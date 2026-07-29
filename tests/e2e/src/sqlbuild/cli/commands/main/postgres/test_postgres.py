@@ -1422,16 +1422,16 @@ def test_given_existing_snapshot_targets_when_building_on_postgres_then_apply_sq
     "test_case",
     [
         PostgresDbtSeedChangeE2ETestCase(
-            description="postgres dbt seed change reloads, cascades, and round-trips identity",
+            description="postgres dbt seed change and ordinary rerun execute the selected graph",
             expected_initial_total=75,
             expected_changed_total=115,
-            expected_changed_fragments=("Upstream changed", "fct_orders"),
-            expected_noop_fragments=("Skipping dbt: no dbt work selected.",),
+            expected_changed_fragments=("dbt execution", "fct_orders"),
+            expected_rerun_fragments=("dbt execution", "fct_orders"),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_postgres_dbt_seed_change_when_building_then_cascades_and_round_trips(
+def test_given_postgres_dbt_seed_change_when_building_then_ordinary_rerun_executes_graph(
     tmp_path: Path,
     test_case: PostgresDbtSeedChangeE2ETestCase,
     postgres_e2e_config: dict[str, object],
@@ -1471,13 +1471,13 @@ def test_given_postgres_dbt_seed_change_when_building_then_cascades_and_round_tr
             sql=f"SELECT total_amount FROM {schema_name}.fct_orders",
         ) == ((test_case.expected_changed_total,),)
 
-        noop: subprocess.CompletedProcess[str] = run_sqb(
+        rerun: subprocess.CompletedProcess[str] = run_sqb(
             command=("--no-color", "dbt", "build", "--select", "+fct_orders"),
             project_dir=project_dir,
             env=env,
         )
-        assert noop.returncode == 0, noop.stdout + noop.stderr
-        for fragment in test_case.expected_noop_fragments:
-            assert fragment in noop.stdout
+        assert rerun.returncode == 0, rerun.stdout + rerun.stderr
+        for fragment in test_case.expected_rerun_fragments:
+            assert fragment in rerun.stdout
     finally:
         cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)

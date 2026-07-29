@@ -25,7 +25,6 @@ NODE_TYPE_UDF: str = "udf"
 NODE_TYPE_TABLE_FN: str = "table_fn"
 FUNCTION_NODE_TYPES: tuple[str, str] = (NODE_TYPE_UDF, NODE_TYPE_TABLE_FN)
 NODE_TYPE_SEED: str = "seed"
-NODE_TYPE_DBT: str = "dbt"
 NODE_TYPE_LOADER: str = "loader"
 NODE_TYPE_TASK: str = "task"
 NODE_TYPE_ASSET: str = "asset"

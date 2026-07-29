@@ -272,4 +272,4 @@ class PostgresDbtSeedChangeE2ETestCase:
     expected_initial_total: int
     expected_changed_total: int
     expected_changed_fragments: tuple[str, ...]
-    expected_noop_fragments: tuple[str, ...]
+    expected_rerun_fragments: tuple[str, ...]

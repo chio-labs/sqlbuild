@@ -9,7 +9,7 @@ from sqlbuild.compiler.planner._helpers.identity.hashing import (
     graph_key_for_compiled_resource,
 )
 from sqlbuild.compiler.planner._helpers.identity.seed import build_seed_identity
-from sqlbuild.compiler.planner.main.identity.graph_identity import (
+from sqlbuild.compiler.planner.main.identity._graph_identity import (
     build_expected_graph_identity_hashes,
 )
 from sqlbuild.compiler.planner.main.identity.version_identity_function_hashes import (

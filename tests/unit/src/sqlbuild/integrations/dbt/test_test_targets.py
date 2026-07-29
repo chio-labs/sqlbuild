@@ -65,6 +65,19 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
             mock_model_names=("stg_orders",),
         ),
         DbtSqlTestTargetTestCase(
+            description="prefers exact dbt model name containing double underscores",
+            selected_dbt_unique_ids=("model.analytics.race__int_enriched__course_match_graph",),
+            select=("race__int_enriched__course_match_graph",),
+            expected_target_names=("race__int_enriched__course_match_graph",),
+            expected_model_names=("race__int_enriched__course_match_graph",),
+            expected_query_fragments=('__dbt_ref("stg_orders")',),
+            manifest_factory=partial(
+                build_dbt_sql_test_target_manifest,
+                target_model_name="race__int_enriched__course_match_graph",
+            ),
+            mock_model_names=("stg_orders",),
+        ),
+        DbtSqlTestTargetTestCase(
             description="adapts selected dbt model from unquoted relation",
             selected_dbt_unique_ids=("model.analytics.fact_orders",),
             select=("fact_orders",),

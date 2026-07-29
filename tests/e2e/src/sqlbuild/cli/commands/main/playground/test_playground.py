@@ -11,7 +11,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     skip_unless_dbt_is_runnable,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.playground._test_types import (
-    DbtChangeAwarePlaygroundLifecycleTestCase,
+    DbtPlaygroundLifecycleTestCase,
     PythonNodesPlaygroundLifecycleTestCase,
     VirtualPlaygroundLifecycleTestCase,
 )
@@ -232,31 +232,30 @@ def test_given_python_nodes_playground_when_running_lifecycle_then_it_succeeds(
 @pytest.mark.parametrize(
     "test_case",
     [
-        DbtChangeAwarePlaygroundLifecycleTestCase(
-            description="dbt playground second build prunes unchanged models (change-aware)",
-            project_name="dbt_change_aware_playground",
+        DbtPlaygroundLifecycleTestCase(
+            description="dbt playground runs ordinary dbt work on consecutive builds",
+            project_name="dbt_playground_lifecycle",
             expected_first_build_fragments=(
                 "dbt build",
                 "model     stg_orders",
                 "model     fct_orders",
             ),
             expected_second_build_fragments=(
-                "all planned dbt models are current",
-                "no change",
-                "Skipping dbt: no dbt work selected.",
+                "dbt build",
+                "model     stg_orders",
+                "model     fct_orders",
             ),
             expected_second_build_absent_fragments=(
-                "OK     reuse",
-                "Reuse plan",
-                "dbt reuse  pre-phase",
-                "dbt fingerprint write failed",
+                "Compiling dbt production ref",
+                "dbt defer clone",
+                "dbt fingerprint",
             ),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_dbt_playground_when_building_then_runs_dbt_without_reuse(
-    test_case: DbtChangeAwarePlaygroundLifecycleTestCase,
+def test_given_dbt_playground_when_building_twice_then_runs_ordinary_dbt_each_time(
+    test_case: DbtPlaygroundLifecycleTestCase,
     tmp_path: Path,
 ) -> None:
     skip_unless_dbt_is_runnable()
@@ -288,7 +287,7 @@ def test_given_dbt_playground_when_building_then_runs_dbt_without_reuse(
         assert fragment in first_output
 
     second_build: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "dbt", "build", "--changes-only"),
+        command=("--no-color", "dbt", "build"),
         project_dir=sqlbuild_project_dir,
     )
     assert second_build.returncode == 0, second_build.stdout + second_build.stderr

@@ -24,7 +24,7 @@ class PythonNodesPlaygroundLifecycleTestCase:
 
 
 @dataclass(frozen=True)
-class DbtChangeAwarePlaygroundLifecycleTestCase:
+class DbtPlaygroundLifecycleTestCase:
     description: str
     project_name: str
     expected_first_build_fragments: tuple[str, ...]

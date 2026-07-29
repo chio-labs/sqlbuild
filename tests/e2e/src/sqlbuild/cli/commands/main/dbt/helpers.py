@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import json
 import os
 import pty
@@ -389,254 +388,6 @@ def prepare_dbt_interop_project(*, tmp_path: Path) -> Path:
     return root_dir / "sqlbuild_project"
 
 
-def prepare_dbt_node_source_watermark_project(*, tmp_path: Path) -> Path:
-    """Write a minimal dbt-only project with source freshness metadata."""
-
-    workspace: Path = tmp_path / "dbt_node_source_watermark"
-    dbt_project_dir: Path = workspace / "dbt_project"
-    profiles_dir: Path = workspace / "profiles"
-    sqlbuild_project_dir: Path = workspace / "sqlbuild_project"
-    dbt_models_dir: Path = dbt_project_dir / "models"
-    sqlbuild_models_dir: Path = sqlbuild_project_dir / "models"
-    dbt_models_dir.mkdir(parents=True)
-    profiles_dir.mkdir(parents=True)
-    sqlbuild_models_dir.mkdir(parents=True)
-    db_path: Path = sqlbuild_project_dir / "dbt_watermark.duckdb"
-    (dbt_project_dir / "dbt_project.yml").write_text(
-        "name: analytics\n"
-        "profile: analytics\n"
-        "model-paths: ['models']\n"
-        "target-path: target\n"
-        "models:\n"
-        "  analytics:\n"
-        "    +materialized: table\n",
-        encoding="utf-8",
-    )
-    (dbt_models_dir / "sources.yml").write_text(
-        "version: 2\n\n"
-        "sources:\n"
-        "  - name: raw\n"
-        "    schema: main\n"
-        "    tables:\n"
-        "      - name: raw_orders\n"
-        "        config:\n"
-        "          loaded_at_field: updated_at\n"
-        "          freshness:\n"
-        "            warn_after:\n"
-        "              count: 99\n"
-        "              period: day\n",
-        encoding="utf-8",
-    )
-    (dbt_models_dir / "b.sql").write_text(
-        "select id from {{ source('raw', 'raw_orders') }}\n",
-        encoding="utf-8",
-    )
-    (dbt_models_dir / "v.sql").write_text(
-        "{{ config(materialized='view') }}\n\nselect id from {{ ref('b') }}\n",
-        encoding="utf-8",
-    )
-    (dbt_models_dir / "a.sql").write_text(
-        "select id from {{ ref('v') }}\n",
-        encoding="utf-8",
-    )
-    (dbt_models_dir / "c.sql").write_text(
-        "select id from {{ ref('b') }}\n",
-        encoding="utf-8",
-    )
-    (sqlbuild_models_dir / "downstream_b.sql").write_text(
-        "MODEL (\n"
-        "  materialized table,\n"
-        "  columns (id ()),\n"
-        ");\n\n"
-        'select id from __dbt_ref("analytics", "b")\n',
-        encoding="utf-8",
-    )
-    (profiles_dir / "profiles.yml").write_text(
-        "analytics:\n"
-        "  target: dev\n"
-        "  outputs:\n"
-        "    dev:\n"
-        "      type: duckdb\n"
-        f"      path: '{db_path.as_posix()}'\n"
-        "      schema: main\n",
-        encoding="utf-8",
-    )
-    (sqlbuild_project_dir / "sqlbuild_project.toml").write_text(
-        'name = "dbt_node_source_watermark"\n'
-        'adapter = "duckdb"\n'
-        'default_target = "dev"\n\n'
-        "[connection]\n"
-        'source = "dbt_profile"\n'
-        'profile = "analytics"\n\n'
-        "[dbt]\n"
-        'project_dir = "../dbt_project"\n'
-        'profiles_dir = "../profiles"\n'
-        'target_path = "../dbt_project/target"\n\n'
-        "[targets.dev.connection]\n"
-        'source = "dbt_profile"\n'
-        'profile = "analytics"\n'
-        'target = "dev"\n',
-        encoding="utf-8",
-    )
-    return sqlbuild_project_dir
-
-
-def configure_dbt_node_source_watermark_production_ref(*, project_dir: Path) -> None:
-    """Add prod target and production_ref config to the dbt watermark fixture."""
-
-    workspace: Path = project_dir.parent
-    profiles_dir: Path = workspace / "profiles"
-    macro_dir: Path = project_dir / "dbt" / "macros"
-    macro_dir.mkdir(parents=True)
-    db_path: Path = project_dir / "dbt_watermark.duckdb"
-    (profiles_dir / "profiles.yml").write_text(
-        "analytics:\n"
-        "  target: dev\n"
-        "  outputs:\n"
-        "    dev:\n"
-        "      type: duckdb\n"
-        f"      path: '{db_path.as_posix()}'\n"
-        "      schema: main\n"
-        "    prod:\n"
-        "      type: duckdb\n"
-        f"      path: '{db_path.as_posix()}'\n"
-        "      schema: prod\n",
-        encoding="utf-8",
-    )
-    (project_dir / "sqlbuild_project.toml").write_text(
-        'name = "dbt_node_source_watermark"\n'
-        'adapter = "duckdb"\n'
-        'default_target = "dev"\n\n'
-        "[connection]\n"
-        'source = "dbt_profile"\n'
-        'profile = "analytics"\n\n'
-        "[dbt]\n"
-        'project_dir = "../dbt_project"\n'
-        'profiles_dir = "../profiles"\n'
-        'target_path = "../dbt_project/target"\n\n'
-        "[dbt.production_ref]\n"
-        'git_ref = "prod"\n'
-        'generate_schema_name_override = "dbt/macros/generate_schema_name.sql"\n\n'
-        "[targets.dev]\n"
-        'schema = "main"\n\n'
-        "[targets.dev.connection]\n"
-        'source = "dbt_profile"\n'
-        'profile = "analytics"\n'
-        'target = "dev"\n\n'
-        "[targets.prod]\n"
-        'schema = "prod"\n\n'
-        "[targets.prod.connection]\n"
-        'source = "dbt_profile"\n'
-        'profile = "analytics"\n'
-        'target = "prod"\n',
-        encoding="utf-8",
-    )
-    macro_dir.joinpath("generate_schema_name.sql").write_text(
-        "{% macro generate_schema_name(custom_schema_name, node) -%}\n  prod\n{%- endmacro %}\n",
-        encoding="utf-8",
-    )
-    _initialize_dbt_diff_git(workspace=workspace)
-
-
-def checkout_dbt_watermark_feature_branch(*, project_dir: Path) -> None:
-    """Move the dbt watermark fixture to a feature branch after prod setup."""
-
-    _run_git(args=("checkout", "-b", "feature"), cwd=project_dir.parent)
-
-
-def write_dbt_watermark_local_target(*, project_dir: Path, target: str) -> None:
-    """Write a local SQLBuild target override for the dbt watermark fixture."""
-
-    project_dir.joinpath("sqlbuild_local.toml").write_text(
-        f'target = "{target}"\n', encoding="utf-8"
-    )
-
-
-def remove_dbt_watermark_local_target(*, project_dir: Path) -> None:
-    """Remove the local SQLBuild target override for the dbt watermark fixture."""
-
-    project_dir.joinpath("sqlbuild_local.toml").unlink(missing_ok=True)
-
-
-def replace_dbt_watermark_raw_orders(*, project_dir: Path, version: str) -> None:
-    """Replace the raw source rows for dbt watermark E2Es."""
-
-    execute_duckdb(
-        db_path=project_dir / "dbt_watermark.duckdb",
-        sql=(
-            "CREATE OR REPLACE TABLE main.raw_orders "
-            "(id INTEGER, updated_at TIMESTAMP);\n"
-            f"INSERT INTO main.raw_orders VALUES (1, TIMESTAMP '{version}');\n"
-        ),
-    )
-
-
-def run_dbt_watermark_build(*, project_dir: Path, selector: str) -> None:
-    """Build a dbt watermark fixture model without SQLBuild state recording."""
-
-    workspace: Path = project_dir.parent
-    _run_dbt(
-        args=("build", "--select", selector),
-        dbt_project_dir=workspace / "dbt_project",
-        profiles_dir=workspace / "profiles",
-        target="dev",
-    )
-
-
-def latest_dbt_node_source_watermark_payloads(*, project_dir: Path) -> dict[str, dict[str, object]]:
-    """Return latest dbt node source watermark payloads keyed by node name."""
-
-    rows: list[tuple[object, object]] = execute_duckdb_query(
-        project_dir=project_dir,
-        sql=(
-            "SELECT node_name, watermarks_json_b64 "
-            "FROM main._sqlbuild_node_source_watermarks "
-            "WHERE node_type = 'dbt' "
-            "ORDER BY created_at, run_id, node_name"
-        ),
-    )
-    payloads: dict[str, dict[str, object]] = {}
-    node_name: object
-    encoded_payload: object
-    for node_name, encoded_payload in rows:
-        payloads[str(node_name)] = json.loads(
-            base64.b64decode(str(encoded_payload)).decode("utf-8")
-        )
-    return payloads
-
-
-def latest_node_source_watermark_payloads(
-    *, project_dir: Path, node_type: str
-) -> dict[str, dict[str, object]]:
-    """Return latest node source watermark payloads keyed by node name."""
-
-    rows: list[tuple[object, object]] = execute_duckdb_query(
-        project_dir=project_dir,
-        sql=(
-            "SELECT node_name, watermarks_json_b64 "
-            "FROM main._sqlbuild_node_source_watermarks "
-            f"WHERE node_type = '{node_type}' "
-            "ORDER BY created_at, run_id, node_name"
-        ),
-    )
-    payloads: dict[str, dict[str, object]] = {}
-    node_name: object
-    encoded_payload: object
-    for node_name, encoded_payload in rows:
-        payloads[str(node_name)] = json.loads(
-            base64.b64decode(str(encoded_payload)).decode("utf-8")
-        )
-    return payloads
-
-
-def execute_duckdb_query(*, project_dir: Path, sql: str) -> list[tuple[object, object]]:
-    """Run a DuckDB query for the dbt watermark E2E warehouse."""
-
-    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb
-
-    return query_duckdb(db_path=project_dir / "dbt_watermark.duckdb", sql=sql)
-
-
 def write_dbt_model_sqlbuild_unit_test(*, project_dir: Path) -> None:
     """Write a SQLBuild unit test that targets a dbt model directly."""
 
@@ -650,6 +401,54 @@ def write_dbt_model_sqlbuild_unit_test(*, project_dir: Path) -> None:
         "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
         ")\n"
         "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_double_underscore_dbt_model_sqlbuild_unit_test(*, project_dir: Path) -> None:
+    """Write a direct dbt target whose model name contains double underscores."""
+
+    model_name: str = "race__int_enriched__course_match_graph"
+    project_dir.parent.joinpath("dbt_project", "models", "marts", f"{model_name}.sql").write_text(
+        "select order_id, ordered_at from {{ ref('stg_orders') }}\n",
+        encoding="utf-8",
+    )
+    project_dir.joinpath("tests", "unit", f"test_dbt_{model_name}.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__dbt_ref__stg_orders AS (\n"
+        "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
+        "),\n"
+        f"__expected__{model_name} AS (\n"
+        "  SELECT 10 AS order_id, cast('2026-01-01 00:00:00' as timestamp) AS ordered_at\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+
+def write_sqlbuild_defer_target_models(*, project_dir: Path) -> None:
+    """Configure native SQLBuild target deferral inside a dbt interop fixture."""
+
+    config_path: Path = project_dir / "sqlbuild_project.toml"
+    config_text: str = config_path.read_text(encoding="utf-8").replace(
+        'adapter = "duckdb"\n',
+        'adapter = "duckdb"\ndefault_target = "dev"\n',
+    )
+    config_path.write_text(
+        config_text
+        + "\n[targets.dev]\n"
+        + 'schema = "dev"\n\n'
+        + "[targets.prod]\n"
+        + 'schema = "prod"\n',
+        encoding="utf-8",
+    )
+    project_dir.joinpath("models", "deferred_upstream.sql").write_text(
+        "MODEL (materialized table);\n\nSELECT 42 AS order_id\n",
+        encoding="utf-8",
+    )
+    project_dir.joinpath("models", "deferred_consumer.sql").write_text(
+        'MODEL (materialized table);\n\nSELECT order_id FROM __ref("deferred_upstream")\n',
         encoding="utf-8",
     )
 
@@ -1627,74 +1426,6 @@ def apply_dbt_lineage_error_setup(
         cast(Callable[[Path], None], setup)(project_dir)
 
 
-def query_dbt_phase11_source_freshness_rows(*, project_dir: Path) -> list[tuple[object, ...]]:
-    """Return dbt Phase 11 source freshness state rows when the state table exists."""
-
-    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb, table_exists
-
-    db_path: Path = project_dir / "dbt_phase11.duckdb"
-    table_is_present: bool = table_exists(db_path=db_path, table_name="_sqlbuild_source_freshness")
-    return query_duckdb(
-        db_path=db_path,
-        sql={
-            False: (
-                "SELECT CAST(NULL AS VARCHAR) AS source_name, "
-                "CAST(NULL AS VARCHAR) AS data_version WHERE FALSE"
-            ),
-            True: (
-                "SELECT source_name, data_version FROM main._sqlbuild_source_freshness "
-                "ORDER BY source_name, data_version"
-            ),
-        }[table_is_present],
-    )
-
-
-def query_dbt_phase11_schema_source_freshness_rows(
-    *, project_dir: Path, schema: str
-) -> list[tuple[object, ...]]:
-    """Return dbt Phase 11 source freshness state rows for a specific schema."""
-
-    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb, table_exists
-
-    db_path: Path = project_dir / "dbt_phase11.duckdb"
-    table_is_present: bool = table_exists(
-        db_path=db_path, table_name="_sqlbuild_source_freshness", schema=schema
-    )
-    return query_duckdb(
-        db_path=db_path,
-        sql={
-            False: (
-                "SELECT CAST(NULL AS VARCHAR) AS source_name, "
-                "CAST(NULL AS VARCHAR) AS data_version WHERE FALSE"
-            ),
-            True: (
-                f"SELECT source_name, data_version FROM {schema}._sqlbuild_source_freshness "
-                "ORDER BY source_name, data_version"
-            ),
-        }[table_is_present],
-    )
-
-
-def set_dbt_phase11_sqlbuild_target_schema(*, project_dir: Path, schema: str) -> None:
-    """Change the focused Phase 11 SQLBuild target schema."""
-
-    project_file: Path = project_dir / "sqlbuild_project.toml"
-    project_file.write_text(
-        project_file.read_text(encoding="utf-8").replace('schema = "main"', f'schema = "{schema}"'),
-        encoding="utf-8",
-    )
-
-
-def write_dbt_phase11_invalid_downstream_model(*, project_dir: Path) -> None:
-    """Make the downstream SQLBuild model fail during warehouse execution."""
-
-    (project_dir / "models" / "downstream_orders.sql").write_text(
-        "MODEL (materialized table);\n\n"
-        'SELECT missing_column FROM __dbt_ref("analytics", "fact_orders")\n',
-        encoding="utf-8",
-    )
-
-
 def break_dbt_interop_fact_orders_model(project_dir: Path) -> None:
     """Make the dbt fact_orders model fail at run time so the dbt build errors."""
 
@@ -1708,74 +1439,8 @@ def break_dbt_interop_fact_orders_model(project_dir: Path) -> None:
     )
 
 
-def add_dbt_phase11_payments_branch(*, project_dir: Path) -> None:
-    """Add a dbt model that depends on orders and payments sources."""
-
-    dbt_models_dir: Path = project_dir.parent / "dbt_project" / "models"
-    sqlbuild_models_dir: Path = project_dir / "models"
-    sources_path: Path = dbt_models_dir / "sources.yml"
-    sources_path.write_text(
-        sources_path.read_text(encoding="utf-8")
-        + "      - name: payments\n"
-        + "        identifier: raw_payments\n"
-        + "        config:\n"
-        + "          loaded_at_field: loaded_at\n"
-        + "          freshness:\n"
-        + "            error_after: {count: 1, period: day}\n",
-        encoding="utf-8",
-    )
-    (dbt_models_dir / "order_payments.sql").write_text(
-        "select o.order_id, o.amount as order_amount, p.payment_amount "
-        "from {{ source('raw', 'orders') }} o "
-        "join {{ source('raw', 'payments') }} p using (order_id)\n",
-        encoding="utf-8",
-    )
-    (sqlbuild_models_dir / "payment_summary.sql").write_text(
-        "MODEL (materialized table);\n\n"
-        'SELECT order_id, payment_amount FROM __dbt_ref("analytics", "order_payments")\n',
-        encoding="utf-8",
-    )
-
-
-def add_dbt_phase11_query_filter_branch(*, project_dir: Path) -> None:
-    """Add dbt sources that exercise loaded_at_query and freshness filter translation."""
-
-    dbt_models_dir: Path = project_dir.parent / "dbt_project" / "models"
-    sqlbuild_models_dir: Path = project_dir / "models"
-    sources_path: Path = dbt_models_dir / "sources.yml"
-    sources_path.write_text(
-        sources_path.read_text(encoding="utf-8")
-        + "      - name: query_events\n"
-        + "        identifier: raw_query_events\n"
-        + "        config:\n"
-        + "          loaded_at_query: SELECT MAX(loaded_at) AS loaded_at "
-        + "FROM main.raw_query_events\n"
-        + "          freshness:\n"
-        + "            error_after: {count: 1, period: day}\n"
-        + "      - name: filtered_events\n"
-        + "        identifier: raw_filtered_events\n"
-        + "        config:\n"
-        + "          loaded_at_field: loaded_at\n"
-        + "          freshness:\n"
-        + "            error_after: {count: 1, period: day}\n"
-        + "            filter: include_in_freshness\n",
-        encoding="utf-8",
-    )
-    (dbt_models_dir / "event_rollup.sql").write_text(
-        "select event_id, event_amount from {{ source('raw', 'query_events') }}\n"
-        "union all\n"
-        "select event_id, event_amount from {{ source('raw', 'filtered_events') }}\n",
-        encoding="utf-8",
-    )
-    (sqlbuild_models_dir / "event_summary.sql").write_text(
-        "MODEL (materialized table);\n\n"
-        'SELECT event_id, event_amount FROM __dbt_ref("analytics", "event_rollup")\n',
-        encoding="utf-8",
-    )
-
-
-def prepare_dbt_phase11_project(*, tmp_path: Path, replay_on_change: str | None = None) -> Path:
-    """Write a focused dbt interop project for model-planning E2Es."""
+def prepare_dbt_phase11_project(*, tmp_path: Path) -> Path:
+    """Write a focused dbt interop project for lineage E2Es."""
 
     root_dir: Path = tmp_path / "dbt_phase11"
     dbt_project_dir: Path = root_dir / "dbt_project"
@@ -1858,10 +1523,6 @@ def prepare_dbt_phase11_project(*, tmp_path: Path, replay_on_change: str | None 
         "        tests: [not_null]\n",
         encoding="utf-8",
     )
-    replay_line: str = {
-        False: "",
-        True: f'replay_on_change = "{replay_on_change}"\n',
-    }[replay_on_change is not None]
     (sqlbuild_project_dir / "sqlbuild_project.toml").write_text(
         'name = "dbt_phase11"\n'
         'adapter = "duckdb"\n'
@@ -1873,8 +1534,7 @@ def prepare_dbt_phase11_project(*, tmp_path: Path, replay_on_change: str | None 
         "[dbt]\n"
         'project_dir = "../dbt_project"\n'
         'profiles_dir = "../profiles"\n'
-        'target_path = "../dbt_project/target"\n'
-        f"{replay_line}",
+        'target_path = "../dbt_project/target"\n',
         encoding="utf-8",
     )
     (sqlbuild_models_dir / "downstream_orders.sql").write_text(
@@ -1936,26 +1596,6 @@ def _run_dbt(
 
 def _run_git(*, args: tuple[str, ...], cwd: Path) -> None:
     subprocess.run(("git", *args), cwd=cwd, capture_output=True, check=True, text=True)
-
-
-def add_dbt_phase11_sqlbuild_function_branch(*, project_dir: Path) -> None:
-    """Add a SQLBuild UDF branch downstream of the dbt orders model."""
-
-    functions_dir: Path = project_dir / "functions" / "sql"
-    models_dir: Path = project_dir / "models"
-    functions_dir.mkdir(parents=True, exist_ok=True)
-    (functions_dir / "is_large_amount.sql").write_text(
-        "FUNCTION (\n  arguments (amount INTEGER),\n  returns BOOLEAN,\n);\n\namount > 50\n",
-        encoding="utf-8",
-    )
-    (models_dir / "amount_quality.sql").write_text(
-        "MODEL (materialized table);\n\n"
-        "SELECT\n"
-        "  order_id,\n"
-        '  __udf("is_large_amount")(downstream_amount) AS is_large_amount\n'
-        'FROM __ref("downstream_orders")\n',
-        encoding="utf-8",
-    )
 
 
 def write_dbt_phase11_fact_orders_model(*, project_dir: Path, amount_expression: str) -> None:
@@ -2070,206 +1710,3 @@ def _assert_dbt_local_replay_row_query(
     db_path: Path = project_dir / "target" / "run" / "scenarios" / scenario_name / "local.duckdb"
     rows: list[tuple[object, ...]] = query_duckdb(db_path=db_path, sql=rows_sql)
     assert tuple(rows) == expected_rows
-
-
-_SEED_CHANGE_RAW_ORDERS_BASE: str = (
-    "order_id,customer_id,amount\n101,1,25\n102,2,20\n103,3,30\n104,1,15\n"
-)
-
-
-def prepare_dbt_seed_change_project(*, tmp_path: Path) -> Path:
-    """Write a pure dbt DuckDB project with a seed-backed model chain.
-
-    Chain: seed raw_orders -> stg_orders -> int_orders -> fct_customer_revenue, plus a
-    seed raw_customers used by int_orders. Returns the SQLBuild twin project dir.
-    """
-
-    root_dir: Path = tmp_path / "dbt_seed_change"
-    dbt_project_dir: Path = root_dir / "dbt_project"
-    profiles_dir: Path = root_dir / "profiles"
-    sqlbuild_project_dir: Path = root_dir / "sqlbuild_project"
-    dbt_models_dir: Path = dbt_project_dir / "models"
-    dbt_seeds_dir: Path = dbt_project_dir / "seeds"
-    dbt_models_dir.mkdir(parents=True)
-    dbt_seeds_dir.mkdir(parents=True)
-    profiles_dir.mkdir(parents=True)
-    sqlbuild_project_dir.mkdir(parents=True)
-    db_path: Path = sqlbuild_project_dir / "dbt_seed_change.duckdb"
-    (profiles_dir / "profiles.yml").write_text(
-        "analytics:\n"
-        "  target: dev\n"
-        "  outputs:\n"
-        "    dev:\n"
-        "      type: duckdb\n"
-        f"      path: '{db_path.as_posix()}'\n"
-        "      schema: main\n",
-        encoding="utf-8",
-    )
-    (dbt_project_dir / "dbt_project.yml").write_text(
-        "name: analytics\n"
-        "version: '1.0'\n"
-        "profile: analytics\n"
-        "model-paths: ['models']\n"
-        "seed-paths: ['seeds']\n"
-        "models:\n"
-        "  analytics:\n"
-        "    +materialized: table\n",
-        encoding="utf-8",
-    )
-    (dbt_seeds_dir / "raw_orders.csv").write_text(_SEED_CHANGE_RAW_ORDERS_BASE, encoding="utf-8")
-    (dbt_seeds_dir / "raw_customers.csv").write_text(
-        "customer_id,customer_name\n1,Ada\n2,Babbage\n3,Curie\n", encoding="utf-8"
-    )
-    (dbt_models_dir / "stg_orders.sql").write_text(
-        "select order_id, customer_id, amount from {{ ref('raw_orders') }}\n",
-        encoding="utf-8",
-    )
-    (dbt_models_dir / "stg_customers.sql").write_text(
-        "select customer_id, customer_name from {{ ref('raw_customers') }}\n",
-        encoding="utf-8",
-    )
-    (dbt_models_dir / "int_orders.sql").write_text(
-        "select o.order_id, o.customer_id, o.amount, c.customer_name "
-        "from {{ ref('stg_orders') }} o "
-        "join {{ ref('stg_customers') }} c using (customer_id)\n",
-        encoding="utf-8",
-    )
-    (dbt_models_dir / "fct_customer_revenue.sql").write_text(
-        "select customer_id, count(*) as order_count, sum(amount) as total_revenue "
-        "from {{ ref('int_orders') }} group by customer_id\n",
-        encoding="utf-8",
-    )
-    (dbt_models_dir / "schema.yml").write_text(
-        "version: 2\n"
-        "models:\n"
-        "  - name: fct_customer_revenue\n"
-        "    columns:\n"
-        "      - name: customer_id\n"
-        "        tests: [not_null, unique]\n",
-        encoding="utf-8",
-    )
-    (sqlbuild_project_dir / "sqlbuild_project.toml").write_text(
-        'name = "dbt_seed_change"\n'
-        'adapter = "duckdb"\n'
-        'default_target = "dev"\n'
-        "[connection]\n"
-        'database = "dbt_seed_change.duckdb"\n'
-        "[targets.dev]\n"
-        'schema = "main"\n'
-        "[dbt]\n"
-        'project_dir = "../dbt_project"\n'
-        'profiles_dir = "../profiles"\n'
-        'target_path = "../dbt_project/target"\n',
-        encoding="utf-8",
-    )
-    return sqlbuild_project_dir
-
-
-def append_dbt_seed_change_order(
-    *, project_dir: Path, order_id: int, customer_id: int, amount: int
-) -> None:
-    """Append one unique order row to the seed-change raw_orders seed."""
-
-    seed_path: Path = project_dir.parent / "dbt_project" / "seeds" / "raw_orders.csv"
-    seed_path.write_text(
-        seed_path.read_text(encoding="utf-8") + f"{order_id},{customer_id},{amount}\n",
-        encoding="utf-8",
-    )
-
-
-def query_dbt_seed_change_revenue_rows(*, project_dir: Path) -> list[tuple[object, ...]]:
-    """Return fct_customer_revenue rows for the seed-change project."""
-
-    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb
-
-    return query_duckdb(
-        db_path=project_dir / "dbt_seed_change.duckdb",
-        sql="SELECT customer_id, total_revenue FROM main.fct_customer_revenue ORDER BY customer_id",
-    )
-
-
-def run_dbt_seed_change_build(
-    *, project_dir: Path, select: str, changes_only: bool
-) -> subprocess.CompletedProcess[str]:
-    """Run `sqb dbt build --select <select>` for the seed-change project."""
-
-    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
-
-    changes_only_args: tuple[str, ...] = {False: (), True: ("--changes-only",)}[changes_only]
-    return run_sqb(
-        command=("--no-color", "dbt", "build", *changes_only_args, "--select", select),
-        project_dir=project_dir,
-    )
-
-
-def run_dbt_seed_change_command(
-    *, project_dir: Path, command: tuple[str, ...]
-) -> subprocess.CompletedProcess[str]:
-    """Run an arbitrary `sqb dbt ...` command for the seed-change project."""
-
-    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
-
-    return run_sqb(command=command, project_dir=project_dir)
-
-
-def drop_dbt_seed_change_relation(*, project_dir: Path, relation: str) -> None:
-    """Drop a warehouse relation in the seed-change project's DuckDB."""
-
-    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import execute_duckdb
-
-    execute_duckdb(
-        db_path=project_dir / "dbt_seed_change.duckdb",
-        sql=f"DROP TABLE main.{relation}",
-    )
-
-
-def add_dbt_seed_change_second_seed(*, project_dir: Path) -> None:
-    """Add an independent second seed + model branch to the seed-change project.
-
-    Adds seed raw_regions and model dim_regions (regions -> dim_regions), leaving the
-    existing raw_orders -> ... -> fct_customer_revenue branch untouched, so a change to
-    one seed must cascade only into its own branch.
-    """
-
-    dbt_dir: Path = project_dir.parent / "dbt_project"
-    (dbt_dir / "seeds" / "raw_regions.csv").write_text(
-        "region_id,region_name\n1,North\n2,South\n", encoding="utf-8"
-    )
-    (dbt_dir / "models" / "dim_regions.sql").write_text(
-        "select region_id, region_name from {{ ref('raw_regions') }}\n",
-        encoding="utf-8",
-    )
-
-
-def append_dbt_seed_change_region(*, project_dir: Path, region_id: int, region_name: str) -> None:
-    """Append one row to the raw_regions seed."""
-
-    seed_path: Path = project_dir.parent / "dbt_project" / "seeds" / "raw_regions.csv"
-    seed_path.write_text(
-        seed_path.read_text(encoding="utf-8") + f"{region_id},{region_name}\n",
-        encoding="utf-8",
-    )
-
-
-def edit_dbt_seed_change_leaf_sql(*, project_dir: Path) -> None:
-    """Change the leaf model's own SQL without changing its inputs."""
-
-    leaf_path: Path = project_dir.parent / "dbt_project" / "models" / "fct_customer_revenue.sql"
-    leaf_path.write_text(
-        "select customer_id, count(*) as order_count, sum(amount) + 0 as total_revenue "
-        "from {{ ref('int_orders') }} group by customer_id\n",
-        encoding="utf-8",
-    )
-
-
-def set_dbt_seed_change_column_types(*, project_dir: Path) -> None:
-    """Add a seed column_types config without changing CSV bytes (config-only change)."""
-
-    seeds_block: str = (
-        "seeds:\n  analytics:\n    raw_orders:\n      +column_types:\n        amount: bigint\n"
-    )
-    dbt_project_file: Path = project_dir.parent / "dbt_project" / "dbt_project.yml"
-    dbt_project_file.write_text(
-        dbt_project_file.read_text(encoding="utf-8") + seeds_block,
-        encoding="utf-8",
-    )

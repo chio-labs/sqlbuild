@@ -151,7 +151,6 @@ project_dir = "../dbt"
 profiles_dir = "../profiles"
 target = "prod"
 target_path = "target/dbt"
-defer_clone_from = true
 
 [dbt.vars]
 country = "US"
@@ -229,7 +228,6 @@ git_timeout_seconds = 12
             expected_dbt_target="prod",
             expected_dbt_target_path="target/dbt",
             expected_dbt_vars={"country": "US", "limit": 100, "enabled": True},
-            expected_dbt_defer_clone_from=True,
             expected_dbt_production_ref_git_ref="prod",
             expected_dbt_production_ref_generate_schema_name_override=(
                 "dbt/macros/prod_generate_schema_name.sql"
@@ -309,7 +307,6 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.dbt.target == test_case.expected_dbt_target
     assert config.dbt.target_path == test_case.expected_dbt_target_path
     assert config.dbt.vars == test_case.expected_dbt_vars
-    assert config.dbt.defer_clone_from is test_case.expected_dbt_defer_clone_from
     assert config.dbt.production_ref.git_ref == test_case.expected_dbt_production_ref_git_ref
     assert (
         config.dbt.production_ref.generate_schema_name_override
@@ -359,7 +356,6 @@ user = "kevin"
 
 [dbt]
 target = "pat"
-defer_clone_from = false
 
 [dbt.vars]
 shared = "local"
@@ -395,7 +391,6 @@ max_total_bytes = 78
             expected_vars={"user": "kevin"},
             expected_dbt_target="pat",
             expected_dbt_vars={"shared": "local", "threads": 2},
-            expected_dbt_defer_clone_from=False,
             expected_changes_only=True,
             expected_scenario_local_type_overrides={
                 "snowflake": {
@@ -535,7 +530,6 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
     assert config.vars == test_case.expected_vars
     assert config.dbt.target == test_case.expected_dbt_target
     assert config.dbt.vars == test_case.expected_dbt_vars
-    assert config.dbt.defer_clone_from is test_case.expected_dbt_defer_clone_from
     assert config.scenario.local_type_overrides == test_case.expected_scenario_local_type_overrides
     assert {
         "max_rows_per_relation": config.scenario.snapshot_limits.max_rows_per_relation,
@@ -1030,6 +1024,28 @@ threads = 8
 """.strip(),
             expected_error_fragment=r"dbt contains unknown key\(s\): threads",
         ),
+        LoadProjectConfigErrorTestCase(
+            description="raises targeted error for removed dbt defer clone config",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt]
+defer_clone_from = true
+""".strip(),
+            expected_error_fragment=r"option\(s\) were removed: defer_clone_from",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises targeted error for removed dbt replay config",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[dbt]
+replay_on_change = "full"
+""".strip(),
+            expected_error_fragment=r"option\(s\) were removed: replay_on_change",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -1145,6 +1161,14 @@ concurrency = "many"
 extra_concurrency = 8
 """.strip(),
             expected_error_fragment=r"settings contains unknown key\(s\): extra_concurrency",
+        ),
+        LoadLocalConfigErrorTestCase(
+            description="raises targeted error for removed local dbt defer clone config",
+            local_file_contents="""
+[dbt]
+defer_clone_from = false
+""".strip(),
+            expected_error_fragment="dbt.*defer_clone_from was removed",
         ),
     ],
     ids=lambda case: case.description,

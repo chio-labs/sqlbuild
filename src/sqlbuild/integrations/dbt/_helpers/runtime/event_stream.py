@@ -373,7 +373,7 @@ def parse_dbt_node_start_message(*, event: dict[str, object]) -> str | None:
     data: dict[str, object] = _dict_value(event.get("data"))
     node_info: dict[str, object] = _dict_value(data.get("node_info"))
     unique_id: str | None = _str_value(node_info.get("unique_id"))
-    if unique_id is None or unique_id.startswith("unit_test"):
+    if unique_id is None:
         return None
     resource_type: str = _str_value(node_info.get("resource_type")) or "node"
     node_name: str = _str_value(node_info.get("node_name")) or unique_id
@@ -390,7 +390,7 @@ def parse_dbt_node_start_result(*, event: dict[str, object]) -> DbtNodeExecution
     data: dict[str, object] = _dict_value(event.get("data"))
     node_info: dict[str, object] = _dict_value(data.get("node_info"))
     unique_id: str | None = _str_value(node_info.get("unique_id"))
-    if unique_id is None or unique_id.startswith("unit_test"):
+    if unique_id is None:
         return None
     return DbtNodeExecutionResult(
         unique_id=unique_id,
@@ -448,7 +448,7 @@ def parse_dbt_node_result(
         return None
     node_info: dict[str, object] = _dict_value(data.get("node_info"))
     unique_id: str | None = _str_value(node_info.get("unique_id"))
-    if unique_id is None or unique_id.startswith("unit_test"):
+    if unique_id is None:
         return None
     if event_name == _DBT_NODE_FINISHED_EVENT:
         run_result: dict[str, object] = _dict_value(data.get("run_result"))

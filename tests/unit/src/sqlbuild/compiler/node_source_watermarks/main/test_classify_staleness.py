@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.node_source_watermarks.main.classify_staleness import (
+from sqlbuild.compiler.node_source_watermarks.main._classify_staleness import (
     classify_node_source_watermark_staleness,
 )
 from sqlbuild.compiler.node_source_watermarks.models import (

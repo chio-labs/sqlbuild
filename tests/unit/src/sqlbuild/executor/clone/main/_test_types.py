@@ -14,13 +14,6 @@ class CloneStreamTestCase:
 
 
 @dataclass(frozen=True)
-class PrephaseCauseAnnotationTestCase:
-    description: str
-    caused_by_names: tuple[str, ...]
-    expected_annotation: str
-
-
-@dataclass(frozen=True)
 class PrephaseCloneItemRowTestCase:
     description: str
     action: str

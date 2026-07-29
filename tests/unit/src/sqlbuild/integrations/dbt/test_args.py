@@ -217,25 +217,6 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
             expected_sqlbuild_args=("--fail-fast",),
         ),
         DbtArgRoutingTestCase(
-            description="routes SQLBuild changes-only flag for build",
-            command="build",
-            parsed=DbtInteropParsedArgs(changes_only=True),
-            expected_select=(),
-            expected_exclude=(),
-            expected_dbt_args=(),
-            expected_sqlbuild_args=("--changes-only",),
-        ),
-        DbtArgRoutingTestCase(
-            description="routes dbt defer clone flag to wrapper only",
-            command="build",
-            parsed=DbtInteropParsedArgs(defer_clone_from=True),
-            expected_select=(),
-            expected_exclude=(),
-            expected_dbt_args=(),
-            expected_sqlbuild_args=(),
-            expected_defer_clone_from=True,
-        ),
-        DbtArgRoutingTestCase(
             description="appends dbt passthrough tail to dbt args verbatim",
             command="test",
             parsed=DbtInteropParsedArgs(
@@ -296,7 +277,6 @@ def test_given_parsed_dbt_args_when_routing_then_returns_expected_buckets(
     assert result.exclude == test_case.expected_exclude
     assert result.dbt_args == test_case.expected_dbt_args
     assert result.sqlbuild_args == test_case.expected_sqlbuild_args
-    assert result.defer_clone_from == test_case.expected_defer_clone_from
 
 
 @pytest.mark.parametrize(
@@ -342,18 +322,6 @@ def test_given_parsed_dbt_args_when_routing_then_returns_expected_buckets(
             parsed=DbtInteropParsedArgs(start_cursor_int="1"),
             expected_error_fragment="is not a valid SQLBuild option",
         ),
-        DbtArgRoutingErrorTestCase(
-            description="rejects defer clone with defer to",
-            command="build",
-            parsed=DbtInteropParsedArgs(defer_to="prod", defer_clone_from=True),
-            expected_error_fragment="cannot be used with --defer-to",
-        ),
-        DbtArgRoutingErrorTestCase(
-            description="rejects defer clone on plan",
-            command="plan",
-            parsed=DbtInteropParsedArgs(defer_clone_from=True),
-            expected_error_fragment="is not a valid SQLBuild option",
-        ),
     ],
     ids=lambda case: case.description,
 )
@@ -397,17 +365,6 @@ def test_given_invalid_parsed_dbt_args_when_routing_then_raises_clear_error(
             expected_target=None,
             expected_dbt_passthrough=(),
         ),
-        DbtArgParseTestCase(
-            description="parses valueless defer clone flag",
-            command="build",
-            args=("--defer-clone-from", "--select", "fact_orders"),
-            expected_select=("fact_orders",),
-            expected_exclude=(),
-            expected_full_refresh=False,
-            expected_target=None,
-            expected_dbt_passthrough=(),
-            expected_defer_clone_from=True,
-        ),
     ],
     ids=lambda case: case.description,
 )
@@ -424,7 +381,6 @@ def test_given_raw_dbt_tokens_when_parsing_then_returns_declared_flags(
     assert parsed.full_refresh == test_case.expected_full_refresh
     assert parsed.target == test_case.expected_target
     assert parsed.dbt_passthrough == test_case.expected_dbt_passthrough
-    assert parsed.defer_clone_from == test_case.expected_defer_clone_from
 
 
 @pytest.mark.parametrize(
@@ -441,6 +397,18 @@ def test_given_raw_dbt_tokens_when_parsing_then_returns_declared_flags(
             command="run",
             args=("--target",),
             expected_error_fragment="expected one argument",
+        ),
+        DbtArgParseErrorTestCase(
+            description="rejects removed defer clone flag",
+            command="build",
+            args=("--defer-clone-from",),
+            expected_error_fragment="unrecognized option",
+        ),
+        DbtArgParseErrorTestCase(
+            description="rejects removed changes only wrapper flag",
+            command="run",
+            args=("--changes-only",),
+            expected_error_fragment="unrecognized option",
         ),
     ],
     ids=lambda case: case.description,

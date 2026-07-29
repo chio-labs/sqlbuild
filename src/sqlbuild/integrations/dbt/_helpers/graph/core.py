@@ -10,13 +10,9 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.graph.main.invert_edges import invert_edges
 from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
-from sqlbuild.integrations.dbt._helpers.manifest.core import (
-    dbt_manifest_model_materialization,
-)
 from sqlbuild.integrations.dbt._helpers.manifest.sqlbuild_refs import (
     resolve_sqlbuild_model_dbt_refs,
 )
-from sqlbuild.integrations.dbt.constants import DBT_MATERIALIZATION_VIEW
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,
     DbtCombinedGraphKey,
@@ -25,8 +21,6 @@ from sqlbuild.integrations.dbt.models import (
     DbtManifestSource,
 )
 from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtCombinedGraphResourceType
-
-_SQLBUILD_VIEW_MATERIALIZATION: str = "view"
 
 
 def build_dbt_combined_graph(
@@ -79,40 +73,6 @@ def dbt_source_graph_key(unique_id: str) -> DbtCombinedGraphKey:
         resource_type=DbtCombinedGraphResourceType.SOURCE,
         name=unique_id,
     )
-
-
-def combined_graph_node_is_clonable(
-    *, key: DbtCombinedGraphKey, manifest: DbtManifestIndex
-) -> bool:
-    """Return whether a combined graph node is a model or seed (not a true source)."""
-
-    if key.resource_type == DbtCombinedGraphResourceType.MODEL:
-        return True
-    return key.name in manifest.seeds_by_unique_id
-
-
-def combined_graph_node_is_view(
-    *,
-    key: DbtCombinedGraphKey,
-    manifest: DbtManifestIndex,
-    project: CompiledProject,
-) -> bool:
-    """Return whether a combined graph node is materialized as a view."""
-
-    if key.owner == DbtCombinedGraphOwner.DBT:
-        model: DbtManifestModel | None = manifest.models_by_unique_id.get(key.name)
-        if model is None:
-            return False
-        return dbt_manifest_model_materialization(model=model) == DBT_MATERIALIZATION_VIEW
-    sqlbuild_model: CompiledModel | None = next(
-        (model for model in project.models if model.name == key.name), None
-    )
-    if sqlbuild_model is None:
-        return False
-    materialized: object | None = sqlbuild_model.config.values.get(
-        "materialized", _SQLBUILD_VIEW_MATERIALIZATION
-    )
-    return str(materialized).lower() == _SQLBUILD_VIEW_MATERIALIZATION
 
 
 def build_combined_downstream_deps(

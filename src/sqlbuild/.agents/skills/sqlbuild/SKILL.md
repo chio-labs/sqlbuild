@@ -111,7 +111,7 @@ Verify early, test properly, and deploy reversibly. SQL pipelines with the rigor
 
 **Valid isn't the same as correct.** Your SQL compiles, runs, and returns rows - none of that means the number is right, and a silently-wrong number a stakeholder already trusted is the bug that actually hurts.
 
-SQLBuild brings software-engineering rigor to SQL pipelines: **verify early, test properly, deploy reversibly.** Catch errors before the warehouse runs them, test your logic locally, and only build what actually changed. It works on a standalone SQL project or [points at your existing dbt project](/concepts/dbt-compatibility/overview) with no migration - free and open source.
+SQLBuild brings software-engineering rigor to SQL pipelines: **verify early, test properly, deploy reversibly.** Catch errors before the warehouse runs them and test your logic locally - with change-aware builds and reversible deploys there when you need them, not forced on you on day one. It works on a standalone SQL project or [points at your existing dbt project](/concepts/dbt-compatibility/overview) with no migration - free and open source.
 
 ### Test properly
 
@@ -157,20 +157,22 @@ Before any model runs, SQLBuild does static analysis of your project - offline, 
 - **Fast, because it's Rust where it counts.** Static analysis runs on [Polyglot](https://github.com/tobilg/polyglot), a Rust SQL engine (MIT, 32+ dialects), so compile stays quick even on large projects.
 - **Open, not paywalled.** The static analysis is part of the Apache-2.0 core - no proprietary engine, no separate login, and no paid tier gating the smart checks.
 
-### Only build what changed
+### Change-aware builds, when you need them
 
-Verification tells you the work is right; change detection makes sure you only pay for the work you need.
+**Start simple.** By default, `sqb build` runs your full selection - the same predictable mental model as dbt, with nothing to configure. For many projects, that is all they will ever need.
 
-Every model, seed, UDF, and Python node has a versioned identity. SQLBuild compares it against state stored in your own warehouse and skips anything unchanged.
+**Scale deliberately.** Change-aware builds are powerful: every model, seed, UDF, and Python node has a versioned identity, so SQLBuild can skip anything already current and only pay for the work that actually changed. But that power introduces complexity - warehouse state to reason about, staleness and cascade behavior, and partial-selection edge cases - that is not worth it for smaller or simpler pipelines. So it is opt-in: turn it on with `--changes-only` (or `changes_only = true` in config) when the cost of full rebuilds outgrows the simplicity of running everything.
 
-- **Models and UDFs:** fingerprinted by query hash, config, and upstream UDF hashes. Unchanged models are skipped entirely.
+When enabled, change detection covers the whole graph:
+
+- **Models and UDFs:** fingerprinted by query hash, config, and upstream UDF hashes. Unchanged models are skipped.
 - **Seeds:** content and load-affecting config are hashed. Unchanged seeds are not reloaded.
 - **Audits:** audits that already passed for the same model version are not re-run.
 - **Source freshness:** external source data versions are tracked automatically. Models downstream of unchanged sources are skipped, with lag tolerance to avoid jitter.
 - **Cascade propagation:** when a model does change, the signal propagates downstream, with configurable replay windows (`replay_on_change`).
 - **Python nodes:** loaders, tasks, assets, checks, and hooks are fingerprinted by source and dependency hashes; skip/run is user-controlled via `ctx.skip()`.
 
-State is plain append-only rows in your own warehouse (`_sqlbuild_fingerprints`, `_sqlbuild_source_freshness`, `_sqlbuild_node_results`) - no external state database, no manifest files, no state machine that can corrupt. Point SQLBuild at an [existing dbt project](/concepts/dbt-compatibility/overview) and the same change detection prunes unchanged dbt models from the run - nothing metered, no account, nothing to log into.
+State is plain append-only rows in your own warehouse (`_sqlbuild_fingerprints`, `_sqlbuild_source_freshness`, `_sqlbuild_node_results`) - no external state database, no manifest files, no state machine that can corrupt. Point SQLBuild at an [existing dbt project](/concepts/dbt-compatibility/overview) and the same opt-in change detection prunes unchanged dbt models from the run - nothing metered, no account, nothing to log into.
 
 ### Deploy reversibly (opt-in)
 
@@ -640,7 +642,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 
 | Feature | SQLBuild | dbt | SQLMesh |
 |---------|----------|-----|---------|
-| Change-aware by default | Fingerprints models, seeds, functions, Python nodes; skips unchanged work including audits | dbt State (paid) | Version hash comparison |
+| Change-aware builds | Opt-in (`--changes-only`); fingerprints models, seeds, functions, Python nodes and skips unchanged work including audits | dbt State (paid) | Version hash comparison |
 | Warehouse-native state | Append-only tables in the warehouse; no external state database | manifest.json artifacts | Requires external state store (SQLite/PostgreSQL) |
 | Source freshness | `sqb freshness` with adapter/column/sql strategies, lag tolerance, and CI gating | `dbt source freshness` | No dedicated freshness command; `signals` gate model evaluation until external data is ready |
 | Reuse from production | `reuse_from` clones/copies unchanged relations from another target | dbt State clone (paid) | Virtual environments reuse fingerprint-matched physical tables across environments (shared physical storage) |
@@ -678,7 +680,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Feature | SQLBuild | dbt | SQLMesh |
 |---------|----------|-----|---------|
 | dbt compatibility | Run alongside dbt - reads manifest, no migration | N/A | Jinja compatibility layer plus own macro system |
-| Change-aware dbt builds | Fingerprints dbt models in the warehouse and prunes unchanged ones from the dbt run | dbt State (paid) | N/A |
+| Change-aware dbt builds | Opt-in (`--changes-only`); fingerprints dbt models in the warehouse and prunes unchanged ones from the dbt run | dbt State (paid) | N/A |
 | Reuse dbt builds from production | Pull already-built dbt tables from a production git branch, seed incrementals for catch-up | dbt State clone (paid) | N/A |
 
 #### Sources
@@ -704,7 +706,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 
 | Tool | Best for |
 |------|----------|
-| **SQLBuild** | Change-aware SQL pipelines with warehouse-native state. Skips unchanged work by default, tracks source freshness, and keeps all state as append-only tables in the warehouse. Adds ingestion, Python nodes, pre-promotion audit gating, chained unit tests, local E2E replay, and opt-in virtual environments. |
+| **SQLBuild** | Rigor-first SQL pipelines: compile-time verification, pre-promotion audit gating, chained unit tests, and local E2E replay by default. Opt into change-aware builds and warehouse-native state when full rebuilds get expensive, plus ingestion, Python nodes, and virtual environments as the project grows. |
 | **dbt** | The most widely adopted SQL transformation framework with the largest adapter and community ecosystem. |
 | **SQLMesh** | State-managed pipelines with virtual environments, interval tracking, and cross-dialect transpilation. |
 
@@ -716,11 +718,11 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 
 Source: `concepts/dbt-compatibility/overview.mdx`
 
-Skip unchanged models in your existing dbt project. Change-aware dbt builds with no SQLBuild models and no migration.
+Opt into change-aware builds for your existing dbt project. No SQLBuild models and no migration.
 
-Point SQLBuild at your existing dbt project to stop rebuilding what hasn't changed. No SQLBuild models, no migration, no edits to your dbt files.
+Point SQLBuild at your existing dbt project and, when you want it, stop rebuilding what hasn't changed. No SQLBuild models, no migration, no edits to your dbt files.
 
-**Change-aware builds.** SQLBuild fingerprints your dbt models in the warehouse and prunes the ones that have not changed, so a second build skips everything already current and a single edit rebuilds only that model and whatever depends on it. This works on a plain dbt project with no SQLBuild models. See [Change-aware builds](/concepts/dbt-compatibility/change-aware-builds).
+**Change-aware builds (opt-in).** By default `sqb dbt build` runs your full selection, exactly like dbt. Add `--changes-only` and SQLBuild fingerprints your dbt models in the warehouse and prunes the ones that have not changed, so a second build skips everything already current and a single edit rebuilds only that model and whatever depends on it. This works on a plain dbt project with no SQLBuild models. See [Change-aware builds](/concepts/dbt-compatibility/change-aware-builds).
 
 It also adds standalone operations that work against a production-shaped git ref: [`sqb dbt clone`](/concepts/dbt-compatibility/clone) to populate a target from production, and [`sqb dbt diff`](/concepts/dbt-compatibility/diff) to compare a build against a production baseline.
 
@@ -778,9 +780,9 @@ target = "dev"
 
 `source = "dbt_profile"` tells SQLBuild to connect using your dbt profile, so it talks to the same warehouse dbt does.
 
-The `[dbt.production_ref]` block configures where your production-shaped relations live, and is used by [`sqb dbt clone`](/concepts/dbt-compatibility/clone) and [`sqb dbt diff`](/concepts/dbt-compatibility/diff). It is not used by ordinary `sqb dbt build`, which is change-aware off warehouse fingerprints alone. See [Configuration](#configuration) for the field reference and the schema-name override.
+The `[dbt.production_ref]` block configures where your production-shaped relations live, and is used by [`sqb dbt clone`](/concepts/dbt-compatibility/clone) and [`sqb dbt diff`](/concepts/dbt-compatibility/diff). It is not used by ordinary `sqb dbt build`, whose change-aware pruning comes from warehouse fingerprints alone. See [Configuration](#configuration) for the field reference and the schema-name override.
 
-Run `sqb dbt build --select path:models/marts` once to build your selected dbt models with state recorded, then plan again. Once everything in the selection is current, the dbt side reports nothing to do:
+Run `sqb dbt build --select path:models/marts` once to build your selected dbt models with state recorded, then plan again with `--changes-only`. Once everything in the selection is current, the dbt side reports nothing to do:
 
 ```
 Plan ready (0 selected resources)
@@ -800,7 +802,7 @@ dbt (3 selected resources)
     Blocked (0)
 ```
 
-The next `sqb dbt build` skips the dbt run entirely because nothing changed. Change one model and only that model, plus whatever depends on it, rebuilds.
+The next `sqb dbt build --changes-only` skips the dbt run entirely because nothing changed. Change one model and only that model, plus whatever depends on it, rebuilds.
 
 ### How it works
 
@@ -808,7 +810,7 @@ The next `sqb dbt build` skips the dbt run entirely because nothing changed. Cha
 2. SQLBuild reads the manifest to understand dbt model names and their qualified warehouse tables
 3. SQLBuild resolves your `--select`/`--exclude` against dbt by running `dbt ls`, so dbt-native selectors like `state:modified` and `package:` are evaluated by dbt itself, not reimplemented
 4. SQLBuild plans which dbt models actually need to run, using warehouse-stored fingerprints and source freshness
-5. `sqb dbt plan/run/build/test` orchestrates the run: dbt builds only the models that changed, pruning everything that is current
+5. `sqb dbt plan/run/build/test` orchestrates the run: dbt builds the full selection by default, and with `--changes-only` builds only the models that changed, pruning everything that is current
 6. (Optional) any SQLBuild models you have added run last, against the dbt outputs
 
 Each step calls the `dbt` CLI directly: `dbt compile` for the manifest, `dbt ls` for selection, and `dbt build`/`dbt run` for execution.
@@ -830,11 +832,11 @@ Declared flags are routed to the right place automatically:
 | `--full-refresh` | dbt **and** SQLBuild | Forces a full rebuild of selected models and tells SQLBuild's planner not to skip them. |
 | `--threads` | dbt (`--threads`) and SQLBuild (`--concurrency`) | |
 | `--target` / `--project-dir` / `--profiles-dir` / `--profile` / `--target-path` | dbt | Standard dbt locators. |
-| `--force` | SQLBuild | Bypasses change detection: plans and runs every selected model even if its fingerprint is unchanged. See below. |
+| `--changes-only` | SQLBuild | Prunes models whose fingerprint and relation are unchanged from the dbt run. See below. |
 
-##### `--force`
+##### `--changes-only`
 
-By default SQLBuild skips any model whose fingerprint and relation are unchanged. `--force` overrides that for the current run: every selected model is planned and run regardless of whether it changed. It is the dbt-interop equivalent of native `sqb build --force`, and is useful when you want to rebuild despite a clean plan (for example, to re-materialize after an out-of-band warehouse change). It does not alter fingerprints permanently; the next run without `--force` is change-aware again.
+By default `sqb dbt build` runs every selected model, exactly like dbt. `--changes-only` turns on change-aware pruning for the current run: any model whose fingerprint and relation are unchanged is dropped from the dbt command, so dbt only rebuilds what actually changed. It is the dbt-interop equivalent of native `sqb build --changes-only`. Pruning is driven by the warehouse fingerprints SQLBuild records on every build, so a build without the flag still keeps state current; the next `--changes-only` run picks up exactly where it left off. It is distinct from `--full-refresh`: `--changes-only` decides *whether* a model runs, while `--full-refresh` decides *how* (a full rebuild rather than an incremental run).
 
 ##### `--vars`
 
@@ -1010,11 +1012,11 @@ The `test_type:data` and `test_type:unit` selectors from dbt are mapped to SQLBu
 
 Source: `concepts/dbt-compatibility/change-aware-builds.mdx`
 
-Skip unchanged dbt models by fingerprinting them in the warehouse, with cascade propagation and source freshness.
+Opt into skipping unchanged dbt models by fingerprinting them in the warehouse, with cascade propagation and source freshness.
 
-When you run `sqb dbt build` or `sqb dbt run`, SQLBuild plans which dbt models actually need to run instead of rebuilding everything in the selection. Models whose SQL has not changed and whose inputs are current are pruned from the dbt command, so a second build skips them entirely.
+By default, `sqb dbt build` and `sqb dbt run` rebuild everything in the selection, exactly like dbt. With `--changes-only`, SQLBuild instead plans which dbt models actually need to run: models whose SQL has not changed and whose inputs are current are pruned from the dbt command, so a second build skips them entirely.
 
-This works on a plain dbt project, with no SQLBuild models and no changes to your dbt files. SQLBuild reads the dbt manifest, compares it against state it stores in your warehouse, and decides per model whether dbt needs to run it.
+This works on a plain dbt project, with no SQLBuild models and no changes to your dbt files. SQLBuild reads the dbt manifest, compares it against state it stores in your warehouse, and decides per model whether dbt needs to run it. The fingerprints below are recorded on every build, so change-aware pruning is ready the moment you pass `--changes-only`.
 
 ### How dbt models are tracked
 
@@ -1032,15 +1034,15 @@ The version identity comes from dbt's own `checksum` for the model node in the m
 
 After dbt runs, SQLBuild writes an updated fingerprint for each dbt model that executed, so the next plan sees them as current.
 
-#### Overriding change detection with `--force`
+#### Enabling change-aware pruning with `--changes-only`
 
-`--force` bypasses the table above for the current run: every selected dbt model is planned and run regardless of whether its fingerprint matches or its relation exists.
+The table above only takes effect under `--changes-only`. Without it, every selected dbt model is planned and run regardless of whether its fingerprint matches; with it, current models are pruned from the dbt command.
 
 ```bash
-sqb dbt build --select path:models/marts --force
+sqb dbt build --select path:models/marts --changes-only
 ```
 
-Use it when you want to rebuild despite a clean plan, for example after an out-of-band change to the warehouse that SQLBuild's fingerprints cannot see. `--force` does not change fingerprints permanently or disable tracking; it just ignores the skip decision this once, and the next run without it is change-aware again. It is distinct from `--full-refresh`: `--force` decides *whether* a model runs, while `--full-refresh` decides *how* (a full rebuild rather than an incremental run). This mirrors native `sqb build --force`. See [Flags](/concepts/dbt-compatibility/overview#flags) for how flags route across dbt and SQLBuild.
+Use the default full build when you want to rebuild despite a clean plan, for example after an out-of-band change to the warehouse that SQLBuild's fingerprints cannot see. Fingerprints are recorded on every build regardless of the flag, so switching between full and change-aware runs never loses state. It is distinct from `--full-refresh`: `--changes-only` decides *whether* a model runs, while `--full-refresh` decides *how* (a full rebuild rather than an incremental run). This mirrors native `sqb build --changes-only`. See [Flags](/concepts/dbt-compatibility/overview#flags) for how flags route across dbt and SQLBuild.
 
 #### What SQLBuild creates in your warehouse
 
@@ -1073,7 +1075,7 @@ Source freshness records are persisted after a successful build, so the next pla
 
 ### Pruning and steady state
 
-Only the dbt models classified as `run` are passed to the underlying `dbt build`/`dbt run` command. Current models are removed from the dbt selection, dbt tests and seeds for pruned models are dropped from the command, and dbt never sees the models it does not need to rebuild.
+Under `--changes-only`, only the dbt models classified as `run` are passed to the underlying `dbt build`/`dbt run` command. Current models are removed from the dbt selection, dbt tests and seeds for pruned models are dropped from the command, and dbt never sees the models it does not need to rebuild.
 
 When every dbt model in the selection is current, SQLBuild does not invoke dbt at all. The dbt section of the plan reports the skip and lists the current models:
 
@@ -1091,7 +1093,7 @@ dbt (3 selected resources)
       model.analytics.dim_products    no change
 ```
 
-A first build runs the changed models; a second build with no changes skips the entire dbt run and only re-evaluates SQLBuild models, which are themselves current. This is the same skip-unchanged behavior SQLBuild applies to its own models, extended over your existing dbt project.
+With `--changes-only`, a first build runs the changed models; a second build with no changes skips the entire dbt run and only re-evaluates SQLBuild models, which are themselves current. This is the same opt-in skip-unchanged behavior SQLBuild applies to its own models, extended over your existing dbt project.
 
 ### Replay on change
 
@@ -1777,6 +1779,7 @@ default_audit_run_scope = "final"
 | Field | Default | Description |
 |-------|---------|-------------|
 | `sql_analysis` | `true` | Enable SQL validation and static analysis at compile time |
+| `changes_only` | `false` | Enable [change-aware pruning](/concepts/planning#changes-only-mode) for `plan`, `build`, and `sqb dbt` execution without passing `--changes-only` each run. Can also be set per target under `[targets.<name>]`. The CLI flag takes precedence, then the selected target, then local settings, then this project setting. |
 | `virtual_environments` | `false` | Enable [virtual environments](/concepts/virtual-environments) (versioned model outputs, promotion, rollback, state management). When `false`, the project runs in standard mode. |
 | `query_change_tracking` | `true` | Track query fingerprints for change detection |
 | `sql_validation` | `true` | Validate SQL syntax during compilation |
@@ -2551,7 +2554,7 @@ For common ingestion you can declare the source entirely in YAML, with no `@load
 
 ### Source freshness
 
-Source freshness lets SQLBuild observe whether a source's data has changed between runs. This feeds into [planning and change detection](/concepts/planning): models downstream of unchanged sources are skipped automatically.
+Source freshness lets SQLBuild observe whether a source's data has changed between runs. This feeds into [planning and change detection](/concepts/planning): under `--changes-only`, models downstream of unchanged sources are skipped.
 
 Configure freshness per source with a `freshness:` block:
 
@@ -4065,9 +4068,9 @@ Source: `concepts/planning.mdx`
 
 How SQLBuild decides what to build: fingerprints, change reasons, and warehouse-native state.
 
-When you run `sqb plan` or `sqb build`, SQLBuild compiles your project, compares it against the current warehouse state, and produces a plan. By default, only stale work runs - unchanged models, seeds, audits, and Python nodes are skipped automatically.
+When you run `sqb plan` or `sqb build`, SQLBuild compiles your project, compares it against the current warehouse state, and produces a plan. By default, SQLBuild runs your full selection - the same predictable behavior as a plain build, with nothing to configure.
 
-Use `--force` to override change detection and run everything selected, regardless of state.
+Change-aware pruning is opt-in. Pass `--changes-only` (or set `changes_only = true` in config) to narrow the run to only stale work - unchanged models, seeds, audits, and Python nodes are then skipped automatically. The fingerprints and change reasons below are recorded on every successful build regardless, so change detection is ready the moment you enable pruning.
 
 ### What is tracked
 
@@ -4108,7 +4111,29 @@ The plan assigns a reason to each node that needs work:
 | Upstream changed | An upstream model's change cascades downstream (see [Cascade propagation](/concepts/planning/cascade-propagation)) |
 | Run despite unchanged | The model is configured to run periodically even without changes (see [Run despite unchanged](#run-despite-unchanged)) |
 
-Unchanged nodes are skipped and show as current in the plan output.
+By default, every selected node runs regardless of its reason. Under `--changes-only`, nodes with no pending work are pruned and show as current in the plan output.
+
+### Changes-only mode
+
+By default, SQLBuild executes all selected models regardless of whether they have changed. `--changes-only` narrows the scope to only models that are actually stale:
+
+```bash
+sqb build --changes-only
+sqb build --select path:models/marts --changes-only
+sqb plan --changes-only
+```
+
+To make it the default for a project or target, set it in config instead of passing the flag every run:
+
+```toml
+[settings]
+changes_only = true
+
+[targets.dev]
+changes_only = true
+```
+
+The CLI flag takes precedence, followed by the selected target, explicit local settings, then project settings. When any source enables it, the planner removes models and functions from the selected scope if they have no pending work; models with any change reason, a pending backfill, or a changed upstream source are kept. Sources, seeds, and other non-model resources are always kept.
 
 ### On this topic
 
@@ -4204,9 +4229,9 @@ See [Incremental Models: Replay on change](/concepts/incremental#replay-on-chang
 
 Source: `concepts/planning/source-freshness.mdx`
 
-Observing whether external source data has actually changed between runs, so downstream models are skipped when sources are unchanged.
+Observing whether external source data has actually changed between runs, so downstream models can be skipped when sources are unchanged.
 
-Source freshness lets SQLBuild observe whether external source data has actually changed between runs. Models downstream of unchanged sources are skipped automatically.
+Source freshness lets SQLBuild observe whether external source data has actually changed between runs. Under [`--changes-only`](/concepts/planning#changes-only-mode), models downstream of unchanged sources are skipped; on a default full build the observations are still recorded so pruning is accurate the next time you enable it.
 
 ### Configuration
 
@@ -7673,7 +7698,7 @@ Build a subset of models with `--select`:
 sqb build --virtual-env pr_123 --select fact_orders
 ```
 
-Partial builds leave the VDE in `active` (working) status if downstream models remain stale. A follow-up `sqb build --virtual-env pr_123` (without `--select`) builds the remaining stale models to finalize the VDE.
+Partial builds leave the VDE in `active` (working) status if downstream models remain stale. A follow-up `sqb build --virtual-env pr_123 --changes-only` (without `--select`) builds the remaining stale models to finalize the VDE; a plain `sqb build --virtual-env pr_123` rebuilds the whole selection.
 
 #### Stale upstream coherence
 
@@ -7692,15 +7717,15 @@ sqb build --virtual-env pr_123 --select fact_orders --include-stale-upstreams
 
 #### Stale-driven selection
 
-Virtual environment builds are change-aware by default. When combined with `--select`, only models that are both selected and stale are built:
+Virtual environment builds run the full selection by default, like standard mode. Add `--changes-only` to intersect the selection with the stale-driven set, so only models that are both selected and stale are built:
 
 ```bash
-sqb build --virtual-env pr_123 --select path:models/marts
+sqb build --virtual-env pr_123 --select path:models/marts --changes-only
 ```
 
-This intersects the user selection with the stale-driven selection, useful when the stale cascade is large and you want to build a coherent subgraph without running unchanged models. Use `--force` to override and build all selected models regardless of state.
+This is useful when the stale cascade is large and you want to build a coherent subgraph without running unchanged models. Without `--changes-only`, every selected model is built regardless of state.
 
-Standard mode is change-aware by default. See [Planning and Change Detection](/concepts/planning) for how fingerprints, source freshness, and identity tracking determine what gets built.
+Change-aware pruning is opt-in in both standard mode and virtual environments. See [Planning and Change Detection](/concepts/planning) for how fingerprints, source freshness, and identity tracking determine what gets built.
 
 ### Stale detection
 
@@ -9794,7 +9819,7 @@ sqb --project-dir <path> plan [flags]
 | Flag | Description |
 |------|-------------|
 | `--no-sql-validation` | Skip compile-time SQL syntax validation |
-| `--force` | Override change detection and plan all selected models regardless of state |
+| `--changes-only` | Narrow the plan to only stale models; prune anything already current |
 | `--no-python` | Exclude read-side Python tasks and assets from the plan |
 | `--defer-to` | Resolve unselected model references against another target |
 | `--json` | Output the plan as JSON |
@@ -9868,7 +9893,7 @@ Execute the build lifecycle: compile, plan, and build what changed.
 
 ## sqb build
 
-Compiles, plans, and executes the build lifecycle. By default, only stale work runs; unchanged models, seeds, audits, and Python nodes are skipped automatically. Use `--no-tests` and `--no-audits` to skip validation for fast iteration.
+Compiles, plans, and executes the build lifecycle. By default, SQLBuild runs your full selection. Pass `--changes-only` (or set `changes_only = true` in config) to skip work that is already current - unchanged models, seeds, audits, and Python nodes. Use `--no-tests` and `--no-audits` to skip validation for fast iteration.
 
 ### Usage
 
@@ -9880,7 +9905,7 @@ sqb --project-dir <path> build [flags]
 
 | Flag | Description |
 |------|-------------|
-| `--force` | Override change detection and build all selected models regardless of state |
+| `--changes-only` | Skip models, seeds, audits, and Python nodes that are already current; build only stale work |
 | `--no-tests` | Skip SQL unit tests |
 | `--no-audits` | Skip audits |
 | `--no-python` | Skip read-side Python tasks and assets (loader-side Python still runs for selected sources) |
@@ -11300,7 +11325,7 @@ Run SQLBuild alongside an existing dbt project.
 
 ## sqb dbt
 
-Orchestrate dbt and SQLBuild together. Each subcommand runs dbt first, then SQLBuild, with selection logic that works across both project graphs. `sqb dbt build`, `sqb dbt run`, and `sqb dbt plan` are [change-aware](/concepts/dbt-compatibility/change-aware-builds): they prune dbt models that have not changed. See [Using SQLBuild with dbt](/concepts/dbt-compatibility/overview) for concepts and selection behavior.
+Orchestrate dbt and SQLBuild together. Each subcommand runs dbt first, then SQLBuild, with selection logic that works across both project graphs. `sqb dbt build`, `sqb dbt run`, and `sqb dbt plan` run the full selection by default and become [change-aware](/concepts/dbt-compatibility/change-aware-builds) with `--changes-only`, pruning dbt models that have not changed. See [Using SQLBuild with dbt](/concepts/dbt-compatibility/overview) for concepts and selection behavior.
 
 ### sqb dbt plan
 

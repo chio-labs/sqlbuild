@@ -5,48 +5,11 @@ import pytest
 from sqlbuild.executor.clone.main._prephase_row_from_clone_item import (
     prephase_row_from_clone_item,
 )
-from sqlbuild.executor.clone.main.prephase_cause_annotation import (
-    format_prephase_cause_annotation,
-)
 from sqlbuild.executor.clone.models import CloneItemResult, PrephaseProgressRow
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from tests.unit.src.sqlbuild.executor.clone.main._test_types import (
-    PrephaseCauseAnnotationTestCase,
     PrephaseCloneItemRowTestCase,
 )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    (
-        PrephaseCauseAnnotationTestCase(
-            description="formats one selected model cause",
-            caused_by_names=("fact_orders",),
-            expected_annotation="  [for fact_orders]",
-        ),
-        PrephaseCauseAnnotationTestCase(
-            description="sorts and caps selected model causes at four",
-            caused_by_names=(
-                "mart_activity",
-                "dim_customer",
-                "fact_orders",
-                "mart_revenue",
-                "mart_retention",
-                "mart_profit",
-            ),
-            expected_annotation=(
-                "  [for dim_customer, fact_orders, mart_activity, mart_profit and 2 more]"
-            ),
-        ),
-    ),
-    ids=lambda case: case.description,
-)
-def test_given_selected_model_causes_when_formatting_then_uses_bracketed_capped_annotation(
-    test_case: PrephaseCauseAnnotationTestCase,
-) -> None:
-    result: str = format_prephase_cause_annotation(test_case.caused_by_names)
-
-    assert result == test_case.expected_annotation
 
 
 @pytest.mark.parametrize(
