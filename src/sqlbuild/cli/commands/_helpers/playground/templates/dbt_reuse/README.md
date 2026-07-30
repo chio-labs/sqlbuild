@@ -1,7 +1,7 @@
 # dbt Playground
 
-A pure dbt project (no SQLBuild models) used to demonstrate SQLBuild's
-change-aware dbt builds, clone, and diff.
+A pure dbt project (no SQLBuild models) used to demonstrate ordinary dbt
+execution through SQLBuild, plus explicit clone and diff commands.
 
 The project is a small jaffle-style analytics warehouse with 10 dbt models across
 staging, intermediate, and marts, backed by local DuckDB seeds.
@@ -26,8 +26,8 @@ sqb dbt init --project-dir dbt_project --profiles-dir profiles
 # first build: SQLBuild builds the selected dbt models
 sqb dbt build
 
-# second build: change-aware - unchanged dbt models are pruned from the dbt run
-sqb dbt build --changes-only
+# second build: the ordinary dbt selection runs again
+sqb dbt build
 
 # compare your dev branch against the production-shaped main branch
 sqb dbt diff --select fct_orders

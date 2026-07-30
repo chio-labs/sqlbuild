@@ -1241,30 +1241,31 @@ wheels = [
 
 [[package]]
 name = "fensu"
-version = "0.2.1"
+version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fensu-cli" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/4c/72/b2c2a8168220198098d90498ca429e5121e1067d499a90dddd45fbb11946/fensu-0.7.0.tar.gz", hash = "sha256:4dd08a014c8f41151284e310fa551c02003aeb95502d4f52072bb8145d72d7ba", size = 447319, upload-time = "2026-07-26T08:34:27.727Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e1/65/ea74a2e7ea330cac9fcf6f1ba713fdac94e490303f3950ff1326f958f086/fensu-0.2.1-cp312-abi3-macosx_10_12_x86_64.whl", hash = "sha256:391307fa6ee8af508752e51882aa576e56ed8f71ea2c2def26f19915804216e9", size = 4968954, upload-time = "2026-07-19T19:13:01.316Z" },
-    { url = "https://files.pythonhosted.org/packages/b1/c6/fa253b8edb4e98a47b179e9010cd9dd248dca823dd4c5287dc3ae3af6935/fensu-0.2.1-cp312-abi3-macosx_11_0_arm64.whl", hash = "sha256:fab45cf119a349b27bce0190ffb03546983ba3c7f7d6a4aca4ebfdfc3fa12e19", size = 4827726, upload-time = "2026-07-19T19:13:03.544Z" },
-    { url = "https://files.pythonhosted.org/packages/48/3b/8b696fd195f24293cbd667c3a93b7761efebda91c433fe9d953a8071cc05/fensu-0.2.1-cp312-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e991f3ac074f85d8b90bdf64670b521227df042a3cd64c9df7a1283406874214", size = 5218297, upload-time = "2026-07-19T19:13:05.462Z" },
-    { url = "https://files.pythonhosted.org/packages/c7/f4/dae2287a9754b7da610252e7a54401678b64703e0321f0d1b14165f2d7a2/fensu-0.2.1-cp312-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a4874ee6357de6c7cab85dd3e8f7fd4b0874886b37afdaf7857d7ddfb7ac0a83", size = 5258151, upload-time = "2026-07-19T19:13:07.394Z" },
-    { url = "https://files.pythonhosted.org/packages/1f/2b/74d98743f0fa2508d20a7be4a041de2ccda6f041e9ecd2bdc570ebf2ba6c/fensu-0.2.1-cp312-abi3-win_amd64.whl", hash = "sha256:f856827c6100a4676d854e97f71c40a2bf11453690e6c3dd825d7611f7aaa9af", size = 4764853, upload-time = "2026-07-19T19:13:09.461Z" },
+    { url = "https://files.pythonhosted.org/packages/6e/2c/0d4cd4e01202c9abd72203e17de9c304326e308653a71dab73b680f693eb/fensu-0.7.0-cp312-abi3-macosx_10_12_x86_64.whl", hash = "sha256:92c94299ca8fc5ab13d647213668913b4f243677426894daafbd20ac265b3f7d", size = 4825810, upload-time = "2026-07-26T08:34:07.698Z" },
+    { url = "https://files.pythonhosted.org/packages/cb/b9/6b7d09b822f8cc72d159518da238678934ef5b6c2161585644ad8e053638/fensu-0.7.0-cp312-abi3-macosx_11_0_arm64.whl", hash = "sha256:0799444e43e48cb54c5cdb7dac034c280657f2332102495d0ff6565188012dbf", size = 4677489, upload-time = "2026-07-26T08:34:09.731Z" },
+    { url = "https://files.pythonhosted.org/packages/99/67/596d50d0adb23196e18dd94d2224939d4cda511662130ba232ca6783673e/fensu-0.7.0-cp312-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:b47ae5fba46795a60c17799392b6cd998a2889e5f2b9f7046c2615027067c27f", size = 5068643, upload-time = "2026-07-26T08:34:11.539Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/e3/383d7f065b42e551865f9eb8c17229d395552bfeb0ab4efda0cc7d530b90/fensu-0.7.0-cp312-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:eede5756eb15a19164b0479027a0839b4fc852f3d25f5b4b486e7d54f596fac6", size = 5110611, upload-time = "2026-07-26T08:34:13.344Z" },
+    { url = "https://files.pythonhosted.org/packages/e9/4e/4ce0bf2e49480fd901c218c4a54fc7423f5dd606254afe0324fc8c5bb506/fensu-0.7.0-cp312-abi3-win_amd64.whl", hash = "sha256:273ef5638e6a8b2f8823bf03b216428a4c80a15c30de5757e17b4e9ab3df3053", size = 4612666, upload-time = "2026-07-26T08:34:14.918Z" },
 ]
 
 [[package]]
 name = "fensu-cli"
-version = "0.2.1"
+version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/94/59/e0cfd0d215c7e76fee2bdadadf2f510193f7df33b9281e13f1454762e360/fensu_cli-0.2.1.tar.gz", hash = "sha256:e4902ffcd97edd9813ef6c4e3ce87636afcac5dbc42975e998b9e37fcd7fd0f9", size = 260135, upload-time = "2026-07-19T19:29:39.325Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ed/69/d1a5fd5eeb97c9914b3f7ea13015993d2d98fe7ac1809076b0a68772348b/fensu_cli-0.7.0.tar.gz", hash = "sha256:8e21cfa91f2dc8040423d350d2ac629333198907526bc7e22cf7c45bb4b9df24", size = 407498, upload-time = "2026-07-26T08:34:28.884Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ef/bf/b800c78164f17afed0e5b1b5d5e273f82f11ec59ba378d850b2b36987795/fensu_cli-0.2.1-cp312-cp312-macosx_10_12_x86_64.whl", hash = "sha256:210394fc077c8012b69cfa38bf220f62ad54b6daf44a6ec38d112fab02d0763e", size = 3201823, upload-time = "2026-07-19T19:29:30.597Z" },
-    { url = "https://files.pythonhosted.org/packages/7d/ef/f732ede4a087bcae533f71c484be5487185f66f8be5a5d8c69496e13a1f5/fensu_cli-0.2.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:39e3b904a57dfb83b84be2c3338ebcb43ab6b4fb2abf75e0867590258238183d", size = 3093396, upload-time = "2026-07-19T19:29:32.104Z" },
-    { url = "https://files.pythonhosted.org/packages/fe/99/a0410f2578bb98922df8e9411b006b270b9e993619eaf06a2a8631447611/fensu_cli-0.2.1-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:657030ddfba79db90ac631063d950e5b123e1e9c51b111269f581191c6b4e940", size = 3274416, upload-time = "2026-07-19T19:29:33.576Z" },
-    { url = "https://files.pythonhosted.org/packages/ae/c9/efde26bd0f9bc581eff2963908967e2d04651a883d44da2f1d1cfd8bdcf7/fensu_cli-0.2.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5c629b0b09ae6a1fef5e42e8a997811955664aa0853d8370c7016f1adbbbc6d8", size = 3365941, upload-time = "2026-07-19T19:29:35.111Z" },
-    { url = "https://files.pythonhosted.org/packages/e1/f3/672508b996926050d06d2f4ee488359d52da1fbf21a28419eefe8b256cd6/fensu_cli-0.2.1-cp312-cp312-win_amd64.whl", hash = "sha256:e84556a259f01621ed0ab3b31bc26bb7c32ac037ecd4ec61f580d2a6901936ae", size = 3013437, upload-time = "2026-07-19T19:29:36.515Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/32/48ffcf138f23a1b292d58c15376df071f5092eb7b73625e34caa5aa0b07d/fensu_cli-0.7.0-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:6691402a575596397a5b075fc4c86dcb1d41afaa96dd1784913a2d6120d0ad47", size = 5011601, upload-time = "2026-07-26T08:34:16.839Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/57/f54a438e6237cf1b4cde884360e2ef11049e938e096ff9de1f1f18388ce7/fensu_cli-0.7.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:79f31298768a79a2a7490fa280d619b40ac5033e55b35eeb4e7ef40e4fcfac4c", size = 4776898, upload-time = "2026-07-26T08:34:18.711Z" },
+    { url = "https://files.pythonhosted.org/packages/ae/0e/d78c8cd1e98909363beba0d913c10ca8bebfdae2fec46cfd8abe67dd0ee2/fensu_cli-0.7.0-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:c99e465da033e6656c7f560eaa10a04189bbacf3819784e65b831e7aa96933bb", size = 5133532, upload-time = "2026-07-26T08:34:20.735Z" },
+    { url = "https://files.pythonhosted.org/packages/45/e8/ee0c59d847e755a71fed8af589ad2e55559f15717b6ffa47d620d9809187/fensu_cli-0.7.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:f643c114ee7a9215688282df51a9a9036ea093f07ee40dbf9ccd8eab62e2c6e5", size = 5278235, upload-time = "2026-07-26T08:34:23.755Z" },
+    { url = "https://files.pythonhosted.org/packages/5c/95/806b4cca943d7fa190ff3bd3af9466c98da15ad87cd0314962f93ebb3c49/fensu_cli-0.7.0-py3-none-win_amd64.whl", hash = "sha256:2fb89605899a0c6aeb8fc8dd80d7276cda89c3cd18ccb96f43e551df67ea7140", size = 4679648, upload-time = "2026-07-26T08:34:25.519Z" },
 ]
 
 [[package]]

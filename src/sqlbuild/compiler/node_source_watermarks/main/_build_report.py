@@ -1,4 +1,4 @@
-"""Public node source watermark stale-input report entrypoint."""
+"""Internal node source watermark stale-input report entrypoint."""
 
 from __future__ import annotations
 

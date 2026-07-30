@@ -32,13 +32,11 @@ def add_dbt_execution_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--indirect-selection", default=None)
     parser.add_argument("--defer", action="store_true", default=False)
     parser.add_argument("--defer-to", default=None)
-    parser.add_argument("--defer-clone-from", action="store_true", default=None)
     parser.add_argument("--start-cursor-ts", default=None)
     parser.add_argument("--end-cursor-ts", default=None)
     parser.add_argument("--start-cursor-int", default=None)
     parser.add_argument("--end-cursor-int", default=None)
     parser.add_argument("--fail-fast", action="store_true", default=False)
-    parser.add_argument("--changes-only", action="store_true", default=False)
     parser.add_argument("--hard-copy", action="store_true", default=False)
     parser.add_argument(
         "dbt_passthrough",
@@ -56,7 +54,7 @@ def build_dbt_execution_parser(
     parser: argparse.ArgumentParser = _StrictArgumentParser(
         prog=prog or f"sqb dbt {command.value}",
         add_help=True,
-        description=f"Run `dbt {command.value}` through SQLBuild change detection.",
+        description=f"Run `dbt {command.value}` with SQLBuild interop.",
         epilog="Pass raw dbt operational flags after `--`, e.g. `-- --log-level debug`.",
     )
     add_dbt_execution_args(parser)
@@ -96,14 +94,12 @@ def parse_dbt_execution_args(
         state=namespace.state,
         indirect_selection=namespace.indirect_selection,
         defer=namespace.defer,
-        defer_clone_from=namespace.defer_clone_from,
         defer_to=namespace.defer_to,
         start_cursor_ts=namespace.start_cursor_ts,
         end_cursor_ts=namespace.end_cursor_ts,
         start_cursor_int=namespace.start_cursor_int,
         end_cursor_int=namespace.end_cursor_int,
         fail_fast=namespace.fail_fast,
-        changes_only=namespace.changes_only,
         hard_copy=namespace.hard_copy,
         dbt_passthrough=(*leading, *tail),
     )

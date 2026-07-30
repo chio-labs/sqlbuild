@@ -8,16 +8,10 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
-from sqlbuild.compiler.planner.models import (
-    DependencyBaselinePlanEntry,
-    GraphNodeKey,
-    PlanOutput,
-)
-from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
+from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.integrations.dbt._helpers.selection.selector_terms import dbt_fqn_selector_term
@@ -28,9 +22,6 @@ from sqlbuild.integrations.dbt.types import (
     DbtInteropSkipReason,
     DbtLineageDirection,
     DbtLineageOutputFormat,
-    DbtModelOutcomeState,
-    DbtModelPlanAction,
-    DbtModelPlanReason,
 )
 from sqlbuild.spec.contracts.models import DbtProductionRefConfig, ScenarioConfig, SourceColumnEntry
 
@@ -49,14 +40,13 @@ class DbtManifestModel:
     node_checksum: str | None = None
     fqn: tuple[str, ...] = field(default_factory=tuple)
     query_sql: str = ""
-    definition_fingerprint: str = ""
     depends_on_nodes: tuple[str, ...] = field(default_factory=tuple)
     payload: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class DbtManifestSource:
-    """One dbt source node needed for SQLBuild freshness translation."""
+    """One dbt source node needed for graph and lineage resolution."""
 
     unique_id: str
     package_name: str
@@ -66,10 +56,6 @@ class DbtManifestSource:
     database: str | None = None
     schema: str | None = None
     identifier: str | None = None
-    loaded_at_field: str | None = None
-    loaded_at_query: str | None = None
-    freshness: dict[str, object] | None = None
-    freshness_filter: str | None = None
     payload: dict[str, object] = field(default_factory=dict)
 
 
@@ -84,7 +70,6 @@ class DbtManifestSeed:
     database: str | None = None
     schema: str | None = None
     alias: str | None = None
-    identity_hash: str | None = None
     payload: dict[str, object] = field(default_factory=dict)
 
 
@@ -97,7 +82,9 @@ class DbtManifestIndex:
     models_by_package_and_name: dict[tuple[str, str], DbtManifestModel]
     sources_by_unique_id: dict[str, DbtManifestSource] = field(default_factory=dict)
     seeds_by_unique_id: dict[str, DbtManifestSeed] = field(default_factory=dict)
-    seed_identity_warnings: tuple[str, ...] = field(default_factory=tuple)
+    validation_depends_on_nodes_by_unique_id: dict[str, tuple[str, ...]] = field(
+        default_factory=dict
+    )
 
 
 @dataclass(frozen=True)
@@ -379,48 +366,6 @@ class DbtCommandExecutionResult:
 
 
 @dataclass(frozen=True)
-class DbtModelExecutionOutcomeEntry:
-    """Actual or planned outcome for one dbt model upstream."""
-
-    unique_id: str
-    state: DbtModelOutcomeState
-    planned_action: DbtModelPlanAction | None = None
-    status: str | None = None
-    relation_name: str | None = None
-    node_checksum: str | None = None
-    messages: tuple[DbtNodeMessage, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class DbtExecutionOutcome:
-    """Aggregated dbt model outcomes used as SQLBuild upstream overlay."""
-
-    entries: tuple[DbtModelExecutionOutcomeEntry, ...] = field(default_factory=tuple)
-    stale_sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
-    blocked_sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
-
-    @property
-    def changed_unique_ids(self) -> tuple[str, ...]:
-        return tuple(
-            entry.unique_id for entry in self.entries if entry.state == DbtModelOutcomeState.CHANGED
-        )
-
-    @property
-    def current_unique_ids(self) -> tuple[str, ...]:
-        return tuple(
-            entry.unique_id for entry in self.entries if entry.state == DbtModelOutcomeState.CURRENT
-        )
-
-    @property
-    def blocking_unique_ids(self) -> tuple[str, ...]:
-        return tuple(
-            entry.unique_id
-            for entry in self.entries
-            if entry.state == DbtModelOutcomeState.BLOCKING
-        )
-
-
-@dataclass(frozen=True)
 class DbtLsNode:
     """One node returned by `dbt ls --output json`."""
 
@@ -577,14 +522,12 @@ class DbtInteropParsedArgs:
     state: str | None = None
     indirect_selection: str | None = None
     defer: bool = False
-    defer_clone_from: bool | None = None
     start_cursor_ts: str | None = None
     end_cursor_ts: str | None = None
     start_cursor_int: str | None = None
     end_cursor_int: str | None = None
     defer_to: str | None = None
     fail_fast: bool = False
-    changes_only: bool = False
     hard_copy: bool = False
     dbt_passthrough: tuple[str, ...] = field(default_factory=tuple)
 
@@ -598,7 +541,6 @@ class DbtInteropRoutedArgs:
     exclude: tuple[str, ...] = field(default_factory=tuple)
     dbt_args: tuple[str, ...] = field(default_factory=tuple)
     sqlbuild_args: tuple[str, ...] = field(default_factory=tuple)
-    defer_clone_from: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -613,99 +555,6 @@ class DbtInteropSelectionResult:
 
 
 @dataclass(frozen=True)
-class DbtModelPlanEntry:
-    """Planner result for one dbt model node."""
-
-    unique_id: str
-    package_name: str
-    name: str
-    action: DbtModelPlanAction
-    reason: DbtModelPlanReason
-    relation_name: str
-    fqn: tuple[str, ...] = field(default_factory=tuple)
-    fingerprint_query_sql: str | None = None
-    previous_query_sql: str | None = None
-    previous_version_hash: str | None = None
-    previous_metadata_json: str | None = None
-    expected_version_hash: str | None = None
-    blocked_source_unique_ids: tuple[str, ...] = field(default_factory=tuple)
-
-    @property
-    def selector_term(self) -> str:
-        return dbt_fqn_selector_term(fqn=self.fqn, fallback=self.name)
-
-
-@dataclass(frozen=True)
-class DbtModelPlanningResult:
-    """dbt model planning summary used for pruning dbt execution."""
-
-    entries: tuple[DbtModelPlanEntry, ...] = field(default_factory=tuple)
-    stale_sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
-    blocked_sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
-    source_freshness: StandardSourceFreshnessPlanningResult | None = None
-    selected_unique_ids: tuple[str, ...] = field(default_factory=tuple)
-    changed_seed_unique_ids: tuple[str, ...] = field(default_factory=tuple)
-    stale_out_of_selection_warning_messages: tuple[str, ...] = field(default_factory=tuple)
-
-    @property
-    def run_unique_ids(self) -> tuple[str, ...]:
-        return tuple(
-            entry.unique_id for entry in self.entries if entry.action == DbtModelPlanAction.RUN
-        )
-
-    @property
-    def run_selector_terms(self) -> tuple[str, ...]:
-        return tuple(
-            entry.selector_term for entry in self.entries if entry.action == DbtModelPlanAction.RUN
-        )
-
-    @property
-    def current_unique_ids(self) -> tuple[str, ...]:
-        return tuple(
-            entry.unique_id for entry in self.entries if entry.action == DbtModelPlanAction.CURRENT
-        )
-
-    @property
-    def blocked_unique_ids(self) -> tuple[str, ...]:
-        return tuple(
-            entry.unique_id for entry in self.entries if entry.action == DbtModelPlanAction.BLOCKED
-        )
-
-    @property
-    def displayed_entries(self) -> tuple[DbtModelPlanEntry, ...]:
-        """Return plan entries that should be shown to the user."""
-
-        if not self.selected_unique_ids:
-            return self.entries
-        selected: frozenset[str] = frozenset(self.selected_unique_ids)
-        return tuple(entry for entry in self.entries if entry.unique_id in selected)
-
-    @property
-    def displayed_run_unique_ids(self) -> tuple[str, ...]:
-        return tuple(
-            entry.unique_id
-            for entry in self.displayed_entries
-            if entry.action == DbtModelPlanAction.RUN
-        )
-
-    @property
-    def displayed_current_unique_ids(self) -> tuple[str, ...]:
-        return tuple(
-            entry.unique_id
-            for entry in self.displayed_entries
-            if entry.action == DbtModelPlanAction.CURRENT
-        )
-
-    @property
-    def displayed_blocked_unique_ids(self) -> tuple[str, ...]:
-        return tuple(
-            entry.unique_id
-            for entry in self.displayed_entries
-            if entry.action == DbtModelPlanAction.BLOCKED
-        )
-
-
-@dataclass(frozen=True)
 class DbtInteropPlan:
     """Plan output for one future `sqb dbt` command."""
 
@@ -716,12 +565,7 @@ class DbtInteropPlan:
     sqlbuild_command_argvs: tuple[tuple[str, ...], ...]
     selection: DbtInteropSelectionResult
     sqlbuild_plan_output: PlanOutput | None = None
-    dbt_model_plan: DbtModelPlanningResult | None = None
-    dbt_non_model_run_unique_ids: tuple[str, ...] = field(default_factory=tuple)
-    dbt_pruned_seed_unique_ids: tuple[str, ...] = field(default_factory=tuple)
-    dbt_pruned_test_unique_ids: tuple[str, ...] = field(default_factory=tuple)
     dbt_required_selector_terms: tuple[str, ...] = field(default_factory=tuple)
-    changes_only: bool = False
     supplemental_dbt_command_argvs: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     dbt_skip_reason: DbtInteropSkipReason | None = None
     sqlbuild_skip_reason: DbtInteropSkipReason | None = None
@@ -757,7 +601,6 @@ class DbtInteropInvocation:
     dbt_output_stream: TextIO
     routed: DbtInteropRoutedArgs
     discovered_inputs: DiscoveredProjectInputs
-    effective_changes_only: bool
     effective_sqlbuild_args: tuple[str, ...]
     dbt_options: DbtCliOptions
     dbt_vars: dict[str, object]
@@ -782,70 +625,6 @@ class DbtInteropPlanResolution:
 
 
 @dataclass(frozen=True)
-class DbtPlannedWork:
-    """Interop plan enriched with model planning plus the connection config."""
-
-    plan: DbtInteropPlan
-    connection_config: dict[str, object]
-
-
-@dataclass(frozen=True)
-class DbtWriteIdentities:
-    """Write-time identity hashes and query SQL lookups for dbt nodes."""
-
-    expected_version_hash_by_unique_id: dict[str, str | None]
-    seed_identity_by_unique_id: dict[str, str]
-    previous_version_hash_by_unique_id: dict[str, str]
-    write_identity_hashes: dict[GraphNodeKey, str]
-    query_sql_by_unique_id: dict[str, str]
-
-
-@dataclass(frozen=True)
-class DbtDeferClonePlan:
-    """Resolved defer-clone selection for one dbt interop execution."""
-
-    enabled: bool
-    unique_ids: frozenset[str]
-    cause_names: tuple[str, ...]
-    view_chain_terms: tuple[str, ...]
-    view_chain_unique_ids: frozenset[str]
-
-
-@dataclass(frozen=True)
-class DbtPreExecutionOutputs:
-    """Plan and missing-relation blocks resolved before dbt execution."""
-
-    plan: DbtInteropPlan
-    missing_relation_blocked_models: dict[str, tuple[DbtManifestModel, ...]]
-
-
-@dataclass(frozen=True)
-class DbtTrackedExecution:
-    """dbt execution result with fingerprint and watermark tracking applied."""
-
-    execution: DbtCommandExecutionResult
-    fingerprint_warnings: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtSqlbuildReplanResult:
-    """SQLBuild plan output and missing-relation blocks after dbt execution."""
-
-    plan_output: PlanOutput | None
-    missing_relation_blocked_models: dict[str, tuple[DbtManifestModel, ...]]
-
-
-@dataclass(frozen=True)
-class DbtFingerprintDestination:
-    """Run-scoped fingerprint destination coordinates for dbt node writes."""
-
-    run_id: str
-    fingerprint_database: str | None
-    fingerprint_schema: str | None
-    target_name: str | None
-
-
-@dataclass(frozen=True)
 class DbtInteropCommandArgs:
     """Selection, passthrough args, and executables for a dbt interop command."""
 
@@ -855,19 +634,6 @@ class DbtInteropCommandArgs:
     sqlbuild_command_args: tuple[str, ...] = ()
     dbt_executable: str = "dbt"
     sqlbuild_executable: str = "sqb"
-
-
-@dataclass(frozen=True)
-class DbtDeferClonePrephaseContext:
-    """Runtime environment inputs for a dbt defer-clone prephase."""
-
-    project_dir: Path
-    discovered_inputs: DiscoveredProjectInputs
-    dbt_options: DbtCliOptions
-    runner: Any
-    adapter: BaseAdapter
-    project: CompiledProject
-    connection_config: dict[str, object]
 
 
 @dataclass(frozen=True)
@@ -882,25 +648,10 @@ class DbtPlanEnvironment:
 
 
 @dataclass(frozen=True)
-class DbtSqlbuildPlanArtifacts:
-    """Optional dbt manifest, graph, and source-freshness planning artifacts."""
-
-    manifest: DbtManifestIndex | None = None
-    dbt_manifest: DbtManifestIndex | None = None
-    dbt_graph: DbtCombinedGraph | None = None
-    dbt_source_freshness: StandardSourceFreshnessPlanningResult | None = None
-
-
-@dataclass(frozen=True)
 class DbtSqlbuildPlanRequest:
-    """Selection, overrides, and dbt artifacts for a SQLBuild plan-output build."""
+    """Selection and native planner inputs for a SQLBuild plan-output build."""
 
     selected_model_names: tuple[str, ...]
-    required_dbt_unique_ids: tuple[str, ...]
     sqlbuild_args: tuple[str, ...]
-    forced_stale_model_names: tuple[str, ...] = ()
     external_blocked_model_names: tuple[str, ...] = ()
-    deferred_relations: dict[str, RelationInfo] | None = None
-    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = ()
-    disable_scope_pruning: bool = False
-    artifacts: DbtSqlbuildPlanArtifacts = field(default_factory=DbtSqlbuildPlanArtifacts)
+    test_manifest: DbtManifestIndex | None = None

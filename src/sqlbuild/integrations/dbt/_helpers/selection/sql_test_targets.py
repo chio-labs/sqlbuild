@@ -651,35 +651,29 @@ def _expected_model_names(*, project: CompiledProject) -> tuple[str, ...]:
 def _resolve_expected_model(
     *, manifest: DbtManifestIndex, expected_name: str, require_match: bool
 ) -> DbtManifestModel | None:
-    package_name: str | None = None
-    model_name: str = expected_name
+    matches: tuple[DbtManifestModel, ...] = manifest.models_by_name.get(expected_name, ())
+    if len(matches) > 1:
+        packages: str = ", ".join(sorted(model.package_name for model in matches))
+        raise DbtInteropRuntimeError(
+            f"dbt model '{expected_name}' is ambiguous across packages: {packages}",
+            help=f"Use __expected__<package>__{expected_name} to choose one dbt model.",
+        )
+    if len(matches) == 1:
+        return matches[0]
     if _DBT_QUALIFIED_EXPECTED_NAME_SEPARATOR in expected_name:
         package_name, model_name = expected_name.split(
             _DBT_QUALIFIED_EXPECTED_NAME_SEPARATOR, maxsplit=1
         )
-    if package_name is not None:
-        dbt_model: DbtManifestModel | None = manifest.models_by_package_and_name.get(
+        qualified_match: DbtManifestModel | None = manifest.models_by_package_and_name.get(
             (package_name, model_name)
         )
-        if dbt_model is None and require_match:
-            raise DbtInteropRuntimeError(
-                f"dbt model '{expected_name}' was selected for SQLBuild testing but was not found"
-            )
-        return dbt_model
-    matches: tuple[DbtManifestModel, ...] = manifest.models_by_name.get(model_name, ())
-    if len(matches) > 1:
-        packages: str = ", ".join(sorted(model.package_name for model in matches))
+        if qualified_match is not None:
+            return qualified_match
+    if require_match:
         raise DbtInteropRuntimeError(
-            f"dbt model '{model_name}' is ambiguous across packages: {packages}",
-            help=f"Use __expected__<package>__{model_name} to choose one dbt model.",
+            f"dbt model '{expected_name}' was selected for SQLBuild testing but was not found"
         )
-    if len(matches) == 0:
-        if require_match:
-            raise DbtInteropRuntimeError(
-                f"dbt model '{expected_name}' was selected for SQLBuild testing but was not found"
-            )
-        return None
-    return matches[0]
+    return None
 
 
 def _select_matches_expected_model(*, select: tuple[str, ...], dbt_model: DbtManifestModel) -> bool:

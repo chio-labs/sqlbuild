@@ -17,9 +17,6 @@ from sqlbuild.integrations.dbt.models import (
 from sqlbuild.integrations.dbt.types import (
     DbtLineageDirection,
     DbtLineageOutputFormat,
-    DbtModelOutcomeState,
-    DbtModelPlanAction,
-    DbtModelPlanReason,
 )
 from sqlbuild.spec.contracts.models import DbtConfig, LocalDbtConfig
 
@@ -161,15 +158,6 @@ class DbtCompileFullRefreshPipelineTestCase:
 
 
 @dataclass(frozen=True)
-class DbtDeferCloneResolutionTestCase:
-    description: str
-    cli_defer_clone_from: bool | None
-    project_defer_clone_from: bool
-    local_defer_clone_from: bool | None
-    expected_defer_clone_from: bool
-
-
-@dataclass(frozen=True)
 class DbtEventParseTestCase:
     description: str
     event: dict[str, object]
@@ -248,109 +236,11 @@ class DbtManifestIndexErrorTestCase:
 
 
 @dataclass(frozen=True)
-class DbtSourceFreshnessTranslationTestCase:
-    description: str
-    manifest_data: dict[str, object]
-    expected_source_name: str
-    expected_strategy: str | None
-    expected_column: str | None = None
-    expected_query: str | None = None
-    expected_filter: str | None = None
-    expected_warn_after: str | None = None
-    expected_error_after: str | None = None
-    expected_table: str | None = None
-    expected_source_names: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class DbtSourceFreshnessTranslationErrorTestCase:
-    description: str
-    manifest_data: dict[str, object]
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
-class DbtModelPlanningTestCase:
-    description: str
-    create_relation: bool
-    fingerprint_hash: str | None
-    expected_action: DbtModelPlanAction
-    expected_reason: DbtModelPlanReason
-    changes_only: bool = False
-
-
-@dataclass(frozen=True)
-class DbtCandidateSelectionTestCase:
-    description: str
-    changes_only: bool
-    expected_actions_by_unique_id: dict[str, DbtModelPlanAction]
-
-
-@dataclass(frozen=True)
-class DbtModelPlanningRelationPrefetchTestCase:
-    description: str
-    expected_list_relation_call_count: int
-    expected_relation_exists_call_count: int
-    expected_reasons_by_unique_id: dict[str, DbtModelPlanReason]
-
-
-@dataclass(frozen=True)
-class DbtSeedRelationPrefetchTestCase:
-    description: str
-    seed_names: tuple[str, ...]
-    existing_seed_names: tuple[str, ...]
-    expected_changed_seed_names: tuple[str, ...]
-    expected_seed_relation_exists_call_count: int
-
-
-@dataclass(frozen=True)
 class DbtExecutionSelectionStatusTestCase:
     description: str
     expected_total: int
     expected_output_fragment: str
     expected_completion_fragment: str
-
-
-@dataclass(frozen=True)
-class DbtFingerprintWriteTestCase:
-    description: str
-    query_sql: str
-    node_checksum: str
-    expected_definition: str
-    expected_version_hash: str
-    expected_metadata_fragment: str
-
-
-@dataclass(frozen=True)
-class DbtModelSourceBlockingTestCase:
-    description: str
-    expected_blocked_unique_ids: tuple[str, ...]
-    expected_blocked_sqlbuild_model_names: tuple[str, ...]
-    expected_blocked_source_unique_ids: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtSourceFreshnessScopeTestCase:
-    description: str
-    candidate_unique_ids: tuple[str, ...]
-    expected_freshness_request_names: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtExecutionArgvPruningTestCase:
-    description: str
-    expected_argv: tuple[str, ...] | None
-    changes_only: bool = False
-    model_action: DbtModelPlanAction = DbtModelPlanAction.RUN
-
-
-@dataclass(frozen=True)
-class DbtExecutionOutcomeTestCase:
-    description: str
-    expected_states_by_unique_id: tuple[tuple[str, DbtModelOutcomeState], ...]
-    expected_stale_sqlbuild_model_names: tuple[str, ...]
-    expected_blocked_sqlbuild_model_names: tuple[str, ...]
-    expected_output_fragments: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -489,7 +379,6 @@ class DbtArgRoutingTestCase:
     expected_exclude: tuple[str, ...]
     expected_dbt_args: tuple[str, ...]
     expected_sqlbuild_args: tuple[str, ...]
-    expected_defer_clone_from: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -510,7 +399,6 @@ class DbtArgParseTestCase:
     expected_full_refresh: bool
     expected_target: str | None
     expected_dbt_passthrough: tuple[str, ...]
-    expected_defer_clone_from: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -536,18 +424,6 @@ class DbtSelectionTestCase:
     expected_dbt_anchor_terms: tuple[str, ...] = ()
     expected_dbt_anchor_unique_ids_by_term: dict[str, tuple[str, ...]] | None = None
     expected_path_translations: tuple[tuple[str, str], ...] = ()
-
-
-@dataclass(frozen=True)
-class DbtDeferCloneViewChainTermsTestCase:
-    description: str
-    manifest_data: dict[str, object]
-    sqlbuild_model_sql_by_name: dict[str, str]
-    selected_sqlbuild_model_names: tuple[str, ...]
-    selected_dbt_unique_ids: tuple[str, ...]
-    expected_terms: tuple[str, ...]
-    expected_unique_ids: frozenset[str]
-    expected_clone_unique_ids: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -793,22 +669,3 @@ class DbtSqlTestFixtureNameTestCase:
     known_names: set[str]
     expected_names: set[str]
     expected_error_fragment: str | None = None
-
-
-@dataclass(frozen=True)
-class DbtSeedIdentityTestCase:
-    description: str
-    checksum: str
-    config_overrides: dict[str, object] | None
-    other_checksum: str
-    other_config_overrides: dict[str, object] | None
-    expected_same_identity: bool
-
-
-@dataclass(frozen=True)
-class DbtSeedContentIdentityTestCase:
-    description: str
-    left_content: str
-    right_content: str
-    expected_same_identity: bool
-    expected_warning: bool

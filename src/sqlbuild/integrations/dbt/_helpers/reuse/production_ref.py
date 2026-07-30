@@ -11,9 +11,6 @@ import tarfile
 import tempfile
 from pathlib import Path
 
-from sqlbuild.integrations.dbt._helpers.manifest.core import (
-    precompute_dbt_manifest_seed_content_hashes,
-)
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import (
     DbtInteropConfigError,
@@ -147,9 +144,7 @@ def compile_production_ref_manifest(
                 "dbt production_ref compile did not produce manifest.json",
                 help=f"Expected manifest at {manifest_path}.",
             )
-        manifest_contents: str = _manifest_contents_with_seed_content_hashes(
-            manifest_path=manifest_path
-        )
+        manifest_contents: str = manifest_path.read_text(encoding="utf-8")
         _write_production_ref_manifest_cache(
             sqlbuild_project_dir=sqlbuild_project_dir,
             cache_key=cache_key,
@@ -160,12 +155,6 @@ def compile_production_ref_manifest(
             manifest_contents=manifest_contents,
             command=command,
         )
-
-
-def _manifest_contents_with_seed_content_hashes(*, manifest_path: Path) -> str:
-    raw_data: object = json.loads(manifest_path.read_text(encoding="utf-8"))
-    enriched: object = precompute_dbt_manifest_seed_content_hashes(raw_data=raw_data)
-    return json.dumps(enriched, sort_keys=True)
 
 
 def _git_root(*, path: Path) -> Path:
