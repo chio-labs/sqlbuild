@@ -160,14 +160,14 @@ def test_given_reuse_checkout_with_packages_when_compiling_then_runs_deps_before
     "test_case",
     [
         DbtReuseCompileDepsTestCase(
-            description="precomputes seed content hashes before reuse checkout is deleted",
+            description="keeps production ref seed manifest free of SQLBuild identity state",
             expected_commands=("compile",),
             expected_manifest_contents="",
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_reuse_manifest_with_seed_when_indexing_after_compile_then_has_no_seed_warning(
+def test_given_reuse_manifest_with_seed_when_compiling_then_does_not_add_seed_identity_state(
     test_case: DbtReuseCompileDepsTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -239,8 +239,8 @@ def test_given_reuse_manifest_with_seed_when_indexing_after_compile_then_has_no_
     )
 
     assert tuple(command_names) == test_case.expected_commands
-    assert index.seed_identity_warnings == ()
-    assert index.seeds_by_unique_id["seed.analytics.countries"].identity_hash is not None
+    assert "seed.analytics.countries" in index.seeds_by_unique_id
+    assert "sqlbuild_seed_content_hash" not in result.manifest_contents
 
 
 @pytest.mark.parametrize(

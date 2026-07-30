@@ -4,17 +4,17 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from sqlbuild.compiler.node_source_watermarks.main.build_report import (
+from sqlbuild.compiler.node_source_watermarks.main._build_report import (
     build_node_source_watermark_staleness_report,
 )
-from sqlbuild.compiler.node_source_watermarks.main.classify_staleness import (
+from sqlbuild.compiler.node_source_watermarks.main._classify_staleness import (
     classify_node_source_watermark_staleness,
+)
+from sqlbuild.compiler.node_source_watermarks.main._render_report import (
+    format_node_source_watermark_staleness_report,
 )
 from sqlbuild.compiler.node_source_watermarks.main.native_graph import (
     build_native_node_source_watermark_inputs,
-)
-from sqlbuild.compiler.node_source_watermarks.main.render_report import (
-    format_node_source_watermark_staleness_report,
 )
 from sqlbuild.compiler.node_source_watermarks.models import (
     NativeNodeSourceWatermarkInputs,

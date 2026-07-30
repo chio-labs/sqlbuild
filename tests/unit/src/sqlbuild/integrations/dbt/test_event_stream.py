@@ -128,6 +128,28 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
             expected_status="success",
             expected_total=1,
         ),
+        DbtEventParseTestCase(
+            description="parses dbt unit test result",
+            event={
+                "data": {
+                    "execution_time": 0.07,
+                    "index": 1,
+                    "total": 1,
+                    "run_result": {"status": "pass"},
+                    "node_info": {
+                        "node_name": "stg_orders_unit",
+                        "resource_type": "unit_test",
+                        "unique_id": "unit_test.analytics.stg_orders_unit",
+                    },
+                },
+                "info": {"level": "info", "name": "NodeFinished", "msg": "PASS"},
+            },
+            expected_unique_id="unit_test.analytics.stg_orders_unit",
+            expected_resource_type="unit_test",
+            expected_node_name="stg_orders_unit",
+            expected_status="pass",
+            expected_total=1,
+        ),
     ],
     ids=lambda case: case.description,
 )

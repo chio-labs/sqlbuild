@@ -10,7 +10,6 @@ from typing import Any, TextIO
 from sqlbuild.cli.commands.main.execution.connection_progress import (
     build_connection_progress_reporter,
 )
-from sqlbuild.integrations.dbt._helpers.pipeline.execute import append_manifest_seed_warnings
 from sqlbuild.integrations.dbt._helpers.pipeline.interop_prologue import (
     compile_dbt_interop_project,
     load_compiled_dbt_manifest,
@@ -18,12 +17,9 @@ from sqlbuild.integrations.dbt._helpers.pipeline.interop_prologue import (
     resolve_dbt_interop_plan,
 )
 from sqlbuild.integrations.dbt._helpers.pipeline.plan_output import (
-    apply_dbt_build_pruning,
-    attach_dbt_model_plan,
     attach_sqlbuild_plan_output,
 )
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
-from sqlbuild.integrations.dbt.constants import DBT_FULL_REFRESH_FLAG
 from sqlbuild.integrations.dbt.main.runtime._report_progress import report_progress
 from sqlbuild.integrations.dbt.models import (
     DbtInteropCompiledProject,
@@ -96,30 +92,11 @@ def plan_dbt_interop_from_project(
         sqlbuild_executable=sqlbuild_executable,
         on_progress=on_progress,
     )
-    plan: DbtInteropPlan = attach_dbt_model_plan(
+    plan: DbtInteropPlan = attach_sqlbuild_plan_output(
         plan=resolution.plan,
         project_dir=project_dir,
         discovered_inputs=invocation.discovered_inputs,
         compiled=compiled,
-        manifest=manifest,
-        graph=resolution.graph,
-        full_refresh=DBT_FULL_REFRESH_FLAG in invocation.routed.dbt_args,
-        changes_only=invocation.effective_changes_only,
-        connection_progress=connection_progress,
-        on_progress=on_progress,
-    )
-    plan = append_manifest_seed_warnings(plan=plan, manifest=manifest)
-    plan = apply_dbt_build_pruning(
-        plan=plan,
-        changes_only=invocation.effective_changes_only,
-    )
-    plan = attach_sqlbuild_plan_output(
-        plan=plan,
-        project_dir=project_dir,
-        discovered_inputs=invocation.discovered_inputs,
-        compiled=compiled,
-        manifest=manifest,
-        graph=resolution.graph,
         sqlbuild_args=invocation.effective_sqlbuild_args,
         connection_progress=connection_progress,
         on_progress=on_progress,

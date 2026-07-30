@@ -6,10 +6,10 @@ from collections import defaultdict
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.node_source_watermarks.main.frontier import (
+from sqlbuild.compiler.node_source_watermarks.main._frontier import (
     build_materialized_watermark_frontier,
 )
-from sqlbuild.compiler.node_source_watermarks.main.source_ancestry import (
+from sqlbuild.compiler.node_source_watermarks.main._source_ancestry import (
     build_watermark_source_ancestry,
 )
 from sqlbuild.compiler.node_source_watermarks.models import (

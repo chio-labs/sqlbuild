@@ -1,24 +1,19 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from collections.abc import Callable
 from dataclasses import replace
-from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, ClassVar, cast
+from typing import ClassVar, cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     QueryResult,
-    RelationInfo,
     RowDiffResult,
-    TableFreshnessMetadata,
-    TableFreshnessRequest,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands._helpers.diff.output import has_diff_failures
@@ -47,9 +42,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
-from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_DBT
-from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
-from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
 from sqlbuild.compiler.planner.models import BackfillResult, ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import (
@@ -397,14 +389,15 @@ def build_dbt_sql_test_target_manifest(
     fact_compiled_code: str
     | None = 'select * from "analytics"."stg_orders" where amount_cents > 0',
     include_ambiguous_package: bool = False,
+    target_model_name: str = "fact_orders",
 ) -> DbtManifestIndex:
     """Build a manifest fixture for dbt SQL test target adaptation."""
 
     fact_node: dict[str, object] = build_manifest_model_node(
-        unique_id="model.analytics.fact_orders",
+        unique_id=f"model.analytics.{target_model_name}",
         package_name="analytics",
-        name="fact_orders",
-        relation_name='"analytics"."fact_orders"',
+        name=target_model_name,
+        relation_name=f'"analytics"."{target_model_name}"',
         raw_code="select * from {{ ref('stg_orders') }}",
         compiled_code=fact_compiled_code,
         depends_on_nodes=("model.analytics.stg_orders",),
@@ -1312,44 +1305,6 @@ def graph_key_from_stable_id(stable_id: str) -> DbtCombinedGraphKey:
     return factories[(owner_enum, resource_type_enum)](name)
 
 
-def write_dbt_test_fingerprint(
-    *,
-    adapter: Any,
-    connection: Any,
-    unique_id: str,
-    version_hash: str,
-    definition: str = "select * from orders",
-) -> None:
-    """Write one dbt fingerprint row for planning tests."""
-
-    fingerprint: Fingerprint = Fingerprint(
-        node_type=NODE_TYPE_DBT,
-        node_name=unique_id,
-        target_database=None,
-        target_schema="main",
-        target_name="orders",
-        run_id="test",
-        definition_hash=version_hash,
-        version_hash=version_hash,
-        schema_fingerprint=hashlib.sha256(b"").hexdigest(),
-        definition=definition,
-        metadata_json="{}",
-        ts=datetime.now(tz=UTC),
-    )
-
-    write_fingerprint(
-        connection=connection,
-        execute=adapter.execute,
-        database=None,
-        schema="main",
-        fingerprint=fingerprint,
-        render_qualified_name=adapter.render_qualified_name,
-        render_framework_type=adapter.render_framework_type,
-        render_create_table_sql=adapter.render_create_fingerprint_table_sql,
-        render_create_index_sqls=adapter.render_create_fingerprint_index_sqls,
-    )
-
-
 def build_lineage_manifest_data() -> dict[str, object]:
     """Build manifest data for mixed dbt/SQLBuild lineage unit tests."""
 
@@ -1613,70 +1568,6 @@ class EmptyLineageSourceSchemaAdapter(FakeLineageSourceSchemaAdapter):
         super().__init__({})
 
 
-class CountingModelPlanningAdapter(DuckDbAdapter):
-    """DuckDB adapter that records relation existence planning calls."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.list_relation_calls: list[
-            tuple[str | None, tuple[str, ...] | None, tuple[str, ...] | None]
-        ] = []
-        self.relation_exists_calls: list[tuple[str | None, str | None, str]] = []
-        self.table_freshness_requests: list[TableFreshnessRequest] = []
-
-    def supports_table_freshness_metadata(self) -> bool:
-        return True
-
-    def get_tables_freshness_metadata(
-        self,
-        connection: Any,
-        *,
-        requests: tuple[TableFreshnessRequest, ...],
-    ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
-        del connection
-        self.table_freshness_requests.extend(requests)
-        return {
-            request: TableFreshnessMetadata(
-                data_version=datetime(2026, 1, 1),
-                value_kind="timestamp",
-                observed_at=datetime(2026, 1, 1),
-            )
-            for request in requests
-        }
-
-    def list_relations(
-        self,
-        connection: Any,
-        *,
-        database: str | None,
-        schemas: tuple[str, ...] | None,
-        names: tuple[str, ...] | None = None,
-    ) -> tuple[RelationInfo, ...]:
-        self.list_relation_calls.append((database, schemas, names))
-        return super().list_relations(
-            connection=connection,
-            database=database,
-            schemas=schemas,
-            names=names,
-        )
-
-    def relation_exists(
-        self,
-        connection: Any,
-        *,
-        database: str | None,
-        schema: str | None,
-        name: str,
-    ) -> bool:
-        self.relation_exists_calls.append((database, schema, name))
-        return super().relation_exists(
-            connection=connection,
-            database=database,
-            schema=schema,
-            name=name,
-        )
-
-
 def _lineage_column_id(column: QualifiedLineageColumn) -> str:
     resource_name: str = column.resource_name
     column_name: str = column.column_name
@@ -1720,27 +1611,6 @@ def build_depth_zero_lineage_graph_for_output_test() -> DbtLineageGraph:
         direction=DbtLineageDirection.UPSTREAM,
         depth=0,
     )
-
-
-def setup_dbt_model_planning_state(
-    *,
-    adapter: Any,
-    connection: Any,
-    unique_id: str,
-    create_relation: bool,
-    fingerprint_hash: str | None,
-) -> None:
-    """Create optional relation and fingerprint state for dbt model planning tests."""
-
-    for _requested_relation in range(int(create_relation)):
-        adapter.execute(connection=connection, sql="CREATE TABLE main.orders AS SELECT 1 AS id")
-    for requested_fingerprint_hash in (fingerprint_hash,) * int(fingerprint_hash is not None):
-        write_dbt_test_fingerprint(
-            adapter=adapter,
-            connection=connection,
-            unique_id=unique_id,
-            version_hash=cast(str, requested_fingerprint_hash),
-        )
 
 
 def build_dbt_diff_manifest_model_node(

@@ -24,6 +24,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     write_dbt_source_fixture_name_collision_sqlbuild_unit_test,
     write_dbt_source_relation_collision_sqlbuild_unit_test,
     write_dbt_source_sqlbuild_unit_test,
+    write_double_underscore_dbt_model_sqlbuild_unit_test,
     write_incremental_dbt_model_sqlbuild_unit_test,
     write_mocked_snapshot_boundary_dbt_sqlbuild_unit_test,
     write_qualified_dbt_model_sqlbuild_unit_test,
@@ -251,6 +252,57 @@ def test_given_sqlbuild_test_targets_dbt_model_when_running_dbt_test_then_uses_m
     expected_stdout_fragment: str
     for expected_stdout_fragment in test_case.expected_stdout_fragments:
         assert expected_stdout_fragment in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtTestCliTestCase(
+            description="direct dbt target containing double underscores runs SQLBuild test",
+            setup_command=(
+                "dbt",
+                "build",
+                "--select",
+                "+race__int_enriched__course_match_graph",
+            ),
+            command=(
+                "dbt",
+                "test",
+                "--select",
+                "race__int_enriched__course_match_graph",
+            ),
+            expected_stdout_fragments=(
+                "SQLBuild execution  sqb test",
+                "test_dbt_race__int_enriched__course_match_graph",
+            ),
+            expected_absent_stdout_fragments=("No SQLBuild work selected",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_direct_dbt_target_with_double_underscores_when_testing_then_runs_sqlbuild_test(
+    test_case: DbtTestCliTestCase,
+    tmp_path: Path,
+) -> None:
+    skip_unless_dbt_is_runnable()
+    project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
+    write_double_underscore_dbt_model_sqlbuild_unit_test(project_dir=project_dir)
+    setup_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.setup_command,
+        project_dir=project_dir,
+    )
+    assert setup_result.returncode == 0, setup_result.stderr or setup_result.stdout
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    for expected_fragment in test_case.expected_stdout_fragments:
+        assert expected_fragment in result.stdout
+    for absent_fragment in test_case.expected_absent_stdout_fragments:
+        assert absent_fragment not in result.stdout
 
 
 @pytest.mark.parametrize(

@@ -3,42 +3,23 @@ from __future__ import annotations
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
-    DbtCloneE2ETestCase,
-    DbtDeferCloneNodeSourceWatermarkE2ETestCase,
     DbtExecutionCliTestCase,
     DbtExecutionFailureCliTestCase,
     DbtExecutionQueryAssertion,
-    DbtExistingRelationGuardE2ETestCase,
-    DbtInheritedNodeSourceWatermarkE2ETestCase,
-    DbtMissingRelationGuardE2ETestCase,
-    DbtNodeSourceWatermarkE2ETestCase,
-    DbtNodeSourceWatermarkWarningE2ETestCase,
-    DbtSqlbuildNodeSourceWatermarkE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     break_dbt_interop_fact_orders_model,
-    checkout_dbt_watermark_feature_branch,
-    configure_dbt_node_source_watermark_production_ref,
-    latest_dbt_node_source_watermark_payloads,
-    latest_node_source_watermark_payloads,
     load_json_stdout,
-    prepare_dbt_diff_workspace,
     prepare_dbt_interop_project,
-    prepare_dbt_node_source_watermark_project,
-    remove_dbt_watermark_local_target,
-    replace_dbt_watermark_raw_orders,
-    run_dbt_watermark_build,
     skip_unless_dbt_is_runnable,
-    write_dbt_diff_orders_model,
-    write_dbt_watermark_local_target,
+    write_sqlbuild_defer_target_models,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
-    execute_duckdb,
     query_duckdb,
     row_count,
     run_sqb,
@@ -46,340 +27,6 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 )
 
 pytestmark: pytest.MarkDecorator = pytest.mark.dbt
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DbtNodeSourceWatermarkE2ETestCase(
-            description="dbt-only build records direct source watermark",
-            command=("--no-color", "dbt", "build", "--select", "b"),
-            expected_node_name="model.analytics.b",
-            expected_source_name="source.analytics.raw.raw_orders",
-            expected_watermark_kind="direct",
-            expected_stdout_fragments=(
-                "Recording dbt node source watermarks",
-                "Recorded dbt node source watermarks",
-                "Completed successfully.",
-            ),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_dbt_model_reads_source_when_build_runs_then_records_node_source_watermark(
-    test_case: DbtNodeSourceWatermarkE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    skip_unless_dbt_is_runnable()
-    project_dir: Path = prepare_dbt_node_source_watermark_project(tmp_path=tmp_path)
-    replace_dbt_watermark_raw_orders(
-        project_dir=project_dir,
-        version="2026-06-29 15:45:00",
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=test_case.command,
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    expected_fragment: str
-    for expected_fragment in test_case.expected_stdout_fragments:
-        assert expected_fragment in result.stdout
-    payloads: dict[str, dict[str, object]] = latest_dbt_node_source_watermark_payloads(
-        project_dir=project_dir
-    )
-    payload: dict[str, object] = payloads[test_case.expected_node_name]
-    sources: object = payload["sources"]
-    assert isinstance(sources, list)
-    assert len(sources) == 1
-    source: object = sources[0]
-    assert isinstance(source, dict)
-    source_entry: dict[str, Any] = cast(dict[str, Any], source)
-    assert source_entry["source_name"] == test_case.expected_source_name
-    assert source_entry["watermark_kind"] == test_case.expected_watermark_kind
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    (
-        DbtNodeSourceWatermarkWarningE2ETestCase(
-            description="dbt plan warns when selected model depends on stale frontier table",
-            setup_command=("--no-color", "dbt", "build", "--select", "b"),
-            command=("--no-color", "dbt", "plan", "--select", "a"),
-            expected_stdout_fragments=(
-                "Warnings (2)",
-                "selected dbt model 'a' will build on 1 stale upstream(s)",
-                "Stale inputs detected",
-                "Affected selected models:",
-                "model.analytics.a",
-                "Stale frontier tables:",
-                "model.analytics.b",
-                "Changed sources:",
-                "source.analytics.raw.raw_orders",
-            ),
-        ),
-        DbtNodeSourceWatermarkWarningE2ETestCase(
-            description="dbt plan does not warn when selected model reads advanced source directly",
-            setup_command=("--no-color", "dbt", "build", "--select", "b"),
-            command=("--no-color", "dbt", "plan", "--select", "b"),
-            expected_stdout_fragments=(
-                "Plan ready",
-                "model.analytics.b",
-            ),
-            unexpected_stdout_fragments=(
-                "Stale inputs detected",
-                "Stale frontier tables:",
-            ),
-        ),
-    ),
-    ids=lambda case: case.description,
-)
-def test_given_dbt_watermark_frontier_when_planning_then_renders_expected_warning(
-    test_case: DbtNodeSourceWatermarkWarningE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    skip_unless_dbt_is_runnable()
-    project_dir: Path = prepare_dbt_node_source_watermark_project(tmp_path=tmp_path)
-    replace_dbt_watermark_raw_orders(
-        project_dir=project_dir,
-        version="2026-06-29 15:45:00",
-    )
-    setup_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=test_case.setup_command,
-        project_dir=project_dir,
-    )
-    assert setup_result.returncode == 0, setup_result.stdout + setup_result.stderr
-    replace_dbt_watermark_raw_orders(
-        project_dir=project_dir,
-        version="2026-06-30 15:45:00",
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=test_case.command,
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    expected_fragment: str
-    for expected_fragment in test_case.expected_stdout_fragments:
-        assert expected_fragment in result.stdout
-    unexpected_fragment: str
-    for unexpected_fragment in test_case.unexpected_stdout_fragments:
-        assert unexpected_fragment not in result.stdout
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DbtInheritedNodeSourceWatermarkE2ETestCase(
-            description="dbt downstream build inherits stale upstream source watermark",
-            setup_command=("--no-color", "dbt", "build", "--select", "b"),
-            command=("--no-color", "dbt", "build", "--select", "c"),
-            initial_source_version="2026-06-29T15:45:00",
-            advanced_source_version="2026-06-30T15:45:00",
-            expected_node_name="model.analytics.c",
-            expected_source_name="source.analytics.raw.raw_orders",
-            expected_watermark_kind="inherited",
-            expected_data_version="2026-06-29T15:45:00",
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_dbt_upstream_table_stale_when_downstream_runs_then_records_inherited_watermark(
-    test_case: DbtInheritedNodeSourceWatermarkE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    skip_unless_dbt_is_runnable()
-    project_dir: Path = prepare_dbt_node_source_watermark_project(tmp_path=tmp_path)
-    replace_dbt_watermark_raw_orders(
-        project_dir=project_dir,
-        version=test_case.initial_source_version.replace("T", " "),
-    )
-    setup_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=test_case.setup_command,
-        project_dir=project_dir,
-    )
-    assert setup_result.returncode == 0, setup_result.stdout + setup_result.stderr
-    replace_dbt_watermark_raw_orders(
-        project_dir=project_dir,
-        version=test_case.advanced_source_version.replace("T", " "),
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=test_case.command,
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    payloads: dict[str, dict[str, object]] = latest_dbt_node_source_watermark_payloads(
-        project_dir=project_dir
-    )
-    payload: dict[str, object] = payloads[test_case.expected_node_name]
-    sources: object = payload["sources"]
-    assert isinstance(sources, list)
-    assert len(sources) == 1
-    source: object = sources[0]
-    assert isinstance(source, dict)
-    source_entry: dict[str, Any] = cast(dict[str, Any], source)
-    assert source_entry["source_name"] == test_case.expected_source_name
-    assert source_entry["watermark_kind"] == test_case.expected_watermark_kind
-    assert source_entry["data_version"] == test_case.expected_data_version
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DbtNodeSourceWatermarkWarningE2ETestCase(
-            description="dbt plan reports unknown when frontier table has no watermark",
-            setup_command=(),
-            command=("--no-color", "dbt", "plan", "--select", "a"),
-            expected_stdout_fragments=(
-                "Warnings (2)",
-                "selected dbt model 'a' will build on 1 stale upstream(s)",
-                "Stale inputs detected",
-                "Affected selected models:",
-                "model.analytics.a",
-                "Unknown freshness proofs:",
-                "model.analytics.b (missing_frontier_watermark)",
-            ),
-            unexpected_stdout_fragments=("Stale frontier tables:",),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_dbt_frontier_table_without_watermark_when_planning_then_reports_unknown(
-    test_case: DbtNodeSourceWatermarkWarningE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    skip_unless_dbt_is_runnable()
-    project_dir: Path = prepare_dbt_node_source_watermark_project(tmp_path=tmp_path)
-    replace_dbt_watermark_raw_orders(
-        project_dir=project_dir,
-        version="2026-06-29 15:45:00",
-    )
-    run_dbt_watermark_build(project_dir=project_dir, selector="b")
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=test_case.command,
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    expected_fragment: str
-    for expected_fragment in test_case.expected_stdout_fragments:
-        assert expected_fragment in result.stdout
-    unexpected_fragment: str
-    for unexpected_fragment in test_case.unexpected_stdout_fragments:
-        assert unexpected_fragment not in result.stdout
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DbtSqlbuildNodeSourceWatermarkE2ETestCase(
-            description="SQLBuild model inherits dbt upstream source watermark",
-            command=("--no-color", "dbt", "build", "--select", "+downstream_b"),
-            expected_node_name="downstream_b",
-            expected_source_name="source.analytics.raw.raw_orders",
-            expected_watermark_kind="inherited",
-            expected_stdout_fragments=(
-                "Recording dbt node source watermarks",
-                "Completed successfully.",
-            ),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_sqlbuild_model_depends_on_dbt_model_when_build_runs_then_inherits_watermark(
-    test_case: DbtSqlbuildNodeSourceWatermarkE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    skip_unless_dbt_is_runnable()
-    project_dir: Path = prepare_dbt_node_source_watermark_project(tmp_path=tmp_path)
-    replace_dbt_watermark_raw_orders(
-        project_dir=project_dir,
-        version="2026-06-29 15:45:00",
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=test_case.command,
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    expected_fragment: str
-    for expected_fragment in test_case.expected_stdout_fragments:
-        assert expected_fragment in result.stdout
-    payloads: dict[str, dict[str, object]] = latest_node_source_watermark_payloads(
-        project_dir=project_dir,
-        node_type="model",
-    )
-    payload: dict[str, object] = payloads[test_case.expected_node_name]
-    sources: object = payload["sources"]
-    assert isinstance(sources, list)
-    assert len(sources) == 1
-    source: object = sources[0]
-    assert isinstance(source, dict)
-    source_entry: dict[str, Any] = cast(dict[str, Any], source)
-    assert source_entry["source_name"] == test_case.expected_source_name
-    assert source_entry["watermark_kind"] == test_case.expected_watermark_kind
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DbtDeferCloneNodeSourceWatermarkE2ETestCase(
-            description="dbt defer-clone records cloned production source watermark",
-            expected_node_name="model.analytics.b",
-            expected_data_version="2026-06-01T00:00:00",
-            expected_watermark_kind="direct",
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_dbt_boundary_defer_cloned_when_build_runs_then_records_production_watermark(
-    tmp_path: Path,
-    test_case: DbtDeferCloneNodeSourceWatermarkE2ETestCase,
-) -> None:
-    skip_unless_dbt_is_runnable()
-    project_dir: Path = prepare_dbt_node_source_watermark_project(tmp_path=tmp_path)
-    configure_dbt_node_source_watermark_production_ref(project_dir=project_dir)
-    replace_dbt_watermark_raw_orders(
-        project_dir=project_dir, version=test_case.expected_data_version.replace("T", " ")
-    )
-    write_dbt_watermark_local_target(project_dir=project_dir, target="prod")
-    prod_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "dbt", "build", "--target", "prod", "--select", "b"),
-        project_dir=project_dir,
-    )
-    assert prod_result.returncode == 0, prod_result.stdout + prod_result.stderr
-    remove_dbt_watermark_local_target(project_dir=project_dir)
-    checkout_dbt_watermark_feature_branch(project_dir=project_dir)
-    replace_dbt_watermark_raw_orders(project_dir=project_dir, version="2026-06-02 00:00:00")
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=(
-            "--no-color",
-            "dbt",
-            "build",
-            "--select",
-            "downstream_b",
-            "--defer-clone-from",
-        ),
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "Recorded dbt defer-clone node source watermarks (1)." in result.stdout
-    payloads: dict[str, dict[str, object]] = latest_dbt_node_source_watermark_payloads(
-        project_dir=project_dir
-    )
-    payload: dict[str, object] = payloads[test_case.expected_node_name]
-    sources: list[dict[str, object]] = cast(list[dict[str, object]], payload["sources"])
-    source_entry: dict[str, object] = sources[0]
-    assert source_entry["data_version"] == test_case.expected_data_version
-    assert source_entry["watermark_kind"] == test_case.expected_watermark_kind
 
 
 @pytest.mark.parametrize(
@@ -690,27 +337,48 @@ def test_given_dbt_interop_project_when_running_execution_command_then_outputs_e
 @pytest.mark.parametrize(
     "test_case",
     [
-        DbtMissingRelationGuardE2ETestCase(
-            description="plain SQLBuild selection blocks when dbt upstream relation is missing",
-            command=("dbt", "build", "--select", "downstream_orders"),
-            expected_returncode=1,
+        DbtExecutionCliTestCase(
+            description="dbt interop run preserves native SQLBuild target deferral",
+            command=(
+                "dbt",
+                "run",
+                "--select",
+                "deferred_consumer",
+                "--defer-to",
+                "prod",
+            ),
+            expected_row_counts=(("deferred_consumer", 1),),
             expected_stdout_fragments=(
                 "Skipping dbt: no dbt work selected.",
-                "depends on missing dbt relation(s):",
-                "fact_orders",
-                "Use --select +downstream_orders",
+                "SQLBuild execution",
+                "Completed successfully.",
             ),
-            expected_absent_relations=("fact_orders", "downstream_orders"),
+            expected_query_assertions=(
+                DbtExecutionQueryAssertion(
+                    description="consumer reads the deferred production upstream",
+                    sql="SELECT order_id FROM dev.deferred_consumer",
+                    expected_rows=((42,),),
+                ),
+            ),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_plain_sqlbuild_selection_with_missing_dbt_ref_when_running_then_blocks_before_build(
+def test_given_native_defer_to_when_running_dbt_interop_then_reads_deferred_target(
+    test_case: DbtExecutionCliTestCase,
     tmp_path: Path,
-    test_case: DbtMissingRelationGuardE2ETestCase,
 ) -> None:
     skip_unless_dbt_is_runnable()
     project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
+    write_sqlbuild_defer_target_models(project_dir=project_dir)
+    local_config_path: Path = project_dir / "sqlbuild_local.toml"
+    local_config_path.write_text('target = "prod"\n', encoding="utf-8")
+    setup_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("build", "--select", "deferred_upstream"),
+        project_dir=project_dir,
+    )
+    assert setup_result.returncode == 0, setup_result.stderr or setup_result.stdout
+    local_config_path.write_text('target = "dev"\n', encoding="utf-8")
 
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=test_case.command,
@@ -718,58 +386,15 @@ def test_given_plain_sqlbuild_selection_with_missing_dbt_ref_when_running_then_b
     )
 
     db_path: Path = project_dir / "dbt_interop.duckdb"
-    assert result.returncode == test_case.expected_returncode, result.stderr or result.stdout
-    expected_stdout_fragment: str
-    for expected_stdout_fragment in test_case.expected_stdout_fragments:
-        assert expected_stdout_fragment in result.stdout
-    absent_relation: str
-    for absent_relation in test_case.expected_absent_relations:
-        assert not table_exists(db_path=db_path, table_name=absent_relation)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DbtExistingRelationGuardE2ETestCase(
-            description="plain SQLBuild selection builds when dbt upstream relation already exists",
-            command=("dbt", "build", "--select", "downstream_orders"),
-            setup_sql="CREATE TABLE main.fact_orders AS SELECT 1 AS order_id, 100 AS amount",
-            expected_returncode=0,
-            expected_stdout_fragments=("Skipping dbt: no dbt work selected.",),
-            unexpected_stdout_fragments=("depends on missing dbt relation",),
-            expected_rows=((1,),),
+    assert result.returncode == 0, result.stderr or result.stdout
+    assert table_exists(db_path=db_path, table_name="deferred_consumer", schema="dev")
+    assert not table_exists(db_path=db_path, table_name="deferred_upstream", schema="dev")
+    for expected_fragment in test_case.expected_stdout_fragments:
+        assert expected_fragment in result.stdout
+    for query_assertion in test_case.expected_query_assertions:
+        assert query_duckdb(db_path=db_path, sql=query_assertion.sql) == list(
+            query_assertion.expected_rows
         )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_plain_sqlbuild_selection_with_existing_dbt_ref_when_running_then_builds_downstream(
-    tmp_path: Path,
-    test_case: DbtExistingRelationGuardE2ETestCase,
-) -> None:
-    skip_unless_dbt_is_runnable()
-    project_dir: Path = prepare_dbt_interop_project(tmp_path=tmp_path)
-    db_path: Path = project_dir / "dbt_interop.duckdb"
-    execute_duckdb(
-        db_path=db_path,
-        sql=test_case.setup_sql,
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=test_case.command,
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == test_case.expected_returncode, result.stderr or result.stdout
-    expected_stdout_fragment: str
-    for expected_stdout_fragment in test_case.expected_stdout_fragments:
-        assert expected_stdout_fragment in result.stdout
-    unexpected_stdout_fragment: str
-    for unexpected_stdout_fragment in test_case.unexpected_stdout_fragments:
-        assert unexpected_stdout_fragment not in result.stdout
-    assert query_duckdb(
-        db_path=db_path,
-        sql="SELECT order_id FROM main.downstream_orders ORDER BY order_id",
-    ) == list(test_case.expected_rows)
 
 
 @pytest.mark.parametrize(
@@ -916,145 +541,3 @@ def test_given_failing_dbt_model_when_running_command_then_dependent_sqlbuild_is
     relation_name: str
     for relation_name in test_case.expected_absent_relations:
         assert not table_exists(db_path=db_path, table_name=relation_name), relation_name
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DbtCloneE2ETestCase(
-            description="dbt build defer-clones dbt boundary before sqlbuild downstream build",
-            command=(
-                "--no-color",
-                "dbt",
-                "build",
-                "--select",
-                "downstream_orders",
-                "--defer-clone-from",
-            ),
-            expected_returncode=0,
-            expected_stdout_fragments=(
-                "Plan ready",
-                "Compiling dbt production ref git ref 'prod'",
-                "Prephase  dbt defer clone",
-                "[for downstream_orders]",
-                "Skipping dbt: no dbt work selected.",
-                "SQLBuild execution",
-                "downstream_orders",
-                "Completed successfully.",
-            ),
-            expected_rows=((1, 900), (2, 900)),
-            rows_sql=(
-                "SELECT order_id, downstream_amount FROM main.downstream_orders ORDER BY order_id"
-            ),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_sqlbuild_downstream_when_dbt_building_with_defer_clone_then_clones_dbt_boundary(
-    tmp_path: Path,
-    test_case: DbtCloneE2ETestCase,
-) -> None:
-    skip_unless_dbt_is_runnable()
-    workspace: Path = prepare_dbt_diff_workspace(
-        tmp_path=tmp_path,
-        workspace_name="dbt_defer_clone_workspace",
-    )
-    sqlbuild_model_dir: Path = workspace / "sqlbuild_project" / "models"
-    sqlbuild_model_dir.mkdir(exist_ok=True)
-    sqlbuild_model_dir.joinpath("downstream_orders.sql").write_text(
-        "MODEL (materialized table);\n\n"
-        "SELECT order_id, amount_cents AS downstream_amount "
-        'FROM __dbt_ref("analytics", "dbt_orders")\n',
-        encoding="utf-8",
-    )
-    write_dbt_diff_orders_model(
-        workspace=workspace,
-        amount_cents=111,
-        order_ids=(1, 3),
-        include_unique_key=True,
-        include_cursor_meta=True,
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=test_case.command,
-        project_dir=workspace / "sqlbuild_project",
-    )
-
-    assert result.returncode == test_case.expected_returncode, result.stdout + result.stderr
-    fragment: str
-    for fragment in test_case.expected_stdout_fragments:
-        assert fragment in result.stdout
-    assert result.stdout.index("Plan ready") < result.stdout.index("Prephase  dbt defer clone")
-    for fragment in test_case.expected_stderr_fragments:
-        assert fragment in result.stderr
-    assert (
-        tuple(query_duckdb(db_path=workspace / "warehouse.duckdb", sql=test_case.rows_sql))
-        == test_case.expected_rows
-    )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DbtCloneE2ETestCase(
-            description="dbt build defer-clones dbt boundary for pure dbt selection",
-            command=(
-                "--no-color",
-                "dbt",
-                "build",
-                "--select",
-                "dbt_bias",
-                "--defer-clone-from",
-            ),
-            expected_returncode=0,
-            expected_stdout_fragments=(
-                "Plan ready",
-                "Compiling dbt production ref git ref 'prod'",
-                "Prephase  dbt defer clone",
-                "[for dbt_bias]",
-                "Prephase  dbt defer clone views",
-                "dbt_order_summary",
-                "dbt execution",
-                "dbt_bias",
-                "SQLBuild (0 selected)",
-                "skipped: no SQLBuild work selected",
-                "Completed successfully.",
-            ),
-            expected_rows=((1, 900), (2, 900)),
-            rows_sql="SELECT order_id, bias_amount_cents FROM main.dbt_bias ORDER BY order_id",
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_pure_dbt_selection_when_building_with_defer_clone_then_clones_dbt_boundary(
-    tmp_path: Path,
-    test_case: DbtCloneE2ETestCase,
-) -> None:
-    skip_unless_dbt_is_runnable()
-    workspace: Path = prepare_dbt_diff_workspace(
-        tmp_path=tmp_path,
-        workspace_name="dbt_pure_defer_clone_workspace",
-        include_defer_clone_chain=True,
-    )
-    write_dbt_diff_orders_model(
-        workspace=workspace,
-        amount_cents=111,
-        order_ids=(1, 3),
-        include_unique_key=True,
-        include_cursor_meta=True,
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=test_case.command,
-        project_dir=workspace / "sqlbuild_project",
-    )
-
-    assert result.returncode == test_case.expected_returncode, result.stdout + result.stderr
-    fragment: str
-    for fragment in test_case.expected_stdout_fragments:
-        assert fragment in result.stdout
-    assert result.stdout.index("Plan ready") < result.stdout.index("Prephase  dbt defer clone")
-    assert (
-        tuple(query_duckdb(db_path=workspace / "warehouse.duckdb", sql=test_case.rows_sql))
-        == test_case.expected_rows
-    )

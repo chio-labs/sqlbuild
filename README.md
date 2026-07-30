@@ -20,7 +20,7 @@ All state is persisted as append-only tables in the warehouse alongside your dat
 - **Audits that block bad data.** Audits run before data reaches the target table. Full table builds materialize into a staging table and only promote if audits pass; incremental models validate each batch before DML.
 - **Deploy reversibly (opt-in).** Virtual environments add instant low-copy branching, partial promotion, rollback, checkpoints, and reconciliation. Opt-in, not a tax you pay upfront.
 - **Opt-in change-aware execution.** Models, seeds, UDFs, and Python nodes are fingerprinted, and source freshness is tracked. Commands run the selected work by default; pass `--changes-only` or set `changes_only = true` to skip work that is already current.
-- **Works with your existing dbt project.** Point SQLBuild at a dbt project and opt into change-aware builds with zero SQLBuild models. It reads the manifest and drives the `dbt` CLI as a subprocess; it never edits your dbt files. `sqb dbt clone` and `sqb dbt diff` work against a production-shaped git ref. See [dbt compatibility](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
+- **Works with your existing dbt project.** Point SQLBuild at a dbt project and run ordinary dbt selections alongside SQLBuild models. It reads the manifest and drives the `dbt` CLI as a subprocess; it never edits your dbt files. dbt-native `--state` and `--defer` remain available, while `sqb dbt clone` and `sqb dbt diff` work against a production-shaped git ref. See [dbt compatibility](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
 - **Warehouse-native state.** All change-tracking state lives in append-only tables (`_sqlbuild_fingerprints`, `_sqlbuild_source_freshness`, `_sqlbuild_node_results`) in your warehouse schemas. No external state machine, no corruption risk.
 - **Cursor-based incremental processing.** Automatic gap detection and resume, with microbatch mode for large ranges. No external checkpoint to maintain.
 - **Ingestion and Python nodes.** Load external data with Python `@loader` functions, and run `@task`, `@asset`, and `@check` nodes as first-class members of the same DAG as your SQL models.
@@ -37,29 +37,23 @@ changes_only = true
 changes_only = true
 ```
 
-The CLI flag takes precedence, followed by the selected target, explicit local settings, and project settings. For `plan`, `build`, and `sqb dbt` execution, the full selected scope runs when no configuration source enables changes-only mode; the former execution `--force` option is no longer used.
+The CLI flag takes precedence, followed by the selected target, explicit local settings, and project settings. For native `plan` and `build` execution, the full selected scope runs when no configuration source enables changes-only mode; the former execution `--force` option is no longer used.
 
 ## Works with your existing dbt project
 
-Point SQLBuild at a dbt project and run a `sqb dbt` command. The first time, it bootstraps a minimal twin project from your `dbt_project.yml` and profile (reusing your dbt connection), then builds your selection with state recorded:
+Point SQLBuild at a dbt project and run a `sqb dbt` command. The first time, it bootstraps a minimal twin project from your `dbt_project.yml` and profile (reusing your dbt connection), then runs your selection through dbt:
 
 ```bash
 sqb dbt build --select path:models/marts
 ```
 
-Run it again with `--changes-only` and models that have not changed are skipped:
+SQLBuild preserves dbt-native state and defer arguments when you need dbt's own state-aware selection:
 
 ```bash
-sqb dbt build --changes-only --select path:models/marts
+sqb dbt build --state path/to/state --defer --select state:modified+
 ```
 
-```
-dbt (3 selected resources)
-  planned models: 0 run, 3 current, 0 blocked
-  skipped: all planned dbt models are current
-```
-
-Change one model and only that model, plus whatever depends on it, rebuilds when `--changes-only` is enabled. SQLBuild fingerprints your dbt models in the warehouse and prunes everything that is already current. Your `--select` scope is always respected, and where it matters SQLBuild warns you about stale upstreams or downstreams left outside the selection. See [dbt compatibility](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
+Ordinary `sqb dbt plan`, `run`, `build`, and `test` commands do not fingerprint dbt models, inspect production state, or clone deferred relations automatically. Use `sqb dbt clone` and `sqb dbt diff` explicitly for production-shaped comparisons. See [dbt compatibility](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
 
 ## Quick start
 

@@ -20,7 +20,6 @@ def route_dbt_interop_args(
             code="C236",
         ) from exc
     _validate_event_time_pair(parsed)
-    _validate_defer_clone_conflict(parsed)
     _validate_sqlbuild_flags_allowed(command=normalized_command, parsed=parsed)
     dbt_args: list[str] = []
     sqlbuild_args: list[str] = []
@@ -38,7 +37,6 @@ def route_dbt_interop_args(
         exclude=tuple(parsed.exclude),
         dbt_args=tuple(dbt_args),
         sqlbuild_args=tuple(sqlbuild_args),
-        defer_clone_from=parsed.defer_clone_from,
     )
 
 
@@ -107,7 +105,6 @@ def _route_sqlbuild_only(*, parsed: DbtInteropParsedArgs, sqlbuild_args: list[st
             sqlbuild_args.extend((flag, value))
     for flag, enabled in (
         ("--fail-fast", parsed.fail_fast),
-        ("--changes-only", parsed.changes_only),
         ("--hard-copy", parsed.hard_copy),
     ):
         if enabled:
@@ -121,15 +118,6 @@ def _validate_event_time_pair(parsed: DbtInteropParsedArgs) -> None:
     raise DbtInteropArgumentError(
         "--event-time-start and --event-time-end must be provided together",
         code="C233",
-    )
-
-
-def _validate_defer_clone_conflict(parsed: DbtInteropParsedArgs) -> None:
-    if parsed.defer_to is None or not parsed.defer_clone_from:
-        return
-    raise DbtInteropArgumentError(
-        "--defer-clone-from cannot be used with --defer-to",
-        code="C239",
     )
 
 
@@ -157,9 +145,7 @@ def _validate_sqlbuild_flags_allowed(
         ("--start-cursor-int", parsed.start_cursor_int is not None),
         ("--end-cursor-int", parsed.end_cursor_int is not None),
         ("--defer-to", parsed.defer_to is not None),
-        ("--defer-clone-from", parsed.defer_clone_from),
         ("--fail-fast", parsed.fail_fast),
-        ("--changes-only", parsed.changes_only),
         ("--hard-copy", parsed.hard_copy),
     ):
         if present and flag not in allowed:
@@ -179,15 +165,13 @@ def _allowed_sqlbuild_flags(command: DbtInteropCommand) -> frozenset[str]:
     common_execution_flags: tuple[str, ...] = (
         *cursor_flags,
         "--defer-to",
-        "--defer-clone-from",
         "--fail-fast",
-        "--changes-only",
         "--verbose",
     )
     if command in {DbtInteropCommand.RUN, DbtInteropCommand.BUILD}:
         return frozenset(common_execution_flags)
     if command == DbtInteropCommand.PLAN:
-        return frozenset((*cursor_flags, "--defer-to", "--changes-only"))
+        return frozenset((*cursor_flags, "--defer-to"))
     if command == DbtInteropCommand.TEST:
         return frozenset()
     return frozenset()

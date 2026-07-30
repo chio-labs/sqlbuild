@@ -34,6 +34,8 @@ CONFIG_CONCURRENCY_KEY: str = "concurrency"
 LEGACY_CONFIG_CONCURRENCY_KEY: str = "max_concurrency"
 SQL_ANALYSIS_SETTING_KEY: str = "sql_analysis"
 DBT_LEGACY_REUSE_FROM_CONFIG_KEY: str = "reuse_from"
+DBT_DEFER_CLONE_CONFIG_KEY: str = "defer_clone_from"
+DBT_REPLAY_ON_CHANGE_CONFIG_KEY: str = "replay_on_change"
 SOURCE_LOADER_CONFIG_KEY: str = "loader"
 SOURCE_AGE_POLICY_CONFIG_KEY: str = "age_policy"
 
