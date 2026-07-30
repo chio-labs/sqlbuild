@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.48.1](https://github.com/chio-labs/sqlbuild/compare/v0.48.0...v0.48.1) (2026-07-30)
+
+
+### Bug Fixes
+
+* **dbt:** simplify interop planning and test accounting ([320e908](https://github.com/chio-labs/sqlbuild/commit/320e9081eb3da0b22dc0cb1e7d3e2da24b5ade35))
+* **dbt:** simplify interop planning and test accounting ([2f87b66](https://github.com/chio-labs/sqlbuild/commit/2f87b666c6372279dc3c54ed3afcf0b3c5360e87))
+
 ## [0.48.0](https://github.com/chio-labs/sqlbuild/compare/v0.47.0...v0.48.0) (2026-07-23)
 
 
