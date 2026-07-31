@@ -660,9 +660,35 @@ def _format_python_failure_details(
     return lines
 
 
-def _format_failure_details(*, result: BuildExecutionResult, style: CliStyle) -> list[str]:
+def _format_load_failure_details(
+    *, results: tuple[LoadExecutionResult, ...], style: CliStyle
+) -> list[str]:
     lines: list[str] = []
-    has_failures: bool = False
+    load_result: LoadExecutionResult
+    for load_result in results:
+        if load_result.status != ExecutionStatus.FAILED:
+            continue
+        if not lines:
+            lines.append("")
+            lines.append(style.error_strong("Failures:"))
+            lines.append("")
+        lines.append(f"  {load_result.source_name}  ({load_result.resource_kind.value})")
+        if load_result.error_message is not None:
+            lines.extend(
+                _format_failure_error_block(
+                    error_code=None,
+                    error_message=load_result.error_message,
+                    error_help=None,
+                    style=style,
+                )
+            )
+        lines.append("")
+    return lines
+
+
+def _format_failure_details(*, result: BuildExecutionResult, style: CliStyle) -> list[str]:
+    lines: list[str] = _format_load_failure_details(results=result.load_results, style=style)
+    has_failures: bool = bool(lines)
 
     seed_result: SeedExecutionResult
     for seed_result in result.seed_results:
@@ -820,7 +846,7 @@ def _format_failure_error_block(
         use_color=style.use_color,
     )
     formatted_line: str
-    for index, formatted_line in enumerate(_format_error_lines(message)):
+    for index, formatted_line in enumerate(message.splitlines() or [message]):
         display_label: str = label if index == 0 else ""
         lines.append(f"    {display_label:<{_TYPE_WIDTH}}{formatted_line}")
     return lines

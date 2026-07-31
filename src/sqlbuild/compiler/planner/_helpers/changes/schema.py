@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.planner.models import SchemaFinding
 from sqlbuild.compiler.planner.types import SchemaChangeKind, SchemaColumnSource
@@ -98,7 +99,7 @@ def _compare_yml_columns(
                     expected_type=col.type,
                 )
             )
-        elif warehouse_map[col.name] != col.type:
+        elif not types_equal(left=warehouse_map[col.name], right=col.type, dialect=None):
             findings.append(
                 SchemaFinding(
                     kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
@@ -133,7 +134,7 @@ def _compare_yml_columns_non_enforced(
                     expected_type=col.type,
                 )
             )
-        elif warehouse_map[col.name] != col.type:
+        elif not types_equal(left=warehouse_map[col.name], right=col.type, dialect=None):
             findings.append(
                 SchemaFinding(
                     kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
@@ -168,7 +169,9 @@ def _compare_inferred_columns(
                     expected_type=col.type,
                 )
             )
-        elif col.type is not None and warehouse_map[col.name] != col.type:
+        elif col.type is not None and not types_equal(
+            left=warehouse_map[col.name], right=col.type, dialect=None
+        ):
             findings.append(
                 SchemaFinding(
                     kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
