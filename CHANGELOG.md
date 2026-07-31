@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.48.2](https://github.com/chio-labs/sqlbuild/compare/v0.48.1...v0.48.2) (2026-07-31)
+
+
+### Bug Fixes
+
+* preserve build errors and normalize schema types ([4753e41](https://github.com/chio-labs/sqlbuild/commit/4753e418fd0add3161435727321902d9ed051f88))
+* preserve build errors and normalize schema types ([3480cd1](https://github.com/chio-labs/sqlbuild/commit/3480cd168887c3c1b2e2abd0a821fba53f823768))
+
 ## [0.48.1](https://github.com/chio-labs/sqlbuild/compare/v0.48.0...v0.48.1) (2026-07-30)
 
 
