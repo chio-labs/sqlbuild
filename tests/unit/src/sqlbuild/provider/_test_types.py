@@ -1,4 +1,4 @@
-"""Test types for provider API tests."""
+"""Test types for root-level public API tests."""
 
 from __future__ import annotations
 

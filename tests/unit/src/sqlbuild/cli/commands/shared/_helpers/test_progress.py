@@ -387,6 +387,29 @@ def test_given_audit_results_when_aggregating_then_produces_expected_entries(
             unexpected_fragments=("\033[",),
         ),
         BuildFooterTestCase(
+            description="failed loader result includes complete multiline error",
+            result=BuildExecutionResult(
+                status=BuildStatus.FAILED,
+                load_results=(
+                    LoadExecutionResult(
+                        source_name="raw__orders",
+                        loader_name="load_orders",
+                        status=ExecutionStatus.FAILED,
+                        target="dev.raw__orders",
+                        error_message="loader line one\nloader line two\nloader line three",
+                    ),
+                ),
+            ),
+            expected_fragments=(
+                "FAIL=1",
+                "raw__orders  (source)",
+                "loader line one",
+                "loader line two",
+                "loader line three",
+            ),
+            unexpected_fragments=("\033[",),
+        ),
+        BuildFooterTestCase(
             description="function warning appears in summary and warnings section",
             result=BuildExecutionResult(
                 status=BuildStatus.SUCCESS,
@@ -453,7 +476,7 @@ def test_given_audit_results_when_aggregating_then_produces_expected_entries(
             use_color=True,
         ),
         BuildFooterTestCase(
-            description="footer failure error text truncates after four lines",
+            description="footer failure preserves the complete error text",
             result=BuildExecutionResult(
                 status=BuildStatus.FAILED,
                 function_results=(
@@ -462,7 +485,8 @@ def test_given_audit_results_when_aggregating_then_produces_expected_entries(
                         status=ExecutionStatus.FAILED,
                         function_kind="udf",
                         error_message=(
-                            "line one\nline two\nline three\nline four\nline five should not appear"
+                            "line one\nline two\nline three\nline four\n"
+                            "line five should appear " + "x" * 170 + " final characters"
                         ),
                     ),
                 ),
@@ -472,9 +496,11 @@ def test_given_audit_results_when_aggregating_then_produces_expected_entries(
                 "error     line one",
                 "line two",
                 "line three",
-                "line four...",
+                "line four",
+                "line five should appear",
+                "final characters",
             ),
-            unexpected_fragments=("line five should not appear", "\033["),
+            unexpected_fragments=("line four...", "\033["),
         ),
     ],
     ids=lambda case: case.description,

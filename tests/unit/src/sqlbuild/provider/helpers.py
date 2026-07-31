@@ -1,4 +1,4 @@
-"""Helpers for provider API tests."""
+"""Helpers for root-level public API tests."""
 
 from __future__ import annotations
 
