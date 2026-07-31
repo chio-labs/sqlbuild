@@ -9,7 +9,7 @@ from pydantic import Field
 
 from sqlbuild.provider.exceptions import ProviderInputError
 from sqlbuild.providers import Provider
-from tests.unit.src.sqlbuild.providers._test_types import (
+from tests.unit.src.sqlbuild.provider._test_types import (
     ExplicitProviderNameTestCase,
     InvalidExplicitProviderNameTestCase,
     ProviderLifecycleTestCase,
@@ -17,7 +17,7 @@ from tests.unit.src.sqlbuild.providers._test_types import (
     ProviderSettingsErrorTestCase,
     ProviderSettingsTestCase,
 )
-from tests.unit.src.sqlbuild.providers.helpers import construct_provider
+from tests.unit.src.sqlbuild.provider.helpers import construct_provider
 
 
 @pytest.mark.parametrize(

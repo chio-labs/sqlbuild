@@ -235,11 +235,11 @@ def render_dbt_execution_summary_footer(
 
     if not node_results:
         return None
-    pass_count = 0
-    warn_count = 0
-    fail_count = 0
-    skip_count = 0
-    elapsed = 0.0
+    pass_count: int = 0
+    warn_count: int = 0
+    fail_count: int = 0
+    skip_count: int = 0
+    elapsed: float = 0.0
     for result in node_results:
         status: str = result.status.lower()
         if result.execution_time is not None:
