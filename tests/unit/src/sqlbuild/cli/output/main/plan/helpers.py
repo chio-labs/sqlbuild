@@ -297,13 +297,14 @@ def build_function_entry(
 
 def build_warning(
     *,
-    model_name: str,
+    model_name: str | None,
     message: str,
     severity: WarningSeverity = WarningSeverity.WARNING,
+    code: str | None = None,
 ) -> PlanWarning:
     """Build a PlanWarning for formatter tests."""
 
-    return PlanWarning(model_name=model_name, severity=severity, message=message)
+    return PlanWarning(model_name=model_name, severity=severity, message=message, code=code)
 
 
 def build_schema_finding(
