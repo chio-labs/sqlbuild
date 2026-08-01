@@ -20,5 +20,5 @@ def build_scenario_expected_comparison_sql(
         "(SELECT COUNT(*) FROM __expected) AS expected_count, "
         "(SELECT COUNT(*) FROM ("
         f"SELECT * FROM __actual {set_difference_operator} SELECT * FROM __expected"
-        ")) AS mismatched_count"
+        ") AS __sqlbuild_mismatch) AS mismatched_count"
     )

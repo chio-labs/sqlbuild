@@ -56,6 +56,20 @@ class SqlServerRenderRenameTestCase:
 
 
 @dataclass(frozen=True)
+class SqlServerCursorBoundLiteralTestCase:
+    description: str
+    value: str
+    cursor_type: str | None
+    expected_literal: str
+
+
+@dataclass(frozen=True)
+class SqlServerRollbackTestCase:
+    description: str
+    expected_statement: str
+
+
+@dataclass(frozen=True)
 class SqlServerMoveOrCopyRelationTestCase:
     description: str
     source: str
