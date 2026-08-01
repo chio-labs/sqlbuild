@@ -7,6 +7,7 @@ import pytest
 
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo, QueryResult
+from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.executor.run._helpers.reuse.core import create_relation_from_reuse_origin
 from tests.integration.src.sqlbuild.adapters.sqlserver._test_types import (
@@ -14,8 +15,10 @@ from tests.integration.src.sqlbuild.adapters.sqlserver._test_types import (
     SqlServerMergeTestCase,
     SqlServerQueryTestCase,
     SqlServerRelationReuseCopyTestCase,
+    SqlServerRollbackPreservationTestCase,
     SqlServerSchemaIntrospectionTestCase,
     SqlServerSeedTestCase,
+    SqlServerTimestampCursorBoundTestCase,
 )
 from tests.integration.src.sqlbuild.adapters.sqlserver.helpers import (
     build_statement_recorder,
@@ -240,4 +243,77 @@ def test_given_seed_csv_when_loading_then_sqlserver_inserts_all_rows(
     rows: tuple[tuple[object, ...], ...] = fetch_rows(
         adapter=adapter, connection=connection, sql=f"SELECT id, name FROM {target} ORDER BY id"
     )
+    assert rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerRollbackPreservationTestCase(
+            description="preserves the original error after sqlserver already rolled back",
+            original_error_message="original transaction failure",
+            expected_transaction_count=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_ended_transaction_when_context_raises_then_original_error_is_preserved(
+    test_case: SqlServerRollbackPreservationTestCase,
+    adapter: SqlServerAdapter,
+    connection: Any,
+) -> None:
+    with pytest.raises(RuntimeError, match=test_case.original_error_message):
+        with adapter.transaction(connection):
+            adapter.execute(connection=connection, sql="ROLLBACK TRANSACTION")
+            raise RuntimeError(test_case.original_error_message)
+
+    rows: tuple[tuple[object, ...], ...] = fetch_rows(
+        adapter=adapter,
+        connection=connection,
+        sql="SELECT @@TRANCOUNT",
+    )
+    assert int(str(rows[0][0])) == test_case.expected_transaction_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerTimestampCursorBoundTestCase(
+            description="compares legacy datetime values with fractional datetime2 bounds",
+            cursor_start="2026-04-03T14:30:00.000001",
+            cursor_end="2026-04-04T14:30:00.000001",
+            expected_rows=((1,),),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_legacy_datetime_when_querying_fractional_bounds_then_sqlserver_accepts_them(
+    test_case: SqlServerTimestampCursorBoundTestCase,
+    adapter: SqlServerAdapter,
+    connection: Any,
+    sqlserver_schema: str,
+) -> None:
+    target: str = qualified_name(schema=sqlserver_schema, name="timestamp_events")
+    adapter.execute(
+        connection=connection,
+        sql=f"CREATE TABLE {target} (event_id INT, ordered_at DATETIME)",
+    )
+    adapter.execute(
+        connection=connection,
+        sql=f"INSERT INTO {target} VALUES (1, '2026-04-04T14:30:00')",
+    )
+    bounded_sql: str = adapter.render_query_with_cursor_bounds(
+        sql=f"SELECT event_id, ordered_at FROM {target}",
+        cursor_column="ordered_at",
+        cursor_start=test_case.cursor_start,
+        cursor_end=test_case.cursor_end,
+        cursor_type=CursorKind.TIMESTAMP,
+    )
+
+    rows: tuple[tuple[object, ...], ...] = fetch_rows(
+        adapter=adapter,
+        connection=connection,
+        sql=f"SELECT event_id FROM ({bounded_sql}) AS bounded_events",
+    )
+
     assert rows == test_case.expected_rows

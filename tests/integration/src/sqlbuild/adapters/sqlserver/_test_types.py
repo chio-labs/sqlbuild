@@ -48,3 +48,18 @@ class SqlServerSeedTestCase:
     description: str
     csv_text: str
     expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SqlServerRollbackPreservationTestCase:
+    description: str
+    original_error_message: str
+    expected_transaction_count: int
+
+
+@dataclass(frozen=True)
+class SqlServerTimestampCursorBoundTestCase:
+    description: str
+    cursor_start: str
+    cursor_end: str
+    expected_rows: tuple[tuple[object, ...], ...]
