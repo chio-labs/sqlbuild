@@ -55,6 +55,7 @@ _DBT_REF_PATTERN: re.Pattern[str] = re.compile(
     rf'{reference_call_prefix_pattern_text(SqlReferenceKind.DBT_REF)}"([^"]+)"'
     r'(?:,\s*"([^"]+)")?\)'
 )
+_LEADING_WITH_PATTERN: re.Pattern[str] = re.compile(r"^\s*WITH\b", re.IGNORECASE)
 
 
 def plan_test(
@@ -169,7 +170,6 @@ def plan_test(
             )
             if sql_analysis_sql is not None:
                 step_sql = sql_analysis_sql.resolved_sql
-                resolved_value = sql_analysis_sql.resolved_sql
                 sql_analysis_resolved[model_name] = sql_analysis_sql
                 reachable_mocks.update(sql_analysis_sql.reachable_mock_names)
 
@@ -191,26 +191,16 @@ def plan_test(
             )
         )
 
-    assertion_steps: list[SqlTestAssertionStep] = []
-    assertion_name: str
-    assertion_sql: str
-    for assertion_name, assertion_sql in assertion_map.items():
-        assertion_steps.append(
-            SqlTestAssertionStep(
-                name=assertion_name,
-                resolved_sql=_resolve_assertion_sql(
-                    sql=assertion_sql,
-                    resolved_chain=resolved,
-                    mock_refs=mock_refs,
-                    mock_sources=mock_sources,
-                    mock_seeds=mock_seeds,
-                    mock_dbt_refs=mock_dbt_refs,
-                    helper_ctes=helper_ctes,
-                    function_locations=function_locations,
-                    adapter=adapter,
-                ),
-            )
-        )
+    assertion_steps: tuple[SqlTestAssertionStep, ...] = _build_assertion_steps(
+        assertion_map=assertion_map,
+        test=test,
+        function_locations=function_locations,
+        helper_ctes=helper_ctes,
+        resolved_chain=resolved,
+        sql_analysis_resolved=sql_analysis_resolved,
+        adapter=adapter,
+        sql_analysis_enabled=sql_analysis_enabled,
+    )
 
     unreachable_ref: str
     for unreachable_ref in sorted(set(mock_refs) - reachable_mocks):
@@ -262,12 +252,75 @@ def plan_test(
         key=test.key,
         name=test.name,
         chain=tuple(chain_steps),
-        assertions=tuple(assertion_steps),
+        assertions=assertion_steps,
         scope_deps=test.scope_deps,
         function_deps=_dedupe_function_deps(function_deps),
         sql_analysis_enabled=sql_analysis_enabled,
     )
     return entry, tuple(warnings)
+
+
+def _build_assertion_steps(
+    *,
+    assertion_map: dict[str, str],
+    test: CompiledSqlTest,
+    function_locations: dict[str, CompiledRelationLocation],
+    helper_ctes: tuple[CompileSqlTestCte, ...],
+    resolved_chain: dict[str, str],
+    sql_analysis_resolved: dict[str, SqlAnalysisResolvedTestSql],
+    adapter: BaseAdapter,
+    sql_analysis_enabled: bool,
+) -> tuple[SqlTestAssertionStep, ...]:
+    mock_refs: dict[str, str] = _extract_mock_refs(test)
+    mock_sources: dict[str, str] = _extract_mock_sources(test)
+    mock_seeds: dict[str, str] = _extract_mock_seeds(test)
+    mock_dbt_refs: dict[str, str] = _extract_mock_dbt_refs(test)
+    assertion_steps: list[SqlTestAssertionStep] = []
+    assertion_name: str
+    assertion_sql: str
+    for assertion_name, assertion_sql in assertion_map.items():
+        resolved_assertion_sql: str | None = None
+        if sql_analysis_enabled:
+            analyzed_assertion_sql: SqlAnalysisResolvedTestSql | None = (
+                try_resolve_test_model_sql_with_sql_analysis(
+                    query_sql=assertion_sql,
+                    mock_refs=mock_refs,
+                    mock_sources=mock_sources,
+                    mock_seeds=mock_seeds,
+                    mock_dbt_refs=mock_dbt_refs,
+                    function_locations={
+                        name: target.qualified_name
+                        for name, target in function_locations.items()
+                        if target.qualified_name is not None
+                    },
+                    helper_ctes=helper_ctes,
+                    resolved_chain=sql_analysis_resolved,
+                    file_label=str(test.test_file.relative_path),
+                )
+            )
+            if analyzed_assertion_sql is not None and not _has_unresolved_test_reference(
+                analyzed_assertion_sql.resolved_sql
+            ):
+                resolved_assertion_sql = analyzed_assertion_sql.resolved_sql
+        if resolved_assertion_sql is None:
+            resolved_assertion_sql = _resolve_assertion_sql(
+                sql=assertion_sql,
+                resolved_chain=resolved_chain,
+                mock_refs=mock_refs,
+                mock_sources=mock_sources,
+                mock_seeds=mock_seeds,
+                mock_dbt_refs=mock_dbt_refs,
+                helper_ctes=helper_ctes,
+                function_locations=function_locations,
+                adapter=adapter,
+            )
+        assertion_steps.append(
+            SqlTestAssertionStep(
+                name=assertion_name,
+                resolved_sql=resolved_assertion_sql,
+            )
+        )
+    return tuple(assertion_steps)
 
 
 def _plan_direct_logic_test(
@@ -344,9 +397,13 @@ def _resolve_assertion_sql(
     function_locations: dict[str, CompiledRelationLocation],
     adapter: BaseAdapter,
 ) -> str:
-    assertion_resolved_chain: dict[str, str] = {
-        name: _wrap_resolved_chain_sql(sql) for name, sql in resolved_chain.items()
-    }
+    assertion_resolved_chain: dict[str, str]
+    assertion_chain_ctes: tuple[str, ...]
+    assertion_resolved_chain, assertion_chain_ctes = _build_assertion_chain_ctes(
+        assertion_sql=sql,
+        resolved_chain=resolved_chain,
+        requires_flat_ctes=adapter.requires_derived_table_aliases(),
+    )
     resolved_sql: str
     resolved_sql, _ = _resolve_test_model_sql(
         query_sql=sql,
@@ -359,14 +416,42 @@ def _resolve_assertion_sql(
         function_locations=function_locations,
         adapter=adapter,
     )
+    if assertion_chain_ctes:
+        return f"WITH {', '.join(assertion_chain_ctes)} {resolved_sql}"
     return resolved_sql
 
 
-def _wrap_resolved_chain_sql(sql: str) -> str:
-    stripped: str = sql.strip()
-    if stripped.startswith("(") and stripped.endswith(")"):
-        return stripped
-    return f"({stripped})"
+def _build_assertion_chain_ctes(
+    *,
+    assertion_sql: str,
+    resolved_chain: dict[str, str],
+    requires_flat_ctes: bool,
+) -> tuple[dict[str, str], tuple[str, ...]]:
+    if requires_flat_ctes and _LEADING_WITH_PATTERN.search(assertion_sql) is not None:
+        raise PlannerInputError(
+            "SQL test assertion fallback cannot safely flatten an assertion beginning with WITH"
+        )
+    assertion_resolved_chain: dict[str, str] = {}
+    cte_parts: list[str] = []
+    seen_names: set[str] = set()
+    match: re.Match[str]
+    for match in _REF_PATTERN.finditer(assertion_sql):
+        name: str = match.group(1)
+        if name in seen_names or name not in resolved_chain:
+            continue
+        seen_names.add(name)
+        cte_name: str = f"{REF_TEST_CTE_PREFIX}{name}"
+        resolved_sql: str = resolved_chain[name].strip()
+        if resolved_sql.startswith("(") and resolved_sql.endswith(")"):
+            resolved_sql = resolved_sql[1:-1].strip()
+        if requires_flat_ctes and _LEADING_WITH_PATTERN.search(resolved_sql) is not None:
+            raise PlannerInputError(
+                "SQL test assertion fallback cannot safely flatten a referenced model beginning "
+                "with WITH"
+            )
+        assertion_resolved_chain[name] = cte_name
+        cte_parts.append(f"{cte_name} AS ({resolved_sql})")
+    return assertion_resolved_chain, tuple(cte_parts)
 
 
 def _dedupe_function_deps(deps: list[CompiledObjectKey]) -> tuple[CompiledObjectKey, ...]:
@@ -553,6 +638,16 @@ def _validate_resolved_sql(
             )
         )
     return tuple(warnings)
+
+
+def _has_unresolved_test_reference(sql: str) -> bool:
+    normalized_sql: str = sql.lower()
+    return (
+        _REF_PATTERN.search(normalized_sql) is not None
+        or _SOURCE_PATTERN.search(normalized_sql) is not None
+        or _SEED_PATTERN.search(normalized_sql) is not None
+        or _DBT_REF_PATTERN.search(normalized_sql) is not None
+    )
 
 
 def _wrap_mock_with_helpers(

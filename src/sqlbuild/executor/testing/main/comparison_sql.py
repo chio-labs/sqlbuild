@@ -61,7 +61,7 @@ def build_sql_test_comparison_sql(
             f"(SELECT COUNT(*) FROM {expected_cte}) AS expected_count, "
             f"(SELECT COUNT(*) FROM ("
             f"SELECT * FROM {actual_cte} {set_difference_operator} SELECT * FROM {expected_cte}"
-            f")) AS mismatched_count"
+            f") AS __sqlbuild_mismatch) AS mismatched_count"
         )
     assertion_index: int
     for assertion_index, assertion in enumerate(test_entry.assertions, start=len(test_entry.chain)):

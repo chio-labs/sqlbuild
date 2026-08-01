@@ -61,3 +61,10 @@ class ExecuteScenarioSnapshotCaptureLimitTestCase:
     expected_missing_relative_path: Path
     expected_query_fragment: str
     unexpected_query_fragment: str
+
+
+@dataclass(frozen=True)
+class ScenarioExpectedComparisonSqlTestCase:
+    description: str
+    set_difference_operator: str
+    expected_fragments: tuple[str, ...]

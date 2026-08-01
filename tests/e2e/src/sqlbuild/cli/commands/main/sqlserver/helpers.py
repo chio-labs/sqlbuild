@@ -428,6 +428,7 @@ def prepare_sqlserver_waffle_shop(*, tmp_path: Path, config: dict[str, object]) 
     (project_dir / "functions" / "sql" / "customer_orders.sql").unlink(missing_ok=True)
     (project_dir / "functions" / "python" / "is_completed_order_py.py").unlink(missing_ok=True)
     (project_dir / "tests" / "unit" / "test_customer_orders_table_fn.sql").unlink(missing_ok=True)
+    (project_dir / "tests" / "unit" / "test_fact_orders.sql").unlink(missing_ok=True)
     (project_dir / "models" / "marts" / "daily_order_partitioned.sql").unlink(missing_ok=True)
     (project_dir / "tests" / "unit" / "test_is_completed_order_udf.sql").unlink(missing_ok=True)
 
@@ -486,8 +487,6 @@ def prepare_sqlserver_waffle_shop(*, tmp_path: Path, config: dict[str, object]) 
         encoding="utf-8",
     )
     adapt_sqlserver_text_file(project_dir / "sources" / "raw.yml")
-    for test_path in (project_dir / "tests" / "unit").glob("*.sql"):
-        test_path.unlink(missing_ok=True)
     return project_dir, schema_name
 
 

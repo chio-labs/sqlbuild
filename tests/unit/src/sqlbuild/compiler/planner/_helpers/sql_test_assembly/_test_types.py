@@ -25,6 +25,7 @@ class PlanTestChainTestCase:
     expected_error_fragments: tuple[str, ...] = field(default_factory=tuple)
     sql_body: str = ""
     expected_cte_bodies: dict[str, str] = field(default_factory=dict)
+    assertion_ctes: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -35,3 +36,11 @@ class PlanMacroTestCase:
     expected_sql: str
     expected_actual_fragment: str
     expected_expected_fragment: str
+
+
+@dataclass(frozen=True)
+class AssertionChainCteErrorTestCase:
+    description: str
+    assertion_sql: str
+    resolved_chain: dict[str, str]
+    expected_error_fragment: str

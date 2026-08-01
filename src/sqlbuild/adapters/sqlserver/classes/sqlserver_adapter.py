@@ -339,7 +339,7 @@ class SqlServerAdapter(BaseAdapter):
         self.execute(connection=connection, sql="COMMIT TRANSACTION")
 
     def rollback(self, connection: Any) -> None:
-        self.execute(connection=connection, sql="ROLLBACK TRANSACTION")
+        self.execute(connection=connection, sql="IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION")
 
     def default_schema(self) -> str:
         return "dbo"
@@ -932,7 +932,9 @@ class SqlServerAdapter(BaseAdapter):
     def render_cursor_bound_literal(self, *, value: str, cursor_type: str | None) -> str:
         if cursor_type == CursorKind.INTEGER:
             return value
-        return f"'{value}'"
+        if cursor_type == CursorKind.TIMESTAMP:
+            return f"CAST({self._quote_sql_string(value)} AS DATETIME2(6))"
+        return self._quote_sql_string(value)
 
     def describe_relation(self, *, connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
         parts: list[str] = [part.strip("[]") for part in relation.split(".")]

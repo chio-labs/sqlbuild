@@ -47,6 +47,16 @@ from tests.unit.src.sqlbuild.executor.testing.main.helpers import (
                 "EXCEPT DISTINCT",
             ),
         ),
+        BuildComparisonSqlTestCase(
+            description="sqlserver comparison aliases the set difference derived table",
+            adapter_name="sqlserver",
+            expected_fragments=(
+                "FROM __actual__orders",
+                "FROM __expected__orders",
+                "EXCEPT",
+                ") AS __sqlbuild_mismatch",
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )

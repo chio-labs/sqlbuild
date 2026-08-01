@@ -3,10 +3,12 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile.models import FunctionArgument
 from tests.unit.src.sqlbuild.adapters.sqlserver._test_types import (
     SqlServerAdapterDefaultsTestCase,
+    SqlServerCursorBoundLiteralTestCase,
     SqlServerIndexSqlTestCase,
     SqlServerLatestReadSqlTestCase,
     SqlServerMoveOrCopyRelationTestCase,
@@ -17,6 +19,7 @@ from tests.unit.src.sqlbuild.adapters.sqlserver._test_types import (
     SqlServerRenderIdentifierTestCase,
     SqlServerRenderQualifiedNameTestCase,
     SqlServerRenderRenameTestCase,
+    SqlServerRollbackTestCase,
 )
 from tests.unit.src.sqlbuild.adapters.sqlserver.helpers import FakeSqlServerConnection
 
@@ -69,6 +72,58 @@ def test_given_identifier_when_rendering_then_sqlserver_bracket_quotes_identifie
     identifier: str = adapter.render_identifier(test_case.name)
 
     assert identifier == test_case.expected_identifier
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerCursorBoundLiteralTestCase(
+            description="casts fractional timestamp cursor bounds to datetime2",
+            value="2026-04-04T14:30:00.000001",
+            cursor_type=CursorKind.TIMESTAMP,
+            expected_literal="CAST('2026-04-04T14:30:00.000001' AS DATETIME2(6))",
+        ),
+        SqlServerCursorBoundLiteralTestCase(
+            description="leaves integer cursor bounds unquoted",
+            value="42",
+            cursor_type=CursorKind.INTEGER,
+            expected_literal="42",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cursor_bound_when_rendering_then_sqlserver_uses_compatible_literal(
+    test_case: SqlServerCursorBoundLiteralTestCase,
+) -> None:
+    adapter: SqlServerAdapter = SqlServerAdapter()
+
+    literal: str = adapter.render_cursor_bound_literal(
+        value=test_case.value,
+        cursor_type=test_case.cursor_type,
+    )
+
+    assert literal == test_case.expected_literal
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerRollbackTestCase(
+            description="guards rollback when sqlserver already ended the transaction",
+            expected_statement="IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_transaction_when_rolling_back_then_sqlserver_checks_transaction_count(
+    test_case: SqlServerRollbackTestCase,
+) -> None:
+    adapter: SqlServerAdapter = SqlServerAdapter()
+    connection: FakeSqlServerConnection = FakeSqlServerConnection()
+
+    adapter.rollback(connection)
+
+    assert connection.executed_sql == [test_case.expected_statement]
 
 
 @pytest.mark.parametrize(
