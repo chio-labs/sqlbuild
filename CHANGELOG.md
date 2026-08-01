@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.48.3](https://github.com/chio-labs/sqlbuild/compare/v0.48.2...v0.48.3) (2026-08-01)
+
+
+### Bug Fixes
+
+* **sqlserver:** harden test SQL and cursor bounds ([d73edbf](https://github.com/chio-labs/sqlbuild/commit/d73edbf77d1c8239fd6d300c7b5fb9c24ef4e0b5))
+* **sqlserver:** harden test SQL and cursor bounds ([8e5fb24](https://github.com/chio-labs/sqlbuild/commit/8e5fb24bbadac12d67ccd833920b707e22243c0d))
+
 ## [0.48.2](https://github.com/chio-labs/sqlbuild/compare/v0.48.1...v0.48.2) (2026-07-31)
 
 
