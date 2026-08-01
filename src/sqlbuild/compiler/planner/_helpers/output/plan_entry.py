@@ -615,6 +615,7 @@ def plan_model_from_change(
         warehouse_columns=warehouse_columns,
         cursor_column=cursor_column,
         cursor_bounds=ddl_cursor_bounds,
+        cursor_type=cursor_type,
     )
 
     entry: ModelPlanEntry = ModelPlanEntry(
@@ -979,6 +980,7 @@ def _build_logical_ddl_from_adapter(
     warehouse_columns: tuple[ColumnInfo, ...],
     cursor_column: str | None = None,
     cursor_bounds: CursorBounds | None = None,
+    cursor_type: str | None = None,
 ) -> str:
     """Generate logical DDL using adapter render methods."""
 
@@ -1006,6 +1008,7 @@ def _build_logical_ddl_from_adapter(
                     cursor_column=cursor_column,
                     cursor_start=cursor_bounds.start,
                     cursor_end=cursor_bounds.end,
+                    cursor_type=cursor_type,
                 )
             )
         return ";\n\n".join(

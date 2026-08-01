@@ -238,6 +238,7 @@ class StrictAdapter(
         cursor_start: str,
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
+        cursor_type: str | None = None,
     ) -> tuple[str, ...]:
         """Render SQL statements for cursor-bounded delete-insert."""
         ...

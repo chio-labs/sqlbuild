@@ -9,6 +9,7 @@ from sqlbuild.compiler.compile.models import FunctionArgument
 from tests.unit.src.sqlbuild.adapters.sqlserver._test_types import (
     SqlServerAdapterDefaultsTestCase,
     SqlServerCursorBoundLiteralTestCase,
+    SqlServerDeleteInsertCursorSqlTestCase,
     SqlServerIndexSqlTestCase,
     SqlServerLatestReadSqlTestCase,
     SqlServerMoveOrCopyRelationTestCase,
@@ -103,6 +104,64 @@ def test_given_cursor_bound_when_rendering_then_sqlserver_uses_compatible_litera
     )
 
     assert literal == test_case.expected_literal
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerDeleteInsertCursorSqlTestCase(
+            description="casts timestamp delete bounds to datetime2",
+            cursor_column="ordered_at",
+            cursor_start="2026-04-04T13:30:00.000001",
+            cursor_end="2026-04-04T14:30:00.000001",
+            cursor_type=CursorKind.TIMESTAMP,
+            expected_statements=(
+                "DELETE FROM dbo.raw_orders WHERE [ordered_at] >= "
+                "CAST('2026-04-04T13:30:00.000001' AS DATETIME2(6)) AND [ordered_at] < "
+                "CAST('2026-04-04T14:30:00.000001' AS DATETIME2(6))",
+                "INSERT INTO dbo.raw_orders SELECT * FROM dbo.raw_orders__staging",
+            ),
+        ),
+        SqlServerDeleteInsertCursorSqlTestCase(
+            description="leaves integer delete bounds unquoted",
+            cursor_column="order_id",
+            cursor_start="41",
+            cursor_end="43",
+            cursor_type=CursorKind.INTEGER,
+            expected_statements=(
+                "DELETE FROM dbo.raw_orders WHERE [order_id] >= 41 AND [order_id] < 43",
+                "INSERT INTO dbo.raw_orders SELECT * FROM dbo.raw_orders__staging",
+            ),
+        ),
+        SqlServerDeleteInsertCursorSqlTestCase(
+            description="quotes and escapes unknown delete bounds",
+            cursor_column="order_key",
+            cursor_start="a'b",
+            cursor_end="c'd",
+            cursor_type=None,
+            expected_statements=(
+                "DELETE FROM dbo.raw_orders WHERE [order_key] >= 'a''b' AND [order_key] < 'c''d'",
+                "INSERT INTO dbo.raw_orders SELECT * FROM dbo.raw_orders__staging",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cursor_type_when_rendering_delete_insert_then_sqlserver_uses_typed_bounds(
+    test_case: SqlServerDeleteInsertCursorSqlTestCase,
+) -> None:
+    adapter: SqlServerAdapter = SqlServerAdapter()
+
+    statements: tuple[str, ...] = adapter.render_delete_insert_cursor(
+        destination="dbo.raw_orders",
+        sql="SELECT * FROM dbo.raw_orders__staging",
+        cursor_column=test_case.cursor_column,
+        cursor_start=test_case.cursor_start,
+        cursor_end=test_case.cursor_end,
+        cursor_type=test_case.cursor_type,
+    )
+
+    assert statements == test_case.expected_statements
 
 
 @pytest.mark.parametrize(

@@ -486,7 +486,15 @@ def prepare_sqlserver_waffle_shop(*, tmp_path: Path, config: dict[str, object]) 
         lookups_path.read_text(encoding="utf-8").replace("type: VARCHAR", "type: NVARCHAR(100)"),
         encoding="utf-8",
     )
-    adapt_sqlserver_text_file(project_dir / "sources" / "raw.yml")
+    raw_sources_path: Path = project_dir / "sources" / "raw.yml"
+    adapt_sqlserver_text_file(raw_sources_path)
+    raw_sources_path.write_text(
+        raw_sources_path.read_text(encoding="utf-8").replace(
+            "      - name: ordered_at\n        type: DATETIME2",
+            "      - name: ordered_at\n        type: DATETIME",
+        ),
+        encoding="utf-8",
+    )
     return project_dir, schema_name
 
 

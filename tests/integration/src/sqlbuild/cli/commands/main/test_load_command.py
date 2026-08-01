@@ -13,6 +13,7 @@ from _pytest.capture import CaptureFixture, CaptureResult
 from _pytest.monkeypatch import MonkeyPatch
 from duckdb import DuckDBPyConnection
 
+from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands._helpers.load.selection import select_load_entries
 from sqlbuild.cli.commands.exceptions import CliUserError
@@ -3004,14 +3005,26 @@ def test_given_source_loader_write_strategy_when_running_pipeline_then_uses_expe
             project_files=WRITE_STRATEGY_CASE_FIXTURES[1].project_files,
             method_name="merge",
             expected_sql="SELECT * FROM raw_merge_customers__staging",
-            expected_unique_key=("customer_id",),
+            expected_arguments=("customer_id",),
         ),
         LoadCommandAdapterCallTestCase(
             description="delete insert rerun calls adapter delete insert cursor with staging select",
             project_files=WRITE_STRATEGY_CASE_FIXTURES[3].project_files,
             method_name="delete_insert_cursor",
             expected_sql="SELECT * FROM raw_delete_insert_events__staging",
-            expected_unique_key=("event_id", "2", "4"),
+            expected_arguments=("event_id", "2", "4", CursorKind.INTEGER),
+        ),
+        LoadCommandAdapterCallTestCase(
+            description="timestamp delete insert rerun propagates native cursor kind",
+            project_files=WRITE_STRATEGY_CASE_FIXTURES[4].project_files,
+            method_name="delete_insert_cursor",
+            expected_sql="SELECT * FROM raw_delete_insert_ts__staging",
+            expected_arguments=(
+                "event_at",
+                "2026-01-01T01:00:00",
+                "2026-01-01T02:00:00.000001",
+                CursorKind.TIMESTAMP,
+            ),
         ),
     ],
     ids=lambda case: case.description,
@@ -3026,7 +3039,7 @@ def test_given_source_loader_write_strategy_when_rerunning_then_calls_expected_a
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
     source_file: DiscoveredSourceFile = discovered_inputs.source_files[0]
     adapter: DuckDbAdapter = DuckDbAdapter()
-    calls: list[tuple[str, str, tuple[str, ...]]] = []
+    calls: list[tuple[str, str, tuple[str | None, ...]]] = []
 
     run_load_pipeline(
         sources=source_file.source_entries,
@@ -3070,8 +3083,15 @@ def test_given_source_loader_write_strategy_when_rerunning_then_calls_expected_a
         cursor_start: str,
         cursor_end: str,
         statement_recorder: object,
+        cursor_type: str | None = None,
     ) -> None:
-        calls.append(("delete_insert_cursor", sql, (cursor_column, cursor_start, cursor_end)))
+        calls.append(
+            (
+                "delete_insert_cursor",
+                sql,
+                (cursor_column, cursor_start, cursor_end, cursor_type),
+            )
+        )
 
     monkeypatch.setattr(adapter, "append", append_spy)
     monkeypatch.setattr(adapter, "merge", merge_spy)
@@ -3091,7 +3111,7 @@ def test_given_source_loader_write_strategy_when_rerunning_then_calls_expected_a
     )
 
     assert results[0].status.value == "success"
-    assert calls == [(test_case.method_name, test_case.expected_sql, test_case.expected_unique_key)]
+    assert calls == [(test_case.method_name, test_case.expected_sql, test_case.expected_arguments)]
 
 
 @pytest.mark.parametrize(

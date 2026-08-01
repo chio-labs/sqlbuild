@@ -437,6 +437,7 @@ class BaseAdapter(StrictAdapter):
         cursor_start: str,
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
+        cursor_type: str | None = None,
     ) -> tuple[str, ...]:
         delete_sql: str = (
             f"DELETE FROM {destination} "
@@ -1338,6 +1339,7 @@ class BaseAdapter(StrictAdapter):
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
+        cursor_type: str | None = None,
     ) -> None:
         statements: tuple[str, ...] = self.render_delete_insert_cursor(
             destination=destination,
@@ -1346,6 +1348,7 @@ class BaseAdapter(StrictAdapter):
             cursor_start=cursor_start,
             cursor_end=cursor_end,
             columns=columns,
+            cursor_type=cursor_type,
         )
         statement_recorder.record_many(statements)
         with self.transaction(connection):
