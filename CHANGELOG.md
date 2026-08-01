@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.48.4](https://github.com/chio-labs/sqlbuild/compare/v0.48.3...v0.48.4) (2026-08-01)
+
+
+### Bug Fixes
+
+* **sqlserver:** type loader cursor delete bounds ([79c2213](https://github.com/chio-labs/sqlbuild/commit/79c221364f83612f3cdd512e4fe9852e1f4d01f8))
+* **sqlserver:** type loader cursor delete bounds ([7a53481](https://github.com/chio-labs/sqlbuild/commit/7a534813859723e331214476a00c6c38fce0b7f4))
+
 ## [0.48.3](https://github.com/chio-labs/sqlbuild/compare/v0.48.2...v0.48.3) (2026-08-01)
 
 
