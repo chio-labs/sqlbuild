@@ -26,7 +26,11 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     [
         VirtualSourceFreshnessPlanE2ETestCase(
             description="virtual plan observes current source freshness before build persistence",
-            expected_unchanged_fragments=("Plan ready (0 selected)",),
+            expected_unchanged_fragments=(
+                "Plan ready (0 selected)",
+                "source freshness observed: 1",
+                "source freshness observed set: raw_orders",
+            ),
             expected_fragments=(
                 "Plan ready (1 selected)",
                 "source freshness observed: 1",
@@ -93,6 +97,8 @@ def test_given_virtual_source_freshness_change_when_planning_then_selects_downst
     assert unchanged_plan_result.returncode == 0, unchanged_plan_result.stderr
     assert "Plan ready (1 selected)" in unchanged_plan_result.stdout
     assert "fact_orders" in unchanged_plan_result.stdout
+    for fragment in test_case.expected_unchanged_fragments[1:]:
+        assert fragment in unchanged_plan_result.stdout, unchanged_plan_result.stdout
 
     unchanged_changes_only_plan_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "plan", "--changes-only"),

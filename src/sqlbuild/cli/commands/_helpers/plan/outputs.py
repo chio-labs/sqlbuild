@@ -38,6 +38,9 @@ def write_plan_command_output(
             use_color=invocation.use_color,
             display_options=display_options,
             python_plan_entries=pipeline_result.python_plan_entries,
+            include_standard_freshness_diagnostics=(
+                invocation.virtual_mode or invocation.effective_changes_only
+            ),
         )
         + "\n"
     )

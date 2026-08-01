@@ -317,7 +317,7 @@ def test_given_upstream_table_exists_without_watermark_when_downstream_runs_then
                 "models/a.sql": 'MODEL (materialized table);\n\nSELECT id FROM __ref("b")\n',
             },
             setup_build_command=("--no-color", "build", "--select", "b"),
-            plan_command=("--no-color", "plan", "--select", "a"),
+            command=("--no-color", "build", "--select", "a", "--changes-only"),
             expected_stdout_fragments=(
                 "Warnings (1)",
                 "Stale inputs detected",
@@ -339,7 +339,7 @@ def test_given_upstream_table_exists_without_watermark_when_downstream_runs_then
                 ),
             },
             setup_build_command=("--no-color", "build", "--select", "a"),
-            plan_command=("--no-color", "plan", "--select", "a"),
+            command=("--no-color", "plan", "--select", "a", "--changes-only"),
             expected_stdout_fragments=("Source freshness", "source-stale models: a"),
             unexpected_stdout_fragments=("Warnings (1)", "Stale inputs detected"),
         ),
@@ -354,7 +354,15 @@ def test_given_upstream_table_exists_without_watermark_when_downstream_runs_then
                 "models/a2.sql": 'MODEL (materialized table);\n\nSELECT id FROM __ref("b")\n',
             },
             setup_build_command=("--no-color", "build", "--select", "b"),
-            plan_command=("--no-color", "plan", "--select", "a1", "--select", "a2"),
+            command=(
+                "--no-color",
+                "plan",
+                "--select",
+                "a1",
+                "--select",
+                "a2",
+                "--changes-only",
+            ),
             expected_stdout_fragments=(
                 "Warnings (1)",
                 "Stale inputs detected",
@@ -382,7 +390,7 @@ def test_given_upstream_table_exists_without_watermark_when_downstream_runs_then
             },
             setup_build_command=("--no-color", "build"),
             setup_after_source_advance_commands=(("--no-color", "build", "--select", "b"),),
-            plan_command=("--no-color", "plan", "--select", "a"),
+            command=("--no-color", "plan", "--select", "a", "--changes-only"),
             expected_stdout_fragments=(
                 "Warnings (1)",
                 "Stale inputs detected",
@@ -394,10 +402,46 @@ def test_given_upstream_table_exists_without_watermark_when_downstream_runs_then
                 "raw_orders",
             ),
         ),
+        NodeSourceWatermarkWarningBuildE2ETestCase(
+            description="default standard plan omits freshness and stale-input diagnostics",
+            project_name="node_watermark_warning_default_standard_output",
+            models={
+                "models/b.sql": (
+                    'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+                ),
+                "models/a.sql": 'MODEL (materialized table);\n\nSELECT id FROM __ref("b")\n',
+            },
+            setup_build_command=("--no-color", "build", "--select", "b"),
+            command=("--no-color", "plan", "--select", "a"),
+            expected_stdout_fragments=("Plan ready (1 selected)",),
+            unexpected_stdout_fragments=(
+                "Source freshness",
+                "Stale inputs detected",
+                "Warnings (1)",
+            ),
+        ),
+        NodeSourceWatermarkWarningBuildE2ETestCase(
+            description="default standard build omits freshness and stale-input diagnostics",
+            project_name="node_watermark_warning_default_standard_build_output",
+            models={
+                "models/b.sql": (
+                    'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
+                ),
+                "models/a.sql": 'MODEL (materialized table);\n\nSELECT id FROM __ref("b")\n',
+            },
+            setup_build_command=("--no-color", "build", "--select", "b"),
+            command=("--no-color", "build", "--select", "a"),
+            expected_stdout_fragments=("Plan ready (1 selected)", "Execution"),
+            unexpected_stdout_fragments=(
+                "Source freshness",
+                "Stale inputs detected",
+                "Warnings (1)",
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_source_advances_when_planning_selection_then_reports_expected_stale_inputs(
+def test_given_source_advances_when_running_standard_command_then_reports_expected_stale_inputs(
     test_case: NodeSourceWatermarkWarningBuildE2ETestCase,
     tmp_path: Path,
 ) -> None:
@@ -422,7 +466,7 @@ def test_given_source_advances_when_planning_selection_then_reports_expected_sta
         assert followup_result.returncode == 0, followup_result.stdout + followup_result.stderr
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=test_case.plan_command,
+        command=test_case.command,
         project_dir=project_dir,
     )
 

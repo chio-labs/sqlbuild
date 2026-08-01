@@ -19,6 +19,7 @@ def format_plan(
     display_options: DisplayOptions | None = None,
     section_header_style: Callable[[str], str] | None = None,
     python_plan_entries: tuple[PythonPlanEntry, ...] = (),
+    include_standard_freshness_diagnostics: bool = True,
 ) -> str:
     """Format plan output grouped by reason with inline detail."""
 
@@ -30,4 +31,5 @@ def format_plan(
         display_options=display_options,
         section_header_style=section_header_style,
         python_plan_entries=python_plan_entries,
+        include_standard_freshness_diagnostics=include_standard_freshness_diagnostics,
     )
