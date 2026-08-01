@@ -8,6 +8,7 @@ from types import MappingProxyType
 
 from sqlbuild.compiler.compile._helpers.render.macros import expand_sql_macros
 from sqlbuild.compiler.compile.constants import (
+    ASSERT_TEST_CTE_PREFIX,
     DBT_REF_TEST_CTE_PREFIX,
     EXPECTED_TEST_CTE_PREFIX,
     REF_TEST_CTE_PREFIX,
@@ -132,6 +133,14 @@ def build_test_and_project(
             mock_seed_names=tuple(test_case.mock_seed_ctes.keys()),
             mock_dbt_ref_names=tuple(test_case.mock_dbt_ref_ctes.keys()),
             expected_model_names=test_case.expected_model_names,
+            assertion_ctes=tuple(
+                CompileSqlTestCte(
+                    name=f"{ASSERT_TEST_CTE_PREFIX}{name}",
+                    sql_body=body,
+                )
+                for name, body in test_case.assertion_ctes.items()
+            ),
+            assertion_names=tuple(test_case.assertion_ctes),
         ),
     )
 

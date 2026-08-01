@@ -515,6 +515,50 @@ def test_given_sqlserver_alias_required_sources_when_resolving_then_aliases_deri
     "test_case",
     [
         SourceResolutionTestCase(
+            description="casts sqlserver exclusive timestamp bounds to datetime2",
+            query_sql='SELECT * FROM __source("orders")',
+            star_exclude_keyword="EXCEPT",
+            source_map={"orders": SourceEntry(name="orders", schema="raw", table="orders")},
+            source_warehouse_columns={},
+            cursor_bounds=CursorBounds(
+                start="2026-04-04T14:30:00.000001",
+                end="2026-04-05T14:30:00.000001",
+            ),
+            cursor_inputs={"orders": "ordered_at"},
+            cursor_type=CursorKind.TIMESTAMP,
+            lower_bound_inclusive=False,
+            expected_sql=(
+                "SELECT * FROM (SELECT * FROM raw.orders WHERE ordered_at > "
+                "CAST('2026-04-04T14:30:00.000001' AS DATETIME2(6)) AND ordered_at < "
+                "CAST('2026-04-05T14:30:00.000001' AS DATETIME2(6))) "
+                "AS __sqb_source_orders"
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_sqlserver_timestamp_bounds_when_resolving_then_uses_datetime2_literals(
+    test_case: SourceResolutionTestCase,
+) -> None:
+    result: str = resolve_source_references(
+        query_sql=test_case.query_sql,
+        source_map=test_case.source_map,
+        source_warehouse_columns=test_case.source_warehouse_columns,
+        star_exclude_keyword=test_case.star_exclude_keyword,
+        cursor_bounds=test_case.cursor_bounds,
+        cursor_inputs=test_case.cursor_inputs,
+        adapter=SqlServerAdapter(),
+        cursor_type=test_case.cursor_type,
+        lower_bound_inclusive=test_case.lower_bound_inclusive,
+    )
+
+    assert result == test_case.expected_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SourceResolutionTestCase(
             description="renders partial source casts without unsupported star exclusion",
             query_sql='SELECT order_id, status, amount FROM __source("raw_orders")',
             star_exclude_keyword="EXCLUDE",

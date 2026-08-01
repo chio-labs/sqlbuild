@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -16,14 +17,17 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
+from sqlbuild.compiler.planner._helpers.sql_tests import assembly as sql_test_assembly
 from sqlbuild.compiler.planner._helpers.sql_tests.assembly import plan_test
 from sqlbuild.compiler.planner.models import (
     ChainStep,
     PlanWarning,
+    SqlAnalysisResolvedTestSql,
     SqlTestPlanEntry,
 )
 from sqlbuild.compiler.planner.types import WarningSeverity
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
+    AssertionChainCteErrorTestCase,
     PlanMacroTestCase,
     PlanTestChainTestCase,
 )
@@ -855,4 +859,151 @@ def test_given_sql_analysis_enabled_when_generated_cte_name_conflicts_then_it_ra
             project=project,
             adapter=DuckDbAdapter(),
             sql_analysis_enabled=True,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PlanTestChainTestCase(
+            description="sql analysis resolves assertions against shared chain ctes",
+            model_queries={"stg_orders": 'SELECT id AS order_id FROM __source("raw")'},
+            mock_ref_ctes={},
+            mock_source_ctes={"raw": "SELECT 1 AS id"},
+            helper_ctes={},
+            expected_model_names=("stg_orders",),
+            expected_chain_length=1,
+            expected_cte_bodies={"stg_orders": "SELECT 1 AS order_id"},
+            assertion_ctes={
+                "order_ids_are_not_null": (
+                    'SELECT * FROM __ref("stg_orders") AS stg_orders WHERE order_id IS NULL'
+                )
+            },
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_sql_analysis_assertion_when_planning_then_uses_shared_chain_ctes(
+    test_case: PlanTestChainTestCase,
+) -> None:
+    compiled_test: CompiledSqlTest
+    project: CompiledProject
+    compiled_test, project = build_test_and_project(test_case)
+
+    entry: SqlTestPlanEntry
+    warnings: tuple[PlanWarning, ...]
+    entry, warnings = plan_test(
+        test=compiled_test,
+        project=project,
+        adapter=DuckDbAdapter(),
+        sql_analysis_enabled=True,
+    )
+
+    assert not warnings
+    assert len(entry.chain) == test_case.expected_chain_length
+    assert len(entry.assertions) == 1
+    assertion_sql: str = entry.assertions[0].resolved_sql
+    assert "__ref__stg_orders AS (SELECT id AS order_id FROM __source__raw)" in assertion_sql
+    assert "FROM __ref__stg_orders AS stg_orders" in assertion_sql
+    assert "FROM (WITH" not in assertion_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PlanTestChainTestCase(
+            description="assertion analysis failure uses the independent textual chain",
+            model_queries={"stg_orders": 'SELECT id AS order_id FROM __source("raw")'},
+            mock_ref_ctes={},
+            mock_source_ctes={"raw": "SELECT 1 AS id"},
+            helper_ctes={},
+            expected_model_names=("stg_orders",),
+            expected_chain_length=1,
+            expected_cte_bodies={"stg_orders": "SELECT 1 AS order_id"},
+            assertion_ctes={
+                "order_ids_are_not_null": (
+                    'SELECT * FROM __ref("stg_orders") AS stg_orders WHERE order_id IS NULL'
+                )
+            },
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_assertion_analysis_failure_when_planning_then_textual_chain_stays_valid(
+    test_case: PlanTestChainTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    compiled_test: CompiledSqlTest
+    project: CompiledProject
+    compiled_test, project = build_test_and_project(test_case)
+    model_analysis_result: SqlAnalysisResolvedTestSql | None = (
+        sql_test_assembly.try_resolve_test_model_sql_with_sql_analysis(
+            query_sql=test_case.model_queries["stg_orders"],
+            mock_refs={},
+            mock_sources=test_case.mock_source_ctes,
+            mock_seeds={},
+            mock_dbt_refs={},
+            function_locations={},
+            helper_ctes=(),
+            resolved_chain={},
+            file_label="tests/unit/test_chain.sql",
+        )
+    )
+    assert model_analysis_result is not None
+    monkeypatch.setattr(
+        sql_test_assembly,
+        "try_resolve_test_model_sql_with_sql_analysis",
+        Mock(side_effect=(model_analysis_result, None)),
+    )
+
+    entry: SqlTestPlanEntry
+    warnings: tuple[PlanWarning, ...]
+    entry, warnings = plan_test(
+        test=compiled_test,
+        project=project,
+        adapter=DuckDbAdapter(),
+        sql_analysis_enabled=True,
+    )
+
+    assert not warnings
+    assert len(entry.chain) == test_case.expected_chain_length
+    assert len(entry.assertions) == 1
+    resolved_assertion_sql: str = entry.assertions[0].resolved_sql
+    assert "WITH __ref__stg_orders AS" in resolved_assertion_sql
+    assert "SELECT 1 AS id" in resolved_assertion_sql
+    assert "__REF(" not in resolved_assertion_sql.upper()
+    assert "FROM (WITH" not in resolved_assertion_sql.upper()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AssertionChainCteErrorTestCase(
+            description="rejects referenced model fallback beginning with with",
+            assertion_sql='SELECT * FROM __ref("stg_orders")',
+            resolved_chain={
+                "stg_orders": "(WITH model_rows AS (SELECT 1 AS id) SELECT * FROM model_rows)"
+            },
+            expected_error_fragment="referenced model beginning with WITH",
+        ),
+        AssertionChainCteErrorTestCase(
+            description="rejects assertion fallback beginning with with",
+            assertion_sql=(
+                'WITH invalid_orders AS (SELECT * FROM __ref("stg_orders")) '
+                "SELECT * FROM invalid_orders"
+            ),
+            resolved_chain={"stg_orders": "(SELECT 1 AS id)"},
+            expected_error_fragment="assertion beginning with WITH",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unflattened_with_when_building_assertion_ctes_then_raises_clear_error(
+    test_case: AssertionChainCteErrorTestCase,
+) -> None:
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+        sql_test_assembly._build_assertion_chain_ctes(
+            assertion_sql=test_case.assertion_sql,
+            resolved_chain=test_case.resolved_chain,
+            requires_flat_ctes=True,
         )
