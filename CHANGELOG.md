@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.48.5](https://github.com/chio-labs/sqlbuild/compare/v0.48.4...v0.48.5) (2026-08-01)
+
+
+### Bug Fixes
+
+* **cli:** scope freshness diagnostics to changes-only ([dc7f043](https://github.com/chio-labs/sqlbuild/commit/dc7f043609dbc883236d1a453e1773095a35c75b))
+* **cli:** scope freshness diagnostics to changes-only ([07bd489](https://github.com/chio-labs/sqlbuild/commit/07bd489c1bc4f79d549c8448b680eba2abebf959))
+
 ## [0.48.4](https://github.com/chio-labs/sqlbuild/compare/v0.48.3...v0.48.4) (2026-08-01)
 
 
