@@ -1632,6 +1632,7 @@ class DatabricksAdapter(BaseAdapter):
         cursor_start: str,
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
+        cursor_type: str | None = None,
     ) -> tuple[str, ...]:
         column_list: str = ""
         if columns is not None:
@@ -1988,6 +1989,7 @@ class DatabricksAdapter(BaseAdapter):
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
+        cursor_type: str | None = None,
     ) -> None:
         statements: tuple[str, ...] = self.render_delete_insert_cursor(
             destination=destination,
@@ -1996,6 +1998,7 @@ class DatabricksAdapter(BaseAdapter):
             cursor_start=cursor_start,
             cursor_end=cursor_end,
             columns=columns,
+            cursor_type=cursor_type,
         )
         statement_recorder.record_many(statements)
         statement: str

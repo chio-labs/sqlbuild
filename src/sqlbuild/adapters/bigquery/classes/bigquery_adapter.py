@@ -1620,6 +1620,7 @@ class BigQueryAdapter(BaseAdapter):
         cursor_start: str,
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
+        cursor_type: str | None = None,
     ) -> tuple[str, ...]:
         insert_clause: str = "INSERT ROW"
         if columns is not None:
@@ -2140,6 +2141,7 @@ class BigQueryAdapter(BaseAdapter):
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
+        cursor_type: str | None = None,
     ) -> None:
         if columns is None:
             columns = self.query_column_names(connection=connection, sql=sql)
@@ -2150,6 +2152,7 @@ class BigQueryAdapter(BaseAdapter):
             cursor_start=cursor_start,
             cursor_end=cursor_end,
             columns=columns,
+            cursor_type=cursor_type,
         )
         statement_recorder.record_many(statements)
         statement: str

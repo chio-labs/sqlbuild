@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
+from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SourceColumnEntry
@@ -94,6 +95,15 @@ class LoaderRowsErrorTestCase:
     description: str
     rows: tuple[dict[str, object], ...]
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class LoaderCursorKindTestCase:
+    """One native loader cursor kind inference case."""
+
+    description: str
+    value: int | bool | datetime | date | str
+    expected_cursor_kind: CursorKind | None
 
 
 @dataclass(frozen=True)

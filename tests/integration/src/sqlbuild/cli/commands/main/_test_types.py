@@ -138,7 +138,7 @@ class LoadCommandAdapterCallTestCase:
     project_files: dict[str, str]
     method_name: str
     expected_sql: str
-    expected_unique_key: tuple[str, ...] = ()
+    expected_arguments: tuple[str | None, ...] = ()
 
 
 @dataclass(frozen=True)

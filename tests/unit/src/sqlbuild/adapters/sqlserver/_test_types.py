@@ -64,6 +64,16 @@ class SqlServerCursorBoundLiteralTestCase:
 
 
 @dataclass(frozen=True)
+class SqlServerDeleteInsertCursorSqlTestCase:
+    description: str
+    cursor_column: str
+    cursor_start: str
+    cursor_end: str
+    cursor_type: str | None
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SqlServerRollbackTestCase:
     description: str
     expected_statement: str

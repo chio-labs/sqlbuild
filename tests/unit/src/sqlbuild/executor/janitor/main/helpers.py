@@ -266,6 +266,7 @@ class FakeJanitorAdapter(BaseAdapter):
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
+        cursor_type: str | None = None,
     ) -> None:
         raise NotImplementedError
 
