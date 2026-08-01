@@ -119,7 +119,7 @@ class NodeSourceWatermarkWarningBuildE2ETestCase:
     project_name: str
     models: dict[str, str]
     setup_build_command: tuple[str, ...]
-    plan_command: tuple[str, ...]
+    command: tuple[str, ...]
     expected_stdout_fragments: tuple[str, ...]
     unexpected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_stdout_occurrences: dict[str, int] = field(default_factory=dict)

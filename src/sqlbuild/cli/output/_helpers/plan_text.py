@@ -44,6 +44,7 @@ from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 
 _DIFF_HEADER_MARKER: str = "# "
+_STALE_INPUT_WARNING_TITLE: str = "Stale inputs detected"
 
 _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
     PlanReason.QUERY_CHANGED,
@@ -78,6 +79,7 @@ def format_plan(
     display_options: DisplayOptions | None = None,
     section_header_style: Callable[[str], str] | None = None,
     python_plan_entries: tuple[PythonPlanEntry, ...] = (),
+    include_standard_freshness_diagnostics: bool = True,
 ) -> str:
     """Format plan output grouped by reason with inline detail."""
 
@@ -96,7 +98,11 @@ def format_plan(
             section_header_style=resolved_section_header_style,
             python_plan_entries=python_plan_entries,
         )
-        lines = _format_warnings(lines=lines, plan=plan)
+        lines = _format_warnings(
+            lines=lines,
+            plan=plan,
+            include_standard_freshness_diagnostics=(include_standard_freshness_diagnostics),
+        )
         result: str = "\n".join(lines)
         return result if use_color else _strip_ansi(result)
 
@@ -121,12 +127,13 @@ def format_plan(
         section_header_style=resolved_section_header_style,
         display_options=resolved_display_options,
     )
-    lines = _format_standard_source_freshness_metadata(
-        lines=lines,
-        plan=plan,
-        section_header_style=resolved_section_header_style,
-        display_options=resolved_display_options,
-    )
+    if include_standard_freshness_diagnostics:
+        lines = _format_standard_source_freshness_metadata(
+            lines=lines,
+            plan=plan,
+            section_header_style=resolved_section_header_style,
+            display_options=resolved_display_options,
+        )
     lines = _format_standard_remaining_stale_metadata(
         lines=lines,
         plan=plan,
@@ -273,7 +280,11 @@ def format_plan(
         display_options=resolved_display_options,
         section_header_style=resolved_section_header_style,
     )
-    lines = _format_warnings(lines=lines, plan=plan)
+    lines = _format_warnings(
+        lines=lines,
+        plan=plan,
+        include_standard_freshness_diagnostics=include_standard_freshness_diagnostics,
+    )
 
     output: str = "\n".join(lines)
     return output if use_color else _strip_ansi(output)
@@ -1405,11 +1416,22 @@ def _format_function_entry(
     return lines
 
 
-def _format_warnings(*, lines: list[str], plan: PlanOutput) -> list[str]:
+def _format_warnings(
+    *,
+    lines: list[str],
+    plan: PlanOutput,
+    include_standard_freshness_diagnostics: bool,
+) -> list[str]:
     """Append the warnings section."""
 
     warning_entries: list[PlanWarning] = [
-        w for w in plan.warnings if w.severity != WarningSeverity.INFO
+        warning
+        for warning in plan.warnings
+        if warning.severity != WarningSeverity.INFO
+        and (
+            include_standard_freshness_diagnostics
+            or not warning.message.startswith(_STALE_INPUT_WARNING_TITLE)
+        )
     ]
     if not warning_entries:
         return lines
