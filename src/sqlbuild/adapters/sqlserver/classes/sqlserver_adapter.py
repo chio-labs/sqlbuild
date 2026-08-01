@@ -1184,6 +1184,7 @@ class SqlServerAdapter(BaseAdapter):
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
+        cursor_type: str | None = None,
     ) -> None:
         statements: tuple[str, ...] = self.render_delete_insert_cursor(
             destination=destination,
@@ -1192,6 +1193,7 @@ class SqlServerAdapter(BaseAdapter):
             cursor_start=cursor_start,
             cursor_end=cursor_end,
             columns=columns,
+            cursor_type=cursor_type,
         )
         statement_recorder.record_many(statements)
         with self.transaction(connection):
@@ -2013,11 +2015,18 @@ class SqlServerAdapter(BaseAdapter):
         cursor_start: str,
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
+        cursor_type: str | None = None,
     ) -> tuple[str, ...]:
+        start_literal: str = self.render_cursor_bound_literal(
+            value=cursor_start, cursor_type=cursor_type
+        )
+        end_literal: str = self.render_cursor_bound_literal(
+            value=cursor_end, cursor_type=cursor_type
+        )
         delete_sql: str = (
             f"DELETE FROM {destination} "
-            f"WHERE {self.render_identifier(cursor_column)} >= '{cursor_start}' "
-            f"AND {self.render_identifier(cursor_column)} < '{cursor_end}'"
+            f"WHERE {self.render_identifier(cursor_column)} >= {start_literal} "
+            f"AND {self.render_identifier(cursor_column)} < {end_literal}"
         )
         insert_stmts: tuple[str, ...] = self.render_append(
             destination=destination, sql=sql, columns=columns

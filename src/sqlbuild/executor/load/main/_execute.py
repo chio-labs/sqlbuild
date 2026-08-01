@@ -9,6 +9,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
@@ -18,6 +19,7 @@ from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load._helpers.cursors import (
     exclusive_cursor_end,
     format_cursor_bound,
+    infer_cursor_kind,
     load_staging_cursor_bounds,
 )
 from sqlbuild.executor.load._helpers.execution import load_resource_kind
@@ -265,6 +267,7 @@ def _apply_source_write_strategy(
         cursor_start, cursor_max = cursor_bounds
         if cursor_start is None or cursor_max is None:
             return adapter
+        cursor_type: CursorKind | None = infer_cursor_kind(cursor_start)
         adapter.delete_insert_cursor(
             connection=connection,
             destination=target,
@@ -273,6 +276,7 @@ def _apply_source_write_strategy(
             cursor_start=format_cursor_bound(cursor_start),
             cursor_end=format_cursor_bound(exclusive_cursor_end(cursor_max)),
             statement_recorder=statement_recorder,
+            cursor_type=cursor_type,
         )
         return adapter
     raise ExecutorInputError(f"unsupported source write_strategy: {source_entry.write_strategy}")

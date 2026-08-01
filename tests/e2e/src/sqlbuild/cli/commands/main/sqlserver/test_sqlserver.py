@@ -278,14 +278,30 @@ def test_given_waffle_shop_when_running_full_build_on_sqlserver_then_expected_ta
     ensure_sqlserver_schema_ready(schema_name=schema_name, config=config)
 
     try:
-        result: subprocess.CompletedProcess[str] = run_sqb(
+        first_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.command,
+            project_dir=project_dir,
+        )
+        cursor_type_rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
+            sql=(
+                "SELECT data_type FROM information_schema.columns "
+                f"WHERE table_schema = '{schema_name}' AND table_name = 'raw_orders' "
+                "AND column_name = 'ordered_at'"
+            ),
+            config=config,
+        )
+        second_result: subprocess.CompletedProcess[str] = run_sqb(
             command=test_case.command,
             project_dir=project_dir,
         )
 
-        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
-        for fragment in test_case.expected_stdout_fragments:
-            assert fragment in result.stdout
+        assert cursor_type_rows == (("datetime",),)
+        for result in (first_result, second_result):
+            assert result.returncode == test_case.expected_return_code, (
+                result.stdout + result.stderr
+            )
+            for fragment in test_case.expected_stdout_fragments:
+                assert fragment in result.stdout
         rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
             sql=(
                 "SELECT COUNT(*) FROM "
@@ -294,6 +310,13 @@ def test_given_waffle_shop_when_running_full_build_on_sqlserver_then_expected_ta
             config=config,
         )
         assert int(str(rows[0][0])) == test_case.expected_row_count
+        source_rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
+            sql=(
+                f"SELECT COUNT(*) FROM {relation_name(schema_name=schema_name, name='raw_orders')}"
+            ),
+            config=config,
+        )
+        assert int(str(source_rows[0][0])) == test_case.expected_row_count
     finally:
         cleanup_sqlserver_schema(schema_name=schema_name, config=config)
 

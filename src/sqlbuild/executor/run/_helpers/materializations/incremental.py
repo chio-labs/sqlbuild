@@ -613,6 +613,7 @@ def _execute_dml(
                 cursor_end=cursor_end,
                 columns=dml_columns,
                 statement_recorder=statement_recorder,
+                cursor_type=entry.cursor_type,
             )
         else:
             adapter.delete_insert(
