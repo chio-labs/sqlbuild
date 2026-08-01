@@ -279,15 +279,15 @@ def test_given_ended_transaction_when_context_raises_then_original_error_is_pres
     "test_case",
     [
         SqlServerTimestampCursorBoundTestCase(
-            description="compares legacy datetime values with fractional datetime2 bounds",
-            cursor_start="2026-04-03T14:30:00.000001",
+            description="deletes legacy datetime values with fractional datetime2 bounds",
+            cursor_start="2026-04-04T14:30:00",
             cursor_end="2026-04-04T14:30:00.000001",
-            expected_rows=((1,),),
+            expected_rows=((2,),),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_legacy_datetime_when_querying_fractional_bounds_then_sqlserver_accepts_them(
+def test_given_legacy_datetime_when_deleting_fractional_bounds_then_sqlserver_accepts_them(
     test_case: SqlServerTimestampCursorBoundTestCase,
     adapter: SqlServerAdapter,
     connection: Any,
@@ -302,18 +302,21 @@ def test_given_legacy_datetime_when_querying_fractional_bounds_then_sqlserver_ac
         connection=connection,
         sql=f"INSERT INTO {target} VALUES (1, '2026-04-04T14:30:00')",
     )
-    bounded_sql: str = adapter.render_query_with_cursor_bounds(
-        sql=f"SELECT event_id, ordered_at FROM {target}",
+    adapter.delete_insert_cursor(
+        connection=connection,
+        destination=target,
+        sql="SELECT 2 AS event_id, CAST('2026-04-04T14:30:00' AS DATETIME) AS ordered_at",
         cursor_column="ordered_at",
         cursor_start=test_case.cursor_start,
         cursor_end=test_case.cursor_end,
+        statement_recorder=build_statement_recorder(),
         cursor_type=CursorKind.TIMESTAMP,
     )
 
     rows: tuple[tuple[object, ...], ...] = fetch_rows(
         adapter=adapter,
         connection=connection,
-        sql=f"SELECT event_id FROM ({bounded_sql}) AS bounded_events",
+        sql=f"SELECT event_id FROM {target}",
     )
 
     assert rows == test_case.expected_rows

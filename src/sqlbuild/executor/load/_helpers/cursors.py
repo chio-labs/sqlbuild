@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 
 
@@ -38,6 +39,16 @@ def exclusive_cursor_end(value: object) -> object:
     if isinstance(value, date):
         return value + timedelta(days=1)
     return value
+
+
+def infer_cursor_kind(value: object) -> CursorKind | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return CursorKind.INTEGER
+    if isinstance(value, datetime):
+        return CursorKind.TIMESTAMP
+    return None
 
 
 def format_cursor_bound(value: object) -> str:

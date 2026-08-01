@@ -455,6 +455,7 @@ class PostgresAdapter(BaseAdapter):
         cursor_start: str,
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
+        cursor_type: str | None = None,
     ) -> tuple[str, ...]:
         quoted_cursor_column: str = self.render_identifier(cursor_column)
         delete_sql: str = (
@@ -913,6 +914,7 @@ class PostgresAdapter(BaseAdapter):
         cursor_end: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
+        cursor_type: str | None = None,
     ) -> None:
         statements: tuple[str, ...] = self.render_delete_insert_cursor(
             destination=destination,
@@ -921,6 +923,7 @@ class PostgresAdapter(BaseAdapter):
             cursor_start=cursor_start,
             cursor_end=cursor_end,
             columns=columns,
+            cursor_type=cursor_type,
         )
         statement_recorder.record_many(statements)
         with self.transaction(connection):
