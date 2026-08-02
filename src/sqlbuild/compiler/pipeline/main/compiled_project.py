@@ -12,7 +12,10 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline._helpers.target_defaults import apply_target_defaults
-from sqlbuild.compiler.pipeline._helpers.target_validation import validate_project_targets
+from sqlbuild.compiler.pipeline._helpers.target_validation import (
+    validate_managed_loader_target_isolation,
+    validate_project_targets,
+)
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
@@ -33,6 +36,10 @@ def build_compiled_project(
 ) -> CompiledProject:
     """Build one compiled project with adapter defaults and target validation applied."""
 
+    validate_managed_loader_target_isolation(
+        discovered_inputs=discovered_inputs,
+        adapter=adapter,
+    )
     compile_inputs: CompileProjectInputs = build_compile_inputs(
         discovered_inputs=discovered_inputs,
         selected_target=selected_target,

@@ -149,6 +149,7 @@ def assemble_compiled_project(
             _assemble_compiled_source(
                 source_input=source_input,
                 target_config=inputs.effective_target,
+                effective_vars=inputs.effective_vars,
             )
             for source_input in inputs.source_inputs
         ),
@@ -403,10 +404,12 @@ def _assemble_compiled_source(
     *,
     source_input: CompileSourceInput,
     target_config: TargetConfig | None,
+    effective_vars: dict[str, object],
 ) -> CompiledSource:
     source_entry: SourceEntry = _build_source_relation_entry(
         source_entry=source_input.source_entry,
         target_config=target_config,
+        effective_vars=effective_vars,
     )
     return CompiledSource(
         key=CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name=source_entry.name),
@@ -421,15 +424,44 @@ def _build_source_relation_entry(
     *,
     source_entry: SourceEntry,
     target_config: TargetConfig | None,
+    effective_vars: dict[str, object],
 ) -> SourceEntry:
     if source_entry.loader is None or target_config is None:
         return source_entry
     return replace(
         source_entry,
         database=(
-            source_entry.database if source_entry.database is not None else target_config.database
+            source_entry.database
+            if source_entry.database is not None
+            else _expand_target_value(
+                value=target_config.database,
+                effective_vars=effective_vars,
+            )
         ),
-        schema=source_entry.schema if source_entry.schema is not None else target_config.schema,
+        schema=(
+            source_entry.schema
+            if source_entry.schema is not None
+            else _expand_target_value(
+                value=target_config.loader_schema or target_config.schema,
+                effective_vars=effective_vars,
+            )
+        ),
+    )
+
+
+def _expand_target_value(*, value: str | None, effective_vars: dict[str, object]) -> str | None:
+    if value is None:
+        return None
+    return str(
+        expand_template_data(
+            value=value,
+            variables=effective_vars,
+            context_values={},
+            context_label="managed source target",
+            allow_context=False,
+            preserve_context_tokens=False,
+            preserve_unknown_context=False,
+        )
     )
 
 

@@ -12,6 +12,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
 from sqlbuild.compiler.planner.models import (
+    CloneSourcePlanEntry,
     CursorOverrides,
     ModelPlanEntry,
     PlanOutput,
@@ -93,10 +94,12 @@ class ClonePipelineResult:
     origin_project: CompiledProject
     destination_project: CompiledProject
     clone_plan: PlanOutput
+    destination_source_entries: tuple[CloneSourcePlanEntry, ...] = field(default_factory=tuple)
     destination_model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
     destination_seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
     origin_model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
     origin_seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
+    origin_source_entries: tuple[CloneSourcePlanEntry, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

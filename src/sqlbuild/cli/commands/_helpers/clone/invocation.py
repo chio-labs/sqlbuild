@@ -9,6 +9,7 @@ from typing import TextIO
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.clone.validation import validate_clone_request
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
+from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import CloneCommandRequest, CloneInvocation
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -17,6 +18,7 @@ from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
+from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
 
 
 def resolve_clone_invocation(*, request: CloneCommandRequest) -> CloneInvocation:
@@ -36,10 +38,22 @@ def resolve_clone_invocation(*, request: CloneCommandRequest) -> CloneInvocation
         project_dir=effective_project_dir
     )
     progress.complete("Discovered project.")
+    destination_target_name: str | None = request.destination_target_name
+    if destination_target_name is None:
+        destination_target_name = resolve_target_name(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+            selected_target=None,
+        )
+    if destination_target_name is None:
+        raise CliUserError(
+            "clone requires --to when the project has no active target",
+            code="C406",
+        )
     validate_clone_request(
         discovered_inputs=discovered_inputs,
         origin_target_name=request.origin_target_name,
-        destination_target_name=request.destination_target_name,
+        destination_target_name=destination_target_name,
     )
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
@@ -53,6 +67,7 @@ def resolve_clone_invocation(*, request: CloneCommandRequest) -> CloneInvocation
         discovered_inputs=discovered_inputs,
         adapter_name=adapter_name,
         adapter=adapter,
+        destination_target_name=destination_target_name,
         use_color=use_color,
         progress_stream=progress_stream,
     )

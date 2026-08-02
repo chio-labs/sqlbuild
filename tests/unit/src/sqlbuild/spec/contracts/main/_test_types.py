@@ -15,6 +15,7 @@ class TargetConfigResolutionTestCase:
     expected_schema: str | None
     expected_connection: dict[str, object]
     expected_allow_reset: bool
+    expected_loader_schema: str | None = None
     expected_reuse_from: str | None = None
     expected_defer_clone_from: str | None = None
     expected_changes_only: bool | None = None

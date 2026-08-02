@@ -61,6 +61,11 @@ def resolve_target_config(
             local_target.database if local_target.database is not None else project_target.database
         ),
         schema=local_target.schema if local_target.schema is not None else project_target.schema,
+        loader_schema=(
+            local_target.loader_schema
+            if local_target.loader_schema is not None
+            else project_target.loader_schema
+        ),
         defer_sources_to=(
             local_target.defer_sources_to
             if local_target.defer_sources_to is not None

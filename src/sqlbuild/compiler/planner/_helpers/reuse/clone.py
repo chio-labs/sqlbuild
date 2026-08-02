@@ -10,6 +10,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledSource,
 )
 from sqlbuild.compiler.graph.main._build_lineage_downstream_deps import (
     build_lineage_downstream_deps,
@@ -41,6 +42,7 @@ from sqlbuild.compiler.planner._helpers.resolve.refs import (
 from sqlbuild.compiler.planner._helpers.resolve.resolve import resolve_model_sql
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
+    CloneSourcePlanEntry,
     CursorOverridePair,
     ModelPlanContext,
     ModelPlanEntry,
@@ -100,17 +102,19 @@ def build_clone_model_entries(
     plan: PlanOutput,
     adapter: BaseAdapter,
     connection: Any,
+    source_project: CompiledProject | None = None,
 ) -> tuple[ModelPlanEntry, ...]:
+    effective_source_project: CompiledProject = source_project or project
     model_locations: dict[str, CompiledRelationLocation] = build_model_locations(project.models)
     seed_locations: dict[str, CompiledRelationLocation] = build_seed_locations(project.seeds)
     function_locations: dict[str, CompiledRelationLocation] = build_function_locations(
         project.functions
     )
     source_map: dict[str, SourceEntry] = {
-        source.name: source.source_entry for source in project.sources
+        source.name: source.source_entry for source in effective_source_project.sources
     }
     source_warehouse_columns: dict[str, tuple[Any, ...]] = gather_source_columns(
-        project=project,
+        project=effective_source_project,
         adapter=adapter,
         connection=connection,
     )
@@ -156,6 +160,60 @@ def build_clone_model_entries(
             logical_ddl="",
         )
     return tuple(entries_by_key[key] for key in plan.execution_order if key in entries_by_key)
+
+
+def build_clone_source_entries(
+    *,
+    project: CompiledProject,
+    plan: PlanOutput,
+    adapter: BaseAdapter,
+) -> tuple[CloneSourcePlanEntry, ...]:
+    entries_by_key: dict[CompiledObjectKey, CloneSourcePlanEntry] = {}
+    source: CompiledSource
+    for source in project.sources:
+        source_entry: SourceEntry = source.source_entry
+        if (
+            source.key not in plan.selected_keys
+            or not source_entry.managed
+            or source_entry.loader is None
+            or source_entry.expression is not None
+        ):
+            continue
+        relation_name: str = source_entry.table or source_entry.name
+        entries_by_key[source.key] = CloneSourcePlanEntry(
+            key=source.key,
+            name=source.name,
+            destination=CompiledRelationLocation(
+                database=source_entry.database,
+                schema=source_entry.schema,
+                name=relation_name,
+                qualified_name=adapter.render_qualified_name(
+                    database=source_entry.database,
+                    schema=source_entry.schema,
+                    name=relation_name,
+                ),
+            ),
+        )
+    return tuple(entries_by_key[key] for key in plan.execution_order if key in entries_by_key)
+
+
+def build_origin_source_entries(
+    *,
+    project: CompiledProject,
+    selected_names: frozenset[str],
+    adapter: BaseAdapter,
+) -> tuple[CloneSourcePlanEntry, ...]:
+    selected_keys: frozenset[CompiledObjectKey] = frozenset(
+        source.key for source in project.sources if source.name in selected_names
+    )
+    return build_clone_source_entries(
+        project=project,
+        plan=PlanOutput(
+            execution_order=tuple(source.key for source in project.sources),
+            selected_keys=selected_keys,
+        ),
+        adapter=adapter,
+    )
 
 
 def build_origin_model_entries(

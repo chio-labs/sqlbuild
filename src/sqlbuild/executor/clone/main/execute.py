@@ -8,21 +8,21 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
-from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
+from sqlbuild.compiler.planner.models import CloneSourcePlanEntry, ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.clone._helpers.operations import clone_relation, recreate_view
-from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
+from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult, CloneSourceEntries
 from sqlbuild.executor.clone.types import CloneItemCallback
 
 
 def _ensure_destination_schemas(
     *,
-    destination_entries: tuple[SeedPlanEntry | ModelPlanEntry, ...],
+    destination_entries: tuple[CloneSourcePlanEntry | SeedPlanEntry | ModelPlanEntry, ...],
     adapter: BaseAdapter,
     destination_connection: Any,
 ) -> None:
     schemas: set[tuple[str | None, str]] = set()
-    entry: SeedPlanEntry | ModelPlanEntry
+    entry: CloneSourcePlanEntry | SeedPlanEntry | ModelPlanEntry
     for entry in destination_entries:
         if entry.destination.schema is not None:
             schemas.add((entry.destination.database, entry.destination.schema))
@@ -38,6 +38,7 @@ def _ensure_destination_schemas(
 
 def execute_clone(
     *,
+    source_entries: CloneSourceEntries,
     origin_model_entries: tuple[ModelPlanEntry, ...],
     destination_model_entries: tuple[ModelPlanEntry, ...],
     origin_seed_entries: tuple[SeedPlanEntry, ...],
@@ -54,8 +55,12 @@ def execute_clone(
     origin_seeds_by_name: dict[str, SeedPlanEntry] = {
         entry.name: entry for entry in origin_seed_entries
     }
+    origin_sources_by_name: dict[str, CloneSourcePlanEntry] = {
+        entry.name: entry for entry in source_entries.origin
+    }
     results: list[CloneItemResult] = []
-    destination_entries: tuple[SeedPlanEntry | ModelPlanEntry, ...] = (
+    destination_entries: tuple[CloneSourcePlanEntry | SeedPlanEntry | ModelPlanEntry, ...] = (
+        *source_entries.destination,
         *destination_seed_entries,
         *destination_model_entries,
     )
@@ -66,13 +71,18 @@ def execute_clone(
     )
 
     clonable_entries: tuple[
-        tuple[SeedPlanEntry | ModelPlanEntry, SeedPlanEntry | ModelPlanEntry], ...
+        tuple[
+            CloneSourcePlanEntry | SeedPlanEntry | ModelPlanEntry,
+            CloneSourcePlanEntry | SeedPlanEntry | ModelPlanEntry,
+        ],
+        ...,
     ] = tuple(
         (destination_entry, origin_entry)
         for destination_entry in destination_entries
         if (
             origin_entry := (
-                origin_seeds_by_name.get(destination_entry.name)
+                origin_sources_by_name.get(destination_entry.name)
+                or origin_seeds_by_name.get(destination_entry.name)
                 or origin_models_by_name.get(destination_entry.name)
             )
         )
@@ -92,12 +102,13 @@ def execute_clone(
     )
     total: int = len(clonable_entries)
     index: int = 0
-    destination_entry: SeedPlanEntry | ModelPlanEntry
-    origin_entry: SeedPlanEntry | ModelPlanEntry
+    destination_entry: CloneSourcePlanEntry | SeedPlanEntry | ModelPlanEntry
+    origin_entry: CloneSourcePlanEntry | SeedPlanEntry | ModelPlanEntry
     for destination_entry, origin_entry in clonable_entries:
         index += 1
         if (
             isinstance(destination_entry, ModelPlanEntry)
+            and isinstance(origin_entry, ModelPlanEntry)
             and destination_entry.materialization_type == MaterializationType.VIEW
         ):
             item_result: CloneItemResult = recreate_view(

@@ -281,8 +281,8 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
             cli_vars=args.vars,
         )
     if args.command == CliCommand.CLONE:
-        if args.from_target is None or args.to_target is None:
-            raise CliUserError("clone requires --from and --to", code="C406")
+        if args.from_target is None:
+            raise CliUserError("clone requires --from", code="C406")
         return handlers.run_clone(
             CloneCommandRequest(
                 project_dir=project_dir,

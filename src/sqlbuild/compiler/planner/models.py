@@ -767,6 +767,15 @@ class ModelPlanEntry:
 
 
 @dataclass(frozen=True)
+class CloneSourcePlanEntry:
+    """One managed source relation selected for target cloning."""
+
+    key: CompiledObjectKey
+    name: str
+    destination: CompiledRelationLocation
+
+
+@dataclass(frozen=True)
 class SeedPlanEntry:
     """Per-seed execution plan entry."""
 
