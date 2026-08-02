@@ -1291,17 +1291,18 @@ def test_given_scenario_capture_arguments_when_running_with_dependencies_then_di
 def test_given_query_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, str | None, str, int | None]] = []
+    received_args: list[tuple[Path | None, str | None, Path | None, str, int | None]] = []
 
     def run_query(
         project_dir: Path | None,
         sql: str | None,
+        query_file: Path | None,
         selected_target: str | None,
         output_format: str,
         limit: int | None,
     ) -> int:
         del selected_target
-        received_args.append((project_dir, sql, output_format, limit))
+        received_args.append((project_dir, sql, query_file, output_format, limit))
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -1310,7 +1311,44 @@ def test_given_query_command_arguments_when_running_with_dependencies_then_it_di
     )
 
     assert exit_code == test_case.expected_exit_code
-    assert received_args == [(None, "select 1 as id", "table", 5)]
+    assert received_args == [(None, "select 1 as id", None, "table", 5)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="dispatches query file path through injected handler",
+            argv=["query", "--file", "queries/orders.sql", "--no-limit"],
+            expected_exit_code=4,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_query_file_argument_when_running_with_dependencies_then_dispatches_path(
+    test_case: MainTestCase,
+) -> None:
+    received_args: list[tuple[str | None, Path | None, int | None]] = []
+
+    def run_query(
+        project_dir: Path | None,
+        sql: str | None,
+        query_file: Path | None,
+        selected_target: str | None,
+        output_format: str,
+        limit: int | None,
+    ) -> int:
+        del project_dir, selected_target, output_format
+        received_args.append((sql, query_file, limit))
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_query=run_query),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_args == [(None, Path("queries/orders.sql"), None)]
 
 
 @pytest.mark.parametrize(
@@ -2434,11 +2472,12 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
     def run_query(
         project_dir: Path | None,
         sql: str | None,
+        query_file: Path | None,
         selected_target: str | None,
         output_format: str,
         limit: int | None,
     ) -> int:
-        del project_dir, sql, selected_target, output_format, limit
+        del project_dir, sql, query_file, selected_target, output_format, limit
         raise test_case.error_factory(Path("/tmp/demo"))
 
     exit_code: int = _main_with_dependencies(
@@ -2483,11 +2522,12 @@ def test_given_expected_cli_error_and_color_support_when_running_main_then_it_co
     def run_query(
         project_dir: Path | None,
         sql: str | None,
+        query_file: Path | None,
         selected_target: str | None,
         output_format: str,
         limit: int | None,
     ) -> int:
-        del project_dir, sql, selected_target, output_format, limit
+        del project_dir, sql, query_file, selected_target, output_format, limit
         raise test_case.error_factory(Path("/tmp/demo"))
 
     exit_code: int = _main_with_dependencies(

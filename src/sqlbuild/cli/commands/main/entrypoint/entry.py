@@ -144,12 +144,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
         run_promote=run_promote,
         run_rollback=run_rollback,
-        run_query=lambda project_dir, sql, selected_target, output_format, limit: run_query(
-            project_dir=project_dir,
-            sql=sql,
-            selected_target=selected_target,
-            output_format=output_format,
-            limit=limit,
+        run_query=lambda project_dir, sql, query_file, selected_target, output_format, limit: (
+            run_query(
+                project_dir=project_dir,
+                sql=sql,
+                query_file=query_file,
+                selected_target=selected_target,
+                output_format=output_format,
+                limit=limit,
+            )
         ),
         run_debug=lambda project_dir, no_color, no_connection, selected_target, json_output: (
             run_debug(

@@ -311,6 +311,7 @@ def _add_inspection_parsers(
 
     query_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.QUERY)
     query_parser.add_argument("query_sql", nargs="?", metavar="sql")
+    query_parser.add_argument("--file", dest="query_file", default=None)
     query_parser.add_argument("--target", default=None)
     query_parser.add_argument(
         "--format",

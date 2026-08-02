@@ -18,6 +18,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver._test_types import (
     SqlServerBuildE2ETestCase,
     SqlServerDbtProfileE2ETestCase,
     SqlServerDependencyBaselineE2ETestCase,
+    SqlServerDiffE2ETestCase,
     SqlServerIntermediateDagStrategyE2ETestCase,
     SqlServerJanitorDetachedVdeE2ETestCase,
     SqlServerLoaderWaffleShopE2ETestCase,
@@ -67,6 +68,152 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
     stringify_warehouse_rows,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SqlServerDiffE2ETestCase(
+            description="schema-only diff ignores row drift",
+            command=(
+                "--no-color",
+                "diff",
+                "prod:dev",
+                "--schema-only",
+                "--select",
+                "fact_orders",
+            ),
+            mutation_sql=("UPDATE {dev} SET amount_cents = 105 WHERE order_id = 1",),
+            expected_stdout_fragments=("fact_orders", "No schema differences."),
+            expected_return_code=0,
+        ),
+        SqlServerDiffE2ETestCase(
+            description="full diff reports row mismatch",
+            command=(
+                "--no-color",
+                "diff",
+                "prod:dev",
+                "--full",
+                "--select",
+                "fact_orders",
+            ),
+            mutation_sql=("UPDATE {dev} SET amount_cents = 105 WHERE order_id = 1",),
+            expected_stdout_fragments=(
+                "amount_cents",
+                "mismatches=1",
+                "order_id=1 | 100 -> 105",
+            ),
+            expected_return_code=1,
+        ),
+        SqlServerDiffE2ETestCase(
+            description="same-target full diff reports identical rows",
+            command=(
+                "--no-color",
+                "diff",
+                "dev:dev",
+                "--full",
+                "--select",
+                "fact_orders",
+            ),
+            mutation_sql=(),
+            expected_stdout_fragments=(
+                "fact_orders",
+                "No schema differences.",
+                "No changed columns.",
+            ),
+            expected_return_code=0,
+        ),
+        SqlServerDiffE2ETestCase(
+            description="bounded diff filters rows below integer cursor bound",
+            command=(
+                "--no-color",
+                "diff",
+                "prod:dev",
+                "--bounded",
+                "2",
+                "--select",
+                "fact_orders",
+            ),
+            mutation_sql=(
+                "UPDATE {dev} SET amount_cents = 105 WHERE order_id = 1",
+                "UPDATE {dev} SET amount_cents = 205 WHERE order_id = 2",
+            ),
+            expected_stdout_fragments=(
+                "amount_cents",
+                "mismatches=1",
+                "order_id=2 | 200 -> 205",
+            ),
+            expected_absent_stdout_fragments=("order_id=1 | 100 -> 105",),
+            expected_return_code=1,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_sqlserver_targets_when_running_diff_then_all_modes_execute_end_to_end(
+    test_case: SqlServerDiffE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    config: dict[str, object] = build_sqlserver_config()
+    prod_schema: str = build_unique_schema_name(prefix="sqb_diff_prod")
+    dev_schema: str = build_unique_schema_name(prefix="sqb_diff_dev")
+    ensure_sqlserver_schema_ready(schema_name=prod_schema, config=config)
+    ensure_sqlserver_schema_ready(schema_name=dev_schema, config=config)
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="sqlserver_diff_project",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "sqlserver_diff_project"\n'
+                'adapter = "sqlserver"\n'
+                'default_target = "dev"\n\n'
+                "[connection]\n"
+                f'host = "{config["host"]}"\n'
+                f"port = {config['port']}\n"
+                f'database = "{config["database"]}"\n'
+                f'user = "{config["user"]}"\n'
+                f'password = "{config["password"]}"\n\n'
+                "[targets.prod]\n"
+                f'schema = "{prod_schema}"\n\n'
+                "[targets.dev]\n"
+                f'schema = "{dev_schema}"\n'
+            ),
+            "models/fact_orders.sql": (
+                "MODEL (\n"
+                "  materialized table,\n"
+                "  unique_key [order_id],\n"
+                "  cursor order_id,\n"
+                "  cursor_type integer,\n"
+                ");\n\n"
+                "SELECT 1 AS order_id, 100 AS amount_cents\n"
+            ),
+        },
+    )
+    prod_relation: str = relation_name(schema_name=prod_schema, name="fact_orders")
+    dev_relation: str = relation_name(schema_name=dev_schema, name="fact_orders")
+
+    try:
+        for relation in (prod_relation, dev_relation):
+            execute_sqlserver_sql(
+                config=config,
+                sql=f"CREATE TABLE {relation} (order_id INT, amount_cents INT); "
+                f"INSERT INTO {relation} VALUES (1, 100), (2, 200), (3, 300)",
+            )
+        for mutation_sql in test_case.mutation_sql:
+            execute_sqlserver_sql(sql=mutation_sql.format(dev=dev_relation), config=config)
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=test_case.command,
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout, result.stdout + result.stderr
+        for fragment in test_case.expected_absent_stdout_fragments:
+            assert fragment not in result.stdout, result.stdout + result.stderr
+    finally:
+        cleanup_sqlserver_schema(schema_name=dev_schema, config=config)
+        cleanup_sqlserver_schema(schema_name=prod_schema, config=config)
 
 
 @pytest.mark.parametrize(
