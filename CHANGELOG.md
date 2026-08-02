@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.48.7](https://github.com/chio-labs/sqlbuild/compare/v0.48.6...v0.48.7) (2026-08-02)
+
+
+### Bug Fixes
+
+* **loaders:** isolate schemas and clone managed sources ([253cd2b](https://github.com/chio-labs/sqlbuild/commit/253cd2b44732cc34adf6e753bf0746f3d8f648b9))
+* **loaders:** isolate schemas and clone managed sources ([3003167](https://github.com/chio-labs/sqlbuild/commit/300316787a6bf5678a942a5534f986c0c7cbf7d1))
+
+
+### Documentation
+
+* surface local configuration workflow ([ae7cdd7](https://github.com/chio-labs/sqlbuild/commit/ae7cdd703c4d6329c8697ec6da4a95fc4bebe007))
+
 ## [0.48.6](https://github.com/chio-labs/sqlbuild/compare/v0.48.5...v0.48.6) (2026-08-02)
 
 
