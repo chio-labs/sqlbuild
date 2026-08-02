@@ -8,7 +8,10 @@ from textwrap import dedent
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.clone._test_types import CloneE2ETestCase
+from tests.e2e.src.sqlbuild.cli.commands.main.clone._test_types import (
+    CloneE2ETestCase,
+    ClonePolicyErrorTestCase,
+)
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     query_duckdb,
@@ -166,3 +169,65 @@ def test_given_clone_command_when_running_then_managed_relations_sync_as_expecte
     for query, expected_rows in test_case.expected_query_results:
         actual_rows: list[tuple[object, ...]] = query_duckdb(db_path=db_path, sql=query)
         assert tuple(tuple(row) for row in actual_rows) == expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ClonePolicyErrorTestCase(
+            description="denied origin identifies its enabling policy",
+            origin_allowed=False,
+            destination_allowed=True,
+            expected_error_code="C404",
+            expected_policy_key="targets.prod.clone.allow_as_clone_origin = true",
+        ),
+        ClonePolicyErrorTestCase(
+            description="denied destination identifies its enabling policy",
+            origin_allowed=True,
+            destination_allowed=False,
+            expected_error_code="C405",
+            expected_policy_key="targets.dev.clone.allow_as_clone_destination = true",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_denied_clone_policy_when_running_then_error_identifies_configuration_fix(
+    test_case: ClonePolicyErrorTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="clone_policy_project",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                f"""
+                name = "clone_policy_project"
+                adapter = "duckdb"
+                default_target = "dev"
+
+                [targets.prod]
+                schema = "prod"
+
+                [targets.prod.clone]
+                allow_as_clone_origin = {str(test_case.origin_allowed).lower()}
+
+                [targets.dev]
+                schema = "dev"
+
+                [targets.dev.clone]
+                allow_as_clone_destination = {str(test_case.destination_allowed).lower()}
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "clone", "--from", "prod", "--to", "dev"),
+        project_dir=project_dir,
+    )
+    combined_output: str = result.stdout + result.stderr
+
+    assert result.returncode != 0
+    assert test_case.expected_error_code in combined_output
+    assert test_case.expected_policy_key in combined_output

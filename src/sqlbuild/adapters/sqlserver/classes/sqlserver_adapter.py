@@ -21,6 +21,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _snapshot_key_condition,
 )
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.constants import DIFF_LEFT_SIDE, DIFF_RIGHT_SIDE
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
@@ -30,7 +31,9 @@ from sqlbuild.adapter.contract.models import (
     FunctionInfo,
     QueryResult,
     RelationInfo,
+    RowDiffColumnResult,
     RowDiffResult,
+    RowDiffSampleCell,
     RowDiffSampleRow,
     RowDiffTolerance,
     RowDiffTolerances,
@@ -59,7 +62,12 @@ from sqlbuild.adapter.state_sql.main.render_read_latest_node_source_watermarks_s
 from sqlbuild.adapters.sqlserver.classes.sqlserver_connection import _SqlServerConnection
 from sqlbuild.adapters.sqlserver.constants import (
     BOOLEAN_RETURN_TYPE,
+    DIFF_CHARACTER_LENGTH_TYPES,
+    DIFF_DATETIME_PRECISION_TYPES,
+    DIFF_NUMERIC_PRECISION_TYPES,
+    DIFF_UNSUPPORTED_COMPARISON_TYPES,
     EMPTY_SEED_VALUE,
+    INFORMATION_SCHEMA_NULLABLE_VALUE,
     INTEGER_TYPE_TOKEN,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
@@ -949,6 +957,52 @@ class SqlServerAdapter(BaseAdapter):
         )
         return tuple(ColumnInfo(name=row[0], type=row[1]) for row in cursor.fetchall())
 
+    def _describe_relation_for_diff(
+        self, *, connection: Any, relation: str
+    ) -> tuple[ColumnInfo, ...]:
+        parts: list[str] = [part.strip("[]") for part in relation.split(".")]
+        name: str = parts[-1]
+        schema_and_relation_part_count: int = 2
+        schema: str | None = parts[-2] if len(parts) >= schema_and_relation_part_count else None
+        cursor: Any = self.execute(
+            connection=connection,
+            sql=(
+                "SELECT column_name, data_type, character_maximum_length, "
+                "numeric_precision, numeric_scale, datetime_precision, is_nullable "
+                "FROM information_schema.columns "
+                f"WHERE table_name = {_quote_sql_string(name)}"
+                + (f" AND table_schema = {_quote_sql_string(schema)}" if schema else "")
+                + " ORDER BY ordinal_position"
+            ),
+        )
+        return tuple(
+            ColumnInfo(name=str(row[0]), type=self._format_diff_column_type(row=row))
+            for row in cursor.fetchall()
+        )
+
+    def _format_diff_column_type(self, *, row: Any) -> str:
+        data_type: str = str(row[1]).lower()
+        detail: str = ""
+        if data_type in DIFF_CHARACTER_LENGTH_TYPES:
+            length: int | None = row[2]
+            if length is not None:
+                detail = "max" if length == -1 else str(length)
+        elif data_type in DIFF_NUMERIC_PRECISION_TYPES:
+            precision: int | None = row[3]
+            scale: int | None = row[4]
+            if precision is not None and scale is not None:
+                detail = f"{precision},{scale}"
+        elif data_type in DIFF_DATETIME_PRECISION_TYPES:
+            datetime_precision: int | None = row[5]
+            if datetime_precision is not None:
+                detail = str(datetime_precision)
+        if detail:
+            data_type += f"({detail})"
+        nullability: str = (
+            "NULL" if str(row[6]).upper() == INFORMATION_SCHEMA_NULLABLE_VALUE else "NOT NULL"
+        )
+        return f"{data_type} {nullability}"
+
     def add_columns(
         self,
         *,
@@ -999,9 +1053,16 @@ class SqlServerAdapter(BaseAdapter):
 
         if cursor_column is None or start_cursor is None:
             return ""
-        clauses: list[str] = [f"{cursor_column} >= '{start_cursor.value}'"]
+        quoted_cursor: str = self.render_identifier(cursor_column)
+        start_literal: str = self.render_cursor_bound_literal(
+            value=str(start_cursor.value), cursor_type=start_cursor.kind
+        )
+        clauses: list[str] = [f"{quoted_cursor} >= {start_literal}"]
         if end_cursor is not None:
-            clauses.append(f"{cursor_column} < '{end_cursor.value}'")
+            end_literal: str = self.render_cursor_bound_literal(
+                value=str(end_cursor.value), cursor_type=end_cursor.kind
+            )
+            clauses.append(f"{quoted_cursor} < {end_literal}")
         return " AND ".join(clauses)
 
     def build_row_diff_equal_expression(
@@ -1016,21 +1077,37 @@ class SqlServerAdapter(BaseAdapter):
             column_type=column_info.type,
             tolerances=tolerances,
         )
+        normalized_type: str = column_info.type.lower().split("(", 1)[0].split(maxsplit=1)[0]
+        if normalized_type in DIFF_UNSUPPORTED_COMPARISON_TYPES:
+            raise AdapterUserError(
+                message=(
+                    f"row diff column '{column}' uses unsupported SQL Server comparison "
+                    f"type '{column_info.type}'"
+                )
+            )
         left_expression: str = f"__left.{column}"
         right_expression: str = f"__right.{column}"
         if tolerance is None:
-            return f"{left_expression} IS NOT DISTINCT FROM {right_expression}"
+            return (
+                f"(({left_expression} IS NULL AND {right_expression} IS NULL) OR "
+                f"({left_expression} IS NOT NULL AND {right_expression} IS NOT NULL AND "
+                f"{left_expression} = {right_expression}))"
+            )
         threshold_parts: list[str] = []
         if tolerance.absolute is not None:
             threshold_parts.append(self.format_row_diff_decimal_sql(tolerance.absolute))
         if tolerance.relative is not None:
             threshold_parts.append(
                 f"{self.format_row_diff_decimal_sql(tolerance.relative)} * "
-                f"GREATEST(ABS({left_expression}), ABS({right_expression}))"
+                f"(CASE WHEN ABS({left_expression}) >= ABS({right_expression}) "
+                f"THEN ABS({left_expression}) ELSE ABS({right_expression}) END)"
             )
         threshold_sql: str = threshold_parts[0]
         if len(threshold_parts) > 1:
-            threshold_sql = f"GREATEST({', '.join(threshold_parts)})"
+            threshold_sql = (
+                f"(CASE WHEN {threshold_parts[0]} >= {threshold_parts[1]} "
+                f"THEN {threshold_parts[0]} ELSE {threshold_parts[1]} END)"
+            )
         return (
             f"(({left_expression} IS NULL AND {right_expression} IS NULL) OR "
             f"({left_expression} IS NOT NULL AND {right_expression} IS NOT NULL AND "
@@ -1084,11 +1161,12 @@ class SqlServerAdapter(BaseAdapter):
         start_cursor: CursorValue | None = None,
         end_cursor: CursorValue | None = None,
     ) -> int:
-        where_clause: str = ""
-        if cursor_column and start_cursor:
-            where_clause = f" WHERE {cursor_column} >= '{start_cursor.value}'"
-            if end_cursor:
-                where_clause += f" AND {cursor_column} < '{end_cursor.value}'"
+        cursor_filter: str = self.build_cursor_filter(
+            cursor_column=cursor_column,
+            start_cursor=start_cursor,
+            end_cursor=end_cursor,
+        )
+        where_clause: str = f" WHERE {cursor_filter}" if cursor_filter else ""
         cursor: Any = connection.execute(f"SELECT COUNT(*) FROM {relation}{where_clause}")
         result: Any = cursor.fetchone()
         return int(result[0])
@@ -1214,7 +1292,106 @@ class SqlServerAdapter(BaseAdapter):
         start_cursor: CursorValue | None = None,
         end_cursor: CursorValue | None = None,
     ) -> RowDiffResult:
-        raise AdapterUserError(message="diff_rows requires an engine-specific implementation")
+        keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(
+            connection=connection, relation=left
+        )
+        compare_columns: tuple[str, ...] = tuple(
+            column.name
+            for column in left_columns
+            if column.name not in keys and column.name not in excluded_columns
+        )
+        left_columns_by_name: dict[str, ColumnInfo] = {
+            column.name: column for column in left_columns
+        }
+        cursor_filter: str = self.build_cursor_filter(
+            cursor_column=cursor_column,
+            start_cursor=start_cursor,
+            end_cursor=end_cursor,
+        )
+        left_cte: str = f"SELECT * FROM {left}"
+        right_cte: str = f"SELECT * FROM {right}"
+        if cursor_filter:
+            left_cte += f" WHERE {cursor_filter}"
+            right_cte += f" WHERE {cursor_filter}"
+        self.validate_row_diff_keys(
+            connection=connection,
+            relation_sql=left_cte,
+            relation_label="left",
+            keys=keys,
+        )
+        self.validate_row_diff_keys(
+            connection=connection,
+            relation_sql=right_cte,
+            relation_label="right",
+            keys=keys,
+        )
+        join_condition: str = " AND ".join(f"__left.{key} = __right.{key}" for key in keys)
+        column_equal_expressions: dict[str, str] = {
+            column: self.build_row_diff_equal_expression(
+                column=column,
+                column_info=left_columns_by_name[column],
+                tolerances=tolerances,
+            )
+            for column in compare_columns
+        }
+        column_tolerances: dict[str, RowDiffTolerance | None] = {
+            column: self.resolve_row_diff_tolerance(
+                column=column,
+                column_type=left_columns_by_name[column].type,
+                tolerances=tolerances,
+            )
+            for column in compare_columns
+        }
+        equal_condition: str = "1 = 1"
+        if compare_columns:
+            equal_condition = " AND ".join(column_equal_expressions.values())
+        column_count_sql_parts: list[str] = [
+            f"COUNT(CASE WHEN __left.{keys[0]} IS NOT NULL "
+            f"AND __right.{keys[0]} IS NOT NULL "
+            f"AND NOT ({column_equal_expressions[column]}) THEN 1 END) "
+            f"AS __{column}_mismatch_count"
+            for column in compare_columns
+        ]
+        column_count_sql: str = ""
+        if column_count_sql_parts:
+            column_count_sql = ", " + ", ".join(column_count_sql_parts)
+        diff_sql: str = (
+            f"WITH __left AS ({left_cte}), __right AS ({right_cte}) "
+            "SELECT "
+            f"COUNT(CASE WHEN __left.{keys[0]} IS NOT NULL THEN 1 END) AS left_count, "
+            f"COUNT(CASE WHEN __right.{keys[0]} IS NOT NULL THEN 1 END) AS right_count, "
+            "COUNT(*) AS joined, "
+            f"COUNT(CASE WHEN __left.{keys[0]} IS NOT NULL "
+            f"AND __right.{keys[0]} IS NOT NULL AND ({equal_condition}) "
+            "THEN 1 END) AS equal, "
+            f"COUNT(CASE WHEN __left.{keys[0]} IS NOT NULL "
+            f"AND __right.{keys[0]} IS NOT NULL AND NOT ({equal_condition}) "
+            "THEN 1 END) AS unequal, "
+            f"COUNT(CASE WHEN __right.{keys[0]} IS NULL THEN 1 END) AS left_only, "
+            f"COUNT(CASE WHEN __left.{keys[0]} IS NULL THEN 1 END) AS right_only"
+            f"{column_count_sql} "
+            f"FROM __left FULL OUTER JOIN __right ON {join_condition}"
+        )
+        row: tuple[Any, ...] = self.execute(connection=connection, sql=diff_sql).fetchone()
+        column_results: tuple[RowDiffColumnResult, ...] = tuple(
+            RowDiffColumnResult(
+                name=column,
+                mismatched_count=int(row[index]),
+                tolerance=column_tolerances[column],
+            )
+            for index, column in enumerate(compare_columns, start=7)
+        )
+        return RowDiffResult(
+            left_count=int(row[0]),
+            right_count=int(row[1]),
+            joined_count=int(row[2]),
+            equal_count=int(row[3]),
+            unequal_count=int(row[4]),
+            left_only_count=int(row[5]),
+            right_only_count=int(row[6]),
+            column_results=column_results,
+        )
 
     def diff_schema(
         self,
@@ -1223,7 +1400,35 @@ class SqlServerAdapter(BaseAdapter):
         left: str,
         right: str,
     ) -> SchemaDiffResult:
-        raise AdapterUserError(message="diff_schema requires an engine-specific implementation")
+        left_columns: tuple[ColumnInfo, ...] = self._describe_relation_for_diff(
+            connection=connection, relation=left
+        )
+        right_columns: tuple[ColumnInfo, ...] = self._describe_relation_for_diff(
+            connection=connection, relation=right
+        )
+        left_map: dict[str, str] = {column.name: column.type for column in left_columns}
+        right_map: dict[str, str] = {column.name: column.type for column in right_columns}
+        added: list[ColumnInfo] = []
+        removed: list[ColumnInfo] = []
+        type_changed: list[tuple[ColumnInfo, ColumnInfo]] = []
+        for column_name, column_type in right_map.items():
+            if column_name not in left_map:
+                added.append(ColumnInfo(name=column_name, type=column_type))
+            elif left_map[column_name] != column_type:
+                type_changed.append(
+                    (
+                        ColumnInfo(name=column_name, type=left_map[column_name]),
+                        ColumnInfo(name=column_name, type=column_type),
+                    )
+                )
+        for column_name, column_type in left_map.items():
+            if column_name not in right_map:
+                removed.append(ColumnInfo(name=column_name, type=column_type))
+        return SchemaDiffResult(
+            added_columns=tuple(added),
+            removed_columns=tuple(removed),
+            type_changed_columns=tuple(type_changed),
+        )
 
     def drop(
         self,
@@ -1401,7 +1606,7 @@ class SqlServerAdapter(BaseAdapter):
             return "decimal"
         if INTEGER_TYPE_TOKEN in normalized:
             return "integer"
-        return self.sql_analysis_dialect_name
+        return None
 
     def persists_python_functions(self) -> bool:
         return True
@@ -2368,9 +2573,51 @@ class SqlServerAdapter(BaseAdapter):
         end_cursor: CursorValue | None = None,
         limit: int = 20,
     ) -> tuple[tuple[tuple[str, object], ...], ...]:
-        raise AdapterUserError(
-            message="sample_side_only_rows requires an engine-specific implementation"
+        keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
+        cursor_filter: str = self.build_cursor_filter(
+            cursor_column=cursor_column,
+            start_cursor=start_cursor,
+            end_cursor=end_cursor,
         )
+        left_cte: str = f"SELECT * FROM {left}"
+        right_cte: str = f"SELECT * FROM {right}"
+        if cursor_filter:
+            left_cte += f" WHERE {cursor_filter}"
+            right_cte += f" WHERE {cursor_filter}"
+        self.validate_row_diff_keys(
+            connection=connection,
+            relation_sql=left_cte,
+            relation_label="left",
+            keys=keys,
+        )
+        self.validate_row_diff_keys(
+            connection=connection,
+            relation_sql=right_cte,
+            relation_label="right",
+            keys=keys,
+        )
+        join_condition: str = " AND ".join(f"__left.{key} = __right.{key}" for key in keys)
+        key_select_sql: str = ", ".join(
+            f"COALESCE(__left.{key}, __right.{key}) AS __key_{key}" for key in keys
+        )
+        if side == DIFF_LEFT_SIDE:
+            side_condition: str = f"__left.{keys[0]} IS NOT NULL AND __right.{keys[0]} IS NULL"
+        elif side == DIFF_RIGHT_SIDE:
+            side_condition = f"__right.{keys[0]} IS NOT NULL AND __left.{keys[0]} IS NULL"
+        else:
+            raise AdapterUserError(message="sample_side_only_rows side must be 'left' or 'right'")
+        sample_sql: str = (
+            f"WITH __left AS ({left_cte}), __right AS ({right_cte}) "
+            f"SELECT TOP {limit} {key_select_sql} "
+            f"FROM __left FULL OUTER JOIN __right ON {join_condition} "
+            f"WHERE {side_condition} "
+            f"ORDER BY {', '.join(f'__key_{key}' for key in keys)}"
+        )
+        rows: list[tuple[Any, ...]] = self.execute(connection=connection, sql=sample_sql).fetchall()
+        samples: list[tuple[tuple[str, object], ...]] = []
+        for row in rows:
+            samples.append(tuple((key, row[index]) for index, key in enumerate(keys)))
+        return tuple(samples)
 
     def sample_unequal_rows(
         self,
@@ -2386,9 +2633,102 @@ class SqlServerAdapter(BaseAdapter):
         end_cursor: CursorValue | None = None,
         limit: int = 20,
     ) -> tuple[RowDiffSampleRow, ...]:
-        raise AdapterUserError(
-            message="sample_unequal_rows requires an engine-specific implementation"
+        keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(
+            connection=connection, relation=left
         )
+        compare_columns: tuple[str, ...] = tuple(
+            column.name
+            for column in left_columns
+            if column.name not in keys and column.name not in excluded_columns
+        )
+        left_columns_by_name: dict[str, ColumnInfo] = {
+            column.name: column for column in left_columns
+        }
+        cursor_filter: str = self.build_cursor_filter(
+            cursor_column=cursor_column,
+            start_cursor=start_cursor,
+            end_cursor=end_cursor,
+        )
+        left_cte: str = f"SELECT * FROM {left}"
+        right_cte: str = f"SELECT * FROM {right}"
+        if cursor_filter:
+            left_cte += f" WHERE {cursor_filter}"
+            right_cte += f" WHERE {cursor_filter}"
+        self.validate_row_diff_keys(
+            connection=connection,
+            relation_sql=left_cte,
+            relation_label="left",
+            keys=keys,
+        )
+        self.validate_row_diff_keys(
+            connection=connection,
+            relation_sql=right_cte,
+            relation_label="right",
+            keys=keys,
+        )
+        column_equal_expressions: dict[str, str] = {
+            column: self.build_row_diff_equal_expression(
+                column=column,
+                column_info=left_columns_by_name[column],
+                tolerances=tolerances,
+            )
+            for column in compare_columns
+        }
+        unequal_condition: str = "1 = 0"
+        if compare_columns:
+            unequal_condition = " OR ".join(
+                f"NOT ({expression})" for expression in column_equal_expressions.values()
+            )
+        key_select_sql: str = ", ".join(
+            f"COALESCE(__left.{key}, __right.{key}) AS __key_{key}" for key in keys
+        )
+        compare_select_sql: str = ", ".join(
+            f"__left.{column} AS __left_{column}, "
+            f"__right.{column} AS __right_{column}, "
+            f"CASE WHEN {column_equal_expressions[column]} THEN 0 ELSE 1 END "
+            f"AS __changed_{column}"
+            for column in compare_columns
+        )
+        if compare_select_sql:
+            compare_select_sql = ", " + compare_select_sql
+        join_condition: str = " AND ".join(f"__left.{key} = __right.{key}" for key in keys)
+        sample_sql: str = (
+            f"WITH __left AS ({left_cte}), __right AS ({right_cte}) "
+            f"SELECT TOP {limit} {key_select_sql}{compare_select_sql} "
+            f"FROM __left FULL OUTER JOIN __right ON {join_condition} "
+            f"WHERE __left.{keys[0]} IS NOT NULL AND __right.{keys[0]} IS NOT NULL "
+            f"AND ({unequal_condition}) "
+            f"ORDER BY {', '.join(f'__key_{key}' for key in keys)}"
+        )
+        rows: list[tuple[Any, ...]] = self.execute(connection=connection, sql=sample_sql).fetchall()
+        samples: list[RowDiffSampleRow] = []
+        for row in rows:
+            key_values: tuple[tuple[str, object], ...] = tuple(
+                (key, row[index]) for index, key in enumerate(keys)
+            )
+            changed_cells: list[RowDiffSampleCell] = []
+            for column_index, column in enumerate(compare_columns):
+                left_value_index: int = len(keys) + (column_index * 3)
+                right_value_index: int = left_value_index + 1
+                changed_flag_index: int = right_value_index + 1
+                left_value: object = row[left_value_index]
+                right_value: object = row[right_value_index]
+                if bool(row[changed_flag_index]):
+                    changed_cells.append(
+                        RowDiffSampleCell(
+                            name=column,
+                            left_value=left_value,
+                            right_value=right_value,
+                        )
+                    )
+            samples.append(
+                RowDiffSampleRow(
+                    key_values=key_values,
+                    changed_cells=tuple(changed_cells),
+                )
+            )
+        return tuple(samples)
 
     def schema_exists(
         self,
