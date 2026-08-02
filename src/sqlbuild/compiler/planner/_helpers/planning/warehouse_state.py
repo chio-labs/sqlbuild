@@ -47,7 +47,6 @@ def gather_planner_warehouse_state(
         deferral=deferral,
         project_config=runtime.project_config,
         local_config=runtime.local_config,
-        require_source_deferral_config=False,
     )
     if runtime.on_progress is not None:
         runtime.on_progress(

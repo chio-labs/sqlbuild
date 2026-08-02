@@ -204,7 +204,7 @@ class SourceDeferralBuildTestCase:
 
 
 @dataclass(frozen=True)
-class SourceDeferralErrorTestCase:
+class ManagedSourcePlanningErrorTestCase:
     description: str
     project_files: dict[str, str]
     expected_error_fragment: str

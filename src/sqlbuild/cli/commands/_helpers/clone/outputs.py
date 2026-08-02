@@ -23,13 +23,15 @@ def write_clone_execution_header(
 ) -> None:
     """Write the standard clone execution header."""
 
-    clone_total: int = len(preparation.pipeline_result.destination_model_entries) + len(
-        preparation.pipeline_result.destination_seed_entries
+    clone_total: int = (
+        len(preparation.pipeline_result.destination_source_entries)
+        + len(preparation.pipeline_result.destination_model_entries)
+        + len(preparation.pipeline_result.destination_seed_entries)
     )
     invocation.progress_stream.write(
         render_clone_header(
             origin_target_name=request.origin_target_name,
-            destination_target_name=request.destination_target_name,
+            destination_target_name=invocation.destination_target_name,
             total=clone_total,
             use_color=invocation.use_color,
         )

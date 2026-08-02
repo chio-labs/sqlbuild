@@ -43,7 +43,7 @@ from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.clone.main.execute import execute_clone
 from sqlbuild.executor.clone.main.fingerprinting import copy_clone_fingerprints
 from sqlbuild.executor.clone.main.run_prephase_clone_stream import run_prephase_clone_stream
-from sqlbuild.executor.clone.models import CloneExecutionResult
+from sqlbuild.executor.clone.models import CloneExecutionResult, CloneSourceEntries
 from sqlbuild.executor.clone.types import CloneStatus
 
 
@@ -230,6 +230,10 @@ def run_defer_clone_prephase(
 
         def run_clone(on_item: Any) -> CloneExecutionResult:
             return execute_clone(
+                source_entries=CloneSourceEntries(
+                    origin=clone_pipeline.origin_source_entries,
+                    destination=clone_pipeline.destination_source_entries,
+                ),
                 origin_model_entries=clone_pipeline.origin_model_entries,
                 destination_model_entries=clone_pipeline.destination_model_entries,
                 origin_seed_entries=clone_pipeline.origin_seed_entries,

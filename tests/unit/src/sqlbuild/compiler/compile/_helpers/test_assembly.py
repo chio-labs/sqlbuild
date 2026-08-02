@@ -314,6 +314,10 @@ default_target = "dev"
 [targets.dev]
 database = "project_id"
 schema = "analytics_dev"
+loader_schema = "raw_${suffix}"
+
+[targets.dev.vars]
+suffix = "dev"
 """.strip()
                 + "\n",
                 "sources/raw.yml": """
@@ -338,7 +342,7 @@ def raw_orders(ctx):
             expected_model_target_schemas=(),
             expected_source_names=("raw_orders",),
             expected_source_databases=("project_id",),
-            expected_source_schemas=("analytics_dev",),
+            expected_source_schemas=("raw_dev",),
             expected_seed_names=(),
             expected_audit_names=(),
             expected_audit_scope_deps=(),

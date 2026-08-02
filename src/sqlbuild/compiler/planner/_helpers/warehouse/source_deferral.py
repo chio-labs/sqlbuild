@@ -20,14 +20,8 @@ from sqlbuild.compiler.references.main._quoted_reference_call_pattern import (
     quoted_reference_call_pattern,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.spec.contracts.models import (
-    ClonePolicy,
-    LocalConfig,
-    LocalTargetConfig,
-    ProjectConfig,
-    SourceEntry,
-    TargetConfig,
-)
+from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceEntry, TargetConfig
 
 _CTX_PATTERN: re.Pattern[str] = re.compile(r"\$\{CTX:([^}]+)\}")
 _VAR_PATTERN: re.Pattern[str] = re.compile(r"\$\{([^}:]+)\}")
@@ -42,7 +36,6 @@ def build_source_read_map(
     project_config: ProjectConfig | None,
     local_config: LocalConfig | None,
     defer_sources_to: str | None,
-    require_source_deferral_config: bool = True,
 ) -> dict[str, SourceEntry]:
     """Resolve the source relation map used when selected SQL reads managed sources."""
 
@@ -64,20 +57,16 @@ def build_source_read_map(
         local_config=local_config,
         defer_sources_to=defer_sources_to,
     )
-    if source_target_name is None and project.effective_target_name is None:
-        return source_map
     if source_target_name is None:
-        if not require_source_deferral_config:
-            return source_map
-        raise PlannerInputError(_missing_source_deferral_message(project.effective_target_name))
+        return source_map
     if project_config is None or local_config is None:
-        raise PlannerInputError(_missing_source_deferral_message(project.effective_target_name))
+        return source_map
     if (
         source_target_name not in project_config.targets
         and source_target_name not in local_config.targets
     ):
         raise PlannerInputError(f"Unknown source deferral target '{source_target_name}'")
-    source_target: TargetConfig = _resolve_target_config(
+    source_target: TargetConfig = resolve_target_config(
         project_config=project_config,
         local_config=local_config,
         target_name=source_target_name,
@@ -158,51 +147,12 @@ def _resolve_source_target_name(
         return defer_sources_to
     if project.effective_target_name is None or project_config is None or local_config is None:
         return None
-    active_target: TargetConfig = _resolve_target_config(
+    active_target: TargetConfig = resolve_target_config(
         project_config=project_config,
         local_config=local_config,
         target_name=project.effective_target_name,
     )
-    return active_target.defer_sources_to
-
-
-def _resolve_target_config(
-    *, project_config: ProjectConfig, local_config: LocalConfig, target_name: str
-) -> TargetConfig:
-    project_target: TargetConfig = project_config.targets.get(target_name, TargetConfig())
-    local_target: LocalTargetConfig | None = local_config.targets.get(target_name)
-    if local_target is None:
-        return project_target
-    return TargetConfig(
-        connection={**project_target.connection, **local_target.connection},
-        vars={**project_target.vars, **local_target.vars},
-        database=(
-            local_target.database if local_target.database is not None else project_target.database
-        ),
-        schema=(local_target.schema if local_target.schema is not None else project_target.schema),
-        defer_sources_to=(
-            local_target.defer_sources_to
-            if local_target.defer_sources_to is not None
-            else project_target.defer_sources_to
-        ),
-        defer_clone_from=(
-            local_target.defer_clone_from
-            if local_target.defer_clone_from is not None
-            else project_target.defer_clone_from
-        ),
-        clone=ClonePolicy(
-            allow_as_clone_origin=(
-                local_target.clone.allow_as_clone_origin
-                if local_target.clone.allow_as_clone_origin is not None
-                else project_target.clone.allow_as_clone_origin
-            ),
-            allow_as_clone_destination=(
-                local_target.clone.allow_as_clone_destination
-                if local_target.clone.allow_as_clone_destination is not None
-                else project_target.clone.allow_as_clone_destination
-            ),
-        ),
-    )
+    return active_target.defer_sources_to or project.effective_target_name
 
 
 def _raw_source_entry(source: CompiledSource) -> SourceEntry:
@@ -231,7 +181,7 @@ def _source_entry_for_environment(
     schema: str | None = source_entry.schema
     if schema is None:
         schema = _resolve_target_field(
-            target_value=target_config.schema,
+            target_value=target_config.loader_schema or target_config.schema,
             logical_value=source_entry.schema,
             effective_vars=effective_vars,
         )
@@ -266,21 +216,3 @@ def _resolve_target_field(
         )
 
     return _VAR_PATTERN.sub(_replace_var, result)
-
-
-def _missing_source_deferral_message(target_name: str | None) -> str:
-    active_target: str = target_name if target_name is not None else "<none>"
-    example_target: str = target_name if target_name is not None else "dev"
-    return (
-        f"Missing source deferral config for target '{active_target}'.\n\n"
-        "This project has sources with loaders. A loader writes data to the active "
-        "target, but models may need to read source data from another target. "
-        "SQLBuild will not guess.\n\n"
-        "Add one of these:\n\n"
-        f"    [targets.{example_target}]\n"
-        '    defer_sources_to = "prod"  # example: read production source data in dev\n\n'
-        "or:\n\n"
-        f"    [targets.{example_target}]\n"
-        f'    defer_sources_to = "{example_target}"   '
-        f"# read source data loaded into {example_target}"
-    )

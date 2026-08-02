@@ -108,7 +108,6 @@ def build_planner_relations_context(
     deferral: DeferralInputs | None = None,
     project_config: ProjectConfig | None = None,
     local_config: LocalConfig | None = None,
-    require_source_deferral_config: bool = True,
     known_source_columns: dict[str, tuple[ColumnInfo, ...]] | None = None,
 ) -> PlannerRelationsContext:
     """Resolve relation locations and source metadata for plan entry construction."""
@@ -138,7 +137,6 @@ def build_planner_relations_context(
             project_config=project_config,
             local_config=local_config,
             defer_sources_to=effective_deferral.defer_sources_to,
-            require_source_deferral_config=require_source_deferral_config,
         )
         if effective_deferral.source_deferral_enabled
         else source_map

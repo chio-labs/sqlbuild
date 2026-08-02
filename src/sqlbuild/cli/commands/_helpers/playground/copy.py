@@ -33,7 +33,6 @@ materialized = "table"
 
 [targets.dev]
 schema = "main"
-defer_sources_to = "dev"
 """
 
 _PYTHON_NODES_README: str = """# SQLBuild Python Nodes Playground
@@ -200,7 +199,6 @@ materialized = "table"
 
 [targets.dev]
 schema = "dev"
-defer_sources_to = "dev"
 
 [targets.dev.state]
 backend = "duckdb"

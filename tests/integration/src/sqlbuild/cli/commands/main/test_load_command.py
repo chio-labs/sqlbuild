@@ -68,11 +68,11 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     LoadCommandSelectionErrorTestCase,
     LoadCommandWriteStrategyLifecycleTestCase,
     LoadCommandWriteStrategyTestCase,
+    ManagedSourcePlanningErrorTestCase,
     PlanAutoLoadJsonTestCase,
     PlanAutoLoadOutputTestCase,
     SourceDeferralArtifactTestCase,
     SourceDeferralBuildTestCase,
-    SourceDeferralErrorTestCase,
     SourceDeferralNoErrorTestCase,
 )
 
@@ -157,6 +157,27 @@ schema = "dev"
 
 [targets.prod]
 schema = "prod"
+""".strip()
+    + "\n",
+}
+
+_SOURCE_LOADER_SCHEMA_PROJECT_FILES: dict[str, str] = {
+    **_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
+    "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_target = "dev"
+
+[connection]
+database = "demo.duckdb"
+
+[targets.dev]
+schema = "dev"
+loader_schema = "raw_dev"
+
+[targets.prod]
+schema = "prod"
+loader_schema = "raw_prod"
 """.strip()
     + "\n",
 }
@@ -280,7 +301,19 @@ def raw_orders(ctx):
 }
 
 _SOURCE_DEFERRAL_EXPLICIT_SCHEMA_PROJECT_FILES: dict[str, str] = {
-    "sqlbuild_project.toml": _SOURCE_DEFERRAL_PROJECT_FILES["sqlbuild_project.toml"],
+    "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_target = "dev"
+
+[connection]
+database = "demo.duckdb"
+
+[targets.dev]
+schema = "dev"
+loader_schema = "raw_dev"
+""".strip()
+    + "\n",
     "sources/raw.yml": """
 sources:
   - name: raw_orders
@@ -297,6 +330,27 @@ sources:
     + "\n",
     "loaders/raw_orders.py": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES["loaders/raw_orders.py"],
     "models/stg_orders.sql": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES["models/stg_orders.sql"],
+}
+
+_SOURCE_LOADER_COLLISION_PROJECT_FILES: dict[str, str] = {
+    **_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
+    "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_target = "dev"
+
+[connection]
+database = "demo.duckdb"
+
+[targets.dev]
+schema = "dev"
+loader_schema = "shared_raw"
+
+[targets.prod]
+schema = "prod"
+loader_schema = "shared_raw"
+""".strip()
+    + "\n",
 }
 
 _SOURCE_DEFERRAL_EXPRESSION_PROJECT_FILES: dict[str, str] = {
@@ -910,6 +964,14 @@ def test_given_managed_source_environment_when_building_or_running_then_reads_co
     "test_case",
     [
         SourceDeferralNoErrorTestCase(
+            description="plan defaults managed source reads to active target",
+            project_files=_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
+            setup_sql=(),
+            select=("stg_orders",),
+            result_sql="",
+            expected_rows=(),
+        ),
+        SourceDeferralNoErrorTestCase(
             description="plan configured target accepts deferred source reads",
             project_files=_SOURCE_DEFERRAL_PROJECT_FILES,
             setup_sql=(),
@@ -925,6 +987,19 @@ def test_given_managed_source_environment_when_building_or_running_then_reads_co
             result_sql="",
             expected_rows=(),
             defer_sources_to="dev",
+        ),
+        SourceDeferralNoErrorTestCase(
+            description="selected sql function defaults managed source read to active target",
+            project_files={
+                **_SOURCE_DEFERRAL_SQL_FUNCTION_PROJECT_FILES,
+                "sqlbuild_project.toml": _SOURCE_DEFERRAL_MISSING_PROJECT_FILES[
+                    "sqlbuild_project.toml"
+                ],
+            },
+            setup_sql=(),
+            select=("order_statuses",),
+            result_sql="",
+            expected_rows=(),
         ),
         SourceDeferralNoErrorTestCase(
             description="selected sql function managed source read uses configured deferral",
@@ -959,6 +1034,20 @@ def test_given_plan_source_deferral_override_when_planning_then_succeeds(
 @pytest.mark.parametrize(
     "test_case",
     [
+        SourceDeferralNoErrorTestCase(
+            description="loader schema separates managed writes from model schema",
+            project_files=_SOURCE_LOADER_SCHEMA_PROJECT_FILES,
+            setup_sql=(),
+            select=("stg_orders",),
+            result_sql=(
+                "SELECT 'model', order_id, status FROM dev.stg_orders "
+                "UNION ALL "
+                "SELECT 'source', order_id, status FROM raw_dev.raw_orders "
+                "ORDER BY 1"
+            ),
+            expected_rows=(("model", 7, "loaded"), ("source", 7, "loaded")),
+            command_options={"select": ("stg_orders",)},
+        ),
         SourceDeferralNoErrorTestCase(
             description="unmanaged source read does not require source deferral config",
             project_files=_SOURCE_DEFERRAL_UNMANAGED_PROJECT_FILES,
@@ -1012,15 +1101,12 @@ def test_given_plan_source_deferral_override_when_planning_then_succeeds(
             command_options={"select": ("stg_orders",)},
         ),
         SourceDeferralNoErrorTestCase(
-            description="explicit source schema is preserved instead of deferred target schema",
+            description="explicit managed source schema overrides target loader schema",
             project_files=_SOURCE_DEFERRAL_EXPLICIT_SCHEMA_PROJECT_FILES,
             setup_sql=(
                 "CREATE SCHEMA external_raw",
                 "CREATE TABLE external_raw.raw_orders(order_id INTEGER, status VARCHAR)",
                 "INSERT INTO external_raw.raw_orders VALUES (16, 'external-explicit')",
-                "CREATE SCHEMA prod",
-                "CREATE TABLE prod.raw_orders(order_id INTEGER, status VARCHAR)",
-                "INSERT INTO prod.raw_orders VALUES (116, 'prod-ignored')",
             ),
             select=("stg_orders",),
             result_sql="SELECT order_id, status FROM dev.stg_orders ORDER BY order_id",
@@ -1122,33 +1208,24 @@ def test_given_no_managed_source_read_ambiguity_when_building_then_source_deferr
 @pytest.mark.parametrize(
     "test_case",
     [
-        SourceDeferralErrorTestCase(
-            description="managed source read without source deferral config errors",
-            project_files=_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
-            expected_error_fragment="Missing source deferral config for target 'dev'",
-        ),
-        SourceDeferralErrorTestCase(
+        ManagedSourcePlanningErrorTestCase(
             description="managed source read with unknown cli deferral target errors",
             project_files=_SOURCE_DEFERRAL_MISSING_PROJECT_FILES,
             defer_sources_to="missing_env",
             expected_error_fragment="Unknown source deferral target 'missing_env'",
         ),
-        SourceDeferralErrorTestCase(
-            description="selected sql function managed source read without deferral config errors",
-            project_files={
-                **_SOURCE_DEFERRAL_SQL_FUNCTION_PROJECT_FILES,
-                "sqlbuild_project.toml": _SOURCE_DEFERRAL_MISSING_PROJECT_FILES[
-                    "sqlbuild_project.toml"
-                ],
-            },
-            select=("order_statuses",),
-            expected_error_fragment="Missing source deferral config for target 'dev'",
+        ManagedSourcePlanningErrorTestCase(
+            description="managed loaders cannot share a write namespace across targets",
+            project_files=_SOURCE_LOADER_COLLISION_PROJECT_FILES,
+            expected_error_fragment=(
+                "Managed loader write collision: targets 'dev' and 'prod' both resolve to"
+            ),
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_managed_source_without_source_deferral_when_planning_then_errors(
-    test_case: SourceDeferralErrorTestCase,
+def test_given_invalid_managed_source_target_config_when_planning_then_errors(
+    test_case: ManagedSourcePlanningErrorTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:

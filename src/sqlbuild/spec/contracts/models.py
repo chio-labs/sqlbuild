@@ -58,6 +58,7 @@ class TargetConfig:
     vars: dict[str, str] = field(default_factory=dict)
     database: str | None = None
     schema: str | None = None
+    loader_schema: str | None = None
     defer_sources_to: str | None = None
     defer_clone_from: str | None = None
     reuse_from: str | None = None
@@ -75,6 +76,7 @@ class LocalTargetConfig:
     vars: dict[str, str] = field(default_factory=dict)
     database: str | None = None
     schema: str | None = None
+    loader_schema: str | None = None
     defer_sources_to: str | None = None
     defer_clone_from: str | None = None
     reuse_from: str | None = None
