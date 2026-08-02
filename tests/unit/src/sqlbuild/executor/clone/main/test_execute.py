@@ -4,7 +4,7 @@ import pytest
 
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.executor.clone.main.execute import execute_clone
-from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
+from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult, CloneSourceEntries
 from sqlbuild.executor.clone.types import CloneStatus
 from tests.unit.src.sqlbuild.executor.clone._helpers.helpers import (
     FakeCloneAdapter,
@@ -51,6 +51,7 @@ def test_given_clone_entries_when_executing_then_streams_each_item(
         streamed.append((index, total, item.destination_relation, item.status.value))
 
     result: CloneExecutionResult = execute_clone(
+        source_entries=CloneSourceEntries(),
         origin_model_entries=origin_entries,
         destination_model_entries=destination_entries,
         origin_seed_entries=(),

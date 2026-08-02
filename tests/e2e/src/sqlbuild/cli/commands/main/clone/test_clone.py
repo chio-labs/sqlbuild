@@ -23,7 +23,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     "test_case",
     [
         CloneE2ETestCase(
-            description="clone copies tables recreates views and warns on missing source",
+            description="clone uses active destination copies tables and recreates views",
             repo_files={
                 "sqlbuild_project.toml": dedent(
                     """
@@ -95,8 +95,6 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "clone",
                 "--from",
                 "prod",
-                "--to",
-                "dev",
                 "--select",
                 "fact_orders",
                 "orders_enriched",
@@ -164,6 +162,214 @@ def test_given_clone_command_when_running_then_managed_relations_sync_as_expecte
     for fragment in test_case.expected_stdout_fragments:
         assert fragment in result.stdout, result.stdout + result.stderr
 
+    query: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for query, expected_rows in test_case.expected_query_results:
+        actual_rows: list[tuple[object, ...]] = query_duckdb(db_path=db_path, sql=query)
+        assert tuple(tuple(row) for row in actual_rows) == expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CloneE2ETestCase(
+            description="clone copies managed source before recreating dependent view",
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
+                    name = "managed_source_clone_project"
+                    adapter = "duckdb"
+                    default_target = "dev"
+
+                    [targets.dev]
+                    schema = "dev"
+                    loader_schema = "raw_dev"
+
+                    [targets.dev.connection]
+                    database = "clone.duckdb"
+
+                    [targets.dev.clone]
+                    allow_as_clone_origin = true
+
+                    [targets.prod]
+                    schema = "prod"
+                    loader_schema = "raw_prod"
+
+                    [targets.prod.connection]
+                    database = "clone.duckdb"
+
+                    [targets.prod.clone]
+                    allow_as_clone_destination = true
+                    """
+                ).strip()
+                + "\n",
+                "loaders/raw.py": dedent(
+                    """
+                    from sqlbuild.loaders import loader
+
+                    @loader
+                    def raw_customers(ctx):
+                        return []
+                    """
+                ).strip()
+                + "\n",
+                "sources/raw.yml": dedent(
+                    """
+                    sources:
+                      - name: raw_customers
+                        managed: true
+                        write_strategy: table
+                        columns:
+                          - name: customer_id
+                            type: INTEGER
+                          - name: first_name
+                            type: VARCHAR
+                    """
+                ).strip()
+                + "\n",
+                "models/stg_customers.sql": dedent(
+                    """
+                    MODEL (materialized view);
+
+                    SELECT customer_id, first_name FROM __source("raw_customers")
+                    """
+                ).strip()
+                + "\n",
+            },
+            clone_command=("--no-color", "clone", "--from", "dev", "--to", "prod"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "raw_customers",
+                "copied",
+                "stg_customers",
+                "recreated_view",
+            ),
+            expected_query_results=(
+                (
+                    "SELECT customer_id, first_name FROM prod.stg_customers ORDER BY customer_id",
+                    ((1, "Ada"), (2, "Grace")),
+                ),
+            ),
+        ),
+        CloneE2ETestCase(
+            description="clone preserves destination deferral without copying managed source",
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
+                    name = "managed_source_clone_project"
+                    adapter = "duckdb"
+                    default_target = "dev"
+
+                    [targets.dev]
+                    schema = "dev"
+                    loader_schema = "raw_dev"
+
+                    [targets.dev.connection]
+                    database = "clone.duckdb"
+
+                    [targets.dev.clone]
+                    allow_as_clone_origin = true
+
+                    [targets.prod]
+                    schema = "prod"
+                    loader_schema = "raw_prod"
+                    defer_sources_to = "dev"
+
+                    [targets.prod.connection]
+                    database = "clone.duckdb"
+
+                    [targets.prod.clone]
+                    allow_as_clone_destination = true
+                    """
+                ).strip()
+                + "\n",
+                "loaders/raw.py": dedent(
+                    """
+                    from sqlbuild.loaders import loader
+
+                    @loader
+                    def raw_customers(ctx):
+                        return []
+                    """
+                ).strip()
+                + "\n",
+                "sources/raw.yml": dedent(
+                    """
+                    sources:
+                      - name: raw_customers
+                        managed: true
+                        write_strategy: table
+                        columns:
+                          - name: customer_id
+                            type: INTEGER
+                          - name: first_name
+                            type: VARCHAR
+                    """
+                ).strip()
+                + "\n",
+                "models/stg_customers.sql": dedent(
+                    """
+                    MODEL (materialized view);
+
+                    SELECT customer_id, first_name FROM __source("raw_customers")
+                    """
+                ).strip()
+                + "\n",
+            },
+            clone_command=("--no-color", "clone", "--from", "dev", "--to", "prod"),
+            expected_exit_code=0,
+            expected_stdout_fragments=("stg_customers", "recreated_view"),
+            expected_query_results=(
+                (
+                    "SELECT customer_id, first_name FROM prod.stg_customers ORDER BY customer_id",
+                    ((1, "Ada"), (2, "Grace")),
+                ),
+                (
+                    "SELECT COUNT(*) FROM information_schema.tables "
+                    "WHERE table_schema = 'raw_prod' AND table_name = 'raw_customers'",
+                    ((0,),),
+                ),
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_managed_source_when_cloning_then_source_routing_is_preserved(
+    test_case: CloneE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="managed_source_clone_project",
+        repo_files=test_case.repo_files,
+    )
+    db_path: Path = project_dir / "clone.duckdb"
+
+    import duckdb
+
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(db_path))
+    connection.execute("CREATE SCHEMA dev")
+    connection.execute("CREATE SCHEMA prod")
+    connection.execute("CREATE SCHEMA raw_dev")
+    connection.execute("CREATE SCHEMA raw_prod")
+    connection.execute(
+        "CREATE TABLE raw_dev.raw_customers AS "
+        "SELECT * FROM (VALUES (1, 'Ada'), (2, 'Grace')) AS t(customer_id, first_name)"
+    )
+    connection.execute(
+        "CREATE VIEW dev.stg_customers AS SELECT customer_id, first_name FROM raw_dev.raw_customers"
+    )
+    connection.close()
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.clone_command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    fragment: str
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout, result.stdout + result.stderr
     query: str
     expected_rows: tuple[tuple[object, ...], ...]
     for query, expected_rows in test_case.expected_query_results:

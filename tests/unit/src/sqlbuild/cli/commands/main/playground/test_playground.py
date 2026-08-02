@@ -67,7 +67,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
             ),
             unexpected_paths=(Path("target"),),
             expected_file_fragments=(
-                (Path("sqlbuild_project.toml"), ('defer_sources_to = "dev"',)),
+                (Path("sqlbuild_project.toml"), ('default_target = "dev"',)),
                 (
                     Path("sources/raw.yml"),
                     ("managed: true",),

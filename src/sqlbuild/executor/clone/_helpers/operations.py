@@ -9,7 +9,7 @@ from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
+from sqlbuild.compiler.planner.models import CloneSourcePlanEntry, ModelPlanEntry, SeedPlanEntry
 from sqlbuild.executor.clone.main.clone_relation_operation import clone_relation_by_names
 from sqlbuild.executor.clone.main.recreate_view_operation import recreate_view_by_names
 from sqlbuild.executor.clone.models import CloneItemResult
@@ -17,8 +17,8 @@ from sqlbuild.executor.clone.models import CloneItemResult
 
 def clone_relation(
     *,
-    destination_entry: SeedPlanEntry | ModelPlanEntry,
-    origin_entry: SeedPlanEntry | ModelPlanEntry,
+    destination_entry: CloneSourcePlanEntry | SeedPlanEntry | ModelPlanEntry,
+    origin_entry: CloneSourcePlanEntry | SeedPlanEntry | ModelPlanEntry,
     adapter: BaseAdapter,
     destination_connection: Any,
     hard_copy: bool,
@@ -67,5 +67,7 @@ def recreate_view(
     )
 
 
-def qualified_name(*, adapter: BaseAdapter, entry: SeedPlanEntry | ModelPlanEntry) -> str:
+def qualified_name(
+    *, adapter: BaseAdapter, entry: CloneSourcePlanEntry | SeedPlanEntry | ModelPlanEntry
+) -> str:
     return resolve_relation_location_qualified_name(adapter=adapter, location=entry.destination)

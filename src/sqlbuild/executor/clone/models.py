@@ -5,7 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from sqlbuild.adapter.contract.models import LifeCycleEvent
+from sqlbuild.compiler.planner.models import CloneSourcePlanEntry
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
+
+
+@dataclass(frozen=True)
+class CloneSourceEntries:
+    """Origin and destination managed source entries for one clone run."""
+
+    origin: tuple[CloneSourcePlanEntry, ...] = field(default_factory=tuple)
+    destination: tuple[CloneSourcePlanEntry, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

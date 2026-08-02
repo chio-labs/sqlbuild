@@ -99,6 +99,7 @@ def test_given_changes_only_config_when_resolving_then_precedence_is_applied(
                 targets={
                     "dev": TargetConfig(
                         changes_only=True,
+                        loader_schema="raw_shared",
                         state=StateConfig(
                             backend="postgres",
                             schema="sqlbuild_state",
@@ -120,6 +121,7 @@ def test_given_changes_only_config_when_resolving_then_precedence_is_applied(
                             allow_reset=True,
                         ),
                         changes_only=False,
+                        loader_schema="raw_local",
                         reuse_hard_copy=True,
                         defer_clone_from="staging",
                     )
@@ -134,6 +136,7 @@ def test_given_changes_only_config_when_resolving_then_precedence_is_applied(
                 "database": "local-state.duckdb",
             },
             expected_allow_reset=True,
+            expected_loader_schema="raw_local",
             expected_reuse_from="prod",
             expected_defer_clone_from="staging",
             expected_changes_only=False,
@@ -155,6 +158,7 @@ def test_given_project_and_local_state_config_when_resolving_then_local_override
     assert target_config.state.schema == test_case.expected_schema
     assert target_config.state.connection == test_case.expected_connection
     assert target_config.state.allow_reset is test_case.expected_allow_reset
+    assert target_config.loader_schema == test_case.expected_loader_schema
     assert target_config.reuse_from == test_case.expected_reuse_from
     assert target_config.defer_clone_from == test_case.expected_defer_clone_from
     assert target_config.changes_only is test_case.expected_changes_only
