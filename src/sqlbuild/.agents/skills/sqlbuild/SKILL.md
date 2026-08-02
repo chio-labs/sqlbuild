@@ -356,6 +356,12 @@ cd waffle-shop
 
 This creates a self-contained waffle shop project with everything you need to explore SQLBuild.
 
+The playground creates the shared `sqlbuild_project.toml`; that is sufficient for this
+quickstart. In a team project, you can additionally create a gitignored
+`sqlbuild_local.toml` to select your usual target and override your personal development
+schema or credentials without changing the committed project config. See
+[Project Configuration](/concepts/project-configuration#sqlbuild_local-toml).
+
 ### 2. Plan
 
 Preview what SQLBuild will do:
@@ -1590,6 +1596,26 @@ SQLBuild projects are configured with two files in the project root:
 - **`sqlbuild_project.toml`** - shared project configuration, committed to version control
 - **`sqlbuild_local.toml`** - local developer overrides, gitignored
 
+Most projects need only one committed `sqlbuild_project.toml`. Define shared targets such
+as `dev` and `prod` there, including clone policies and team-wide defaults. Do not maintain
+separate complete project files for each environment.
+
+Create `sqlbuild_local.toml` only when a developer or execution environment needs different
+target selection, credentials, schemas, adapter settings, or variables. SQLBuild loads it
+automatically and merges its explicitly configured values over the shared project config.
+
+```text
+project/
+  sqlbuild_project.toml   # committed: shared targets and behavior
+  sqlbuild_local.toml     # gitignored: this developer's overrides
+```
+
+Add the local file to `.gitignore`:
+
+```gitignore
+sqlbuild_local.toml
+```
+
 ### sqlbuild_project.toml
 
 A complete example:
@@ -1702,6 +1728,21 @@ The active target is determined by (in order of precedence):
 2. `sqlbuild_local.toml` `target` field
 3. `default_target` in `sqlbuild_project.toml`
 4. No target (models build to the default schema)
+
+A typical developer keeps shared target definitions in `sqlbuild_project.toml` and selects
+their normal target once in the optional local file:
+
+```toml
+# sqlbuild_local.toml
+target = "dev"
+
+[targets.dev]
+schema = "dev_alice"
+loader_schema = "raw_alice"
+```
+
+Commands then use `dev` automatically. An explicit command such as `sqb build --target prod`
+still takes precedence for that invocation.
 
 #### Clone policies
 
@@ -1920,12 +1961,17 @@ See [skills CLI reference](/cli/skills) for usage details.
 
 ### sqlbuild_local.toml
 
-Local developer overrides. This file should be gitignored.
+Local developer overrides. This optional file is loaded automatically and should be
+gitignored. Only put values that differ from the shared project configuration here.
 
 ```toml
 target = "dev"
 
-[connection]
+[targets.dev]
+schema = "dev_alice"
+loader_schema = "raw_alice"
+
+[targets.dev.connection]
 database = "my_local.duckdb"
 
 [settings]
@@ -1944,7 +1990,13 @@ debug_mode = "true"
 | `settings` | Override global settings (only explicitly set fields take effect) |
 | `vars` | Developer-specific variable overrides (merged on top of project + target vars) |
 
-This replaces the common dbt pattern of switching profiles or setting environment variables to change targets. Each developer sets their target, connection, and preferences once in `sqlbuild_local.toml` and it persists across sessions.
+Target blocks support the same local overrides, including `schema`, `loader_schema`,
+`connection`, `vars`, source deferral, reuse, and clone policy fields. Unspecified values
+continue to come from `sqlbuild_project.toml`.
+
+This replaces the common dbt pattern of switching profiles or setting environment variables
+to change targets. Each developer sets their target, connection, and preferences once in
+`sqlbuild_local.toml` and it persists across sessions.
 
 ## Overview
 
@@ -10609,6 +10661,9 @@ Copy model relations between configured targets.
 Copies selected relations from one target to another. It uses adapter-native cloning where supported and physical copies where required; `--hard-copy` forces a physical copy on adapters that support both.
 
 No `manifest.json` generation or artifact management is required. Clone works directly against live targets.
+
+When `--to` is omitted, the destination is the active target selected by `--target`,
+`sqlbuild_local.toml`, or `default_target`, in that order.
 
 ### Usage
 
