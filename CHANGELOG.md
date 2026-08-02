@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.48.6](https://github.com/chio-labs/sqlbuild/compare/v0.48.5...v0.48.6) (2026-08-02)
+
+
+### Bug Fixes
+
+* **cli:** complete query and SQL Server diff parity ([29b131a](https://github.com/chio-labs/sqlbuild/commit/29b131ac55785ee6b4b1e4da18ed525dc46a4bda))
+* **cli:** complete query and SQL Server diff parity ([1084a1e](https://github.com/chio-labs/sqlbuild/commit/1084a1e05708e0b0f626dcd9177cfe7160a9d330))
+
 ## [0.48.5](https://github.com/chio-labs/sqlbuild/compare/v0.48.4...v0.48.5) (2026-08-01)
 
 
