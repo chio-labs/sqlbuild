@@ -1,5 +1,11 @@
 from dataclasses import dataclass
 
+from sqlbuild.adapter.contract.models import (
+    ColumnInfo,
+    CursorValue,
+    RowDiffTolerances,
+)
+
 
 @dataclass(frozen=True)
 class SqlServerAdapterDefaultsTestCase:
@@ -71,6 +77,25 @@ class SqlServerDeleteInsertCursorSqlTestCase:
     cursor_end: str
     cursor_type: str | None
     expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SqlServerDiffCursorFilterTestCase:
+    description: str
+    cursor_column: str
+    start_cursor: CursorValue
+    end_cursor: CursorValue | None
+    expected_filter: str
+
+
+@dataclass(frozen=True)
+class SqlServerRowDiffEqualitySqlTestCase:
+    description: str
+    column: str
+    column_info: ColumnInfo
+    tolerances: RowDiffTolerances | None
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)

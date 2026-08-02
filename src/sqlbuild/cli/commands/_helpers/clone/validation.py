@@ -22,11 +22,18 @@ def validate_clone_request(
         raise CliUserError(f"unknown target '{destination_target_name}'", code="C403")
     if not targets[origin_target_name].clone.allow_as_clone_origin:
         raise CliUserError(
-            f"target '{origin_target_name}' is not allowed as a clone origin target",
+            (
+                f"target '{origin_target_name}' is not allowed as a clone origin target; "
+                f"set targets.{origin_target_name}.clone.allow_as_clone_origin = true"
+            ),
             code="C404",
         )
     if not targets[destination_target_name].clone.allow_as_clone_destination:
         raise CliUserError(
-            f"target '{destination_target_name}' is not allowed as a clone destination target",
+            (
+                f"target '{destination_target_name}' is not allowed as a clone destination "
+                f"target; set targets.{destination_target_name}.clone."
+                "allow_as_clone_destination = true"
+            ),
             code="C405",
         )

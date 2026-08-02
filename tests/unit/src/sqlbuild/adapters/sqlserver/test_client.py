@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+from datetime import datetime
+from decimal import Decimal
+
 import pytest
 
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.models import (
+    ColumnInfo,
+    CursorValue,
+    RowDiffTolerance,
+    RowDiffTolerances,
+)
 from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile.models import FunctionArgument
@@ -10,6 +19,7 @@ from tests.unit.src.sqlbuild.adapters.sqlserver._test_types import (
     SqlServerAdapterDefaultsTestCase,
     SqlServerCursorBoundLiteralTestCase,
     SqlServerDeleteInsertCursorSqlTestCase,
+    SqlServerDiffCursorFilterTestCase,
     SqlServerIndexSqlTestCase,
     SqlServerLatestReadSqlTestCase,
     SqlServerMoveOrCopyRelationTestCase,
@@ -21,6 +31,7 @@ from tests.unit.src.sqlbuild.adapters.sqlserver._test_types import (
     SqlServerRenderQualifiedNameTestCase,
     SqlServerRenderRenameTestCase,
     SqlServerRollbackTestCase,
+    SqlServerRowDiffEqualitySqlTestCase,
 )
 from tests.unit.src.sqlbuild.adapters.sqlserver.helpers import FakeSqlServerConnection
 
@@ -162,6 +173,94 @@ def test_given_cursor_type_when_rendering_delete_insert_then_sqlserver_uses_type
     )
 
     assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SqlServerDiffCursorFilterTestCase(
+            description="renders integer diff bounds without string coercion",
+            cursor_column="order_id",
+            start_cursor=CursorValue(kind=CursorKind.INTEGER, value=2),
+            end_cursor=CursorValue(kind=CursorKind.INTEGER, value=4),
+            expected_filter="[order_id] >= 2 AND [order_id] < 4",
+        ),
+        SqlServerDiffCursorFilterTestCase(
+            description="casts timestamp diff bounds to datetime2",
+            cursor_column="ordered_at",
+            start_cursor=CursorValue(
+                kind=CursorKind.TIMESTAMP,
+                value=datetime.fromisoformat("2026-04-04T13:30:00.000001"),
+            ),
+            end_cursor=CursorValue(
+                kind=CursorKind.TIMESTAMP,
+                value=datetime.fromisoformat("2026-04-04T14:30:00.000001"),
+            ),
+            expected_filter=(
+                "[ordered_at] >= CAST('2026-04-04 13:30:00.000001' AS DATETIME2(6)) "
+                "AND [ordered_at] < CAST('2026-04-04 14:30:00.000001' AS DATETIME2(6))"
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_typed_cursors_when_building_diff_filter_then_sqlserver_uses_typed_literals(
+    test_case: SqlServerDiffCursorFilterTestCase,
+) -> None:
+    adapter: SqlServerAdapter = SqlServerAdapter()
+
+    cursor_filter: str = adapter.build_cursor_filter(
+        cursor_column=test_case.cursor_column,
+        start_cursor=test_case.start_cursor,
+        end_cursor=test_case.end_cursor,
+    )
+
+    assert cursor_filter == test_case.expected_filter
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SqlServerRowDiffEqualitySqlTestCase(
+            description="renders portable null-safe equality",
+            column="status",
+            column_info=ColumnInfo(name="status", type="nvarchar"),
+            tolerances=None,
+            expected_fragments=(
+                "__left.status IS NULL AND __right.status IS NULL",
+                "__left.status IS NOT NULL AND __right.status IS NOT NULL",
+                "__left.status = __right.status",
+            ),
+            unexpected_fragments=("IS NOT DISTINCT FROM",),
+        ),
+        SqlServerRowDiffEqualitySqlTestCase(
+            description="renders relative tolerance without greatest",
+            column="amount",
+            column_info=ColumnInfo(name="amount", type="decimal"),
+            tolerances=RowDiffTolerances(
+                by_column={"amount": RowDiffTolerance(relative=Decimal("0.01"))}
+            ),
+            expected_fragments=("CASE WHEN", "0.01 *", "ABS(__left.amount - __right.amount)"),
+            unexpected_fragments=("GREATEST",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_diff_column_when_rendering_equality_then_sqlserver_uses_portable_sql(
+    test_case: SqlServerRowDiffEqualitySqlTestCase,
+) -> None:
+    adapter: SqlServerAdapter = SqlServerAdapter()
+
+    expression: str = adapter.build_row_diff_equal_expression(
+        column=test_case.column,
+        column_info=test_case.column_info,
+        tolerances=test_case.tolerances,
+    )
+
+    for fragment in test_case.expected_fragments:
+        assert fragment in expression
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in expression
 
 
 @pytest.mark.parametrize(

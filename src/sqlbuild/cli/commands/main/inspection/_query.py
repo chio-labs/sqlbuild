@@ -24,13 +24,14 @@ def run_query(
     *,
     project_dir: Path | None,
     sql: str | None,
+    query_file: Path | None = None,
     selected_target: str | None = None,
     output_format: str = "long",
     limit: int | None = 20,
 ) -> int:
     """Execute ad hoc SQL against the active project connection."""
 
-    query_sql: str = _resolve_query_sql(sql=sql)
+    query_sql: str = _resolve_query_sql(sql=sql, query_file=query_file)
     if limit is not None and limit < 0:
         raise CliUserError(
             "query --limit must be greater than or equal to 0",
@@ -65,10 +66,38 @@ def run_query(
     return 0
 
 
-def _resolve_query_sql(*, sql: str | None) -> str:
+def _resolve_query_sql(*, sql: str | None, query_file: Path | None) -> str:
+    if sql is not None and query_file is not None:
+        raise CliUserError(
+            "query accepts either positional SQL or --file, not both",
+            code="C104",
+        )
+    if query_file is not None:
+        query_sql: str = _read_query_file(query_file=query_file)
+        if not query_sql.strip():
+            raise CliUserError("query SQL must not be empty", code="C103")
+        return query_sql
     if sql is None:
-        raise CliUserError("query requires SQL", code="C102", help="pass SQL as the query argument")
-    query_sql: str = sql
+        raise CliUserError(
+            "query requires SQL",
+            code="C102",
+            help="pass SQL as the query argument or use --file PATH",
+        )
+    query_sql = sql
     if not query_sql.strip():
         raise CliUserError("query SQL must not be empty", code="C103")
     return query_sql
+
+
+def _read_query_file(*, query_file: Path) -> str:
+    if not query_file.exists():
+        raise CliUserError(f"query file does not exist: {query_file}", code="C105")
+    if not query_file.is_file():
+        raise CliUserError(f"query file path is not a file: {query_file}", code="C106")
+    try:
+        return query_file.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise CliUserError(
+            f"query file could not be read as UTF-8: {query_file}",
+            code="C107",
+        ) from error
