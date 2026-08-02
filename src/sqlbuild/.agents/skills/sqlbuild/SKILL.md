@@ -1704,16 +1704,18 @@ Targets can declare whether they allow cloning to or from:
 schema = "prod"
 
 [targets.prod.clone]
-allow_as_source = true
-allow_as_target = false
+allow_as_clone_origin = true
+allow_as_clone_destination = false
 
 [targets.dev]
 schema = "dev"
 
 [targets.dev.clone]
-allow_as_source = false
-allow_as_target = true
+allow_as_clone_origin = false
+allow_as_clone_destination = true
 ```
+
+Both policies default to `false`. `sqb clone --from prod --to dev` requires `allow_as_clone_origin = true` on `prod` and `allow_as_clone_destination = true` on `dev`.
 
 ### Defaults
 
@@ -2420,6 +2422,8 @@ database = "my_database"
 | `database` | Database name (default: `master`). Also accepts `dbname` as an alias. |
 
 All fields in `connection` are passed to `pymssql.connect()`. See the [pymssql documentation](https://pymssql.readthedocs.io/en/stable/ref/pymssql.html) for all available options.
+
+SQL Server supports schema-only, full-row, and bounded `sqb diff` comparisons.
 
 ### Per-target connections
 
@@ -5912,14 +5916,11 @@ See the [lineage CLI reference](/cli/lineage) for full flag documentation and ou
 
 #### Batch analysis with `sqb compile`
 
-Every compile run includes column lineage in the output:
+Every compile run computes column lineage for analysis and reports a summary:
 
 ```bash
 # Default: fast column lineage
 sqb compile
-
-# Rich column lineage in compile
-sqb compile --lineage-mode rich
 
 # Skip column lineage
 sqb compile --lineage-mode none
@@ -5928,7 +5929,7 @@ sqb compile --lineage-mode none
 sqb compile --json
 ```
 
-In the JSON compile report, each model includes a `lineage` field with `column_count`, `edge_count`, and `has_star` metadata.
+In the JSON compile report, each model includes a `lineage` field with `column_count`, `edge_count`, and `has_star` metadata. It does not contain the full edge graph; use `sqb lineage <model>[.<column>] --format json` when you need structured lineage details.
 
 See the [compile CLI reference](/cli/compile) for details on the compile report format.
 
@@ -6007,7 +6008,7 @@ For timestamp cursors, the bound is a duration (`14d`, `6h`, `30m`). For integer
 
 ### Row matching
 
-Rows are matched between the two sides using the model's `unique_key`. For models without a `unique_key`, SQLBuild uses all columns as a composite key.
+Rows are matched between the two sides using the model's `unique_key`. Models without a `unique_key` can use schema-only diff but cannot run full or bounded row comparisons.
 
 The diff output categorises rows as:
 - **Equal** - same key, same values on both sides
@@ -9774,7 +9775,7 @@ The `--lineage-mode` flag controls how column lineage is computed during compile
 | `rich` | Full SQL analysis with transform classification and deeper tracing. Slower on large projects. |
 | `none` | Skip column lineage entirely. |
 
-Column lineage results are included in the JSON compile report under each model's `lineage` field. See [Column Lineage](/concepts/column-lineage) for details on analysis modes and transform types.
+The JSON compile report includes a lineage summary for each model, not the full column graph. Use `sqb lineage <model>[.<column>]` to inspect lineage as a tree, edge list, or JSON. See [Column Lineage](/concepts/column-lineage) for details on analysis modes and transform types.
 
 ### Examples
 
@@ -10576,11 +10577,11 @@ Results are written to `target/run/checks/python_checks.json`.
 
 Source: `cli/clone.mdx`
 
-Copy models between targets using zero-copy cloning.
+Copy model relations between configured targets.
 
 ## sqb clone
 
-Copies model relations from one target to another. Uses zero-copy cloning where the adapter supports it, falling back to physical copies with `--hard-copy`.
+Copies model relations from one target to another. It uses adapter-native cloning where supported and physical copies where required; `--hard-copy` forces a physical copy on adapters that support both.
 
 No `manifest.json` generation or artifact management is required. Clone works directly against live targets.
 
@@ -10616,7 +10617,17 @@ sqb clone --from prod --to dev --hard-copy
 
 ### Clone policies
 
-Targets must allow cloning in `sqlbuild_project.toml`. See [Project Configuration](/concepts/project-configuration) for details.
+Targets deny cloning by default. Enable the origin and destination explicitly in `sqlbuild_project.toml`:
+
+```toml
+[targets.prod.clone]
+allow_as_clone_origin = true
+
+[targets.dev.clone]
+allow_as_clone_destination = true
+```
+
+The origin target must already contain the built relations being cloned. The configured warehouse credentials must be able to read those relations and create relations in the destination. See [Project Configuration](/concepts/project-configuration) for details.
 
 ## diff
 
@@ -10633,6 +10644,8 @@ sqb diff <FROM>:<TO> <mode> [flags]
 ```
 
 The first argument is a positional `FROM:TO` range. Exactly one mode is required: `--full`, `--schema-only`, or `--bounded <duration>`.
+
+Full and bounded row comparisons require the model to define `unique_key`. Bounded mode uses the model's cursor and falls back to a full row comparison when no cursor is configured.
 
 ### Flags
 
@@ -10672,6 +10685,8 @@ Source: `cli/lineage.mdx`
 Explore model and column-level dependency graphs from the command line.
 
 Inspect upstream and downstream dependencies for any model, source, seed, or function in your project. Supports both model-level lineage (dependency graph) and column-level lineage (tracing individual columns through transformations). Outputs as a tree, edge list, or structured JSON.
+
+`sqb compile` computes lineage for validation and includes per-model summaries in its JSON report. Use this command when you need to inspect or export the actual lineage graph.
 
 ### Usage
 
@@ -10921,6 +10936,8 @@ Generate the static DAG artifact for Dagster and other integrations.
 
 Compiles the project and outputs the static DAG artifact. The artifact contains every node (source, seed, model, function), dependency edge, and check (test, audit, scenario) in your project as structured JSON. It is the bridge between SQLBuild and external orchestrators like Dagster.
 
+This artifact describes resource dependencies, not column-level lineage. Use [`sqb lineage`](/cli/lineage) to inspect or export column traces.
+
 ### Usage
 
 ```bash
@@ -11093,6 +11110,8 @@ Or from a file:
 ```bash
 sqb --project-dir <path> query --file my_query.sql
 ```
+
+File paths are resolved from the current working directory.
 
 ### Flags
 

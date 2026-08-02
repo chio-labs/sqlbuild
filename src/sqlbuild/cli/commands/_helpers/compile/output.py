@@ -97,7 +97,12 @@ def format_compile_text(
     lines.append(f"  {style.muted('Wrote:')} {_relative_target_path(_compiled_sql_dir(written))}/")
     if manifest:
         lines.append(f"  {style.muted('Wrote:')} target/manifest.json")
-    if (
+    if lineage is not None and lineage_mode == CompileLineageMode.RICH:
+        lines.append(
+            f"  {style.muted('Column lineage:')} rich analysis complete; "
+            "inspect with sqb lineage <model>[.<column>]"
+        )
+    elif (
         lineage is None
         and graph.project.settings.sql_analysis
         and lineage_mode != CompileLineageMode.NONE

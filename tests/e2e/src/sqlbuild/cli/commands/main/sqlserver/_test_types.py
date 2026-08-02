@@ -33,6 +33,16 @@ class SqlServerBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SqlServerDiffE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    mutation_sql: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...]
+    expected_return_code: int
+    expected_absent_stdout_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class SqlServerDbtProfileE2ETestCase:
     description: str
     schema_prefix: str

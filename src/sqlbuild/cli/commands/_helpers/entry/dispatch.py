@@ -373,6 +373,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
         return handlers.run_query(
             project_dir=project_dir,
             sql=args.query_sql,
+            query_file=None if args.query_file is None else Path(args.query_file),
             selected_target=args.target,
             output_format=args.query_format,
             limit=query_limit,

@@ -48,6 +48,12 @@ class CompileTextOutputTestCase:
 
 
 @dataclass(frozen=True)
+class CompileRichLineageOutputTestCase:
+    description: str
+    expected_fragment: str
+
+
+@dataclass(frozen=True)
 class CompileTextColorTestCase:
     description: str
     expected_fragments: tuple[str, ...]

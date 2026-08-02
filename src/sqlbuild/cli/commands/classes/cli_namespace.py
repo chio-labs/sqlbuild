@@ -75,6 +75,7 @@ _DEFAULT_VALUES: dict[str, object] = {
     "max_column_examples": None,
     "max_row_only_examples": None,
     "query_sql": None,
+    "query_file": None,
     "query_format": "long",
     "query_limit": 20,
     "query_no_limit": False,
@@ -190,6 +191,7 @@ class CliNamespace:
     max_column_examples: int | None
     max_row_only_examples: int | None
     query_sql: str | None
+    query_file: str | None
     query_format: str
     query_limit: int | None
     query_no_limit: bool

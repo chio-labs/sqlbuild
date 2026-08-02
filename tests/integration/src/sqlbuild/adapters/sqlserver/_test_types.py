@@ -1,6 +1,14 @@
 from dataclasses import dataclass
 
-from sqlbuild.adapter.contract.models import ColumnInfo, QueryResult
+from sqlbuild.adapter.contract.models import (
+    ColumnInfo,
+    CursorValue,
+    QueryResult,
+    RowDiffResult,
+    RowDiffSampleRow,
+    RowDiffTolerances,
+    SchemaDiffResult,
+)
 
 
 @dataclass(frozen=True)
@@ -63,3 +71,43 @@ class SqlServerTimestampCursorBoundTestCase:
     cursor_start: str
     cursor_end: str
     expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SqlServerSchemaDiffTestCase:
+    description: str
+    left_ddl: str
+    right_ddl: str
+    expected_result: SchemaDiffResult
+
+
+@dataclass(frozen=True)
+class SqlServerRowDiffTestCase:
+    description: str
+    left_ddl: str
+    right_ddl: str
+    unique_key: tuple[str, ...]
+    expected_result: RowDiffResult
+    excluded_columns: tuple[str, ...] = ()
+    tolerances: RowDiffTolerances | None = None
+    cursor_column: str | None = None
+    start_cursor: CursorValue | None = None
+    end_cursor: CursorValue | None = None
+
+
+@dataclass(frozen=True)
+class SqlServerRowDiffSamplingTestCase:
+    description: str
+    expected_unequal_rows: tuple[RowDiffSampleRow, ...]
+    expected_left_only_rows: tuple[tuple[tuple[str, object], ...], ...]
+    expected_right_only_rows: tuple[tuple[tuple[str, object], ...], ...]
+
+
+@dataclass(frozen=True)
+class SqlServerRowDiffErrorTestCase:
+    description: str
+    column_name: str
+    column_type: str
+    value_sql: str
+    expected_error_fragment: str
+    tolerances: RowDiffTolerances | None = None

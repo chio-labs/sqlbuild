@@ -9,9 +9,12 @@ from sqlbuild.cli.commands._helpers.compile.output import (
     format_compile_text,
 )
 from sqlbuild.cli.commands.models import WrittenTarget
+from sqlbuild.cli.commands.types import CompileLineageMode
+from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileJsonExecutionLayersTestCase,
+    CompileRichLineageOutputTestCase,
     CompileTextColorTestCase,
     CompileTextOutputTestCase,
 )
@@ -77,6 +80,44 @@ def test_given_compiled_project_when_formatting_compile_text_then_matches_expect
     for fragment in test_case.unexpected_fragments:
         assert fragment not in output
     assert "\033[" not in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CompileRichLineageOutputTestCase(
+            description="points rich analysis users to the lineage command",
+            expected_fragment=(
+                "Column lineage: rich analysis complete; "
+                "inspect with sqb lineage <model>[.<column>]"
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_rich_lineage_when_formatting_compile_text_then_points_to_lineage_command(
+    test_case: CompileRichLineageOutputTestCase,
+) -> None:
+    graph: ProjectGraph = build_compile_output_graph(model_names=("orders",))
+
+    output: str = format_compile_text(
+        graph=graph,
+        written=WrittenTarget(
+            model_count=1,
+            seed_count=0,
+            function_count=0,
+            audit_count=0,
+            test_count=0,
+            target_dir=graph.project.models[0].relative_path.parent.parent / "target",
+        ),
+        manifest=False,
+        lineage=ProjectColumnLineage(models={}, edges=()),
+        diagnostics=(),
+        lineage_mode=CompileLineageMode.RICH,
+        use_color=False,
+    )
+
+    assert test_case.expected_fragment in output
 
 
 @pytest.mark.parametrize(

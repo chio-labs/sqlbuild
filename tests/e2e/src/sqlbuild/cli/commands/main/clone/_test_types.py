@@ -14,6 +14,15 @@ class CloneE2ETestCase:
 
 
 @dataclass(frozen=True)
+class ClonePolicyErrorTestCase:
+    description: str
+    origin_allowed: bool
+    destination_allowed: bool
+    expected_error_code: str
+    expected_policy_key: str
+
+
+@dataclass(frozen=True)
 class VirtualCloneE2ETestCase:
     description: str
     command: tuple[str, ...]

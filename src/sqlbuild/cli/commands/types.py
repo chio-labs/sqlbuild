@@ -85,6 +85,7 @@ class QueryCommandHandler(Protocol):
         project_dir: Path | None,
         *,
         sql: str | None,
+        query_file: Path | None,
         selected_target: str | None,
         output_format: str,
         limit: int | None,
