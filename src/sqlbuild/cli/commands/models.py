@@ -374,7 +374,7 @@ class CloneCommandRequest:
     no_color: bool
     no_sql_validation: bool
     origin_target_name: str
-    destination_target_name: str
+    destination_target_name: str | None
     hard_copy: bool
     virtual_env: str | None = None
     skip_locked: bool = False
@@ -392,6 +392,7 @@ class CloneInvocation:
     discovered_inputs: DiscoveredProjectInputs
     adapter_name: str
     adapter: BaseAdapter
+    destination_target_name: str
     use_color: bool
     progress_stream: TextIO
 

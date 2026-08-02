@@ -356,6 +356,12 @@ cd waffle-shop
 
 This creates a self-contained waffle shop project with everything you need to explore SQLBuild.
 
+The playground creates the shared `sqlbuild_project.toml`; that is sufficient for this
+quickstart. In a team project, you can additionally create a gitignored
+`sqlbuild_local.toml` to select your usual target and override your personal development
+schema or credentials without changing the committed project config. See
+[Project Configuration](/concepts/project-configuration#sqlbuild_local-toml).
+
 ### 2. Plan
 
 Preview what SQLBuild will do:
@@ -1590,6 +1596,26 @@ SQLBuild projects are configured with two files in the project root:
 - **`sqlbuild_project.toml`** - shared project configuration, committed to version control
 - **`sqlbuild_local.toml`** - local developer overrides, gitignored
 
+Most projects need only one committed `sqlbuild_project.toml`. Define shared targets such
+as `dev` and `prod` there, including clone policies and team-wide defaults. Do not maintain
+separate complete project files for each environment.
+
+Create `sqlbuild_local.toml` only when a developer or execution environment needs different
+target selection, credentials, schemas, adapter settings, or variables. SQLBuild loads it
+automatically and merges its explicitly configured values over the shared project config.
+
+```text
+project/
+  sqlbuild_project.toml   # committed: shared targets and behavior
+  sqlbuild_local.toml     # gitignored: this developer's overrides
+```
+
+Add the local file to `.gitignore`:
+
+```gitignore
+sqlbuild_local.toml
+```
+
 ### sqlbuild_project.toml
 
 A complete example:
@@ -1658,6 +1684,7 @@ A target is a named build context - the schema, database, or connection you buil
 | Field | Description |
 |-------|-------------|
 | `schema` | Schema for all models in this target |
+| `loader_schema` | Default write schema for managed source loaders; falls back to `schema` |
 | `database` | Database for all models in this target |
 | `connection` | Override the base connection config |
 | `vars` | Target-specific project variables |
@@ -1668,16 +1695,14 @@ A target is a named build context - the schema, database, or connection you buil
 
 ```toml
 [targets.prod]
-schema = "prod"
-
-[targets.prod.vars]
-source_schema = "raw_prod"
+schema = "analytics_prod"
+loader_schema = "raw_prod"
+defer_sources_to = "prod"
 
 [targets.dev]
-schema = "dev"
-
-[targets.dev.vars]
-source_schema = "raw_dev"
+schema = "analytics_dev"
+loader_schema = "raw_dev"
+defer_sources_to = "prod"
 
 [targets.staging]
 schema = "staging"
@@ -1685,6 +1710,15 @@ schema = "staging"
 [targets.staging.connection]
 database = "staging.duckdb"
 ```
+
+Managed loader writes use the active target's `loader_schema`, falling back to its model
+`schema`. Managed source reads use the target named by `defer_sources_to`, or the active
+target itself when deferral is omitted. In the example, `load --target dev` writes to
+`raw_dev`, while models built in dev read from `raw_prod`.
+
+SQLBuild rejects targets on the same warehouse/database when their managed loader writes
+resolve to the same schema. Two targets may read the same schema through deferral, but they
+cannot both own loader writes there.
 
 #### Selecting a target
 
@@ -1694,6 +1728,21 @@ The active target is determined by (in order of precedence):
 2. `sqlbuild_local.toml` `target` field
 3. `default_target` in `sqlbuild_project.toml`
 4. No target (models build to the default schema)
+
+A typical developer keeps shared target definitions in `sqlbuild_project.toml` and selects
+their normal target once in the optional local file:
+
+```toml
+# sqlbuild_local.toml
+target = "dev"
+
+[targets.dev]
+schema = "dev_alice"
+loader_schema = "raw_alice"
+```
+
+Commands then use `dev` automatically. An explicit command such as `sqb build --target prod`
+still takes precedence for that invocation.
 
 #### Clone policies
 
@@ -1912,12 +1961,17 @@ See [skills CLI reference](/cli/skills) for usage details.
 
 ### sqlbuild_local.toml
 
-Local developer overrides. This file should be gitignored.
+Local developer overrides. This optional file is loaded automatically and should be
+gitignored. Only put values that differ from the shared project configuration here.
 
 ```toml
 target = "dev"
 
-[connection]
+[targets.dev]
+schema = "dev_alice"
+loader_schema = "raw_alice"
+
+[targets.dev.connection]
 database = "my_local.duckdb"
 
 [settings]
@@ -1936,7 +1990,13 @@ debug_mode = "true"
 | `settings` | Override global settings (only explicitly set fields take effect) |
 | `vars` | Developer-specific variable overrides (merged on top of project + target vars) |
 
-This replaces the common dbt pattern of switching profiles or setting environment variables to change targets. Each developer sets their target, connection, and preferences once in `sqlbuild_local.toml` and it persists across sessions.
+Target blocks support the same local overrides, including `schema`, `loader_schema`,
+`connection`, `vars`, source deferral, reuse, and clone policy fields. Unspecified values
+continue to come from `sqlbuild_project.toml`.
+
+This replaces the common dbt pattern of switching profiles or setting environment variables
+to change targets. Each developer sets their target, connection, and preferences once in
+`sqlbuild_local.toml` and it persists across sessions.
 
 ## Overview
 
@@ -2665,7 +2725,7 @@ Use [`sqb freshness`](/cli/freshness) to observe source freshness on demand with
 |-------|-------------|
 | `name` | Source name, used in `__source("name")` references |
 | `database` | Target database (optional) |
-| `schema` | Target schema (optional) |
+| `schema` | Physical source schema (optional). For managed sources, overrides target `loader_schema`; otherwise managed loaders fall back to `loader_schema`, then target `schema`. |
 | `table` | Target table name (defaults to `name` if omitted) |
 | `expression` | Inline SQL expression (alternative to table reference) |
 | `managed` | Set to `true` to bind the source to the `@loader` function of the same name (see [Loaders](/concepts/python-nodes/loaders)) |
@@ -6553,20 +6613,36 @@ When `--reload` is passed, `ctx.is_reload` is `True` in the loader function. Thi
 
 ### Source deferral
 
-When using multiple targets, loaders write data into the active target. But models may need to read source data from a different target (e.g. reading production data while developing in dev). The `defer_sources_to` field controls this:
+Loader writes and managed source reads are resolved separately. `loader_schema` controls
+where a target's loaders write; `defer_sources_to` optionally selects another target whose
+managed sources models should read.
 
 ```toml
 [targets.dev]
-schema = "dev"
+schema = "analytics_dev"
+loader_schema = "raw_dev"
 defer_sources_to = "prod"
 
 [targets.prod]
-schema = "prod"
+schema = "analytics_prod"
+loader_schema = "raw_prod"
 ```
 
-With this config, models in the `dev` target read managed source data from `prod` schema, even though `sqb load` writes to `dev`. This prevents accidentally reading empty or partial source tables during development.
+With this config:
 
-If a target uses managed sources but does not declare `defer_sources_to`, SQLBuild raises an error rather than guessing.
+- `sqb load --target dev` writes to `raw_dev`.
+- `sqb load --target prod` writes to `raw_prod`.
+- Models built in dev read from `raw_prod` because dev defers source reads to prod.
+- Models built in prod read from `raw_prod` because omitted deferral defaults to the active target.
+
+If `loader_schema` is omitted, loaders fall back to the active target's model `schema`, then
+the adapter default schema. An explicit `schema` on a managed source overrides the target
+default. SQLBuild validates final managed-loader write namespaces and rejects two targets
+on the same warehouse/database that could write to the same schema.
+
+`defer_sources_to` never redirects loader writes. It only changes `__source()` and Python
+`source()` reads. This lets developers test loaders in an isolated schema without making
+development models consume partial development source data.
 
 ### Schema evolution
 
@@ -9906,6 +9982,7 @@ sqb --project-dir <path> build [flags]
 
 | Flag | Description |
 |------|-------------|
+| `--target` | Build against a configured target instead of the active/default target |
 | `--changes-only` | Skip models, seeds, audits, and Python nodes that are already current; build only stale work |
 | `--no-tests` | Skip SQL unit tests |
 | `--no-audits` | Skip audits |
@@ -10581,14 +10658,17 @@ Copy model relations between configured targets.
 
 ## sqb clone
 
-Copies model relations from one target to another. It uses adapter-native cloning where supported and physical copies where required; `--hard-copy` forces a physical copy on adapters that support both.
+Copies selected relations from one target to another. It uses adapter-native cloning where supported and physical copies where required; `--hard-copy` forces a physical copy on adapters that support both.
 
 No `manifest.json` generation or artifact management is required. Clone works directly against live targets.
+
+When `--to` is omitted, the destination is the active target selected by `--target`,
+`sqlbuild_local.toml`, or `default_target`, in that order.
 
 ### Usage
 
 ```bash
-sqb --project-dir <path> clone --from <target> --to <target> [flags]
+sqb --project-dir <path> clone --from <target> [--to <target>] [flags]
 ```
 
 ### Flags
@@ -10596,7 +10676,7 @@ sqb --project-dir <path> clone --from <target> --to <target> [flags]
 | Flag | Description |
 |------|-------------|
 | `--from` | Source target (required) |
-| `--to` | Destination target (required) |
+| `--to` | Destination target; defaults to the active target |
 | `--hard-copy` | Force physical table copies instead of zero-copy cloning |
 | `--no-sql-validation` | Skip compile-time SQL syntax validation |
 | `--select`, `-s` | Select specific models to clone |
@@ -10608,12 +10688,33 @@ sqb --project-dir <path> clone --from <target> --to <target> [flags]
 # Clone all models from prod to dev
 sqb clone --from prod --to dev
 
+# Equivalent when dev is the active target
+sqb clone --from prod
+
 # Clone only marts to dev
 sqb clone --from prod --to dev --select path:models/marts
 
 # Force physical copies
 sqb clone --from prod --to dev --hard-copy
 ```
+
+### Managed sources
+
+Clone includes selected managed physical sources when the destination target reads its own
+loader namespace. Sources are copied before seeds and models so views can be recreated in a
+destination that has never been built.
+
+Source locations respect target configuration:
+
+- The origin relation comes from the target that the origin uses for managed source reads.
+- The destination relation uses the destination target's `loader_schema`, falling back to
+  its model `schema`.
+- If the destination defers source reads to another target, clone reuses that target's source
+  relation and does not copy or overwrite it.
+- Expression sources and unmanaged external sources are not cloned.
+
+`--hard-copy` controls how included relations are copied. It does not change which managed
+sources are selected.
 
 ### Clone policies
 
@@ -10627,7 +10728,7 @@ allow_as_clone_origin = true
 allow_as_clone_destination = true
 ```
 
-The origin target must already contain the built relations being cloned. The configured warehouse credentials must be able to read those relations and create relations in the destination. See [Project Configuration](/concepts/project-configuration) for details.
+The origin target must already contain the built relations being cloned. The configured warehouse credentials must be able to read those relations and create relations in the destination. Managed physical sources may bootstrap a destination that has not been built. See [Project Configuration](/concepts/project-configuration) for details.
 
 ## diff
 

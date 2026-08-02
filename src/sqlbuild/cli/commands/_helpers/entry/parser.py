@@ -234,7 +234,7 @@ def _add_data_parsers(
     clone_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.CLONE)
     clone_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     clone_parser.add_argument("--from", dest="from_target", required=True)
-    clone_parser.add_argument("--to", dest="to_target", required=True)
+    clone_parser.add_argument("--to", dest="to_target", default=None)
     clone_parser.add_argument("--hard-copy", action="store_true", default=False)
     clone_parser.add_argument("--virtual-env", default=None)
     clone_parser.add_argument("--skip-locked", action="store_true", default=False)

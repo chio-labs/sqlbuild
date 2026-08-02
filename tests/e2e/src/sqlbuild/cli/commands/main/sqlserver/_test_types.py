@@ -33,6 +33,14 @@ class SqlServerBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SqlServerCloneE2ETestCase:
+    description: str
+    expected_stdout_fragments: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
 class SqlServerDiffE2ETestCase:
     description: str
     command: tuple[str, ...]

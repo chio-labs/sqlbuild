@@ -50,6 +50,7 @@ schema = "dev"
                     "vars": {},
                     "database": None,
                     "schema": "dev",
+                    "loader_schema": None,
                     "defer_sources_to": None,
                     "defer_clone_from": None,
                     "reuse_from": None,
@@ -103,6 +104,7 @@ user = "kevin"
 
 [targets.dev]
 schema = "dev_${user}"
+loader_schema = "raw_${user}"
 defer_sources_to = "prod"
 defer_clone_from = "prod"
 reuse_from = "prod"
@@ -191,6 +193,7 @@ git_timeout_seconds = 12
                     "vars": {"schema_prefix": "dev"},
                     "database": None,
                     "schema": "dev_${user}",
+                    "loader_schema": "raw_${user}",
                     "defer_sources_to": "prod",
                     "defer_clone_from": "prod",
                     "reuse_from": "prod",
@@ -267,6 +270,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
             "vars": target_config.vars,
             "database": target_config.database,
             "schema": target_config.schema,
+            "loader_schema": target_config.loader_schema,
             "defer_sources_to": target_config.defer_sources_to,
             "defer_clone_from": target_config.defer_clone_from,
             "reuse_from": target_config.reuse_from,
@@ -461,6 +465,7 @@ target = "dev"
 [targets.dev]
 database = "local_db"
 schema = "local_schema"
+loader_schema = "local_raw"
 defer_sources_to = "prod"
 defer_clone_from = "prod"
 reuse_from = "prod"
@@ -492,6 +497,7 @@ allow_as_clone_destination = false
                     "vars": {"user": "local_user"},
                     "database": "local_db",
                     "schema": "local_schema",
+                    "loader_schema": "local_raw",
                     "defer_sources_to": "prod",
                     "defer_clone_from": "prod",
                     "reuse_from": "prod",
@@ -543,6 +549,7 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
             "vars": target_config.vars,
             "database": target_config.database,
             "schema": target_config.schema,
+            "loader_schema": target_config.loader_schema,
             "defer_sources_to": target_config.defer_sources_to,
             "defer_clone_from": target_config.defer_clone_from,
             "reuse_from": target_config.reuse_from,

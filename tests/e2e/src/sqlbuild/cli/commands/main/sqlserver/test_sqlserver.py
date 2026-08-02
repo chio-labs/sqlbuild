@@ -16,6 +16,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver._test_types import (
     SqlServerBuildE2ETestCase,
+    SqlServerCloneE2ETestCase,
     SqlServerDbtProfileE2ETestCase,
     SqlServerDependencyBaselineE2ETestCase,
     SqlServerDiffE2ETestCase,
@@ -68,6 +69,129 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
     stringify_warehouse_rows,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SqlServerCloneE2ETestCase(
+            description="managed source is copied before dependent view recreation",
+            expected_stdout_fragments=(
+                "raw_customers",
+                "copied",
+                "stg_customers",
+                "recreated_view",
+            ),
+            expected_rows=((1, "Ada"), (2, "Grace")),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_managed_source_when_cloning_sqlserver_then_source_precedes_dependent_view(
+    test_case: SqlServerCloneE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    config: dict[str, object] = build_sqlserver_config()
+    schema_base: str = build_unique_schema_name(prefix="sqb_clone_source")
+    dev_schema_name: str = f"{schema_base}_dev"
+    prod_schema_name: str = f"{schema_base}_prod"
+    dev_loader_schema_name: str = f"{schema_base}_raw_dev"
+    prod_loader_schema_name: str = f"{schema_base}_raw_prod"
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="sqlserver_managed_source_clone",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "sqlserver_managed_source_clone"\n'
+                'adapter = "sqlserver"\n'
+                'default_target = "dev"\n\n'
+                "[connection]\n"
+                f'host = "{config["host"]}"\n'
+                f"port = {config['port']}\n"
+                f'database = "{config["database"]}"\n'
+                f'user = "{config["user"]}"\n'
+                f'password = "{config["password"]}"\n\n'
+                "[targets.dev]\n"
+                f'schema = "{dev_schema_name}"\n\n'
+                f'loader_schema = "{dev_loader_schema_name}"\n\n'
+                "[targets.dev.clone]\n"
+                "allow_as_clone_origin = true\n\n"
+                "[targets.prod]\n"
+                f'schema = "{prod_schema_name}"\n\n'
+                f'loader_schema = "{prod_loader_schema_name}"\n\n'
+                "[targets.prod.clone]\n"
+                "allow_as_clone_destination = true\n"
+            ),
+            "loaders/raw.py": (
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader\n"
+                "def raw_customers(ctx):\n"
+                "    return []\n"
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_customers\n"
+                "    managed: true\n"
+                "    write_strategy: table\n"
+                "    columns:\n"
+                "      - name: customer_id\n"
+                "        type: INTEGER\n"
+                "      - name: first_name\n"
+                "        type: VARCHAR\n"
+            ),
+            "models/stg_customers.sql": (
+                "MODEL (materialized view);\n\n"
+                'SELECT customer_id, first_name FROM __source("raw_customers")\n'
+            ),
+        },
+    )
+    try:
+        ensure_sqlserver_schema_ready(schema_name=dev_schema_name, config=config)
+        ensure_sqlserver_schema_ready(schema_name=prod_schema_name, config=config)
+        ensure_sqlserver_schema_ready(schema_name=dev_loader_schema_name, config=config)
+        ensure_sqlserver_schema_ready(schema_name=prod_loader_schema_name, config=config)
+        execute_sqlserver_sql(
+            sql=(
+                "SELECT customer_id, first_name "
+                f"INTO {relation_name(schema_name=dev_loader_schema_name, name='raw_customers')} "
+                "FROM (VALUES (1, 'Ada'), (2, 'Grace')) AS source(customer_id, first_name)"
+            ),
+            config=config,
+        )
+        execute_sqlserver_sql(
+            sql=(
+                f"CREATE VIEW {relation_name(schema_name=dev_schema_name, name='stg_customers')} "
+                "AS SELECT customer_id, first_name "
+                f"FROM {relation_name(schema_name=dev_loader_schema_name, name='raw_customers')}"
+            ),
+            config=config,
+        )
+
+        result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "clone", "--from", "dev", "--to", "prod"),
+            project_dir=project_dir,
+        )
+
+        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
+        expected_fragment: str
+        for expected_fragment in test_case.expected_stdout_fragments:
+            assert expected_fragment in result.stdout
+        assert (
+            fetch_sqlserver_rows(
+                sql=(
+                    "SELECT customer_id, first_name FROM "
+                    f"{relation_name(schema_name=prod_schema_name, name='stg_customers')} "
+                    "ORDER BY customer_id"
+                ),
+                config=config,
+            )
+            == test_case.expected_rows
+        )
+    finally:
+        cleanup_sqlserver_schema(schema_name=prod_loader_schema_name, config=config)
+        cleanup_sqlserver_schema(schema_name=dev_loader_schema_name, config=config)
+        cleanup_sqlserver_schema(schema_name=prod_schema_name, config=config)
+        cleanup_sqlserver_schema(schema_name=dev_schema_name, config=config)
 
 
 @pytest.mark.parametrize(
