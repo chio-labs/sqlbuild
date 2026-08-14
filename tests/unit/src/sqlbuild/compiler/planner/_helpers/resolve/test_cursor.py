@@ -126,6 +126,44 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types impor
             expected_bounds=CursorBounds(start="2024-01-15", end="2024-01-21"),
         ),
         CursorBoundsTestCase(
+            description="lookback in months subtracts a calendar month from the start",
+            cursor_snapshot=ModelCursorSnapshot(
+                target_max="2024-03-15T00:00:00",
+                upstream_mins=("2024-01-01T00:00:00",),
+                upstream_maxes=("2024-04-01T00:00:00",),
+            ),
+            lookback="1mo",
+            backfill_duration=None,
+            start_cursor_override=None,
+            end_cursor_override=None,
+            cursor_type=CursorType.TIMESTAMP,
+            cursor_grain=CursorGrain.MONTH,
+            is_microbatch=False,
+            expected_bounds=CursorBounds(
+                start="2024-02-15T00:00:00",
+                end="2024-04-01T00:00:00",
+            ),
+        ),
+        CursorBoundsTestCase(
+            description="bounded backfill in months overrides start to end minus calendar months",
+            cursor_snapshot=ModelCursorSnapshot(
+                target_max="2024-03-01T00:00:00",
+                upstream_mins=("2023-01-01T00:00:00",),
+                upstream_maxes=("2024-04-01T00:00:00",),
+            ),
+            lookback=None,
+            backfill_duration="2mo",
+            start_cursor_override=None,
+            end_cursor_override=None,
+            cursor_type=CursorType.TIMESTAMP,
+            cursor_grain=CursorGrain.MONTH,
+            is_microbatch=False,
+            expected_bounds=CursorBounds(
+                start="2024-02-01T00:00:00",
+                end="2024-04-01T00:00:00",
+            ),
+        ),
+        CursorBoundsTestCase(
             description="integer end override advances by one unit",
             cursor_snapshot=ModelCursorSnapshot(
                 target_max="1000",

@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import re
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import advance_cursor_end
@@ -11,10 +10,8 @@ from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
 )
-from sqlbuild.compiler.planner.models import CursorBounds, ModelCursorSnapshot
+from sqlbuild.compiler.planner.models import CursorBounds, Duration, ModelCursorSnapshot
 from sqlbuild.compiler.planner.types import CursorType
-
-_DURATION_PATTERN: re.Pattern[str] = re.compile(r"^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$")
 
 
 def compute_cursor_bounds(
@@ -106,36 +103,19 @@ def _compute_raw_end(snapshot: ModelCursorSnapshot) -> str | None:
 def _subtract_duration(*, value: str, duration: str) -> str | None:
     """Subtract a duration string from a cursor value."""
 
-    td: timedelta | None = _parse_duration(duration)
-    if td is None:
+    parsed: Duration | None = Duration.parse(duration)
+    if parsed is None:
         return None
 
     timestamp: datetime | None = _try_parse_timestamp(value)
     if timestamp is not None:
-        adjusted: datetime = timestamp - td
-        return adjusted.isoformat()
+        return parsed.subtract_from(timestamp).isoformat()
 
     integer: int | None = _try_parse_integer(value)
     if integer is not None:
-        total_seconds: int = int(td.total_seconds())
-        return str(integer - total_seconds)
+        return str(integer - parsed.fixed_seconds)
 
     return None
-
-
-def _parse_duration(duration: str) -> timedelta | None:
-    """Parse a duration string like '1d', '6h', '30m', '15s' into a timedelta."""
-
-    match: re.Match[str] | None = _DURATION_PATTERN.match(duration)
-    if match is None:
-        return None
-    days: int = int(match.group(1) or 0)
-    hours: int = int(match.group(2) or 0)
-    minutes: int = int(match.group(3) or 0)
-    seconds: int = int(match.group(4) or 0)
-    if days == 0 and hours == 0 and minutes == 0 and seconds == 0:
-        return None
-    return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
 
 
 def _try_parse_timestamp(value: str) -> datetime | None:
