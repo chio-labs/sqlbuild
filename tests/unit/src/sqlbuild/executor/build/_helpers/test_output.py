@@ -40,6 +40,46 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
     "test_case",
     [
         BuildOutputTestCase(
+            description="microbatch model shows batch count and inclusive cursor range",
+            result=BuildExecutionResult(
+                status=BuildStatus.SUCCESS,
+                model_results=(
+                    ModelExecutionResult(
+                        model_name="events",
+                        status=ExecutionStatus.SUCCESS,
+                        duration_ms=1000,
+                        batch_count=5,
+                        cursor_range_start="2014-01-01",
+                        cursor_range_end="2015-01-01",
+                        cursor_type="timestamp",
+                        cursor_grain="day",
+                    ),
+                ),
+                success_count=1,
+            ),
+            expected_output_fragments=(
+                "events",
+                "5 batches",
+                "range 2014-01-01 \u2192 2014-12-31",
+            ),
+        ),
+        BuildOutputTestCase(
+            description="non-microbatch model shows no batch summary line",
+            result=BuildExecutionResult(
+                status=BuildStatus.SUCCESS,
+                model_results=(
+                    ModelExecutionResult(
+                        model_name="orders",
+                        status=ExecutionStatus.SUCCESS,
+                        duration_ms=150,
+                    ),
+                ),
+                success_count=1,
+            ),
+            expected_output_fragments=("orders", "OK"),
+            expected_absent_fragments=("batches", "range"),
+        ),
+        BuildOutputTestCase(
             description="success build shows OK status and completed successfully",
             result=BuildExecutionResult(
                 status=BuildStatus.SUCCESS,

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
+from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
 from sqlbuild.compiler.planner.main.execution.model_execution_annotation import (
     model_execution_annotation,
 )
@@ -101,6 +102,10 @@ def format_build_output(
                 name_width=top_level_name_width,
             )
         )
+
+        batch_line: str | None = _format_batch_summary_line(model_result=model_result)
+        if batch_line is not None:
+            lines.append(batch_line)
 
         if verbose:
             event: LifeCycleEvent
@@ -379,6 +384,32 @@ def _format_log_block(*, message: str, use_color: bool) -> list[str]:
     style: CliStyle = CliStyle(use_color=use_color)
     line = style.log_label(line)
     return ["", line, ""]
+
+
+def _format_batch_summary_line(*, model_result: ModelExecutionResult) -> str | None:
+    """Return the microbatch batch-count and cursor-range summary line, if any."""
+
+    if model_result.batch_count is None:
+        return None
+    batch_label: str = "batch" if model_result.batch_count == 1 else "batches"
+    parts: list[str] = [f"{model_result.batch_count} {batch_label}"]
+    range_text: str | None = _format_batch_range(model_result=model_result)
+    if range_text is not None:
+        parts.append(f"range {range_text}")
+    return f"         {'    '.join(parts)}"
+
+
+def _format_batch_range(*, model_result: ModelExecutionResult) -> str | None:
+    """Return the inclusive cursor range for a microbatch model, if resolvable."""
+
+    if model_result.cursor_range_start is None or model_result.cursor_range_end is None:
+        return None
+    inclusive_end: str = inclusive_cursor_end(
+        end=model_result.cursor_range_end,
+        cursor_type=model_result.cursor_type,
+        cursor_grain=model_result.cursor_grain,
+    )
+    return f"{model_result.cursor_range_start} \u2192 {inclusive_end}"
 
 
 def _format_sub_line(
