@@ -143,7 +143,7 @@ def execute_microbatch_entry(
     )
     state = batch_outcome.state
     if batch_outcome.failure is not None:
-        return batch_outcome.failure
+        return replace(batch_outcome.failure, batch_count=batch_outcome.completed_batches)
     final_audit_run: FinalAuditRun = run_final_scope_audits(context=context)
     state.audit_results.extend(final_audit_run.results)
     if final_audit_run.has_error:
@@ -189,10 +189,16 @@ def execute_microbatch_entry(
             audit_results=tuple(state.audit_results),
         )
     )
+    resolved_range: CursorBounds | None = context.entry.microbatch_range
     return ModelExecutionResult(
         model_name=context.entry.name,
         status=ExecutionStatus.SUCCESS,
         promoted_relation=targets.target_qualified,
+        batch_count=batch_outcome.completed_batches,
+        cursor_range_start=None if resolved_range is None else resolved_range.start,
+        cursor_range_end=None if resolved_range is None else resolved_range.end,
+        cursor_type=context.entry.cursor_type,
+        cursor_grain=context.entry.cursor_grain,
         audit_results=tuple(state.audit_results),
         warning_messages=tuple(state.warnings),
         lifecycle_events=state.statement_recorder.snapshot(),
@@ -244,7 +250,9 @@ def _execute_microbatch_batches(
             state=state,
         )
         if stage_failure is not None:
-            return MicrobatchPhaseOutcome(state=state, failure=stage_failure)
+            return MicrobatchPhaseOutcome(
+                state=state, failure=stage_failure, completed_batches=completed_batches
+            )
         schema_outcome: MicrobatchSchemaPhaseOutcome = _apply_microbatch_schema_change(
             context=context,
             is_full_refresh=is_full_refresh,
@@ -255,7 +263,9 @@ def _execute_microbatch_batches(
         )
         state = schema_outcome.state
         if schema_outcome.failure is not None:
-            return MicrobatchPhaseOutcome(state=state, failure=schema_outcome.failure)
+            return MicrobatchPhaseOutcome(
+                state=state, failure=schema_outcome.failure, completed_batches=completed_batches
+            )
         schema_checked = schema_outcome.schema_checked
         type_failure: ModelExecutionResult | None = _enforce_microbatch_types(
             context=context,
@@ -266,7 +276,9 @@ def _execute_microbatch_batches(
             state=state,
         )
         if type_failure is not None:
-            return MicrobatchPhaseOutcome(state=state, failure=type_failure)
+            return MicrobatchPhaseOutcome(
+                state=state, failure=type_failure, completed_batches=completed_batches
+            )
         audit_outcome: MicrobatchPhaseOutcome = _run_microbatch_delta_audits(
             context=context,
             batch=batch,
@@ -275,7 +287,7 @@ def _execute_microbatch_batches(
         )
         state = audit_outcome.state
         if audit_outcome.failure is not None:
-            return audit_outcome
+            return replace(audit_outcome, completed_batches=completed_batches)
         dml_failure: ModelExecutionResult | None = _apply_microbatch_dml(
             context=context,
             batch=batch,
@@ -286,7 +298,9 @@ def _execute_microbatch_batches(
             state=state,
         )
         if dml_failure is not None:
-            return MicrobatchPhaseOutcome(state=state, failure=dml_failure)
+            return MicrobatchPhaseOutcome(
+                state=state, failure=dml_failure, completed_batches=completed_batches
+            )
         _complete_microbatch_batch(
             context=context,
             window_text=window_text,
@@ -294,7 +308,7 @@ def _execute_microbatch_batches(
             state=state,
         )
         completed_batches += 1
-    return MicrobatchPhaseOutcome(state=state)
+    return MicrobatchPhaseOutcome(state=state, completed_batches=completed_batches)
 
 
 def _stage_microbatch_delta(
