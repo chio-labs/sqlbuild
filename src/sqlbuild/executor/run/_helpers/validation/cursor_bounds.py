@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from typing import Any
+from datetime import date, datetime, timedelta
+from decimal import Decimal
+from typing import Any, cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
@@ -162,7 +163,25 @@ def _query_target_max_raw(
     return row[0]
 
 
+def _is_plain_date(value: object) -> bool:
+    """Return whether a value is a date that is not also a datetime."""
+
+    return isinstance(value, date) and not isinstance(value, datetime)
+
+
+def _floor_date_bound(*, value: date, grain: str) -> date:
+    """Floor a plain date bound to the start of its grain."""
+
+    if grain == CursorGrain.MONTH:
+        return value.replace(day=1)
+    if grain == CursorGrain.YEAR:
+        return value.replace(month=1, day=1)
+    return value
+
+
 def _floor_timestamp_bound(*, value: object, grain: str) -> object:
+    if _is_plain_date(value):
+        return _floor_date_bound(value=cast(date, value), grain=grain)
     if not isinstance(value, datetime):
         return value
     if grain == CursorGrain.SECOND:
@@ -181,6 +200,8 @@ def _floor_timestamp_bound(*, value: object, grain: str) -> object:
 
 
 def _increment_timestamp_bound(*, value: object, grain: str) -> object:
+    if _is_plain_date(value):
+        return _increment_date_bound(value=cast(date, value), grain=grain)
     if not isinstance(value, datetime):
         return value
     if grain == CursorGrain.SECOND:
@@ -201,12 +222,29 @@ def _increment_timestamp_bound(*, value: object, grain: str) -> object:
     return value
 
 
+def _increment_date_bound(*, value: date, grain: str) -> date:
+    """Step a plain date bound forward by one whole unit of grain."""
+
+    if grain == CursorGrain.MONTH:
+        final_month: int = 12
+        year: int = value.year + (1 if value.month == final_month else 0)
+        month: int = 1 if value.month == final_month else value.month + 1
+        return value.replace(year=year, month=month, day=1)
+    if grain == CursorGrain.YEAR:
+        return value.replace(year=value.year + 1, month=1, day=1)
+    return value + timedelta(days=1)
+
+
 def _normalize_bound(*, value: object, is_end: bool) -> str | None:
     if isinstance(value, datetime):
         normalized: datetime = value + timedelta(seconds=1) if is_end else value
         return normalized.isoformat()
-    if isinstance(value, int):
-        normalized_int: int = value + 1 if is_end else value
+    if _is_plain_date(value):
+        plain_date: date = cast(date, value)
+        normalized_date: date = plain_date + timedelta(days=1) if is_end else plain_date
+        return normalized_date.isoformat()
+    if isinstance(value, (int, Decimal)):
+        normalized_int: int = int(value) + 1 if is_end else int(value)
         return str(normalized_int)
     if value is None:
         return None

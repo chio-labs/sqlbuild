@@ -40,6 +40,38 @@ class RuntimeCursorStartTestCase:
 
 
 @dataclass(frozen=True)
+class RuntimeCursorEndBoundTestCase:
+    description: str
+    upstream_min: object
+    upstream_max: object
+    cursor_type: str
+    cursor_grain: str | None
+    warehouse_column_type: str
+    expected_start: str
+    expected_end: str
+
+
+@dataclass(frozen=True)
+class MicrobatchCursorDiscoveryTestCase:
+    description: str
+    warehouse_column_type: str
+    cursor_min: object
+    cursor_max: object
+    cursor_type: str
+    expected_start: str
+    expected_end: str
+
+
+@dataclass(frozen=True)
+class MicrobatchCursorDiscoveryFailureTestCase:
+    description: str
+    warehouse_column_type: str
+    cursor_min: object
+    cursor_max: object
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class RuntimeTargetMaxTestCase:
     description: str
     target_rows: tuple[object, ...]
