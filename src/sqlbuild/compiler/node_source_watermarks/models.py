@@ -94,11 +94,20 @@ class NodeSourceWatermarkSet:
 
 @dataclass(frozen=True)
 class NodeSourceWatermarkTarget:
-    """Physical target relation for a materialized node watermark row."""
+    """Case-folded physical target relation for a materialized node watermark row."""
 
     database: str | None
     schema: str | None
     name: str | None
+
+    def __post_init__(self) -> None:
+        """Fold identifier parts so config and warehouse casing compare equal."""
+
+        object.__setattr__(
+            self, "database", None if self.database is None else self.database.lower()
+        )
+        object.__setattr__(self, "schema", None if self.schema is None else self.schema.lower())
+        object.__setattr__(self, "name", None if self.name is None else self.name.lower())
 
 
 @dataclass(frozen=True)

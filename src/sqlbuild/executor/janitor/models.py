@@ -10,11 +10,20 @@ from sqlbuild.adapter.contract.models import RelationInfo
 
 @dataclass(frozen=True)
 class JanitorRelationKey:
-    """Physical identity for a warehouse relation considered by janitor."""
+    """Case-folded physical identity for a warehouse relation considered by janitor."""
 
     database: str | None
     schema: str | None
     name: str
+
+    def __post_init__(self) -> None:
+        """Fold identifier parts so config and warehouse casing compare equal."""
+
+        object.__setattr__(
+            self, "database", None if self.database is None else self.database.lower()
+        )
+        object.__setattr__(self, "schema", None if self.schema is None else self.schema.lower())
+        object.__setattr__(self, "name", self.name.lower())
 
     def display_name(self) -> str:
         """Render a qualified display name."""

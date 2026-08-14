@@ -4,6 +4,7 @@ tooling = ["scripts"]
 rule_modules = [
     "scripts.fensu_policy.rules.adapter_ownership",
     "scripts.fensu_policy.rules.canonical_operations",
+    "scripts.fensu_policy.rules.identifier_hygiene",
     "scripts.fensu_policy.rules.module_boundaries",
     "scripts.fensu_policy.rules.orchestration_dataflow",
     "scripts.fensu_policy.rules.source_hygiene",
@@ -172,6 +173,11 @@ reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers 
 [[rule_exceptions]]
 rule = "FFL101"
 path = "scripts/fensu_policy/rules/canonical_operations.py"
+reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers imports, despite FFR704 requiring that layout."
+
+[[rule_exceptions]]
+rule = "FFL101"
+path = "scripts/fensu_policy/rules/identifier_hygiene.py"
 reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers imports, despite FFR704 requiring that layout."
 
 [[rule_exceptions]]
