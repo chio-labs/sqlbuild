@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
@@ -252,6 +253,7 @@ def _execute_microbatch_batches(
     total_batches: int = len(batches)
     batch: BatchWindow
     for batch in batches:
+        batch_start_time: float = time.monotonic()
         window_text: str = f"{batch.start}..{batch.end}"
         stage_failure: ModelExecutionResult | None = _stage_microbatch_delta(
             context=context,
@@ -325,7 +327,10 @@ def _execute_microbatch_batches(
         )
         completed_batches += 1
         if on_progress is not None:
-            on_progress(f"batch {completed_batches}/{total_batches} {window_text}")
+            batch_elapsed: float = time.monotonic() - batch_start_time
+            on_progress(
+                f"batch {completed_batches}/{total_batches} {window_text} {batch_elapsed:.1f}s"
+            )
     return MicrobatchPhaseOutcome(
         state=state,
         completed_batches=completed_batches,
