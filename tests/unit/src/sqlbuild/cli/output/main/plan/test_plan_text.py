@@ -365,7 +365,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 "cursor: event_time",
                 "mode: microbatch",
                 "2026-03-26",
-                "2026-04-25",
+                "2026-04-24",
                 "policy: replay_on_change=bounded-30d",
                 "query diff:",
             ),
