@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from datetime import timedelta
 
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey
@@ -13,6 +12,7 @@ from sqlbuild.compiler.planner.models import (
     CascadeCause,
     CascadeResult,
     ChangeDetectionResult,
+    Duration,
     FunctionChangeResult,
     PlannerChangeResults,
     PlannerResolvedActions,
@@ -21,7 +21,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
 
-_DURATION_PATTERN: re.Pattern[str] = re.compile(r"^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$")
+_APPROX_SECONDS_PER_MONTH: int = 2_629_746
 
 _ACTION_RANK: dict[BackfillAction, int] = {
     BackfillAction.FORWARD_ONLY: 0,
@@ -305,15 +305,9 @@ def _reason_for_change(change: ChangeDetectionResult) -> PlanReason:
 
 
 def _parse_duration(duration: str) -> timedelta | None:
-    """Parse a duration string like '1d', '6h', '30m', '15s' into a timedelta."""
+    """Return a comparable magnitude for ranking a bounded backfill window."""
 
-    match: re.Match[str] | None = _DURATION_PATTERN.match(duration)
-    if match is None:
+    parsed: Duration | None = Duration.parse(duration)
+    if parsed is None:
         return None
-    days: int = int(match.group(1) or 0)
-    hours: int = int(match.group(2) or 0)
-    minutes: int = int(match.group(3) or 0)
-    seconds: int = int(match.group(4) or 0)
-    if days == 0 and hours == 0 and minutes == 0 and seconds == 0:
-        return None
-    return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
+    return timedelta(seconds=parsed.fixed_seconds + parsed.total_months * _APPROX_SECONDS_PER_MONTH)

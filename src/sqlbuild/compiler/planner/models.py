@@ -273,13 +273,13 @@ class Duration:
     def is_zero(self) -> bool:
         """Return whether the duration is empty."""
 
-        return self._total_months == 0 and self.fixed_seconds == 0
+        return self.total_months == 0 and self.fixed_seconds == 0
 
     @property
     def has_calendar_component(self) -> bool:
         """Return whether the duration includes variable-length years or months."""
 
-        return self._total_months != 0
+        return self.total_months != 0
 
     @property
     def fixed_seconds(self) -> int:
@@ -293,7 +293,9 @@ class Duration:
         )
 
     @property
-    def _total_months(self) -> int:
+    def total_months(self) -> int:
+        """Return the whole-month portion (years folded into months)."""
+
         return self.years * self._MONTHS_PER_YEAR + self.months
 
     @property
@@ -306,7 +308,7 @@ class Duration:
         """Return the moment advanced by this duration."""
 
         return (
-            self._shift_months(moment=moment, months_delta=self._total_months)
+            self._shift_months(moment=moment, months_delta=self.total_months)
             + self._fixed_timedelta
         )
 
@@ -314,7 +316,7 @@ class Duration:
         """Return the moment moved back by this duration."""
 
         return (
-            self._shift_months(moment=moment, months_delta=-self._total_months)
+            self._shift_months(moment=moment, months_delta=-self.total_months)
             - self._fixed_timedelta
         )
 
