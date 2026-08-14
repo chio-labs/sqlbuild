@@ -54,7 +54,7 @@ def build_planner_source_freshness_result(
             run_id="planning",
             render_qualified_name=adapter.render_qualified_name,
             state_table_exists_by_schema={
-                state_schema: state_schema in freshness_state_schemas
+                state_schema: state_schema.lower() in freshness_state_schemas
                 for state_schema in state_schemas
             },
         )

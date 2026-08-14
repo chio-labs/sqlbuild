@@ -342,11 +342,11 @@ def _gather_relations(
     for relation in relations:
         if relation.name == FINGERPRINT_TABLE_NAME:
             if relation.schema is not None:
-                fingerprint_schemas.add(relation.schema)
+                fingerprint_schemas.add(relation.schema.lower())
             continue
         if relation.name == SOURCE_FRESHNESS_TABLE_NAME:
             if relation.schema is not None:
-                freshness_schemas.add(relation.schema)
+                freshness_schemas.add(relation.schema.lower())
             continue
         result[relation.name] = relation
     return result, frozenset(fingerprint_schemas), frozenset(freshness_schemas)
@@ -390,7 +390,7 @@ def _gather_fingerprints(
         fingerprint_set: FingerprintSet = read_latest_fingerprints(
             connection=connection,
             execute=execute,
-            table_exists=schema in fingerprint_state_schemas,
+            table_exists=schema.lower() in fingerprint_state_schemas,
             database=database,
             schema=schema,
             render_qualified_name=adapter.render_qualified_name,

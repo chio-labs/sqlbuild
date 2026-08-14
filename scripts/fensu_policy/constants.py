@@ -155,6 +155,20 @@ MAIN_MODULE_NAME: str = "main.py"
 MAIN_PACKAGE_NAME: str = "main"
 NESTED_HELPER_MODULE_MIN_PARTS: int = 5
 PLANNER_PATH_PREFIX: str = "src/sqlbuild/compiler/planner/"
+IDENTIFIER_STATE_SCHEMA_COLLECTION_NAMES: frozenset[str] = frozenset(
+    {
+        "fingerprint_state_schemas",
+        "freshness_state_schemas",
+        "target_schemas",
+    }
+)
+IDENTIFIER_NORMALIZATION_ALLOWED_PREFIXES: tuple[str, ...] = (
+    "src/sqlbuild/adapter/",
+    "src/sqlbuild/adapters/",
+    "scripts/fensu_policy/",
+)
+IDENTIFIER_NORMALIZATION_METHOD_NAME: str = "__post_init__"
+RELATION_IDENTITY_KEY_FIELD_NAMES: frozenset[str] = frozenset({"database", "schema", "name"})
 POLICY_EVALUATION_SCOPES: frozenset[str] = frozenset({"root", "tooling"})
 POLICY_IMPLEMENTATION_PATH_PREFIX: str = "scripts/fensu_policy/"
 PROVIDER_CLASS_NAME: str = "Provider"
