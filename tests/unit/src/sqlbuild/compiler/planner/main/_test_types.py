@@ -162,3 +162,12 @@ class CursorEndRoundTripTestCase:
     cursor_type: str | None
     cursor_grain: str | None
     expected_round_trip: str
+
+
+@dataclass(frozen=True)
+class CursorBoundDisplayTestCase:
+    description: str
+    value: str
+    cursor_type: str | None
+    cursor_grain: str | None
+    expected_display: str

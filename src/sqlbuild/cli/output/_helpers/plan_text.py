@@ -10,6 +10,7 @@ from typing import cast
 
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.main.changes.query_diff import format_query_diff
+from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
 from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
 from sqlbuild.compiler.planner.main.execution.model_materialization_label import (
     model_materialization_label,
@@ -1051,12 +1052,17 @@ def _append_cursor_detail(
 def _format_cursor_range(*, bounds: CursorBounds, entry: ModelPlanEntry) -> str:
     """Render a cursor range with an inclusive end bound."""
 
+    start: str = cursor_bound_display(
+        value=bounds.start,
+        cursor_type=entry.cursor_type,
+        cursor_grain=entry.cursor_grain,
+    )
     inclusive_end: str = inclusive_cursor_end(
         end=bounds.end,
         cursor_type=entry.cursor_type,
         cursor_grain=entry.cursor_grain,
     )
-    return f"{bounds.start} \u2192 {inclusive_end}"
+    return f"{start} \u2192 {inclusive_end}"
 
 
 def _append_policy_line(*, lines: list[str], entry: ModelPlanEntry) -> list[str]:
