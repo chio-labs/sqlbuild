@@ -837,3 +837,66 @@ def test_given_microbatch_with_origin_proof_when_running_then_audit_executes(
     assert len(result.audit_results) == test_case.expected_audit_count
     assert result.audit_results[0].reused is False
     assert connection.execute("SELECT COUNT(*) FROM main.orders").fetchone()[0] == 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MicrobatchSuccessTestCase(
+            description="progress callback fires per batch with timing",
+            setup_sql=(
+                _TS_SOURCE_SQL,
+                _TS_SOURCE_DATA,
+                "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP, payload VARCHAR)",
+            ),
+            model_sql=_TS_MODEL_SQL,
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="append",
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            batch_size="1h",
+            microbatch_start="2026-01-01T00:00:00",
+            microbatch_end="2026-01-01T03:00:00",
+            expected_row_count=3,
+            expected_batch_count=3,
+        ),
+        MicrobatchSuccessTestCase(
+            description="batch count populated without progress callback",
+            setup_sql=(
+                _TS_SOURCE_SQL,
+                _TS_SOURCE_DATA,
+                "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP, payload VARCHAR)",
+            ),
+            model_sql=_TS_MODEL_SQL,
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="append",
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            batch_size="1h",
+            microbatch_start="2026-01-01T00:00:00",
+            microbatch_end="2026-01-01T03:00:00",
+            expected_row_count=3,
+            expected_batch_count=3,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_microbatch_model_when_executing_then_reports_batch_progress(
+    test_case: MicrobatchSuccessTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    progress_messages: list[str] = []
+    patched_case: MicrobatchSuccessTestCase = dataclasses.replace(
+        test_case, on_progress=progress_messages.append
+    )
+    result: ModelExecutionResult = run_success_test(
+        test_case=patched_case, adapter=adapter, connection=connection
+    )
+
+    assert result.batch_count == test_case.expected_batch_count
+    assert len(progress_messages) == test_case.expected_batch_count
+    assert "batch 1/" in progress_messages[0]
+    assert "s" in progress_messages[0]
