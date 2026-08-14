@@ -6,6 +6,7 @@ import re
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
+from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import advance_cursor_end
 from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
@@ -26,6 +27,7 @@ def compute_cursor_bounds(
     start_cursor_override: str | None,
     end_cursor_override: str | None,
     is_microbatch: bool,
+    cursor_grain: str | None = None,
 ) -> CursorBounds | None:
     """Compute effective cursor bounds for one incremental model."""
 
@@ -43,7 +45,11 @@ def compute_cursor_bounds(
     if start_cursor_override is not None:
         raw_start = start_cursor_override
     if end_cursor_override is not None:
-        raw_end = end_cursor_override
+        raw_end = _advance_inclusive_operator_end(
+            end_cursor_override=end_cursor_override,
+            cursor_type=cursor_type,
+            cursor_grain=cursor_grain,
+        )
 
     if backfill_duration is not None and start_cursor_override is None:
         adjusted_start: str | None = _subtract_duration(value=raw_end, duration=backfill_duration)
@@ -62,6 +68,21 @@ def compute_cursor_bounds(
     )
 
     return CursorBounds(start=raw_start, end=raw_end)
+
+
+def _advance_inclusive_operator_end(
+    *,
+    end_cursor_override: str,
+    cursor_type: str | None,
+    cursor_grain: str | None,
+) -> str:
+    """Advance an inclusive operator end to the exclusive bound so the final value is processed."""
+
+    return advance_cursor_end(
+        value=end_cursor_override,
+        cursor_type=cursor_type,
+        cursor_grain=cursor_grain,
+    )
 
 
 def _compute_raw_start(snapshot: ModelCursorSnapshot) -> str | None:

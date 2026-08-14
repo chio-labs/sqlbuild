@@ -10,6 +10,7 @@ from sqlbuild.compiler.planner.constants import (
     MICROBATCH_START_SENTINEL,
 )
 from sqlbuild.compiler.planner.models import CursorBounds, ModelCursorSnapshot
+from sqlbuild.compiler.planner.types import CursorGrain, CursorType
 from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     CursorBoundsTestCase,
 )
@@ -109,7 +110,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types impor
             expected_bounds=CursorBounds(start="2024-01-10", end="2024-02-01"),
         ),
         CursorBoundsTestCase(
-            description="operator end override replaces computed end",
+            description="operator end override advances the inclusive end to an exclusive bound",
             cursor_snapshot=ModelCursorSnapshot(
                 target_max="2024-01-15",
                 upstream_mins=("2024-01-01",),
@@ -119,8 +120,41 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types impor
             backfill_duration=None,
             start_cursor_override=None,
             end_cursor_override="2024-01-20",
+            cursor_type=CursorType.TIMESTAMP,
+            cursor_grain=CursorGrain.DAY,
             is_microbatch=False,
-            expected_bounds=CursorBounds(start="2024-01-15", end="2024-01-20"),
+            expected_bounds=CursorBounds(start="2024-01-15", end="2024-01-21"),
+        ),
+        CursorBoundsTestCase(
+            description="integer end override advances by one unit",
+            cursor_snapshot=ModelCursorSnapshot(
+                target_max="1000",
+                upstream_mins=("1",),
+                upstream_maxes=("2000",),
+            ),
+            lookback=None,
+            backfill_duration=None,
+            start_cursor_override=None,
+            end_cursor_override="1500",
+            cursor_type=CursorType.INTEGER,
+            is_microbatch=False,
+            expected_bounds=CursorBounds(start="1000", end="1501"),
+        ),
+        CursorBoundsTestCase(
+            description="timestamp end override with a time component advances by grain",
+            cursor_snapshot=ModelCursorSnapshot(
+                target_max="2024-01-15T00:00:00",
+                upstream_mins=("2024-01-01T00:00:00",),
+                upstream_maxes=("2024-02-01T00:00:00",),
+            ),
+            lookback=None,
+            backfill_duration=None,
+            start_cursor_override=None,
+            end_cursor_override="2024-01-20T06:00:00",
+            cursor_type=CursorType.TIMESTAMP,
+            cursor_grain=CursorGrain.HOUR,
+            is_microbatch=False,
+            expected_bounds=CursorBounds(start="2024-01-15T00:00:00", end="2024-01-20T07:00:00"),
         ),
         CursorBoundsTestCase(
             description="microbatch returns sentinel values regardless of snapshot",
@@ -215,6 +249,7 @@ def test_given_snapshot_and_config_when_computing_cursor_bounds_then_returns_exp
         backfill_duration=test_case.backfill_duration,
         start_cursor_override=test_case.start_cursor_override,
         end_cursor_override=test_case.end_cursor_override,
+        cursor_grain=test_case.cursor_grain,
         is_microbatch=test_case.is_microbatch,
     )
 

@@ -144,3 +144,21 @@ class InclusiveCursorEndTestCase:
     cursor_type: str | None
     cursor_grain: str | None
     expected_end: str
+
+
+@dataclass(frozen=True)
+class AdvanceCursorEndTestCase:
+    description: str
+    value: str
+    cursor_type: str | None
+    cursor_grain: str | None
+    expected_end: str
+
+
+@dataclass(frozen=True)
+class CursorEndRoundTripTestCase:
+    description: str
+    inclusive_value: str
+    cursor_type: str | None
+    cursor_grain: str | None
+    expected_round_trip: str
