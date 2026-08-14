@@ -135,3 +135,12 @@ class SqlbuildModelSelectorNamesTestCase:
     term: str
     expected_model_names: tuple[str, ...]
     expected_translation: str | None
+
+
+@dataclass(frozen=True)
+class InclusiveCursorEndTestCase:
+    description: str
+    end: str
+    cursor_type: str | None
+    cursor_grain: str | None
+    expected_end: str

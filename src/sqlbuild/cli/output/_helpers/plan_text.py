@@ -10,11 +10,13 @@ from typing import cast
 
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.main.changes.query_diff import format_query_diff
+from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
 from sqlbuild.compiler.planner.main.execution.model_materialization_label import (
     model_materialization_label,
 )
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
+    CursorBounds,
     DependencyBaselinePlanEntry,
     ExistingDestinationInputPlanEntry,
     FunctionPlanEntry,
@@ -1040,9 +1042,21 @@ def _append_cursor_detail(
         lines.append(f"    cursor: {entry.cursor_column}")
     if entry.incremental_mode == IncrementalMode.MICROBATCH:
         lines.append(f"    mode: {IncrementalMode.MICROBATCH.value}")
-    if show_range and entry.cursor_bounds is not None:
-        lines.append(f"    range: {entry.cursor_bounds.start} \u2192 {entry.cursor_bounds.end}")
+    resolved_bounds: CursorBounds | None = entry.microbatch_range or entry.cursor_bounds
+    if show_range and resolved_bounds is not None:
+        lines.append(f"    range: {_format_cursor_range(bounds=resolved_bounds, entry=entry)}")
     return lines
+
+
+def _format_cursor_range(*, bounds: CursorBounds, entry: ModelPlanEntry) -> str:
+    """Render a cursor range with an inclusive end bound."""
+
+    inclusive_end: str = inclusive_cursor_end(
+        end=bounds.end,
+        cursor_type=entry.cursor_type,
+        cursor_grain=entry.cursor_grain,
+    )
+    return f"{bounds.start} \u2192 {inclusive_end}"
 
 
 def _append_policy_line(*, lines: list[str], entry: ModelPlanEntry) -> list[str]:
