@@ -12,6 +12,7 @@ from sqlbuild.cli.progress.main._expectation_detail import format_expectation_de
 from sqlbuild.cli.progress.main._expectation_name import format_expectation_name
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
 from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
 from sqlbuild.compiler.planner.main.execution.materialization_type_display import (
     materialization_type_display,
@@ -1069,12 +1070,17 @@ def _format_streaming_batch_summary(*, model_result: ModelExecutionResult) -> st
     batch_label: str = "batch" if model_result.batch_count == 1 else "batches"
     parts: list[str] = [f"{model_result.batch_count} {batch_label}"]
     if model_result.cursor_range_start is not None and model_result.cursor_range_end is not None:
+        start: str = cursor_bound_display(
+            value=model_result.cursor_range_start,
+            cursor_type=model_result.cursor_type,
+            cursor_grain=model_result.cursor_grain,
+        )
         end: str = inclusive_cursor_end(
             end=model_result.cursor_range_end,
             cursor_type=model_result.cursor_type,
             cursor_grain=model_result.cursor_grain,
         )
-        parts.append(f"range {model_result.cursor_range_start} \u2192 {end}")
+        parts.append(f"range {start} \u2192 {end}")
     if model_result.rows_affected is not None:
         parts.append(_format_abbreviated_rows(count=model_result.rows_affected))
     return f"         {'    '.join(parts)}"

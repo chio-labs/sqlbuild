@@ -23,6 +23,7 @@ from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
 )
+from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
     CursorInputRelation,
@@ -328,8 +329,9 @@ def _execute_microbatch_batches(
         completed_batches += 1
         if on_progress is not None:
             batch_elapsed: float = time.monotonic() - batch_start_time
+            display_window: str = _format_batch_window_for_display(batch=batch, entry=context.entry)
             on_progress(
-                f"batch {completed_batches}/{total_batches} {window_text} {batch_elapsed:.1f}s"
+                f"batch {completed_batches}/{total_batches} {display_window} {batch_elapsed:.1f}s"
             )
     return MicrobatchPhaseOutcome(
         state=state,
@@ -817,6 +819,22 @@ def compute_batch_windows(
     if cursor_type == CursorType.INTEGER:
         return _compute_integer_batches(start=start, end=end, batch_size=batch_size)
     return ()
+
+
+def _format_batch_window_for_display(*, batch: BatchWindow, entry: ModelPlanEntry) -> str:
+    """Render a batch window for progress output, collapsing whole-day bounds to dates."""
+
+    start: str = cursor_bound_display(
+        value=batch.start,
+        cursor_type=entry.cursor_type,
+        cursor_grain=entry.cursor_grain,
+    )
+    end: str = cursor_bound_display(
+        value=batch.end,
+        cursor_type=entry.cursor_type,
+        cursor_grain=entry.cursor_grain,
+    )
+    return f"{start}..{end}"
 
 
 def _substitute_sentinels(

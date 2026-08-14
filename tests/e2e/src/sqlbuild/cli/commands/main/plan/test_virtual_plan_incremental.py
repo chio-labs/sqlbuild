@@ -34,8 +34,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_fragments=(
                 "rebuild last 7d",
                 "policy: replay_on_change=bounded-7d",
-                "2026-01-02T00:00:00",
-                "2026-01-04",
+                "range: 2026-01-02 \u2192 2026-01-04",
             ),
             unexpected_plan_fragments=("policy: replay_on_change=full",),
         )

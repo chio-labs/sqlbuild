@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
+from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
 from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
 from sqlbuild.compiler.planner.main.execution.model_execution_annotation import (
     model_execution_annotation,
@@ -429,12 +430,17 @@ def _format_batch_range(*, model_result: ModelExecutionResult) -> str | None:
 
     if model_result.cursor_range_start is None or model_result.cursor_range_end is None:
         return None
+    start: str = cursor_bound_display(
+        value=model_result.cursor_range_start,
+        cursor_type=model_result.cursor_type,
+        cursor_grain=model_result.cursor_grain,
+    )
     inclusive_end: str = inclusive_cursor_end(
         end=model_result.cursor_range_end,
         cursor_type=model_result.cursor_type,
         cursor_grain=model_result.cursor_grain,
     )
-    return f"{model_result.cursor_range_start} \u2192 {inclusive_end}"
+    return f"{start} \u2192 {inclusive_end}"
 
 
 def _format_sub_line(

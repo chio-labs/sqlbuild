@@ -35,6 +35,25 @@ def inclusive_cursor_end(
     return _inclusive_timestamp_end(end=end, cursor_grain=cursor_grain)
 
 
+def cursor_bound_display(
+    *,
+    value: str,
+    cursor_type: str | None,
+    cursor_grain: str | None,
+) -> str:
+    """Render a cursor bound for display, collapsing a whole-day midnight timestamp to a date."""
+
+    if cursor_type == CursorType.INTEGER:
+        return value
+    try:
+        parsed: datetime = datetime.fromisoformat(value)
+    except ValueError:
+        return value
+    if cursor_grain in WHOLE_DAY_CURSOR_GRAINS and _has_no_time_component(value=parsed):
+        return parsed.date().isoformat()
+    return value
+
+
 def _advance_integer_end(*, value: str) -> str:
     try:
         return str(int(Decimal(value)) + 1)
