@@ -103,7 +103,9 @@ def format_build_output(
             )
         )
 
-        batch_line: str | None = _format_batch_summary_line(model_result=model_result)
+        batch_line: str | None = _format_batch_summary_line(
+            model_result=model_result, use_color=use_color
+        )
         if batch_line is not None:
             lines.append(batch_line)
 
@@ -386,8 +388,10 @@ def _format_log_block(*, message: str, use_color: bool) -> list[str]:
     return ["", line, ""]
 
 
-def _format_batch_summary_line(*, model_result: ModelExecutionResult) -> str | None:
-    """Return the microbatch batch-count and cursor-range summary line, if any."""
+def _format_batch_summary_line(
+    *, model_result: ModelExecutionResult, use_color: bool
+) -> str | None:
+    """Return the muted microbatch summary line, if any."""
 
     if model_result.batch_count is None:
         return None
@@ -396,7 +400,27 @@ def _format_batch_summary_line(*, model_result: ModelExecutionResult) -> str | N
     range_text: str | None = _format_batch_range(model_result=model_result)
     if range_text is not None:
         parts.append(f"range {range_text}")
-    return f"         {'    '.join(parts)}"
+    if model_result.rows_affected is not None:
+        parts.append(_format_abbreviated_row_count(count=model_result.rows_affected))
+    line: str = f"         {'    '.join(parts)}"
+    style: CliStyle = CliStyle(use_color=use_color)
+    return style.muted(line)
+
+
+def _format_abbreviated_row_count(*, count: int) -> str:
+    """Format a row count with K/M/B abbreviation above 10,000."""
+
+    row_label: str = "row" if count == 1 else "rows"
+    _BILLION: int = 1_000_000_000
+    _MILLION: int = 1_000_000
+    _THOUSAND: int = 10_000
+    if count >= _BILLION:
+        return f"{count / _BILLION:.1f}B {row_label}"
+    if count >= _MILLION:
+        return f"{count / _MILLION:.1f}M {row_label}"
+    if count >= _THOUSAND:
+        return f"{count / _THOUSAND:.1f}K {row_label}"
+    return f"{count:,} {row_label}"
 
 
 def _format_batch_range(*, model_result: ModelExecutionResult) -> str | None:

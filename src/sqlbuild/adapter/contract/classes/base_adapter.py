@@ -1299,14 +1299,17 @@ class BaseAdapter(StrictAdapter):
         sql: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
-    ) -> None:
+    ) -> int | None:
         statements: tuple[str, ...] = self.render_append(
             destination=destination, sql=sql, columns=columns
         )
         statement_recorder.record_many(statements)
+        affected: int | None = None
         stmt: str
         for stmt in statements:
-            self.execute(connection=connection, sql=stmt)
+            cursor: Any = self.execute(connection=connection, sql=stmt)
+            affected = self.affected_row_count(cursor=cursor)
+        return affected
 
     def delete_insert(
         self,
@@ -1317,16 +1320,19 @@ class BaseAdapter(StrictAdapter):
         unique_key: str | tuple[str, ...],
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
-    ) -> None:
+    ) -> int | None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         statements: tuple[str, ...] = self.render_delete_insert(
             destination=destination, sql=sql, unique_key=keys, columns=columns
         )
         statement_recorder.record_many(statements)
+        affected: int | None = None
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection=connection, sql=stmt)
+                cursor: Any = self.execute(connection=connection, sql=stmt)
+                affected = self.affected_row_count(cursor=cursor)
+        return affected
 
     def delete_insert_cursor(
         self,
@@ -1340,7 +1346,7 @@ class BaseAdapter(StrictAdapter):
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
         cursor_type: str | None = None,
-    ) -> None:
+    ) -> int | None:
         statements: tuple[str, ...] = self.render_delete_insert_cursor(
             destination=destination,
             sql=sql,
@@ -1351,10 +1357,13 @@ class BaseAdapter(StrictAdapter):
             cursor_type=cursor_type,
         )
         statement_recorder.record_many(statements)
+        affected: int | None = None
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection=connection, sql=stmt)
+                cursor: Any = self.execute(connection=connection, sql=stmt)
+                affected = self.affected_row_count(cursor=cursor)
+        return affected
 
     def merge(
         self,
@@ -1364,7 +1373,7 @@ class BaseAdapter(StrictAdapter):
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
-    ) -> None:
+    ) -> int | None:
         raise AdapterUserError(message="merge requires an engine-specific implementation")
 
     def add_columns(

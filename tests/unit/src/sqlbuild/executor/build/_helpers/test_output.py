@@ -40,7 +40,7 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
     "test_case",
     [
         BuildOutputTestCase(
-            description="microbatch model shows batch count and inclusive cursor range",
+            description="microbatch model shows batch count cursor range and row count",
             result=BuildExecutionResult(
                 status=BuildStatus.SUCCESS,
                 model_results=(
@@ -49,6 +49,7 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
                         status=ExecutionStatus.SUCCESS,
                         duration_ms=1000,
                         batch_count=5,
+                        rows_affected=32689379,
                         cursor_range_start="2014-01-01",
                         cursor_range_end="2015-01-01",
                         cursor_type="timestamp",
@@ -61,6 +62,7 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
                 "events",
                 "5 batches",
                 "range 2014-01-01 \u2192 2014-12-31",
+                "32.7M rows",
             ),
         ),
         BuildOutputTestCase(
