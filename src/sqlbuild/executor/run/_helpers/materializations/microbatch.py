@@ -143,7 +143,11 @@ def execute_microbatch_entry(
     )
     state = batch_outcome.state
     if batch_outcome.failure is not None:
-        return replace(batch_outcome.failure, batch_count=batch_outcome.completed_batches)
+        return replace(
+            batch_outcome.failure,
+            batch_count=batch_outcome.completed_batches,
+            rows_affected=batch_outcome.rows_affected,
+        )
     final_audit_run: FinalAuditRun = run_final_scope_audits(context=context)
     state.audit_results.extend(final_audit_run.results)
     if final_audit_run.has_error:
@@ -195,6 +199,7 @@ def execute_microbatch_entry(
         status=ExecutionStatus.SUCCESS,
         promoted_relation=targets.target_qualified,
         batch_count=batch_outcome.completed_batches,
+        rows_affected=batch_outcome.rows_affected,
         cursor_range_start=None if resolved_range is None else resolved_range.start,
         cursor_range_end=None if resolved_range is None else resolved_range.end,
         cursor_type=context.entry.cursor_type,
@@ -239,6 +244,7 @@ def _execute_microbatch_batches(
 ) -> MicrobatchPhaseOutcome:
     schema_checked: bool = False
     completed_batches: int = 0
+    total_rows: int = 0
     batch: BatchWindow
     for batch in batches:
         window_text: str = f"{batch.start}..{batch.end}"
@@ -288,7 +294,7 @@ def _execute_microbatch_batches(
         state = audit_outcome.state
         if audit_outcome.failure is not None:
             return replace(audit_outcome, completed_batches=completed_batches)
-        dml_failure: ModelExecutionResult | None = _apply_microbatch_dml(
+        dml_result: ModelExecutionResult | int | None = _apply_microbatch_dml(
             context=context,
             batch=batch,
             completed_batches=completed_batches,
@@ -297,10 +303,15 @@ def _execute_microbatch_batches(
             targets=targets,
             state=state,
         )
-        if dml_failure is not None:
+        if isinstance(dml_result, ModelExecutionResult):
             return MicrobatchPhaseOutcome(
-                state=state, failure=dml_failure, completed_batches=completed_batches
+                state=state,
+                failure=dml_result,
+                completed_batches=completed_batches,
+                rows_affected=total_rows if total_rows > 0 else None,
             )
+        if isinstance(dml_result, int):
+            total_rows += dml_result
         _complete_microbatch_batch(
             context=context,
             window_text=window_text,
@@ -308,7 +319,11 @@ def _execute_microbatch_batches(
             state=state,
         )
         completed_batches += 1
-    return MicrobatchPhaseOutcome(state=state, completed_batches=completed_batches)
+    return MicrobatchPhaseOutcome(
+        state=state,
+        completed_batches=completed_batches,
+        rows_affected=total_rows if total_rows > 0 else None,
+    )
 
 
 def _stage_microbatch_delta(
@@ -505,7 +520,7 @@ def _apply_microbatch_dml(
     window_text: str,
     targets: MicrobatchTargets,
     state: MicrobatchLifecycleState,
-) -> ModelExecutionResult | None:
+) -> ModelExecutionResult | int | None:
     try:
         with diagnostics_context(
             sqlbuild_phase="dml",
@@ -529,6 +544,7 @@ def _apply_microbatch_dml(
                 name=targets.delta_table,
             )
             _validate_cursor_output_columns(entry=context.entry, delta_columns=delta_columns)
+            batch_rows: int | None = None
             if is_full_refresh and completed_batches == 0:
                 context.adapter.create_table_as(
                     connection=context.connection,
@@ -537,7 +553,7 @@ def _apply_microbatch_dml(
                     statement_recorder=state.statement_recorder,
                 )
             else:
-                _execute_dml(
+                batch_rows = _execute_dml(
                     adapter=context.adapter,
                     connection=context.connection,
                     target_qualified=targets.target_qualified,
@@ -559,7 +575,7 @@ def _apply_microbatch_dml(
             audit_results=state.audit_results,
             statement_recorder=state.statement_recorder,
         )
-    return None
+    return batch_rows
 
 
 def _complete_microbatch_batch(

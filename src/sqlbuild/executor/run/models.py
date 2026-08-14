@@ -104,6 +104,7 @@ class ModelExecutionResult:
     promoted_relation: str | None = None
     duration_ms: int | None = None
     batch_count: int | None = None
+    rows_affected: int | None = None
     cursor_range_start: str | None = None
     cursor_range_end: str | None = None
     cursor_type: str | None = None
@@ -263,6 +264,7 @@ class MicrobatchPhaseOutcome:
     state: MicrobatchLifecycleState
     failure: ModelExecutionResult | None = None
     completed_batches: int = 0
+    rows_affected: int | None = None
 
 
 @dataclass(frozen=True)

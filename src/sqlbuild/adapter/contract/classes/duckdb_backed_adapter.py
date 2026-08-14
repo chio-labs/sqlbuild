@@ -1776,14 +1776,17 @@ class DuckDbBackedAdapter(BaseAdapter):
         sql: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
-    ) -> None:
+    ) -> int | None:
         statements: tuple[str, ...] = self.render_append(
             destination=destination, sql=sql, columns=columns
         )
         statement_recorder.record_many(statements)
+        affected: int | None = None
         stmt: str
         for stmt in statements:
-            self.execute(connection=connection, sql=stmt)
+            result: Any = self.execute(connection=connection, sql=stmt)
+            affected = self.affected_row_count(cursor=result)
+        return affected
 
     def delete_insert(
         self,
@@ -1794,16 +1797,19 @@ class DuckDbBackedAdapter(BaseAdapter):
         unique_key: str | tuple[str, ...],
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
-    ) -> None:
+    ) -> int | None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         statements: tuple[str, ...] = self.render_delete_insert(
             destination=destination, sql=sql, unique_key=keys, columns=columns
         )
         statement_recorder.record_many(statements)
+        affected: int | None = None
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection=connection, sql=stmt)
+                result: Any = self.execute(connection=connection, sql=stmt)
+                affected = self.affected_row_count(cursor=result)
+        return affected
 
     def delete_insert_cursor(
         self,
@@ -1817,7 +1823,7 @@ class DuckDbBackedAdapter(BaseAdapter):
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
         cursor_type: str | None = None,
-    ) -> None:
+    ) -> int | None:
         statements: tuple[str, ...] = self.render_delete_insert_cursor(
             destination=destination,
             sql=sql,
@@ -1828,10 +1834,13 @@ class DuckDbBackedAdapter(BaseAdapter):
             cursor_type=cursor_type,
         )
         statement_recorder.record_many(statements)
+        affected: int | None = None
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
-                self.execute(connection=connection, sql=stmt)
+                result: Any = self.execute(connection=connection, sql=stmt)
+                affected = self.affected_row_count(cursor=result)
+        return affected
 
     def merge(
         self,
@@ -1841,16 +1850,19 @@ class DuckDbBackedAdapter(BaseAdapter):
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
-    ) -> None:
+    ) -> int | None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         source_columns: tuple[str, ...] = self.query_column_names(connection=connection, sql=sql)
         statements: tuple[str, ...] = self.render_merge(
             destination=destination, sql=sql, unique_key=keys, source_columns=source_columns
         )
         statement_recorder.record_many(statements)
+        affected: int | None = None
         stmt: str
         for stmt in statements:
-            self.execute(connection=connection, sql=stmt)
+            result: Any = self.execute(connection=connection, sql=stmt)
+            affected = self.affected_row_count(cursor=result)
+        return affected
 
     def render_merge(
         self,

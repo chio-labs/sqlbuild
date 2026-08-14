@@ -864,7 +864,7 @@ class SqlServerAdapter(BaseAdapter):
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
-    ) -> None:
+    ) -> int | None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         source_columns: tuple[str, ...] = self.query_column_names(connection=connection, sql=sql)
         non_key_columns: tuple[str, ...] = tuple(col for col in source_columns if col not in keys)
@@ -890,7 +890,8 @@ class SqlServerAdapter(BaseAdapter):
             f"WHERE NOT EXISTS (SELECT 1 FROM {destination} AS __target WHERE {key_match_sql})"
         )
         statement_recorder.record(insert_sql)
-        self.execute(connection=connection, sql=insert_sql)
+        insert_cursor: Any = self.execute(connection=connection, sql=insert_sql)
+        return self.affected_row_count(cursor=insert_cursor)
 
     def render_identifier(self, name: str) -> str:
         return "[" + name.replace("]", "]]") + "]"
