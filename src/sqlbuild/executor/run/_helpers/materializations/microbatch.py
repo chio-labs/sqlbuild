@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -94,6 +95,7 @@ def execute_microbatch_entry(
     context: ModelMaterializationContext,
     declared_columns: tuple[ColumnInfo, ...],
     is_full_refresh: bool = False,
+    on_progress: Callable[[str], None] | None = None,
 ) -> ModelExecutionResult:
     """Execute one microbatch incremental model through batched delta/DML."""
 
@@ -140,6 +142,7 @@ def execute_microbatch_entry(
         batches=batch_plan.batches,
         targets=targets,
         state=state,
+        on_progress=on_progress,
     )
     state = batch_outcome.state
     if batch_outcome.failure is not None:
@@ -241,10 +244,12 @@ def _execute_microbatch_batches(
     batches: tuple[BatchWindow, ...],
     targets: MicrobatchTargets,
     state: MicrobatchLifecycleState,
+    on_progress: Callable[[str], None] | None = None,
 ) -> MicrobatchPhaseOutcome:
     schema_checked: bool = False
     completed_batches: int = 0
     total_rows: int = 0
+    total_batches: int = len(batches)
     batch: BatchWindow
     for batch in batches:
         window_text: str = f"{batch.start}..{batch.end}"
@@ -319,6 +324,8 @@ def _execute_microbatch_batches(
             state=state,
         )
         completed_batches += 1
+        if on_progress is not None:
+            on_progress(f"batch {completed_batches}/{total_batches} {window_text}")
     return MicrobatchPhaseOutcome(
         state=state,
         completed_batches=completed_batches,

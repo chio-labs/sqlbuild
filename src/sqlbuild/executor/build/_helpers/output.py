@@ -413,12 +413,13 @@ def _format_abbreviated_row_count(*, count: int) -> str:
     row_label: str = "row" if count == 1 else "rows"
     _BILLION: int = 1_000_000_000
     _MILLION: int = 1_000_000
-    _THOUSAND: int = 10_000
+    _THOUSAND: int = 1_000
+    _ABBREVIATION_THRESHOLD: int = 10_000
     if count >= _BILLION:
         return f"{count / _BILLION:.1f}B {row_label}"
     if count >= _MILLION:
         return f"{count / _MILLION:.1f}M {row_label}"
-    if count >= _THOUSAND:
+    if count >= _ABBREVIATION_THRESHOLD:
         return f"{count / _THOUSAND:.1f}K {row_label}"
     return f"{count:,} {row_label}"
 

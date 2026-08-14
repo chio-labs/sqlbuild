@@ -129,12 +129,14 @@ def _dispatch_model(
         return execute_microbatch_entry(
             context=context,
             declared_columns=entry.declared_columns,
+            on_progress=on_progress,
         )
     if is_full_refresh_microbatch:
         return execute_microbatch_entry(
             context=context,
             declared_columns=entry.declared_columns,
             is_full_refresh=True,
+            on_progress=on_progress,
         )
     if entry.action in INCREMENTAL_ACTIONS:
         return execute_incremental_entry(
