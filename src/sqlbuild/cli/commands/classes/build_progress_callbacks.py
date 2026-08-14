@@ -1068,7 +1068,10 @@ def _format_streaming_batch_summary(*, model_result: ModelExecutionResult) -> st
     if model_result.batch_count is None:
         return None
     batch_label: str = "batch" if model_result.batch_count == 1 else "batches"
-    parts: list[str] = [f"{model_result.batch_count} {batch_label}"]
+    count_text: str = f"{model_result.batch_count} {batch_label}"
+    if model_result.batch_size is not None:
+        count_text = f"{count_text} ({model_result.batch_size})"
+    parts: list[str] = [count_text]
     if model_result.cursor_range_start is not None and model_result.cursor_range_end is not None:
         start: str = cursor_bound_display(
             value=model_result.cursor_range_start,

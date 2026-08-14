@@ -62,14 +62,20 @@ def test_given_row_count_when_abbreviating_then_matches_expected_format(
     "test_case",
     [
         BatchSummaryTestCase(
-            description="microbatch result includes batch count range and rows",
+            description="microbatch result includes batch count size range and rows",
             batch_count=5,
+            batch_size="1mo",
             rows_affected=32_689_379,
             cursor_range_start="2014-01-01",
             cursor_range_end="2015-01-01",
             cursor_type="timestamp",
             cursor_grain="day",
-            expected_fragments=("5 batches", "2014-01-01", "2014-12-31", "32.7M rows"),
+            expected_fragments=(
+                "5 batches (1mo)",
+                "2014-01-01",
+                "2014-12-31",
+                "32.7M rows",
+            ),
         ),
         BatchSummaryTestCase(
             description="microbatch result without rows omits row count",
@@ -92,6 +98,7 @@ def test_given_model_result_when_formatting_batch_summary_then_matches_contract(
         model_name="test_model",
         status=ExecutionStatus.SUCCESS,
         batch_count=test_case.batch_count,
+        batch_size=test_case.batch_size,
         rows_affected=test_case.rows_affected,
         cursor_range_start=test_case.cursor_range_start,
         cursor_range_end=test_case.cursor_range_end,

@@ -104,6 +104,7 @@ class ModelExecutionResult:
     promoted_relation: str | None = None
     duration_ms: int | None = None
     batch_count: int | None = None
+    batch_size: str | None = None
     rows_affected: int | None = None
     cursor_range_start: str | None = None
     cursor_range_end: str | None = None
