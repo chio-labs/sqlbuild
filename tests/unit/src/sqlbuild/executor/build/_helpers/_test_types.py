@@ -127,5 +127,6 @@ class BatchSummaryTestCase:
     cursor_type: str | None
     cursor_grain: str | None
     expected_fragments: tuple[str, ...]
+    batch_size: str | None = None
     expected_absent_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_none: bool = False

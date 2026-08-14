@@ -397,7 +397,10 @@ def _format_batch_summary_line(
     if model_result.batch_count is None:
         return None
     batch_label: str = "batch" if model_result.batch_count == 1 else "batches"
-    parts: list[str] = [f"{model_result.batch_count} {batch_label}"]
+    count_text: str = f"{model_result.batch_count} {batch_label}"
+    if model_result.batch_size is not None:
+        count_text = f"{count_text} ({model_result.batch_size})"
+    parts: list[str] = [count_text]
     range_text: str | None = _format_batch_range(model_result=model_result)
     if range_text is not None:
         parts.append(f"range {range_text}")

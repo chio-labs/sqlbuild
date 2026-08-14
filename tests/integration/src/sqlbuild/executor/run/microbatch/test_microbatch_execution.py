@@ -897,6 +897,6 @@ def test_given_microbatch_model_when_executing_then_reports_batch_progress(
     )
 
     assert result.batch_count == test_case.expected_batch_count
-    assert len(progress_messages) == test_case.expected_batch_count
+    assert len(progress_messages) == test_case.expected_batch_count * 2
     assert "batch 1/" in progress_messages[0]
-    assert "s" in progress_messages[0]
+    assert any(message.rstrip().endswith("s") for message in progress_messages)

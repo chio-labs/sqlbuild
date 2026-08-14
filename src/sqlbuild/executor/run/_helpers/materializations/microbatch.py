@@ -87,6 +87,7 @@ class _MicrobatchPlan:
     """Planned batch windows or the early-exit result when none can run."""
 
     batches: tuple[BatchWindow, ...] = ()
+    effective_batch_size: str | None = None
     early_exit: ModelExecutionResult | None = None
 
 
@@ -149,6 +150,7 @@ def execute_microbatch_entry(
         return replace(
             batch_outcome.failure,
             batch_count=batch_outcome.completed_batches,
+            batch_size=batch_plan.effective_batch_size,
             rows_affected=batch_outcome.rows_affected,
         )
     final_audit_run: FinalAuditRun = run_final_scope_audits(context=context)
@@ -202,6 +204,7 @@ def execute_microbatch_entry(
         status=ExecutionStatus.SUCCESS,
         promoted_relation=targets.target_qualified,
         batch_count=batch_outcome.completed_batches,
+        batch_size=batch_plan.effective_batch_size,
         rows_affected=batch_outcome.rows_affected,
         cursor_range_start=None if resolved_range is None else resolved_range.start,
         cursor_range_end=None if resolved_range is None else resolved_range.end,
@@ -254,6 +257,9 @@ def _execute_microbatch_batches(
     for batch in batches:
         batch_start_time: float = time.monotonic()
         window_text: str = f"{batch.start}..{batch.end}"
+        display_window: str = _format_batch_window_for_display(batch=batch, entry=context.entry)
+        if on_progress is not None:
+            on_progress(f"batch {completed_batches + 1}/{total_batches} {display_window}")
         stage_failure: ModelExecutionResult | None = _stage_microbatch_delta(
             context=context,
             batch=batch,
@@ -327,7 +333,6 @@ def _execute_microbatch_batches(
         completed_batches += 1
         if on_progress is not None:
             batch_elapsed: float = time.monotonic() - batch_start_time
-            display_window: str = _format_batch_window_for_display(batch=batch, entry=context.entry)
             on_progress(
                 f"batch {completed_batches}/{total_batches} {display_window} {batch_elapsed:.1f}s"
             )
@@ -800,7 +805,7 @@ def _plan_microbatch_windows(
                 lifecycle_events=statement_recorder.snapshot(),
             )
         )
-    return _MicrobatchPlan(batches=batches)
+    return _MicrobatchPlan(batches=batches, effective_batch_size=effective_batch_size)
 
 
 def compute_batch_windows(
