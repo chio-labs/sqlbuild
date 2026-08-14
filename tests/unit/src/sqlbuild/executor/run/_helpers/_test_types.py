@@ -15,6 +15,19 @@ class BuildQualifiedNameTestCase:
 
 
 @dataclass(frozen=True)
+class InclusiveEndBatchWindowTestCase:
+    description: str
+    start: str
+    inclusive_end: str
+    batch_size: str
+    cursor_type: str
+    cursor_grain: str | None
+    expected_batch_count: int
+    expected_final_window_end: str
+    expected_final_value_included: bool
+
+
+@dataclass(frozen=True)
 class BuildFailedResultTestCase:
     description: str
     error: str | BaseException

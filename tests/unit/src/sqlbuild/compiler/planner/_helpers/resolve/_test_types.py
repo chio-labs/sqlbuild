@@ -21,6 +21,7 @@ class CursorBoundsTestCase:
     expected_bounds: CursorBounds | None
     cursor_type: str | None = None
     cursor_start: str | None = None
+    cursor_grain: str | None = None
 
 
 @dataclass(frozen=True)
