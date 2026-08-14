@@ -55,6 +55,15 @@ from tests.unit.src.sqlbuild.executor.diff.helpers import (
             expected_end_cursor_kind=CursorKind.TIMESTAMP,
             expected_fallback=False,
         ),
+        ResolveBoundedCursorsTestCase(
+            description="accepts a calendar month duration as bounded window",
+            config_values={"cursor": "event_time", "cursor_type": "timestamp"},
+            bounded="1mo",
+            expected_cursor_column="event_time",
+            expected_start_cursor=None,
+            expected_end_cursor_kind=CursorKind.TIMESTAMP,
+            expected_fallback=False,
+        ),
     ],
     ids=lambda case: case.description,
 )

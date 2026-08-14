@@ -407,7 +407,7 @@ def test_given_bounded_cursor_metadata_when_diffing_then_runs_without_error(
             node_meta={"sqlbuild": {"cursor": "updated_at", "cursor_type": "timestamp"}},
             config_meta=None,
             bounded="seven",
-            expected_error_fragment="requires duration like 30d, 12h, or 15m",
+            expected_error_fragment="requires duration like",
             expected_code="C344",
         ),
         DbtDiffBoundedCursorErrorTestCase(
