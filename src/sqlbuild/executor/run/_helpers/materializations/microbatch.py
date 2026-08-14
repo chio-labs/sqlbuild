@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -790,6 +790,22 @@ def _substitute_sentinels(
     return result
 
 
+def _advance_discovered_end_bound(*, raw_max: Any) -> str:
+    """Step the discovered end bound past MAX(cursor) so the final value is included."""
+
+    if isinstance(raw_max, datetime):
+        return (raw_max + timedelta(seconds=1)).isoformat()
+    if isinstance(raw_max, date):
+        return (raw_max + timedelta(days=1)).isoformat()
+    if isinstance(raw_max, (int, Decimal)):
+        return str(int(raw_max) + 1)
+    raise ExecutorInputError(
+        f"microbatch cursor discovery returned an unsupported cursor type "
+        f"'{type(raw_max).__name__}'; the end bound cannot be advanced safely, so the "
+        "newest cursor value would be dropped from every run"
+    )
+
+
 def _discover_cursor_range(
     *,
     adapter: BaseAdapter,
@@ -817,12 +833,7 @@ def _discover_cursor_range(
     raw_min: Any = row[0]
     raw_max: Any = row[1]
     min_val: str = raw_min.isoformat() if isinstance(raw_min, datetime) else str(raw_min)
-    if isinstance(raw_max, datetime):
-        max_val: str = (raw_max + timedelta(seconds=1)).isoformat()
-    elif isinstance(raw_max, int):
-        max_val = str(raw_max + 1)
-    else:
-        max_val = str(raw_max)
+    max_val: str = _advance_discovered_end_bound(raw_max=raw_max)
     if cursor_start is not None:
         if cursor_type == CursorType.TIMESTAMP:
             start_dt: datetime = datetime.fromisoformat(min_val)
