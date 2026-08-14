@@ -206,10 +206,7 @@ class BuildProgressCallbacks:
         self._spinner_frame_index = (self._spinner_frame_index + 1) % len(_ACTIVE_SPINNER_FRAMES)
         name_display: str = _truncate_name(name=self._current_node_name, width=self._name_width)
         if self._current_sub_message:
-            name_display = _truncate_name(
-                name=f"{self._current_node_name}  {self._current_sub_message}",
-                width=self._name_width,
-            )
+            name_display = f"{name_display}  {self._current_sub_message}"
         nw: int = self._name_width
         line: str = f"  {ctr}  {display_type:<{_TYPE_WIDTH}}{name_display:<{nw}} {status}"
         with self._write_lock:
