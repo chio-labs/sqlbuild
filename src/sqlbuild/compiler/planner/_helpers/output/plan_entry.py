@@ -638,6 +638,8 @@ def plan_model_from_change(
         cursor_input_relations=cursor_input_relations,
         batch_size=batch_size,
         microbatch_range=microbatch_range,
+        start_cursor_override=start_cursor_override,
+        end_cursor_override=end_cursor_override,
         unique_key=unique_key,
         snapshot_strategy=snapshot_strategy,
         updated_at_column=updated_at_column,

@@ -65,6 +65,20 @@ class RuntimeCursorEndBoundTestCase:
 
 
 @dataclass(frozen=True)
+class RuntimeCursorOverrideTestCase:
+    description: str
+    upstream_min: object
+    upstream_max: object
+    cursor_type: str
+    cursor_grain: str | None
+    warehouse_column_type: str
+    start_cursor_override: str | None
+    end_cursor_override: str | None
+    expected_start: str
+    expected_end: str
+
+
+@dataclass(frozen=True)
 class MicrobatchCursorDiscoveryTestCase:
     description: str
     warehouse_column_type: str
