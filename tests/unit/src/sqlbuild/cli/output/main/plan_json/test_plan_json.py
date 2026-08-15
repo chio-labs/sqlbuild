@@ -8,7 +8,11 @@ import pytest
 
 from sqlbuild.cli.output.main._plan_json import format_plan_json
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
-from sqlbuild.compiler.planner.models import CascadeCause, CascadeResult
+from sqlbuild.compiler.planner.models import (
+    CascadeCause,
+    CascadeResult,
+    CursorInputRelation,
+)
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
     MaterializationType,
@@ -92,6 +96,48 @@ from tests.unit.src.sqlbuild.cli.output.main.plan_json._test_types import JsonOu
                 '"built_version_hash": null',
                 '"built_version_present": false',
                 '"identity_status": "missing"',
+            ),
+        ),
+        JsonOutputTestCase(
+            description="plan json exposes deferred runtime-owned cursor work",
+            plan_output=build_plan_output(
+                model_entries=(
+                    build_model_entry(
+                        name="clean_events",
+                        action=PlanAction.CREATE_TABLE,
+                        reason=PlanReason.FIRST_RUN,
+                        materialization_type=MaterializationType.INCREMENTAL,
+                        incremental_strategy="delete_insert",
+                        incremental_mode="microbatch",
+                        cursor_column="event_date",
+                        cursor_type="timestamp",
+                        cursor_grain="day",
+                        batch_size="1mo",
+                        cursor_input_relations=(
+                            CursorInputRelation(
+                                relation="stg_events",
+                                cursor_column="event_date",
+                                cursor_grain="month",
+                                is_model_backed=True,
+                            ),
+                        ),
+                        start_cursor_override="2014-01-01",
+                        end_cursor_override="2014-03-31",
+                    ),
+                ),
+            ),
+            expected_keys=("models",),
+            expected_fragments=(
+                '"bounds_owner": "runtime"',
+                '"resolution_status": "deferred"',
+                '"start": "2014-01-01"',
+                '"end": "2014-03-31"',
+                '"resolved_bounds": null',
+                '"declared_grain": "day"',
+                '"effective_grain": "month"',
+                '"declared_batch_size": "1mo"',
+                '"effective_batch_size": "1mo"',
+                '"planned_batch_count": null',
             ),
         ),
         JsonOutputTestCase(

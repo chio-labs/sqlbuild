@@ -900,3 +900,67 @@ def test_given_microbatch_model_when_executing_then_reports_batch_progress(
     assert len(progress_messages) == test_case.expected_batch_count * 2
     assert "batch 1/" in progress_messages[0]
     assert any(message.rstrip().endswith("s") for message in progress_messages)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MicrobatchSuccessTestCase(
+            description="runtime-owned range is reported before model-backed batches start",
+            setup_sql=(
+                "CREATE TABLE main.fact_orders (id INTEGER, ordered_at TIMESTAMP, payload VARCHAR)",
+                "INSERT INTO main.fact_orders VALUES "
+                "(1, '2026-01-01 00:30:00', 'a'), "
+                "(2, '2026-01-01 01:30:00', 'b')",
+                "CREATE TABLE main.orders (id INTEGER, activity_hour TIMESTAMP, payload VARCHAR)",
+            ),
+            model_sql=(
+                "SELECT id, DATE_TRUNC('hour', ordered_at) AS activity_hour, payload "
+                "FROM main.fact_orders "
+                f"WHERE ordered_at >= '{MICROBATCH_START_SENTINEL}' "
+                f"AND ordered_at < '{MICROBATCH_END_SENTINEL}'"
+            ),
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="delete_insert",
+            cursor_column="activity_hour",
+            cursor_type="timestamp",
+            cursor_grain="hour",
+            batch_size="1h",
+            microbatch_start="2026-01-01T00:00:00",
+            microbatch_end="2026-01-01T02:00:00",
+            use_plan_microbatch_range=False,
+            cursor_input_relations=(("main.fact_orders", "ordered_at"),),
+            cursor_inputs_model_backed=True,
+            unique_key=("id",),
+            expected_row_count=2,
+            expected_progress_message=(
+                "resolved runtime range 2026-01-01T00:00:00 -> 2026-01-01T01:00:00 (2 batches x 1h)"
+            ),
+            expected_cursor_range_start="2026-01-01T00:00:00",
+            expected_cursor_range_end="2026-01-01T02:00:00",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_runtime_owned_range_when_executing_then_reports_resolution_before_batches(
+    test_case: MicrobatchSuccessTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    progress_messages: list[str] = []
+    result: ModelExecutionResult = run_success_test(
+        test_case=dataclasses.replace(test_case, on_progress=progress_messages.append),
+        adapter=adapter,
+        connection=connection,
+    )
+
+    assert (
+        progress_messages[0],
+        result.cursor_range_start,
+        result.cursor_range_end,
+    ) == (
+        test_case.expected_progress_message,
+        test_case.expected_cursor_range_start,
+        test_case.expected_cursor_range_end,
+    )

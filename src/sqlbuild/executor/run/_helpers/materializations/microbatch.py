@@ -24,6 +24,7 @@ from sqlbuild.compiler.planner.constants import (
     MICROBATCH_START_SENTINEL,
 )
 from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
+from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
     CursorInputRelation,
@@ -88,6 +89,7 @@ class _MicrobatchPlan:
 
     batches: tuple[BatchWindow, ...] = ()
     effective_batch_size: str | None = None
+    resolved_range: CursorBounds | None = None
     early_exit: ModelExecutionResult | None = None
 
 
@@ -126,6 +128,21 @@ def execute_microbatch_entry(
     )
     if batch_plan.early_exit is not None:
         return batch_plan.early_exit
+    if (
+        on_progress is not None
+        and context.entry.microbatch_range is None
+        and batch_plan.resolved_range is not None
+        and batch_plan.effective_batch_size is not None
+    ):
+        on_progress(
+            _format_resolved_microbatch_progress(
+                bounds=batch_plan.resolved_range,
+                batch_count=len(batch_plan.batches),
+                batch_size=batch_plan.effective_batch_size,
+                cursor_type=context.entry.cursor_type,
+                cursor_grain=context.entry.cursor_grain,
+            )
+        )
     full_refresh_exit: ModelExecutionResult | None = _drop_target_for_full_refresh(
         context=context,
         is_full_refresh=is_full_refresh,
@@ -198,7 +215,7 @@ def execute_microbatch_entry(
             audit_results=tuple(state.audit_results),
         )
     )
-    resolved_range: CursorBounds | None = context.entry.microbatch_range
+    resolved_range: CursorBounds | None = batch_plan.resolved_range
     return ModelExecutionResult(
         model_name=context.entry.name,
         status=ExecutionStatus.SUCCESS,
@@ -807,7 +824,34 @@ def _plan_microbatch_windows(
                 lifecycle_events=statement_recorder.snapshot(),
             )
         )
-    return _MicrobatchPlan(batches=batches, effective_batch_size=effective_batch_size)
+    return _MicrobatchPlan(
+        batches=batches,
+        effective_batch_size=effective_batch_size,
+        resolved_range=microbatch_range,
+    )
+
+
+def _format_resolved_microbatch_progress(
+    *,
+    bounds: CursorBounds,
+    batch_count: int,
+    batch_size: str,
+    cursor_type: str | None,
+    cursor_grain: str | None,
+) -> str:
+    """Format the concrete runtime-owned range before its first batch starts."""
+
+    start: str = cursor_bound_display(
+        value=bounds.start,
+        cursor_type=cursor_type,
+        cursor_grain=cursor_grain,
+    )
+    end: str = inclusive_cursor_end(
+        end=bounds.end,
+        cursor_type=cursor_type,
+        cursor_grain=cursor_grain,
+    )
+    return f"resolved runtime range {start} -> {end} ({batch_count} batches x {batch_size})"
 
 
 def compute_batch_windows(
