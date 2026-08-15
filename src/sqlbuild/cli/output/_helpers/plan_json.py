@@ -6,6 +6,8 @@ import difflib
 import json
 from typing import cast
 
+from sqlbuild.cli.output._helpers.cursor_plan import build_cursor_plan_details
+from sqlbuild.cli.output.models import CursorPlanDetails
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
@@ -151,6 +153,9 @@ def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
             "start": entry.cursor_bounds.start,
             "end": entry.cursor_bounds.end,
         }
+    cursor_details: CursorPlanDetails | None = build_cursor_plan_details(entry=entry)
+    if cursor_details is not None:
+        model["cursor"] = _serialize_cursor_details(details=cursor_details)
 
     model["backfill"] = {
         "action": entry.backfill.action.value,
@@ -179,6 +184,31 @@ def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
         }
 
     return model
+
+
+def _serialize_cursor_details(*, details: CursorPlanDetails) -> dict[str, object]:
+    """Serialize requested, resolved, and deferred cursor-plan state."""
+
+    resolved_bounds: dict[str, str] | None = None
+    if details.resolved_bounds is not None:
+        resolved_bounds = {
+            "start": details.resolved_bounds.start,
+            "end": details.resolved_bounds.end,
+        }
+    return {
+        "requested_bounds": {
+            "start": details.requested_start,
+            "end": details.requested_end,
+        },
+        "bounds_owner": details.bounds_owner.value,
+        "resolution_status": details.resolution_status.value,
+        "resolved_bounds": resolved_bounds,
+        "declared_grain": details.declared_grain,
+        "effective_grain": details.effective_grain,
+        "declared_batch_size": details.declared_batch_size,
+        "effective_batch_size": details.effective_batch_size,
+        "planned_batch_count": details.planned_batch_count,
+    }
 
 
 def _model_identity_status(entry: ModelPlanEntry) -> str:
