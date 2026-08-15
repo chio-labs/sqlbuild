@@ -419,6 +419,8 @@ def _prepare_delta_relation(
                 cursor_grain=entry.cursor_grain,
                 cursor_start=entry.cursor_start,
                 cursor_input_relations=entry.cursor_input_relations,
+                start_cursor_override=entry.start_cursor_override,
+                end_cursor_override=entry.end_cursor_override,
             ),
         )
         if runtime_cursor_bounds is None:

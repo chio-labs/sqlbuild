@@ -168,6 +168,8 @@ class RuntimeCursorSpec:
     cursor_grain: str | None
     cursor_start: str | None
     cursor_input_relations: tuple[CursorInputRelation, ...]
+    start_cursor_override: str | None = None
+    end_cursor_override: str | None = None
 
 
 @dataclass(frozen=True)
