@@ -5,7 +5,7 @@ import os
 import pty
 import subprocess
 import threading
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable
 from functools import partial
 from pathlib import Path
 from shutil import copytree
@@ -13,9 +13,6 @@ from typing import cast
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
-    DbtLineageErrorE2ETestCase,
-)
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import REPO_ROOT, execute_duckdb
 
 DBT_INTEROP_FIXTURE_DIR: Path = REPO_ROOT / "tests" / "e2e" / "fixtures" / "dbt_interop"
@@ -1286,146 +1283,6 @@ def load_json_stdout(stdout: str) -> dict[str, object]:
     return payload
 
 
-def assert_dbt_lineage_json_payload(
-    *,
-    payload: dict[str, object],
-    expected_node_ids: tuple[str, ...],
-    expected_edges: tuple[tuple[str, str], ...],
-    expected_focus: tuple[str, ...],
-    expected_direction: str,
-    expected_node_metadata: tuple[tuple[str, str, object], ...] = (),
-) -> None:
-    """Assert stable dbt lineage JSON output."""
-
-    nodes_payload: object = payload["nodes"]
-    edges_payload: object = payload["edges"]
-    focus_payload: object = payload["focus"]
-    assert isinstance(nodes_payload, Sequence)
-    assert isinstance(edges_payload, Sequence)
-    assert isinstance(focus_payload, Sequence)
-    assert all(isinstance(node, dict) for node in nodes_payload)
-    assert all(isinstance(edge, dict) for edge in edges_payload)
-    nodes: list[Mapping[str, object]] = [cast(Mapping[str, object], node) for node in nodes_payload]
-    assert [node["id"] for node in nodes] == list(expected_node_ids)
-    assert [
-        (cast(Mapping[str, object], edge)["from"], cast(Mapping[str, object], edge)["to"])
-        for edge in edges_payload
-    ] == list(expected_edges)
-    assert list(focus_payload) == list(expected_focus)
-    assert payload["direction"] == expected_direction
-    node_by_id: dict[str, Mapping[str, object]] = {str(node["id"]): node for node in nodes}
-    for node_id, metadata_key, expected_value in expected_node_metadata:
-        assert node_by_id[node_id][metadata_key] == expected_value, (
-            node_id,
-            metadata_key,
-            node_by_id[node_id][metadata_key],
-        )
-
-
-def assert_dbt_column_lineage_json_payload(
-    *,
-    payload: dict[str, object],
-    expected_target: tuple[str, str, str],
-    expected_edges: tuple[tuple[str, str], ...],
-    expected_direction: str,
-    expected_warnings: tuple[str, ...] = (),
-) -> None:
-    """Assert stable dbt column lineage JSON output."""
-
-    target_payload: object = payload["target"]
-    trace_payload: object = payload["trace"]
-    metadata_payload: object = payload["metadata"]
-    assert isinstance(target_payload, dict)
-    assert isinstance(trace_payload, Sequence)
-    assert isinstance(metadata_payload, dict)
-    assert all(isinstance(edge, dict) for edge in trace_payload)
-    target: Mapping[str, object] = cast(Mapping[str, object], target_payload)
-    metadata: Mapping[str, object] = cast(Mapping[str, object], metadata_payload)
-    assert (
-        target["resource_type"],
-        target["resource_name"],
-        target["column_name"],
-    ) == expected_target
-    assert [
-        (
-            _column_payload_id(
-                cast(Mapping[str, object], cast(Mapping[str, object], edge)["source"])
-            ),
-            _column_payload_id(
-                cast(Mapping[str, object], cast(Mapping[str, object], edge)["target"])
-            ),
-        )
-        for edge in trace_payload
-    ] == list(expected_edges)
-    assert payload["direction"] == expected_direction
-    assert metadata["warnings"] == list(expected_warnings), metadata["warnings"]
-
-
-def _column_payload_id(column: Mapping[str, object]) -> str:
-    return f"{column['resource_name']}:{column['column_name']}"
-
-
-def remove_dbt_phase11_sqlbuild_models(*, project_dir: Path) -> None:
-    """Remove all SQLBuild model files from the focused dbt fixture."""
-
-    model_path: Path
-    for model_path in (project_dir / "models").glob("*.sql"):
-        model_path.unlink()
-
-
-def write_dbt_phase11_missing_ref_model(project_dir: Path) -> None:
-    """Make dbt compile fail before lineage can load a manifest."""
-
-    (project_dir.parent / "dbt_project" / "models" / "fact_orders.sql").write_text(
-        "select order_id from {{ ref('does_not_exist') }}\n",
-        encoding="utf-8",
-    )
-
-
-def write_dbt_phase11_invalid_sqlbuild_model(project_dir: Path) -> None:
-    """Add a SQLBuild model that only compiles with SQL validation disabled."""
-
-    (project_dir / "models" / "invalid_sql.sql").write_text(
-        "MODEL (materialized table);\n\nSELECT FROM\n",
-        encoding="utf-8",
-    )
-
-
-def write_dbt_phase11_star_lineage_models(project_dir: Path) -> None:
-    """Use SELECT * dbt models to exercise adapter-described source schemas."""
-
-    dbt_models_dir: Path = project_dir.parent / "dbt_project" / "models"
-    (dbt_models_dir / "stg_orders.sql").write_text(
-        "select * from {{ source('raw', 'orders') }}\n",
-        encoding="utf-8",
-    )
-    (dbt_models_dir / "fact_orders.sql").write_text(
-        "select * from {{ ref('stg_orders') }}\n",
-        encoding="utf-8",
-    )
-
-
-def drop_dbt_phase11_orders_source_table(project_dir: Path) -> None:
-    """Remove the physical source table while keeping the dbt source definition."""
-
-    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import execute_duckdb
-
-    execute_duckdb(
-        db_path=project_dir / "dbt_phase11.duckdb",
-        sql="DROP TABLE IF EXISTS main.raw_orders",
-    )
-
-
-def apply_dbt_lineage_error_setup(
-    *, project_dir: Path, test_case: DbtLineageErrorE2ETestCase
-) -> None:
-    """Apply optional setup for a dbt lineage error E2E."""
-
-    setup: Callable[[Path], None] | None
-    for setup in {False: (), True: (test_case.setup,)}[test_case.setup is not None]:
-        cast(Callable[[Path], None], setup)(project_dir)
-
-
 def break_dbt_interop_fact_orders_model(project_dir: Path) -> None:
     """Make the dbt fact_orders model fail at run time so the dbt build errors."""
 
@@ -1435,141 +1292,6 @@ def break_dbt_interop_fact_orders_model(project_dir: Path) -> None:
     fact_orders_path.write_text(
         "{{ config(tags=['finance']) }}\n"
         "select * from this_relation_does_not_exist_for_failure_test\n",
-        encoding="utf-8",
-    )
-
-
-def prepare_dbt_phase11_project(*, tmp_path: Path) -> Path:
-    """Write a focused dbt interop project for lineage E2Es."""
-
-    root_dir: Path = tmp_path / "dbt_phase11"
-    dbt_project_dir: Path = root_dir / "dbt_project"
-    profiles_dir: Path = root_dir / "profiles"
-    sqlbuild_project_dir: Path = root_dir / "sqlbuild_project"
-    dbt_models_dir: Path = dbt_project_dir / "models"
-    dbt_seeds_dir: Path = dbt_project_dir / "seeds"
-    sqlbuild_models_dir: Path = sqlbuild_project_dir / "models"
-    dbt_models_dir.mkdir(parents=True)
-    dbt_seeds_dir.mkdir(parents=True)
-    profiles_dir.mkdir(parents=True)
-    sqlbuild_models_dir.mkdir(parents=True)
-
-    db_path: Path = sqlbuild_project_dir / "dbt_phase11.duckdb"
-    (profiles_dir / "profiles.yml").write_text(
-        "analytics:\n"
-        "  target: dev\n"
-        "  outputs:\n"
-        "    dev:\n"
-        "      type: duckdb\n"
-        f"      path: '{db_path.as_posix()}'\n",
-        encoding="utf-8",
-    )
-    (dbt_project_dir / "dbt_project.yml").write_text(
-        "name: analytics\n"
-        "version: '1.0'\n"
-        "profile: analytics\n"
-        "model-paths: ['models']\n"
-        "seed-paths: ['seeds']\n"
-        "models:\n"
-        "  analytics:\n"
-        "    +materialized: table\n",
-        encoding="utf-8",
-    )
-    (dbt_seeds_dir / "country_codes.csv").write_text(
-        "country_code,country_name\nUS,United States\n",
-        encoding="utf-8",
-    )
-    (dbt_models_dir / "sources.yml").write_text(
-        "version: 2\n"
-        "sources:\n"
-        "  - name: raw\n"
-        "    schema: main\n"
-        "    tables:\n"
-        "      - name: orders\n"
-        "        identifier: raw_orders\n"
-        "        config:\n"
-        "          loaded_at_field: loaded_at\n"
-        "          freshness:\n"
-        "            error_after: {count: 1, period: day}\n"
-        "      - name: customers\n"
-        "        identifier: raw_customers\n",
-        encoding="utf-8",
-    )
-    write_dbt_phase11_fact_orders_model(
-        project_dir=sqlbuild_project_dir, amount_expression="amount"
-    )
-    (dbt_models_dir / "stg_orders.sql").write_text(
-        "select order_id, customer_id, amount, loaded_at from {{ source('raw', 'orders') }}\n",
-        encoding="utf-8",
-    )
-    (dbt_models_dir / "stg_customers.sql").write_text(
-        "select customer_id, customer_name from {{ source('raw', 'customers') }}\n",
-        encoding="utf-8",
-    )
-    (dbt_models_dir / "dim_customers.sql").write_text(
-        "select customer_id, customer_name from {{ ref('stg_customers') }}\n",
-        encoding="utf-8",
-    )
-    (dbt_models_dir / "schema.yml").write_text(
-        "version: 2\n"
-        "models:\n"
-        "  - name: fact_orders\n"
-        "    columns:\n"
-        "      - name: order_id\n"
-        "        tests: [not_null]\n"
-        "  - name: dim_customers\n"
-        "    columns:\n"
-        "      - name: customer_id\n"
-        "        tests: [not_null]\n",
-        encoding="utf-8",
-    )
-    (sqlbuild_project_dir / "sqlbuild_project.toml").write_text(
-        'name = "dbt_phase11"\n'
-        'adapter = "duckdb"\n'
-        'default_target = "dev"\n'
-        "[connection]\n"
-        'database = "dbt_phase11.duckdb"\n'
-        "[targets.dev]\n"
-        'schema = "main"\n'
-        "[dbt]\n"
-        'project_dir = "../dbt_project"\n'
-        'profiles_dir = "../profiles"\n'
-        'target_path = "../dbt_project/target"\n',
-        encoding="utf-8",
-    )
-    (sqlbuild_models_dir / "downstream_orders.sql").write_text(
-        "MODEL (materialized table);\n\n"
-        'SELECT order_id, amount AS downstream_amount FROM __dbt_ref("analytics", "fact_orders")\n',
-        encoding="utf-8",
-    )
-    (sqlbuild_models_dir / "customer_summary.sql").write_text(
-        "MODEL (materialized table);\n\n"
-        'SELECT customer_id, customer_name FROM __dbt_ref("analytics", "dim_customers")\n',
-        encoding="utf-8",
-    )
-    seed_dbt_phase11_sources(project_dir=sqlbuild_project_dir, stale_orders=False)
-    return sqlbuild_project_dir
-
-
-def _write_prod_schema_macro(*, macro_dir: Path) -> None:
-    macro_dir.joinpath("prod_generate_schema_name.sql").write_text(
-        "{% macro generate_schema_name(custom_schema_name, node) -%}\n  prod\n{%- endmacro %}\n",
-        encoding="utf-8",
-    )
-
-
-def _write_dbt_orders_snapshot(*, snapshots_dir: Path, target_schema: str) -> None:
-    snapshots_dir.joinpath("orders_snapshot.sql").write_text(
-        "{% snapshot orders_snapshot %}\n"
-        "{{ config(\n"
-        f"  target_schema='{target_schema}',\n"
-        "  unique_key='order_id',\n"
-        "  strategy='timestamp',\n"
-        "  updated_at='event_time',\n"
-        "  meta={'sqlbuild': {'reuse_cursor': 'event_time'}}\n"
-        ") }}\n"
-        "select order_id, amount, event_time from main.raw_orders\n"
-        "{% endsnapshot %}\n",
         encoding="utf-8",
     )
 
@@ -1596,44 +1318,6 @@ def _run_dbt(
 
 def _run_git(*, args: tuple[str, ...], cwd: Path) -> None:
     subprocess.run(("git", *args), cwd=cwd, capture_output=True, check=True, text=True)
-
-
-def write_dbt_phase11_fact_orders_model(*, project_dir: Path, amount_expression: str) -> None:
-    """Write the mutable dbt fact_orders model used by Phase 11 E2Es."""
-
-    dbt_models_dir: Path = project_dir.parent / "dbt_project" / "models"
-    (dbt_models_dir / "fact_orders.sql").write_text(
-        "select order_id, customer_id, "
-        f"{amount_expression} as amount from {{{{ ref('stg_orders') }}}}\n",
-        encoding="utf-8",
-    )
-
-
-def seed_dbt_phase11_sources(*, project_dir: Path, stale_orders: bool) -> None:
-    """Create raw DuckDB tables for the focused Phase 11 dbt project."""
-
-    from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import execute_duckdb
-
-    loaded_at: str = {
-        False: "2999-01-01 00:00:00",
-        True: "2000-01-01 00:00:00",
-    }[stale_orders]
-    db_path: Path = project_dir / "dbt_phase11.duckdb"
-    execute_duckdb(
-        db_path=db_path,
-        sql=(
-            "CREATE OR REPLACE TABLE main.raw_orders AS "
-            "SELECT 1 AS order_id, 10 AS customer_id, 100 AS amount, "
-            f"TIMESTAMP '{loaded_at}' AS loaded_at"
-        ),
-    )
-    execute_duckdb(
-        db_path=db_path,
-        sql=(
-            "CREATE OR REPLACE TABLE main.raw_customers AS "
-            "SELECT 10 AS customer_id, 'Ada' AS customer_name"
-        ),
-    )
 
 
 def assert_dbt_scenario_snapshot(
