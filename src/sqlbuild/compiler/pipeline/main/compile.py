@@ -30,9 +30,6 @@ from sqlbuild.compiler.pipeline._helpers.graph import build_static_all_keys
 from sqlbuild.compiler.pipeline._helpers.materializations import load_custom_materializations
 from sqlbuild.compiler.pipeline._helpers.python_plan_entries import build_python_run_plan_outputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
-from sqlbuild.compiler.pipeline.main.prepare_versions import (
-    load_custom_prepare_version_functions,
-)
 from sqlbuild.compiler.pipeline.models import (
     CompilePipelineOptions,
     CompilePipelineResult,
@@ -164,10 +161,6 @@ def _build_result(
         selected_sql_keys = run_selection.sql_keys
         selected_python_node_names = run_selection.python_node_names
 
-    custom_prepare_version_functions: dict[str, Any] = load_custom_prepare_version_functions(
-        discovered_inputs.materialization_files
-    )
-
     plan_output: PlanOutput = build_execution_plan(
         project=project,
         adapter=adapter,
@@ -190,9 +183,6 @@ def _build_result(
         ),
         policies=PlannerPolicies(
             auto_load_sources=options.auto_load_sources,
-            custom_prepare_version_materializations=frozenset(
-                custom_prepare_version_functions.keys()
-            ),
         ),
         on_progress=on_progress,
         project_config=discovered_inputs.project_config,
@@ -213,7 +203,6 @@ def _build_result(
         project=project,
         plan_output=python_outputs.plan_output,
         custom_materializations=custom_materializations,
-        custom_prepare_version_functions=custom_prepare_version_functions,
         python_node_names=python_outputs.selected_python_node_names,
         python_plan_entries=python_outputs.python_plan_entries,
     )

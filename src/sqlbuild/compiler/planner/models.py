@@ -516,7 +516,6 @@ class PlanEntryBuildInputs:
     run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = None
     source_freshness_blocked_model_names: frozenset[str] = frozenset()
     external_blocked_model_names: frozenset[str] = frozenset()
-    custom_prepare_version_materializations: frozenset[str] = frozenset()
     start_cursor_override: str | None = None
     end_cursor_override: str | None = None
 
@@ -990,7 +989,6 @@ class PlannerPolicies:
     """Behavior policies selected by the caller for one planner invocation."""
 
     auto_load_sources: bool = False
-    custom_prepare_version_materializations: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)

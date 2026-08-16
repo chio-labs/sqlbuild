@@ -65,7 +65,7 @@ from sqlbuild.executor.build.models import (
     SourceLoadPlanEntry,
 )
 from sqlbuild.executor.build.types import BeforeModelMaterializeCallback
-from sqlbuild.executor.custom.models import MaterializationResult, PrepareVersionContext
+from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.functions.constants import FUNCTION_ENTRY_MISSING_CODE
 from sqlbuild.executor.functions.main._execute import execute_function
 from sqlbuild.executor.load.main._build_execution_indexes import build_load_execution_indexes
@@ -135,9 +135,6 @@ class BuildScheduler:
         self._custom_materializations: Mapping[str, Callable[..., MaterializationResult]] = (
             customizations.custom_materializations or {}
         )
-        self._custom_prepare_version_functions: Mapping[
-            str, Callable[[PrepareVersionContext], None]
-        ] = customizations.custom_prepare_version_functions or {}
         self._loader_functions_by_name: dict[str, DiscoveredLoaderFunction] = {
             loader.name: loader for loader in customizations.loader_functions
         }
@@ -625,7 +622,6 @@ class BuildScheduler:
                     snapshots=self._snapshots,
                     allow_snapshot_schema_change=self._allow_snapshot_schema_change,
                     custom_materializations=self._custom_materializations,
-                    custom_prepare_version_functions=self._custom_prepare_version_functions,
                     target=self._target,
                     effective_vars=self._effective_vars,
                     warehouse_relations=self._warehouse_relations,
