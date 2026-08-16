@@ -458,7 +458,6 @@ def _add_dbt_parsers(
     dbt_subparsers.add_parser("test", add_help=False)
     dbt_subparsers.add_parser("scenario")
     dbt_subparsers.add_parser("debug")
-    dbt_subparsers.add_parser("clone")
     dbt_init_parser: argparse.ArgumentParser = dbt_subparsers.add_parser("init")
     dbt_init_parser.add_argument("--project-dir", dest="dbt_project_dir", default=None)
     dbt_init_parser.add_argument("--profiles-dir", dest="dbt_profiles_dir", default=None)

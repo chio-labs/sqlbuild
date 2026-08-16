@@ -12,7 +12,6 @@ from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt._helpers.pipeline import execute as dbt_execute_module
 from sqlbuild.integrations.dbt._helpers.pipeline import execution_phases as phases_module
-from sqlbuild.integrations.dbt._helpers.pipeline import interop_prologue as prologue_module
 from sqlbuild.integrations.dbt._helpers.pipeline.execute import (
     build_failed_sqlbuild_model_names,
     build_merged_dbt_execution_argv,
@@ -110,11 +109,6 @@ def test_given_ordinary_plan_when_compiling_then_never_compiles_production_ref(
         ),
     )
     monkeypatch.setattr(plan_module, "attach_sqlbuild_plan_output", lambda **kwargs: plan)
-    monkeypatch.setattr(
-        prologue_module,
-        "compile_production_ref_manifest",
-        lambda **kwargs: pytest.fail("ordinary plan compiled production_ref"),
-    )
 
     result: DbtInteropPlan = plan_module.plan_dbt_interop_from_project(
         project_dir=Path("/project"),
@@ -217,11 +211,6 @@ def test_given_ordinary_execution_when_compiling_then_never_uses_production_ref_
         lambda **kwargs: None,
     )
     monkeypatch.setattr(execute_module, "write_sqlbuild_skip_notice", lambda **kwargs: None)
-    monkeypatch.setattr(
-        prologue_module,
-        "compile_production_ref_manifest",
-        lambda **kwargs: pytest.fail("ordinary execution compiled production_ref"),
-    )
 
     result: int = execute_module.execute_dbt_interop_from_project(
         DbtInteropExecutionRequest(command=command, project_dir=Path("/project"), args=())

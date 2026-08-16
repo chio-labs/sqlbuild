@@ -10,8 +10,8 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.compiler.planner.models import CloneSourcePlanEntry, ModelPlanEntry, SeedPlanEntry
-from sqlbuild.executor.clone.main.clone_relation_operation import clone_relation_by_names
-from sqlbuild.executor.clone.main.recreate_view_operation import recreate_view_by_names
+from sqlbuild.executor.clone.main._clone_relation_operation import clone_relation_by_names
+from sqlbuild.executor.clone.main._recreate_view_operation import recreate_view_by_names
 from sqlbuild.executor.clone.models import CloneItemResult
 
 

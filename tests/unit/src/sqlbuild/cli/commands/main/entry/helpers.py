@@ -50,7 +50,6 @@ def build_handlers(**overrides: Any) -> CliEntrypointHandlers:
         run_dbt_test=overrides.get("run_dbt_test", noop_handler),
         run_dbt_scenario=overrides.get("run_dbt_scenario", noop_handler),
         run_dbt_debug=overrides.get("run_dbt_debug", noop_handler),
-        run_dbt_clone=overrides.get("run_dbt_clone", noop_handler),
         run_dbt_init=overrides.get("run_dbt_init", noop_handler),
         run_build=overrides.get("run_build", noop_handler),
         run_freshness=overrides.get("run_freshness", noop_handler),

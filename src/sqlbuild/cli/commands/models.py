@@ -1217,7 +1217,6 @@ class CliEntrypointHandlers:
     run_dbt_test: Callable[[Path | None, tuple[str, ...], bool], int]
     run_dbt_scenario: Callable[[Path | None, tuple[str, ...], bool], int]
     run_dbt_debug: Callable[[Path | None, tuple[str, ...], bool], int]
-    run_dbt_clone: Callable[[Path | None, tuple[str, ...], bool], int]
     run_dbt_init: Callable[[DbtInitCommandRequest], int]
     run_build: Callable[[BuildCommandRequest], int]
     run_freshness: Callable[[FreshnessCommandRequest], int]

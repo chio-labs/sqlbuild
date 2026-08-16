@@ -25,7 +25,6 @@ _DBT_PASSTHROUGH_SUBCOMMANDS: frozenset[str] = frozenset(
         "test",
         "scenario",
         "debug",
-        "clone",
     }
 )
 

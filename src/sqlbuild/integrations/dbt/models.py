@@ -11,7 +11,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.integrations.dbt._helpers.selection.selector_terms import dbt_fqn_selector_term
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
@@ -19,7 +18,7 @@ from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
     DbtInteropSkipReason,
 )
-from sqlbuild.spec.contracts.models import DbtProductionRefConfig, ScenarioConfig
+from sqlbuild.spec.contracts.models import ScenarioConfig
 
 
 @dataclass(frozen=True)
@@ -253,49 +252,6 @@ class DbtProductionRefCompileResult:
     manifest_contents: str
     command: DbtCommandResult
     cache_hit: bool = False
-
-
-@dataclass(frozen=True)
-class DbtCloneOptions:
-    """Parsed SQLBuild dbt clone options."""
-
-    dbt_args: tuple[str, ...]
-    select: tuple[str, ...]
-    exclude: tuple[str, ...]
-    hard_copy: bool
-    no_sql_validation: bool
-
-
-@dataclass(frozen=True)
-class DbtCloneRun:
-    """dbt clone execution result with rendering labels."""
-
-    result: CloneExecutionResult
-    origin_label: str
-    destination_label: str
-
-
-@dataclass(frozen=True)
-class DbtComparisonPreparation:
-    """Current and production-ref manifests prepared for clone/diff commands."""
-
-    discovered_inputs: DiscoveredProjectInputs
-    production_ref: DbtProductionRefConfig
-    production_git_ref: str
-    dbt_options: DbtCliOptions
-    runner: Any
-    current_manifest: DbtManifestIndex
-    reuse_manifest: DbtManifestIndex
-
-
-@dataclass(frozen=True)
-class DbtInteropConnection:
-    """Open warehouse connection resolved for a dbt interop command."""
-
-    adapter: BaseAdapter
-    adapter_name: str
-    connection_config: dict[str, object]
-    connection: Any
 
 
 @dataclass(frozen=True)

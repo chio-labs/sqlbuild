@@ -14,7 +14,6 @@ from sqlbuild.cli.commands.constants import (
     DBT_JSON_OUTPUT_OPTION,
     DBT_VERBOSE_OPTIONS,
 )
-from sqlbuild.cli.commands.main.dbt._dbt_clone import run_dbt_clone_command
 from sqlbuild.cli.commands.main.dbt._dbt_debug import run_dbt_debug_command
 from sqlbuild.cli.commands.main.dbt._dbt_scenario import run_dbt_scenario_command
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
@@ -49,10 +48,6 @@ def run_dbt_command(
         )
     if command == DbtInteropCommand.DEBUG:
         return run_dbt_debug_command(
-            project_dir=effective_project_dir, args=forwarded_args, no_color=no_color
-        )
-    if command == DbtInteropCommand.CLONE:
-        return run_dbt_clone_command(
             project_dir=effective_project_dir, args=forwarded_args, no_color=no_color
         )
     if command == DbtInteropCommand.SCENARIO:
