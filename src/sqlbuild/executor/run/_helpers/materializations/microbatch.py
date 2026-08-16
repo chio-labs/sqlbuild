@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+import time
+from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -21,13 +23,18 @@ from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
 )
+from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
+from sqlbuild.compiler.planner.main.execution.effective_microbatch_batch_size import (
+    resolve_effective_microbatch_batch_size,
+)
+from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
     CursorInputRelation,
+    Duration,
     ModelPlanEntry,
 )
 from sqlbuild.compiler.planner.types import (
-    CursorGrain,
     CursorType,
     IncrementalStrategy,
     OnSchemaChange,
@@ -75,9 +82,6 @@ from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
-_DURATION_PATTERN_STR: str = (
-    r"^(?:(\d+)y)?(?:(\d+)mo)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$"
-)
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 
 
@@ -86,6 +90,8 @@ class _MicrobatchPlan:
     """Planned batch windows or the early-exit result when none can run."""
 
     batches: tuple[BatchWindow, ...] = ()
+    effective_batch_size: str | None = None
+    resolved_range: CursorBounds | None = None
     early_exit: ModelExecutionResult | None = None
 
 
@@ -94,6 +100,7 @@ def execute_microbatch_entry(
     context: ModelMaterializationContext,
     declared_columns: tuple[ColumnInfo, ...],
     is_full_refresh: bool = False,
+    on_progress: Callable[[str], None] | None = None,
 ) -> ModelExecutionResult:
     """Execute one microbatch incremental model through batched delta/DML."""
 
@@ -123,6 +130,21 @@ def execute_microbatch_entry(
     )
     if batch_plan.early_exit is not None:
         return batch_plan.early_exit
+    if (
+        on_progress is not None
+        and context.entry.microbatch_range is None
+        and batch_plan.resolved_range is not None
+        and batch_plan.effective_batch_size is not None
+    ):
+        on_progress(
+            _format_resolved_microbatch_progress(
+                bounds=batch_plan.resolved_range,
+                batch_count=len(batch_plan.batches),
+                batch_size=batch_plan.effective_batch_size,
+                cursor_type=context.entry.cursor_type,
+                cursor_grain=context.entry.cursor_grain,
+            )
+        )
     full_refresh_exit: ModelExecutionResult | None = _drop_target_for_full_refresh(
         context=context,
         is_full_refresh=is_full_refresh,
@@ -140,10 +162,16 @@ def execute_microbatch_entry(
         batches=batch_plan.batches,
         targets=targets,
         state=state,
+        on_progress=on_progress,
     )
     state = batch_outcome.state
     if batch_outcome.failure is not None:
-        return batch_outcome.failure
+        return replace(
+            batch_outcome.failure,
+            batch_count=batch_outcome.completed_batches,
+            batch_size=batch_plan.effective_batch_size,
+            rows_affected=batch_outcome.rows_affected,
+        )
     final_audit_run: FinalAuditRun = run_final_scope_audits(context=context)
     state.audit_results.extend(final_audit_run.results)
     if final_audit_run.has_error:
@@ -189,10 +217,18 @@ def execute_microbatch_entry(
             audit_results=tuple(state.audit_results),
         )
     )
+    resolved_range: CursorBounds | None = batch_plan.resolved_range
     return ModelExecutionResult(
         model_name=context.entry.name,
         status=ExecutionStatus.SUCCESS,
         promoted_relation=targets.target_qualified,
+        batch_count=batch_outcome.completed_batches,
+        batch_size=batch_plan.effective_batch_size,
+        rows_affected=batch_outcome.rows_affected,
+        cursor_range_start=None if resolved_range is None else resolved_range.start,
+        cursor_range_end=None if resolved_range is None else resolved_range.end,
+        cursor_type=context.entry.cursor_type,
+        cursor_grain=context.entry.cursor_grain,
         audit_results=tuple(state.audit_results),
         warning_messages=tuple(state.warnings),
         lifecycle_events=state.statement_recorder.snapshot(),
@@ -230,12 +266,20 @@ def _execute_microbatch_batches(
     batches: tuple[BatchWindow, ...],
     targets: MicrobatchTargets,
     state: MicrobatchLifecycleState,
+    on_progress: Callable[[str], None] | None = None,
 ) -> MicrobatchPhaseOutcome:
     schema_checked: bool = False
     completed_batches: int = 0
+    total_rows: int = 0
+    row_count_known: bool = False
+    total_batches: int = len(batches)
     batch: BatchWindow
     for batch in batches:
+        batch_start_time: float = time.monotonic()
         window_text: str = f"{batch.start}..{batch.end}"
+        display_window: str = _format_batch_window_for_display(batch=batch, entry=context.entry)
+        if on_progress is not None:
+            on_progress(f"batch {completed_batches + 1}/{total_batches} {display_window}")
         stage_failure: ModelExecutionResult | None = _stage_microbatch_delta(
             context=context,
             batch=batch,
@@ -244,7 +288,9 @@ def _execute_microbatch_batches(
             state=state,
         )
         if stage_failure is not None:
-            return MicrobatchPhaseOutcome(state=state, failure=stage_failure)
+            return MicrobatchPhaseOutcome(
+                state=state, failure=stage_failure, completed_batches=completed_batches
+            )
         schema_outcome: MicrobatchSchemaPhaseOutcome = _apply_microbatch_schema_change(
             context=context,
             is_full_refresh=is_full_refresh,
@@ -255,7 +301,9 @@ def _execute_microbatch_batches(
         )
         state = schema_outcome.state
         if schema_outcome.failure is not None:
-            return MicrobatchPhaseOutcome(state=state, failure=schema_outcome.failure)
+            return MicrobatchPhaseOutcome(
+                state=state, failure=schema_outcome.failure, completed_batches=completed_batches
+            )
         schema_checked = schema_outcome.schema_checked
         type_failure: ModelExecutionResult | None = _enforce_microbatch_types(
             context=context,
@@ -266,7 +314,9 @@ def _execute_microbatch_batches(
             state=state,
         )
         if type_failure is not None:
-            return MicrobatchPhaseOutcome(state=state, failure=type_failure)
+            return MicrobatchPhaseOutcome(
+                state=state, failure=type_failure, completed_batches=completed_batches
+            )
         audit_outcome: MicrobatchPhaseOutcome = _run_microbatch_delta_audits(
             context=context,
             batch=batch,
@@ -275,8 +325,8 @@ def _execute_microbatch_batches(
         )
         state = audit_outcome.state
         if audit_outcome.failure is not None:
-            return audit_outcome
-        dml_failure: ModelExecutionResult | None = _apply_microbatch_dml(
+            return replace(audit_outcome, completed_batches=completed_batches)
+        dml_result: ModelExecutionResult | int | None = _apply_microbatch_dml(
             context=context,
             batch=batch,
             completed_batches=completed_batches,
@@ -285,8 +335,19 @@ def _execute_microbatch_batches(
             targets=targets,
             state=state,
         )
-        if dml_failure is not None:
-            return MicrobatchPhaseOutcome(state=state, failure=dml_failure)
+        if isinstance(dml_result, ModelExecutionResult):
+            return MicrobatchPhaseOutcome(
+                state=state,
+                failure=dml_result,
+                completed_batches=completed_batches,
+                rows_affected=_reported_rows_affected(
+                    total_rows=total_rows,
+                    row_count_known=row_count_known,
+                ),
+            )
+        if isinstance(dml_result, int):
+            total_rows += dml_result
+            row_count_known = True
         _complete_microbatch_batch(
             context=context,
             window_text=window_text,
@@ -294,7 +355,25 @@ def _execute_microbatch_batches(
             state=state,
         )
         completed_batches += 1
-    return MicrobatchPhaseOutcome(state=state)
+        if on_progress is not None:
+            batch_elapsed: float = time.monotonic() - batch_start_time
+            on_progress(
+                f"batch {completed_batches}/{total_batches} {display_window} {batch_elapsed:.1f}s"
+            )
+    return MicrobatchPhaseOutcome(
+        state=state,
+        completed_batches=completed_batches,
+        rows_affected=_reported_rows_affected(
+            total_rows=total_rows,
+            row_count_known=row_count_known,
+        ),
+    )
+
+
+def _reported_rows_affected(*, total_rows: int, row_count_known: bool) -> int | None:
+    """Preserve a known zero row count while keeping unavailable counts as None."""
+
+    return total_rows if row_count_known else None
 
 
 def _stage_microbatch_delta(
@@ -491,7 +570,7 @@ def _apply_microbatch_dml(
     window_text: str,
     targets: MicrobatchTargets,
     state: MicrobatchLifecycleState,
-) -> ModelExecutionResult | None:
+) -> ModelExecutionResult | int | None:
     try:
         with diagnostics_context(
             sqlbuild_phase="dml",
@@ -515,6 +594,7 @@ def _apply_microbatch_dml(
                 name=targets.delta_table,
             )
             _validate_cursor_output_columns(entry=context.entry, delta_columns=delta_columns)
+            batch_rows: int | None = None
             if is_full_refresh and completed_batches == 0:
                 context.adapter.create_table_as(
                     connection=context.connection,
@@ -523,7 +603,7 @@ def _apply_microbatch_dml(
                     statement_recorder=state.statement_recorder,
                 )
             else:
-                _execute_dml(
+                batch_rows = _execute_dml(
                     adapter=context.adapter,
                     connection=context.connection,
                     target_qualified=targets.target_qualified,
@@ -545,7 +625,7 @@ def _apply_microbatch_dml(
             audit_results=state.audit_results,
             statement_recorder=state.statement_recorder,
         )
-    return None
+    return batch_rows
 
 
 def _complete_microbatch_batch(
@@ -653,6 +733,8 @@ def _plan_microbatch_windows(
                     cursor_grain=entry.cursor_grain,
                     cursor_start=entry.cursor_start,
                     cursor_input_relations=entry.cursor_input_relations,
+                    start_cursor_override=entry.start_cursor_override,
+                    end_cursor_override=entry.end_cursor_override,
                 ),
             )
         except Exception as exc:
@@ -735,7 +817,7 @@ def _plan_microbatch_windows(
             cursor_input_relations=entry.cursor_input_relations,
         )
         if effective_timestamp_grain is not None:
-            effective_batch_size = _coarsen_timestamp_batch_size(
+            effective_batch_size = resolve_effective_microbatch_batch_size(
                 batch_size=batch_size,
                 effective_grain=effective_timestamp_grain,
             )
@@ -758,7 +840,34 @@ def _plan_microbatch_windows(
                 lifecycle_events=statement_recorder.snapshot(),
             )
         )
-    return _MicrobatchPlan(batches=batches)
+    return _MicrobatchPlan(
+        batches=batches,
+        effective_batch_size=effective_batch_size,
+        resolved_range=microbatch_range,
+    )
+
+
+def _format_resolved_microbatch_progress(
+    *,
+    bounds: CursorBounds,
+    batch_count: int,
+    batch_size: str,
+    cursor_type: str | None,
+    cursor_grain: str | None,
+) -> str:
+    """Format the concrete runtime-owned range before its first batch starts."""
+
+    start: str = cursor_bound_display(
+        value=bounds.start,
+        cursor_type=cursor_type,
+        cursor_grain=cursor_grain,
+    )
+    end: str = inclusive_cursor_end(
+        end=bounds.end,
+        cursor_type=cursor_type,
+        cursor_grain=cursor_grain,
+    )
+    return f"resolved runtime range {start} -> {end} ({batch_count} batches x {batch_size})"
 
 
 def compute_batch_windows(
@@ -777,6 +886,22 @@ def compute_batch_windows(
     return ()
 
 
+def _format_batch_window_for_display(*, batch: BatchWindow, entry: ModelPlanEntry) -> str:
+    """Render a batch window for progress output, collapsing whole-day bounds to dates."""
+
+    start: str = cursor_bound_display(
+        value=batch.start,
+        cursor_type=entry.cursor_type,
+        cursor_grain=entry.cursor_grain,
+    )
+    end: str = cursor_bound_display(
+        value=batch.end,
+        cursor_type=entry.cursor_type,
+        cursor_grain=entry.cursor_grain,
+    )
+    return f"{start}..{end}"
+
+
 def _substitute_sentinels(
     *,
     sql: str,
@@ -788,6 +913,22 @@ def _substitute_sentinels(
     result: str = sql.replace(MICROBATCH_START_SENTINEL, batch_start)
     result = result.replace(MICROBATCH_END_SENTINEL, batch_end)
     return result
+
+
+def _advance_discovered_end_bound(*, raw_max: Any) -> str:
+    """Step the discovered end bound past MAX(cursor) so the final value is included."""
+
+    if isinstance(raw_max, datetime):
+        return (raw_max + timedelta(seconds=1)).isoformat()
+    if isinstance(raw_max, date):
+        return (raw_max + timedelta(days=1)).isoformat()
+    if isinstance(raw_max, (int, Decimal)):
+        return str(int(raw_max) + 1)
+    raise ExecutorInputError(
+        f"microbatch cursor discovery returned an unsupported cursor type "
+        f"'{type(raw_max).__name__}'; the end bound cannot be advanced safely, so the "
+        "newest cursor value would be dropped from every run"
+    )
 
 
 def _discover_cursor_range(
@@ -817,12 +958,7 @@ def _discover_cursor_range(
     raw_min: Any = row[0]
     raw_max: Any = row[1]
     min_val: str = raw_min.isoformat() if isinstance(raw_min, datetime) else str(raw_min)
-    if isinstance(raw_max, datetime):
-        max_val: str = (raw_max + timedelta(seconds=1)).isoformat()
-    elif isinstance(raw_max, int):
-        max_val = str(raw_max + 1)
-    else:
-        max_val = str(raw_max)
+    max_val: str = _advance_discovered_end_bound(raw_max=raw_max)
     if cursor_start is not None:
         if cursor_type == CursorType.TIMESTAMP:
             start_dt: datetime = datetime.fromisoformat(min_val)
@@ -863,19 +999,8 @@ def _compute_timestamp_batches(
 ) -> tuple[BatchWindow, ...]:
     """Split a timestamp range into batch windows by duration."""
 
-    import re
-
-    pattern: re.Pattern[str] = re.compile(_DURATION_PATTERN_STR)
-    match: re.Match[str] | None = pattern.match(batch_size)
-    if match is None:
-        return ()
-    years: int = int(match.group(1) or 0)
-    months: int = int(match.group(2) or 0)
-    days: int = int(match.group(3) or 0)
-    hours: int = int(match.group(4) or 0)
-    minutes: int = int(match.group(5) or 0)
-    seconds: int = int(match.group(6) or 0)
-    if years == months == days == hours == minutes == seconds == 0:
+    duration: Duration | None = Duration.parse(batch_size)
+    if duration is None:
         return ()
 
     try:
@@ -891,16 +1016,7 @@ def _compute_timestamp_batches(
     index: int = 0
     current: datetime = start_dt
     while current < end_dt:
-        batch_end_candidate: datetime = _add_timestamp_interval(
-            current=current,
-            years=years,
-            months=months,
-            days=days,
-            hours=hours,
-            minutes=minutes,
-            seconds=seconds,
-        )
-        batch_end: datetime = min(batch_end_candidate, end_dt)
+        batch_end: datetime = min(duration.add_to(current), end_dt)
         windows.append(
             BatchWindow(
                 start=current.isoformat(),
@@ -948,60 +1064,3 @@ def _compute_integer_batches(
         index += 1
 
     return tuple(windows)
-
-
-def _coarsen_timestamp_batch_size(*, batch_size: str, effective_grain: str) -> str:
-    grain_sizes: dict[str, tuple[int, str]] = {
-        CursorGrain.SECOND: (0, "1s"),
-        CursorGrain.MINUTE: (1, "1m"),
-        CursorGrain.HOUR: (2, "1h"),
-        CursorGrain.DAY: (3, "1d"),
-        CursorGrain.MONTH: (4, "1mo"),
-        CursorGrain.YEAR: (5, "1y"),
-    }
-    parsed_order: int | None = _timestamp_batch_size_order(batch_size)
-    if parsed_order is None:
-        return batch_size
-    effective_order: int = grain_sizes[effective_grain][0]
-    if parsed_order >= effective_order:
-        return batch_size
-    return grain_sizes[effective_grain][1]
-
-
-def _timestamp_batch_size_order(batch_size: str) -> int | None:
-    if batch_size.endswith("y") and not batch_size.endswith("dy"):
-        return 5
-    if batch_size.endswith("mo"):
-        return 4
-    if batch_size.endswith("d"):
-        return 3
-    if batch_size.endswith("h"):
-        return 2
-    if batch_size.endswith("m"):
-        return 1
-    if batch_size.endswith("s"):
-        return 0
-    return None
-
-
-def _add_timestamp_interval(
-    *,
-    current: datetime,
-    years: int,
-    months: int,
-    days: int,
-    hours: int,
-    minutes: int,
-    seconds: int,
-) -> datetime:
-    result: datetime = current
-    if years:
-        result = result.replace(year=result.year + years)
-    if months:
-        total_month: int = (result.month - 1) + months
-        year: int = result.year + (total_month // 12)
-        month: int = (total_month % 12) + 1
-        result = result.replace(year=year, month=month)
-    if days or hours or minutes or seconds:
-        result = result + timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
-    return result

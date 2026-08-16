@@ -1,0 +1,86 @@
+name: Verify
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Static checks and unit + integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install Python
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: uv sync --locked --all-groups --all-extras
+      - name: Run static checks
+        run: make check-ci
+      - name: Run unit and integration tests
+        run: make test
+
+  e2e:
+    name: DuckDB E2E tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install Python
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: uv sync --locked --all-groups --all-extras
+      - name: Run DuckDB E2E tests
+        run: make test-e2e-duckdb
+
+  postgres:
+    name: PostgreSQL integration and E2E tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install Python
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: uv sync --locked --all-groups --all-extras
+      - name: Verify Docker
+        run: docker info
+      - name: Run PostgreSQL tests
+        env:
+          PYTHONUNBUFFERED: "1"
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: >-
+          uv run pytest tests
+          -m "real_warehouse and postgres"
+          -vv --color=yes -n auto --dist loadfile
+
+  verify:
+    name: Verify
+    needs: [checks, e2e, postgres]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm all required verification jobs passed
+        run: echo "All required verification jobs passed"

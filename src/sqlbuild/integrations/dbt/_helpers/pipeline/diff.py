@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -14,12 +14,10 @@ from sqlbuild.adapter.contract.models import (
 )
 from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
+from sqlbuild.compiler.planner.models import Duration
 from sqlbuild.executor.diff.models import DiffExecutionResult, ModelDiffResult
 from sqlbuild.integrations.dbt.constants import (
     DBT_BOUNDED_FLAG,
-    DBT_DIFF_DAY_UNIT,
-    DBT_DIFF_HOUR_UNIT,
-    DBT_DIFF_MINUTE_UNIT,
     DBT_EXCLUDE_FLAG,
     DBT_FULL_FLAG,
     DBT_MAX_COLUMN_EXAMPLES_FLAG,
@@ -352,7 +350,7 @@ def _bounded_cursors(
         )
     if raw_cursor_type == CursorKind.TIMESTAMP:
         end: datetime = datetime.now(tz=UTC)
-        start: datetime = end - _parse_duration_bound(bounded)
+        start: datetime = _parse_duration_bound(bounded).subtract_from(end)
         return (
             raw_cursor,
             CursorValue(kind=CursorKind.TIMESTAMP, value=start),
@@ -402,31 +400,11 @@ def _parse_integer_bound(raw: str) -> int:
         ) from error
 
 
-def _parse_duration_bound(raw: str) -> timedelta:
-    bounded_value_part_count: int = 2
-    if len(raw) < bounded_value_part_count:
+def _parse_duration_bound(raw: str) -> Duration:
+    duration: Duration | None = Duration.parse(raw)
+    if duration is None:
         raise DbtInteropArgumentError(
-            "timestamp cursor bounded dbt diff requires duration like 30d, 12h, or 15m",
+            "timestamp cursor bounded dbt diff requires duration like 30d, 12h, 15m, or 1mo",
             code="C344",
         )
-    amount_text: str = raw[:-1]
-    unit: str = raw[-1]
-    try:
-        amount: int = int(amount_text)
-    except ValueError as error:
-        raise DbtInteropArgumentError(
-            "timestamp cursor bounded dbt diff requires duration like 30d, 12h, or 15m",
-            code="C344",
-        ) from error
-    if amount <= 0:
-        raise DbtInteropArgumentError("bounded dbt diff duration must be positive", code="C345")
-    if unit == DBT_DIFF_DAY_UNIT:
-        return timedelta(days=amount)
-    if unit == DBT_DIFF_HOUR_UNIT:
-        return timedelta(hours=amount)
-    if unit == DBT_DIFF_MINUTE_UNIT:
-        return timedelta(minutes=amount)
-    raise DbtInteropArgumentError(
-        "timestamp cursor bounded dbt diff requires duration like 30d, 12h, or 15m",
-        code="C344",
-    )
+    return duration

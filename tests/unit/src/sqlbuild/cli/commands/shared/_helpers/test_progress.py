@@ -709,6 +709,33 @@ def test_given_failed_top_level_node_when_reporting_progress_then_writes_error_d
             use_color=True,
         ),
         BuildProgressModelOutputTestCase(
+            description="microbatch model streams batch count range and row count",
+            node_result=ModelExecutionResult(
+                model_name="events",
+                status=ExecutionStatus.SUCCESS,
+                duration_ms=84400,
+                batch_count=5,
+                rows_affected=32689379,
+                cursor_range_start="2014-01-01",
+                cursor_range_end="2015-01-01",
+                cursor_type="timestamp",
+                cursor_grain="day",
+            ),
+            plan_output=PlanOutput(),
+            expected_fragments=("5 batches", "2014-01-01", "2014-12-31", "32.7M rows"),
+        ),
+        BuildProgressModelOutputTestCase(
+            description="non-microbatch model does not stream batch summary",
+            node_result=ModelExecutionResult(
+                model_name="dim_customers",
+                status=ExecutionStatus.SUCCESS,
+                duration_ms=100,
+            ),
+            plan_output=PlanOutput(),
+            expected_fragments=("OK",),
+            unexpected_fragments=("batches", "range"),
+        ),
+        BuildProgressModelOutputTestCase(
             description="completed model row renders reused audit detail",
             node_result=ModelExecutionResult(
                 model_name="fact_orders",

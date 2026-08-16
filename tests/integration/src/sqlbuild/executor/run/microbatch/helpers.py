@@ -282,6 +282,7 @@ def _execute_test(
         ),
         declared_columns=(),
         is_full_refresh=test_case.is_full_refresh,
+        on_progress=getattr(test_case, "on_progress", None),
     )
 
 

@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from sqlbuild.compiler.auditing.types import AuditRunScope
@@ -38,6 +39,9 @@ class MicrobatchSuccessTestCase:
     query_change_tracking: bool = True
     expected_audit_count: int = 0
     expected_warning_count: int = 0
+    expected_progress_message: str | None = None
+    expected_cursor_range_start: str | None = None
+    expected_cursor_range_end: str | None = None
     expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...] = field(
         default_factory=tuple
     )
@@ -45,6 +49,8 @@ class MicrobatchSuccessTestCase:
     expected_delta_cleaned: bool = True
     expected_executed_statement_fragments: tuple[str, ...] = field(default_factory=tuple)
     hook_functions: tuple[object, ...] = field(default_factory=tuple)
+    on_progress: Callable[[str], None] | None = None
+    expected_batch_count: int | None = None
 
 
 @dataclass(frozen=True)

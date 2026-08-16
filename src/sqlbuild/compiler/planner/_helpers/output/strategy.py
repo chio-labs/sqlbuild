@@ -231,11 +231,16 @@ def build_model_warnings(
                 model_name=model_name,
                 severity=WarningSeverity.WARNING,
                 message=(
-                    f"query changed for '{model_name}'; incremental history will run "
-                    "forward only unless you set replay_on_change. Use "
-                    "replay_on_change full or bounded-<duration> to replay history, "
-                    "or set settings.query_change_tracking = false in sqlbuild_project.toml "
-                    "to disable query-change warnings."
+                    f"{model_name}: the model's SQL changed, so already-built dates keep "
+                    "their old results - only new dates will use the new query. To apply "
+                    "the change to existing data, choose how much to reprocess: "
+                    "replay_on_change full (rebuild every date with the new SQL), "
+                    "replay_on_change bounded-<duration> e.g. bounded-14d (reprocess just "
+                    "that window), or leave it forward-only (existing dates as-is, new "
+                    "dates use the new query - the default). If this model's output does "
+                    "not depend on the SQL that changed, this is safe to ignore. Silence "
+                    "these with settings.query_change_tracking = false in "
+                    "sqlbuild_project.toml."
                 ),
             )
         )

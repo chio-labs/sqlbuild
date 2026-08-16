@@ -28,6 +28,14 @@ class ConnectionMixin(ABC):
         """Execute SQL and normalize row-returning results for CLI display."""
         ...
 
+    def affected_row_count(self, *, cursor: Any) -> int | None:
+        """Return the row count affected by the last DML statement, if known."""
+
+        raw: object = getattr(cursor, "rowcount", None)
+        if not isinstance(raw, int) or raw < 0:
+            return None
+        return raw
+
     @abstractmethod
     def close(self, connection: Any) -> None:
         """Close the given connection."""

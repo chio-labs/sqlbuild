@@ -54,3 +54,21 @@ SCENARIO_PLAN_UNKNOWN_SEED: str = "S507"
 SCENARIO_PLAN_MISSING_FIXTURE_SQL: str = "S508"
 SCENARIO_PLAN_MISSING_RELATION_TARGET: str = "S509"
 SCENARIO_PLAN_INTERNAL: str = "S599"
+
+WHOLE_DAY_CURSOR_GRAINS: frozenset[str] = frozenset({"day", "month", "year"})
+CURSOR_GRAIN_ORDER: dict[str, int] = {
+    "second": 0,
+    "minute": 1,
+    "hour": 2,
+    "day": 3,
+    "month": 4,
+    "year": 5,
+}
+CURSOR_GRAIN_BATCH_SIZE: dict[str, str] = {
+    "second": "1s",
+    "minute": "1m",
+    "hour": "1h",
+    "day": "1d",
+    "month": "1mo",
+    "year": "1y",
+}

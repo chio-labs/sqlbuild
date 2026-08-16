@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from typing import Any
+from datetime import date, datetime, timedelta
+from decimal import Decimal
+from typing import Any, cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
@@ -101,11 +102,20 @@ def resolve_runtime_cursor_bounds(
         end: str | None = _normalize_bound(value=row[1], is_end=True)
     if start is None or end is None:
         return None
+    if spec.start_cursor_override is not None:
+        start = spec.start_cursor_override
     start = _apply_cursor_start_floor(
         current_start=start,
         cursor_start=spec.cursor_start,
         cursor_type=cursor_type,
     )
+    if spec.end_cursor_override is not None:
+        end = _apply_cursor_end_ceiling(
+            current_end=end,
+            end_cursor_override=spec.end_cursor_override,
+            cursor_type=cursor_type,
+            effective_grain=effective_grain,
+        )
     return CursorBounds(start=start, end=end)
 
 
@@ -162,7 +172,25 @@ def _query_target_max_raw(
     return row[0]
 
 
+def _is_plain_date(value: object) -> bool:
+    """Return whether a value is a date that is not also a datetime."""
+
+    return isinstance(value, date) and not isinstance(value, datetime)
+
+
+def _floor_date_bound(*, value: date, grain: str) -> date:
+    """Floor a plain date bound to the start of its grain."""
+
+    if grain == CursorGrain.MONTH:
+        return value.replace(day=1)
+    if grain == CursorGrain.YEAR:
+        return value.replace(month=1, day=1)
+    return value
+
+
 def _floor_timestamp_bound(*, value: object, grain: str) -> object:
+    if _is_plain_date(value):
+        return _floor_date_bound(value=cast(date, value), grain=grain)
     if not isinstance(value, datetime):
         return value
     if grain == CursorGrain.SECOND:
@@ -181,6 +209,8 @@ def _floor_timestamp_bound(*, value: object, grain: str) -> object:
 
 
 def _increment_timestamp_bound(*, value: object, grain: str) -> object:
+    if _is_plain_date(value):
+        return _increment_date_bound(value=cast(date, value), grain=grain)
     if not isinstance(value, datetime):
         return value
     if grain == CursorGrain.SECOND:
@@ -201,12 +231,29 @@ def _increment_timestamp_bound(*, value: object, grain: str) -> object:
     return value
 
 
+def _increment_date_bound(*, value: date, grain: str) -> date:
+    """Step a plain date bound forward by one whole unit of grain."""
+
+    if grain == CursorGrain.MONTH:
+        final_month: int = 12
+        year: int = value.year + (1 if value.month == final_month else 0)
+        month: int = 1 if value.month == final_month else value.month + 1
+        return value.replace(year=year, month=month, day=1)
+    if grain == CursorGrain.YEAR:
+        return value.replace(year=value.year + 1, month=1, day=1)
+    return value + timedelta(days=1)
+
+
 def _normalize_bound(*, value: object, is_end: bool) -> str | None:
     if isinstance(value, datetime):
         normalized: datetime = value + timedelta(seconds=1) if is_end else value
         return normalized.isoformat()
-    if isinstance(value, int):
-        normalized_int: int = value + 1 if is_end else value
+    if _is_plain_date(value):
+        plain_date: date = cast(date, value)
+        normalized_date: date = plain_date + timedelta(days=1) if is_end else plain_date
+        return normalized_date.isoformat()
+    if isinstance(value, (int, Decimal)):
+        normalized_int: int = int(value) + 1 if is_end else int(value)
         return str(normalized_int)
     if value is None:
         return None
@@ -233,6 +280,53 @@ def _apply_cursor_start_floor(
         if current_integer is not None and floor_integer is not None:
             return str(max(current_integer, floor_integer))
     return current_start
+
+
+def _apply_cursor_end_ceiling(
+    *,
+    current_end: str,
+    end_cursor_override: str,
+    cursor_type: str | None,
+    effective_grain: str | None,
+) -> str:
+    """Clamp the discovered exclusive end down to the inclusive `--end-cursor-ts` override."""
+
+    if cursor_type == CursorType.TIMESTAMP:
+        override_value: date | datetime | None = _parse_timestamp_or_date(end_cursor_override)
+        if _try_parse_timestamp(current_end) is None or override_value is None:
+            return current_end
+        grain: str = effective_grain or CursorGrain.SECOND
+        exclusive_override: object = _increment_timestamp_bound(
+            value=_floor_timestamp_bound(value=override_value, grain=grain),
+            grain=grain,
+        )
+        normalized_override: str | None = _normalize_bound(value=exclusive_override, is_end=False)
+        if normalized_override is None:
+            return current_end
+        return min(current_end, normalized_override, key=_timestamp_sort_key)
+    if cursor_type == CursorType.INTEGER:
+        current_integer: int | None = _try_parse_integer(current_end)
+        override_integer: int | None = _try_parse_integer(end_cursor_override)
+        if current_integer is None or override_integer is None:
+            return current_end
+        return str(min(current_integer, override_integer + 1))
+    return current_end
+
+
+def _timestamp_sort_key(value: str) -> datetime:
+    parsed: datetime | None = _try_parse_timestamp(value)
+    if parsed is None:
+        return datetime.max
+    return parsed
+
+
+def _parse_timestamp_or_date(value: str) -> date | datetime | None:
+    """Parse an override bound as a plain date when date-only, else a datetime."""
+
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return _try_parse_timestamp(value)
 
 
 def _try_parse_timestamp(value: str) -> datetime | None:

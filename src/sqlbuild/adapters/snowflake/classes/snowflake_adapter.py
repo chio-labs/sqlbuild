@@ -2051,16 +2051,19 @@ class SnowflakeAdapter(BaseAdapter):
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
-    ) -> None:
+    ) -> int | None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         source_columns: tuple[str, ...] = self.query_column_names(connection=connection, sql=sql)
         statements: tuple[str, ...] = self.render_merge(
             destination=destination, sql=sql, unique_key=keys, source_columns=source_columns
         )
         statement_recorder.record_many(statements)
+        affected: int | None = None
         statement: str
         for statement in statements:
-            self.execute(connection=connection, sql=statement)
+            result: Any = self.execute(connection=connection, sql=statement)
+            affected = self.affected_row_count(cursor=result)
+        return affected
 
     def query_column_names(self, *, connection: Any, sql: str) -> tuple[str, ...]:
         """Return Snowflake query column names using cursor description."""

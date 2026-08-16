@@ -103,6 +103,13 @@ class ModelExecutionResult:
     staging_relation: str | None = None
     promoted_relation: str | None = None
     duration_ms: int | None = None
+    batch_count: int | None = None
+    batch_size: str | None = None
+    rows_affected: int | None = None
+    cursor_range_start: str | None = None
+    cursor_range_end: str | None = None
+    cursor_type: str | None = None
+    cursor_grain: str | None = None
     audit_results: tuple[AuditExecutionResult, ...] = field(default_factory=tuple)
     warning_messages: tuple[str, ...] = field(default_factory=tuple)
     lifecycle_events: tuple[LifeCycleEvent, ...] = field(default_factory=tuple)
@@ -161,6 +168,8 @@ class RuntimeCursorSpec:
     cursor_grain: str | None
     cursor_start: str | None
     cursor_input_relations: tuple[CursorInputRelation, ...]
+    start_cursor_override: str | None = None
+    end_cursor_override: str | None = None
 
 
 @dataclass(frozen=True)
@@ -257,6 +266,8 @@ class MicrobatchPhaseOutcome:
 
     state: MicrobatchLifecycleState
     failure: ModelExecutionResult | None = None
+    completed_batches: int = 0
+    rows_affected: int | None = None
 
 
 @dataclass(frozen=True)

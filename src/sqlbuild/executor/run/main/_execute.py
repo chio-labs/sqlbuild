@@ -109,6 +109,8 @@ def execute_table_entry(
                     cursor_grain=entry.cursor_grain,
                     cursor_start=entry.cursor_start,
                     cursor_input_relations=entry.cursor_input_relations,
+                    start_cursor_override=entry.start_cursor_override,
+                    end_cursor_override=entry.end_cursor_override,
                 ),
             )
         except Exception as exc:

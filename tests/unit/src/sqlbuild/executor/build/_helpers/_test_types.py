@@ -108,3 +108,25 @@ class ExternalBuildSourceLoadTestCase:
     expected_status: ExecutionStatus
     expected_completed_key_count: int
     expected_lifecycle_message: str
+
+
+@dataclass(frozen=True)
+class AbbreviatedRowCountTestCase:
+    description: str
+    count: int
+    expected_output: str
+
+
+@dataclass(frozen=True)
+class BatchSummaryTestCase:
+    description: str
+    batch_count: int | None
+    rows_affected: int | None
+    cursor_range_start: str | None
+    cursor_range_end: str | None
+    cursor_type: str | None
+    cursor_grain: str | None
+    expected_fragments: tuple[str, ...]
+    batch_size: str | None = None
+    expected_absent_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_none: bool = False

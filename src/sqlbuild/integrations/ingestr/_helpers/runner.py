@@ -12,6 +12,8 @@ from sqlbuild.integrations.ingestr._helpers.output import format_ingestr_command
 from sqlbuild.integrations.ingestr.exceptions import IngestrIntegrationError
 from sqlbuild.integrations.ingestr.models import IngestrCommandResult
 
+_DUCKDB_DRIVER_BOOTSTRAP_ERROR: str = "ADBC driver still not available after installation"
+
 
 def run_ingestr_command(
     command: tuple[str, ...],
@@ -25,13 +27,9 @@ def run_ingestr_command(
         )
     command_display: str = format_ingestr_command(command)
     try:
-        completed: subprocess.CompletedProcess[str] = subprocess.run(
-            command,
-            capture_output=True,
-            check=False,
-            env=_ingestr_subprocess_env(),
-            text=True,
-        )
+        completed: subprocess.CompletedProcess[str] = _run_ingestr_subprocess(command=command)
+        if completed.returncode != 0 and _DUCKDB_DRIVER_BOOTSTRAP_ERROR in completed.stdout:
+            completed = _run_ingestr_subprocess(command=command)
     except OSError as error:
         raise IngestrIntegrationError(f"failed to execute ingestr: {error}") from error
     result: IngestrCommandResult = IngestrCommandResult(
@@ -44,6 +42,16 @@ def run_ingestr_command(
             f"ingestr failed with exit code {completed.returncode}", result
         )
     return result
+
+
+def _run_ingestr_subprocess(*, command: tuple[str, ...]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        capture_output=True,
+        check=False,
+        env=_ingestr_subprocess_env(),
+        text=True,
+    )
 
 
 def _ingestr_subprocess_env() -> dict[str, str]:

@@ -21,6 +21,7 @@ from sqlbuild.compiler.planner._helpers.graph.source_load_nodes import build_sou
 from sqlbuild.compiler.planner._helpers.output.cursor_type_check import (
     check_cursor_type_consistency,
 )
+from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import advance_cursor_end
 from sqlbuild.compiler.planner._helpers.output.strategy import (
     build_model_warnings,
     get_materialization_type,
@@ -637,6 +638,8 @@ def plan_model_from_change(
         cursor_input_relations=cursor_input_relations,
         batch_size=batch_size,
         microbatch_range=microbatch_range,
+        start_cursor_override=start_cursor_override,
+        end_cursor_override=end_cursor_override,
         unique_key=unique_key,
         snapshot_strategy=snapshot_strategy,
         updated_at_column=updated_at_column,
@@ -901,6 +904,7 @@ def _compute_microbatch_range(
         backfill_duration=backfill_duration,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
+        cursor_grain=_get_config_str(model=model, key="cursor_grain"),
         is_microbatch=False,
     )
 
@@ -941,7 +945,14 @@ def _compute_plan_cursor_bounds(
     if full_refresh:
         return None
     if start_cursor_override is not None and end_cursor_override is not None:
-        return CursorBounds(start=start_cursor_override, end=end_cursor_override)
+        return CursorBounds(
+            start=start_cursor_override,
+            end=advance_cursor_end(
+                value=end_cursor_override,
+                cursor_type=_get_config_str(model=model, key="cursor_type"),
+                cursor_grain=_get_config_str(model=model, key="cursor_grain"),
+            ),
+        )
 
     cursor_snapshot: ModelCursorSnapshot | None = snapshot.cursor_snapshots.get(model.name)
     if cursor_snapshot is None:

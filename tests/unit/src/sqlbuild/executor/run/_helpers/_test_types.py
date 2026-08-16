@@ -15,6 +15,19 @@ class BuildQualifiedNameTestCase:
 
 
 @dataclass(frozen=True)
+class InclusiveEndBatchWindowTestCase:
+    description: str
+    start: str
+    inclusive_end: str
+    batch_size: str
+    cursor_type: str
+    cursor_grain: str | None
+    expected_batch_count: int
+    expected_final_window_end: str
+    expected_final_value_included: bool
+
+
+@dataclass(frozen=True)
 class BuildFailedResultTestCase:
     description: str
     error: str | BaseException
@@ -37,6 +50,75 @@ class RuntimeCursorStartTestCase:
     cursor_start: str | None
     expected_start: str
     expected_end: str
+
+
+@dataclass(frozen=True)
+class RuntimeCursorEndBoundTestCase:
+    description: str
+    upstream_min: object
+    upstream_max: object
+    cursor_type: str
+    cursor_grain: str | None
+    warehouse_column_type: str
+    expected_start: str
+    expected_end: str
+
+
+@dataclass(frozen=True)
+class RuntimeCursorOverrideTestCase:
+    description: str
+    upstream_min: object
+    upstream_max: object
+    cursor_type: str
+    cursor_grain: str | None
+    warehouse_column_type: str
+    start_cursor_override: str | None
+    end_cursor_override: str | None
+    expected_start: str
+    expected_end: str
+
+
+@dataclass(frozen=True)
+class RuntimeExistingTargetOverrideTestCase:
+    description: str
+    upstream_min: object
+    upstream_max: object
+    target_max: object
+    cursor_type: str
+    cursor_grain: str | None
+    cursor_start: str | None
+    start_cursor_override: str
+    end_cursor_override: str
+    warehouse_column_type: str
+    expected_bounds: object
+
+
+@dataclass(frozen=True)
+class ReportedRowsAffectedTestCase:
+    description: str
+    total_rows: int
+    row_count_known: bool
+    expected_rows_affected: int | None
+
+
+@dataclass(frozen=True)
+class MicrobatchCursorDiscoveryTestCase:
+    description: str
+    warehouse_column_type: str
+    cursor_min: object
+    cursor_max: object
+    cursor_type: str
+    expected_start: str
+    expected_end: str
+
+
+@dataclass(frozen=True)
+class MicrobatchCursorDiscoveryFailureTestCase:
+    description: str
+    warehouse_column_type: str
+    cursor_min: object
+    cursor_max: object
+    expected_error_fragment: str
 
 
 @dataclass(frozen=True)

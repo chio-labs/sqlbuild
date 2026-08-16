@@ -25,12 +25,12 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     "test_case",
     [
         PlanEntryCursorOverrideTestCase(
-            description="explicit cursor overrides work without cursor snapshot",
+            description="explicit overrides advance the inclusive end to an exclusive bound",
             start_cursor_override="2026-01-02T00:00:00",
             end_cursor_override="2026-01-04T00:00:00",
             expected_bounds=CursorBounds(
                 start="2026-01-02T00:00:00",
-                end="2026-01-04T00:00:00",
+                end="2026-01-04T00:00:01",
             ),
         )
     ],

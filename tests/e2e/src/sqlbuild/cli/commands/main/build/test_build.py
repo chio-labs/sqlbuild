@@ -919,16 +919,12 @@ def test_given_independent_source_branch_failure_when_building_then_appends_succ
             description="source freshness error blocks affected branch but unrelated branch runs",
             expected_exit_code=1,
             expected_output_fragments=(
-                "age errors:",
-                "raw_orders",
-                "source-blocked models:",
-                "stg_orders",
-                "fact_orders",
                 "dim_customers",
                 "SKIP",
                 "OK",
                 "Blocked by source freshness error",
             ),
+            unexpected_output_fragments=("Source freshness", "age errors:"),
         )
     ],
     ids=lambda case: case.description,
