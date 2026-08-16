@@ -36,20 +36,10 @@ from sqlbuild.adapter.contract.types import (
     PromotionStrategy,
     TablePromotionMode,
 )
-from sqlbuild.adapter.state_sql.main.render_create_node_source_watermark_table_sql import (
-    render_create_node_source_watermark_table_sql,
-)
-from sqlbuild.adapter.state_sql.main.render_insert_node_source_watermark_records_sql import (
-    render_insert_node_source_watermark_records_sql,
-)
 from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
     render_insert_source_freshness_records_sql,
 )
-from sqlbuild.adapter.state_sql.main.render_read_latest_node_source_watermarks_sql import (
-    render_read_latest_node_source_watermarks_sql,
-)
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkRecord
 from sqlbuild.compiler.planner.types import InitialValidFrom, SnapshotStrategy
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
@@ -1875,36 +1865,6 @@ class BaseAdapter(StrictAdapter):
             render_qualified_name=self.render_qualified_name,
         )
 
-    def render_create_node_source_watermark_table_sql(
-        self,
-        *,
-        database: str | None,
-        schema: str,
-    ) -> str:
-        """Render DDL that creates the node source watermark table when it is missing."""
-
-        return render_create_node_source_watermark_table_sql(
-            database=database,
-            schema=schema,
-            render_qualified_name=self.render_qualified_name,
-            render_framework_type=self.render_framework_type,
-            transient=self.state_tables_transient,
-        )
-
-    def render_read_latest_node_source_watermarks_sql(
-        self,
-        *,
-        database: str | None,
-        schema: str,
-    ) -> str:
-        """Render SQL that reads latest node source watermark rows per identity."""
-
-        return render_read_latest_node_source_watermarks_sql(
-            database=database,
-            schema=schema,
-            render_qualified_name=self.render_qualified_name,
-        )
-
     def render_create_fingerprint_index_sqls(
         self,
         *,
@@ -1937,22 +1897,6 @@ class BaseAdapter(StrictAdapter):
         """Render DML that appends source freshness records."""
 
         return render_insert_source_freshness_records_sql(
-            database=database,
-            schema=schema,
-            records=records,
-            render_qualified_name=self.render_qualified_name,
-        )
-
-    def render_insert_node_source_watermark_records_sql(
-        self,
-        *,
-        database: str | None,
-        schema: str,
-        records: tuple[NodeSourceWatermarkRecord, ...],
-    ) -> str:
-        """Render DML that appends node source watermark records."""
-
-        return render_insert_node_source_watermark_records_sql(
             database=database,
             schema=schema,
             records=records,

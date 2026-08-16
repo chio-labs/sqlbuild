@@ -36,24 +36,6 @@ class ExternalBlockedPlanOutputTestCase:
 
 
 @dataclass(frozen=True)
-class StandardReuseFromTargetPlanOutputTestCase:
-    description: str
-    expected_reuse_from_target_name: str
-    expected_model_names: tuple[str, ...]
-    expected_reuse_eligible_names: tuple[str, ...]
-    expected_decisions: dict[str, str]
-    expected_actions: dict[str, str]
-
-
-@dataclass(frozen=True)
-class StandardDependencyBaselinePlanOutputTestCase:
-    description: str
-    selected_model_name: str
-    expected_model_names: tuple[str, ...]
-    expected_dependency_baseline_names: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class StandardDirectInputBaselineTestCase:
     description: str
     models_by_name: dict[str, str]
@@ -61,21 +43,6 @@ class StandardDirectInputBaselineTestCase:
     selected_model_name: str
     expected_baseline_names: tuple[str, ...]
     unexpected_baseline_names: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class StandardReuseFullRefreshBypassTestCase:
-    description: str
-    expected_reuse_from_target_metadata_present: bool
-    expected_reuse_decision_metadata_present: bool
-
-
-@dataclass(frozen=True)
-class StandardReuseFromSourceDeferralConflictTestCase:
-    description: str
-    defer_sources_to: str | None
-    target_defer_sources_to: str | None
-    expected_error_fragment: str
 
 
 @dataclass(frozen=True)

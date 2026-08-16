@@ -331,16 +331,6 @@ class ReuseFromAuditGateDecisionTestCase:
 
 
 @dataclass(frozen=True)
-class RelationReuseOriginExecutionTestCase:
-    description: str
-    hard_copy: bool
-    supports_zero_copy_clone: bool
-    expected_calls: tuple[str, ...]
-    expected_sql: str | None = None
-    expected_error_fragments: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
 class RuntimeContractValidationTestCase:
     description: str
     contract_enforced: bool

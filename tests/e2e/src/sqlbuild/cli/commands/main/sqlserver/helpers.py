@@ -1,20 +1,14 @@
 from __future__ import annotations
 
 import os
-import subprocess
 import uuid
 from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver._test_types import (
-    SqlServerDependencyBaselineE2ETestCase,
-)
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
-    prepare_inline_project,
     prepare_source_loader_strategies,
     prepare_waffle_shop,
-    run_sqb,
     stringify_warehouse_rows,
 )
 
@@ -53,115 +47,6 @@ def build_sqlserver_project_toml(
         "[defaults]\n"
         'materialized = "table"\n'
     )
-
-
-def build_sqlserver_dependency_baseline_project_toml(
-    *, project_name: str, dev_schema_name: str, prod_schema_name: str, config: dict[str, object]
-) -> str:
-    return (
-        f'name = "{project_name}"\n'
-        'adapter = "sqlserver"\n'
-        'default_target = "dev"\n\n'
-        "[connection]\n"
-        f'host = "{config["host"]}"\n'
-        f"port = {config['port']}\n"
-        f'database = "{config["database"]}"\n'
-        f'user = "{config["user"]}"\n'
-        f'password = "{config["password"]}"\n\n'
-        "[targets.prod]\n"
-        f'schema = "{prod_schema_name}"\n\n'
-        "[targets.dev]\n"
-        f'schema = "{dev_schema_name}"\n'
-        'reuse_from = "prod"\n'
-        "reuse_hard_copy = true\n\n"
-        "[defaults]\n"
-        'materialized = "table"\n'
-    )
-
-
-def assert_sqlserver_dependency_baseline_case(
-    *, tmp_path: Path, test_case: SqlServerDependencyBaselineE2ETestCase
-) -> None:
-    schema_base: str = build_unique_schema_name(prefix=test_case.schema_prefix)
-    dev_schema_name: str = f"{schema_base}_dev"
-    prod_schema_name: str = f"{schema_base}_prod"
-    config: dict[str, object] = build_sqlserver_config()
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="sqlserver_dependency_baseline",
-        repo_files={
-            "sqlbuild_project.toml": build_sqlserver_dependency_baseline_project_toml(
-                project_name="sqlserver_dependency_baseline",
-                dev_schema_name=dev_schema_name,
-                prod_schema_name=prod_schema_name,
-                config=config,
-            ),
-            "models/upstream.sql": (
-                "MODEL (materialized table);\n\nSELECT 1 AS id, 900 AS amount\n"
-            ),
-            "models/downstream.sql": (
-                "MODEL (materialized table);\n\n"
-                'SELECT id, amount AS downstream_amount FROM __ref("upstream")\n'
-            ),
-        },
-    )
-    try:
-        ensure_sqlserver_schema_ready(schema_name=dev_schema_name, config=config)
-        ensure_sqlserver_schema_ready(schema_name=prod_schema_name, config=config)
-        (project_dir / "sqlbuild_local.toml").write_text('target = "prod"\n', encoding="utf-8")
-        prod_result: subprocess.CompletedProcess[str] = run_sqb(
-            command=("--no-color", "build", "--select", "upstream"),
-            project_dir=project_dir,
-        )
-        assert prod_result.returncode == 0, prod_result.stdout + prod_result.stderr
-        (project_dir / "sqlbuild_local.toml").write_text('target = "dev"\n', encoding="utf-8")
-
-        result: subprocess.CompletedProcess[str] = run_sqb(
-            command=test_case.command,
-            project_dir=project_dir,
-        )
-
-        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
-        expected_fragment: str
-        for expected_fragment in test_case.expected_stdout_fragments:
-            assert expected_fragment in result.stdout
-        absent_fragment: str
-        for absent_fragment in test_case.expected_absent_stdout_fragments:
-            assert absent_fragment not in result.stdout
-        assert (
-            fetch_sqlserver_rows(
-                sql=(
-                    "SELECT id, amount FROM "
-                    f"{relation_name(schema_name=dev_schema_name, name='upstream')} ORDER BY id"
-                ),
-                config=config,
-            )
-            == test_case.expected_upstream_rows
-        )
-        assert (
-            fetch_sqlserver_rows(
-                sql=(
-                    "SELECT id, downstream_amount FROM "
-                    f"{relation_name(schema_name=dev_schema_name, name='downstream')} ORDER BY id"
-                ),
-                config=config,
-            )
-            == test_case.expected_downstream_rows
-        )
-        assert (
-            fetch_sqlserver_rows(
-                sql=(
-                    "SELECT node_type, node_name FROM "
-                    f"{relation_name(schema_name=dev_schema_name, name='_sqlbuild_fingerprints')} "
-                    "WHERE node_type = 'model' ORDER BY node_name"
-                ),
-                config=config,
-            )
-            == test_case.expected_fingerprint_rows
-        )
-    finally:
-        cleanup_sqlserver_schema(schema_name=dev_schema_name, config=config)
-        cleanup_sqlserver_schema(schema_name=prod_schema_name, config=config)
 
 
 def build_sqlserver_virtual_project_toml(

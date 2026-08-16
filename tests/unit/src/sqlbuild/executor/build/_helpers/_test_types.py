@@ -53,31 +53,6 @@ class BuildSchedulerPreHookSkipTestCase:
 
 
 @dataclass(frozen=True)
-class BuildSchedulerNodeSourceWatermarkTestCase:
-    description: str
-    expected_rows: tuple[tuple[object, ...], ...]
-
-
-@dataclass(frozen=True)
-class BuildSchedulerNodeSourceWatermarkPayloadTestCase:
-    description: str
-    expected_source_hashes_by_node: dict[str, tuple[str, ...]]
-    expected_source_kinds_by_node: dict[str, tuple[str, ...]]
-    expected_unknown_reasons_by_node: dict[str, tuple[str, ...]] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class BuildSchedulerMergedUpstreamWatermarkTestCase:
-    description: str
-    b_data_hash: str
-    b_data_version: str
-    c_data_hash: str
-    c_data_version: str
-    expected_source_hashes_by_node: dict[str, tuple[str, ...]]
-    expected_source_kinds_by_node: dict[str, tuple[str, ...]]
-
-
-@dataclass(frozen=True)
 class BuildSchedulerPlannedSkipTestCase:
     description: str
     expected_model_statuses: tuple[ExecutionStatus, ...]

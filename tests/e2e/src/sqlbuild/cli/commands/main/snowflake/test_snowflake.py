@@ -27,7 +27,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake._test_types import (
     SnowflakeDbtCloneE2ETestCase,
     SnowflakeDbtProfileE2ETestCase,
     SnowflakeDbtScenarioLocalReplayE2ETestCase,
-    SnowflakeDependencyBaselineE2ETestCase,
     SnowflakeDiffE2ETestCase,
     SnowflakeIntermediateDagStrategyE2ETestCase,
     SnowflakeJanitorDetachedVdeE2ETestCase,
@@ -49,7 +48,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake.helpers import (
     assert_snowflake_snapshot_apply_rows,
     assert_snowflake_snapshot_matrix_rows,
     build_snowflake_dbt_profiles_yml,
-    build_snowflake_dependency_baseline_project_toml,
     build_snowflake_local_config,
     build_snowflake_project_toml,
     build_snowflake_source_deferral_project_toml,
@@ -71,7 +69,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     assert_dbt_profile_lifecycle,
-    assert_real_adapter_dependency_baseline_case,
     build_current_check_customers_model_sql,
     build_current_customers_model_sql,
     build_current_delete_customers_model_sql,
@@ -89,55 +86,6 @@ from tests.integration.src.sqlbuild.adapters.snowflake.helpers import (
     build_snowflake_connection_config,
     build_unique_schema_name,
 )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        SnowflakeDependencyBaselineE2ETestCase(
-            description="direct dependency baseline copies prod upstream on Snowflake",
-            schema_prefix="sqb_dep_base",
-            command=("--no-color", "build", "--select", "downstream"),
-            expected_stdout_fragments=(
-                "Plan ready (1 selected)",
-                "Reused inputs (1)",
-                "upstream",
-                "from reuse origin target",
-                "downstream",
-                "Completed successfully.",
-            ),
-            expected_absent_stdout_fragments=("cannot build selected scope",),
-            expected_upstream_rows=((1, 900),),
-            expected_downstream_rows=((1, 900),),
-            expected_fingerprint_rows=(("model", "downstream"),),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_downstream_selection_when_snowflake_upstream_missing_then_baselines_from_prod(
-    tmp_path: Path,
-    test_case: SnowflakeDependencyBaselineE2ETestCase,
-) -> None:
-    assert test_case.expected_upstream_rows == ((1, 900),)
-    schema_base: str = build_unique_schema_name(prefix=test_case.schema_prefix)
-    dev_schema_name: str = f"{schema_base}_dev"
-    prod_schema_name: str = f"{schema_base}_prod"
-    assert_real_adapter_dependency_baseline_case(
-        tmp_path=tmp_path,
-        test_case=test_case,
-        project_name="snowflake_dependency_baseline",
-        dev_schema_name=dev_schema_name,
-        prod_schema_name=prod_schema_name,
-        project_toml=build_snowflake_dependency_baseline_project_toml(
-            project_name="snowflake_dependency_baseline",
-            dev_schema_name=dev_schema_name,
-            prod_schema_name=prod_schema_name,
-        ),
-        ensure_schema_ready=lambda schema_name: ensure_query_schema_ready(schema_name=schema_name),
-        cleanup_schema=lambda schema_name: cleanup_snowflake_schema(schema_name=schema_name),
-        fetch_rows=lambda sql: fetch_snowflake_rows(schema_name=dev_schema_name, sql=sql),
-        relation_name=lambda schema_name, name: relation_name(schema_name=schema_name, name=name),
-    )
 
 
 @pytest.mark.dbt

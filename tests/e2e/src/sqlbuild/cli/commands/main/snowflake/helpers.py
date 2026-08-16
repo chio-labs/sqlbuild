@@ -67,35 +67,6 @@ def build_snowflake_project_toml(*, project_name: str, schema_name: str) -> str:
     )
 
 
-def build_snowflake_dependency_baseline_project_toml(
-    *, project_name: str, dev_schema_name: str, prod_schema_name: str
-) -> str:
-    database_name: str = str(build_snowflake_connection_config(schema=dev_schema_name)["database"])
-    return (
-        f'name = "{project_name}"\n'
-        'adapter = "snowflake"\n'
-        'default_target = "dev"\n\n'
-        "[connection]\n"
-        'account = "${ENV:SQB_TEST_SNOWFLAKE_ACCOUNT}"\n'
-        'user = "${ENV:SQB_TEST_SNOWFLAKE_USER}"\n'
-        'authenticator = "${ENV:SQB_TEST_SNOWFLAKE_AUTHENTICATOR}"\n'
-        'token = "${ENV:SQB_TEST_SNOWFLAKE_PAT}"\n'
-        'role = "${ENV:SQB_TEST_SNOWFLAKE_ROLE}"\n'
-        'warehouse = "${ENV:SQB_TEST_SNOWFLAKE_WAREHOUSE}"\n'
-        'database = "${ENV:SQB_TEST_SNOWFLAKE_DATABASE}"\n\n'
-        "[targets.prod]\n"
-        f'database = "{database_name}"\n'
-        f'schema = "{prod_schema_name}"\n\n'
-        "[targets.dev]\n"
-        f'database = "{database_name}"\n'
-        f'schema = "{dev_schema_name}"\n'
-        'reuse_from = "prod"\n'
-        "reuse_hard_copy = true\n\n"
-        "[defaults]\n"
-        'materialized = "table"\n'
-    )
-
-
 def build_snowflake_virtual_seed_project_toml(
     *, database_name: str, schema_name: str, unsuffixed_virtual_env: str | None = None
 ) -> str:

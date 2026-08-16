@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import base64
 import hashlib
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
@@ -48,14 +46,10 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
-from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner._helpers.graph.core import build_downstream_deps
-from sqlbuild.compiler.planner._helpers.pruning.selection_staleness import (
-    build_stale_out_of_selection_warnings,
-)
 from sqlbuild.compiler.planner._helpers.scenario.artifacts import build_scenario_relation_map
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
@@ -63,24 +57,15 @@ from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     GraphIdentityNode,
     GraphNodeKey,
-    ModelPlanEntry,
-    PlannerChangeResults,
     PlannerScope,
     PlanOutput,
-    PlanWarning,
     ScenarioArtifactIdentity,
     ScenarioRelationMap,
-    StandardModelVersionIdentities,
-    WarehouseFingerprints,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
-    ChangeKind,
     GraphResourceKind,
-    MaterializationType,
-    PlanAction,
-    PlanReason,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.source_freshness.models import (
@@ -124,16 +109,6 @@ class PlannerTestAdapter(BaseAdapter):
 
     def close(self, connection: object) -> None:
         del connection
-
-
-class StandardReuseFromTargetTestResult:
-    """Minimal DB-API-style result for standard reuse_from tests."""
-
-    def __init__(self, rows: tuple[tuple[object, ...], ...]) -> None:
-        self._rows: tuple[tuple[object, ...], ...] = rows
-
-    def fetchall(self) -> tuple[tuple[object, ...], ...]:
-        return self._rows
 
 
 def compose_readable_identity(
@@ -181,151 +156,6 @@ def build_diamond_ladder_identity_nodes(
             current.append(key)
         previous = tuple(current)
     return nodes, tuple(order)
-
-
-class StandardReuseFromTargetTestAdapter(PlannerTestAdapter):
-    """Adapter test double for standard reuse_from snapshot tests."""
-
-    def __init__(
-        self,
-        *,
-        fingerprint_rows: tuple[tuple[object, ...], ...],
-        existing_relations: frozenset[tuple[str | None, str | None, str]],
-    ) -> None:
-        self.fingerprint_rows: tuple[tuple[object, ...], ...] = fingerprint_rows
-        self.existing_relations: frozenset[tuple[str | None, str | None, str]] = existing_relations
-
-    def execute(self, connection: object, sql: str) -> StandardReuseFromTargetTestResult:
-        del connection, sql
-        return StandardReuseFromTargetTestResult(self.fingerprint_rows)
-
-    def relation_exists(
-        self,
-        connection: Any,
-        *,
-        database: str | None,
-        schema: str | None,
-        name: str,
-    ) -> bool:
-        del connection
-        return (
-            name == FINGERPRINT_TABLE_NAME
-            or (
-                database,
-                schema,
-                name,
-            )
-            in self.existing_relations
-        )
-
-    def list_relations(
-        self,
-        connection: Any,
-        *,
-        database: str | None,
-        schemas: tuple[str, ...] | None,
-        names: tuple[str, ...] | None = None,
-    ) -> tuple[RelationInfo, ...]:
-        del connection, names
-        requested: frozenset[str] = frozenset(schemas or ())
-        listed: list[RelationInfo] = []
-        relation_database: str | None
-        relation_schema: str | None
-        relation_name: str
-        for relation_database, relation_schema, relation_name in self.existing_relations:
-            relation: RelationInfo = RelationInfo(
-                database=relation_database,
-                schema=relation_schema,
-                name=relation_name,
-                relation_type="base table",
-            )
-            should_list: bool = relation_database == database and (
-                schemas is None or relation_schema in requested
-            )
-            _RELATION_INFO_COLLECTORS[should_list](listed, relation)
-        self._append_fingerprint_relations(listed, database, requested)
-        return tuple(listed)
-
-    def _append_fingerprint_relations(
-        self,
-        listed: list[RelationInfo],
-        database: str | None,
-        requested: frozenset[str],
-    ) -> None:
-        requested_schema: str
-        for requested_schema in requested:
-            listed.append(
-                RelationInfo(
-                    database=database,
-                    schema=requested_schema,
-                    name=FINGERPRINT_TABLE_NAME,
-                    relation_type="base table",
-                )
-            )
-
-    def render_qualified_name(
-        self,
-        *,
-        database: str | None,
-        schema: str | None,
-        name: str,
-    ) -> str | None:
-        return {
-            (True, True): f"{database}.{schema}.{name}",
-            (False, True): f"{schema}.{name}",
-            (True, False): name,
-            (False, False): name,
-        }[(database is not None, schema is not None)]
-
-
-class MissingFingerprintTableReuseFromTargetTestAdapter(StandardReuseFromTargetTestAdapter):
-    def relation_exists(
-        self,
-        connection: Any,
-        *,
-        database: str | None,
-        schema: str | None,
-        name: str,
-    ) -> bool:
-        del connection
-        return (database, schema, name) in self.existing_relations
-
-    def _append_fingerprint_relations(
-        self,
-        listed: list[RelationInfo],
-        database: str | None,
-        requested: frozenset[str],
-    ) -> None:
-        del listed, database, requested
-
-
-class FailingFingerprintReadReuseFromTargetTestAdapter(StandardReuseFromTargetTestAdapter):
-    def execute(self, connection: object, sql: str) -> StandardReuseFromTargetTestResult:
-        del connection, sql
-        raise RuntimeError("cannot select fingerprint rows")
-
-
-def build_standard_reuse_from_target_test_adapter(
-    *,
-    fingerprint_rows: tuple[tuple[object, ...], ...],
-    existing_relations: frozenset[tuple[str | None, str | None, str]],
-    fingerprint_table_exists: bool = True,
-    fingerprint_read_fails: bool = False,
-) -> StandardReuseFromTargetTestAdapter:
-    adapter_classes: MappingProxyType[
-        tuple[bool, bool], type[StandardReuseFromTargetTestAdapter]
-    ] = MappingProxyType(
-        {
-            (True, False): StandardReuseFromTargetTestAdapter,
-            (False, False): MissingFingerprintTableReuseFromTargetTestAdapter,
-            (True, True): FailingFingerprintReadReuseFromTargetTestAdapter,
-            (False, True): MissingFingerprintTableReuseFromTargetTestAdapter,
-        }
-    )
-    return adapter_classes[(fingerprint_table_exists, fingerprint_read_fails)](
-        fingerprint_rows=fingerprint_rows,
-        existing_relations=existing_relations,
-    )
 
 
 def _append_relation_info(listed: list[RelationInfo], relation: RelationInfo) -> None:
@@ -450,295 +280,6 @@ def build_run_despite_unchanged_source_freshness(
         ),
     )
     return (StandardSourceFreshnessPlanningResult(), populated_result)[data_version is not None]
-
-
-def build_node_source_watermark_warning_plan(
-    *,
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    model_names: tuple[str, ...],
-    source_names: tuple[str, ...],
-    source_record_hash: str = "hash-current",
-) -> PlanOutput:
-    """Build a minimal native plan for node source watermark warning tests."""
-
-    source_entries: dict[str, SourceEntry] = {
-        source_name: SourceEntry(name=source_name, schema="raw", table=source_name)
-        for source_name in source_names
-    }
-    return PlanOutput(
-        model_entries=tuple(
-            _node_source_watermark_warning_model_entry(model_name) for model_name in model_names
-        ),
-        selected_keys=frozenset(model_key(model_name) for model_name in model_names),
-        upstream_deps=upstream_deps,
-        source_map=source_entries,
-        source_freshness=StandardSourceFreshnessPlanningResult(
-            observed_records=tuple(
-                _node_source_watermark_warning_source_record(
-                    source_name=source_name,
-                    data_version_hash=source_record_hash,
-                )
-                for source_name in source_names
-            )
-        ),
-    )
-
-
-def _node_source_watermark_warning_model_entry(model_name: str) -> ModelPlanEntry:
-    return ModelPlanEntry(
-        key=model_key(model_name),
-        name=model_name,
-        relative_path=Path(f"models/{model_name}.sql"),
-        materialization_type=MaterializationType.TABLE,
-        action=PlanAction.CREATE_TABLE,
-        reason=PlanReason.FIRST_RUN,
-        destination=CompiledRelationLocation(
-            database=None,
-            schema="main",
-            name=model_name,
-            qualified_name=f"main.{model_name}",
-        ),
-        fingerprint_query_sql="SELECT 1",
-        resolved_sql="SELECT 1",
-        logical_ddl="CREATE TABLE x AS SELECT 1",
-        fingerprint_version_hash=f"version-{model_name}",
-    )
-
-
-def _node_source_watermark_warning_source_record(
-    *, source_name: str, data_version_hash: str
-) -> SourceFreshnessRecord:
-    return SourceFreshnessRecord(
-        source_name=source_name,
-        target_database=None,
-        target_schema="raw",
-        target_name=source_name,
-        run_id="planning",
-        strategy=SourceFreshnessStrategy.SQL.value,
-        value_kind="timestamp",
-        data_version="2026-06-29T18:00:00+00:00",
-        data_version_hash=data_version_hash,
-        observed_at=datetime(2026, 6, 29, 18, tzinfo=UTC),
-    )
-
-
-def build_standard_reuse_from_target_project() -> CompiledProject:
-    """Build a minimal compiled project with two selected models."""
-
-    return CompiledProject(
-        run_id="test_run",
-        effective_target_name="dev",
-        effective_connection={},
-        effective_vars={},
-        effective_target_database=None,
-        effective_target_schema="dev_schema",
-        models=(
-            CompiledModel(
-                key=model_key("orders"),
-                deps=(),
-                name="orders",
-                relative_path=Path("models/orders.sql"),
-                query_sql="SELECT 1",
-                config=CompileModelConfig(logical_schema="analytics"),
-                destination=CompiledRelationLocation(
-                    database=None,
-                    schema="dev_schema",
-                    name="orders",
-                    qualified_name="dev_schema.orders",
-                    logical_schema="analytics",
-                ),
-            ),
-            CompiledModel(
-                key=model_key("customers"),
-                deps=(),
-                name="customers",
-                relative_path=Path("models/customers.sql"),
-                query_sql="SELECT 1",
-                config=CompileModelConfig(logical_schema="analytics"),
-                destination=CompiledRelationLocation(
-                    database=None,
-                    schema="dev_schema",
-                    name="customers",
-                    qualified_name="dev_schema.customers",
-                    logical_schema="analytics",
-                ),
-            ),
-            CompiledModel(
-                key=model_key("line_items"),
-                deps=(),
-                name="line_items",
-                relative_path=Path("models/line_items.sql"),
-                query_sql="SELECT 1",
-                config=CompileModelConfig(
-                    logical_schema="analytics",
-                    values={"materialized": "incremental", "incremental_strategy": "append"},
-                ),
-                destination=CompiledRelationLocation(
-                    database=None,
-                    schema="dev_schema",
-                    name="line_items",
-                    qualified_name="dev_schema.line_items",
-                    logical_schema="analytics",
-                ),
-            ),
-            CompiledModel(
-                key=model_key("account_snapshot"),
-                deps=(),
-                name="account_snapshot",
-                relative_path=Path("models/account_snapshot.sql"),
-                query_sql="SELECT 1 AS account_id, CURRENT_TIMESTAMP AS updated_at",
-                config=CompileModelConfig(
-                    logical_schema="analytics",
-                    values={
-                        "materialized": "snapshot",
-                        "unique_key": ["account_id"],
-                        "snapshot_strategy": "timestamp",
-                        "updated_at": "updated_at",
-                    },
-                ),
-                destination=CompiledRelationLocation(
-                    database=None,
-                    schema="dev_schema",
-                    name="account_snapshot",
-                    qualified_name="dev_schema.account_snapshot",
-                    logical_schema="analytics",
-                ),
-            ),
-        ),
-    )
-
-
-def build_standard_reuse_from_target_scope(
-    *, selected_model_names: frozenset[str] | None = None
-) -> PlannerScope:
-    """Build a minimal planner scope selecting two models."""
-
-    project: CompiledProject = build_standard_reuse_from_target_project()
-    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
-    all_model_names: frozenset[str] = frozenset(model.name for model in project.models)
-    effective_selected_names: frozenset[str] = cast(
-        frozenset[str],
-        (selected_model_names, all_model_names)[selected_model_names is None],
-    )
-    model_keys_by_name: dict[str, CompiledObjectKey] = {
-        model.name: model.key for model in project.models
-    }
-    selected_keys: frozenset[CompiledObjectKey] = frozenset(
-        model_keys_by_name[name] for name in effective_selected_names
-    )
-    return PlannerScope(
-        upstream_deps={},
-        downstream_deps={},
-        all_keys={model.name: model.key for model in project.models},
-        models_by_name=models_by_name,
-        selected_keys=selected_keys,
-        execution_order=tuple(model.key for model in project.models),
-    )
-
-
-def build_standard_reuse_from_target_fingerprint_row(
-    *, model_name: str, version_hash: str
-) -> tuple[object, ...]:
-    """Build one valid fingerprint row tuple for read_latest_fingerprints."""
-
-    encoded_sql: str = base64.b64encode(b"SELECT 1").decode("ascii")
-    encoded_metadata: str = base64.b64encode(b"{}").decode("ascii")
-    return (
-        "model",
-        model_name,
-        None,
-        "prod_schema",
-        model_name,
-        "run_1",
-        f"{model_name}_definition_hash",
-        version_hash,
-        f"{model_name}_schema_hash",
-        encoded_sql,
-        encoded_metadata,
-        datetime(2026, 1, 1, tzinfo=UTC),
-    )
-
-
-def build_standard_reuse_decision_scope(
-    *, selected_model_names: frozenset[str] | None = None
-) -> PlannerScope:
-    """Build a planner scope for standard reuse decision matrix tests."""
-
-    model_configs: tuple[tuple[str, dict[str, object]], ...] = (
-        ("candidate", {}),
-        ("current", {}),
-        ("missing_fingerprint", {}),
-        ("missing_relation", {}),
-        ("version_mismatch", {}),
-        ("ineligible_view", {"materialized": "view"}),
-        (
-            "incremental_candidate",
-            {"materialized": "incremental", "cursor_type": "integer"},
-        ),
-        (
-            "snapshot_candidate",
-            {
-                "materialized": "snapshot",
-                "unique_key": ["id"],
-                "snapshot_strategy": "timestamp",
-                "updated_at": "updated_at",
-            },
-        ),
-        ("ineligible_custom", {"materialized": "custom_kind"}),
-        ("missing_expected", {}),
-        ("current_reuse_from_missing", {}),
-    )
-    models: tuple[CompiledModel, ...] = tuple(
-        CompiledModel(
-            key=model_key(model_name),
-            deps=(),
-            name=model_name,
-            relative_path=Path(f"models/{model_name}.sql"),
-            query_sql="SELECT 1",
-            config=CompileModelConfig(values=config_values),
-            destination=CompiledRelationLocation(
-                database=None,
-                schema="dev_schema",
-                name=model_name,
-                qualified_name=f"dev_schema.{model_name}",
-            ),
-        )
-        for model_name, config_values in model_configs
-    )
-    model_keys: dict[str, CompiledObjectKey] = {model.name: model.key for model in models}
-    effective_selected_model_names: frozenset[str] = cast(
-        frozenset[str],
-        (
-            selected_model_names,
-            frozenset(model.name for model in models),
-        )[selected_model_names is None],
-    )
-    return PlannerScope(
-        upstream_deps={},
-        downstream_deps={},
-        all_keys=model_keys,
-        models_by_name={model.name: model for model in models},
-        selected_keys=frozenset(model_keys[name] for name in effective_selected_model_names),
-        execution_order=tuple(model.key for model in models),
-    )
-
-
-def build_standard_reuse_fingerprint(*, model_name: str, version_hash: str) -> Fingerprint:
-    """Build a minimal fingerprint for standard reuse decision tests."""
-
-    return Fingerprint(
-        node_type="model",
-        node_name=model_name,
-        target_database=None,
-        target_schema="dev_schema",
-        target_name=model_name,
-        run_id="run_1",
-        definition_hash="definition_hash",
-        version_hash=version_hash,
-        schema_fingerprint="schema_hash",
-        definition="SELECT 1",
-        ts=datetime(2026, 1, 1, tzinfo=UTC),
-    )
 
 
 def source_key(name: str) -> CompiledObjectKey:
@@ -1850,52 +1391,4 @@ def build_seed_identity_compiled_seed(
             name="orders",
             qualified_name="main.orders",
         ),
-    )
-
-
-def build_changed_direct_dep_stale_warnings(
-    *, reuse_satisfied_model_names: frozenset[str]
-) -> tuple[PlanWarning, ...]:
-    leaf_key: CompiledObjectKey = CompiledObjectKey(
-        resource_type=CompiledResourceType.MODEL, name="leaf"
-    )
-    dep_key: CompiledObjectKey = CompiledObjectKey(
-        resource_type=CompiledResourceType.MODEL, name="dep"
-    )
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {
-        leaf_key: (dep_key,),
-        dep_key: (),
-    }
-    all_keys: dict[str, CompiledObjectKey] = {"leaf": leaf_key, "dep": dep_key}
-    scope: PlannerScope = PlannerScope(
-        upstream_deps=upstream_deps,
-        downstream_deps={},
-        all_keys=all_keys,
-        models_by_name={},
-        selected_keys=frozenset({leaf_key}),
-        execution_order=(dep_key, leaf_key),
-    )
-    return build_stale_out_of_selection_warnings(
-        original_scope=scope,
-        execution_scope=scope,
-        changes=PlannerChangeResults(
-            models={
-                "dep": ChangeDetectionResult(
-                    model_name="dep",
-                    change_kind=ChangeKind.QUERY_CHANGED,
-                )
-            },
-            functions={},
-        ),
-        snapshot=WarehouseSnapshot(fingerprints=WarehouseFingerprints()),
-        version_identities=StandardModelVersionIdentities(
-            function_local_hashes={},
-            seed_version_hashes={},
-            seed_metadata_jsons={},
-            model_metadata_jsons={},
-            model_local_hashes={},
-            model_version_hashes={},
-        ),
-        source_freshness=StandardSourceFreshnessPlanningResult(),
-        reuse_satisfied_model_names=reuse_satisfied_model_names,
     )
