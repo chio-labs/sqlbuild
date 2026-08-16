@@ -18,7 +18,6 @@ from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
     DbtInteropSkipReason,
 )
-from sqlbuild.spec.contracts.models import ScenarioConfig
 
 
 @dataclass(frozen=True)
@@ -349,17 +348,6 @@ class DbtCombinedGraph:
     nodes: frozenset[DbtCombinedGraphKey]
     upstream_deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]]
     downstream_deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]]
-
-
-@dataclass(frozen=True)
-class DbtScenarioBuild:
-    """Adapted SQLBuild project and connection inputs for a dbt scenario run."""
-
-    project: CompiledProject
-    adapter_name: str
-    connection_config: dict[str, object]
-    project_name: str
-    scenario_config: ScenarioConfig
 
 
 @dataclass(frozen=True)
