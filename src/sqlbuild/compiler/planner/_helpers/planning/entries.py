@@ -64,9 +64,6 @@ def build_planner_entry_results(
                 else frozenset()
             ),
             external_blocked_model_names=frozenset(overrides.external_blocked_model_names),
-            custom_prepare_version_materializations=(
-                policies.custom_prepare_version_materializations
-            ),
         ),
     )
     return PlannerEntryResults(

@@ -166,7 +166,6 @@ def execute_build_plan(
         ),
         customizations=BuildCustomizations(
             custom_materializations=pipeline_result.custom_materializations,
-            custom_prepare_version_functions=pipeline_result.custom_prepare_version_functions,
             loader_functions=preparation.python_lifecycle.loader_functions,
         ),
         initial_state=BuildInitialState(

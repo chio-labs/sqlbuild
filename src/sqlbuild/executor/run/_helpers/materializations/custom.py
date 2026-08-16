@@ -23,7 +23,6 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import (
     MaterializationContext,
     MaterializationResult,
-    PrepareVersionContext,
 )
 from sqlbuild.executor.run._helpers.execution.final_audits import run_final_scope_audits
 from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks
@@ -56,7 +55,6 @@ def execute_custom_entry(
     target: str,
     effective_vars: dict[str, object],
     existing_relation: RelationInfo | None,
-    prepare_version_fn: Callable[[PrepareVersionContext], None] | None = None,
     on_progress: Callable[[str], None] | None = None,
 ) -> ModelExecutionResult:
     """Execute one model through the custom materialization lifecycle."""
