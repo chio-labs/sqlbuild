@@ -28,7 +28,7 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
             value="2014-12-31T00:00:00",
             cursor_type=CursorType.TIMESTAMP,
             cursor_grain=CursorGrain.DAY,
-            expected_end="2015-01-01",
+            expected_end="2015-01-01T00:00:00",
         ),
         AdvanceCursorEndTestCase(
             description="date value without a grain steps forward one whole day",
@@ -50,6 +50,20 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
             cursor_type=CursorType.TIMESTAMP,
             cursor_grain=CursorGrain.HOUR,
             expected_end="2014-12-31T12:00:00",
+        ),
+        AdvanceCursorEndTestCase(
+            description="hour grain midnight timestamp steps forward one hour not one day",
+            value="2014-12-31T00:00:00",
+            cursor_type=CursorType.TIMESTAMP,
+            cursor_grain=CursorGrain.HOUR,
+            expected_end="2014-12-31T01:00:00",
+        ),
+        AdvanceCursorEndTestCase(
+            description="midnight timestamp without grain steps forward one second",
+            value="2014-12-31T00:00:00",
+            cursor_type=CursorType.TIMESTAMP,
+            cursor_grain=None,
+            expected_end="2014-12-31T00:00:01",
         ),
         AdvanceCursorEndTestCase(
             description="integer value steps forward one unit",

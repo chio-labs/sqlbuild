@@ -24,6 +24,9 @@ from sqlbuild.compiler.planner.constants import (
     MICROBATCH_START_SENTINEL,
 )
 from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
+from sqlbuild.compiler.planner.main.execution.effective_microbatch_batch_size import (
+    resolve_effective_microbatch_batch_size,
+)
 from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
@@ -32,7 +35,6 @@ from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
 )
 from sqlbuild.compiler.planner.types import (
-    CursorGrain,
     CursorType,
     IncrementalStrategy,
     OnSchemaChange,
@@ -269,6 +271,7 @@ def _execute_microbatch_batches(
     schema_checked: bool = False
     completed_batches: int = 0
     total_rows: int = 0
+    row_count_known: bool = False
     total_batches: int = len(batches)
     batch: BatchWindow
     for batch in batches:
@@ -337,10 +340,14 @@ def _execute_microbatch_batches(
                 state=state,
                 failure=dml_result,
                 completed_batches=completed_batches,
-                rows_affected=total_rows if total_rows > 0 else None,
+                rows_affected=_reported_rows_affected(
+                    total_rows=total_rows,
+                    row_count_known=row_count_known,
+                ),
             )
         if isinstance(dml_result, int):
             total_rows += dml_result
+            row_count_known = True
         _complete_microbatch_batch(
             context=context,
             window_text=window_text,
@@ -356,8 +363,17 @@ def _execute_microbatch_batches(
     return MicrobatchPhaseOutcome(
         state=state,
         completed_batches=completed_batches,
-        rows_affected=total_rows if total_rows > 0 else None,
+        rows_affected=_reported_rows_affected(
+            total_rows=total_rows,
+            row_count_known=row_count_known,
+        ),
     )
+
+
+def _reported_rows_affected(*, total_rows: int, row_count_known: bool) -> int | None:
+    """Preserve a known zero row count while keeping unavailable counts as None."""
+
+    return total_rows if row_count_known else None
 
 
 def _stage_microbatch_delta(
@@ -801,7 +817,7 @@ def _plan_microbatch_windows(
             cursor_input_relations=entry.cursor_input_relations,
         )
         if effective_timestamp_grain is not None:
-            effective_batch_size = _coarsen_timestamp_batch_size(
+            effective_batch_size = resolve_effective_microbatch_batch_size(
                 batch_size=batch_size,
                 effective_grain=effective_timestamp_grain,
             )
@@ -1048,37 +1064,3 @@ def _compute_integer_batches(
         index += 1
 
     return tuple(windows)
-
-
-def _coarsen_timestamp_batch_size(*, batch_size: str, effective_grain: str) -> str:
-    grain_sizes: dict[str, tuple[int, str]] = {
-        CursorGrain.SECOND: (0, "1s"),
-        CursorGrain.MINUTE: (1, "1m"),
-        CursorGrain.HOUR: (2, "1h"),
-        CursorGrain.DAY: (3, "1d"),
-        CursorGrain.MONTH: (4, "1mo"),
-        CursorGrain.YEAR: (5, "1y"),
-    }
-    parsed_order: int | None = _timestamp_batch_size_order(batch_size)
-    if parsed_order is None:
-        return batch_size
-    effective_order: int = grain_sizes[effective_grain][0]
-    if parsed_order >= effective_order:
-        return batch_size
-    return grain_sizes[effective_grain][1]
-
-
-def _timestamp_batch_size_order(batch_size: str) -> int | None:
-    if batch_size.endswith("y") and not batch_size.endswith("dy"):
-        return 5
-    if batch_size.endswith("mo"):
-        return 4
-    if batch_size.endswith("d"):
-        return 3
-    if batch_size.endswith("h"):
-        return 2
-    if batch_size.endswith("m"):
-        return 1
-    if batch_size.endswith("s"):
-        return 0
-    return None

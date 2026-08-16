@@ -69,24 +69,24 @@ def _inclusive_integer_end(*, end: str) -> str:
 
 
 def _advance_timestamp_end(*, value: str, cursor_grain: str | None) -> str:
+    plain_date: date | None = _try_parse_plain_date(value=value)
+    if plain_date is not None:
+        return (plain_date + timedelta(days=1)).isoformat()
     try:
         parsed: datetime = datetime.fromisoformat(value)
     except ValueError:
         return value
-    if _has_no_time_component(value=parsed):
-        exclusive_date: date = (parsed + timedelta(days=1)).date()
-        return exclusive_date.isoformat()
     return (parsed + _grain_step(cursor_grain=cursor_grain)).isoformat()
 
 
 def _inclusive_timestamp_end(*, end: str, cursor_grain: str | None) -> str:
+    plain_date: date | None = _try_parse_plain_date(value=end)
+    if plain_date is not None:
+        return (plain_date - timedelta(days=1)).isoformat()
     try:
         parsed: datetime = datetime.fromisoformat(end)
     except ValueError:
         return end
-    if _has_no_time_component(value=parsed):
-        inclusive_date: date = (parsed - timedelta(days=1)).date()
-        return inclusive_date.isoformat()
     return (parsed - _grain_step(cursor_grain=cursor_grain)).isoformat()
 
 
@@ -102,3 +102,10 @@ def _grain_step(*, cursor_grain: str | None) -> timedelta:
 
 def _has_no_time_component(*, value: datetime) -> bool:
     return (value.hour, value.minute, value.second, value.microsecond) == (0, 0, 0, 0)
+
+
+def _try_parse_plain_date(*, value: str) -> date | None:
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None

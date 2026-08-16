@@ -7,6 +7,9 @@ from decimal import Decimal, InvalidOperation
 
 from sqlbuild.cli.output.models import CursorPlanDetails
 from sqlbuild.cli.output.types import CursorBoundsOwner, CursorResolutionStatus
+from sqlbuild.compiler.planner.main.execution.effective_microbatch_batch_size import (
+    resolve_effective_microbatch_batch_size,
+)
 from sqlbuild.compiler.planner.models import CursorBounds, Duration, ModelPlanEntry
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType, IncrementalMode
 
@@ -17,14 +20,6 @@ _GRAIN_ORDER: dict[str, int] = {
     CursorGrain.DAY: 3,
     CursorGrain.MONTH: 4,
     CursorGrain.YEAR: 5,
-}
-_GRAIN_BATCH_SIZE: dict[str, str] = {
-    CursorGrain.SECOND: "1s",
-    CursorGrain.MINUTE: "1m",
-    CursorGrain.HOUR: "1h",
-    CursorGrain.DAY: "1d",
-    CursorGrain.MONTH: "1mo",
-    CursorGrain.YEAR: "1y",
 }
 
 
@@ -94,28 +89,10 @@ def _effective_batch_size(
     batch_size: str | None = entry.batch_size
     if not runtime_owned or batch_size is None or effective_grain is None:
         return batch_size
-    batch_order: int | None = _batch_size_order(batch_size=batch_size)
-    if batch_order is None or batch_order >= _GRAIN_ORDER[effective_grain]:
-        return batch_size
-    return _GRAIN_BATCH_SIZE[effective_grain]
-
-
-def _batch_size_order(*, batch_size: str) -> int | None:
-    """Map a timestamp duration suffix to its cursor-grain order."""
-
-    if batch_size.endswith("y") and not batch_size.endswith("dy"):
-        return 5
-    if batch_size.endswith("mo"):
-        return 4
-    if batch_size.endswith("d"):
-        return 3
-    if batch_size.endswith("h"):
-        return 2
-    if batch_size.endswith("m"):
-        return 1
-    if batch_size.endswith("s"):
-        return 0
-    return None
+    return resolve_effective_microbatch_batch_size(
+        batch_size=batch_size,
+        effective_grain=effective_grain,
+    )
 
 
 def _count_batches(*, bounds: CursorBounds, batch_size: str, cursor_type: str) -> int | None:

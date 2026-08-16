@@ -39,6 +39,13 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import InclusiveC
             expected_end="2014-12-31T11:00:00",
         ),
         InclusiveCursorEndTestCase(
+            description="hour grain midnight timestamp steps back one hour not one day",
+            end="2014-12-31T00:00:00",
+            cursor_type=CursorType.TIMESTAMP,
+            cursor_grain=CursorGrain.HOUR,
+            expected_end="2014-12-30T23:00:00",
+        ),
+        InclusiveCursorEndTestCase(
             description="month grain date bound reports the final included date",
             end="2015-01-01",
             cursor_type=CursorType.TIMESTAMP,
