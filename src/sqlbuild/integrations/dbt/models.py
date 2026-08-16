@@ -10,7 +10,6 @@ from typing import Any, TextIO
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.diff.models import DiffExecutionResult
@@ -20,10 +19,8 @@ from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphResourceType,
     DbtInteropCommand,
     DbtInteropSkipReason,
-    DbtLineageDirection,
-    DbtLineageOutputFormat,
 )
-from sqlbuild.spec.contracts.models import DbtProductionRefConfig, ScenarioConfig, SourceColumnEntry
+from sqlbuild.spec.contracts.models import DbtProductionRefConfig, ScenarioConfig
 
 
 @dataclass(frozen=True)
@@ -425,71 +422,6 @@ class DbtCombinedGraph:
     nodes: frozenset[DbtCombinedGraphKey]
     upstream_deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]]
     downstream_deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]]
-
-
-@dataclass(frozen=True)
-class DbtLineageNode:
-    """One displayable mixed dbt/SQLBuild lineage graph node."""
-
-    key: DbtCombinedGraphKey
-    label: str
-    qualified_name: str | None = None
-    relative_path: str | None = None
-
-
-@dataclass(frozen=True)
-class DbtLineageGraph:
-    """Selected mixed dbt/SQLBuild lineage graph slice."""
-
-    nodes: tuple[DbtLineageNode, ...]
-    edges: tuple[tuple[DbtCombinedGraphKey, DbtCombinedGraphKey], ...]
-    focus_keys: tuple[DbtCombinedGraphKey, ...] = field(default_factory=tuple)
-    direction: DbtLineageDirection | None = None
-
-
-@dataclass(frozen=True)
-class DbtColumnLineageTrace:
-    """Selected mixed dbt/SQLBuild column lineage trace."""
-
-    target: QualifiedLineageColumn
-    trace: tuple[ColumnLineageEdge, ...]
-    direction: DbtLineageDirection
-    max_depth: int | None
-    analyzed_model_count: int
-    truncated: bool = False
-    warnings: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class DbtSourceSchemaInspectionResult:
-    """Best-effort dbt source schemas for column lineage analysis."""
-
-    columns_by_unique_id: dict[str, tuple[SourceColumnEntry, ...]]
-    warnings: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class DbtLineageArgs:
-    """Parsed arguments for `sqb dbt lineage`."""
-
-    target: str
-    output_format: DbtLineageOutputFormat = DbtLineageOutputFormat.TREE
-    direction: DbtLineageDirection = DbtLineageDirection.UPSTREAM
-    depth: int | None = None
-    no_sql_validation: bool = False
-    dbt_args: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class DbtLineagePreparation:
-    """Compiled dbt/SQLBuild inputs shared by lineage selection and rendering."""
-
-    lineage_args: DbtLineageArgs
-    manifest: DbtManifestIndex
-    adapter: BaseAdapter
-    project: CompiledProject
-    graph: DbtCombinedGraph
-    connection_config: dict[str, object]
 
 
 @dataclass(frozen=True)

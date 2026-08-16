@@ -4,7 +4,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.models import (
@@ -13,10 +12,6 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropParsedArgs,
     DbtLsNode,
     DbtManifestIndex,
-)
-from sqlbuild.integrations.dbt.types import (
-    DbtLineageDirection,
-    DbtLineageOutputFormat,
 )
 from sqlbuild.spec.contracts.models import DbtConfig, LocalDbtConfig
 
@@ -276,98 +271,6 @@ class DbtCombinedGraphTestCase:
     expected_downstream_keys: tuple[str, ...]
     expected_upstream_from: str
     expected_upstream_keys: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtLineageSelectionTestCase:
-    description: str
-    target: str
-    direction: DbtLineageDirection
-    depth: int | None
-    expected_node_ids: tuple[str, ...]
-    expected_edges: tuple[tuple[str, str], ...]
-    expected_focus_ids: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtLineageSelectionErrorTestCase:
-    description: str
-    target: str
-    expected_error_fragment: str
-    expected_code: str
-
-
-@dataclass(frozen=True)
-class DbtLineageArgsTestCase:
-    description: str
-    args: tuple[str, ...]
-    expected_target: str
-    expected_output_format: DbtLineageOutputFormat
-    expected_direction: DbtLineageDirection
-    expected_depth: int | None
-    expected_no_sql_validation: bool
-    expected_dbt_args: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtLineageArgsErrorTestCase:
-    description: str
-    args: tuple[str, ...]
-    expected_error_fragment: str
-    expected_code: str
-
-
-@dataclass(frozen=True)
-class DbtLineageOutputTestCase:
-    description: str
-    formatter: Callable[..., str]
-    expected_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtLineageJsonOutputTestCase:
-    description: str
-    expected_node_metadata: tuple[tuple[str, str, object], ...]
-    expected_direction: str
-
-
-@dataclass(frozen=True)
-class DbtColumnLineageSelectionTestCase:
-    description: str
-    target: str
-    direction: DbtLineageDirection
-    expected_edges: tuple[tuple[str, str], ...]
-    expected_warnings: tuple[str, ...] = ()
-    depth: int | None = None
-    expected_target: tuple[str, str, str] | None = None
-    expected_truncated: bool = False
-    expected_transforms: tuple[str, ...] = ()
-    expected_confidences: tuple[str, ...] = ()
-    expected_is_column_target: bool = True
-
-
-@dataclass(frozen=True)
-class DbtSourceSchemaInspectionTestCase:
-    description: str
-    adapter_factory: Callable[[], BaseAdapter]
-    expected_columns: tuple[str, ...]
-    expected_warnings: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtColumnLineageErrorTestCase:
-    description: str
-    target: str
-    direction: DbtLineageDirection
-    expected_error_fragment: str
-    expected_code: str
-
-
-@dataclass(frozen=True)
-class DbtColumnLineageOutputTestCase:
-    description: str
-    output_format: DbtLineageOutputFormat
-    expected_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)

@@ -473,8 +473,6 @@ def _dispatch_dbt_command(
         return handlers.run_dbt_scenario(project_dir, tuple(args.dbt_args), args.no_color)
     if args.dbt_command == DbtInteropCommand.DEBUG:
         return handlers.run_dbt_debug(project_dir, tuple(args.dbt_args), args.no_color)
-    if args.dbt_command == DbtInteropCommand.LINEAGE:
-        return handlers.run_dbt_lineage(project_dir, tuple(args.dbt_args), args.no_color)
     if args.dbt_command == DbtInteropCommand.DIFF:
         return handlers.run_dbt_diff(project_dir, tuple(args.dbt_args), args.no_color)
     if args.dbt_command == DbtInteropCommand.CLONE:
