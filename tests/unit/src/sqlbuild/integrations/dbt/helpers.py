@@ -7,11 +7,9 @@ from dataclasses import replace
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import ClassVar, cast
+from typing import cast
 
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import (
-    ColumnInfo,
     QueryResult,
     RowDiffResult,
 )
@@ -42,7 +40,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
-from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
 from sqlbuild.compiler.planner.models import BackfillResult, ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
@@ -54,12 +51,10 @@ from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.integrations.dbt._helpers.cli.runner import build_dbt_ls_argv
 from sqlbuild.integrations.dbt._helpers.graph.core import (
-    build_dbt_combined_graph,
     dbt_model_graph_key,
     dbt_source_graph_key,
     sqlbuild_model_graph_key,
 )
-from sqlbuild.integrations.dbt._helpers.lineage.selection import select_dbt_lineage_target
 from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt._helpers.pipeline.diff import (
     DbtDiffOptions,
@@ -72,18 +67,14 @@ from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.models import (
     DbtCliConfigOverrides,
     DbtCliOptions,
-    DbtColumnLineageTrace,
-    DbtCombinedGraph,
     DbtCombinedGraphKey,
     DbtCommandResult,
-    DbtLineageGraph,
     DbtLsNode,
     DbtManifestIndex,
 )
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
     DbtCombinedGraphResourceType,
-    DbtLineageDirection,
 )
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SchemaSeedEntry, SourceEntry
@@ -1303,314 +1294,6 @@ def graph_key_from_stable_id(stable_id: str) -> DbtCombinedGraphKey:
         ): sqlbuild_model_graph_key,
     }
     return factories[(owner_enum, resource_type_enum)](name)
-
-
-def build_lineage_manifest_data() -> dict[str, object]:
-    """Build manifest data for mixed dbt/SQLBuild lineage unit tests."""
-
-    return build_manifest_data(
-        nodes=(
-            build_manifest_model_node(
-                unique_id="model.analytics.stg_orders",
-                package_name="analytics",
-                name="stg_orders",
-                relation_name="analytics.stg_orders",
-                depends_on_nodes=("source.analytics.raw.orders",),
-            ),
-            build_manifest_model_node(
-                unique_id="model.analytics.int_orders",
-                package_name="analytics",
-                name="int_orders",
-                relation_name="analytics.int_orders",
-                depends_on_nodes=("model.analytics.stg_orders",),
-            ),
-        ),
-        sources=(
-            build_manifest_source_node(
-                unique_id="source.analytics.raw.orders",
-                relation_name="raw.orders",
-            ),
-        ),
-    )
-
-
-def build_column_lineage_manifest_data() -> dict[str, object]:
-    """Build manifest data with compiled SQL for dbt column lineage unit tests."""
-
-    return build_manifest_data(
-        nodes=(
-            build_manifest_model_node(
-                unique_id="model.analytics.stg_orders",
-                package_name="analytics",
-                name="stg_orders",
-                relation_name='"db"."raw"."stg_orders"',
-                compiled_code='select order_id, amount from "db"."raw"."orders"',
-                depends_on_nodes=("source.analytics.raw.orders",),
-            ),
-            build_manifest_model_node(
-                unique_id="model.analytics.fact_orders",
-                package_name="analytics",
-                name="fact_orders",
-                relation_name='"db"."marts"."fact_orders"',
-                compiled_code='select order_id, amount from "db"."raw"."stg_orders"',
-                depends_on_nodes=("model.analytics.stg_orders",),
-            ),
-        ),
-        sources=(
-            build_manifest_source_node(
-                unique_id="source.analytics.raw.orders",
-                relation_name='"db"."raw"."orders"',
-            ),
-        ),
-    )
-
-
-def build_column_lineage_star_manifest_data() -> dict[str, object]:
-    """Build manifest data for SELECT * dbt column lineage tests."""
-
-    source: dict[str, object] = build_manifest_source_node(
-        unique_id="source.analytics.raw.orders",
-        relation_name='"db"."raw"."orders"',
-    )
-    source["columns"] = {
-        "order_id": {"name": "order_id", "data_type": "INTEGER"},
-        "amount": {"name": "amount", "data_type": "INTEGER"},
-    }
-    return build_manifest_data(
-        nodes=(
-            build_manifest_model_node(
-                unique_id="model.analytics.stg_orders",
-                package_name="analytics",
-                name="stg_orders",
-                relation_name="raw.stg_orders",
-                compiled_code="select * from raw.orders",
-                depends_on_nodes=("source.analytics.raw.orders",),
-            ),
-            build_manifest_model_node(
-                unique_id="model.analytics.fact_orders",
-                package_name="analytics",
-                name="fact_orders",
-                relation_name="marts.fact_orders",
-                compiled_code="select * from raw.stg_orders",
-                depends_on_nodes=("model.analytics.stg_orders",),
-            ),
-        ),
-        sources=(source,),
-    )
-
-
-def build_column_lineage_join_manifest_data() -> dict[str, object]:
-    """Build manifest data with aliases, joins, and expression transforms."""
-
-    return build_manifest_data(
-        nodes=(
-            build_manifest_model_node(
-                unique_id="model.analytics.stg_orders",
-                package_name="analytics",
-                name="stg_orders",
-                relation_name="raw.stg_orders",
-                compiled_code="select o.order_id, o.amount from raw.orders as o",
-                depends_on_nodes=("source.analytics.raw.orders",),
-            ),
-            build_manifest_model_node(
-                unique_id="model.analytics.fact_orders",
-                package_name="analytics",
-                name="fact_orders",
-                relation_name="fact_orders",
-                compiled_code=(
-                    "select o.order_id, o.amount * 100 as amount_cents "
-                    "from raw.stg_orders o join raw.customers c on o.order_id = c.order_id"
-                ),
-                depends_on_nodes=(
-                    "model.analytics.stg_orders",
-                    "source.analytics.raw.customers",
-                ),
-            ),
-        ),
-        sources=(
-            build_manifest_source_node(
-                unique_id="source.analytics.raw.orders",
-                relation_name="raw.orders",
-            ),
-            build_manifest_source_node(
-                unique_id="source.analytics.raw.customers",
-                name="customers",
-                relation_name="raw.customers",
-            ),
-        ),
-    )
-
-
-def build_column_lineage_quoted_schema_manifest_data() -> dict[str, object]:
-    """Build manifest data with quoted schema-qualified compiled SQL relations."""
-
-    return build_manifest_data(
-        nodes=(
-            build_manifest_model_node(
-                unique_id="model.analytics.stg_orders",
-                package_name="analytics",
-                name="stg_orders",
-                relation_name='"raw"."stg_orders"',
-                compiled_code='select order_id, amount from "raw"."orders"',
-                depends_on_nodes=("source.analytics.raw.orders",),
-            ),
-            build_manifest_model_node(
-                unique_id="model.analytics.fact_orders",
-                package_name="analytics",
-                name="fact_orders",
-                relation_name='"marts"."fact_orders"',
-                compiled_code='select order_id, amount from "raw"."stg_orders"',
-                depends_on_nodes=("model.analytics.stg_orders",),
-            ),
-        ),
-        sources=(
-            build_manifest_source_node(
-                unique_id="source.analytics.raw.orders",
-                relation_name='"db"."raw"."orders"',
-            ),
-        ),
-    )
-
-
-def build_column_lineage_ambiguous_table_manifest_data() -> dict[str, object]:
-    """Build manifest data where table-only relation names are ambiguous."""
-
-    return build_manifest_data(
-        nodes=(
-            build_manifest_model_node(
-                unique_id="model.analytics.fact_orders",
-                package_name="analytics",
-                name="fact_orders",
-                relation_name='"marts"."fact_orders"',
-                compiled_code="select order_id, amount from orders",
-                depends_on_nodes=(
-                    "source.analytics.raw.orders",
-                    "source.analytics.archive.orders",
-                ),
-            ),
-        ),
-        sources=(
-            build_manifest_source_node(
-                unique_id="source.analytics.raw.orders",
-                relation_name='"db"."raw"."orders"',
-            ),
-            build_manifest_source_node(
-                unique_id="source.analytics.archive.orders",
-                name="orders",
-                relation_name='"db"."archive"."orders"',
-            ),
-        ),
-    )
-
-
-def column_lineage_edge_ids(edge: ColumnLineageEdge) -> tuple[str, str]:
-    """Return compact source/target identifiers for column lineage assertions."""
-
-    source: QualifiedLineageColumn = edge.source
-    target: QualifiedLineageColumn = edge.target
-    return (_lineage_column_id(source), _lineage_column_id(target))
-
-
-def column_lineage_target_id(trace: DbtColumnLineageTrace) -> tuple[str, str, str]:
-    """Return compact target identity for dbt column lineage assertions."""
-
-    return (
-        str(trace.target.resource_type),
-        trace.target.resource_name,
-        trace.target.column_name,
-    )
-
-
-class FakeLineageSourceSchemaAdapter(BaseAdapter):
-    """Adapter stub for dbt source schema inspection unit tests."""
-
-    adapter_name: ClassVar[str] = "fake_lineage_source_schema"
-
-    def __init__(self, columns_by_relation: dict[str, tuple[ColumnInfo, ...]]) -> None:
-        self.columns_by_relation: dict[str, tuple[ColumnInfo, ...]] = columns_by_relation
-        self.connect_count: int = 0
-        self.get_all_columns_calls: list[
-            tuple[str | None, tuple[str, ...] | None, tuple[str, ...] | None]
-        ] = []
-
-    def connect(self, config: dict[str, object]) -> object:
-        self.connect_count += 1
-        return object()
-
-    def execute(self, connection: object, sql: str) -> object:
-        raise AssertionError("execute should not be called in source schema tests")
-
-    def query(self, connection: object, sql: str, *, limit: int | None) -> QueryResult:
-        raise AssertionError("query should not be called in source schema tests")
-
-    def close(self, connection: object) -> None:
-        return None
-
-    def get_all_columns(
-        self,
-        connection: object,
-        *,
-        database: str | None,
-        schemas: tuple[str, ...] | None,
-        names: tuple[str, ...] | None = None,
-    ) -> dict[str, tuple[ColumnInfo, ...]]:
-        del connection
-        self.get_all_columns_calls.append((database, schemas, names))
-        return dict(self.columns_by_relation)
-
-
-class EmptyLineageSourceSchemaAdapter(FakeLineageSourceSchemaAdapter):
-    """Adapter stub that reports no dbt source columns."""
-
-    adapter_name: ClassVar[str] = "empty_lineage_source_schema"
-
-    def __init__(self) -> None:
-        super().__init__({})
-
-
-def _lineage_column_id(column: QualifiedLineageColumn) -> str:
-    resource_name: str = column.resource_name
-    column_name: str = column.column_name
-    return f"{resource_name}:{column_name}"
-
-
-def build_lineage_graph_for_output_test() -> DbtLineageGraph:
-    """Build a mixed lineage graph for output formatter tests."""
-
-    manifest: DbtManifestIndex = build_dbt_manifest_index(raw_data=build_lineage_manifest_data())
-    project: CompiledProject = build_compiled_project_with_models(
-        {"fact_orders": 'select * from __dbt_ref("int_orders")'}
-    )
-    combined_graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
-    return select_dbt_lineage_target(
-        project=project,
-        manifest=manifest,
-        graph=combined_graph,
-        target="fact_orders",
-        direction=DbtLineageDirection.UPSTREAM,
-        depth=None,
-    )
-
-
-def build_depth_zero_lineage_graph_for_output_test() -> DbtLineageGraph:
-    """Build a single-node mixed lineage graph for output formatter tests."""
-
-    manifest: DbtManifestIndex = build_dbt_manifest_index(raw_data=build_lineage_manifest_data())
-    project: CompiledProject = build_compiled_project_with_models(
-        {
-            "fact_orders": 'select * from __dbt_ref("int_orders")',
-            "mart_orders": 'select * from __ref("fact_orders")',
-        }
-    )
-    combined_graph: DbtCombinedGraph = build_dbt_combined_graph(manifest=manifest, project=project)
-    return select_dbt_lineage_target(
-        project=project,
-        manifest=manifest,
-        graph=combined_graph,
-        target="mart_orders",
-        direction=DbtLineageDirection.UPSTREAM,
-        depth=0,
-    )
 
 
 def build_dbt_diff_manifest_model_node(

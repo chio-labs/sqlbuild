@@ -47,25 +47,8 @@ class DbtInteropCommand(StrEnum):
     TEST = "test"
     SCENARIO = "scenario"
     DEBUG = "debug"
-    LINEAGE = "lineage"
     DIFF = "diff"
     CLONE = "clone"
-
-
-class DbtLineageDirection(StrEnum):
-    """Traversal direction for mixed dbt/SQLBuild lineage."""
-
-    UPSTREAM = "upstream"
-    DOWNSTREAM = "downstream"
-    BOTH = "both"
-
-
-class DbtLineageOutputFormat(StrEnum):
-    """Output format for mixed dbt/SQLBuild lineage."""
-
-    TREE = "tree"
-    JSON = "json"
-    LIST = "list"
 
 
 class DbtInteropSqlbuildTestAction(StrEnum):

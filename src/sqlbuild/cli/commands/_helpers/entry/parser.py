@@ -458,7 +458,6 @@ def _add_dbt_parsers(
     dbt_subparsers.add_parser("test", add_help=False)
     dbt_subparsers.add_parser("scenario")
     dbt_subparsers.add_parser("debug")
-    dbt_subparsers.add_parser("lineage")
     dbt_subparsers.add_parser("diff")
     dbt_subparsers.add_parser("clone")
     dbt_init_parser: argparse.ArgumentParser = dbt_subparsers.add_parser("init")

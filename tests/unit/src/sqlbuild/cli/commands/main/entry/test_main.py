@@ -311,29 +311,6 @@ def test_given_dbt_command_without_sqlbuild_project_when_dispatching_then_does_n
             ),
         ),
         MainTestCase(
-            description="dispatches dbt lineage and preserves dbt args",
-            argv=[
-                "--project-dir",
-                "/tmp/demo",
-                "dbt",
-                "lineage",
-                "downstream_orders",
-                "--format",
-                "json",
-                "--project-dir",
-                "dbt_project",
-            ],
-            expected_exit_code=31,
-            expected_project_dir=Path("/tmp/demo"),
-            expected_dbt_args=(
-                "downstream_orders",
-                "--format",
-                "json",
-                "--project-dir",
-                "dbt_project",
-            ),
-        ),
-        MainTestCase(
             description="dispatches dbt diff and preserves dbt args",
             argv=[
                 "--project-dir",
@@ -406,7 +383,6 @@ def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_di
             run_dbt_build=run_dbt_execution,
             run_dbt_test=run_dbt_execution,
             run_dbt_debug=run_dbt_execution,
-            run_dbt_lineage=run_dbt_execution,
             run_dbt_diff=run_dbt_execution,
             run_dbt_clone=run_dbt_execution,
         ),

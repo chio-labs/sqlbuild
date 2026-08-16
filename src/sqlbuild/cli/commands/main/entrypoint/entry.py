@@ -101,12 +101,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             args=args,
             no_color=no_color,
         ),
-        run_dbt_lineage=lambda project_dir, args, no_color: run_dbt_command(
-            command=DbtInteropCommand.LINEAGE,
-            project_dir=project_dir,
-            args=args,
-            no_color=no_color,
-        ),
         run_dbt_diff=lambda project_dir, args, no_color: run_dbt_command(
             command=DbtInteropCommand.DIFF,
             project_dir=project_dir,
