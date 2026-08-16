@@ -50,25 +50,6 @@ class BuildNoTestsNoAuditsFlagE2ETestCase:
 
 
 @dataclass(frozen=True)
-class DependencyBaselineBuildE2ETestCase:
-    """Test case for direct-mode dependency baseline reuse_from behavior."""
-
-    description: str
-    project_name: str
-    upstream_sql: str
-    downstream_sql: str
-    prod_setup_sql: str
-    setup_commands: tuple[tuple[str, ...], ...]
-    command: tuple[str, ...]
-    expected_stdout_fragments: tuple[str, ...]
-    unexpected_stdout_fragments: tuple[str, ...]
-    expected_upstream_rows: tuple[tuple[object, ...], ...]
-    expected_downstream_rows: tuple[tuple[object, ...], ...]
-    expected_fingerprint_rows: tuple[tuple[object, ...], ...]
-    dev_setup_sql: str | None = None
-
-
-@dataclass(frozen=True)
 class DeferCloneBuildE2ETestCase:
     """Test case for direct-mode build defer clone behavior."""
 

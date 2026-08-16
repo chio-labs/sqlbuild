@@ -15,7 +15,7 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.compiler.planner.models import CursorBounds, ModelPlanEntry
-from sqlbuild.compiler.planner.types import IncrementalStrategy, OnSchemaChange, RelationReuseKind
+from sqlbuild.compiler.planner.types import IncrementalStrategy, OnSchemaChange
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.models import AuditExecutionResult
@@ -27,13 +27,9 @@ from sqlbuild.executor.run._helpers.execution.hook_phases import (
     run_post_hook_phase,
     run_pre_hook_phase,
 )
-from sqlbuild.executor.run._helpers.execution.promotion import promote_relation_to_destination
 from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
-)
-from sqlbuild.executor.run._helpers.reuse.core import (
-    create_relation_from_reuse_plan,
 )
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run._helpers.validation.contracts import validate_runtime_contract
@@ -374,35 +370,6 @@ def _prepare_delta_relation(
         schema=target_schema,
         statement_recorder=statement_recorder,
     )
-    if (
-        entry.relation_reuse is not None
-        and entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE
-    ):
-        adapter.drop(
-            connection=connection,
-            destination=seed_qualified,
-            if_exists=True,
-            statement_recorder=statement_recorder,
-        )
-        create_relation_from_reuse_plan(
-            adapter=adapter,
-            connection=connection,
-            model_name=entry.name,
-            expected_version_hash=entry.fingerprint_version_hash,
-            relation_reuse=entry.relation_reuse,
-            destination_relation=seed_qualified,
-            statement_recorder=statement_recorder,
-        )
-        promote_relation_to_destination(
-            adapter=adapter,
-            connection=connection,
-            origin_relation=seed_qualified,
-            destination_relation=target_qualified,
-            destination_database=target_database,
-            destination_schema=target_schema,
-            destination_name=target_table,
-            statement_recorder=statement_recorder,
-        )
     if has_model_backed_cursor_inputs(entry.cursor_input_relations):
         if entry.cursor_column is None:
             raise ExecutorInputError("runtime-owned cursor resolution requires cursor_column")

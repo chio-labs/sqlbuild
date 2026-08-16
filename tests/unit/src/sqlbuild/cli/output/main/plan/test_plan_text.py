@@ -20,7 +20,6 @@ from sqlbuild.compiler.planner.types import (
     MaterializationType,
     PlanAction,
     PlanReason,
-    RelationReuseKind,
     SchemaChangeKind,
     WarningSeverity,
 )
@@ -36,14 +35,11 @@ from tests.unit.src.sqlbuild.cli.output.main.plan._test_types import (
     FormatPlanTestCase,
 )
 from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
-    build_dependency_baseline_entry,
     build_discovered_provider_usage,
-    build_existing_destination_input_entry,
     build_function_entry,
     build_model_entry,
     build_plan_output,
     build_plan_provider_usage,
-    build_relation_reuse_plan,
     build_schema_finding,
     build_seed_entry,
     build_source_load_entry,
@@ -54,42 +50,6 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
 @pytest.mark.parametrize(
     "test_case",
     [
-        FormatPlanTestCase(
-            description="direct reuse inputs use destination and reuse origin terminology",
-            plan_output=build_plan_output(
-                dependency_baseline_entries=(
-                    build_dependency_baseline_entry(name="stg_orders"),
-                    build_dependency_baseline_entry(name="stg_payments"),
-                )
-            ),
-            expected_fragments=(
-                "Reused inputs (2)",
-                "stg_orders",
-                "cheap clone from reuse origin target",
-                "stg_payments",
-            ),
-            unexpected_fragments=("Dependency baseline", "baseline reuse", "Trusted inputs"),
-        ),
-        FormatPlanTestCase(
-            description="existing destination inputs show current and stale statuses",
-            plan_output=build_plan_output(
-                existing_destination_input_entries=(
-                    build_existing_destination_input_entry(name="stg_orders"),
-                    build_existing_destination_input_entry(
-                        name="stg_payments",
-                        status="stale",
-                    ),
-                )
-            ),
-            expected_fragments=(
-                "Existing destination inputs (2)",
-                "stg_orders",
-                "current in destination target",
-                "stg_payments",
-                "stale in destination target",
-            ),
-            unexpected_fragments=("may be stale",),
-        ),
         FormatPlanTestCase(
             description="changes-only pruned models are visible as current skips",
             plan_output=build_plan_output(
@@ -289,43 +249,6 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 "bounds: runtime-owned (model-backed cursor input)",
             ),
             unexpected_fragments=("batches: 3 x", "bounds: planner-resolved"),
-        ),
-        FormatPlanTestCase(
-            description="relation reuse is visible and hash-free in plan output",
-            plan_output=build_plan_output(
-                model_entries=(
-                    build_model_entry(
-                        name="orders",
-                        action=PlanAction.CREATE_TABLE,
-                        reason=PlanReason.FIRST_RUN,
-                        materialization_type=MaterializationType.TABLE,
-                        fingerprint_version_hash="expected_hash",
-                        relation_reuse=build_relation_reuse_plan(
-                            kind=RelationReuseKind.COMPLETE_RELATION_REUSE,
-                            hard_copy=True,
-                        ),
-                    ),
-                    build_model_entry(
-                        name="customer_snapshot",
-                        action=PlanAction.SNAPSHOT,
-                        reason=PlanReason.FIRST_RUN,
-                        materialization_type=MaterializationType.SNAPSHOT,
-                        snapshot_strategy="timestamp",
-                        relation_reuse=build_relation_reuse_plan(
-                            kind=RelationReuseKind.SEEDED_RELATION_REUSE,
-                            origin_name="customer_snapshot",
-                            hard_copy=False,
-                        ),
-                    ),
-                ),
-            ),
-            expected_fragments=(
-                "orders",
-                "table (hard-copy reuse from reuse origin target prod)",
-                "customer_snapshot",
-                "snapshot (timestamp) (cheap seeded reuse from reuse origin target prod)",
-            ),
-            unexpected_fragments=("expected_hash", "version_hash"),
         ),
         FormatPlanTestCase(
             description="human plan output omits identity hashes",

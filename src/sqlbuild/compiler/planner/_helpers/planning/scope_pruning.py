@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 from sqlbuild.compiler.planner.models import (
     PlannerResolvedActions,
     PlannerScope,
@@ -21,10 +19,7 @@ def prune_planner_execution_scope(
     """Derive the execution scope from the resolved inspection scope."""
 
     inspection_scope: PlannerScope = scopes.inspection_scope
-    execution_scope: PlannerScope = replace(
-        inspection_scope,
-        selected_keys=inspection_scope.selected_keys - scopes.dependency_baseline_candidate_keys,
-    )
+    execution_scope: PlannerScope = inspection_scope
     return PlannerScopePruningResult(
         inspection_scope=inspection_scope,
         execution_scope=execution_scope,

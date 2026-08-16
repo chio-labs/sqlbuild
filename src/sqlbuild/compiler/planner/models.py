@@ -40,7 +40,6 @@ from sqlbuild.compiler.planner.types import (
     OnSchemaChange,
     PlanAction,
     PlanReason,
-    RelationReuseKind,
     RunDespiteUnchangedMode,
     ScenarioArtifactKind,
     SchemaActionKind,
@@ -512,9 +511,8 @@ class ModelChangesPlanInputs:
 
 @dataclass(frozen=True)
 class PlanEntryBuildInputs:
-    """Reuse decisions, blocked models, and cursor overrides for plan entry building."""
+    """Blocked models and cursor overrides for plan entry building."""
 
-    standard_reuse_decisions: StandardReuseDecisionResults | None = None
     run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = None
     source_freshness_blocked_model_names: frozenset[str] = frozenset()
     external_blocked_model_names: frozenset[str] = frozenset()
@@ -571,79 +569,6 @@ class StandardModelVersionIdentities:
 
 
 @dataclass(frozen=True)
-class StandardReuseFromTargetModelSnapshot:
-    """One model's relation and fingerprint state in the reuse_from target."""
-
-    model_name: str
-    reuse_origin: CompiledRelationLocation
-    reuse_origin_fingerprint_database: str | None
-    reuse_origin_fingerprint_schema: str
-    relation_exists: bool
-    built_version_hash: str | None = None
-    reuse_origin_cursor_max: str | None = None
-
-
-@dataclass(frozen=True)
-class StandardReuseFromTargetSnapshot:
-    """Resolved reuse_from target state used to decide standard target reuse eligibility."""
-
-    reuse_from_target_name: str
-    model_snapshots: dict[str, StandardReuseFromTargetModelSnapshot]
-    hard_copy: bool = False
-
-
-@dataclass(frozen=True)
-class StandardReuseModelDecision:
-    """Planner-side standard reuse decision for one selected model."""
-
-    model_name: str
-    decision: str
-    reuse_from_target_name: str
-    reuse_origin: CompiledRelationLocation
-    reuse_origin_fingerprint_database: str | None
-    reuse_origin_fingerprint_schema: str
-    reuse_origin_relation_exists: bool
-    reuse_origin_built_version_present: bool
-    reuse_origin_matches_expected: bool
-    reuse_from_source_freshness_current: bool = True
-    reuse_origin_cursor_max: str | None = None
-    destination_cursor_max: str | None = None
-
-
-@dataclass(frozen=True)
-class StandardReuseDecisionResults:
-    """Planner-side standard reuse decisions for a reuse_from target."""
-
-    reuse_from_target_name: str
-    models: dict[str, StandardReuseModelDecision]
-    hard_copy: bool = False
-
-
-@dataclass(frozen=True)
-class ReusePolicyNodeFacts:
-    """Adapter-neutral facts needed to decide reuse for one physical node."""
-
-    expected_identity_present: bool
-    destination_identity_current: bool
-    destination_relation_exists: bool
-    reuse_origin_identity_present: bool
-    reuse_origin_relation_exists: bool
-    reuse_origin_matches_expected: bool
-    reuse_eligible_materialization: bool
-    source_freshness_stale: bool = False
-    destination_current_can_reuse_origin: bool = False
-
-
-@dataclass(frozen=True)
-class StandardReusePlanningResult:
-    """Complete planner-side standard reuse analysis for one plan build."""
-
-    snapshot: StandardReuseFromTargetSnapshot
-    decisions: StandardReuseDecisionResults
-    source_freshness: StandardSourceFreshnessPlanningResult | None = None
-
-
-@dataclass(frozen=True)
 class PlannerModelEntryResults:
     """Model plan-entry phase output."""
 
@@ -671,57 +596,9 @@ class PlanWarning:
 
 
 @dataclass(frozen=True)
-class RelationReusePlan:
-    """Execution metadata for copying or cloning an origin relation."""
-
-    kind: RelationReuseKind
-    origin: CompiledRelationLocation
-    reuse_from_target_name: str
-    hard_copy: bool
-    fingerprint_database: str | None
-    fingerprint_schema: str
-    destination_target_name: str | None = None
-
-
-@dataclass(frozen=True)
-class DependencyBaselinePlanEntry:
-    """Physical dependency relation prepared before selected work executes."""
-
-    name: str
-    destination: CompiledRelationLocation
-    relation_reuse: RelationReusePlan
-    fingerprint_version_hash: str | None
-    resource_label: str = "table"
-
-
-@dataclass(frozen=True)
-class ExistingDestinationInputPlanEntry:
-    """Direct input relation already present in the destination target."""
-
-    name: str
-    destination: CompiledRelationLocation
-    status: str
-    expected_version_hash: str | None = None
-    destination_version_hash: str | None = None
-
-
-@dataclass(frozen=True)
-class StandardReuseIdentityInputs:
-    """Version, fingerprint, and cursor inputs for standard reuse planning."""
-
-    expected_version_hashes: dict[str, str]
-    built_fingerprints: dict[str, Fingerprint]
-    cursor_snapshots: dict[str, ModelCursorSnapshot]
-    destination_relation_names: frozenset[str] = frozenset()
-    custom_prepare_version_materializations: frozenset[str] = frozenset()
-
-
-@dataclass(frozen=True)
 class PlanOutputExtras:
-    """Optional supplemental entries and seed fingerprints for plan output assembly."""
+    """Optional supplemental seed fingerprints for plan output assembly."""
 
-    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = ()
-    existing_destination_input_entries: tuple[ExistingDestinationInputPlanEntry, ...] = ()
     seed_version_hashes: dict[str, str] | None = None
     seed_metadata_jsons: dict[str, str] | None = None
     seed_plan_reasons: dict[str, PlanReason] | None = None
@@ -786,54 +663,7 @@ class ModelPlanEntry:
     custom_materialization_name: str | None = None
     custom_config: dict[str, object] = field(default_factory=dict)
     custom_placeholders: dict[str, str] = field(default_factory=dict)
-    relation_reuse: RelationReusePlan | None = None
     run_despite_unchanged: RunDespiteUnchangedDecision | None = None
-
-    def __post_init__(self) -> None:
-        if self.relation_reuse is None:
-            return
-        if self.relation_reuse.kind == RelationReuseKind.COMPLETE_RELATION_REUSE:
-            if self.materialization_type != MaterializationType.TABLE:
-                raise PlannerInputError(
-                    f"model '{self.name}' complete relation reuse requires table materialization"
-                )
-            if self.action != PlanAction.CREATE_TABLE:
-                raise PlannerInputError(
-                    f"model '{self.name}' complete relation reuse requires create_table action"
-                )
-            return
-        if self.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE:
-            if self.materialization_type not in {
-                MaterializationType.INCREMENTAL,
-                MaterializationType.SNAPSHOT,
-                MaterializationType.CUSTOM,
-            }:
-                raise PlannerInputError(
-                    f"model '{self.name}' seeded relation reuse requires "
-                    "incremental, snapshot, or custom materialization"
-                )
-            if self.materialization_type == MaterializationType.CUSTOM:
-                if self.action != PlanAction.CUSTOM:
-                    raise PlannerInputError(
-                        f"model '{self.name}' seeded relation reuse requires custom action"
-                    )
-                return
-            incremental_actions: frozenset[PlanAction] = frozenset(
-                {
-                    PlanAction.INCREMENTAL_APPEND,
-                    PlanAction.INCREMENTAL_DELETE_INSERT,
-                    PlanAction.INCREMENTAL_MERGE,
-                }
-            )
-            snapshot_action: bool = (
-                self.materialization_type == MaterializationType.SNAPSHOT
-                and self.action == PlanAction.SNAPSHOT
-            )
-            if not snapshot_action and self.action not in incremental_actions:
-                raise PlannerInputError(
-                    f"model '{self.name}' seeded relation reuse requires an incremental "
-                    "or snapshot action"
-                )
 
 
 @dataclass(frozen=True)
@@ -1089,12 +919,6 @@ class PlanOutput:
 
     execution_order: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
     model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
-    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = field(
-        default_factory=tuple
-    )
-    existing_destination_input_entries: tuple[ExistingDestinationInputPlanEntry, ...] = field(
-        default_factory=tuple
-    )
     seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
     source_load_entries: tuple[SourceLoadPlanEntry, ...] = field(default_factory=tuple)
     function_entries: tuple[FunctionPlanEntry, ...] = field(default_factory=tuple)
@@ -1166,7 +990,6 @@ class PlannerPolicies:
     """Behavior policies selected by the caller for one planner invocation."""
 
     auto_load_sources: bool = False
-    enable_reuse_planning: bool = True
     custom_prepare_version_materializations: frozenset[str] = frozenset()
 
 
@@ -1184,12 +1007,11 @@ class PlannerRuntime:
 
 @dataclass(frozen=True)
 class PlannerScopeResolution:
-    """Resolved planner scopes and dependency-baseline candidates."""
+    """Resolved planner scopes for one plan build."""
 
     selected_scope: PlannerScope
     stale_warning_scope: PlannerScope
     inspection_scope: PlannerScope
-    dependency_baseline_candidate_keys: frozenset[CompiledObjectKey]
 
 
 @dataclass(frozen=True)
@@ -1206,15 +1028,6 @@ class PlannerIdentityContext:
 
     version_identities: StandardModelVersionIdentities
     stale_warning_identities: StandardModelVersionIdentities
-
-
-@dataclass(frozen=True)
-class PlannerReuseResolution:
-    """Standard reuse planning outcome and reusable baseline keys."""
-
-    standard_reuse: StandardReusePlanningResult | None
-    dependency_baseline_candidate_keys: frozenset[CompiledObjectKey]
-    reusable_dependency_baseline_keys: frozenset[CompiledObjectKey]
 
 
 @dataclass(frozen=True)
@@ -1239,8 +1052,6 @@ class PlannerChangeReconciliation:
 
 @dataclass(frozen=True)
 class PlannerEntryResults:
-    """Model plan entries plus dependency-baseline and reuse-input entries."""
+    """Model plan entries for one plan build."""
 
     model_entry_results: PlannerModelEntryResults
-    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...]
-    existing_destination_input_entries: tuple[ExistingDestinationInputPlanEntry, ...]

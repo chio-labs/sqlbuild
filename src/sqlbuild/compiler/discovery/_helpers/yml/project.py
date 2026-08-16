@@ -464,13 +464,7 @@ def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig
             loader_schema=_optional_str(payload=target_mapping, key="loader_schema"),
             defer_sources_to=_optional_str(payload=target_mapping, key="defer_sources_to"),
             defer_clone_from=_optional_str(payload=target_mapping, key="defer_clone_from"),
-            reuse_from=_optional_str(payload=target_mapping, key="reuse_from"),
             changes_only=_optional_nullable_bool(mapping=target_mapping, key="changes_only"),
-            reuse_hard_copy=_optional_bool(
-                mapping=target_mapping,
-                key="reuse_hard_copy",
-                default=False,
-            ),
             clone=ClonePolicy(
                 allow_as_clone_origin=_optional_bool(
                     mapping=clone_mapping,
@@ -532,12 +526,7 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
             loader_schema=_optional_str(payload=target_mapping, key="loader_schema"),
             defer_sources_to=_optional_str(payload=target_mapping, key="defer_sources_to"),
             defer_clone_from=_optional_str(payload=target_mapping, key="defer_clone_from"),
-            reuse_from=_optional_str(payload=target_mapping, key="reuse_from"),
             changes_only=_optional_nullable_bool(mapping=target_mapping, key="changes_only"),
-            reuse_hard_copy=_optional_nullable_bool(
-                mapping=target_mapping,
-                key="reuse_hard_copy",
-            ),
             clone=LocalClonePolicy(
                 allow_as_clone_origin=_optional_nullable_bool(
                     mapping=clone_mapping,

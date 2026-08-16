@@ -53,9 +53,7 @@ schema = "dev"
                     "loader_schema": None,
                     "defer_sources_to": None,
                     "defer_clone_from": None,
-                    "reuse_from": None,
                     "changes_only": None,
-                    "reuse_hard_copy": False,
                     "allow_as_clone_origin": False,
                     "allow_as_clone_destination": False,
                 }
@@ -107,9 +105,7 @@ schema = "dev_${user}"
 loader_schema = "raw_${user}"
 defer_sources_to = "prod"
 defer_clone_from = "prod"
-reuse_from = "prod"
 changes_only = true
-reuse_hard_copy = true
 
 [targets.dev.connection]
 warehouse = "dev_wh"
@@ -196,9 +192,7 @@ git_timeout_seconds = 12
                     "loader_schema": "raw_${user}",
                     "defer_sources_to": "prod",
                     "defer_clone_from": "prod",
-                    "reuse_from": "prod",
                     "changes_only": True,
-                    "reuse_hard_copy": True,
                     "allow_as_clone_origin": True,
                     "allow_as_clone_destination": True,
                 }
@@ -273,9 +267,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
             "loader_schema": target_config.loader_schema,
             "defer_sources_to": target_config.defer_sources_to,
             "defer_clone_from": target_config.defer_clone_from,
-            "reuse_from": target_config.reuse_from,
             "changes_only": target_config.changes_only,
-            "reuse_hard_copy": target_config.reuse_hard_copy,
             "allow_as_clone_origin": target_config.clone.allow_as_clone_origin,
             "allow_as_clone_destination": target_config.clone.allow_as_clone_destination,
         }
@@ -468,9 +460,7 @@ schema = "local_schema"
 loader_schema = "local_raw"
 defer_sources_to = "prod"
 defer_clone_from = "prod"
-reuse_from = "prod"
 changes_only = false
-reuse_hard_copy = true
 
 [targets.dev.connection]
 warehouse = "local_wh"
@@ -500,9 +490,7 @@ allow_as_clone_destination = false
                     "loader_schema": "local_raw",
                     "defer_sources_to": "prod",
                     "defer_clone_from": "prod",
-                    "reuse_from": "prod",
                     "changes_only": False,
-                    "reuse_hard_copy": True,
                     "allow_as_clone_origin": True,
                     "allow_as_clone_destination": False,
                 }
@@ -552,9 +540,7 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
             "loader_schema": target_config.loader_schema,
             "defer_sources_to": target_config.defer_sources_to,
             "defer_clone_from": target_config.defer_clone_from,
-            "reuse_from": target_config.reuse_from,
             "changes_only": target_config.changes_only,
-            "reuse_hard_copy": target_config.reuse_hard_copy,
             "allow_as_clone_origin": target_config.clone.allow_as_clone_origin,
             "allow_as_clone_destination": target_config.clone.allow_as_clone_destination,
         }
@@ -589,40 +575,6 @@ adapter = "duckdb"
 sql_analysis = 123
 """.strip(),
             expected_error_fragment="Expected 'sql_analysis' to be a boolean when provided",
-        ),
-        LoadProjectConfigErrorTestCase(
-            description="raises when target reuse_from is not a string",
-            project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[targets.dev]
-reuse_from = 123
-""".strip(),
-            expected_error_fragment="Expected 'reuse_from' to be a non-empty string when provided",
-        ),
-        LoadProjectConfigErrorTestCase(
-            description="raises when target reuse_hard_copy is not a boolean",
-            project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[targets.dev]
-reuse_hard_copy = "yes"
-""".strip(),
-            expected_error_fragment="Expected 'reuse_hard_copy' to be a boolean when provided",
-        ),
-        LoadProjectConfigErrorTestCase(
-            description="raises when legacy dbt reuse_from table is used",
-            project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[dbt.reuse_from]
-git_ref = "prod"
-generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"
-""".strip(),
-            expected_error_fragment=r"\[dbt.reuse_from\] was renamed to \[dbt.production_ref\]",
         ),
         LoadProjectConfigErrorTestCase(
             description="raises when dbt production_ref omits git_ref",
@@ -1136,22 +1088,6 @@ user = 123
 sql_analysis = "no thanks"
 """.strip(),
             expected_error_fragment="Expected 'sql_analysis' to be a boolean when provided",
-        ),
-        LoadLocalConfigErrorTestCase(
-            description="raises when local target reuse_from is not a string",
-            local_file_contents="""
-[targets.dev]
-reuse_from = 123
-""".strip(),
-            expected_error_fragment="Expected 'reuse_from' to be a non-empty string when provided",
-        ),
-        LoadLocalConfigErrorTestCase(
-            description="raises when local target reuse_hard_copy is not a boolean",
-            local_file_contents="""
-[targets.dev]
-reuse_hard_copy = "yes"
-""".strip(),
-            expected_error_fragment="Expected 'reuse_hard_copy' to be a boolean when provided",
         ),
         LoadLocalConfigErrorTestCase(
             description="raises when local settings concurrency is not an integer",

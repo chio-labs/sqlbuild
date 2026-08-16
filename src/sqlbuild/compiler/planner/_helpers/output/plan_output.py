@@ -31,8 +31,6 @@ from sqlbuild.compiler.planner._helpers.sql_tests.assembly import plan_test
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
-    DependencyBaselinePlanEntry,
-    ExistingDestinationInputPlanEntry,
     FunctionChangeResult,
     FunctionPlanEntry,
     ModelPlanEntry,
@@ -66,12 +64,6 @@ def build_plan_output(
     extras: PlanOutputExtras | None = None,
 ) -> PlanOutput:
     resolved_extras: PlanOutputExtras = extras if extras is not None else PlanOutputExtras()
-    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = (
-        resolved_extras.dependency_baseline_entries
-    )
-    existing_destination_input_entries: tuple[ExistingDestinationInputPlanEntry, ...] = (
-        resolved_extras.existing_destination_input_entries
-    )
     seed_version_hashes: dict[str, str] | None = resolved_extras.seed_version_hashes
     seed_metadata_jsons: dict[str, str] | None = resolved_extras.seed_metadata_jsons
     seed_plan_reasons: dict[str, PlanReason] | None = resolved_extras.seed_plan_reasons
@@ -143,8 +135,6 @@ def build_plan_output(
     return PlanOutput(
         execution_order=scoped_order,
         model_entries=model_entry_results.entries,
-        dependency_baseline_entries=dependency_baseline_entries,
-        existing_destination_input_entries=existing_destination_input_entries,
         seed_entries=tuple(seed_entries),
         source_load_entries=tuple(source_load_entries),
         function_entries=tuple(function_entries),
