@@ -4,40 +4,25 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.output.main.plan import format_plan
-from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.planner._helpers.graph.scope import build_planner_scope
-from sqlbuild.compiler.planner._helpers.identity.standard import (
-    build_standard_model_version_identities,
-)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
     ModelPlanEntry,
     PlanOutput,
     PlanWarning,
-    StandardModelVersionIdentities,
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
     PlanAction,
     PlanReason,
-    StandardScopePruning,
     WarningSeverity,
 )
-from sqlbuild.executor.build.main._execute import execute_build_plan
-from sqlbuild.executor.build.models import (
-    BuildExecutionResult,
-    BuildRuntimeParams,
-)
-from sqlbuild.executor.build.types import BuildStatus
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     BuildExecutionPlanTestCase,
     FormatPlanIntegrationTestCase,
-    SelectionAwareExecutionRoundTripTestCase,
     SourceCursorInputPlanErrorTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.planner.main.helpers import (
@@ -45,9 +30,7 @@ from tests.integration.src.sqlbuild.compiler.planner.main.helpers import (
     build_project_from_format_test_case,
     build_project_from_source_cursor_input_test_case,
     build_project_from_test_case,
-    build_standard_pruning_project,
     write_previous_function_fingerprints,
-    write_standard_model_state,
 )
 
 
@@ -213,159 +196,6 @@ def test_given_project_when_building_plan_then_produces_expected_output(
     expected_progress_fragment: str
     for expected_progress_fragment in test_case.expected_progress_fragments:
         assert expected_progress_fragment in progress_output
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        SelectionAwareExecutionRoundTripTestCase(
-            description="partial selected table rebuild writes honest stale fingerprint",
-            previous_sql_by_model_name={
-                "a": "select 1 as id",
-                "b": "select 1 as id",
-                "c": 'select * from __ref("a") union all select * from __ref("b")',
-            },
-            current_sql_by_model_name={
-                "a": "select 10 as id",
-                "b": "select 2 as id",
-                "c": 'select * from __ref("a") union all select * from __ref("b")',
-            },
-            build_select=("b", "c"),
-            replan_select=("c",),
-            model_configs={"c": {"materialized": "table"}},
-            expected_built_model_names=("b", "c"),
-            expected_replan_model_names=(),
-            expected_replan_warning_fragments=("selected model 'c' will build on", "- a"),
-            expected_target_rows=((1,), (2,)),
-        ),
-        SelectionAwareExecutionRoundTripTestCase(
-            description="partial selected view rebuild writes honest stale fingerprint",
-            previous_sql_by_model_name={
-                "a": "select 1 as id",
-                "b": "select 1 as id",
-                "c": 'select * from __ref("a") union all select * from __ref("b")',
-            },
-            current_sql_by_model_name={
-                "a": "select 10 as id",
-                "b": "select 2 as id",
-                "c": 'select * from __ref("a") union all select * from __ref("b")',
-            },
-            build_select=("b", "c"),
-            replan_select=("c",),
-            model_configs={"c": {"materialized": "view"}},
-            expected_built_model_names=("b", "c"),
-            expected_replan_model_names=(),
-            expected_replan_warning_fragments=("selected model 'c' will build on", "- a"),
-            expected_target_rows=((1,), (2,)),
-        ),
-        SelectionAwareExecutionRoundTripTestCase(
-            description="partial selected append incremental rebuild writes honest stale fingerprint",
-            previous_sql_by_model_name={
-                "a": "select 1 as id",
-                "b": "select 1 as id",
-                "c": 'select * from __ref("a") union all select * from __ref("b")',
-            },
-            current_sql_by_model_name={
-                "a": "select 10 as id",
-                "b": "select 2 as id",
-                "c": 'select * from __ref("a") union all select * from __ref("b")',
-            },
-            build_select=("b", "c"),
-            replan_select=("c",),
-            model_configs={"c": {"materialized": "incremental", "incremental_strategy": "append"}},
-            expected_built_model_names=("b", "c"),
-            expected_replan_model_names=(),
-            expected_replan_warning_fragments=("selected model 'c' will build on", "- a"),
-            expected_target_rows=((1,), (1,), (2,)),
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_partial_selected_rebuild_when_executed_then_next_plan_still_reports_stale(
-    test_case: SelectionAwareExecutionRoundTripTestCase,
-    adapter: DuckDbAdapter,
-    connection: Any,
-) -> None:
-    previous_project: CompiledProject = build_standard_pruning_project(
-        test_case.previous_sql_by_model_name,
-        model_configs=test_case.model_configs,
-    )
-    current_project: CompiledProject = build_standard_pruning_project(
-        test_case.current_sql_by_model_name,
-        model_configs=test_case.model_configs,
-    )
-    write_standard_model_state(adapter=adapter, connection=connection, project=previous_project)
-    build_plan: PlanOutput = build_execution_plan_from_kwargs(
-        project=current_project,
-        adapter=adapter,
-        connection=connection,
-        select=test_case.build_select,
-        standard_scope_pruning=StandardScopePruning.PRUNE_UNCHANGED,
-    )
-    current_identities: StandardModelVersionIdentities = build_standard_model_version_identities(
-        functions=current_project.functions,
-        seeds=current_project.seeds,
-        scope=build_planner_scope(
-            project=current_project,
-            select=(),
-            exclude=(),
-            auto_load_sources=False,
-        ),
-    )
-    entries_by_name: dict[str, ModelPlanEntry] = {
-        entry.name: entry for entry in build_plan.model_entries
-    }
-
-    result: BuildExecutionResult = execute_build_plan(
-        plan=build_plan,
-        adapter=adapter,
-        connection_config={"database": ":memory:"},
-        connections=(connection,),
-        scheduler_connection=connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode.DIRECT,
-            run_id="partial_run",
-            run_audits=False,
-            run_tests=False,
-            query_change_tracking=True,
-        ),
-    )
-    target_rows: list[tuple[int]] = connection.execute(
-        "SELECT id FROM staging.c ORDER BY id"
-    ).fetchall()
-    latest_c_version_hash: str = str(
-        connection.execute(
-            "SELECT version_hash FROM staging._sqlbuild_fingerprints "
-            "WHERE node_type = 'model' AND node_name = 'c' "
-            "ORDER BY ts DESC LIMIT 1"
-        ).fetchone()[0]
-    )
-    replan: PlanOutput = build_execution_plan_from_kwargs(
-        project=current_project,
-        adapter=adapter,
-        connection=connection,
-        select=test_case.replan_select,
-        standard_scope_pruning=StandardScopePruning.PRUNE_UNCHANGED,
-    )
-    warning_text: str = "\n".join(warning.message for warning in replan.warnings)
-
-    assert (
-        tuple(entry.name for entry in build_plan.model_entries)
-        == test_case.expected_built_model_names
-    )
-    assert result.status == BuildStatus.SUCCESS
-    assert target_rows == list(test_case.expected_target_rows)
-    assert (
-        entries_by_name["c"].fingerprint_version_hash
-        != current_identities.model_version_hashes["c"]
-    )
-    assert latest_c_version_hash == entries_by_name["c"].fingerprint_version_hash
-    assert (
-        tuple(entry.name for entry in replan.model_entries) == test_case.expected_replan_model_names
-    )
-    expected_fragment: str
-    for expected_fragment in test_case.expected_replan_warning_fragments:
-        assert expected_fragment in warning_text
 
 
 @pytest.mark.parametrize(

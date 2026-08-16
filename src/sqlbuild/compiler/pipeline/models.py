@@ -40,7 +40,6 @@ class CompilePipelineOptions:
     exclude: tuple[str, ...] = ()
     cursor_overrides: CursorOverrides | None = None
     full_refresh: bool = False
-    changes_only: bool = False
     auto_load_sources: bool = False
     reload_sources: bool = False
     connection_config: dict[str, object] | None = None

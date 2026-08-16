@@ -20,7 +20,6 @@ from sqlbuild.compiler.node_source_watermarks.models import (
 )
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
-    GraphChangesOnlyPropagationResult,
     GraphIdentityNode,
     GraphNodeKey,
     MissingUpstream,
@@ -245,21 +244,6 @@ class GraphIdentityWritePerfTestCase:
     description: str
     layer_count: int
     expected_max_seconds: float
-
-
-@dataclass(frozen=True)
-class GraphChangesOnlyPropagationTestCase:
-    description: str
-    upstream_deps: dict[GraphNodeKey, tuple[GraphNodeKey, ...]]
-    model_keys: frozenset[GraphNodeKey]
-    selected_model_keys: frozenset[GraphNodeKey]
-    current_model_keys: frozenset[GraphNodeKey]
-    run_model_keys: frozenset[GraphNodeKey]
-    version_mismatch_model_keys: frozenset[GraphNodeKey]
-    expected_result: GraphChangesOnlyPropagationResult
-    changed_seed_keys: frozenset[GraphNodeKey] = frozenset()
-    changed_source_keys: frozenset[GraphNodeKey] = frozenset()
-    blocked_source_keys: frozenset[GraphNodeKey] = frozenset()
 
 
 @dataclass(frozen=True)

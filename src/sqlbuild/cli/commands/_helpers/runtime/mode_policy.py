@@ -26,6 +26,7 @@ def enforce_virtual_only_flags_in_virtual_mode(
     command_name: str,
     virtual_env: str | None,
     include_stale_upstreams: bool,
+    changes_only: bool = False,
 ) -> None:
     """Block virtual-environment-only flags on standard-mode projects."""
 
@@ -40,5 +41,10 @@ def enforce_virtual_only_flags_in_virtual_mode(
         raise CliUserError(
             f"{command_name} does not support --include-stale-upstreams unless "
             "virtual_environments = true",
+            code="C263",
+        )
+    if changes_only:
+        raise CliUserError(
+            f"{command_name} does not support --changes-only unless virtual_environments = true",
             code="C263",
         )
