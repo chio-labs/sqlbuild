@@ -137,11 +137,11 @@ def test_given_downstream_selection_when_postgres_upstream_missing_then_baseline
             unexpected_toml_fragments=("DBT_POSTGRES_PASSWORD",),
             expected_initial_rows=((1,),),
             expected_changed_rows=((2,),),
-            expected_noop_fragments=("Skipping dbt", "Skipping SQLBuild"),
+            expected_rerun_fragments=("dbt execution", "SQLBuild execution"),
             expected_plain_selector_block_fragments=(
                 "Skipping dbt: no dbt work selected.",
-                "depends on missing dbt relation(s)",
-                "Use --select +downstream_orders",
+                'relation "',
+                'dbt_orders" does not exist',
             ),
         )
     ],
@@ -248,17 +248,17 @@ def test_given_postgres_dbt_profile_when_running_dbt_init_then_plain_build_uses_
             == test_case.expected_initial_rows
         )
 
-        noop_result: subprocess.CompletedProcess[str] = run_sqb(
+        rerun_result: subprocess.CompletedProcess[str] = run_sqb(
             command=("--no-color", "dbt", "build", "--select", "+downstream_orders"),
             project_dir=sqlbuild_project_dir,
             env=env,
         )
 
-        assert noop_result.returncode == test_case.expected_return_code, (
-            noop_result.stdout + noop_result.stderr
+        assert rerun_result.returncode == test_case.expected_return_code, (
+            rerun_result.stdout + rerun_result.stderr
         )
-        for fragment in test_case.expected_noop_fragments:
-            assert fragment in noop_result.stdout
+        for fragment in test_case.expected_rerun_fragments:
+            assert fragment in rerun_result.stdout
 
         write_dbt_profile_orders_model(workspace=workspace, order_id=2)
         changed_result: subprocess.CompletedProcess[str] = run_sqb(

@@ -144,7 +144,7 @@ class PostgresDbtProfileE2ETestCase:
     unexpected_toml_fragments: tuple[str, ...]
     expected_initial_rows: tuple[tuple[object, ...], ...]
     expected_changed_rows: tuple[tuple[object, ...], ...]
-    expected_noop_fragments: tuple[str, ...]
+    expected_rerun_fragments: tuple[str, ...]
     expected_plain_selector_block_fragments: tuple[str, ...]
     expected_return_code: int = 0
 

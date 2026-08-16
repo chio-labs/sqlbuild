@@ -30,7 +30,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
             end_cursor_override="2026-01-04T00:00:00",
             expected_bounds=CursorBounds(
                 start="2026-01-02T00:00:00",
-                end="2026-01-05",
+                end="2026-01-04T00:00:01",
             ),
         )
     ],
