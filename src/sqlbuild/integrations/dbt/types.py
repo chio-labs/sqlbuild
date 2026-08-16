@@ -47,7 +47,6 @@ class DbtInteropCommand(StrEnum):
     TEST = "test"
     SCENARIO = "scenario"
     DEBUG = "debug"
-    DIFF = "diff"
     CLONE = "clone"
 
 

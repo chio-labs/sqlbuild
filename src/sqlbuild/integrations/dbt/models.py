@@ -12,7 +12,6 @@ from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.clone.models import CloneExecutionResult
-from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.integrations.dbt._helpers.selection.selector_terms import dbt_fqn_selector_term
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
@@ -254,34 +253,6 @@ class DbtProductionRefCompileResult:
     manifest_contents: str
     command: DbtCommandResult
     cache_hit: bool = False
-
-
-@dataclass(frozen=True)
-class DbtDiffOptions:
-    """Parsed SQLBuild dbt diff options."""
-
-    dbt_args: tuple[str, ...]
-    select: tuple[str, ...]
-    exclude: tuple[str, ...]
-    full: bool
-    schema_only: bool
-    bounded: str | None
-    verbose: bool
-    max_column_examples: int
-    max_row_only_examples: int
-
-
-@dataclass(frozen=True)
-class DbtDiffRun:
-    """dbt diff execution result with rendering labels."""
-
-    result: DiffExecutionResult
-    from_label: str
-    to_label: str
-    mode_label: str
-    verbose: bool
-    max_column_examples: int
-    max_row_only_examples: int
 
 
 @dataclass(frozen=True)

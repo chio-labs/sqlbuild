@@ -69,43 +69,6 @@ class DbtExecutionFailureCliTestCase:
 
 
 @dataclass(frozen=True)
-class DbtLineageE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    expected_node_ids: tuple[str, ...]
-    expected_edges: tuple[tuple[str, str], ...]
-    expected_focus: tuple[str, ...]
-    expected_direction: str
-    expected_node_metadata: tuple[tuple[str, str, object], ...] = ()
-
-
-@dataclass(frozen=True)
-class DbtColumnLineageE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    expected_target: tuple[str, str, str]
-    expected_edges: tuple[tuple[str, str], ...]
-    expected_direction: str
-    expected_warnings: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class DbtLineageTextE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    expected_stdout_fragments: tuple[str, ...]
-    expected_stderr_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtLineageErrorE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    expected_stderr_fragments: tuple[str, ...]
-    setup: Callable[[Path], None] | None = None
-
-
-@dataclass(frozen=True)
 class DbtTestCliTestCase:
     description: str
     command: tuple[str, ...]

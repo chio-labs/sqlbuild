@@ -311,38 +311,6 @@ def test_given_dbt_command_without_sqlbuild_project_when_dispatching_then_does_n
             ),
         ),
         MainTestCase(
-            description="dispatches dbt diff and preserves dbt args",
-            argv=[
-                "--project-dir",
-                "/tmp/demo",
-                "dbt",
-                "diff",
-                "--select",
-                "dbt_orders",
-                "--full",
-                "--target",
-                "prod",
-            ],
-            expected_exit_code=41,
-            expected_project_dir=Path("/tmp/demo"),
-            expected_dbt_args=("--select", "dbt_orders", "--full", "--target", "prod"),
-        ),
-        MainTestCase(
-            description="dispatches dbt diff with sqb project dir alias",
-            argv=[
-                "--sqb-project-dir",
-                "/tmp/demo",
-                "dbt",
-                "diff",
-                "--select",
-                "dbt_orders",
-                "--schema-only",
-            ],
-            expected_exit_code=41,
-            expected_project_dir=Path("/tmp/demo"),
-            expected_dbt_args=("--select", "dbt_orders", "--schema-only"),
-        ),
-        MainTestCase(
             description="dispatches dbt clone and preserves dbt args",
             argv=[
                 "--project-dir",
@@ -383,7 +351,6 @@ def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_di
             run_dbt_build=run_dbt_execution,
             run_dbt_test=run_dbt_execution,
             run_dbt_debug=run_dbt_execution,
-            run_dbt_diff=run_dbt_execution,
             run_dbt_clone=run_dbt_execution,
         ),
     )
