@@ -23,16 +23,12 @@ from sqlbuild.compiler.planner._helpers.planning.output_assembly import (
     with_plan_warnings,
 )
 from sqlbuild.compiler.planner._helpers.planning.reconciliation import reconcile_execution_changes
-from sqlbuild.compiler.planner._helpers.planning.reuse_resolution import resolve_standard_reuse
 from sqlbuild.compiler.planner._helpers.planning.scope_pruning import prune_planner_execution_scope
 from sqlbuild.compiler.planner._helpers.planning.scopes import resolve_planner_scopes
 from sqlbuild.compiler.planner._helpers.planning.warehouse_state import (
     gather_planner_warehouse_state,
 )
 from sqlbuild.compiler.planner._helpers.pruning.cascade import resolve_cascades
-from sqlbuild.compiler.planner._helpers.reuse.standard_reuse_from_target import (
-    enforce_standard_reuse_from_source_deferral_conflict,
-)
 from sqlbuild.compiler.planner._helpers.warehouse.source_freshness import (
     build_planner_source_freshness_result,
 )
@@ -45,7 +41,6 @@ from sqlbuild.compiler.planner.models import (
     PlannerOverrides,
     PlannerPolicies,
     PlannerResolvedActions,
-    PlannerReuseResolution,
     PlannerRuntime,
     PlannerScopePruningResult,
     PlannerScopeResolution,
@@ -83,13 +78,6 @@ def build_execution_plan(
         selection=selection,
         policies=policies,
     )
-    enforce_standard_reuse_from_source_deferral_conflict(
-        project=project,
-        project_config=project_config,
-        local_config=local_config,
-        defer_sources_to=deferral.defer_sources_to,
-        source_deferral_enabled=deferral.source_deferral_enabled,
-    )
     warehouse: PlannerWarehouseState = gather_planner_warehouse_state(
         runtime=runtime,
         scopes=scopes,
@@ -107,20 +95,11 @@ def build_execution_plan(
         snapshot=warehouse.snapshot,
         identities=identities,
     )
-    reuse: PlannerReuseResolution = resolve_standard_reuse(
-        runtime=runtime,
-        scopes=scopes,
-        warehouse=warehouse,
-        identities=identities,
-        overrides=overrides,
-        policies=policies,
-    )
     check_selected_scope_buildability(
         project=project,
         scopes=scopes,
         snapshot=warehouse.snapshot,
         deferral=deferral,
-        reuse=reuse,
     )
     changes: PlannerChangeResults = detect_changes(
         project=project,
@@ -149,7 +128,6 @@ def build_execution_plan(
     reconciliation: PlannerChangeReconciliation = reconcile_execution_changes(
         warehouse=warehouse,
         identities=identities,
-        reuse=reuse,
         pruning=pruning,
         changes=changes,
     )
@@ -160,7 +138,6 @@ def build_execution_plan(
         overrides=overrides,
         policies=policies,
         deferral=deferral,
-        reuse=reuse,
         pruning=pruning,
         reconciliation=reconciliation,
         source_freshness=source_freshness,
@@ -181,7 +158,6 @@ def build_execution_plan(
         warehouse=warehouse,
         identities=identities,
         stale_warning_changes=stale_warning_changes,
-        reuse=reuse,
         pruning=pruning,
         source_freshness=source_freshness,
         plan_output=plan_output,
@@ -189,7 +165,6 @@ def build_execution_plan(
     plan_output = with_plan_metadata(
         plan_output=plan_output,
         pruning=pruning,
-        reuse=reuse,
         source_freshness=source_freshness,
     )
     if on_progress is not None:

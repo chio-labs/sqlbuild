@@ -22,8 +22,6 @@ from sqlbuild.compiler.node_source_watermarks.models import (
 )
 from sqlbuild.compiler.node_source_watermarks.types import WatermarkGraphResourceKind
 from sqlbuild.compiler.planner.models import (
-    DependencyBaselinePlanEntry,
-    ExistingDestinationInputPlanEntry,
     GraphNodeKey,
     ModelPlanEntry,
     PlanOutput,
@@ -89,34 +87,6 @@ def _nodes_by_key(*, plan: PlanOutput) -> dict[WatermarkGraphKey, WatermarkGraph
             key=key,
             resource_kind=WatermarkGraphResourceKind.MODEL,
             materialized=model_entry.materialization_type != MaterializationType.VIEW,
-        )
-    existing_entry: ExistingDestinationInputPlanEntry
-    for existing_entry in plan.existing_destination_input_entries:
-        key = WatermarkGraphKey(
-            node_type=CompiledResourceType.MODEL.value,
-            node_name=existing_entry.name,
-        )
-        nodes.setdefault(
-            key,
-            WatermarkGraphNode(
-                key=key,
-                resource_kind=WatermarkGraphResourceKind.MODEL,
-                materialized=True,
-            ),
-        )
-    baseline_entry: DependencyBaselinePlanEntry
-    for baseline_entry in plan.dependency_baseline_entries:
-        key = WatermarkGraphKey(
-            node_type=CompiledResourceType.MODEL.value,
-            node_name=baseline_entry.name,
-        )
-        nodes.setdefault(
-            key,
-            WatermarkGraphNode(
-                key=key,
-                resource_kind=WatermarkGraphResourceKind.MODEL,
-                materialized=baseline_entry.resource_label != MaterializationType.VIEW.value,
-            ),
         )
     selected_key: CompiledObjectKey
     for selected_key in plan.selected_keys:

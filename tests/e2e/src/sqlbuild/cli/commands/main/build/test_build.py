@@ -14,7 +14,6 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     BuildE2ETestCase,
     DeferCloneBuildE2ETestCase,
-    DependencyBaselineBuildE2ETestCase,
     DirectChangesOnlyBuildE2ETestCase,
     PythonBuildE2ETestCase,
     PythonLoaderPersistedResultBuildE2ETestCase,
@@ -26,12 +25,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     assert_defer_clone_build_case,
-    assert_dependency_baseline_build_case,
     build_freshness_error_branch_source_yml,
-    downstream_model_sql,
-    incremental_upstream_model_sql,
-    raw_orders_setup_sql,
-    table_upstream_model_sql,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     execute_duckdb,
@@ -72,9 +66,6 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
             expected_stdout_fragments=(
                 "Prephase  defer clone",
-                "Existing destination inputs (1)",
-                "upstream",
-                "[for downstream]",
                 "First run (1)",
                 "downstream",
                 "Completed successfully.",
@@ -94,100 +85,6 @@ def test_given_selected_downstream_when_building_with_defer_clone_then_clones_bo
 ) -> None:
     assert test_case.expected_stdout_fragments
     assert_defer_clone_build_case(tmp_path=tmp_path, test_case=test_case)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DependencyBaselineBuildE2ETestCase(
-            description="missing table upstream is baselined before downstream build",
-            project_name="dependency_baseline_missing_table",
-            upstream_sql=table_upstream_model_sql(amount=100),
-            downstream_sql=downstream_model_sql(),
-            prod_setup_sql=raw_orders_setup_sql(
-                rows_sql="(1, 100, TIMESTAMP '2026-01-01 00:00:00')"
-            ),
-            setup_commands=(("--no-color", "build", "--target", "prod", "--select", "upstream"),),
-            command=("--no-color", "build", "--select", "downstream"),
-            expected_stdout_fragments=(
-                "Plan ready (1 selected)",
-                "Reused inputs (1)",
-                "upstream",
-                "from reuse origin target",
-                "downstream",
-                "Completed successfully.",
-            ),
-            unexpected_stdout_fragments=("cannot build selected scope",),
-            expected_upstream_rows=((1, 100),),
-            expected_downstream_rows=((1, 100),),
-            expected_fingerprint_rows=(("model", "downstream"),),
-        ),
-        DependencyBaselineBuildE2ETestCase(
-            description="current table upstream does not baseline",
-            project_name="dependency_baseline_current_table",
-            upstream_sql=table_upstream_model_sql(amount=110),
-            downstream_sql=downstream_model_sql(),
-            prod_setup_sql=raw_orders_setup_sql(
-                rows_sql="(1, 110, TIMESTAMP '2026-01-01 00:00:00')"
-            ),
-            setup_commands=(
-                ("--no-color", "build", "--target", "prod", "--select", "upstream"),
-                ("--no-color", "build", "--target", "dev", "--select", "upstream"),
-            ),
-            command=("--no-color", "build", "--select", "downstream"),
-            expected_stdout_fragments=("Plan ready (1 selected)", "downstream"),
-            unexpected_stdout_fragments=("Reused inputs",),
-            expected_upstream_rows=((1, 110),),
-            expected_downstream_rows=((1, 110),),
-            expected_fingerprint_rows=(("model", "downstream"), ("model", "upstream")),
-        ),
-        DependencyBaselineBuildE2ETestCase(
-            description="stale table upstream is baselined before downstream build",
-            project_name="dependency_baseline_stale_table",
-            upstream_sql=table_upstream_model_sql(amount=120),
-            downstream_sql=downstream_model_sql(),
-            prod_setup_sql=raw_orders_setup_sql(
-                rows_sql="(1, 120, TIMESTAMP '2026-01-01 00:00:00')"
-            ),
-            dev_setup_sql=(
-                "CREATE SCHEMA dev;\nCREATE TABLE dev.upstream AS SELECT 1 AS id, 999 AS amount;\n"
-            ),
-            setup_commands=(("--no-color", "build", "--target", "prod", "--select", "upstream"),),
-            command=("--no-color", "build", "--select", "downstream"),
-            expected_stdout_fragments=("Reused inputs (1)", "from reuse origin target"),
-            unexpected_stdout_fragments=("cannot build selected scope",),
-            expected_upstream_rows=((1, 120),),
-            expected_downstream_rows=((1, 120),),
-            expected_fingerprint_rows=(("model", "downstream"),),
-        ),
-        DependencyBaselineBuildE2ETestCase(
-            description="incremental upstream baselines whole relation without catch-up",
-            project_name="dependency_baseline_incremental_whole_relation",
-            upstream_sql=incremental_upstream_model_sql(),
-            downstream_sql=downstream_model_sql(),
-            prod_setup_sql=raw_orders_setup_sql(
-                rows_sql="(1, 130, TIMESTAMP '2026-01-01 00:00:00')"
-            ),
-            setup_commands=(("--no-color", "build", "--target", "prod", "--select", "upstream"),),
-            dev_setup_sql=(
-                "INSERT INTO main.raw_orders VALUES (2, 131, TIMESTAMP '2026-01-02 00:00:00');\n"
-            ),
-            command=("--no-color", "build", "--select", "downstream"),
-            expected_stdout_fragments=("Reused inputs (1)", "from reuse origin target"),
-            unexpected_stdout_fragments=("incremental_append",),
-            expected_upstream_rows=((1, 130),),
-            expected_downstream_rows=((1, 130),),
-            expected_fingerprint_rows=(("model", "downstream"),),
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_dependency_baseline_project_when_building_downstream_then_prepares_upstream(
-    tmp_path: Path,
-    test_case: DependencyBaselineBuildE2ETestCase,
-) -> None:
-    assert test_case.expected_stdout_fragments
-    assert_dependency_baseline_build_case(tmp_path=tmp_path, test_case=test_case)
 
 
 @pytest.mark.parametrize(

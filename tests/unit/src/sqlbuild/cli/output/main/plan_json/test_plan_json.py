@@ -18,7 +18,6 @@ from sqlbuild.compiler.planner.types import (
     MaterializationType,
     PlanAction,
     PlanReason,
-    RelationReuseKind,
     WarningSeverity,
 )
 from sqlbuild.compiler.python_nodes.types import (
@@ -31,7 +30,6 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
     build_model_entry,
     build_plan_output,
     build_plan_provider_usage,
-    build_relation_reuse_plan,
     build_seed_entry,
     build_source_load_entry,
     build_warning,
@@ -158,34 +156,6 @@ from tests.unit.src.sqlbuild.cli.output.main.plan_json._test_types import JsonOu
                 '"built_version_hash": "built_hash"',
                 '"built_version_present": true',
                 '"identity_status": "unknown"',
-            ),
-        ),
-        JsonOutputTestCase(
-            description="plan json includes relation reuse metadata",
-            plan_output=build_plan_output(
-                model_entries=(
-                    build_model_entry(
-                        name="orders",
-                        action=PlanAction.CREATE_TABLE,
-                        reason=PlanReason.FIRST_RUN,
-                        materialization_type=MaterializationType.TABLE,
-                        relation_reuse=build_relation_reuse_plan(
-                            kind=RelationReuseKind.COMPLETE_RELATION_REUSE,
-                            reuse_from_target_name="prod",
-                            origin_schema="prod_marts",
-                            origin_name="orders",
-                            hard_copy=True,
-                        ),
-                    ),
-                ),
-            ),
-            expected_keys=("models",),
-            expected_fragments=(
-                '"relation_reuse"',
-                '"kind": "complete_relation_reuse"',
-                '"reuse_from_target": "prod"',
-                '"origin_relation": "prod_marts.orders"',
-                '"hard_copy": true',
             ),
         ),
         JsonOutputTestCase(

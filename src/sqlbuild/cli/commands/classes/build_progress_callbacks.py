@@ -87,8 +87,7 @@ class BuildProgressCallbacks:
         }
         self._test_results_by_model: dict[str, SqlTestExecutionResult] = {}
         self._total: int = (
-            len(plan.dependency_baseline_entries)
-            + len(plan.model_entries)
+            len(plan.model_entries)
             + len(plan.seed_entries)
             + len(plan.function_entries)
             + sum(
@@ -120,11 +119,6 @@ class BuildProgressCallbacks:
         self._prefix_width: int = 2 + ctr_width + 2
 
         max_name_len: int = 0
-        baseline_entry: object
-        for baseline_entry in plan.dependency_baseline_entries:
-            max_name_len = max(
-                max_name_len, len(getattr(baseline_entry, "name", str(baseline_entry)))
-            )
         entry: ModelPlanEntry
         for entry in plan.model_entries:
             annotation: str = model_execution_annotation(entry)

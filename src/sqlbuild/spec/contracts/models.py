@@ -61,9 +61,7 @@ class TargetConfig:
     loader_schema: str | None = None
     defer_sources_to: str | None = None
     defer_clone_from: str | None = None
-    reuse_from: str | None = None
     changes_only: bool | None = None
-    reuse_hard_copy: bool = False
     clone: ClonePolicy = field(default_factory=ClonePolicy)
     state: StateConfig = field(default_factory=StateConfig)
 
@@ -79,9 +77,7 @@ class LocalTargetConfig:
     loader_schema: str | None = None
     defer_sources_to: str | None = None
     defer_clone_from: str | None = None
-    reuse_from: str | None = None
     changes_only: bool | None = None
-    reuse_hard_copy: bool | None = None
     clone: LocalClonePolicy = field(default_factory=LocalClonePolicy)
     state: LocalStateConfig = field(default_factory=LocalStateConfig)
 

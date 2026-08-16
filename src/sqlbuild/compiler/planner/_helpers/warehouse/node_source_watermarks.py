@@ -15,8 +15,6 @@ from sqlbuild.compiler.node_source_watermarks.models import (
     NodeSourceWatermarkSet,
 )
 from sqlbuild.compiler.planner.models import (
-    DependencyBaselinePlanEntry,
-    ExistingDestinationInputPlanEntry,
     ModelPlanEntry,
     PlanOutput,
 )
@@ -64,12 +62,4 @@ def _state_targets(*, plan: PlanOutput) -> tuple[tuple[str | None, str], ...]:
     for model_entry in plan.model_entries:
         if model_entry.destination.schema is not None:
             targets.add((model_entry.destination.database, model_entry.destination.schema))
-    existing_entry: ExistingDestinationInputPlanEntry
-    for existing_entry in plan.existing_destination_input_entries:
-        if existing_entry.destination.schema is not None:
-            targets.add((existing_entry.destination.database, existing_entry.destination.schema))
-    baseline_entry: DependencyBaselinePlanEntry
-    for baseline_entry in plan.dependency_baseline_entries:
-        if baseline_entry.destination.schema is not None:
-            targets.add((baseline_entry.destination.database, baseline_entry.destination.schema))
     return tuple(sorted(targets, key=lambda value: (value[0] or "", value[1])))

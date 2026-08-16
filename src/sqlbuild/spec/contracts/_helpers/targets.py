@@ -47,12 +47,6 @@ def resolve_target_config(
     project_target: TargetConfig = project_config.targets.get(target_name, TargetConfig())
     local_target: LocalTargetConfig | None = local_config.targets.get(target_name)
     if local_target is None:
-        _validate_reuse_config(
-            target_name=target_name,
-            target_config=project_target,
-            project_config=project_config,
-            local_config=local_config,
-        )
         return project_target
     target_config: TargetConfig = TargetConfig(
         connection={**project_target.connection, **local_target.connection},
@@ -76,20 +70,10 @@ def resolve_target_config(
             if local_target.defer_clone_from is not None
             else project_target.defer_clone_from
         ),
-        reuse_from=(
-            local_target.reuse_from
-            if local_target.reuse_from is not None
-            else project_target.reuse_from
-        ),
         changes_only=(
             local_target.changes_only
             if local_target.changes_only is not None
             else project_target.changes_only
-        ),
-        reuse_hard_copy=(
-            local_target.reuse_hard_copy
-            if local_target.reuse_hard_copy is not None
-            else project_target.reuse_hard_copy
         ),
         clone=_merge_clone_policy(
             project_clone=project_target.clone,
@@ -99,12 +83,6 @@ def resolve_target_config(
             project_state=project_target.state,
             local_state=local_target.state,
         ),
-    )
-    _validate_reuse_config(
-        target_name=target_name,
-        target_config=target_config,
-        project_config=project_config,
-        local_config=local_config,
     )
     return target_config
 
@@ -138,25 +116,6 @@ def resolve_effective_changes_only(
         if CHANGES_ONLY_SETTING_OVERRIDE_KEY in local_config.setting_overrides
         else project_config.settings.changes_only
     )
-
-
-def _validate_reuse_config(
-    *,
-    target_name: str,
-    target_config: TargetConfig,
-    project_config: ProjectConfig,
-    local_config: LocalConfig,
-) -> None:
-    reuse_from: str | None = target_config.reuse_from
-    if reuse_from is None:
-        return
-    if reuse_from == target_name:
-        raise SpecConfigError(f"Target '{target_name}' cannot reuse from itself")
-    known_targets: set[str] = set(project_config.targets) | set(local_config.targets)
-    if reuse_from not in known_targets:
-        raise SpecConfigError(
-            f"Target '{target_name}' reuse_from references unknown target '{reuse_from}'"
-        )
 
 
 def _merge_clone_policy(

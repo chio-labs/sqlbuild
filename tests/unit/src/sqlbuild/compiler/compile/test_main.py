@@ -2688,8 +2688,6 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
             expected_vars={"shared": "local", "project_only": "present"},
             expected_database="local_db",
             expected_schema="project_schema",
-            expected_reuse_from="prod",
-            expected_reuse_hard_copy=False,
             expected_allow_as_clone_origin=False,
             expected_allow_as_clone_destination=True,
         )
@@ -2709,8 +2707,6 @@ def test_given_project_and_local_environment_when_resolving_then_local_values_ov
                     vars={"shared": "project", "project_only": "present"},
                     database="project_db",
                     schema="project_schema",
-                    reuse_from="staging",
-                    reuse_hard_copy=True,
                     clone=ClonePolicy(
                         allow_as_clone_origin=True,
                         allow_as_clone_destination=True,
@@ -2725,8 +2721,6 @@ def test_given_project_and_local_environment_when_resolving_then_local_values_ov
                     connection={"warehouse": "local_wh"},
                     vars={"shared": "local"},
                     database="local_db",
-                    reuse_from="prod",
-                    reuse_hard_copy=False,
                     clone=LocalClonePolicy(allow_as_clone_origin=False),
                 )
             }
@@ -2738,8 +2732,6 @@ def test_given_project_and_local_environment_when_resolving_then_local_values_ov
     assert environment.vars == test_case.expected_vars
     assert environment.database == test_case.expected_database
     assert environment.schema == test_case.expected_schema
-    assert environment.reuse_from == test_case.expected_reuse_from
-    assert environment.reuse_hard_copy is test_case.expected_reuse_hard_copy
     assert environment.clone.allow_as_clone_origin is test_case.expected_allow_as_clone_origin
     assert (
         environment.clone.allow_as_clone_destination
