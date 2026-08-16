@@ -49,7 +49,6 @@ from sqlbuild.compiler.planner.types import (
     WarningSeverity,
 )
 from sqlbuild.compiler.source_freshness.models import (
-    SourceFreshnessIdentity,
     StandardSourceFreshnessPlanningResult,
 )
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
@@ -939,17 +938,6 @@ class PlanOutput:
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
     provider_usages: tuple[PlanProviderUsage, ...] = field(default_factory=tuple)
     source_freshness: StandardSourceFreshnessPlanningResult | None = None
-    node_source_watermark_node_keys: frozenset[GraphNodeKey] = field(default_factory=frozenset)
-    node_source_watermark_materialized_node_keys: frozenset[GraphNodeKey] = field(
-        default_factory=frozenset
-    )
-    node_source_watermark_upstream_deps: dict[GraphNodeKey, tuple[GraphNodeKey, ...]] = field(
-        default_factory=dict
-    )
-    node_source_watermark_source_identities_by_key: dict[
-        GraphNodeKey,
-        SourceFreshnessIdentity,
-    ] = field(default_factory=dict)
     python_identity_fingerprints: dict[tuple[str, str], Fingerprint] = field(default_factory=dict)
     metadata: dict[str, object] = field(default_factory=dict)
 

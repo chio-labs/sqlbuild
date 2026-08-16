@@ -5,13 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkExecutionContext
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.build._helpers.node_source_watermarks import (
-    build_native_node_source_watermark_context,
-    write_native_node_source_watermark_records,
-)
 from sqlbuild.executor.build._helpers.output import aggregate_build_result
 from sqlbuild.executor.build.classes.build_scheduler import BuildScheduler
 from sqlbuild.executor.build.models import (
@@ -23,7 +18,6 @@ from sqlbuild.executor.build.models import (
     FunctionExecutionResult,
     SeedExecutionResult,
 )
-from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
@@ -50,13 +44,6 @@ def execute_build_plan(
     resolved_initial_state: BuildInitialState = (
         initial_state if initial_state is not None else BuildInitialState()
     )
-    node_source_watermark_context: NodeSourceWatermarkExecutionContext | None = (
-        build_native_node_source_watermark_context(
-            plan=plan,
-            adapter=adapter,
-            connection=scheduler_connection,
-        )
-    )
     scheduler: BuildScheduler = BuildScheduler(
         plan=plan,
         adapter=adapter,
@@ -67,7 +54,6 @@ def execute_build_plan(
         callbacks=resolved_callbacks,
         customizations=resolved_customizations,
         initial_state=resolved_initial_state,
-        node_source_watermark_context=node_source_watermark_context,
     )
 
     model_results: tuple[ModelExecutionResult, ...]
@@ -96,10 +82,4 @@ def execute_build_plan(
         source_audit_results=source_audit_results,
         end_audit_results=end_audit_results,
     )
-    if result.status == BuildStatus.SUCCESS:
-        write_native_node_source_watermark_records(
-            context=node_source_watermark_context,
-            adapter=adapter,
-            connection=scheduler_connection,
-        )
     return result

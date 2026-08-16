@@ -13,7 +13,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
     PostgresBuildE2ETestCase,
     PostgresDbtProfileE2ETestCase,
     PostgresDbtSeedChangeE2ETestCase,
-    PostgresDependencyBaselineE2ETestCase,
     PostgresIntermediateDagStrategyE2ETestCase,
     PostgresLoaderWaffleShopE2ETestCase,
     PostgresNodeResultE2ETestCase,
@@ -30,7 +29,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
     assert_current_postgres_snapshot_rows_from_case,
     assert_postgres_snapshot_apply_rows,
     assert_postgres_snapshot_matrix_rows,
-    build_postgres_dependency_baseline_project_toml,
     build_postgres_project_toml,
     build_postgres_source_deferral_project_toml,
     build_unique_schema_name,
@@ -51,7 +49,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     add_dbt_profile_downstream_model,
-    assert_real_adapter_dependency_baseline_case,
     build_current_check_customers_model_sql,
     build_current_customers_model_sql,
     build_current_delete_customers_model_sql,
@@ -65,61 +62,6 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     stringify_warehouse_rows,
     write_dbt_profile_orders_model,
 )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        PostgresDependencyBaselineE2ETestCase(
-            description="direct dependency baseline copies prod upstream on Postgres",
-            schema_prefix="sqb_dep_base",
-            command=("--no-color", "build", "--select", "downstream"),
-            expected_stdout_fragments=(
-                "Plan ready (1 selected)",
-                "Reused inputs (1)",
-                "upstream",
-                "from reuse origin target",
-                "downstream",
-                "Completed successfully.",
-            ),
-            expected_absent_stdout_fragments=("cannot build selected scope",),
-            expected_upstream_rows=((1, 900),),
-            expected_downstream_rows=((1, 900),),
-            expected_fingerprint_rows=(("model", "downstream"),),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_downstream_selection_when_postgres_upstream_missing_then_baselines_from_prod(
-    tmp_path: Path,
-    postgres_e2e_config: dict[str, object],
-    test_case: PostgresDependencyBaselineE2ETestCase,
-) -> None:
-    assert test_case.expected_upstream_rows == ((1, 900),)
-    schema_base: str = build_unique_schema_name(prefix=test_case.schema_prefix)
-    dev_schema_name: str = f"{schema_base}_dev"
-    prod_schema_name: str = f"{schema_base}_prod"
-    assert_real_adapter_dependency_baseline_case(
-        tmp_path=tmp_path,
-        test_case=test_case,
-        project_name="postgres_dependency_baseline",
-        dev_schema_name=dev_schema_name,
-        prod_schema_name=prod_schema_name,
-        project_toml=build_postgres_dependency_baseline_project_toml(
-            project_name="postgres_dependency_baseline",
-            dev_schema_name=dev_schema_name,
-            prod_schema_name=prod_schema_name,
-            config=postgres_e2e_config,
-        ),
-        ensure_schema_ready=lambda schema_name: ensure_postgres_schema_ready(
-            schema_name=schema_name, config=postgres_e2e_config
-        ),
-        cleanup_schema=lambda schema_name: cleanup_postgres_schema(
-            schema_name=schema_name, config=postgres_e2e_config
-        ),
-        fetch_rows=lambda sql: fetch_postgres_rows(config=postgres_e2e_config, sql=sql),
-        relation_name=lambda schema_name, name: relation_name(schema_name=schema_name, name=name),
-    )
 
 
 @pytest.mark.dbt

@@ -12,7 +12,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery._test_types import (
     BigQueryCliTestCase,
     BigQueryCloneE2ETestCase,
     BigQueryDbtProfileE2ETestCase,
-    BigQueryDependencyBaselineE2ETestCase,
     BigQueryDiffE2ETestCase,
     BigQueryErrorE2ETestCase,
     BigQueryIntermediateDagStrategyE2ETestCase,
@@ -35,7 +34,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery.helpers import (
     assert_bigquery_snapshot_matrix_rows,
     assert_current_bigquery_snapshot_rows,
     bigquery_relation_row_count,
-    build_bigquery_dependency_baseline_project_toml,
     build_bigquery_local_config,
     build_bigquery_project_toml,
     build_bigquery_source_deferral_project_toml,
@@ -66,7 +64,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     assert_dbt_profile_lifecycle,
-    assert_real_adapter_dependency_baseline_case,
     build_current_check_customers_model_sql,
     build_current_customers_model_sql,
     build_current_delete_customers_model_sql,
@@ -83,59 +80,6 @@ from tests.integration.src.sqlbuild.adapters.bigquery.helpers import (
     build_bigquery_connection_config,
     build_unique_dataset_name,
 )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        BigQueryDependencyBaselineE2ETestCase(
-            description="direct dependency baseline copies prod upstream on BigQuery",
-            schema_prefix="sqb_dep_base",
-            command=("--no-color", "build", "--select", "downstream"),
-            expected_stdout_fragments=(
-                "Plan ready (1 selected)",
-                "Reused inputs (1)",
-                "upstream",
-                "from reuse origin target",
-                "downstream",
-                "Completed successfully.",
-            ),
-            expected_absent_stdout_fragments=("cannot build selected scope",),
-            expected_upstream_rows=((1, 900),),
-            expected_downstream_rows=((1, 900),),
-            expected_fingerprint_rows=(("model", "downstream"),),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_downstream_selection_when_bigquery_upstream_missing_then_baselines_from_prod(
-    tmp_path: Path,
-    test_case: BigQueryDependencyBaselineE2ETestCase,
-) -> None:
-    assert test_case.expected_upstream_rows == ((1, 900),)
-    dataset_base: str = build_unique_dataset_name(prefix=test_case.schema_prefix)
-    dev_dataset_name: str = f"{dataset_base}_dev"
-    prod_dataset_name: str = f"{dataset_base}_prod"
-    assert_real_adapter_dependency_baseline_case(
-        tmp_path=tmp_path,
-        test_case=test_case,
-        project_name="bigquery_dependency_baseline",
-        dev_schema_name=dev_dataset_name,
-        prod_schema_name=prod_dataset_name,
-        project_toml=build_bigquery_dependency_baseline_project_toml(
-            project_name="bigquery_dependency_baseline",
-            dev_dataset_name=dev_dataset_name,
-            prod_dataset_name=prod_dataset_name,
-        ),
-        ensure_schema_ready=lambda dataset_name: ensure_bigquery_dataset_ready(
-            dataset_name=dataset_name
-        ),
-        cleanup_schema=lambda dataset_name: cleanup_bigquery_dataset(dataset_name=dataset_name),
-        fetch_rows=lambda sql: fetch_bigquery_rows(dataset_name=dev_dataset_name, sql=sql),
-        relation_name=lambda dataset_name, name: relation_name(
-            dataset_name=dataset_name, name=name
-        ),
-    )
 
 
 @pytest.mark.dbt

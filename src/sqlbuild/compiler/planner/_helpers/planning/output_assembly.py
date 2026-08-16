@@ -6,14 +6,8 @@ from dataclasses import replace
 
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.output.plan_output import build_plan_output
-from sqlbuild.compiler.planner._helpers.pruning.node_source_watermark_staleness import (
-    build_node_source_watermark_staleness_warnings,
-)
 from sqlbuild.compiler.planner._helpers.pruning.selection_staleness import (
     build_stale_out_of_selection_warnings,
-)
-from sqlbuild.compiler.planner._helpers.warehouse.node_source_watermarks import (
-    read_latest_node_source_watermarks_for_plan,
 )
 from sqlbuild.compiler.planner.models import (
     PlannerChangeReconciliation,
@@ -84,7 +78,7 @@ def with_plan_warnings(
     source_freshness: StandardSourceFreshnessPlanningResult,
     plan_output: PlanOutput,
 ) -> PlanOutput:
-    """Append stale-out-of-selection and node-source-watermark warnings to the plan."""
+    """Append stale-out-of-selection warnings to the plan."""
 
     stale_out_of_selection_warnings: tuple[PlanWarning, ...] = (
         build_stale_out_of_selection_warnings(
@@ -97,21 +91,6 @@ def with_plan_warnings(
             include_sources=False,
         )
     )
-    node_source_watermark_warnings: tuple[PlanWarning, ...] = (
-        build_node_source_watermark_staleness_warnings(
-            plan=plan_output,
-            watermark_records=read_latest_node_source_watermarks_for_plan(
-                plan=plan_output,
-                adapter=runtime.adapter,
-                connection=runtime.connection,
-            ),
-        )
-    )
-    if node_source_watermark_warnings:
-        plan_output = replace(
-            plan_output,
-            warnings=(*plan_output.warnings, *node_source_watermark_warnings),
-        )
     if stale_out_of_selection_warnings:
         plan_output = replace(
             plan_output,

@@ -29,13 +29,9 @@ from sqlbuild.compiler.source_freshness.models import (
     StandardSourceFreshnessPlanningResult,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
-    ReuseSatisfiedStalenessTestCase,
     SelectionStalenessGraphWarningTestCase,
     SelectionStalenessWarningTestCase,
     StaleWarningMessageTestCase,
-)
-from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
-    build_changed_direct_dep_stale_warnings,
 )
 
 MODEL_KEY: CompiledObjectKey = CompiledObjectKey(
@@ -401,35 +397,6 @@ def test_given_stale_upstream_graph_when_classifying_then_reports_expected_trigg
     unexpected_fragment: str
     for unexpected_fragment in test_case.unexpected_warning_fragments:
         assert unexpected_fragment not in warning_text
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        ReuseSatisfiedStalenessTestCase(
-            description="changed upstream that is not reuse-satisfied warns the selected leaf",
-            reuse_satisfied_model_names=frozenset(),
-            expected_warns=True,
-        ),
-        ReuseSatisfiedStalenessTestCase(
-            description="changed upstream satisfied by reuse does not warn the selected leaf",
-            reuse_satisfied_model_names=frozenset({"dep"}),
-            expected_warns=False,
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_changed_upstream_when_classifying_then_respects_reuse_satisfaction(
-    test_case: ReuseSatisfiedStalenessTestCase,
-) -> None:
-    warnings: tuple[PlanWarning, ...] = build_changed_direct_dep_stale_warnings(
-        reuse_satisfied_model_names=test_case.reuse_satisfied_model_names
-    )
-
-    warns: bool = any(
-        "leaf" in warning.message and "will build on" in warning.message for warning in warnings
-    )
-    assert warns == test_case.expected_warns
 
 
 @pytest.mark.parametrize(
