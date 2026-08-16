@@ -144,13 +144,7 @@ def build_execution_plan(
     )
     pruning: PlannerScopePruningResult = prune_planner_execution_scope(
         scopes=scopes,
-        warehouse=warehouse,
-        identities=identities,
-        overrides=overrides,
-        policies=policies,
-        stale_warning_changes=stale_warning_changes,
         resolved_actions=resolved_actions,
-        source_freshness=source_freshness,
     )
     reconciliation: PlannerChangeReconciliation = reconcile_execution_changes(
         warehouse=warehouse,

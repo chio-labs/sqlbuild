@@ -4,7 +4,6 @@ from sqlbuild.compiler.planner.models import (
     SelectionStalenessGraph,
     SelectionStalenessWarning,
 )
-from sqlbuild.compiler.planner.types import StandardScopePruning
 
 
 @dataclass(frozen=True)
@@ -21,7 +20,6 @@ class CloneBoundaryTestCase:
 @dataclass(frozen=True)
 class StandardSourceFreshnessPlanOutputTestCase:
     description: str
-    standard_scope_pruning: StandardScopePruning
     expected_has_source_freshness: bool
 
 
@@ -78,20 +76,6 @@ class StandardReuseFromSourceDeferralConflictTestCase:
     defer_sources_to: str | None
     target_defer_sources_to: str | None
     expected_error_fragment: str
-
-
-@dataclass(frozen=True)
-class StandardSelectionAwareStalenessTestCase:
-    description: str
-    previous_sql_by_model_name: dict[str, str]
-    current_sql_by_model_name: dict[str, str]
-    select: tuple[str, ...]
-    expected_model_names: tuple[str, ...]
-    expected_warning_fragments: tuple[str, ...]
-    full_refresh: bool = False
-    model_configs: dict[str, dict[str, object]] | None = None
-    expected_current_version_hash_model_names: tuple[str, ...] = ()
-    expected_non_current_version_hash_model_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

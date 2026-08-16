@@ -56,11 +56,6 @@ class WorkSelectionPolicy(StrEnum):
     STALE_ONLY = "stale_only"
 
 
-class StandardScopePruning(StrEnum):
-    NONE = "none"
-    PRUNE_UNCHANGED = "prune_unchanged"
-
-
 class GraphResourceKind(StrEnum):
     MODEL = "model"
     SEED = "seed"

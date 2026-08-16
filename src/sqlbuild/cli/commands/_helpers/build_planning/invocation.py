@@ -80,6 +80,7 @@ def resolve_build_invocation(*, request: BuildCommandRequest) -> BuildInvocation
         command_name="build",
         virtual_env=request.virtual_env,
         include_stale_upstreams=request.include_stale_upstreams,
+        changes_only=effective_changes_only,
     )
     adapter_context: AdapterConnectionContext = resolve_adapter_connection_context(
         discovered_inputs=discovered_inputs,

@@ -47,7 +47,6 @@ from sqlbuild.compiler.planner.types import (
     SchemaChangeKind,
     SchemaColumnSource,
     SelectorKind,
-    StandardScopePruning,
     WarningSeverity,
 )
 from sqlbuild.compiler.source_freshness.models import (
@@ -112,38 +111,6 @@ class GraphIdentityNode:
     resource_kind: GraphResourceKind
     upstream_keys: tuple[GraphNodeKey, ...]
     local_hash: str | None
-
-
-@dataclass(frozen=True)
-class GraphChangesOnlyPropagationResult:
-    """Neutral changes-only propagation result for selected model nodes."""
-
-    blocked_model_keys: frozenset[GraphNodeKey] = frozenset()
-    identity_stale_model_keys: frozenset[GraphNodeKey] = frozenset()
-    source_changed_model_keys: frozenset[GraphNodeKey] = frozenset()
-    seed_changed_model_keys: frozenset[GraphNodeKey] = frozenset()
-    upstream_changed_model_keys: frozenset[GraphNodeKey] = frozenset()
-    blocked_source_keys_by_model_key: dict[GraphNodeKey, tuple[GraphNodeKey, ...]] = field(
-        default_factory=dict
-    )
-
-
-@dataclass(frozen=True)
-class GraphChangesOnlyPropagationInput:
-    """Neutral graph execution propagation input for selected model nodes."""
-
-    upstream_deps: dict[GraphNodeKey, tuple[GraphNodeKey, ...]]
-    model_keys: frozenset[GraphNodeKey]
-    selected_model_keys: frozenset[GraphNodeKey]
-    current_model_keys: frozenset[GraphNodeKey]
-    run_model_keys: frozenset[GraphNodeKey]
-    version_mismatch_model_keys: frozenset[GraphNodeKey]
-    run_parent_keys: frozenset[GraphNodeKey] | None = None
-    selected_parent_keys: frozenset[GraphNodeKey] | None = None
-    identity_stale_model_keys: frozenset[GraphNodeKey] = frozenset()
-    changed_seed_keys: frozenset[GraphNodeKey] = frozenset()
-    changed_source_keys: frozenset[GraphNodeKey] = frozenset()
-    blocked_source_keys: frozenset[GraphNodeKey] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -1198,7 +1165,6 @@ class DeferralInputs:
 class PlannerPolicies:
     """Behavior policies selected by the caller for one planner invocation."""
 
-    standard_scope_pruning: StandardScopePruning = StandardScopePruning.NONE
     auto_load_sources: bool = False
     enable_reuse_planning: bool = True
     custom_prepare_version_materializations: frozenset[str] = frozenset()
