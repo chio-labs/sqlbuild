@@ -419,6 +419,8 @@ def _prepare_delta_relation(
                 cursor_grain=entry.cursor_grain,
                 cursor_start=entry.cursor_start,
                 cursor_input_relations=entry.cursor_input_relations,
+                start_cursor_override=entry.start_cursor_override,
+                end_cursor_override=entry.end_cursor_override,
             ),
         )
         if runtime_cursor_bounds is None:
@@ -568,7 +570,7 @@ def _execute_dml(
     cursor_start: str | None = None,
     cursor_end: str | None = None,
     statement_recorder: StatementRecorder,
-) -> None:
+) -> int | None:
     """Execute the incremental DML strategy from delta into target."""
 
     strategy: str | None = entry.incremental_strategy
@@ -586,14 +588,13 @@ def _execute_dml(
 
     if strategy == IncrementalStrategy.APPEND:
         incremental_adapter: BaseAdapter = adapter
-        incremental_adapter.append(
+        return incremental_adapter.append(
             connection=connection,
             destination=target_qualified,
             sql=dml_sql,
             columns=dml_columns,
             statement_recorder=statement_recorder,
         )
-        return
 
     if strategy == IncrementalStrategy.DELETE_INSERT:
         cursor_column: str | None = entry.cursor_column
@@ -604,7 +605,7 @@ def _execute_dml(
                     f"cursor_start and cursor_end but got "
                     f"cursor_start={cursor_start}, cursor_end={cursor_end}"
                 )
-            adapter.delete_insert_cursor(
+            return adapter.delete_insert_cursor(
                 connection=connection,
                 destination=target_qualified,
                 sql=dml_sql,
@@ -615,27 +616,24 @@ def _execute_dml(
                 statement_recorder=statement_recorder,
                 cursor_type=entry.cursor_type,
             )
-        else:
-            adapter.delete_insert(
-                connection=connection,
-                destination=target_qualified,
-                sql=dml_sql,
-                unique_key=unique_key,
-                columns=dml_columns,
-                statement_recorder=statement_recorder,
-            )
-        return
+        return adapter.delete_insert(
+            connection=connection,
+            destination=target_qualified,
+            sql=dml_sql,
+            unique_key=unique_key,
+            columns=dml_columns,
+            statement_recorder=statement_recorder,
+        )
 
     if strategy == IncrementalStrategy.MERGE:
         merge_projection: str = ", ".join(intersection_names)
         merge_sql: str = f"SELECT {merge_projection} FROM {delta_qualified}"
-        adapter.merge(
+        return adapter.merge(
             connection=connection,
             destination=target_qualified,
             sql=merge_sql,
             unique_key=unique_key,
             statement_recorder=statement_recorder,
         )
-        return
 
     raise ExecutorInputError(f"unsupported incremental strategy: {strategy}")

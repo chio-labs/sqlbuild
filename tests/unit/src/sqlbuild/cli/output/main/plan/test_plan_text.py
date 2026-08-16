@@ -9,7 +9,12 @@ import pytest
 from sqlbuild.cli.output.main.plan import format_plan
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
-from sqlbuild.compiler.planner.models import CascadeCause, CascadeResult, CursorBounds
+from sqlbuild.compiler.planner.models import (
+    CascadeCause,
+    CascadeResult,
+    CursorBounds,
+    CursorInputRelation,
+)
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
     MaterializationType,
@@ -216,6 +221,76 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             unexpected_fragments=("Normal",),
         ),
         FormatPlanTestCase(
+            description="planner-resolved microbatch shows requested and effective work",
+            plan_output=build_plan_output(
+                model_entries=(
+                    build_model_entry(
+                        name="stg_events",
+                        action=PlanAction.CREATE_TABLE,
+                        reason=PlanReason.FIRST_RUN,
+                        materialization_type=MaterializationType.INCREMENTAL,
+                        incremental_strategy="delete_insert",
+                        incremental_mode="microbatch",
+                        cursor_column="event_date",
+                        cursor_type="timestamp",
+                        cursor_grain="day",
+                        batch_size="1mo",
+                        microbatch_range=CursorBounds(
+                            start="2014-01-01",
+                            end="2014-04-01",
+                        ),
+                        start_cursor_override="2014-01-01",
+                        end_cursor_override="2014-03-31",
+                    ),
+                ),
+            ),
+            expected_fragments=(
+                "cursor: event_date (timestamp)",
+                "requested: 2014-01-01 -> 2014-03-31",
+                "range: 2014-01-01 \u2192 2014-03-31",
+                "grain: day",
+                "batch size: 1mo",
+                "batches: 3 x 1mo",
+                "bounds: planner-resolved",
+            ),
+            unexpected_fragments=("resolved at runtime",),
+        ),
+        FormatPlanTestCase(
+            description="runtime-owned microbatch marks range and count as deferred",
+            plan_output=build_plan_output(
+                model_entries=(
+                    build_model_entry(
+                        name="clean_events",
+                        action=PlanAction.CREATE_TABLE,
+                        reason=PlanReason.FIRST_RUN,
+                        materialization_type=MaterializationType.INCREMENTAL,
+                        incremental_strategy="delete_insert",
+                        incremental_mode="microbatch",
+                        cursor_column="event_date",
+                        cursor_type="timestamp",
+                        cursor_grain="day",
+                        batch_size="1mo",
+                        cursor_input_relations=(
+                            CursorInputRelation(
+                                relation="stg_events",
+                                cursor_column="event_date",
+                                cursor_grain="day",
+                                is_model_backed=True,
+                            ),
+                        ),
+                        start_cursor_override="2014-01-01",
+                        end_cursor_override="2014-03-31",
+                    ),
+                ),
+            ),
+            expected_fragments=(
+                "requested: 2014-01-01 -> 2014-03-31",
+                "batches: resolved at runtime after upstream models complete",
+                "bounds: runtime-owned (model-backed cursor input)",
+            ),
+            unexpected_fragments=("batches: 3 x", "bounds: planner-resolved"),
+        ),
+        FormatPlanTestCase(
             description="relation reuse is visible and hash-free in plan output",
             plan_output=build_plan_output(
                 model_entries=(
@@ -365,7 +440,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 "cursor: event_time",
                 "mode: microbatch",
                 "2026-03-26",
-                "2026-04-25",
+                "2026-04-24",
                 "policy: replay_on_change=bounded-30d",
                 "query diff:",
             ),

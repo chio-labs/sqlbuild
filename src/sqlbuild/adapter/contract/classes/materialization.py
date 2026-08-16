@@ -139,7 +139,7 @@ class MaterializationMixin(ABC):
         sql: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
-    ) -> None:
+    ) -> int | None:
         """Insert rows from a SELECT statement into an existing table."""
         ...
 
@@ -153,7 +153,7 @@ class MaterializationMixin(ABC):
         unique_key: str | tuple[str, ...],
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
-    ) -> None:
+    ) -> int | None:
         """Delete matching rows then insert from a SELECT statement."""
         ...
 
@@ -170,7 +170,7 @@ class MaterializationMixin(ABC):
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
         cursor_type: str | None = None,
-    ) -> None:
+    ) -> int | None:
         """Delete rows by cursor range then insert from a SELECT statement."""
         ...
 
@@ -183,7 +183,7 @@ class MaterializationMixin(ABC):
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
-    ) -> None:
+    ) -> int | None:
         """Upsert rows from a SELECT statement using MERGE or equivalent."""
         ...
 

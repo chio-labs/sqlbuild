@@ -12,6 +12,8 @@ from sqlbuild.cli.progress.main._expectation_detail import format_expectation_de
 from sqlbuild.cli.progress.main._expectation_name import format_expectation_name
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
+from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
 from sqlbuild.compiler.planner.main.execution.materialization_type_display import (
     materialization_type_display,
 )
@@ -51,6 +53,10 @@ _HOOK_MAX_LABEL_WIDTH: int = 56
 _SPINNER_TICK_SECONDS: float = 0.1
 _MAX_ERROR_LINES: int = 4
 _MAX_ERROR_LINE_LENGTH: int = 160
+_ROW_COUNT_BILLION: int = 1_000_000_000
+_ROW_COUNT_MILLION: int = 1_000_000
+_ROW_COUNT_THOUSAND: int = 1_000
+_ROW_COUNT_ABBREVIATION_THRESHOLD: int = 10_000
 _ACTIVE_SPINNER_FRAMES: tuple[str, ...] = (
     "⠋",
     "⠙",
@@ -201,10 +207,7 @@ class BuildProgressCallbacks:
         self._spinner_frame_index = (self._spinner_frame_index + 1) % len(_ACTIVE_SPINNER_FRAMES)
         name_display: str = _truncate_name(name=self._current_node_name, width=self._name_width)
         if self._current_sub_message:
-            name_display = _truncate_name(
-                name=f"{self._current_node_name}  {self._current_sub_message}",
-                width=self._name_width,
-            )
+            name_display = f"{name_display}  {self._current_sub_message}"
         nw: int = self._name_width
         line: str = f"  {ctr}  {display_type:<{_TYPE_WIDTH}}{name_display:<{nw}} {status}"
         with self._write_lock:
@@ -378,6 +381,11 @@ class BuildProgressCallbacks:
                     self._write_sql_block(event.content)
                 elif event.kind == LifeCycleEventKind.LOG:
                     self._write_log_block(event.content)
+
+        batch_line: str | None = _format_streaming_batch_summary(model_result=model_result)
+        if batch_line is not None:
+            self._stream.write(f"{self._style.muted(batch_line)}\n")
+            self._stream.flush()
 
         sub_pad: str = " " * (self._prefix_width + _SUB_INDENT)
         sub_nw: int = self._name_width - _SUB_INDENT
@@ -1052,6 +1060,46 @@ def _truncate_name(*, name: str, width: int) -> str:
     if len(name) <= width:
         return name
     return name[: width - 3] + "..."
+
+
+def _format_streaming_batch_summary(*, model_result: ModelExecutionResult) -> str | None:
+    """Return the batch summary line for streaming output, if applicable."""
+
+    if model_result.batch_count is None:
+        return None
+    batch_label: str = "batch" if model_result.batch_count == 1 else "batches"
+    count_text: str = f"{model_result.batch_count} {batch_label}"
+    if model_result.batch_size is not None:
+        count_text = f"{count_text} ({model_result.batch_size})"
+    parts: list[str] = [count_text]
+    if model_result.cursor_range_start is not None and model_result.cursor_range_end is not None:
+        start: str = cursor_bound_display(
+            value=model_result.cursor_range_start,
+            cursor_type=model_result.cursor_type,
+            cursor_grain=model_result.cursor_grain,
+        )
+        end: str = inclusive_cursor_end(
+            end=model_result.cursor_range_end,
+            cursor_type=model_result.cursor_type,
+            cursor_grain=model_result.cursor_grain,
+        )
+        parts.append(f"range {start} \u2192 {end}")
+    if model_result.rows_affected is not None:
+        parts.append(_format_abbreviated_rows(count=model_result.rows_affected))
+    return f"         {'    '.join(parts)}"
+
+
+def _format_abbreviated_rows(*, count: int) -> str:
+    """Format a row count with K/M/B abbreviation above 10,000."""
+
+    label: str = "row" if count == 1 else "rows"
+    if count >= _ROW_COUNT_BILLION:
+        return f"{count / _ROW_COUNT_BILLION:.1f}B {label}"
+    if count >= _ROW_COUNT_MILLION:
+        return f"{count / _ROW_COUNT_MILLION:.1f}M {label}"
+    if count >= _ROW_COUNT_ABBREVIATION_THRESHOLD:
+        return f"{count / _ROW_COUNT_THOUSAND:.1f}K {label}"
+    return f"{count:,} {label}"
 
 
 from sqlbuild.cli.commands.models import AuditDisplayEntry, ExecutionCounts  # noqa: E402,F401

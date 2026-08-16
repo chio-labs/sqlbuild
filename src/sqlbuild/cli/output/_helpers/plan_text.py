@@ -8,13 +8,19 @@ from collections import Counter
 from collections.abc import Callable, Sequence
 from typing import cast
 
+from sqlbuild.cli.output._helpers.cursor_plan import build_cursor_plan_details
+from sqlbuild.cli.output.models import CursorPlanDetails
+from sqlbuild.cli.output.types import CursorBoundsOwner, CursorResolutionStatus
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.main.changes.query_diff import format_query_diff
+from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
+from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
 from sqlbuild.compiler.planner.main.execution.model_materialization_label import (
     model_materialization_label,
 )
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
+    CursorBounds,
     DependencyBaselinePlanEntry,
     ExistingDestinationInputPlanEntry,
     FunctionPlanEntry,
@@ -961,6 +967,7 @@ def _format_routine_models_section(
                 name_column_width=name_column_width,
             )
         )
+        lines = _append_cursor_detail(lines=lines, entry=entry)
     lines = append_overflow_line(
         lines=lines,
         total_count=len(entries),
@@ -987,6 +994,7 @@ def _format_detail_entry(
                 name=entry.name, value=mat_label, name_column_width=name_column_width
             )
         )
+        lines = _append_cursor_detail(lines=lines, entry=entry)
         return lines
 
     action_text: str = _action_text(entry)
@@ -1036,13 +1044,69 @@ def _append_cursor_detail(
 ) -> list[str]:
     """Append cursor column, mode, and range detail lines."""
 
-    if entry.cursor_column is not None:
-        lines.append(f"    cursor: {entry.cursor_column}")
+    details: CursorPlanDetails | None = build_cursor_plan_details(entry=entry)
+    if details is None:
+        return lines
+    cursor_value: str = entry.cursor_column or ""
+    if entry.cursor_type is not None:
+        cursor_value = f"{cursor_value} ({entry.cursor_type})"
+    lines.append(f"    cursor: {cursor_value}")
     if entry.incremental_mode == IncrementalMode.MICROBATCH:
         lines.append(f"    mode: {IncrementalMode.MICROBATCH.value}")
-    if show_range and entry.cursor_bounds is not None:
-        lines.append(f"    range: {entry.cursor_bounds.start} \u2192 {entry.cursor_bounds.end}")
+    if details.requested_start is not None or details.requested_end is not None:
+        requested_start: str = details.requested_start or "earliest available"
+        requested_end: str = details.requested_end or "latest available"
+        lines.append(f"    requested: {requested_start} -> {requested_end}")
+    if show_range and details.resolved_bounds is not None:
+        lines.append(
+            f"    range: {_format_cursor_range(bounds=details.resolved_bounds, entry=entry)}"
+        )
+    if entry.incremental_mode == IncrementalMode.MICROBATCH:
+        lines = _append_microbatch_plan_detail(lines=lines, details=details)
+    if details.bounds_owner == CursorBoundsOwner.RUNTIME:
+        lines.append("    bounds: runtime-owned (model-backed cursor input)")
+    elif details.resolution_status == CursorResolutionStatus.RESOLVED:
+        lines.append("    bounds: planner-resolved")
     return lines
+
+
+def _append_microbatch_plan_detail(*, lines: list[str], details: CursorPlanDetails) -> list[str]:
+    """Append grain, batch size, and known-or-deferred batch count."""
+
+    if details.declared_grain is not None:
+        grain_text: str = details.declared_grain
+        if details.effective_grain != details.declared_grain:
+            grain_text = f"{details.declared_grain} -> {details.effective_grain} (effective)"
+        lines.append(f"    grain: {grain_text}")
+    if details.declared_batch_size is not None:
+        batch_size_text: str = details.declared_batch_size
+        if details.effective_batch_size != details.declared_batch_size:
+            batch_size_text = (
+                f"{details.declared_batch_size} -> "
+                f"{details.effective_batch_size} (coarsened by upstream grain)"
+            )
+        lines.append(f"    batch size: {batch_size_text}")
+    if details.planned_batch_count is not None and details.effective_batch_size is not None:
+        lines.append(f"    batches: {details.planned_batch_count} x {details.effective_batch_size}")
+    elif details.resolution_status == CursorResolutionStatus.DEFERRED:
+        lines.append("    batches: resolved at runtime after upstream models complete")
+    return lines
+
+
+def _format_cursor_range(*, bounds: CursorBounds, entry: ModelPlanEntry) -> str:
+    """Render a cursor range with an inclusive end bound."""
+
+    start: str = cursor_bound_display(
+        value=bounds.start,
+        cursor_type=entry.cursor_type,
+        cursor_grain=entry.cursor_grain,
+    )
+    inclusive_end: str = inclusive_cursor_end(
+        end=bounds.end,
+        cursor_type=entry.cursor_type,
+        cursor_grain=entry.cursor_grain,
+    )
+    return f"{start} \u2192 {inclusive_end}"
 
 
 def _append_policy_line(*, lines: list[str], entry: ModelPlanEntry) -> list[str]:

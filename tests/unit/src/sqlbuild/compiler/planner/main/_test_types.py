@@ -135,3 +135,47 @@ class SqlbuildModelSelectorNamesTestCase:
     term: str
     expected_model_names: tuple[str, ...]
     expected_translation: str | None
+
+
+@dataclass(frozen=True)
+class InclusiveCursorEndTestCase:
+    description: str
+    end: str
+    cursor_type: str | None
+    cursor_grain: str | None
+    expected_end: str
+
+
+@dataclass(frozen=True)
+class AdvanceCursorEndTestCase:
+    description: str
+    value: str
+    cursor_type: str | None
+    cursor_grain: str | None
+    expected_end: str
+
+
+@dataclass(frozen=True)
+class CursorEndRoundTripTestCase:
+    description: str
+    inclusive_value: str
+    cursor_type: str | None
+    cursor_grain: str | None
+    expected_round_trip: str
+
+
+@dataclass(frozen=True)
+class CursorBoundDisplayTestCase:
+    description: str
+    value: str
+    cursor_type: str | None
+    cursor_grain: str | None
+    expected_display: str
+
+
+@dataclass(frozen=True)
+class EffectiveMicrobatchBatchSizeTestCase:
+    description: str
+    batch_size: str
+    effective_grain: str
+    expected_batch_size: str

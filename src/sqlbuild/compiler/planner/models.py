@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import calendar
+import re
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
@@ -227,6 +229,105 @@ class CursorBounds:
 
     start: str
     end: str
+
+
+@dataclass(frozen=True)
+class Duration:
+    """A calendar-aware cursor-window duration (years/months plus fixed time units)."""
+
+    _PATTERN: ClassVar[re.Pattern[str]] = re.compile(
+        r"^(?:(\d+)y)?(?:(\d+)mo)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$"
+    )
+    _MONTHS_PER_YEAR: ClassVar[int] = 12
+    _SECONDS_PER_DAY: ClassVar[int] = 86_400
+    _SECONDS_PER_HOUR: ClassVar[int] = 3_600
+    _SECONDS_PER_MINUTE: ClassVar[int] = 60
+
+    years: int = 0
+    months: int = 0
+    days: int = 0
+    hours: int = 0
+    minutes: int = 0
+    seconds: int = 0
+
+    @classmethod
+    def parse(cls, value: str) -> Duration | None:
+        """Parse a string like '1mo', '2mo', '1y6mo', '30d', '6h' into a Duration."""
+
+        match: re.Match[str] | None = cls._PATTERN.match(value)
+        if match is None:
+            return None
+        duration: Duration = cls(
+            years=int(match.group(1) or 0),
+            months=int(match.group(2) or 0),
+            days=int(match.group(3) or 0),
+            hours=int(match.group(4) or 0),
+            minutes=int(match.group(5) or 0),
+            seconds=int(match.group(6) or 0),
+        )
+        if duration.is_zero:
+            return None
+        return duration
+
+    @property
+    def is_zero(self) -> bool:
+        """Return whether the duration is empty."""
+
+        return self.total_months == 0 and self.fixed_seconds == 0
+
+    @property
+    def has_calendar_component(self) -> bool:
+        """Return whether the duration includes variable-length years or months."""
+
+        return self.total_months != 0
+
+    @property
+    def fixed_seconds(self) -> int:
+        """Return the fixed-length portion (days and below) as whole seconds."""
+
+        return (
+            self.days * self._SECONDS_PER_DAY
+            + self.hours * self._SECONDS_PER_HOUR
+            + self.minutes * self._SECONDS_PER_MINUTE
+            + self.seconds
+        )
+
+    @property
+    def total_months(self) -> int:
+        """Return the whole-month portion (years folded into months)."""
+
+        return self.years * self._MONTHS_PER_YEAR + self.months
+
+    @property
+    def _fixed_timedelta(self) -> timedelta:
+        return timedelta(
+            days=self.days, hours=self.hours, minutes=self.minutes, seconds=self.seconds
+        )
+
+    def add_to(self, moment: datetime) -> datetime:
+        """Return the moment advanced by this duration."""
+
+        return (
+            self._shift_months(moment=moment, months_delta=self.total_months)
+            + self._fixed_timedelta
+        )
+
+    def subtract_from(self, moment: datetime) -> datetime:
+        """Return the moment moved back by this duration."""
+
+        return (
+            self._shift_months(moment=moment, months_delta=-self.total_months)
+            - self._fixed_timedelta
+        )
+
+    def _shift_months(self, *, moment: datetime, months_delta: int) -> datetime:
+        if months_delta == 0:
+            return moment
+        total: int = (moment.year * self._MONTHS_PER_YEAR + (moment.month - 1)) + months_delta
+        year: int = total // self._MONTHS_PER_YEAR
+        month: int = total % self._MONTHS_PER_YEAR + 1
+        day: int = min(moment.day, calendar.monthrange(year, month)[1])
+        return moment.replace(year=year, month=month, day=day)
 
 
 @dataclass(frozen=True)
@@ -683,6 +784,8 @@ class ModelPlanEntry:
     cursor_input_relations: tuple[CursorInputRelation, ...] = field(default_factory=tuple)
     batch_size: str | None = None
     microbatch_range: CursorBounds | None = None
+    start_cursor_override: str | None = None
+    end_cursor_override: str | None = None
     unique_key: tuple[str, ...] = field(default_factory=tuple)
     snapshot_strategy: str | None = None
     updated_at_column: str | None = None

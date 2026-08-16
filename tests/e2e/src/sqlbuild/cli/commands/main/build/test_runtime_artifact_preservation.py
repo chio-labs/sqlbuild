@@ -36,7 +36,6 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "target/compiled/models/marts/fact_orders.sql",
                 "target/compiled/functions/sql/is_completed_order.sql",
                 "target/compiled/functions/python/is_completed_order_py.sql",
-                "target/manifest.json",
             ),
         )
     ],

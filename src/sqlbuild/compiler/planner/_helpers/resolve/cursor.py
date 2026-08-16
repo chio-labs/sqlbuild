@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-import re
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
+from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import advance_cursor_end
 from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
 )
-from sqlbuild.compiler.planner.models import CursorBounds, ModelCursorSnapshot
+from sqlbuild.compiler.planner.models import CursorBounds, Duration, ModelCursorSnapshot
 from sqlbuild.compiler.planner.types import CursorType
-
-_DURATION_PATTERN: re.Pattern[str] = re.compile(r"^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$")
 
 
 def compute_cursor_bounds(
@@ -26,6 +24,7 @@ def compute_cursor_bounds(
     start_cursor_override: str | None,
     end_cursor_override: str | None,
     is_microbatch: bool,
+    cursor_grain: str | None = None,
 ) -> CursorBounds | None:
     """Compute effective cursor bounds for one incremental model."""
 
@@ -43,7 +42,11 @@ def compute_cursor_bounds(
     if start_cursor_override is not None:
         raw_start = start_cursor_override
     if end_cursor_override is not None:
-        raw_end = end_cursor_override
+        raw_end = _advance_inclusive_operator_end(
+            end_cursor_override=end_cursor_override,
+            cursor_type=cursor_type,
+            cursor_grain=cursor_grain,
+        )
 
     if backfill_duration is not None and start_cursor_override is None:
         adjusted_start: str | None = _subtract_duration(value=raw_end, duration=backfill_duration)
@@ -62,6 +65,21 @@ def compute_cursor_bounds(
     )
 
     return CursorBounds(start=raw_start, end=raw_end)
+
+
+def _advance_inclusive_operator_end(
+    *,
+    end_cursor_override: str,
+    cursor_type: str | None,
+    cursor_grain: str | None,
+) -> str:
+    """Advance an inclusive operator end to the exclusive bound so the final value is processed."""
+
+    return advance_cursor_end(
+        value=end_cursor_override,
+        cursor_type=cursor_type,
+        cursor_grain=cursor_grain,
+    )
 
 
 def _compute_raw_start(snapshot: ModelCursorSnapshot) -> str | None:
@@ -85,36 +103,19 @@ def _compute_raw_end(snapshot: ModelCursorSnapshot) -> str | None:
 def _subtract_duration(*, value: str, duration: str) -> str | None:
     """Subtract a duration string from a cursor value."""
 
-    td: timedelta | None = _parse_duration(duration)
-    if td is None:
+    parsed: Duration | None = Duration.parse(duration)
+    if parsed is None:
         return None
 
     timestamp: datetime | None = _try_parse_timestamp(value)
     if timestamp is not None:
-        adjusted: datetime = timestamp - td
-        return adjusted.isoformat()
+        return parsed.subtract_from(timestamp).isoformat()
 
     integer: int | None = _try_parse_integer(value)
     if integer is not None:
-        total_seconds: int = int(td.total_seconds())
-        return str(integer - total_seconds)
+        return str(integer - parsed.fixed_seconds)
 
     return None
-
-
-def _parse_duration(duration: str) -> timedelta | None:
-    """Parse a duration string like '1d', '6h', '30m', '15s' into a timedelta."""
-
-    match: re.Match[str] | None = _DURATION_PATTERN.match(duration)
-    if match is None:
-        return None
-    days: int = int(match.group(1) or 0)
-    hours: int = int(match.group(2) or 0)
-    minutes: int = int(match.group(3) or 0)
-    seconds: int = int(match.group(4) or 0)
-    if days == 0 and hours == 0 and minutes == 0 and seconds == 0:
-        return None
-    return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
 
 
 def _try_parse_timestamp(value: str) -> datetime | None:

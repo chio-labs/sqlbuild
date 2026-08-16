@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
+from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
+from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
 from sqlbuild.compiler.planner.main.execution.model_execution_annotation import (
     model_execution_annotation,
 )
@@ -101,6 +103,12 @@ def format_build_output(
                 name_width=top_level_name_width,
             )
         )
+
+        batch_line: str | None = _format_batch_summary_line(
+            model_result=model_result, use_color=use_color
+        )
+        if batch_line is not None:
+            lines.append(batch_line)
 
         if verbose:
             event: LifeCycleEvent
@@ -379,6 +387,63 @@ def _format_log_block(*, message: str, use_color: bool) -> list[str]:
     style: CliStyle = CliStyle(use_color=use_color)
     line = style.log_label(line)
     return ["", line, ""]
+
+
+def _format_batch_summary_line(
+    *, model_result: ModelExecutionResult, use_color: bool
+) -> str | None:
+    """Return the muted microbatch summary line, if any."""
+
+    if model_result.batch_count is None:
+        return None
+    batch_label: str = "batch" if model_result.batch_count == 1 else "batches"
+    count_text: str = f"{model_result.batch_count} {batch_label}"
+    if model_result.batch_size is not None:
+        count_text = f"{count_text} ({model_result.batch_size})"
+    parts: list[str] = [count_text]
+    range_text: str | None = _format_batch_range(model_result=model_result)
+    if range_text is not None:
+        parts.append(f"range {range_text}")
+    if model_result.rows_affected is not None:
+        parts.append(_format_abbreviated_row_count(count=model_result.rows_affected))
+    line: str = f"         {'    '.join(parts)}"
+    style: CliStyle = CliStyle(use_color=use_color)
+    return style.muted(line)
+
+
+def _format_abbreviated_row_count(*, count: int) -> str:
+    """Format a row count with K/M/B abbreviation above 10,000."""
+
+    row_label: str = "row" if count == 1 else "rows"
+    _BILLION: int = 1_000_000_000
+    _MILLION: int = 1_000_000
+    _THOUSAND: int = 1_000
+    _ABBREVIATION_THRESHOLD: int = 10_000
+    if count >= _BILLION:
+        return f"{count / _BILLION:.1f}B {row_label}"
+    if count >= _MILLION:
+        return f"{count / _MILLION:.1f}M {row_label}"
+    if count >= _ABBREVIATION_THRESHOLD:
+        return f"{count / _THOUSAND:.1f}K {row_label}"
+    return f"{count:,} {row_label}"
+
+
+def _format_batch_range(*, model_result: ModelExecutionResult) -> str | None:
+    """Return the inclusive cursor range for a microbatch model, if resolvable."""
+
+    if model_result.cursor_range_start is None or model_result.cursor_range_end is None:
+        return None
+    start: str = cursor_bound_display(
+        value=model_result.cursor_range_start,
+        cursor_type=model_result.cursor_type,
+        cursor_grain=model_result.cursor_grain,
+    )
+    inclusive_end: str = inclusive_cursor_end(
+        end=model_result.cursor_range_end,
+        cursor_type=model_result.cursor_type,
+        cursor_grain=model_result.cursor_grain,
+    )
+    return f"{start} \u2192 {inclusive_end}"
 
 
 def _format_sub_line(
