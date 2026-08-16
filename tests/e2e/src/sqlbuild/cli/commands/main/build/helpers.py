@@ -727,34 +727,6 @@ def _cursor_override_without_snapshot_model_sql(*, amount_expression: str) -> st
     )
 
 
-def prepare_direct_changes_only_two_model_project(
-    *, tmp_path: Path, project_name: str, amount_cents: int
-) -> Path:
-    return prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name=project_name,
-        repo_files={
-            "sqlbuild_project.toml": (
-                f'name = "{project_name}"\n'
-                'adapter = "duckdb"\n\n'
-                "[settings]\n"
-                "changes_only = true\n\n"
-                "[connection]\n"
-                'database = "warehouse.duckdb"\n'
-            ),
-            "models/stg_orders.sql": direct_changes_only_stg_orders_sql(amount_cents=amount_cents),
-            "models/fact_orders.sql": (
-                "MODEL (materialized table);\n\n"
-                "SELECT\n"
-                "  order_id,\n"
-                "  amount_cents,\n"
-                "  amount_cents / 100.0 AS amount_dollars\n"
-                'FROM __ref("stg_orders")\n'
-            ),
-        },
-    )
-
-
 def prepare_direct_reuse_from_project(*, tmp_path: Path, project_name: str) -> Path:
     return prepare_inline_project(
         tmp_path=tmp_path,
@@ -1036,20 +1008,4 @@ def prepare_direct_reuse_from_multi_schema_project(*, tmp_path: Path, project_na
             ).strip()
             + "\n",
         },
-    )
-
-
-def write_direct_changes_only_stg_orders(*, project_dir: Path, amount_cents: int) -> None:
-    (project_dir / "models" / "stg_orders.sql").write_text(
-        direct_changes_only_stg_orders_sql(amount_cents=amount_cents),
-        encoding="utf-8",
-    )
-
-
-def direct_changes_only_stg_orders_sql(*, amount_cents: int) -> str:
-    return (
-        "MODEL (materialized table);\n\n"
-        "SELECT\n"
-        "  1 AS order_id,\n"
-        f"  {amount_cents} AS amount_cents\n"
     )
