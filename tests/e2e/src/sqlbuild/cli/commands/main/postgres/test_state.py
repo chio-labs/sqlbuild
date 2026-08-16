@@ -1397,9 +1397,19 @@ def test_given_postgres_checkpoints_over_limit_when_running_janitor_then_it_prun
             )[0][0]
         )
         (project_dir / "models" / "stg_orders.sql").write_text("MODEL ();\n\nSELECT 2 AS id\n")
-        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        assert (
+            run_sqb(
+                command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+            ).returncode
+            == 0
+        )
         (project_dir / "models" / "stg_orders.sql").write_text("MODEL ();\n\nSELECT 3 AS id\n")
-        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        assert (
+            run_sqb(
+                command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+            ).returncode
+            == 0
+        )
         latest_relation_name: str = str(
             fetch_postgres_rows(
                 sql=(
@@ -2133,7 +2143,12 @@ def test_given_postgres_partial_rollback_when_allowed_then_it_marks_vde_working(
             "MODEL ();\n\nSELECT 2 AS id\n",
             encoding="utf-8",
         )
-        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        assert (
+            run_sqb(
+                command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+            ).returncode
+            == 0
+        )
         checkpoints_relation: str = quoted_relation_name(
             schema_name=state_schema,
             name="virtual_environment_checkpoints",
@@ -2238,7 +2253,12 @@ def test_given_postgres_partial_rollback_missing_stale_upstreams_when_including_
             "MODEL ();\n\nSELECT 2 AS id\n",
             encoding="utf-8",
         )
-        assert run_sqb(command=("--no-color", "build"), project_dir=project_dir).returncode == 0
+        assert (
+            run_sqb(
+                command=("--no-color", "build", "--changes-only"), project_dir=project_dir
+            ).returncode
+            == 0
+        )
 
         blocked_result: subprocess.CompletedProcess[str] = run_sqb(
             command=(
@@ -2859,7 +2879,13 @@ def test_given_postgres_virtual_diff_and_promotion_when_running_then_matches_duc
         (project_dir / "models" / "stg_orders.sql").write_text("MODEL ();\n\nSELECT 2 AS id\n")
         assert (
             run_sqb(
-                command=("--no-color", "build", "--virtual-env", "pr_full"),
+                command=(
+                    "--no-color",
+                    "build",
+                    "--virtual-env",
+                    "pr_full",
+                    "--changes-only",
+                ),
                 project_dir=project_dir,
             ).returncode
             == 0
@@ -2875,7 +2901,15 @@ def test_given_postgres_virtual_diff_and_promotion_when_running_then_matches_duc
         (project_dir / "models" / "stg_orders.sql").write_text("MODEL ();\n\nSELECT 3 AS id\n")
         assert (
             run_sqb(
-                command=("--no-color", "build", "--virtual-env", "pr", "--select", "+fact_orders"),
+                command=(
+                    "--no-color",
+                    "build",
+                    "--virtual-env",
+                    "pr",
+                    "--select",
+                    "+fact_orders",
+                    "--changes-only",
+                ),
                 project_dir=project_dir,
             ).returncode
             == 0
@@ -3145,7 +3179,7 @@ def test_given_postgres_function_change_when_promoting_then_publishes_function_d
         )
         assert (
             run_sqb(
-                command=("--no-color", "build", "--virtual-env", "pr"),
+                command=("--no-color", "build", "--virtual-env", "pr", "--changes-only"),
                 project_dir=project_dir,
             ).returncode
             == 0
