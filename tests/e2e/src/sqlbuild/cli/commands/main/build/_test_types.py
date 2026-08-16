@@ -838,38 +838,6 @@ class SchemaBackfillBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
-class DirectChangesOnlyStateBuildE2ETestCase:
-    """Test case for standard changes-only state/data behavior."""
-
-    description: str
-    project_name: str
-    initial_amount_cents: int
-    changed_amount_cents: int
-    expected_initial_amount_dollars: float
-    expected_changed_amount_dollars: float
-
-
-@dataclass(frozen=True)
-class DirectChangesOnlySeedBuildE2ETestCase:
-    description: str
-    project_name: str
-    initial_seed_contents: str
-    changed_seed_contents: str
-    expected_plan_selected_count: int
-    expected_amount_dollars: float
-
-
-@dataclass(frozen=True)
-class DirectSeedChangesOnlyGapE2ETestCase:
-    description: str
-    project_name: str
-    expected_plan_fragment: str = ""
-    expected_seed_payload: tuple[dict[str, object], ...] = field(default_factory=tuple)
-    expected_fact_order_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
-    expected_customer_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
 class DirectReuseFromBuildE2ETestCase:
     description: str
     project_name: str
