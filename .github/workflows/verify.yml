@@ -27,7 +27,7 @@ jobs:
       - name: Install Python
         run: uv python install 3.12
       - name: Install dependencies
-        run: uv sync --locked --all-groups
+        run: uv sync --locked --all-groups --all-extras
       - name: Run static checks
         run: make check-ci
       - name: Run unit and integration tests
@@ -47,7 +47,7 @@ jobs:
       - name: Install Python
         run: uv python install 3.12
       - name: Install dependencies
-        run: uv sync --locked --all-groups
+        run: uv sync --locked --all-groups --all-extras
       - name: Run DuckDB E2E tests
         run: make test-e2e-duckdb
 
@@ -65,7 +65,7 @@ jobs:
       - name: Install Python
         run: uv python install 3.12
       - name: Install dependencies
-        run: uv sync --locked --all-groups
+        run: uv sync --locked --all-groups --all-extras
       - name: Verify Docker
         run: docker info
       - name: Run PostgreSQL tests

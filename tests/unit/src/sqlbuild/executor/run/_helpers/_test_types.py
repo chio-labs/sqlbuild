@@ -79,6 +79,29 @@ class RuntimeCursorOverrideTestCase:
 
 
 @dataclass(frozen=True)
+class RuntimeExistingTargetOverrideTestCase:
+    description: str
+    upstream_min: object
+    upstream_max: object
+    target_max: object
+    cursor_type: str
+    cursor_grain: str | None
+    cursor_start: str | None
+    start_cursor_override: str
+    end_cursor_override: str
+    warehouse_column_type: str
+    expected_bounds: object
+
+
+@dataclass(frozen=True)
+class ReportedRowsAffectedTestCase:
+    description: str
+    total_rows: int
+    row_count_known: bool
+    expected_rows_affected: int | None
+
+
+@dataclass(frozen=True)
 class MicrobatchCursorDiscoveryTestCase:
     description: str
     warehouse_column_type: str

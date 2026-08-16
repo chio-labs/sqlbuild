@@ -171,3 +171,11 @@ class CursorBoundDisplayTestCase:
     cursor_type: str | None
     cursor_grain: str | None
     expected_display: str
+
+
+@dataclass(frozen=True)
+class EffectiveMicrobatchBatchSizeTestCase:
+    description: str
+    batch_size: str
+    effective_grain: str
+    expected_batch_size: str

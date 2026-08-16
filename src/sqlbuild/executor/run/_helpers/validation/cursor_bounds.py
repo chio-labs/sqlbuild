@@ -102,17 +102,13 @@ def resolve_runtime_cursor_bounds(
         end: str | None = _normalize_bound(value=row[1], is_end=True)
     if start is None or end is None:
         return None
+    if spec.start_cursor_override is not None:
+        start = spec.start_cursor_override
     start = _apply_cursor_start_floor(
         current_start=start,
         cursor_start=spec.cursor_start,
         cursor_type=cursor_type,
     )
-    if spec.start_cursor_override is not None:
-        start = _apply_cursor_start_floor(
-            current_start=start,
-            cursor_start=spec.start_cursor_override,
-            cursor_type=cursor_type,
-        )
     if spec.end_cursor_override is not None:
         end = _apply_cursor_end_ceiling(
             current_end=end,

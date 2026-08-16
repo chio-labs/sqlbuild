@@ -896,6 +896,7 @@ def test_given_microbatch_model_when_executing_then_reports_batch_progress(
         test_case=patched_case, adapter=adapter, connection=connection
     )
 
+    assert test_case.expected_batch_count is not None
     assert result.batch_count == test_case.expected_batch_count
     assert len(progress_messages) == test_case.expected_batch_count * 2
     assert "batch 1/" in progress_messages[0]
