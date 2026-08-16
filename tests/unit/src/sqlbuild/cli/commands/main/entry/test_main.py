@@ -310,23 +310,6 @@ def test_given_dbt_command_without_sqlbuild_project_when_dispatching_then_does_n
                 "profiles",
             ),
         ),
-        MainTestCase(
-            description="dispatches dbt clone and preserves dbt args",
-            argv=[
-                "--project-dir",
-                "/tmp/demo",
-                "dbt",
-                "clone",
-                "--select",
-                "dbt_orders",
-                "--hard-copy",
-                "--target",
-                "dev",
-            ],
-            expected_exit_code=43,
-            expected_project_dir=Path("/tmp/demo"),
-            expected_dbt_args=("--select", "dbt_orders", "--hard-copy", "--target", "dev"),
-        ),
     ],
     ids=lambda case: case.description,
 )
@@ -351,7 +334,6 @@ def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_di
             run_dbt_build=run_dbt_execution,
             run_dbt_test=run_dbt_execution,
             run_dbt_debug=run_dbt_execution,
-            run_dbt_clone=run_dbt_execution,
         ),
     )
 

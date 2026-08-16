@@ -131,59 +131,6 @@ class DbtCliFlagAmbiguityE2ETestCase:
 
 
 @dataclass(frozen=True)
-class DbtDiffE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    expected_returncode: int
-    expected_stdout_fragments: tuple[str, ...] = ()
-    expected_absent_stdout_fragments: tuple[str, ...] = ()
-    expected_stderr_fragments: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class DbtCloneE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    expected_returncode: int
-    expected_stdout_fragments: tuple[str, ...] = ()
-    expected_stderr_fragments: tuple[str, ...] = ()
-    expected_absent_stdout_fragments: tuple[str, ...] = ()
-    expected_rows: tuple[tuple[object, ...], ...] = ()
-    rows_sql: str = "SELECT order_id, amount_cents FROM main.dbt_orders ORDER BY order_id"
-    expected_absent_relations: tuple[tuple[str, str], ...] = ()
-    include_production_ref: bool = True
-
-
-@dataclass(frozen=True)
-class DbtDiffErrorE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    include_unique_key: bool
-    include_cursor_meta: bool
-    expected_returncode: int
-    expected_stderr_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtDiffConfigErrorE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    include_production_ref: bool
-    production_ref_git_ref: str
-    expected_returncode: int
-    expected_stderr_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtDiffSelectionE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    expected_returncode: int
-    expected_stdout_fragments: tuple[str, ...]
-    expected_absent_stdout_fragments: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
 class DbtInitMissingProdRelationBuildE2ETestCase:
     description: str
     expected_stdout_fragments: tuple[str, ...]

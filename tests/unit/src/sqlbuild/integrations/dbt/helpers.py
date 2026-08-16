@@ -9,8 +9,6 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
-from sqlbuild.adapter.contract.models import QueryResult
-from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.models import (
@@ -43,7 +41,6 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.integrations.dbt._helpers.cli.runner import build_dbt_ls_argv
 from sqlbuild.integrations.dbt._helpers.graph.core import (
     dbt_model_graph_key,
@@ -60,7 +57,6 @@ from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraphKey,
     DbtCommandResult,
-    DbtLsNode,
     DbtManifestIndex,
 )
 from sqlbuild.integrations.dbt.types import (
@@ -1285,144 +1281,3 @@ def graph_key_from_stable_id(stable_id: str) -> DbtCombinedGraphKey:
         ): sqlbuild_model_graph_key,
     }
     return factories[(owner_enum, resource_type_enum)](name)
-
-
-def build_dbt_diff_ls_node(
-    *,
-    unique_id: str = "model.analytics.dbt_orders",
-    name: str = "dbt_orders",
-    resource_type: str = "model",
-) -> DbtLsNode:
-    """Build a dbt ls node for diff executor tests."""
-
-    return DbtLsNode(
-        unique_id=unique_id,
-        resource_type=resource_type,
-        package_name="analytics",
-        name=name,
-        fqn=("analytics", name),
-    )
-
-
-def build_dbt_clone_manifest_index(
-    *,
-    schema: str,
-    relation_name: str,
-    materialized: str,
-    compiled_code: str | None = None,
-    unique_id: str = "model.analytics.dbt_orders",
-    name: str = "dbt_orders",
-) -> DbtManifestIndex:
-    """Build a single-model dbt manifest index for clone executor tests."""
-
-    return build_dbt_manifest_index(
-        raw_data=build_manifest_data(
-            nodes=(
-                build_manifest_model_node(
-                    unique_id=unique_id,
-                    package_name="analytics",
-                    name=name,
-                    relation_name=relation_name,
-                    schema=schema,
-                    alias=name,
-                    materialized=materialized,
-                    raw_code=(
-                        "{{ config(materialized='view') }}\nSELECT 99 AS order_id, 'raw' AS status"
-                    ),
-                    compiled_code=compiled_code,
-                ),
-            )
-        )
-    )
-
-
-def build_dbt_clone_reuse_manifest_index(
-    *, include_model: bool, materialized: str
-) -> DbtManifestIndex:
-    """Build a reuse manifest index for clone executor tests."""
-
-    model_node: dict[str, object] = build_manifest_model_node(
-        unique_id="model.analytics.dbt_orders",
-        package_name="analytics",
-        name="dbt_orders",
-        relation_name="prod.dbt_orders",
-        schema="prod",
-        alias="dbt_orders",
-        materialized=materialized,
-        raw_code="{{ config(materialized='view') }}\nSELECT 99 AS order_id, 'raw' AS status",
-    )
-    return build_dbt_manifest_index(
-        raw_data=build_manifest_data(nodes=(model_node,) * int(include_model))
-    )
-
-
-def create_dbt_clone_relation(
-    *,
-    adapter: DuckDbAdapter,
-    connection: object,
-    schema: str,
-    name: str = "dbt_orders",
-    rows: tuple[tuple[object, ...], ...] = ((1, "origin"),),
-) -> None:
-    """Create a dbt clone table from literal rows in a real DuckDB schema."""
-
-    adapter.execute(connection=connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
-    selects: list[str] = []
-    row: tuple[object, ...]
-    for row in rows:
-        order_id: int = cast(int, row[0])
-        status: str = cast(str, row[1])
-        selects.append(f"SELECT {order_id} AS order_id, '{status}' AS status")
-    union_sql: str = " UNION ALL ".join(selects)
-    adapter.execute(
-        connection=connection, sql=f"CREATE OR REPLACE TABLE {schema}.{name} AS {union_sql}"
-    )
-
-
-def create_dbt_clone_relation_when_requested(
-    *,
-    adapter: DuckDbAdapter,
-    connection: object,
-    schema: str,
-    create: bool,
-    rows: tuple[tuple[object, ...], ...] = ((1, "origin"),),
-) -> None:
-    """Create a dbt clone fixture relation when requested by a test case."""
-
-    adapter.execute(connection=connection, sql=f"CREATE SCHEMA IF NOT EXISTS {schema}")
-    for _requested_relation in range(int(create)):
-        create_dbt_clone_relation(
-            adapter=adapter,
-            connection=connection,
-            schema=schema,
-            rows=rows,
-        )
-
-
-def read_dbt_clone_rows(
-    *, adapter: DuckDbAdapter, connection: object, schema: str, name: str = "dbt_orders"
-) -> tuple[tuple[object, ...], ...]:
-    """Read deterministic dbt clone rows from DuckDB."""
-
-    result: QueryResult = adapter.query(
-        connection=connection,
-        sql=f"SELECT order_id, status FROM {schema}.{name} ORDER BY order_id",
-        limit=None,
-    )
-    return result.rows
-
-
-def assert_dbt_clone_execution_result(
-    *,
-    result: CloneExecutionResult,
-    expected_item_count: int,
-    expected_action: str | None,
-    expected_status: str | None,
-) -> None:
-    """Assert dbt clone execution result fields."""
-
-    assert len(result.item_results) == expected_item_count
-    actual_outcomes: tuple[tuple[str, str], ...] = tuple(
-        (item.action, item.status) for item in result.item_results
-    )
-    assert actual_outcomes == ((expected_action, expected_status),) * expected_item_count
