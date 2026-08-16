@@ -69,16 +69,6 @@ class DbtExecutionFailureCliTestCase:
 
 
 @dataclass(frozen=True)
-class DbtTestCliTestCase:
-    description: str
-    command: tuple[str, ...]
-    setup_command: tuple[str, ...]
-    expected_stdout_fragments: tuple[str, ...]
-    expected_absent_stdout_fragments: tuple[str, ...] = ()
-    expected_query_assertions: tuple[DbtExecutionQueryAssertion, ...] = ()
-
-
-@dataclass(frozen=True)
 class DbtDebugCliTestCase:
     description: str
     command: tuple[str, ...]

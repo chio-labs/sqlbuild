@@ -37,9 +37,7 @@ def build_dbt_interop_plan(
     dbt_selected_unique_ids: tuple[str, ...] = tuple(
         sorted(node.unique_id for node in dbt_ls_nodes)
     )
-    dbt_has_work: bool = bool(dbt_selected_unique_ids)
-    if normalized_command != DbtInteropCommand.TEST:
-        dbt_has_work = bool(dbt_selected_unique_ids or selection.dbt_required_unique_ids)
+    dbt_has_work: bool = bool(dbt_selected_unique_ids or selection.dbt_required_unique_ids)
     sqlbuild_has_work: bool = bool(selection.sqlbuild_model_names)
     resolved_warnings: tuple[str, ...] = tuple(warnings)
     no_match_warning: str = "No dbt or SQLBuild resources matched the selection."

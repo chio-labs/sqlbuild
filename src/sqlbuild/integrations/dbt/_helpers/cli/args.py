@@ -172,8 +172,6 @@ def _allowed_sqlbuild_flags(command: DbtInteropCommand) -> frozenset[str]:
         return frozenset(common_execution_flags)
     if command == DbtInteropCommand.PLAN:
         return frozenset((*cursor_flags, "--defer-to"))
-    if command == DbtInteropCommand.TEST:
-        return frozenset()
     return frozenset()
 
 

@@ -120,13 +120,6 @@ def test_given_dbt_plan_when_running_then_writes_progress_to_expected_stream(
             expected_forwarded_args=("--select", "tag:nightly"),
             expected_progress_stream=sys.stdout,
         ),
-        DbtExecutionWrapperTestCase(
-            description="dbt test strips local json and verbose flags before execution",
-            command_name="test",
-            args=("--json", "--verbose", "--select", "test_type:data"),
-            expected_forwarded_args=("--select", "test_type:data"),
-            expected_progress_stream=sys.stderr,
-        ),
     ],
     ids=lambda case: case.description,
 )

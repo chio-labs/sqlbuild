@@ -251,22 +251,6 @@ def test_given_dbt_command_without_sqlbuild_project_when_dispatching_then_does_n
             ),
         ),
         MainTestCase(
-            description="dispatches dbt test and preserves dbt args",
-            argv=[
-                "--project-dir",
-                "/tmp/demo",
-                "dbt",
-                "test",
-                "--select",
-                "test_type:data",
-                "--indirect-selection",
-                "eager",
-            ],
-            expected_exit_code=23,
-            expected_project_dir=Path("/tmp/demo"),
-            expected_dbt_args=("--select", "test_type:data", "--indirect-selection", "eager"),
-        ),
-        MainTestCase(
             description="dispatches dbt debug and preserves dbt args",
             argv=[
                 "--project-dir",
@@ -332,7 +316,6 @@ def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_di
             run_dbt_plan=run_dbt_execution,
             run_dbt_run=run_dbt_execution,
             run_dbt_build=run_dbt_execution,
-            run_dbt_test=run_dbt_execution,
             run_dbt_debug=run_dbt_execution,
         ),
     )

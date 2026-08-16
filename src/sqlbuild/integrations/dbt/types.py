@@ -44,22 +44,7 @@ class DbtInteropCommand(StrEnum):
     PLAN = "plan"
     RUN = "run"
     BUILD = "build"
-    TEST = "test"
     DEBUG = "debug"
-
-
-class DbtInteropSqlbuildTestAction(StrEnum):
-    """SQLBuild validation actions used by `sqb dbt test`."""
-
-    TEST = "test"
-    AUDIT = "audit"
-
-
-class DbtChainNodeBoundaryKind(StrEnum):
-    """dbt node kinds that must be mocked as boundaries in a SQLBuild test chain."""
-
-    SNAPSHOT = "snapshot"
-    EPHEMERAL = "ephemeral"
 
 
 class DbtInteropSkipReason(StrEnum):

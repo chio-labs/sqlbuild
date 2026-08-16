@@ -7,7 +7,6 @@ DBT_EXECUTION_COMMANDS: frozenset[DbtInteropCommand] = frozenset(
         DbtInteropCommand.PLAN,
         DbtInteropCommand.RUN,
         DbtInteropCommand.BUILD,
-        DbtInteropCommand.TEST,
     )
 )
 DBT_EXECUTION_DISPLAY_FLAGS: frozenset[str] = frozenset(("--json", "--verbose", "-v"))

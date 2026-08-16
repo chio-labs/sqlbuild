@@ -501,4 +501,3 @@ class DbtSqlbuildPlanRequest:
     selected_model_names: tuple[str, ...]
     sqlbuild_args: tuple[str, ...]
     external_blocked_model_names: tuple[str, ...] = ()
-    test_manifest: DbtManifestIndex | None = None
