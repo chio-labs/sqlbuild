@@ -1215,7 +1215,6 @@ class CliEntrypointHandlers:
     run_dbt_run: Callable[[Path | None, tuple[str, ...], bool], int]
     run_dbt_build: Callable[[Path | None, tuple[str, ...], bool], int]
     run_dbt_test: Callable[[Path | None, tuple[str, ...], bool], int]
-    run_dbt_scenario: Callable[[Path | None, tuple[str, ...], bool], int]
     run_dbt_debug: Callable[[Path | None, tuple[str, ...], bool], int]
     run_dbt_init: Callable[[DbtInitCommandRequest], int]
     run_build: Callable[[BuildCommandRequest], int]

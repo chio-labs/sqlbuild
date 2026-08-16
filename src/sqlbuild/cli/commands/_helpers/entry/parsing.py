@@ -23,7 +23,6 @@ _DBT_PASSTHROUGH_SUBCOMMANDS: frozenset[str] = frozenset(
         "run",
         "build",
         "test",
-        "scenario",
         "debug",
     }
 )
