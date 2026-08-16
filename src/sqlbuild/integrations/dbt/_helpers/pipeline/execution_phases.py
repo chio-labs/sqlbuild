@@ -4,18 +4,15 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from sqlbuild.cli.commands.main.dbt.dbt_sqlbuild_work import (
-    DbtSqlbuildWorkContext,
-    execute_dbt_sqlbuild_work,
-)
+from sqlbuild.cli.commands.main.dbt.dbt_sqlbuild_work import execute_dbt_sqlbuild_work
 from sqlbuild.cli.commands.main.execution.connection_progress import (
     build_connection_progress_reporter,
 )
+from sqlbuild.cli.commands.models import DbtSqlbuildWorkContext
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt._helpers.pipeline.execute import (
-    dbt_test_execution_nodes,
     execute_dbt_commands,
     render_dbt_execution_summary_footer,
 )
@@ -25,9 +22,6 @@ from sqlbuild.integrations.dbt.main.profile._resolve_connection_config import (
     resolve_connection_config,
 )
 from sqlbuild.integrations.dbt.main.runtime._report_progress import report_progress
-from sqlbuild.integrations.dbt.main.selection._resolve_test_actions import (
-    resolve_sqlbuild_test_actions,
-)
 from sqlbuild.integrations.dbt.models import (
     DbtCommandExecutionResult,
     DbtInteropCompiledProject,
@@ -38,7 +32,6 @@ from sqlbuild.integrations.dbt.models import (
     DbtPlanEnvironment,
     DbtSqlbuildPlanRequest,
 )
-from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSqlbuildTestAction
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 
@@ -92,7 +85,6 @@ def execute_dbt_without_state_tracking(
     request: DbtInteropExecutionRequest,
     invocation: DbtInteropInvocation,
     merged_dbt_argv: tuple[str, ...] | None,
-    plan: DbtInteropPlan,
 ) -> DbtCommandExecutionResult:
     """Execute ordinary dbt events without SQLBuild state reads or writes."""
 
@@ -103,16 +95,7 @@ def execute_dbt_without_state_tracking(
         progress_stream=invocation.output_stream,
         stdout_stream=invocation.dbt_output_stream,
         use_color=request.use_color,
-        expected_nodes=(
-            dbt_test_execution_nodes(plan=plan)
-            if request.command == DbtInteropCommand.TEST
-            else None
-        ),
-        skip_message=(
-            "Skipping dbt tests: no dbt tests for the selection."
-            if request.command == DbtInteropCommand.TEST
-            else "Skipping dbt: no dbt work selected."
-        ),
+        skip_message="Skipping dbt: no dbt work selected.",
         on_progress=request.on_progress,
     )
 
@@ -148,10 +131,6 @@ def resolve_sqlbuild_execution_plan_output(
     if plan.sqlbuild_skip_reason is not None:
         return None
     selected_model_names: tuple[str, ...] = plan.selection.sqlbuild_model_names
-    if request.command == DbtInteropCommand.TEST:
-        selected_model_names = tuple(
-            name for name in selected_model_names if name not in failed_sqlbuild_model_names
-        )
     if not selected_model_names:
         return None
     invocation.output_stream.write("\n")
@@ -174,7 +153,6 @@ def resolve_sqlbuild_execution_plan_output(
             selected_model_names=selected_model_names,
             sqlbuild_args=invocation.effective_sqlbuild_args,
             external_blocked_model_names=failed_sqlbuild_model_names,
-            test_manifest=manifest if request.command == DbtInteropCommand.TEST else None,
         ),
         hooks=ConnectionHooks(
             on_connection_start=connection_progress.on_connection_start,
@@ -204,9 +182,6 @@ def run_dbt_sqlbuild_work(
 ) -> int:
     """Execute the SQLBuild portion of the interop plan and return its exit code."""
 
-    actions: tuple[DbtInteropSqlbuildTestAction, ...] = ()
-    if request.command == DbtInteropCommand.TEST:
-        actions = resolve_sqlbuild_test_actions(select=invocation.routed.select)
     return execute_dbt_sqlbuild_work(
         context=DbtSqlbuildWorkContext(
             plan_output=plan_output,
@@ -221,7 +196,6 @@ def run_dbt_sqlbuild_work(
         project_dir=request.project_dir,
         fail_fast=request.fail_fast,
         verbose=request.verbose,
-        actions=actions,
     )
 
 

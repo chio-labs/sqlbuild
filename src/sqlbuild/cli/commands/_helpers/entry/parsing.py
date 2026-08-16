@@ -22,7 +22,6 @@ _DBT_PASSTHROUGH_SUBCOMMANDS: frozenset[str] = frozenset(
         "plan",
         "run",
         "build",
-        "test",
         "debug",
     }
 )

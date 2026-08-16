@@ -455,7 +455,6 @@ def _add_dbt_parsers(
     dbt_subparsers.add_parser("plan", add_help=False)
     dbt_subparsers.add_parser("run", add_help=False)
     dbt_subparsers.add_parser("build", add_help=False)
-    dbt_subparsers.add_parser("test", add_help=False)
     dbt_subparsers.add_parser("debug")
     dbt_init_parser: argparse.ArgumentParser = dbt_subparsers.add_parser("init")
     dbt_init_parser.add_argument("--project-dir", dest="dbt_project_dir", default=None)

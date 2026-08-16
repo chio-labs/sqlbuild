@@ -87,41 +87,6 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
             ),
         ),
         DbtArgRoutingTestCase(
-            description="passes full refresh to dbt only for test",
-            command="test",
-            parsed=DbtInteropParsedArgs(full_refresh=True),
-            expected_select=(),
-            expected_exclude=(),
-            expected_dbt_args=("--full-refresh",),
-            expected_sqlbuild_args=(),
-        ),
-        DbtArgRoutingTestCase(
-            description="passes event time to dbt only for test",
-            command="test",
-            parsed=DbtInteropParsedArgs(
-                event_time_start="2024-09-01",
-                event_time_end="2024-09-04",
-            ),
-            expected_select=(),
-            expected_exclude=(),
-            expected_dbt_args=(
-                "--event-time-start",
-                "2024-09-01",
-                "--event-time-end",
-                "2024-09-04",
-            ),
-            expected_sqlbuild_args=(),
-        ),
-        DbtArgRoutingTestCase(
-            description="passes vars and threads to both sides for test",
-            command="test",
-            parsed=DbtInteropParsedArgs(vars='{"suite":"nightly"}', threads="3"),
-            expected_select=(),
-            expected_exclude=(),
-            expected_dbt_args=("--vars", '{"suite":"nightly"}', "--threads", "3"),
-            expected_sqlbuild_args=("--vars", '{"suite":"nightly"}', "--concurrency", "3"),
-        ),
-        DbtArgRoutingTestCase(
             description="routes dbt project runtime flags only to dbt",
             command="build",
             parsed=DbtInteropParsedArgs(
@@ -217,23 +182,6 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
             expected_sqlbuild_args=("--fail-fast",),
         ),
         DbtArgRoutingTestCase(
-            description="appends dbt passthrough tail to dbt args verbatim",
-            command="test",
-            parsed=DbtInteropParsedArgs(
-                select=("fct_orders",),
-                dbt_passthrough=("--store-failures", "--favor-state"),
-            ),
-            expected_select=("fct_orders",),
-            expected_exclude=(),
-            expected_dbt_args=(
-                "--select",
-                "fct_orders",
-                "--store-failures",
-                "--favor-state",
-            ),
-            expected_sqlbuild_args=(),
-        ),
-        DbtArgRoutingTestCase(
             description="routes event time with SQLBuild integer cursors without conflict",
             command="run",
             parsed=DbtInteropParsedArgs(
@@ -314,12 +262,6 @@ def test_given_parsed_dbt_args_when_routing_then_returns_expected_buckets(
             description="rejects run-only SQLBuild execution flag on plan",
             command="plan",
             parsed=DbtInteropParsedArgs(fail_fast=True),
-            expected_error_fragment="is not a valid SQLBuild option",
-        ),
-        DbtArgRoutingErrorTestCase(
-            description="rejects run cursor option on test",
-            command="test",
-            parsed=DbtInteropParsedArgs(start_cursor_int="1"),
             expected_error_fragment="is not a valid SQLBuild option",
         ),
     ],

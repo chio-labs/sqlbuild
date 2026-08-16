@@ -83,12 +83,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             args=args,
             no_color=no_color,
         ),
-        run_dbt_test=lambda project_dir, args, no_color: run_dbt_command(
-            command=DbtInteropCommand.TEST,
-            project_dir=project_dir,
-            args=args,
-            no_color=no_color,
-        ),
         run_dbt_debug=lambda project_dir, args, no_color: run_dbt_command(
             command=DbtInteropCommand.DEBUG,
             project_dir=project_dir,
