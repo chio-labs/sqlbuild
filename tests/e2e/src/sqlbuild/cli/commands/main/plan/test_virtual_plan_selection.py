@@ -29,7 +29,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             seed_matching_refs=True,
             command=("--no-color", "plan", "--changes-only"),
             expected_fragments=(
-                "Plan ready (0 selected)",
+                "Plan ready  0 selected",
                 "Virtual environment",
                 "name: dev",
                 "status: finalized",
@@ -79,7 +79,7 @@ def test_given_virtual_plan_with_matching_refs_when_running_cli_then_it_selects_
             seed_matching_refs=True,
             command=("--no-color", "plan", "--changes-only"),
             expected_fragments=(
-                "Plan ready (3 selected)",
+                "Plan ready  3 selected",
                 "stale roots: 2",
                 "stale root set: dim_customers, stg_orders",
                 "stale models: 3",
@@ -150,7 +150,7 @@ def test_given_virtual_plan_with_multiple_stale_roots_when_running_cli_then_it_e
             seed_matching_refs=True,
             command=("--no-color", "plan", "--select", "dim_customers"),
             expected_fragments=(
-                "Plan ready (1 selected)",
+                "Plan ready  1 selected",
                 "Virtual environment",
                 "stale roots: 1",
                 "stale root set: stg_orders",
@@ -268,7 +268,7 @@ def test_given_virtual_plan_selected_downstream_with_stale_upstream_when_running
                 "--changes-only",
             ),
             expected_exit_code=0,
-            expected_fragments=("Plan ready (2 selected)", "stg_orders", "fact_orders"),
+            expected_fragments=("Plan ready  2 selected", "stg_orders", "fact_orders"),
             unexpected_fragments=("dim_customers",),
         )
     ],

@@ -108,7 +108,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "recreated_view",
                 "missing_snapshot",
                 "missing in origin environment",
-                "Completed with warnings.",
+                "\u2713 Completed with warnings",
                 "WARN=1",
             ),
             expected_query_results=(

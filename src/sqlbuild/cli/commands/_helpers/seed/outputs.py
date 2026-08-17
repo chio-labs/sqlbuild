@@ -14,7 +14,11 @@ from sqlbuild.cli.progress.main._write_execution_header import write_execution_h
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.build.types import ExecutionStatus
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.completion_line import format_completion_line
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
+from sqlbuild.presentation.main.surface_header import format_surface_header
+from sqlbuild.presentation.main.tree_connector import tree_connector
+from sqlbuild.presentation.types import CompletionState
 
 
 def write_seed_execution_header(
@@ -24,11 +28,15 @@ def write_seed_execution_header(
 
     seed_count: int = len(preparation.pipeline_result.plan_output.seed_entries)
     style: CliStyle = CliStyle(use_color=invocation.use_color)
-    ready_header: str = f"Seed ready ({seed_count} selected)"
-    invocation.progress_stream.write(f"\n{style.success_strong(ready_header)}\n\n")
-    invocation.progress_stream.write(f"{style.success_strong(f'Seeds ({seed_count})')}\n")
-    for seed_entry in preparation.pipeline_result.plan_output.seed_entries:
-        invocation.progress_stream.write(f"  {seed_entry.name}\n")
+    ready_header: str = format_surface_header(
+        style=style, title="Seed ready", context=f"{seed_count} selected"
+    )
+    invocation.progress_stream.write(f"\n{ready_header}\n\n")
+    invocation.progress_stream.write(f"{style.section(f'Seeds ({seed_count})')}\n")
+    seed_index: int
+    for seed_index, seed_entry in enumerate(preparation.pipeline_result.plan_output.seed_entries):
+        connector: str = tree_connector(style=style, last=seed_index == seed_count - 1)
+        invocation.progress_stream.write(f"{connector} {seed_entry.name}\n")
     invocation.progress_stream.write("\n")
     write_execution_header(
         stream=invocation.progress_stream,
@@ -50,24 +58,24 @@ def write_seed_completion_output(
 
     success_count: int = _success_count(outcome.results)
     fail_count: int = _fail_count(outcome.results)
-    completion_message: str = (
-        "Completed successfully." if fail_count == 0 else "Completed with errors."
+    counts_summary: str = format_summary_footer(
+        counts=(
+            ("PASS", success_count),
+            ("WARN", 0),
+            ("FAIL", fail_count),
+            ("SKIP", 0),
+            ("TOTAL", len(outcome.results)),
+        ),
+        use_color=invocation.use_color,
+        elapsed=f"{outcome.elapsed:.2f}s",
+    )
+    completion_message: str = format_completion_line(
+        style=CliStyle(use_color=invocation.use_color),
+        state=CompletionState.OK if fail_count == 0 else CompletionState.FAIL,
+        label="Completed successfully" if fail_count == 0 else "Completed with errors",
+        summary=counts_summary,
     )
     invocation.progress_stream.write(f"\n{completion_message}\n")
-    invocation.progress_stream.write(
-        format_summary_footer(
-            counts=(
-                ("PASS", success_count),
-                ("WARN", 0),
-                ("FAIL", fail_count),
-                ("SKIP", 0),
-                ("TOTAL", len(outcome.results)),
-            ),
-            use_color=invocation.use_color,
-            elapsed=f"{outcome.elapsed:.2f}s",
-        )
-        + "\n"
-    )
     invocation.progress_stream.flush()
     write_execution_json_output(
         payload=format_seed_execution_json(

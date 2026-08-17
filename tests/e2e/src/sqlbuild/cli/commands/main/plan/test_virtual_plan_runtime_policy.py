@@ -30,7 +30,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             seed_matching_refs=True,
             command=("--no-color", "plan", "--changes-only"),
             expected_fragments=(
-                "Plan ready (2 selected)",
+                "Plan ready  2 selected",
                 "stale root set: stg_orders",
                 "Config changed (1)",
                 "stg_orders",
@@ -101,11 +101,11 @@ def test_given_virtual_plan_with_config_change_when_running_cli_then_it_uses_con
         VirtualSourceFreshnessPlanE2ETestCase(
             description="virtual changes-only runs configured table despite unchanged freshness",
             expected_unchanged_fragments=(
-                "Plan ready (2 selected)",
+                "Plan ready  2 selected",
                 "Runs despite unchanged (1)",
             ),
             expected_fragments=(
-                "Plan ready (2 selected)",
+                "Plan ready  2 selected",
                 "Runs despite unchanged (1)",
                 "rolling_orders",
                 "run_despite_unchanged: 30d",
@@ -159,8 +159,8 @@ def test_given_virtual_run_despite_unchanged_when_planning_changes_only_then_sel
     [
         VirtualSourceFreshnessPlanE2ETestCase(
             description="virtual changes-only skips expired run_despite_unchanged duration",
-            expected_unchanged_fragments=("Plan ready (0 selected)",),
-            expected_fragments=("Plan ready (0 selected)",),
+            expected_unchanged_fragments=("Plan ready  0 selected",),
+            expected_fragments=("Plan ready  0 selected",),
             unexpected_fragments=("Runs despite unchanged", "rolling_orders", "orders_mart"),
         )
     ],
@@ -201,7 +201,7 @@ def test_given_virtual_expired_run_despite_unchanged_when_planning_then_skips_ta
             description="virtual changes-only always runs configured unchanged table",
             expected_unchanged_fragments=(),
             expected_fragments=(
-                "Plan ready (2 selected)",
+                "Plan ready  2 selected",
                 "Runs despite unchanged (1)",
                 "rolling_orders",
                 "run_despite_unchanged: always",
@@ -294,7 +294,7 @@ def test_given_virtual_run_despite_unchanged_when_planning_json_then_outputs_met
             description="virtual scoped runtime stale root leaves downstream remaining stale",
             expected_unchanged_fragments=(),
             expected_fragments=(
-                "Plan ready (1 selected)",
+                "Plan ready  1 selected",
                 "Runs despite unchanged (1)",
                 "rolling_orders",
                 "remaining stale after selection: orders_mart",

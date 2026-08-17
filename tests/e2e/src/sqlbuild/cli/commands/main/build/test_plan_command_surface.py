@@ -21,7 +21,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_waffle_sh
             command=("--no-color", "plan", "--select", "path:models/marts"),
             expected_exit_code=0,
             expected_stdout_fragments=(
-                "Plan ready (10 selected)",
+                "Plan ready  10 selected",
                 "Functions (2 standard run)",
                 "is_completed_order",
                 "sql udf",
@@ -43,7 +43,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_waffle_sh
             ),
             expected_exit_code=0,
             expected_stdout_fragments=(
-                "Plan ready (9 selected)",
+                "Plan ready  9 selected",
                 "Functions (2 standard run)",
                 "Models (7 standard run)",
             ),

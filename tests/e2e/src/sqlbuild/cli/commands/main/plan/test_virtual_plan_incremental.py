@@ -187,7 +187,7 @@ def test_given_denied_virtual_snapshot_full_refresh_when_planning_then_matches_b
             expected_plan_exit_code=0,
             expected_build_exit_code=0,
             expected_fragments=(
-                "Plan ready (1 selected, 1 source to load)",
+                "Plan ready  1 selected, 1 source to load",
                 "source freshness observed: 1",
                 "raw_orders",
                 "fact_orders",
