@@ -316,7 +316,7 @@ def _format_seed_line(
         styled_name=seed_result.seed_name,
         value=f"{status_cell} {style.muted(duration) if duration else ''}",
         name_column_width=name_width,
-        prefix=f"  {counter_str}  seed   ",
+        prefix=f"  {counter_str}  {style.muted('seed  ')} ",
     )
 
 
@@ -351,7 +351,7 @@ def _format_model_line(
         styled_name=name_and_annotation,
         value=f"{status_cell} {rendered_duration}{detail}",
         name_column_width=name_width,
-        prefix=f"  {counter_str}  {resource_type:<6} ",
+        prefix=f"  {counter_str}  {style.muted(f'{resource_type:<6}')} ",
     )
     return line
 
@@ -463,7 +463,7 @@ def _format_sub_line(
         styled_name=name,
         value=colored_status,
         name_column_width=name_width,
-        prefix=f"{padding}  {sub_type:<6} ",
+        prefix=f"{padding}  {style.muted(f'{sub_type:<6}')} ",
     )
 
 
@@ -503,7 +503,7 @@ def _format_test_expectation_sub_line(
         styled_name=name,
         value=colored_status,
         name_column_width=name_width,
-        prefix=f"{'':>14}{'expect':<6} ",
+        prefix=f"{'':>14}{style.muted(f'{"expect":<6}')} ",
     )
 
 
