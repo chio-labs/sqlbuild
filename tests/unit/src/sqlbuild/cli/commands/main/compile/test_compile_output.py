@@ -165,7 +165,7 @@ def test_given_deep_linear_project_when_formatting_compile_json_then_counts_exec
             description="styles compile summary and model rows semantically",
             expected_fragments=(
                 "\033[32m\033[1mCompile ready (3 models)\033[0m",
-                "\033[34m\033[1mshort",
+                "short",
                 "\033[32mOK\033[0m",
                 "\033[2m0 columns\033[0m",
                 "\033[32m\033[1mCompiled:\033[0m",

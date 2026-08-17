@@ -25,7 +25,7 @@ from tests.unit.src.sqlbuild.presentation.main._test_types import SummaryFooterT
                 "\033[2mWARN=\033[0m\033[33m1\033[0m",
                 "\033[2mFAIL=\033[0m\033[31m0\033[0m",
                 "\033[2mSKIP=\033[0m\033[2m3\033[0m",
-                "\033[2mTOTAL=\033[0m\033[34m\033[1m6\033[0m",
+                "\033[2mTOTAL=\033[0m\033[34m6\033[0m",
                 "\033[2m(0.12s)\033[0m",
             ),
         ),

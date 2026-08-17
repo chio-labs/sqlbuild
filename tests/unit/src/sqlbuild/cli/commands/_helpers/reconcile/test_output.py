@@ -16,8 +16,8 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.reconcile._test_types import 
             message="Reconcile report for dev: no issues.",
             expected_text=("\nVirtual reconcile\n\nReconcile report for dev: no issues.\n"),
             expected_color_fragments=(
-                "\033[32m\033[1mVirtual reconcile\033[0m",
-                "\033[34m\033[1mReconcile report for dev: no issues.\033[0m",
+                "\033[34m\033[1mVirtual reconcile\033[0m",
+                "\033[34mReconcile report for dev: no issues.\033[0m",
             ),
         ),
         ReconcileOutputTestCase(
@@ -41,8 +41,8 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.reconcile._test_types import 
             ),
             expected_color_fragments=(
                 "\033[32mRepair\033[0m",
-                "  \033[2mmodel   \033[0m \033[34m\033[1mfact_orders\033[0m",
-                "  \033[2mVDE     \033[0m \033[34m\033[1mdev\033[0m",
+                "  \033[2mmodel   \033[0m fact_orders",
+                "  \033[2mVDE     \033[0m dev",
                 "  \033[2mresult  \033[0m \033[32mrepaired\033[0m",
             ),
         ),

@@ -49,7 +49,7 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.clone._test_types import (
             ),
             expected_color_fragments=(
                 "\033[33m\033[1mCompleted with warnings.\033[0m",
-                "\033[2mCLONED=\033[0m\033[34m\033[1m1\033[0m",
+                "\033[2mCLONED=\033[0m\033[34m1\033[0m",
                 "\033[2mPASS=\033[0m\033[32m1\033[0m",
                 "\033[2mWARN=\033[0m\033[33m1\033[0m",
                 "\033[2mFAIL=\033[0m\033[31m1\033[0m",
