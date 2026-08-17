@@ -3,36 +3,19 @@
 from __future__ import annotations
 
 from sqlbuild.presentation.classes.cli_style import CliStyle
-
-TREE_BRANCH_GLYPH: str = "├──"
-TREE_LAST_GLYPH: str = "└──"
-TREE_PIPE_GLYPH: str = "│"
-PHASE_OK_GLYPH: str = "✓"
-PHASE_FAIL_GLYPH: str = "✗"
-
-
-def tree_branch(*, style: CliStyle) -> str:
-    """Render a dim mid-branch tree connector."""
-
-    return style.muted(TREE_BRANCH_GLYPH)
-
-
-def tree_last(*, style: CliStyle) -> str:
-    """Render a dim final-branch tree connector."""
-
-    return style.muted(TREE_LAST_GLYPH)
-
-
-def tree_pipe(*, style: CliStyle) -> str:
-    """Render a dim vertical tree connector."""
-
-    return style.muted(TREE_PIPE_GLYPH)
+from sqlbuild.presentation.constants import (
+    PHASE_FAIL_GLYPH,
+    PHASE_OK_GLYPH,
+    TREE_BRANCH_GLYPH,
+    TREE_LAST_GLYPH,
+)
+from sqlbuild.presentation.types import CompletionState
 
 
 def tree_connector(*, style: CliStyle, last: bool) -> str:
     """Render a dim tree connector for a group entry."""
 
-    return tree_last(style=style) if last else tree_branch(style=style)
+    return style.muted(TREE_LAST_GLYPH if last else TREE_BRANCH_GLYPH)
 
 
 def format_surface_header(*, style: CliStyle, title: str, context: str | None = None) -> str:
@@ -55,28 +38,6 @@ def format_phase_line(*, style: CliStyle, ok: bool, label: str, summary: str | N
     return rendered
 
 
-def format_tree_leaf(
-    *,
-    style: CliStyle,
-    key: str,
-    value: str,
-    last: bool,
-    indent: str = "    ",
-    key_width: int = 0,
-) -> str:
-    """Render a dim-keyed tree leaf with a plain value."""
-
-    connector: str = tree_connector(style=style, last=last)
-    padded_key: str = f"{key:<{key_width}}" if key_width else key
-    return f"{indent}{connector} {style.muted(padded_key)}  {value}"
-
-
-def format_rollup_line(*, style: CliStyle, text: str) -> str:
-    """Render a dim rollup note for routine work omitted from detailed groups."""
-
-    return f"{tree_pipe(style=style)} {style.muted(text)}"
-
-
 def format_status_cell(*, style: CliStyle, status: str, width: int = 6) -> str:
     """Render a fixed-width status cell padded on the plain text, not the ANSI text."""
 
@@ -85,14 +46,14 @@ def format_status_cell(*, style: CliStyle, status: str, width: int = 6) -> str:
 
 
 def format_completion_line(
-    *, style: CliStyle, state: str, label: str, summary: str | None = None
+    *, style: CliStyle, state: CompletionState, label: str, summary: str | None = None
 ) -> str:
     """Render a single-line completion summary: state glyph, label, trailing summary."""
 
-    if state == "fail":
+    if state == CompletionState.FAIL:
         glyph: str = style.error(PHASE_FAIL_GLYPH)
         rendered_label: str = style.error_strong(label)
-    elif state == "warn":
+    elif state == CompletionState.WARN:
         glyph = style.warning(PHASE_OK_GLYPH)
         rendered_label = style.warning_strong(label)
     else:

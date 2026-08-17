@@ -16,3 +16,12 @@ class CursorResolutionStatus(StrEnum):
     DEFERRED = "deferred"
     RESOLVED = "resolved"
     UNAVAILABLE = "unavailable"
+
+
+class PlanRowKind(StrEnum):
+    """Structural classification of a rendered plan line."""
+
+    ENTRY = "entry"
+    LEAF = "leaf"
+    NESTED = "nested"
+    OTHER = "other"

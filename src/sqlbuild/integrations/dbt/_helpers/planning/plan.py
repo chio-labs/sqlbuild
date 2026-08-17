@@ -13,7 +13,8 @@ from sqlbuild.integrations.dbt.models import DbtInteropPlan, DbtInteropSelection
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSkipReason
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.append_overflow_line import append_overflow_line
-from sqlbuild.presentation.main.structure import format_surface_header, tree_connector
+from sqlbuild.presentation.main.surface_header import format_surface_header
+from sqlbuild.presentation.main.tree_connector import tree_connector
 from sqlbuild.presentation.main.visible_entries import visible_entries
 from sqlbuild.presentation.models import DisplayOptions
 
