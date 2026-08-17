@@ -36,7 +36,7 @@ from scripts.fensu_policy.constants import (
 )
 def color_capability_entry(*, module: object, ctx: RuleContext) -> list[Fault]:
     del module
-    if ctx.repo_relative_parts() == PUBLIC_COLOR_ENTRY_PARTS:
+    if ctx.repo_relative_parts() in PUBLIC_COLOR_ENTRY_PARTS:
         return []
     raw_module_parts: tuple[str, ...] = tuple(
         "sqlbuild.presentation._helpers.terminal_capabilities".split(".")
