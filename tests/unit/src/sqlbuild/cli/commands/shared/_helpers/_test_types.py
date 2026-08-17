@@ -55,6 +55,7 @@ class BuildProgressFailureOutputTestCase:
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
     use_color: bool = False
+    terminal_width: int = 120
 
 
 @dataclass(frozen=True)
@@ -94,6 +95,10 @@ class NestedProgressChildRowsTestCase:
     name_width: int
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+    status_text: str = "PASS"
+    child_status_text: str = "PASS"
+    error_code: str | None = None
+    error_message: str | None = None
 
 
 @dataclass(frozen=True)
