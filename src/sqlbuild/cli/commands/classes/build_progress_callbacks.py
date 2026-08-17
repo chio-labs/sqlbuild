@@ -38,8 +38,10 @@ from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.coded_error_text import format_coded_error
-from sqlbuild.presentation.main.structure import format_completion_line, format_status_cell
+from sqlbuild.presentation.main.completion_line import format_completion_line
+from sqlbuild.presentation.main.status_cell import format_status_cell
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
+from sqlbuild.presentation.types import CompletionState
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 
 _TYPE_WIDTH: int = 10
@@ -626,13 +628,13 @@ def format_build_footer(
         elapsed=elapsed_str,
     )
     if result.status == BuildStatus.FAILED or python_fail_count:
-        state: str = "fail"
+        state: CompletionState = CompletionState.FAIL
         label: str = "Completed with errors"
     elif result.warning_count > 0:
-        state = "warn"
+        state = CompletionState.WARN
         label = "Completed with warnings"
     else:
-        state = "ok"
+        state = CompletionState.OK
         label = "Completed successfully"
     lines.append(
         format_completion_line(style=style, state=state, label=label, summary=counts_summary)

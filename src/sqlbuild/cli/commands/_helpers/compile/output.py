@@ -27,12 +27,10 @@ from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.lineage.models import ModelColumnLineage, ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.presentation.classes.cli_style import CliStyle
-from sqlbuild.presentation.main.structure import (
-    format_phase_line,
-    format_status_cell,
-    format_surface_header,
-    tree_connector,
-)
+from sqlbuild.presentation.main.phase_line import format_phase_line
+from sqlbuild.presentation.main.status_cell import format_status_cell
+from sqlbuild.presentation.main.surface_header import format_surface_header
+from sqlbuild.presentation.main.tree_connector import tree_connector
 from sqlbuild.spec.contracts.models import SourceLocation
 
 _HUMAN_MODEL_LIMIT: int = 100
