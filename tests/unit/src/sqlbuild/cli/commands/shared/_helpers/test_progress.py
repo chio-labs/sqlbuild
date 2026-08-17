@@ -502,6 +502,34 @@ def test_given_audit_results_when_aggregating_then_produces_expected_entries(
             ),
             unexpected_fragments=("line four...", "\033["),
         ),
+        BuildFooterTestCase(
+            description="footer lists skipped nodes in a dim capped rollup",
+            result=BuildExecutionResult(
+                status=BuildStatus.FAILED,
+                model_results=(
+                    ModelExecutionResult(
+                        model_name="stg_orders",
+                        status=ExecutionStatus.SKIPPED,
+                    ),
+                    ModelExecutionResult(
+                        model_name="fact_orders",
+                        status=ExecutionStatus.SKIPPED,
+                    ),
+                ),
+                function_results=(
+                    FunctionExecutionResult(
+                        function_name="is_completed_order",
+                        status=ExecutionStatus.FAILED,
+                        function_kind="udf",
+                        error_message="warehouse said no",
+                    ),
+                ),
+            ),
+            expected_fragments=(
+                "Failures:",
+                "Skipped (2): stg_orders, fact_orders",
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -651,6 +679,29 @@ def test_given_execution_context_when_writing_header_then_renders_expected_outpu
                 "          line four...",
             ),
             unexpected_fragments=("line five should not appear", "\033["),
+        ),
+        BuildProgressFailureOutputTestCase(
+            description="failing test writes its row and error inline without a host model",
+            node_result=SqlTestExecutionResult(
+                test_name="test_daily_revenue_chain",
+                outcome=SqlTestOutcome.FAIL,
+                step_results=(
+                    StepResult(
+                        model_name="stg_orders",
+                        outcome=SqlTestOutcome.FAIL,
+                        mismatched_row_count=2,
+                    ),
+                ),
+                error_code="T002",
+                error_message="execution error while running 'stg_orders'",
+            ),
+            expected_fragments=(
+                "test      test_daily_revenu...",
+                "FAIL",
+                "expect  expected stg_orders",
+                "error     error[T002]: execution error while running 'stg_orders'",
+            ),
+            unexpected_fragments=("\033[",),
         ),
     ],
     ids=lambda case: case.description,
