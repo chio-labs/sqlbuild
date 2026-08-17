@@ -43,6 +43,7 @@ from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.aligned_name_value import format_aligned_name_value
 from sqlbuild.presentation.main.append_overflow_line import append_overflow_line
 from sqlbuild.presentation.main.resolve_name_column_width import resolve_name_column_width
+from sqlbuild.presentation.main.structure import format_surface_header, tree_connector
 from sqlbuild.presentation.main.visible_entries import visible_entries
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
@@ -123,7 +124,7 @@ def format_plan(
             python_plan_entries=python_plan_entries,
             full_refresh=False,
         )
-        lines.append(style.success_strong(header))
+        lines.append(format_surface_header(style=style, title="Plan ready", context=header))
 
     lines = _format_virtual_metadata(
         lines=lines,
@@ -269,6 +270,7 @@ def format_plan(
         display_options=resolved_display_options,
         section_header_style=resolved_section_header_style,
     )
+    lines = _treeify_plan_lines(lines)
     lines = _format_warnings(
         lines=lines,
         plan=plan,
@@ -298,13 +300,15 @@ def _format_full_refresh(
 
     if include_header:
         lines.append(
-            CliStyle(use_color=True).success_strong(
-                _plan_ready_header(
+            format_surface_header(
+                style=CliStyle(use_color=True),
+                title="Plan ready",
+                context=_plan_ready_header(
                     selected_count=selected_count,
                     source_load_entries=plan.source_load_entries,
                     python_plan_entries=python_plan_entries,
                     full_refresh=True,
-                )
+                ),
             )
         )
 
@@ -404,7 +408,7 @@ def _plan_ready_header(
     if python_count:
         node_noun: str = "node" if python_count == 1 else "nodes"
         parts.append(f"{python_count} Python {node_noun}")
-    return f"Plan ready ({', '.join(parts)})"
+    return ", ".join(parts)
 
 
 def _python_plan_entries_for_phase(
@@ -1386,14 +1390,21 @@ def _format_warnings(
     lines.append("")
     lines.append(style.warning_strong(f"Warnings ({len(warning_entries)})"))
     warning: PlanWarning
-    for warning in warning_entries:
-        if warning.model_name is not None:
-            lines.append(f"  {style.object_name(warning.model_name)}")
+    warning_index: int
+    for warning_index, warning in enumerate(warning_entries):
+        connector: str = tree_connector(style=style, last=warning_index == len(warning_entries) - 1)
         message_lines: list[str] = warning.message.split("\n")
-        lines.append(f"  {style.warning(f'- {message_lines[0]}')}")
+        if warning.model_name is not None:
+            lines.append(f"{connector} {style.object_name(warning.model_name)}")
+            lines.append(
+                f"    {tree_connector(style=style, last=len(message_lines) == 1)} "
+                f"{style.warning(message_lines[0])}"
+            )
+        else:
+            lines.append(f"{connector} {style.warning(message_lines[0])}")
         continuation: str
         for continuation in message_lines[1:]:
-            lines.append(f"    {style.warning(continuation)}")
+            lines.append(f"      {style.warning(continuation)}")
     return lines
 
 
@@ -1760,6 +1771,72 @@ def _format_name_value_line(*, name: str, value: str, name_column_width: int) ->
         value=value,
         name_column_width=name_column_width,
     )
+
+
+_RUNTIME_PROMINENT_MARKERS: tuple[str, ...] = ("runtime", "deferred")
+
+
+def _treeify_plan_lines(lines: list[str]) -> list[str]:
+    """Convert section entry and detail lines into tree-connected rows."""
+
+    style: CliStyle = CliStyle(use_color=True)
+    kinds: list[str] = []
+    line: str
+    for line in lines:
+        plain: str = _strip_ansi(line)
+        if line != plain or not plain.strip():
+            kinds.append("other")
+        elif plain.startswith("      "):
+            kinds.append("nested")
+        elif plain.startswith("    ") and plain[4] not in " .":
+            kinds.append("leaf")
+        elif plain.startswith("  ") and plain[2] not in " .":
+            kinds.append("entry")
+        else:
+            kinds.append("other")
+    out: list[str] = []
+    index: int
+    for index, line in enumerate(lines):
+        kind: str = kinds[index]
+        if kind == "entry":
+            last: bool = _is_last_tree_row(kinds=kinds, index=index, row_kind="entry")
+            connector: str = style.muted("\u2514\u2500\u2500" if last else "\u251c\u2500\u2500")
+            out.append(f"{connector} {line[2:]}")
+            continue
+        if kind == "leaf":
+            last = _is_last_tree_row(kinds=kinds, index=index, row_kind="leaf")
+            connector = style.muted("\u2514\u2500\u2500" if last else "\u251c\u2500\u2500")
+            content: str = line[4:]
+            key, separator, value = content.partition(": ")
+            if separator:
+                rendered_value: str = value
+                if any(marker in value for marker in _RUNTIME_PROMINENT_MARKERS):
+                    rendered_value = style.section(value)
+                out.append(f"    {connector} {style.muted(key)}  {rendered_value}")
+            else:
+                out.append(f"    {connector} {content}")
+            continue
+        out.append(line)
+    return out
+
+
+def _is_last_tree_row(*, kinds: list[str], index: int, row_kind: str) -> bool:
+    """Return whether the row is the final one of its kind within its block."""
+
+    scan: int = index + 1
+    while scan < len(kinds):
+        kind: str = kinds[scan]
+        if kind == "other":
+            return True
+        if row_kind == "entry" and kind == "entry":
+            return False
+        if row_kind == "leaf":
+            if kind == "leaf":
+                return False
+            if kind == "entry":
+                return True
+        scan += 1
+    return True
 
 
 def _format_schema_findings(findings: tuple[SchemaFinding, ...]) -> list[str]:
