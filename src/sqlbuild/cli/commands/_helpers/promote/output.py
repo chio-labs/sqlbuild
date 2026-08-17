@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.presentation.classes.cli_document import CliDocument
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.structure import format_completion_line
 from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 
 _MODEL_SET_CAP: int = 20
@@ -42,9 +43,16 @@ def format_promote_output(
     )
     doc: CliDocument = CliDocument(style)
     doc.blank()
-    doc.header(text="Virtual promotion complete", suffix=f"{from_label} -> {to_label}")
-    doc.line(f"  target status          {status_value}")
-    doc.line(f"  promoted models        {promoted_count}")
+    doc.line(
+        format_completion_line(
+            style=style,
+            state="ok" if status_label == VirtualEnvironmentStatus.FINALIZED else "warn",
+            label="Virtual promotion complete",
+            summary=f"{from_label} -> {to_label}",
+        )
+    )
+    doc.line(f"  {style.label('target status')}          {status_value}")
+    doc.line(f"  {style.label('promoted models')}        {promoted_count}")
     if promoted_models:
         for line in _format_model_set_lines(
             label="promoted model set",
@@ -53,7 +61,7 @@ def format_promote_output(
             style=style,
         ):
             doc.line(line)
-    doc.line(f"  remaining stale models {remaining_count}")
+    doc.line(f"  {style.label('remaining stale models')} {remaining_count}")
     if remaining_stale:
         for line in _format_model_set_lines(
             label="remaining stale set",
