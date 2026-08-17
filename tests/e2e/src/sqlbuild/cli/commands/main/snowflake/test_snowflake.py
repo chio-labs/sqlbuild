@@ -24,7 +24,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake._test_types import (
     SnowflakeBuildE2ETestCase,
     SnowflakeCliTestCase,
     SnowflakeCloneE2ETestCase,
-    SnowflakeDbtCloneE2ETestCase,
     SnowflakeDbtProfileE2ETestCase,
     SnowflakeDbtScenarioLocalReplayE2ETestCase,
     SnowflakeDiffE2ETestCase,
@@ -44,7 +43,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.snowflake._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.snowflake.helpers import (
     assert_current_snowflake_snapshot_rows,
-    assert_snowflake_dbt_clone_lifecycle,
     assert_snowflake_snapshot_apply_rows,
     assert_snowflake_snapshot_matrix_rows,
     build_snowflake_dbt_profiles_yml,
@@ -158,114 +156,6 @@ def test_given_snowflake_dbt_profile_when_running_dbt_init_then_builds_profile_l
         )
     finally:
         cleanup_snowflake_schema(schema_name=schema_name)
-
-
-@pytest.mark.dbt
-@pytest.mark.parametrize(
-    "test_case",
-    (
-        SnowflakeDbtCloneE2ETestCase(
-            description="dbt clone zero-copy clones a prod table into the Snowflake dev target",
-            schema_prefix="sqlbuild_dbt_clone",
-            command=("--no-color", "dbt", "clone", "--select", "fact_orders"),
-            prod_model_sql="select 1 as order_id, 900 as amount\n",
-            feature_model_sql="select 1 as order_id, 111 as amount\n",
-            expected_stdout_fragments=(
-                "sqb clone  origin=prod destination=dev",
-                "fact_orders",
-                "cloned",
-                "CLONED=1",
-            ),
-            expected_rows=((1, 900),),
-        ),
-        SnowflakeDbtCloneE2ETestCase(
-            description="dbt clone recreates a Snowflake view from current SQL",
-            schema_prefix="sqlbuild_dbt_clone_view",
-            command=("--no-color", "dbt", "clone", "--select", "fact_orders"),
-            prod_model_sql=(
-                "{{ config(materialized='view') }}\n\nselect 1 as order_id, 900 as amount\n"
-            ),
-            feature_model_sql=(
-                "{{ config(materialized='view') }}\n\nselect 1 as order_id, 111 as amount\n"
-            ),
-            expected_stdout_fragments=(
-                "sqb clone  origin=prod destination=dev",
-                "fact_orders",
-                "recreated_view",
-                "RECREATED_VIEWS=1",
-            ),
-            expected_rows=((1, 111),),
-        ),
-    ),
-    ids=lambda case: case.description,
-)
-def test_given_snowflake_dbt_clone_when_running_then_copies_prod_table(
-    tmp_path: Path,
-    test_case: SnowflakeDbtCloneE2ETestCase,
-) -> None:
-    schema_base: str = build_unique_schema_name(prefix=test_case.schema_prefix)
-    dev_schema_name: str = f"{schema_base}_dev"
-    prod_schema_name: str = f"{schema_base}_prod"
-    config: dict[str, object] = build_snowflake_connection_config(schema=dev_schema_name)
-    database_name: str = str(config["database"])
-    try:
-        ensure_query_schema_ready(schema_name=dev_schema_name)
-        ensure_query_schema_ready(schema_name=prod_schema_name)
-        assert_snowflake_dbt_clone_lifecycle(
-            tmp_path=tmp_path,
-            profiles_yml=(
-                "analytics:\n"
-                "  target: dev\n"
-                "  outputs:\n"
-                "    dev:\n"
-                "      type: snowflake\n"
-                f"      account: {config['account']}\n"
-                f"      user: {config['user']}\n"
-                "      authenticator: programmatic_access_token\n"
-                f"      token: {config['token']}\n"
-                f"      role: {config['role']}\n"
-                f"      warehouse: {config['warehouse']}\n"
-                f"      database: {database_name}\n"
-                f"      schema: {dev_schema_name}\n"
-                "    prod:\n"
-                "      type: snowflake\n"
-                f"      account: {config['account']}\n"
-                f"      user: {config['user']}\n"
-                "      authenticator: programmatic_access_token\n"
-                f"      token: {config['token']}\n"
-                f"      role: {config['role']}\n"
-                f"      warehouse: {config['warehouse']}\n"
-                f"      database: {database_name}\n"
-                f"      schema: {prod_schema_name}\n"
-            ),
-            project_toml=(
-                build_snowflake_project_toml(
-                    project_name="snowflake_dbt_clone",
-                    schema_name=dev_schema_name,
-                )
-                + "\n[dbt]\n"
-                + 'project_dir = "../dbt_project"\n'
-                + 'profiles_dir = "../profiles"\n'
-                + 'target_path = "../dbt_project/target"\n'
-                + "[dbt.production_ref]\n"
-                + 'git_ref = "prod"\n'
-                + 'generate_schema_name_override = "dbt/macros/prod_generate_schema_name.sql"\n'
-            ),
-            fetch_rows=lambda sql: fetch_snowflake_rows(schema_name=dev_schema_name, sql=sql),
-            rows_sql=(
-                "SELECT order_id, amount FROM "
-                f"{relation_name(schema_name=dev_schema_name, name='fact_orders')} "
-                "ORDER BY order_id"
-            ),
-            command=test_case.command,
-            prod_model_sql=test_case.prod_model_sql,
-            feature_model_sql=test_case.feature_model_sql,
-            expected_stdout_fragments=test_case.expected_stdout_fragments,
-            expected_rows=test_case.expected_rows,
-        )
-    finally:
-        cleanup_snowflake_schema(schema_name=dev_schema_name)
-        cleanup_snowflake_schema(schema_name=prod_schema_name)
 
 
 @pytest.mark.parametrize(

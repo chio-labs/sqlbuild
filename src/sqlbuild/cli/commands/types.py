@@ -168,4 +168,3 @@ class PlaygroundTemplate(StrEnum):
     RIVERS = "rivers"
     VIRTUAL = "virtual"
     PYTHON_NODES = "python_nodes"
-    DBT = "dbt"

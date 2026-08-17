@@ -212,7 +212,6 @@ class DbtInitRequest:
     dry_run: bool = False
     overwrite: bool = False
     skip_dbt_debug: bool = False
-    production_git_ref: str = "main"
     progress_callbacks: DbtInitProgressCallbacks = field(default_factory=DbtInitProgressCallbacks)
 
 
@@ -223,8 +222,6 @@ class DbtInitResult:
     output_dir: Path
     project_file: Path
     project_name: str
-    macro_file: Path
-    production_git_ref: str
     adapter: str
     target_name: str
     profile_name: str
@@ -241,16 +238,6 @@ class DbtCommandResult:
     returncode: int
     stdout: str = ""
     stderr: str = ""
-
-
-@dataclass(frozen=True)
-class DbtProductionRefCompileResult:
-    """Manifest produced by compiling a dbt project at a production git ref."""
-
-    git_ref: str
-    manifest_contents: str
-    command: DbtCommandResult
-    cache_hit: bool = False
 
 
 @dataclass(frozen=True)

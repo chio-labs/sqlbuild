@@ -461,7 +461,6 @@ def _add_dbt_parsers(
     dbt_init_parser.add_argument("--profiles-dir", dest="dbt_profiles_dir", default=None)
     dbt_init_parser.add_argument("--profile", dest="dbt_profile", default=None)
     dbt_init_parser.add_argument("--target", dest="dbt_target", default=None)
-    dbt_init_parser.add_argument("--prod-git-ref", dest="dbt_prod_git_ref", default=None)
     dbt_init_parser.add_argument("--sqb-output-dir", dest="sqb_output_dir", default=None)
     dbt_init_parser.add_argument("--dry-run", dest="dry_run", action="store_true", default=False)
     dbt_init_parser.add_argument(

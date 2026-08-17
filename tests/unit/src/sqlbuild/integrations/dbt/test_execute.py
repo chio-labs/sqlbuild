@@ -60,7 +60,7 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import CompileOnlyDbtRunne
     ],
     ids=lambda case: case.description,
 )
-def test_given_ordinary_plan_when_compiling_then_never_compiles_production_ref(
+def test_given_ordinary_plan_when_compiling_then_uses_single_current_compile(
     test_case: DbtCompileFullRefreshPipelineTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -135,7 +135,7 @@ def test_given_ordinary_plan_when_compiling_then_never_compiles_production_ref(
     ],
     ids=lambda case: case.description,
 )
-def test_given_ordinary_execution_when_compiling_then_never_uses_production_ref_or_dbt_state(
+def test_given_ordinary_execution_when_compiling_then_never_uses_dbt_state(
     test_case: DbtCompileFullRefreshPipelineTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

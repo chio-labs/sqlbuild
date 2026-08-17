@@ -85,18 +85,6 @@ def write_dbt_init_orders_model(*, workspace: Path, amount_cents: int) -> None:
     )
 
 
-def initialize_dbt_init_git_repo(*, workspace: Path, production_ref: str) -> None:
-    """Create a production ref and feature branch for generated reuse config E2Es."""
-
-    _run_git(args=("init", "--initial-branch=main"), cwd=workspace)
-    _run_git(args=("config", "user.email", "sqlbuild@example.invalid"), cwd=workspace)
-    _run_git(args=("config", "user.name", "SQLBuild Test"), cwd=workspace)
-    _run_git(args=("add", "."), cwd=workspace)
-    _run_git(args=("commit", "-m", "prod baseline"), cwd=workspace)
-    _run_git(args=("update-ref", f"refs/heads/{production_ref}", "HEAD"), cwd=workspace)
-    _run_git(args=("checkout", "-b", "feature"), cwd=workspace)
-
-
 def _capture_pty_output(
     *, master_fd: int, output_parts: list[bytes], reader_done: threading.Event
 ) -> None:
@@ -224,10 +212,6 @@ def break_dbt_interop_fact_orders_model(project_dir: Path) -> None:
         "select * from this_relation_does_not_exist_for_failure_test\n",
         encoding="utf-8",
     )
-
-
-def _run_git(*, args: tuple[str, ...], cwd: Path) -> None:
-    subprocess.run(("git", *args), cwd=cwd, capture_output=True, check=True, text=True)
 
 
 def assert_dbt_local_replay_rows(

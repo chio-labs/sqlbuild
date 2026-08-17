@@ -164,16 +164,6 @@ class ScenarioConfig:
 
 
 @dataclass(frozen=True)
-class DbtProductionRefConfig:
-    """dbt production ref configuration."""
-
-    git_ref: str | None = None
-    generate_schema_name_override: str | None = None
-    refresh: bool = True
-    git_timeout_seconds: int = 30
-
-
-@dataclass(frozen=True)
 class DbtConfig:
     """dbt interop configuration."""
 
@@ -182,7 +172,6 @@ class DbtConfig:
     target: str | None = None
     target_path: str | None = None
     vars: dict[str, object] = field(default_factory=dict)
-    production_ref: DbtProductionRefConfig = field(default_factory=DbtProductionRefConfig)
 
 
 @dataclass(frozen=True)
