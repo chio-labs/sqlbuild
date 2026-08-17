@@ -38,6 +38,7 @@ from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.coded_error_text import format_coded_error
+from sqlbuild.presentation.main.structure import format_completion_line, format_status_cell
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 
@@ -267,7 +268,7 @@ class BuildProgressCallbacks:
         ctr: str = f"{self._counter}/{self._total}".rjust(len(str(self._total)) * 2 + 1)
 
         if isinstance(node_result, SeedExecutionResult):
-            status: str = self._style.status(status=_execution_status_display(node_result.status))
+            status: str = _execution_status_display(node_result.status)
             duration: str = _format_duration(node_result.duration_ms)
             seed_name: str = _truncate_name(name=node_result.seed_name, width=self._name_width)
             self._write_top_level_result_line(
@@ -287,7 +288,7 @@ class BuildProgressCallbacks:
             return
 
         if isinstance(node_result, FunctionExecutionResult):
-            status: str = self._style.status(status=_execution_status_display(node_result.status))
+            status: str = _execution_status_display(node_result.status)
             duration: str = _format_duration(node_result.duration_ms)
             function_name: str = _truncate_name(
                 name=node_result.function_name, width=self._name_width
@@ -309,7 +310,7 @@ class BuildProgressCallbacks:
             return
 
         if isinstance(node_result, LoadExecutionResult):
-            status = self._style.status(status=_execution_status_display(node_result.status))
+            status = _execution_status_display(node_result.status)
             duration = _format_duration(node_result.duration_ms)
             source_name: str = _truncate_name(name=node_result.source_name, width=self._name_width)
             detail: str = _load_result_detail(node_result)
@@ -348,7 +349,7 @@ class BuildProgressCallbacks:
             name_display = f"{model_result.model_name}  ({annotation})"
         name_display = _truncate_name(name=name_display, width=self._name_width)
 
-        status: str = self._style.status(status=_execution_status_display(model_result.status))
+        status: str = _execution_status_display(model_result.status)
         duration: str = _format_duration(model_result.duration_ms)
         detail: str = ""
         if model_result.status == ExecutionStatus.FAILED and model_result.failed_phase is not None:
@@ -491,8 +492,11 @@ class BuildProgressCallbacks:
         detail: str = "",
     ) -> None:
         nw: int = self._name_width
+        status_cell: str = format_status_cell(style=self._style, status=status)
+        rendered_duration: str = self._style.muted(duration) if duration else ""
         self._stream.write(
-            f"  {ctr}  {resource_type:<{_TYPE_WIDTH}}{name:<{nw}} {status:<6} {duration}{detail}\n"
+            f"  {ctr}  {resource_type:<{_TYPE_WIDTH}}{name:<{nw}} "
+            f"{status_cell} {rendered_duration}{detail}\n"
         )
 
     def _write_error_detail(
@@ -606,29 +610,32 @@ def format_build_footer(
         if python_result.status == PythonNodeStatus.FAILED
     )
 
-    if result.status == BuildStatus.FAILED or python_fail_count:
-        lines.append(style.error("Completed with errors."))
-    elif result.warning_count > 0:
-        lines.append(style.warning("Completed with warnings."))
-    else:
-        lines.append(style.success("Completed successfully."))
-
     counts: ExecutionCounts = _count_build_footer_results(
         result=result, python_node_results=python_node_results
     )
     elapsed_str: str = f"{elapsed:.2f}s"
+    counts_summary: str = format_summary_footer(
+        counts=(
+            ("PASS", counts.pass_count),
+            ("WARN", counts.warn_count),
+            ("FAIL", counts.fail_count),
+            ("SKIP", counts.skip_count),
+            ("TOTAL", counts.total_count),
+        ),
+        use_color=style.use_color,
+        elapsed=elapsed_str,
+    )
+    if result.status == BuildStatus.FAILED or python_fail_count:
+        state: str = "fail"
+        label: str = "Completed with errors"
+    elif result.warning_count > 0:
+        state = "warn"
+        label = "Completed with warnings"
+    else:
+        state = "ok"
+        label = "Completed successfully"
     lines.append(
-        format_summary_footer(
-            counts=(
-                ("PASS", counts.pass_count),
-                ("WARN", counts.warn_count),
-                ("FAIL", counts.fail_count),
-                ("SKIP", counts.skip_count),
-                ("TOTAL", counts.total_count),
-            ),
-            use_color=style.use_color,
-            elapsed=elapsed_str,
-        )
+        format_completion_line(style=style, state=state, label=label, summary=counts_summary)
     )
 
     failure_lines: list[str] = _format_failure_details(result=result, style=style)

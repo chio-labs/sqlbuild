@@ -6,6 +6,7 @@ from typing import TextIO
 
 from sqlbuild.cli.progress.main._execution_header import format_execution_header
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.structure import format_surface_header
 
 
 def write_execution_header(
@@ -19,5 +20,5 @@ def write_execution_header(
         target=target,
         concurrency=concurrency,
     )
-    stream.write(f"{style.object_name('Execution')}  {style.muted(header)}\n\n")
+    stream.write(f"{format_surface_header(style=style, title='Execution', context=header)}\n\n")
     stream.flush()
