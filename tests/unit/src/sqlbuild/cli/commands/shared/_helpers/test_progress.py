@@ -425,7 +425,7 @@ def test_given_audit_results_when_aggregating_then_produces_expected_entries(
                 warning_count=1,
             ),
             expected_fragments=(
-                "Completed with warnings.",
+                "\u2713 Completed with warnings",
                 "PASS=1",
                 "WARN=1",
                 "Warnings:",
@@ -450,7 +450,7 @@ def test_given_audit_results_when_aggregating_then_produces_expected_entries(
                 warning_count=1,
             ),
             expected_fragments=(
-                "\033[33mCompleted with warnings.\033[0m",
+                "\033[33m\u2713\033[0m \033[33m\033[1mCompleted with warnings\033[0m",
                 "\033[33m\033[1mWarnings:\033[0m",
             ),
             use_color=True,
@@ -469,7 +469,7 @@ def test_given_audit_results_when_aggregating_then_produces_expected_entries(
                 ),
             ),
             expected_fragments=(
-                "\033[31mCompleted with errors.\033[0m",
+                "\033[31m\u2717\033[0m \033[31m\033[1mCompleted with errors\033[0m",
                 "\033[31m\033[1mFailures:\033[0m",
                 "\033[31m\033[2merror\033[0m",
             ),
@@ -537,7 +537,9 @@ def test_given_failed_resource_result_when_formatting_footer_then_includes_error
             target=None,
             concurrency=1,
             use_color=True,
-            expected_output="Execution  \033[2msqb build  (concurrency: 1)\033[0m\n\n",
+            expected_output=(
+                "\033[34m\033[1mExecution\033[0m  \033[2msqb build  (concurrency: 1)\033[0m\n\n"
+            ),
         ),
     ],
     ids=lambda case: case.description,
