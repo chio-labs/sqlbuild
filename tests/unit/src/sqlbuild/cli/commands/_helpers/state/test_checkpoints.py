@@ -183,12 +183,12 @@ def test_given_checkpoint_model_refs_when_formatting_diff_without_color_then_pre
         CheckpointColorOutputTestCase(
             description="uses semantic checkpoint colors",
             expected_fragments=(
-                "\033[32m\033[1mVirtual environment checkpoint\033[0m",
+                "\033[34m\033[1mVirtual environment checkpoint\033[0m",
                 "\033[34mcp_1\033[0m",
                 "\033[32mRefs\033[0m",
                 "\033[32mSeed refs\033[0m",
-                "\033[34m\033[1mmodel_a",
-                "\033[34m\033[1mseed_a",
+                "model_a",
+                "seed_a",
                 "\033[2mhash_a\033[0m",
                 "\033[2mseed_hash_a\033[0m",
             ),

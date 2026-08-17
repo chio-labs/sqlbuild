@@ -537,8 +537,7 @@ def test_given_failed_resource_result_when_formatting_footer_then_includes_error
             target=None,
             concurrency=1,
             use_color=True,
-            expected_output="\033[34m\033[1mExecution\033[0m  "
-            "\033[2msqb build  (concurrency: 1)\033[0m\n\n",
+            expected_output="Execution  \033[2msqb build  (concurrency: 1)\033[0m\n\n",
         ),
     ],
     ids=lambda case: case.description,
@@ -795,7 +794,7 @@ def test_given_model_node_when_reporting_progress_then_writes_materialization_la
         BuildProgressLoadLogTestCase(
             description="completed source load colors log label and content semantically",
             expected_fragments=(
-                "\033[34m\033[2m    log  \033[0m",
+                "\033[2m    log  \033[0m",
                 "\033[2mingestr stdout\033[0m",
                 "\033[2m         Starting data ingestion\033[0m",
             ),

@@ -177,7 +177,7 @@ def test_given_duckdb_dbt_project_when_running_dbt_init_then_generated_project_b
             description="dbt init renders colored output over a tty",
             input_text="",
             expected_stdout_fragments=(
-                "\x1b[32m\x1b[1mSQLBuild project created\x1b[0m",
+                "\x1b[34m\x1b[1mSQLBuild project created\x1b[0m",
                 "\x1b[1mSetup summary\x1b[0m:",
                 "\x1b[1mWhat SQLBuild created\x1b[0m:",
                 "\x1b[33mReview the config file above.\x1b[0m",

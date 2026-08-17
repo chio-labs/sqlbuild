@@ -34,19 +34,19 @@ from tests.unit.src.sqlbuild.presentation.classes._test_types import CliDocument
             description="renders simple document with semantic color",
             use_color=True,
             expected_rendered=(
-                "\033[32m\033[1mTitle\033[0m\n"
+                "\033[34m\033[1mTitle\033[0m\n"
                 "\n"
-                "  \033[34m\033[1mProject\033[0m: demo\n"
-                "  \033[34m\033[1mConfig\033[0m:  sqlbuild_project.toml\n"
+                "  \033[34mProject\033[0m: demo\n"
+                "  \033[34mConfig\033[0m:  sqlbuild_project.toml\n"
                 "\n"
                 "\033[1mNext steps\033[0m:\n"
                 "  1. Add sources\n"
                 "  2. \033[2msqb compile\033[0m\n"
                 "\n"
                 "\033[1mObjects\033[0m:\n"
-                "  \033[34m\033[1mmodel_a\033[0m\n"
-                "  \033[34m\033[1mmodel_b\033[0m\n"
-                "\033[32m\033[1mTry\033[0m:\n"
+                "  model_a\n"
+                "  model_b\n"
+                "\033[34m\033[1mTry\033[0m:\n"
                 "\033[2m  \033[0msqb build\n"
             ),
         ),
