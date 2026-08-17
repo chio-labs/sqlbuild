@@ -11,7 +11,6 @@ from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
-    AuditOutcome,
     AuditRunScope,
     AuditSeverity,
 )
@@ -26,10 +25,6 @@ from sqlbuild.compiler.planner.types import (
     MaterializationType,
     PlanAction,
     PlanReason,
-)
-from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.run._helpers.reuse.fingerprint_metadata import (
-    model_fingerprint_metadata_with_audit_gate,
 )
 from sqlbuild.executor.run.main._execute import execute_table_entry
 from sqlbuild.executor.run.models import (
@@ -128,37 +123,6 @@ def build_test_audit_plan_entry(
         requested_run_scope=AuditRunScope.FINAL,
         effective_run_scope=AuditRunScope.FINAL,
         attached_target_name=attached_target_name,
-    )
-
-
-def build_test_audit_result(
-    *, audit: AuditPlanEntry, outcome: AuditOutcome = AuditOutcome.PASS
-) -> AuditExecutionResult:
-    """Build a minimal audit execution result for fingerprint metadata tests."""
-
-    return AuditExecutionResult(
-        audit_name=audit.name,
-        attachment_kind=audit.attachment_kind,
-        severity=audit.severity,
-        outcome=outcome,
-        row_count={AuditOutcome.PASS: 0, AuditOutcome.WARN: 1, AuditOutcome.ERROR: 1}[outcome],
-        executed_sql=audit.resolved_sql,
-        run_scope_phase=AuditRunScope.FINAL,
-        attached_target_name=audit.attached_target_name,
-        attached_column_name=audit.attached_column_name,
-    )
-
-
-def build_test_audit_gate_metadata(
-    *, audit: AuditPlanEntry, outcome: AuditOutcome = AuditOutcome.PASS
-) -> str:
-    """Build metadata JSON containing successful audit gate proof."""
-
-    return model_fingerprint_metadata_with_audit_gate(
-        metadata_json="{}",
-        model_audits=(audit,),
-        audit_results=(build_test_audit_result(audit=audit, outcome=outcome),),
-        run_id="reuse_from_run",
     )
 
 
