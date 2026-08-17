@@ -13,7 +13,11 @@ from sqlbuild.cli.output.main._load_execution_json import format_load_execution_
 from sqlbuild.cli.output.main._write_execution_json_output import write_execution_json_output
 from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.completion_line import format_completion_line
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
+from sqlbuild.presentation.main.surface_header import format_surface_header
+from sqlbuild.presentation.main.tree_connector import tree_connector
+from sqlbuild.presentation.types import CompletionState
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -21,9 +25,12 @@ def write_load_ready_output(*, invocation: LoadInvocation) -> None:
     """Write selected source summary header."""
 
     style: CliStyle = CliStyle(use_color=invocation.use_color)
-    ready_header: str = f"Load ready ({len(invocation.selected_sources)} selected)"
-    styled_ready_header: str = style.success_strong(ready_header)
-    invocation.progress_stream.write(f"\n{styled_ready_header}\n\n")
+    ready_header: str = format_surface_header(
+        style=style,
+        title="Load ready",
+        context=f"{len(invocation.selected_sources)} selected",
+    )
+    invocation.progress_stream.write(f"\n{ready_header}\n\n")
     invocation.progress_stream.flush()
 
 
@@ -32,21 +39,24 @@ def write_empty_load_output(*, request: LoadCommandRequest, invocation: LoadInvo
 
     style: CliStyle = CliStyle(use_color=invocation.use_color)
     invocation.progress_stream.write(style.muted("  No managed sources selected.") + "\n")
-    invocation.progress_stream.write("\nCompleted successfully.\n")
-    invocation.progress_stream.write(
-        format_summary_footer(
-            counts=(
-                ("PASS", 0),
-                ("WARN", 0),
-                ("FAIL", 0),
-                ("SKIP", 0),
-                ("TOTAL", 0),
-            ),
-            use_color=invocation.use_color,
-            elapsed="0.00s",
-        )
-        + "\n"
+    counts_summary: str = format_summary_footer(
+        counts=(
+            ("PASS", 0),
+            ("WARN", 0),
+            ("FAIL", 0),
+            ("SKIP", 0),
+            ("TOTAL", 0),
+        ),
+        use_color=invocation.use_color,
+        elapsed="0.00s",
     )
+    completion: str = format_completion_line(
+        style=style,
+        state=CompletionState.OK,
+        label="Completed successfully",
+        summary=counts_summary,
+    )
+    invocation.progress_stream.write(f"\n{completion}\n")
     invocation.progress_stream.flush()
     write_execution_json_output(
         payload=format_load_execution_json(results=()),
@@ -66,11 +76,11 @@ def write_load_plan_output(*, invocation: LoadInvocation) -> None:
         source for source in invocation.selected_sources if not _is_loader_node(source)
     )
     if loader_entries:
-        invocation.progress_stream.write(style.success_strong(f"Loaders ({len(loader_entries)})"))
+        invocation.progress_stream.write(style.section(f"Loaders ({len(loader_entries)})"))
         invocation.progress_stream.write("\n")
         _write_source_names(invocation=invocation, sources=loader_entries)
         invocation.progress_stream.write("\n")
-    invocation.progress_stream.write(style.success_strong(f"Sources ({len(source_entries)})"))
+    invocation.progress_stream.write(style.section(f"Sources ({len(source_entries)})"))
     invocation.progress_stream.write("\n")
     _write_source_names(invocation=invocation, sources=source_entries)
     invocation.progress_stream.write("\n")
@@ -121,9 +131,12 @@ def resolve_load_exit_code(outcome: LoadRunOutcome) -> int:
 
 
 def _write_source_names(*, invocation: LoadInvocation, sources: tuple[SourceEntry, ...]) -> None:
+    style: CliStyle = CliStyle(use_color=invocation.use_color)
     source: SourceEntry
-    for source in sources:
-        invocation.progress_stream.write(f"  {source.name}\n")
+    source_index: int
+    for source_index, source in enumerate(sources):
+        connector: str = tree_connector(style=style, last=source_index == len(sources) - 1)
+        invocation.progress_stream.write(f"{connector} {source.name}\n")
 
 
 def _is_loader_node(source: SourceEntry) -> bool:

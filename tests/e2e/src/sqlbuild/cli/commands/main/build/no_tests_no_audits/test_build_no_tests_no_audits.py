@@ -629,7 +629,7 @@ def test_given_failing_task_selector_when_running_run_then_command_fails(
     combined_output: str = result.stdout + result.stderr
     assert "python    task      fail_orders" in combined_output
     assert "FAIL" in combined_output
-    assert "Completed with errors." in combined_output
+    assert "\u2717 Completed with errors" in combined_output
     assert "Python node failures:" in combined_output
     payload: dict[str, object] = json.loads(json_output_path.read_text(encoding="utf-8"))
     assert payload["status"] == "failed"

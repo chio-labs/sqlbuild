@@ -27,7 +27,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             seed_matching_refs=True,
             command=("--no-color", "plan", "--changes-only"),
             expected_fragments=(
-                "Plan ready (3 selected)",
+                "Plan ready  3 selected",
                 "stale roots: 1",
                 "stale root set: fact_orders",
                 "stale models: 2",

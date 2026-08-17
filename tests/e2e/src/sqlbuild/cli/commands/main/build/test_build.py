@@ -68,7 +68,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "Prephase  defer clone",
                 "First run (1)",
                 "downstream",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
             ),
             unexpected_stdout_fragments=("cannot build selected scope",),
             expected_prod_upstream_rows=((1, "prod_version"),),
@@ -99,7 +99,7 @@ def test_given_selected_downstream_when_building_with_defer_clone_then_clones_bo
             expected_mixed_stdout_fragments=(
                 "selected model 'c' will build on",
                 "- a",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
             ),
             expected_replan_stdout_fragments=(
                 "selected model 'c' will build on",
@@ -241,8 +241,8 @@ def test_given_direct_function_dependency_when_building_then_persists_function_h
         DirectChangesOnlyBuildE2ETestCase(
             description="standard changes-only persists plan-time source freshness observation",
             expected_exit_code=0,
-            expected_output_fragments=("Plan ready (1 selected)", "orders", "TOTAL=1"),
-            unexpected_output_fragments=("Plan ready (0 selected)",),
+            expected_output_fragments=("Plan ready  1 selected", "orders", "TOTAL=1"),
+            unexpected_output_fragments=("Plan ready  0 selected",),
         )
     ],
     ids=lambda case: case.description,
