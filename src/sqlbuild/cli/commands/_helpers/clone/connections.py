@@ -14,6 +14,8 @@ from sqlbuild.cli.commands.models import (
     CloneInvocation,
 )
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
+from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.phase_line import format_phase_line
 
 
 def connect_clone_targets(
@@ -41,8 +43,15 @@ def connect_clone_targets(
     connect_start: float = time.monotonic()
     origin_connection: Any = invocation.adapter.connect(origin_connection_config)
     destination_connection: Any = invocation.adapter.connect(destination_connection_config)
-    progress.complete(
-        f"Connected to {invocation.adapter_name}. ({time.monotonic() - connect_start:.2f}s)"
+    progress.complete_styled(
+        format_phase_line(
+            style=CliStyle(use_color=invocation.use_color),
+            ok=True,
+            label="Warehouse connected",
+            summary=(
+                f"{invocation.adapter_name}  ({time.monotonic() - connect_start:.2f}s)"
+            ),
+        )
     )
     return CloneConnectionContext(
         origin_connection_config=origin_connection_config,

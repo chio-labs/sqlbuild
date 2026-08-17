@@ -5,7 +5,9 @@ from __future__ import annotations
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.completion_line import format_completion_line
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
+from sqlbuild.presentation.types import CompletionState
 
 
 def render_clone_header(
@@ -78,23 +80,35 @@ def render_clone_output(
         1 for item in result.item_results if item.action == CloneAction.RECREATED_VIEW
     )
     print()
-    elapsed: str = f" ({elapsed_seconds:.2f}s)" if elapsed_seconds is not None else ""
+    elapsed: str = f"({elapsed_seconds:.2f}s)" if elapsed_seconds is not None else ""
+    counts_summary: str = format_summary_footer(
+        counts=(
+            ("CLONED", cloned_count),
+            ("COPIED", copied_count),
+            ("RECREATED_VIEWS", recreated_count),
+            ("PASS", success_count),
+            ("WARN", warning_count),
+            ("FAIL", fail_count),
+            ("TOTAL", len(result.item_results)),
+        ),
+        use_color=use_color,
+        elapsed=elapsed or None,
+    )
     if warning_count == 0 and fail_count == 0:
-        print(style.success_strong(f"Completed successfully.{elapsed}"))
+        completion_state: CompletionState = CompletionState.OK
+        completion_label: str = "Completed successfully"
+    elif fail_count == 0:
+        completion_state = CompletionState.WARN
+        completion_label = "Completed with warnings"
     else:
-        print(style.warning_strong(f"Completed with warnings.{elapsed}"))
+        completion_state = CompletionState.FAIL
+        completion_label = "Completed with errors"
     print(
-        format_summary_footer(
-            counts=(
-                ("CLONED", cloned_count),
-                ("COPIED", copied_count),
-                ("RECREATED_VIEWS", recreated_count),
-                ("PASS", success_count),
-                ("WARN", warning_count),
-                ("FAIL", fail_count),
-                ("TOTAL", len(result.item_results)),
-            ),
-            use_color=use_color,
+        format_completion_line(
+            style=style,
+            state=completion_state,
+            label=completion_label,
+            summary=counts_summary,
         )
     )
 
