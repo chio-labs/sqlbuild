@@ -31,12 +31,11 @@ from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.aligned_name_value import format_aligned_name_value
 from sqlbuild.presentation.main.coded_error_text import format_coded_error
 from sqlbuild.presentation.main.resolve_name_column_width import resolve_name_column_width
-from sqlbuild.presentation.main.structure import (
-    format_completion_line,
-    format_status_cell,
-    format_surface_header,
-)
+from sqlbuild.presentation.main.completion_line import format_completion_line
+from sqlbuild.presentation.main.status_cell import format_status_cell
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
+from sqlbuild.presentation.main.surface_header import format_surface_header
+from sqlbuild.presentation.types import CompletionState
 
 
 @dataclass(frozen=True)
@@ -520,14 +519,17 @@ def _format_completion_message(
     style: CliStyle = CliStyle(use_color=use_color)
     if status == BuildStatus.FAILED:
         return format_completion_line(
-            style=style, state="fail", label="Completed with errors", summary=summary
+            style=style, state=CompletionState.FAIL, label="Completed with errors", summary=summary
         )
     if warning_count > 0:
         return format_completion_line(
-            style=style, state="warn", label="Completed with warnings", summary=summary
+            style=style,
+            state=CompletionState.WARN,
+            label="Completed with warnings",
+            summary=summary,
         )
     return format_completion_line(
-        style=style, state="ok", label="Completed successfully", summary=summary
+        style=style, state=CompletionState.OK, label="Completed successfully", summary=summary
     )
 
 
