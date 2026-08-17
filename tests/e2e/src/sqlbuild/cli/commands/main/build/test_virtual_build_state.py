@@ -173,9 +173,7 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
         project_dir=project_dir,
     )
     assert default_plan_result.returncode == 0, default_plan_result.stderr
-    assert (
-        f"Plan ready  {len(test_case.expected_ref_rows)} selected" in default_plan_result.stdout
-    )
+    assert f"Plan ready  {len(test_case.expected_ref_rows)} selected" in default_plan_result.stdout
 
     default_repeat_build_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "build"),
