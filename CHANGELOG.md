@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.49.0](https://github.com/chio-labs/sqlbuild/compare/v0.48.7...v0.49.0) (2026-08-16)
+
+
+### Features
+
+* **build:** add per-batch spinner timing and mutation-proof tests ([6ad998e](https://github.com/chio-labs/sqlbuild/commit/6ad998ebed037b981f16cec15a977e7d086bcc1b))
+* **build:** render whole-day cursor bounds as dates in progress and summaries ([326d0ed](https://github.com/chio-labs/sqlbuild/commit/326d0ed2b3ddde6c499fc0ffa490c54252475a26))
+* **build:** report microbatch batch count and cursor range ([ced59ed](https://github.com/chio-labs/sqlbuild/commit/ced59ed1b389ab0bfdf41be213dad8117fc38878))
+* **build:** show live batch counter on the active row and batch size in the summary ([8cc8916](https://github.com/chio-labs/sqlbuild/commit/8cc8916363abc3636ad01d29bf217d42cc09a078))
+* **build:** stream per-batch progress and batch summary during execution ([d9f790a](https://github.com/chio-labs/sqlbuild/commit/d9f790a23af53e8d6a259f18ab2b7ab404270550))
+* **build:** surface row counts from adapter DML through microbatch output ([6e7697c](https://github.com/chio-labs/sqlbuild/commit/6e7697cb6bb00478904a395e0210fb55b736860a))
+* **plan:** expose effective microbatch cursor work ([ddd421e](https://github.com/chio-labs/sqlbuild/commit/ddd421ee2e835eb30cd5111adf005f66614c8d1c))
+
+
+### Bug Fixes
+
+* **ci:** repair full verification failures ([8ce2fd3](https://github.com/chio-labs/sqlbuild/commit/8ce2fd3ec574ed2a4358c4c5510f057e8e3f8cef))
+* **cli:** stop truncating batch progress in spinner line ([ca493d7](https://github.com/chio-labs/sqlbuild/commit/ca493d744da853b67dc1816887897ebd10a48dc6))
+* **cursor:** honour --start/--end-cursor-ts for model-backed cursor inputs ([e70c044](https://github.com/chio-labs/sqlbuild/commit/e70c0443ccdd13fd458a5c39f313f45a2baf3826))
+* **cursor:** resolve branch review findings ([c4a66d4](https://github.com/chio-labs/sqlbuild/commit/c4a66d4d744f09aa4f0b7d0c13cc6b6e1e59f236))
+* **cursors:** include the final cursor value for date and decimal bounds ([889c267](https://github.com/chio-labs/sqlbuild/commit/889c267a56a807614791f90aa4c4ecd5e024948a))
+* **cursors:** treat operator --end-cursor-ts as inclusive via one canonical step ([7096596](https://github.com/chio-labs/sqlbuild/commit/709659671489597d3896e67698df014b6b3ef68d))
+* **plan:** make the query-changed warning consequence-first and actionable ([b373d2a](https://github.com/chio-labs/sqlbuild/commit/b373d2abb4a9f67cf318239438feb00b0e9c22eb))
+* **planner:** compare warehouse state schemas case-insensitively ([7eae7f1](https://github.com/chio-labs/sqlbuild/commit/7eae7f12ddf621b7d2c41cc654fba4af24168d52))
+* **plan:** show the resolved inclusive cursor range for microbatch models ([861b976](https://github.com/chio-labs/sqlbuild/commit/861b97636bf0c4781c6d9d8326bd55696270ba4c))
+
 ## [0.48.7](https://github.com/chio-labs/sqlbuild/compare/v0.48.6...v0.48.7) (2026-08-02)
 
 
