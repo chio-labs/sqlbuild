@@ -96,7 +96,7 @@ def format_column_lineage_list(
     displayed_trace: tuple[ColumnLineageEdge, ...] = trace.trace[:_HUMAN_COLUMN_TRACE_LIMIT]
     left_width: int = max(len(_column_id(edge.source)) for edge in displayed_trace)
     right_width: int = max(len(_column_id(edge.target)) for edge in displayed_trace)
-    lines: list[str] = [style.object_name("Column dependencies"), ""]
+    lines: list[str] = [style.title("Column dependencies"), ""]
     lines.extend(
         f"{_format_column(column=edge.source, style=style)}"
         f"{' ' * (left_width - len(_column_id(edge.source)))} "
@@ -124,7 +124,7 @@ def format_lineage_tree(*, graph: LineageGraph, use_color: bool = True) -> str:
     style: CliStyle = CliStyle(use_color=use_color)
     focus: CompiledObjectKey = graph.focus_keys[0]
     node_by_key: dict[CompiledObjectKey, LineageNode] = {node.key: node for node in graph.nodes}
-    title: str = style.object_name("Lineage")
+    title: str = style.title("Lineage")
     direction: str = style.muted(graph.direction)
     lines: list[str] = [
         f"{title}  {_format_node(node=node_by_key[focus], style=style)}  {direction}"
@@ -134,7 +134,7 @@ def format_lineage_tree(*, graph: LineageGraph, use_color: bool = True) -> str:
         for parent, child in graph.edges:
             upstream.setdefault(child, []).append(parent)
         if graph.direction == BOTH_DIRECTIONS:
-            lines.append(style.object_name("upstream"))
+            lines.append(style.section("upstream"))
         lines.extend(
             render_dependency_tree(
                 focus=focus,
@@ -151,7 +151,7 @@ def format_lineage_tree(*, graph: LineageGraph, use_color: bool = True) -> str:
         for parent, child in graph.edges:
             downstream.setdefault(parent, []).append(child)
         if graph.direction == BOTH_DIRECTIONS:
-            lines.append(style.object_name("downstream"))
+            lines.append(style.section("downstream"))
         lines.extend(
             render_dependency_tree(
                 focus=focus,
@@ -174,7 +174,7 @@ def format_column_lineage_tree(
     """Format column lineage for humans without graph implementation terms."""
 
     style: CliStyle = CliStyle(use_color=use_color)
-    title: str = style.object_name("Column trace")
+    title: str = style.title("Column trace")
     direction: str = style.muted(trace.direction)
     lines: list[str] = [
         f"{title}  {_format_column(column=trace.target, style=style)}  {direction}",
@@ -217,7 +217,7 @@ def _format_related_column(*, edge: ColumnLineageEdge, is_downstream: bool, styl
 
 def _format_graph_summary(*, graph: LineageGraph, use_color: bool) -> str:
     style: CliStyle = CliStyle(use_color=use_color)
-    title: str = style.object_name("Lineage graph")
+    title: str = style.title("Lineage graph")
     counts: str = style.muted(f"({len(graph.nodes)} nodes, {len(graph.edges)} edges)")
     lines: list[str] = [f"{title}  {counts}"]
     if graph.edges:

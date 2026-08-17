@@ -13,6 +13,7 @@ from sqlbuild.integrations.dbt.models import DbtInteropPlan, DbtInteropSelection
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSkipReason
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.append_overflow_line import append_overflow_line
+from sqlbuild.presentation.main.structure import format_surface_header, tree_connector
 from sqlbuild.presentation.main.visible_entries import visible_entries
 from sqlbuild.presentation.models import DisplayOptions
 
@@ -75,7 +76,9 @@ def format_dbt_interop_plan(
     ) + len(plan.selection.sqlbuild_model_names)
     style: CliStyle = CliStyle(use_color=True)
     lines: list[str] = [
-        style.success_strong(f"Plan ready ({selected_count} selected resources)"),
+        format_surface_header(
+            style=style, title="Plan ready", context=f"{selected_count} selected resources"
+        ),
         "",
     ]
     lines = _format_dbt_section(lines=lines, plan=plan, options=options)
@@ -132,7 +135,10 @@ def _format_dbt_section(
     style: CliStyle = CliStyle(use_color=True)
     selected_count: int = len(plan.dbt_selected_unique_ids)
     required_count: int = len(plan.selection.dbt_required_unique_ids)
-    lines.append(style.dbt_section(f"dbt ({selected_count} selected, {required_count} required)"))
+    lines.append(
+        f"{style.dbt_label('dbt')} "
+        f"{style.dbt_section(f'({selected_count} selected, {required_count} required)')}"
+    )
     if plan.dbt_skip_reason is not None:
         lines.append(style.muted("  skipped: no dbt work selected"))
         return lines
@@ -144,8 +150,13 @@ def _format_dbt_section(
         lines.append("")
         lines.append(f"  {style.plan_section(f'{resource_type} ({len(nodes)})')}")
         visible_nodes: Sequence[DbtLsNode] = visible_entries(entries=nodes, options=options)
-        for node in visible_nodes:
-            lines.append(f"    {style.dbt_object_name(_dbt_node_display_name(node))}")
+        node_index: int
+        for node_index, node in enumerate(visible_nodes):
+            connector: str = tree_connector(
+                style=style,
+                last=node_index == len(visible_nodes) - 1 and len(nodes) <= len(visible_nodes),
+            )
+            lines.append(f"  {connector} {style.dbt_object_name(_dbt_node_display_name(node))}")
         lines = append_overflow_line(
             lines=lines,
             total_count=len(nodes),
@@ -156,11 +167,14 @@ def _format_dbt_section(
     if required_count:
         lines.append("")
         lines.append(style.dbt_label(f"  required ({required_count})"))
-        for unique_id in visible_entries(
+        required_ids: Sequence[str] = visible_entries(
             entries=plan.selection.dbt_required_unique_ids,
             options=options,
-        ):
-            lines.append(f"    {style.dbt_object_name(unique_id)}")
+        )
+        unique_id_index: int
+        for unique_id_index, unique_id in enumerate(required_ids):
+            connector = tree_connector(style=style, last=unique_id_index == len(required_ids) - 1)
+            lines.append(f"  {connector} {style.dbt_object_name(unique_id)}")
     return lines
 
 
