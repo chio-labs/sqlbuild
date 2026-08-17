@@ -48,9 +48,7 @@ def connect_clone_targets(
             style=CliStyle(use_color=invocation.use_color),
             ok=True,
             label="Warehouse connected",
-            summary=(
-                f"{invocation.adapter_name}  ({time.monotonic() - connect_start:.2f}s)"
-            ),
+            summary=(f"{invocation.adapter_name}  ({time.monotonic() - connect_start:.2f}s)"),
         )
     )
     return CloneConnectionContext(

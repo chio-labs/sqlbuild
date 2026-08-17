@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.models import DisplayOptions
 
 
@@ -19,5 +20,10 @@ def append_overflow_line(
     hidden_count: int = total_count - visible_count
     if hidden_count <= 0:
         return lines
-    lines.append(f"{indent}... and {hidden_count} more (use {options.overflow_flag} to show all)")
+    style: CliStyle = CliStyle(use_color=True)
+    lines.append(
+        style.muted(
+            f"{indent}... and {hidden_count} more (use {options.overflow_flag} to show all)"
+        )
+    )
     return lines

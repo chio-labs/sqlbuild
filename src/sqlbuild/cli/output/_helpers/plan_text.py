@@ -891,7 +891,7 @@ def _format_detail_entry(
         lines = _append_cursor_detail(lines=lines, entry=entry)
         return lines
 
-    action_text: str = _action_text(entry)
+    action_text: str = CliStyle(use_color=True).accent(_action_text(entry))
     lines.append(
         _format_name_value_line(
             name=entry.name, value=action_text, name_column_width=name_column_width
@@ -916,7 +916,7 @@ def _format_upstream_changed_entry(
     """Format a per-model entry in the Upstream changed group."""
 
     cascade: CascadeResult | None = entry.cascade
-    action_text: str = _cascade_action_text(cascade)
+    action_text: str = CliStyle(use_color=True).accent(_cascade_action_text(cascade))
     lines.append(
         _format_name_value_line(
             name=entry.name, value=action_text, name_column_width=name_column_width
@@ -1816,21 +1816,17 @@ def _classify_plan_row(line: str) -> PlanRowKind:
     """Classify a rendered plan line for tree conversion."""
 
     plain: str = _strip_ansi(line)
-    if line != plain or not plain.strip():
+    if not plain.strip() or not line.startswith(_ENTRY_ROW_PREFIX):
         return PlanRowKind.OTHER
-    if plain.startswith(_NESTED_ROW_PREFIX):
-        return PlanRowKind.NESTED
-    if (
-        plain.startswith(_LEAF_ROW_PREFIX)
-        and plain[len(_LEAF_ROW_PREFIX)] not in _TREE_EXEMPT_CHARS
-    ):
+    if line.startswith(_NESTED_ROW_PREFIX):
+        return PlanRowKind.NESTED if line == plain else PlanRowKind.OTHER
+    if line.startswith(_LEAF_ROW_PREFIX):
+        if line != plain or plain[len(_LEAF_ROW_PREFIX)] in _TREE_EXEMPT_CHARS:
+            return PlanRowKind.OTHER
         return PlanRowKind.LEAF
-    if (
-        plain.startswith(_ENTRY_ROW_PREFIX)
-        and plain[len(_ENTRY_ROW_PREFIX)] not in _TREE_EXEMPT_CHARS
-    ):
-        return PlanRowKind.ENTRY
-    return PlanRowKind.OTHER
+    if plain[len(_ENTRY_ROW_PREFIX)] in _TREE_EXEMPT_CHARS:
+        return PlanRowKind.OTHER
+    return PlanRowKind.ENTRY
 
 
 def _is_last_tree_row(*, kinds: list[PlanRowKind], index: int, row_kind: PlanRowKind) -> bool:

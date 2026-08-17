@@ -41,6 +41,7 @@ from sqlbuild.presentation.main.coded_error_text import format_coded_error
 from sqlbuild.presentation.main.completion_line import format_completion_line
 from sqlbuild.presentation.main.status_cell import format_status_cell
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
+from sqlbuild.presentation.main.terminal_columns import terminal_columns
 from sqlbuild.presentation.types import CompletionState
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 
@@ -206,9 +207,12 @@ class BuildProgressCallbacks:
         if self._current_sub_message:
             name_display = f"{name_display}  {self._current_sub_message}"
         nw: int = self._name_width
-        line: str = f"  {ctr}  {display_type:<{_TYPE_WIDTH}}{name_display:<{nw}} {status}"
+        plain_part: str = f"  {ctr}  {display_type:<{_TYPE_WIDTH}}{name_display:<{nw}} "
+        max_plain_width: int = max(terminal_columns() - 2, _MIN_NAME_WIDTH)
+        if len(plain_part) > max_plain_width:
+            plain_part = f"{plain_part[: max_plain_width - 4]}... "
         with self._write_lock:
-            self._stream.write(f"\r\033[K{line}")
+            self._stream.write(f"\r\033[K{plain_part}{status}")
             self._stream.flush()
 
     def _start_spinner_loop(self) -> None:
@@ -402,7 +406,8 @@ class BuildProgressCallbacks:
             test_status: str = self._style.status(status=_test_outcome_display(test_result.outcome))
             test_name: str = test_result.test_name
             self._stream.write(
-                f"{sub_pad}{'test':<{_TYPE_WIDTH}}{test_name:<{sub_nw}} {test_status}\n"
+                f"{sub_pad}{self._style.muted(f'{"test":<{_TYPE_WIDTH}}')}"
+                f"{test_name:<{sub_nw}} {test_status}\n"
             )
             expectation_pad: str = f"{sub_pad}  "
             expectation_type_width: int = _TYPE_WIDTH - 2
@@ -414,7 +419,7 @@ class BuildProgressCallbacks:
                 expectation_name: str = format_expectation_name(step_result.model_name)
                 expectation_detail: str = format_expectation_detail(step_result)
                 self._stream.write(
-                    f"{expectation_pad}{'expect':<{expectation_type_width}}"
+                    f"{expectation_pad}{self._style.muted(f'{"expect":<{expectation_type_width}}')}"
                     f"{expectation_name:<{sub_nw}} {expectation_status}{expectation_detail}\n"
                 )
 
@@ -435,8 +440,8 @@ class BuildProgressCallbacks:
             if entry.batch_total > 1:
                 audit_detail = f"  {entry.batch_pass}/{entry.batch_total}" + audit_detail
             audit_line: str = (
-                f"{sub_pad}{entry.label:<{_TYPE_WIDTH}}{audit_name:<{sub_nw}}"
-                f" {audit_status}{audit_detail}\n"
+                f"{sub_pad}{self._style.muted(f'{entry.label:<{_TYPE_WIDTH}}')}"
+                f"{audit_name:<{sub_nw}} {audit_status}{audit_detail}\n"
             )
             self._stream.write(audit_line)
 
@@ -478,8 +483,8 @@ class BuildProgressCallbacks:
             label: str = "pre_hook" if phase == HookPhase.PRE_HOOKS else "post_hook"
             detail: str = _hook_skip_detail(hook_result)
             self._stream.write(
-                f"{sub_pad}{label:<{_HOOK_PHASE_WIDTH}}"
-                f"{hook_result.hook_type:<{_HOOK_TYPE_WIDTH}}"
+                f"{sub_pad}{self._style.muted(f'{label:<{_HOOK_PHASE_WIDTH}}')}"
+                f"{self._style.muted(f'{hook_result.hook_type:<{_HOOK_TYPE_WIDTH}}')}"
                 f"{hook_name:<{label_width}} {hook_status}{detail}\n"
             )
 
@@ -496,16 +501,17 @@ class BuildProgressCallbacks:
         nw: int = self._name_width
         status_cell: str = format_status_cell(style=self._style, status=status)
         rendered_duration: str = self._style.muted(duration) if duration else ""
+        rendered_type: str = self._style.muted(f"{resource_type:<{_TYPE_WIDTH}}")
         self._stream.write(
-            f"  {ctr}  {resource_type:<{_TYPE_WIDTH}}{name:<{nw}} "
-            f"{status_cell} {rendered_duration}{detail}\n"
+            f"  {ctr}  {rendered_type}{name:<{nw}} {status_cell} {rendered_duration}{detail}\n"
         )
 
     def _write_error_detail(
         self, *, error_code: str | None, error_message: str, error_help: str | None = None
     ) -> None:
         pad: str = " " * self._prefix_width
-        label: str = self._style.error_muted("error")
+        label_padding: str = " " * max(0, _TYPE_WIDTH - 1 - len("error"))
+        label: str = f"{self._style.error_muted('error')}{label_padding}"
         message: str = _format_result_error(
             error_code=error_code,
             error_message=error_message,
@@ -514,8 +520,8 @@ class BuildProgressCallbacks:
         )
         line: str
         for line_index, line in enumerate(_format_error_lines(message)):
-            display_label: str = label if line_index == 0 else ""
-            self._stream.write(f"{pad}{display_label:<{_TYPE_WIDTH - 1}} {line}\n")
+            display_label: str = label if line_index == 0 else " " * (_TYPE_WIDTH - 1)
+            self._stream.write(f"{pad}{display_label} {line}\n")
 
 
 def _count_build_footer_results(
@@ -849,7 +855,8 @@ def _format_failure_error_block(
     *, error_code: str | None, error_message: str, error_help: str | None, style: CliStyle
 ) -> list[str]:
     lines: list[str] = []
-    label: str = style.error_muted("error")
+    label_padding: str = " " * max(0, _TYPE_WIDTH - len("error"))
+    label: str = f"{style.error_muted('error')}{label_padding}"
     message: str = _format_result_error(
         error_code=error_code,
         error_message=error_message,
@@ -858,8 +865,8 @@ def _format_failure_error_block(
     )
     formatted_line: str
     for index, formatted_line in enumerate(message.splitlines() or [message]):
-        display_label: str = label if index == 0 else ""
-        lines.append(f"    {display_label:<{_TYPE_WIDTH}}{formatted_line}")
+        display_label: str = label if index == 0 else " " * _TYPE_WIDTH
+        lines.append(f"    {display_label}{formatted_line}")
     return lines
 
 
