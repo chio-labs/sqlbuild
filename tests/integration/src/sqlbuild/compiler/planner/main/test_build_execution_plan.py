@@ -607,7 +607,7 @@ def test_given_upstream_first_run_when_building_plan_then_cascades_to_downstream
             seed_locations={"country_codes": "staging"},
             full_refresh=False,
             expected_format_fragments=(
-                "Plan ready (3 selected)",
+                "Plan ready\033[0m  \033[2m3 selected",
                 "First run (2)",
                 "stg_orders",
                 "view",
@@ -642,7 +642,7 @@ def test_given_upstream_first_run_when_building_plan_then_cascades_to_downstream
                 "Upstream changed (1)",
                 "fact_orders",
                 "full rebuild",
-                "cause: stg_orders",
+                "cause[0m  stg_orders",
             ),
         ),
     ],

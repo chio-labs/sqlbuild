@@ -106,7 +106,7 @@ def test_given_virtual_seed_change_when_building_changes_only_then_updates_seed_
         project_dir=project_dir,
     )
     assert unchanged_build_result.returncode == 0, unchanged_build_result.stderr
-    assert "Plan ready (0 selected)" in unchanged_build_result.stdout
+    assert "Plan ready  0 selected" in unchanged_build_result.stdout
 
     (project_dir / "seeds" / "order_amounts.csv").write_text(
         "order_id,amount_cents\n1,200\n",
@@ -354,7 +354,7 @@ def test_given_explicit_model_selection_when_upstream_seed_changed_then_model_re
     [
         VirtualSeedGapE2ETestCase(
             description="failed virtual seed reload leaves seed ref unchanged",
-            expected_fragments=("order_amounts", "FAIL", "Completed with errors."),
+            expected_fragments=("order_amounts", "FAIL", "\u2717 Completed with errors"),
         )
     ],
     ids=lambda case: case.description,
@@ -516,7 +516,7 @@ def test_given_virtual_seed_change_when_plan_and_build_json_then_seed_reason_is_
         VirtualSeedGapE2ETestCase(
             description="virtual seed schema change reloads seed and model",
             expected_fragments=(
-                "Plan ready (2 selected)",
+                "Plan ready  2 selected",
                 "order_amounts",
                 "seed_changed",
                 "fact_orders",
@@ -577,7 +577,7 @@ def test_given_virtual_seed_schema_change_when_building_changes_only_then_reload
     [
         VirtualSeedGapE2ETestCase(
             description="multi seed virtual graph selects only changed seed closure",
-            expected_fragments=("Plan ready (2 selected)", "order_amounts", "fact_orders"),
+            expected_fragments=("Plan ready  2 selected", "order_amounts", "fact_orders"),
             unexpected_fragments=("country_codes", "dim_countries"),
         )
     ],
@@ -638,7 +638,7 @@ def test_given_multi_seed_graph_when_one_seed_changes_then_only_its_closure_is_s
     [
         VirtualSeedGapE2ETestCase(
             description="virtual model change with current seed does not reload seed",
-            expected_fragments=("Plan ready (1 selected)", "fact_orders"),
+            expected_fragments=("Plan ready  1 selected", "fact_orders"),
             unexpected_fragments=("Seeds (", "seed      order_amounts"),
         )
     ],

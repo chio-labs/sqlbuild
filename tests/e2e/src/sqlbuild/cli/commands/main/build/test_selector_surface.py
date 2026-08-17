@@ -24,7 +24,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             command=("--no-color", "build", "--select", "/models/marts"),
             expected_exit_code=0,
             expected_stdout_fragments=(
-                "Plan ready (10 selected)",
+                "Plan ready  10 selected",
                 "hourly_activity_with_daily_context",
             ),
             expected_stderr_fragments=(),
@@ -40,7 +40,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
             expected_exit_code=0,
             expected_stdout_fragments=(
-                "Plan ready (9 selected, 1 source to load)",
+                "Plan ready  9 selected, 1 source to load",
                 "Sources to load (1)",
                 "raw_orders",
                 "waffle_types",

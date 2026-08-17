@@ -25,7 +25,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             description="waffle shop core lifecycle commands remain consistent",
             expected_exit_code=0,
             expected_fresh_plan_fragments=(
-                "Plan ready (17 selected, 2 sources to load)",
+                "Plan ready  17 selected, 2 sources to load",
                 "Sources to load (2)",
                 "raw_customers",
                 "raw_orders",
@@ -37,20 +37,20 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
             expected_test_fragment="PASS=5  FAIL=0  TOTAL=5",
             expected_audit_fragment="PASS=28  WARN=0  FAIL=0  TOTAL=28",
-            expected_run_fragment="Completed successfully.",
+            expected_run_fragment="\u2713 Completed successfully",
             expected_rerun_reasons={
                 "stg_orders": "no_change",
                 "hourly_order_activity": "normal_incremental",
             },
             expected_full_refresh_fragment=(
-                "Plan ready (full refresh, 17 selected, 2 sources to load)"
+                "Plan ready  full refresh, 17 selected, 2 sources to load"
             ),
             expected_plan_ordered_fragments=(
                 "Connecting to duckdb",
-                "Connected to duckdb. (<time>)",
+                "\u2713 Warehouse connected  duckdb  (<time>)",
                 "Inspecting warehouse state...",
                 "Generated plan. (<time>)",
-                "Plan ready (17 selected, 2 sources to load)",
+                "Plan ready  17 selected, 2 sources to load",
                 "Sources to load (2)",
                 "Changed functions (3)",
                 "First run (13)",
@@ -58,18 +58,18 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
             expected_build_ordered_fragments=(
                 "Connecting to duckdb",
-                "Connected to duckdb. (<time>)",
+                "\u2713 Warehouse connected  duckdb  (<time>)",
                 "Inspecting warehouse state...",
                 "Generated plan. (<time>)",
-                "Plan ready (17 selected, 2 sources to load)",
+                "Plan ready  17 selected, 2 sources to load",
                 "Sources to load (2)",
                 "Execution  sqb build  (concurrency:",
                 "source    raw_customers",
                 "source    raw_orders",
                 "Connecting to duckdb",
-                "Connected to duckdb. (<time>)",
+                "\u2713 Warehouse connected  duckdb  (<time>)",
                 "udf       is_completed_order",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
                 "PASS=<n>  WARN=<n>  FAIL=<n>  SKIP=<n>  TOTAL=<n>  (<time>)",
             ),
         )

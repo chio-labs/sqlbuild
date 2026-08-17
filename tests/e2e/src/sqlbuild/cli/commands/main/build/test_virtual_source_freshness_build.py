@@ -102,7 +102,7 @@ def test_given_virtual_source_freshness_when_building_then_skips_until_data_vers
     assert unchanged_changes_only_build_result.returncode == 0, (
         unchanged_changes_only_build_result.stderr
     )
-    assert "Plan ready (0 selected)" in unchanged_changes_only_build_result.stdout
+    assert "Plan ready  0 selected" in unchanged_changes_only_build_result.stdout
     assert count_virtual_physical_versions(project_dir=project_dir) == first_version_count
 
     explicit_build_result: subprocess.CompletedProcess[str] = run_sqb(
