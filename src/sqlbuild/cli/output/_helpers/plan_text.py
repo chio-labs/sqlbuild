@@ -10,7 +10,7 @@ from typing import cast
 
 from sqlbuild.cli.output._helpers.cursor_plan import build_cursor_plan_details
 from sqlbuild.cli.output.models import CursorPlanDetails
-from sqlbuild.cli.output.types import CursorBoundsOwner, CursorResolutionStatus
+from sqlbuild.cli.output.types import CursorBoundsOwner, CursorResolutionStatus, PlanRowKind
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.main.changes.query_diff import format_query_diff
 from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
@@ -43,13 +43,20 @@ from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.aligned_name_value import format_aligned_name_value
 from sqlbuild.presentation.main.append_overflow_line import append_overflow_line
 from sqlbuild.presentation.main.resolve_name_column_width import resolve_name_column_width
-from sqlbuild.presentation.main.structure import format_surface_header, tree_connector
+from sqlbuild.presentation.main.surface_header import format_surface_header
+from sqlbuild.presentation.main.tree_connector import tree_connector
 from sqlbuild.presentation.main.visible_entries import visible_entries
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 
 _DIFF_HEADER_MARKER: str = "# "
+_ENTRY_ROW_PREFIX: str = "  "
+_LEAF_KEY_SEPARATOR: str = ": "
+_LEAF_ROW_PREFIX: str = "    "
+_NESTED_ROW_PREFIX: str = "      "
+_RUNTIME_PROMINENT_MARKERS: tuple[str, ...] = ("runtime", "deferred")
 _STALE_INPUT_WARNING_TITLE: str = "Stale inputs detected"
+_TREE_EXEMPT_CHARS: frozenset[str] = frozenset({" ", "."})
 
 _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
     PlanReason.QUERY_CHANGED,
@@ -1773,67 +1780,73 @@ def _format_name_value_line(*, name: str, value: str, name_column_width: int) ->
     )
 
 
-_RUNTIME_PROMINENT_MARKERS: tuple[str, ...] = ("runtime", "deferred")
-
-
 def _treeify_plan_lines(lines: list[str]) -> list[str]:
     """Convert section entry and detail lines into tree-connected rows."""
 
     style: CliStyle = CliStyle(use_color=True)
-    kinds: list[str] = []
-    line: str
-    for line in lines:
-        plain: str = _strip_ansi(line)
-        if line != plain or not plain.strip():
-            kinds.append("other")
-        elif plain.startswith("      "):
-            kinds.append("nested")
-        elif plain.startswith("    ") and plain[4] not in " .":
-            kinds.append("leaf")
-        elif plain.startswith("  ") and plain[2] not in " .":
-            kinds.append("entry")
-        else:
-            kinds.append("other")
+    kinds: list[PlanRowKind] = [_classify_plan_row(line) for line in lines]
     out: list[str] = []
     index: int
+    line: str
     for index, line in enumerate(lines):
-        kind: str = kinds[index]
-        if kind == "entry":
-            last: bool = _is_last_tree_row(kinds=kinds, index=index, row_kind="entry")
-            connector: str = style.muted("\u2514\u2500\u2500" if last else "\u251c\u2500\u2500")
-            out.append(f"{connector} {line[2:]}")
+        kind: PlanRowKind = kinds[index]
+        if kind == PlanRowKind.ENTRY:
+            last: bool = _is_last_tree_row(kinds=kinds, index=index, row_kind=PlanRowKind.ENTRY)
+            connector: str = tree_connector(style=style, last=last)
+            out.append(f"{connector} {line[len(_ENTRY_ROW_PREFIX) :]}")
             continue
-        if kind == "leaf":
-            last = _is_last_tree_row(kinds=kinds, index=index, row_kind="leaf")
-            connector = style.muted("\u2514\u2500\u2500" if last else "\u251c\u2500\u2500")
-            content: str = line[4:]
-            key, separator, value = content.partition(": ")
+        if kind == PlanRowKind.LEAF:
+            last = _is_last_tree_row(kinds=kinds, index=index, row_kind=PlanRowKind.LEAF)
+            connector = tree_connector(style=style, last=last)
+            content: str = line[len(_LEAF_ROW_PREFIX) :]
+            key, separator, value = content.partition(_LEAF_KEY_SEPARATOR)
             if separator:
                 rendered_value: str = value
                 if any(marker in value for marker in _RUNTIME_PROMINENT_MARKERS):
                     rendered_value = style.section(value)
-                out.append(f"    {connector} {style.muted(key)}  {rendered_value}")
+                out.append(f"{_LEAF_ROW_PREFIX}{connector} {style.muted(key)}  {rendered_value}")
             else:
-                out.append(f"    {connector} {content}")
+                out.append(f"{_LEAF_ROW_PREFIX}{connector} {content}")
             continue
         out.append(line)
     return out
 
 
-def _is_last_tree_row(*, kinds: list[str], index: int, row_kind: str) -> bool:
+def _classify_plan_row(line: str) -> PlanRowKind:
+    """Classify a rendered plan line for tree conversion."""
+
+    plain: str = _strip_ansi(line)
+    if line != plain or not plain.strip():
+        return PlanRowKind.OTHER
+    if plain.startswith(_NESTED_ROW_PREFIX):
+        return PlanRowKind.NESTED
+    if (
+        plain.startswith(_LEAF_ROW_PREFIX)
+        and plain[len(_LEAF_ROW_PREFIX)] not in _TREE_EXEMPT_CHARS
+    ):
+        return PlanRowKind.LEAF
+    if (
+        plain.startswith(_ENTRY_ROW_PREFIX)
+        and plain[len(_ENTRY_ROW_PREFIX)] not in _TREE_EXEMPT_CHARS
+    ):
+        return PlanRowKind.ENTRY
+    return PlanRowKind.OTHER
+
+
+def _is_last_tree_row(*, kinds: list[PlanRowKind], index: int, row_kind: PlanRowKind) -> bool:
     """Return whether the row is the final one of its kind within its block."""
 
     scan: int = index + 1
     while scan < len(kinds):
-        kind: str = kinds[scan]
-        if kind == "other":
+        kind: PlanRowKind = kinds[scan]
+        if kind == PlanRowKind.OTHER:
             return True
-        if row_kind == "entry" and kind == "entry":
+        if row_kind == PlanRowKind.ENTRY and kind == PlanRowKind.ENTRY:
             return False
-        if row_kind == "leaf":
-            if kind == "leaf":
+        if row_kind == PlanRowKind.LEAF:
+            if kind == PlanRowKind.LEAF:
                 return False
-            if kind == "entry":
+            if kind == PlanRowKind.ENTRY:
                 return True
         scan += 1
     return True

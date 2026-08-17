@@ -6,7 +6,7 @@ from typing import TextIO
 
 from sqlbuild.cli.progress.main._execution_header import format_execution_header
 from sqlbuild.presentation.classes.cli_style import CliStyle
-from sqlbuild.presentation.main.structure import format_surface_header
+from sqlbuild.presentation.main.surface_header import format_surface_header
 
 
 def write_execution_header(

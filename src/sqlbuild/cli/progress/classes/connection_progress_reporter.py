@@ -6,7 +6,7 @@ from typing import TextIO
 
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.presentation.main.structure import format_phase_line
+from sqlbuild.presentation.main.phase_line import format_phase_line
 
 
 class ConnectionProgressReporter:

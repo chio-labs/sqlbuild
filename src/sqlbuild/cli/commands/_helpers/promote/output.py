@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from sqlbuild.presentation.classes.cli_document import CliDocument
 from sqlbuild.presentation.classes.cli_style import CliStyle
-from sqlbuild.presentation.main.structure import format_completion_line
+from sqlbuild.presentation.main.completion_line import format_completion_line
+from sqlbuild.presentation.types import CompletionState
 from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 
 _MODEL_SET_CAP: int = 20
@@ -46,7 +47,11 @@ def format_promote_output(
     doc.line(
         format_completion_line(
             style=style,
-            state="ok" if status_label == VirtualEnvironmentStatus.FINALIZED else "warn",
+            state=(
+                CompletionState.OK
+                if status_label == VirtualEnvironmentStatus.FINALIZED
+                else CompletionState.WARN
+            ),
             label="Virtual promotion complete",
             summary=f"{from_label} -> {to_label}",
         )
