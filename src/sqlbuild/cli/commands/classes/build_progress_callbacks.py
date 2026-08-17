@@ -56,6 +56,7 @@ _HOOK_MIN_LABEL_WIDTH: int = 24
 _HOOK_MAX_LABEL_WIDTH: int = 56
 _SPINNER_TICK_SECONDS: float = 0.1
 _MAX_ERROR_LINES: int = 4
+_SKIPPED_ROLLUP_CAP: int = 20
 _MAX_ERROR_LINE_LENGTH: int = 160
 _ROW_COUNT_BILLION: int = 1_000_000_000
 _ROW_COUNT_MILLION: int = 1_000_000
@@ -257,6 +258,9 @@ class BuildProgressCallbacks:
 
     def on_node_complete(self, node_result: object) -> None:
         if isinstance(node_result, SqlTestExecutionResult):
+            if node_result.outcome != SqlTestOutcome.PASS:
+                self._write_failed_test_result(test_result=node_result)
+                return
             step: object
             for step in node_result.step_results:
                 if hasattr(step, "model_name"):
@@ -464,6 +468,44 @@ class BuildProgressCallbacks:
 
         self._stream.flush()
 
+    def _write_failed_test_result(self, *, test_result: SqlTestExecutionResult) -> None:
+        """Write a failing test row inline since its host model rows will not run."""
+
+        self._stop_spinner_loop()
+        if self._is_tty:
+            with self._write_lock:
+                self._stream.write("\r\033[K")
+                self._stream.flush()
+            self._show_cursor()
+        blank_ctr: str = " " * (len(str(self._total)) * 2 + 1)
+        test_status: str = self._style.status(status=_test_outcome_display(test_result.outcome))
+        test_name: str = _truncate_name(name=test_result.test_name, width=self._name_width)
+        self._stream.write(
+            f"  {blank_ctr}  {self._style.muted(f'{"test":<{_TYPE_WIDTH}}')}"
+            f"{test_name:<{self._name_width}} {test_status}\n"
+        )
+        expectation_pad: str = " " * (self._prefix_width + _SUB_INDENT + 2)
+        expectation_type_width: int = _TYPE_WIDTH - 2
+        sub_nw: int = self._name_width - _SUB_INDENT
+        step_result: StepResult
+        for step_result in test_result.step_results:
+            expectation_status: str = self._style.status(
+                status=_test_outcome_display(step_result.outcome)
+            )
+            expectation_name: str = format_expectation_name(step_result.model_name)
+            expectation_detail: str = format_expectation_detail(step_result)
+            self._stream.write(
+                f"{expectation_pad}{self._style.muted(f'{"expect":<{expectation_type_width}}')}"
+                f"{expectation_name:<{sub_nw}} {expectation_status}{expectation_detail}\n"
+            )
+        if test_result.error_message:
+            self._write_error_detail(
+                error_code=test_result.error_code,
+                error_message=test_result.error_message,
+                error_help=test_result.error_help,
+            )
+        self._stream.flush()
+
     def _write_hook_results(
         self,
         *,
@@ -651,11 +693,63 @@ def format_build_footer(
     if failure_lines:
         lines.extend(failure_lines)
 
+    skipped_lines: list[str] = _format_skipped_rollup(
+        result=result, python_node_results=python_node_results, style=style
+    )
+    if skipped_lines:
+        lines.extend(skipped_lines)
+
     warning_lines: list[str] = _format_warning_details(result=result, style=style)
     if warning_lines:
         lines.extend(warning_lines)
 
     return "\n".join(lines)
+
+
+def _format_skipped_rollup(
+    *,
+    result: BuildExecutionResult,
+    python_node_results: tuple[PythonNodeExecutionResult, ...],
+    style: CliStyle,
+) -> list[str]:
+    """Render a dim rollup of nodes skipped because upstream work failed."""
+
+    skipped_names: list[str] = [
+        model_result.model_name
+        for model_result in result.model_results
+        if model_result.status == ExecutionStatus.SKIPPED
+    ]
+    skipped_names.extend(
+        seed_result.seed_name
+        for seed_result in result.seed_results
+        if seed_result.status == ExecutionStatus.SKIPPED
+    )
+    skipped_names.extend(
+        function_result.function_name
+        for function_result in result.function_results
+        if function_result.status == ExecutionStatus.SKIPPED
+    )
+    skipped_names.extend(
+        load_result.source_name
+        for load_result in result.load_results
+        if load_result.status == ExecutionStatus.SKIPPED
+    )
+    skipped_names.extend(
+        python_result.node_name
+        for python_result in python_node_results
+        if python_result.status == PythonNodeStatus.SKIPPED
+    )
+    if not skipped_names:
+        return []
+    visible_names: list[str] = skipped_names[:_SKIPPED_ROLLUP_CAP]
+    remaining_count: int = len(skipped_names) - len(visible_names)
+    rendered: str = ", ".join(visible_names)
+    if remaining_count > 0:
+        rendered = f"{rendered}, ... (+{remaining_count} more)"
+    return [
+        "",
+        style.muted(f"Skipped ({len(skipped_names)}): {rendered}"),
+    ]
 
 
 def _format_python_failure_details(
