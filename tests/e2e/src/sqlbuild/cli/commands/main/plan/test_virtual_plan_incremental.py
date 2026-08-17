@@ -33,10 +33,10 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_build_exit_code=0,
             expected_fragments=(
                 "rebuild last 7d",
-                "policy: replay_on_change=bounded-7d",
-                "range: 2026-01-02 \u2192 2026-01-04",
+                "policy  replay_on_change=bounded-7d",
+                "range  2026-01-02 \u2192 2026-01-04",
             ),
-            unexpected_plan_fragments=("policy: replay_on_change=full",),
+            unexpected_plan_fragments=("policy  replay_on_change=full",),
         )
     ],
     ids=lambda case: case.description,

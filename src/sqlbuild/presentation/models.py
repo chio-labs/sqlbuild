@@ -25,7 +25,7 @@ class TextStyle:
     def apply(self, *, text: str, use_color: bool) -> str:
         """Apply this style when color is enabled."""
 
-        if not use_color or not self.prefix:
+        if not use_color or not self.prefix or not text:
             return text
         return f"{self.prefix}{text}{self.suffix}"
 
