@@ -691,7 +691,7 @@ def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
     if removed_keys:
         raise ProjectConfigError(
             f"{file_path} [dbt] option(s) were removed: {', '.join(removed_keys)}; "
-            "use dbt-native --state/--defer or explicit sqb dbt clone"
+            "use dbt-native --state/--defer"
         )
     _validate_allowed_keys(
         mapping=mapping,
@@ -722,8 +722,7 @@ def _load_local_dbt(*, payload: object, file_path: Path) -> LocalDbtConfig:
     mapping: dict[str, object] = _coerce_mapping(payload=payload, label="dbt", file_path=file_path)
     if DBT_DEFER_CLONE_CONFIG_KEY in mapping:
         raise ProjectConfigError(
-            f"{file_path} [dbt].defer_clone_from was removed; "
-            "use dbt-native --state/--defer or explicit sqb dbt clone"
+            f"{file_path} [dbt].defer_clone_from was removed; use dbt-native --state/--defer"
         )
     _validate_allowed_keys(
         mapping=mapping,

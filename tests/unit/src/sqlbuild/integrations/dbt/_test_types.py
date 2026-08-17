@@ -1,17 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandResult,
     DbtInteropParsedArgs,
     DbtLsNode,
-    DbtManifestIndex,
 )
 from sqlbuild.spec.contracts.models import DbtConfig, LocalDbtConfig
 
@@ -81,37 +78,6 @@ class DbtRunnerCommandTestCase:
     description: str
     command_result: DbtCommandResult
     expected_argv: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtReuseGitTimeoutTestCase:
-    description: str
-    timeout_seconds: int
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
-class DbtReuseGitRefreshTestCase:
-    description: str
-    git_ref: str
-    refresh: bool
-    expected_archive_ref: str
-    expected_run_calls: int
-
-
-@dataclass(frozen=True)
-class DbtReuseCompileDepsTestCase:
-    description: str
-    expected_commands: tuple[str, ...]
-    expected_manifest_contents: str
-
-
-@dataclass(frozen=True)
-class DbtReuseManifestCacheTestCase:
-    description: str
-    expected_first_commands: tuple[str, ...]
-    expected_second_commands: tuple[str, ...]
-    expected_manifest_contents: str
 
 
 @dataclass(frozen=True)
@@ -400,50 +366,3 @@ class DbtPlanOrchestrationErrorTestCase:
     expected_error_fragment: str
     expected_code: str
     expected_help_fragment: str
-
-
-@dataclass(frozen=True)
-class DbtSqlTestTargetTestCase:
-    description: str
-    selected_dbt_unique_ids: tuple[str, ...]
-    select: tuple[str, ...]
-    expected_target_names: tuple[str, ...]
-    expected_model_names: tuple[str, ...]
-    expected_query_fragments: tuple[str, ...]
-    manifest_factory: Callable[[], DbtManifestIndex]
-    expected_adapted_model_names: tuple[str, ...] | None = None
-    expected_absent_fragments: tuple[str, ...] = field(default_factory=tuple)
-    sqlbuild_model_names: tuple[str, ...] = field(default_factory=tuple)
-    mock_model_names: tuple[str, ...] = field(default_factory=tuple)
-
-    @property
-    def adapted_model_names(self) -> tuple[str, ...]:
-        return self.expected_adapted_model_names or self.expected_model_names
-
-
-@dataclass(frozen=True)
-class DbtSqlTestMultipleBoundaryTestCase:
-    description: str
-    expected_test_model_names: tuple[tuple[str, ...], ...]
-    expected_query_fragments_by_test: tuple[tuple[str, ...], ...]
-    expected_absent_fragments_by_test: tuple[tuple[str, ...], ...]
-
-
-@dataclass(frozen=True)
-class DbtSqlTestTargetErrorTestCase:
-    description: str
-    manifest_factory: Callable[[], DbtManifestIndex]
-    project_factory: Callable[[], CompiledProject]
-    expected_model_names: tuple[str, ...]
-    target_names: tuple[str, ...]
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
-class DbtSqlTestFixtureNameTestCase:
-    description: str
-    manifest_factory: Callable[[], DbtManifestIndex]
-    fixture_resolver: Callable[[DbtManifestIndex, set[str]], set[str]]
-    known_names: set[str]
-    expected_names: set[str]
-    expected_error_fragment: str | None = None
