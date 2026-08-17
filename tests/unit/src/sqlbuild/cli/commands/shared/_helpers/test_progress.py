@@ -11,6 +11,7 @@ import pytest
 
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
+from sqlbuild.cli.commands.classes import build_progress_callbacks
 from sqlbuild.cli.commands.classes.build_progress_callbacks import (
     BuildProgressCallbacks,
     _aggregate_audit_results,
@@ -112,7 +113,23 @@ def test_given_name_and_width_when_truncating_then_returns_expected_result(
                 "expected fact_orders                               PASS",
             ),
             unexpected_fragments=("...",),
-        )
+        ),
+        NestedProgressChildRowsTestCase(
+            description="execution error preserves status and nests diagnostic",
+            item_name="test_daily_revenue_chain",
+            name_width=len("test_daily_revenue_chain"),
+            status_text="ERROR",
+            child_status_text="ERROR",
+            error_code="T002",
+            error_message="execution error while running stg_orders",
+            expected_fragments=(
+                "test      test_daily_revenue_chain",
+                "ERROR",
+                "├── expect  expected fact_orders",
+                "└── error   [T002] execution error while running stg_orders",
+            ),
+            unexpected_fragments=("0 mismatched",),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -132,19 +149,21 @@ def test_given_child_rows_when_completing_nested_progress_then_renders_aligned_e
     callbacks.on_item_complete(
         group_name="fact_orders",
         item_name=test_case.item_name,
-        status_text="PASS",
+        status_text=test_case.status_text,
         child_rows=(
             NestedProgressChildRow(
                 label="expect",
                 name="expected fact_orders",
-                status_text="PASS",
+                status_text=test_case.child_status_text,
             ),
             NestedProgressChildRow(
                 label="expect",
                 name="assertion line_totals_are_non_negative",
-                status_text="PASS",
+                status_text=test_case.child_status_text,
             ),
         ),
+        error_code=test_case.error_code,
+        error_message=test_case.error_message,
     )
     output: str = stream.getvalue()
 
@@ -662,34 +681,34 @@ def test_given_execution_context_when_writing_header_then_renders_expected_outpu
             unexpected_fragments=("staging  relation raw_orders does not exist", "\033["),
         ),
         BuildProgressFailureOutputTestCase(
-            description="live error detail truncates after four lines",
+            description="live error detail wraps to two terminal lines",
             node_result=FunctionExecutionResult(
                 function_name="is_completed_order",
                 status=ExecutionStatus.FAILED,
                 function_kind="udf",
                 duration_ms=110,
                 error_message=(
-                    "line one\nline two\nline three\nline four\nline five should not appear"
+                    "line one with enough content to wrap across the available terminal width "
+                    + "middle diagnostic context " * 10
+                    + "final detail should not appear"
                 ),
             ),
             expected_fragments=(
-                "error     line one",
-                "          line two",
-                "          line three",
-                "          line four...",
+                "error     line one with enough content",
+                "terminal width middle diagnostic context middle diagnostic...",
             ),
-            unexpected_fragments=("line five should not appear", "\033["),
+            unexpected_fragments=("final detail should not appear", "\033["),
+            terminal_width=80,
         ),
         BuildProgressFailureOutputTestCase(
             description="failing test writes its row and error inline without a host model",
             node_result=SqlTestExecutionResult(
                 test_name="test_daily_revenue_chain",
-                outcome=SqlTestOutcome.FAIL,
+                outcome=SqlTestOutcome.ERROR,
                 step_results=(
                     StepResult(
                         model_name="stg_orders",
-                        outcome=SqlTestOutcome.FAIL,
-                        mismatched_row_count=2,
+                        outcome=SqlTestOutcome.ERROR,
                     ),
                 ),
                 error_code="T002",
@@ -697,11 +716,11 @@ def test_given_execution_context_when_writing_header_then_renders_expected_outpu
             ),
             expected_fragments=(
                 "test      test_daily_revenu...",
-                "FAIL",
-                "expect  expected stg_orders",
-                "error     error[T002]: execution error while running 'stg_orders'",
+                "ERROR",
+                "├── expect  expected stg_orders",
+                "└── error  [T002] execution error while running 'stg_orders'",
             ),
-            unexpected_fragments=("\033[",),
+            unexpected_fragments=("0 mismatched", "\033["),
         ),
     ],
     ids=lambda case: case.description,
@@ -712,6 +731,11 @@ def test_given_failed_top_level_node_when_reporting_progress_then_writes_error_d
 ) -> None:
     stream: StringIO = StringIO()
     monkeypatch.setattr("sys.stdout", stream)
+    monkeypatch.setattr(
+        build_progress_callbacks,
+        "terminal_columns",
+        partial(int, test_case.terminal_width),
+    )
     callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
         plan=PlanOutput(),
         use_color=test_case.use_color,
