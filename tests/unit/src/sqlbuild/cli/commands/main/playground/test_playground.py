@@ -404,9 +404,9 @@ def test_given_playground_command_when_running_then_it_prints_next_steps(
             target_path="demo_color_shop",
             expected_stdout_fragments=(),
             expected_color_fragments=(
-                "\033[32m\033[1mSQLBuild playground created\033[0m",
-                "  \033[34m\033[1mProject\033[0m: demo_color_shop",
-                "\033[32m\033[1mTry\033[0m:",
+                "\033[34m\033[1mSQLBuild playground created\033[0m",
+                "  \033[34mProject\033[0m: demo_color_shop",
+                "\033[34m\033[1mTry\033[0m:",
                 "\033[2m  \033[0msqb compile",
             ),
         )

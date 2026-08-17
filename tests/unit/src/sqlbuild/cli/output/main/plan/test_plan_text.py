@@ -1195,7 +1195,7 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
             ),
             expected_fragments=(
                 "\033[32m\033[1mPlan ready (1 selected)\033[0m",
-                "\033[34m\033[1mdim_customers\033[0m",
+                "dim_customers",
                 "\033[32m      + discount  FLOAT   (added)\033[0m",
                 "\033[33m\033[1mWarnings (1)\033[0m",
                 "\033[33m- schema change requires rebuild\033[0m",
@@ -1213,7 +1213,7 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
                 ),
             ),
             expected_fragments=(
-                "\033[34m\033[1mmarker_provider\033[0m",
+                "marker_provider",
                 "\033[2mused by 1 selected Python surface\033[0m",
             ),
         ),
@@ -1240,7 +1240,7 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
             ),
             expected_fragments=(
                 "\033[2mobserved:\033[0m 1",
-                "\033[2mobserved set:\033[0m \033[34m\033[1mraw_orders\033[0m",
+                "\033[2mobserved set:\033[0m raw_orders",
                 "\033[2mchanged:\033[0m \033[33m1\033[0m",
                 "\033[2mchanged set:\033[0m \033[33mraw_orders\033[0m",
                 "\033[2munchanged:\033[0m \033[2m0\033[0m",

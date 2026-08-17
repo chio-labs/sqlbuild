@@ -178,12 +178,12 @@ def test_given_janitor_plan_when_writing_without_color_then_preserves_output_fra
             description="uses semantic plan colors",
             use_color=True,
             expected_output_fragments=(
-                "\033[32m\033[1mJanitor preview\033[0m",
-                "\033[34m\033[1mdev\033[0m",
+                "\033[34m\033[1mJanitor preview\033[0m",
+                "dev",
                 "\033[34m30 days\033[0m",
                 "eligible for deletion  \033[33m1\033[0m",
                 "\033[32mEligible objects\033[0m",
-                "\033[34m\033[1mdev.stale_model\033[0m",
+                "dev.stale_model",
                 "\033[2msource relation\033[0m",
             ),
         )

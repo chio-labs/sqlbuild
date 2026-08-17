@@ -725,7 +725,7 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
             expected_absent_fragments=("CREATE TABLE",),
         ),
         BuildOutputTestCase(
-            description="colorized verbose mode shows lifecycle log messages in muted blue",
+            description="colorized verbose mode shows lifecycle log messages dimmed",
             result=BuildExecutionResult(
                 status=BuildStatus.SUCCESS,
                 model_results=(
@@ -745,9 +745,7 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
             ),
             verbose=True,
             use_color=True,
-            expected_output_fragments=(
-                "\033[34m\033[2m    log  building partition 2024-01-01\033[0m",
-            ),
+            expected_output_fragments=("\033[2m    log  building partition 2024-01-01\033[0m",),
         ),
     ],
     ids=lambda case: case.description,
