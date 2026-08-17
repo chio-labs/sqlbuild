@@ -170,7 +170,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 ),
             ),
             expected_fragments=(
-                "Models (3 standard run)",
+                "Models (3)",
                 "stg_orders",
                 "fact_orders",
                 "fact_events",
@@ -524,6 +524,26 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             ),
         ),
         FormatPlanTestCase(
+            description="upstream changed view shows recreate action",
+            plan_output=build_plan_output(
+                model_entries=(
+                    build_model_entry(
+                        name="stg_orders",
+                        action=PlanAction.CREATE_VIEW,
+                        reason=PlanReason.NO_CHANGE,
+                        materialization_type=MaterializationType.VIEW,
+                        cascade=CascadeResult(
+                            effective_action=BackfillAction.FULL,
+                            effective_duration=None,
+                            root_cause="raw_orders",
+                        ),
+                    ),
+                ),
+            ),
+            expected_fragments=("stg_orders", "recreate view"),
+            unexpected_fragments=("full rebuild",),
+        ),
+        FormatPlanTestCase(
             description="seeds section shows seed names",
             plan_output=build_plan_output(
                 model_entries=(build_model_entry(name="orders", action=PlanAction.CREATE_TABLE),),
@@ -561,7 +581,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             ),
             expected_fragments=(
                 "Plan ready  3 selected",
-                "Functions (2 standard run)",
+                "Functions (2)",
                 "is_completed_order",
                 "sql udf",
                 "is_completed_order_py",
@@ -817,6 +837,22 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             ),
         ),
         FormatPlanTestCase(
+            description="multiline warning messages terminate their child tree",
+            plan_output=build_plan_output(
+                warnings=(
+                    build_warning(
+                        model_name="stg_customers",
+                        message="type change detected\nrebuild required",
+                        severity=WarningSeverity.WARNING,
+                    ),
+                ),
+            ),
+            expected_fragments=(
+                "├── type change detected",
+                "└── rebuild required",
+            ),
+        ),
+        FormatPlanTestCase(
             description="full refresh shows aggregate counts with incremental detail",
             plan_output=build_plan_output(
                 model_entries=(
@@ -947,8 +983,8 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             expected_ordered_fragments=(
                 "Changed functions (1)",
                 "Query changed (1)",
-                "Models (1 standard run)",
-                "Functions (1 standard run)",
+                "Models (1)",
+                "Functions (1)",
                 "Seeds (1)",
             ),
         ),
@@ -1132,9 +1168,9 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             expected_fragments=(
                 "Providers",
                 "\u2514\u2500\u2500 marker_provider",
-                "    hook mark_pre (MarkerProvider)",
-                "    loader raw_orders (MarkerProvider)",
-                "    task publish_orders (MarkerProvider)",
+                "    ├── hook mark_pre (MarkerProvider)",
+                "    ├── loader raw_orders (MarkerProvider)",
+                "    └── task publish_orders (MarkerProvider)",
             ),
             unexpected_fragments=("used by 3 selected Python surfaces", "parameter"),
         ),
@@ -1247,10 +1283,58 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
                 "\033[2mchanged set:\033[0m \033[33mraw_orders\033[0m",
                 "\033[2munchanged:\033[0m \033[2m0\033[0m",
                 "\033[2msource-stale models:\033[0m \033[33mfact_orders\033[0m",
-                "\033[2m    query diff:\033[0m",
+                "\033[2mquery diff:\033[0m",
                 "\033[2m      --- previous\033[0m",
                 "\033[2m      +++ current\033[0m",
                 "\033[2m      @@",
+            ),
+        ),
+        FormatPlanColorTestCase(
+            description="dims routine kinds and accents changed view actions",
+            plan_output=build_plan_output(
+                model_entries=(
+                    build_model_entry(
+                        name="stg_orders",
+                        action=PlanAction.CREATE_VIEW,
+                        reason=PlanReason.NO_CHANGE,
+                        materialization_type=MaterializationType.VIEW,
+                    ),
+                    build_model_entry(
+                        name="stg_payments",
+                        action=PlanAction.CREATE_VIEW,
+                        reason=PlanReason.QUERY_CHANGED,
+                        materialization_type=MaterializationType.VIEW,
+                        backfill_action=BackfillAction.FORWARD_ONLY,
+                        previous_query_sql="SELECT payment_id FROM raw_payments",
+                    ),
+                    build_model_entry(
+                        name="fact_payments",
+                        action=PlanAction.INCREMENTAL_DELETE_INSERT,
+                        reason=PlanReason.QUERY_CHANGED,
+                        materialization_type=MaterializationType.INCREMENTAL,
+                        backfill_action=BackfillAction.FORWARD_ONLY,
+                        previous_query_sql="SELECT payment_id FROM stg_payments",
+                    ),
+                    build_model_entry(
+                        name="partitioned_payments",
+                        action=PlanAction.CUSTOM,
+                        reason=PlanReason.QUERY_CHANGED,
+                        materialization_type=MaterializationType.CUSTOM,
+                        backfill_action=BackfillAction.FORWARD_ONLY,
+                        custom_materialization_name="partition_tracked",
+                        previous_query_sql="SELECT payment_id FROM stg_payments",
+                    ),
+                ),
+            ),
+            expected_fragments=(
+                "stg_orders",
+                "\033[2mview\033[0m",
+                "stg_payments",
+                "\033[34mrecreate view\033[0m",
+                "fact_payments",
+                "\033[34mcontinue forward\033[0m",
+                "partitioned_payments",
+                "\033[34mrun partition_tracked\033[0m",
             ),
         ),
         FormatPlanColorTestCase(

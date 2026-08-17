@@ -20,6 +20,15 @@ from tests.unit.src.sqlbuild.presentation.main._test_types import FormatCodedErr
             expected_rendered="error[R002]: materialization failed",
         ),
         FormatCodedErrorTestCase(
+            description="renders coded detail beneath an existing error label",
+            code="T002",
+            message="test execution failed",
+            help=None,
+            use_color=False,
+            expected_rendered="[T002] test execution failed",
+            include_error_label=False,
+        ),
+        FormatCodedErrorTestCase(
             description="renders plain coded error with help",
             code="K011",
             message="contract requires staged promotion",
@@ -85,6 +94,7 @@ def test_given_coded_error_when_formatting_then_renders_consistently(
         message=test_case.message,
         help=test_case.help,
         use_color=test_case.use_color,
+        include_error_label=test_case.include_error_label,
     )
 
     assert rendered == test_case.expected_rendered

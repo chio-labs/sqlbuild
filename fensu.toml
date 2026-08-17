@@ -114,6 +114,12 @@ reason = "These Jinja globals preserve dbt's external positional call protocol."
 
 [[rule_exceptions]]
 rule = "FFS120"
+path = "scripts/cli_preview/_helpers/workflow.py"
+symbols = ["_run_process._forward_signal"]
+reason = "This callback preserves signal.signal's required positional handler protocol."
+
+[[rule_exceptions]]
+rule = "FFS120"
 path = "src/sqlbuild/integrations/dlt/classes/sqlbuild_dlt_progress_collector.py"
 symbols = [
     "SqlbuildDltProgressCollector.on_start_trace",
