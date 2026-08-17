@@ -45,10 +45,10 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.clone._test_types import (
                 "missing in origin environment",
                 "dim_customers",
                 "boom",
-                "Completed with warnings.",
+                "\u2717 Completed with errors",
             ),
             expected_color_fragments=(
-                "\033[33m\033[1mCompleted with warnings.\033[0m",
+                "\033[31m\u2717\033[0m \033[31m\033[1mCompleted with errors\033[0m",
                 "\033[2mCLONED=\033[0m\033[34m1\033[0m",
                 "\033[2mPASS=\033[0m\033[32m1\033[0m",
                 "\033[2mWARN=\033[0m\033[33m1\033[0m",
