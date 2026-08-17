@@ -35,9 +35,9 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
             description="compiles local project without connecting",
             expected_exit_code=0,
             expected_stdout_fragments=(
-                "Compile ready (1 model)",
-                "  orders                   OK 1 columns",
-                "  Compiled: 1 model, 0 seeds, 0 functions, 0 errors, 0 warnings",
+                "Compile ready  1 model",
+                "orders                   OK   1 columns",
+                "\u2713 Project compiled  1 model, 0 seeds, 0 functions, 0 errors, 0 warnings",
                 "  Wrote: target/compiled/",
             ),
         )
@@ -258,15 +258,15 @@ def test_given_python_project_dag_flag_when_running_compile_then_writes_python_d
             description="returns one when contract diagnostics have errors",
             expected_exit_code=1,
             expected_stdout_fragments=(
-                "Compile ready (1 model)",
-                "  orders                   FAIL 1 columns",
+                "Compile ready  1 model",
+                "orders                   FAIL 1 columns",
                 "error[K001]: required column 'customer_id' missing from model output",
                 "  model: orders",
                 "  --> models/orders.sql:5:5",
                 "  5 |     customer_id (),",
                 "    |     ^^^^^^^^^^^",
                 "  = help: add customer_id to the SELECT list or remove it from MODEL(columns)",
-                "  Compiled: 1 model, 0 seeds, 0 functions, 1 error, 0 warnings",
+                "\u2717 Project compiled  1 model, 0 seeds, 0 functions, 1 error, 0 warnings",
                 "  Wrote: target/compiled/",
             ),
             model_sql=(
