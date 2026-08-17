@@ -81,7 +81,7 @@ PROVIDER_MARKER_FILE: str = (
             description="plan output shows provider usage for selected Python surfaces",
             expected_text_fragments=(
                 "Providers",
-                "  marker_provider",
+                "\u2514\u2500\u2500 marker_provider",
                 "    custom materialization copy_table (MarkerProvider)",
                 "    hook mark_pre (MarkerProvider)",
                 "    loader raw_orders (MarkerProvider)",
