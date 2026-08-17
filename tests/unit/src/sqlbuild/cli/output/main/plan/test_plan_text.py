@@ -56,7 +56,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 metadata={"standard_pruned_model_names": ("customer_revenue_check",)}
             ),
             expected_fragments=(
-                "Plan ready (0 selected)",
+                "Plan ready  0 selected",
                 "Skipped current models (1 already up to date)",
             ),
             unexpected_fragments=("customer_revenue_check", "changes-only", "Execution"),
@@ -205,13 +205,13 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 ),
             ),
             expected_fragments=(
-                "cursor: event_date (timestamp)",
-                "requested: 2014-01-01 -> 2014-03-31",
-                "range: 2014-01-01 \u2192 2014-03-31",
-                "grain: day",
-                "batch size: 1mo",
-                "batches: 3 x 1mo",
-                "bounds: planner-resolved",
+                "cursor  event_date (timestamp)",
+                "requested  2014-01-01 -> 2014-03-31",
+                "range  2014-01-01 \u2192 2014-03-31",
+                "grain  day",
+                "batch size  1mo",
+                "batches  3 x 1mo",
+                "bounds  planner-resolved",
             ),
             unexpected_fragments=("resolved at runtime",),
         ),
@@ -244,11 +244,11 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 ),
             ),
             expected_fragments=(
-                "requested: 2014-01-01 -> 2014-03-31",
-                "batches: resolved at runtime after upstream models complete",
-                "bounds: runtime-owned (model-backed cursor input)",
+                "requested  2014-01-01 -> 2014-03-31",
+                "batches  resolved at runtime after upstream models complete",
+                "bounds  runtime-owned (model-backed cursor input)",
             ),
-            unexpected_fragments=("batches: 3 x", "bounds: planner-resolved"),
+            unexpected_fragments=("batches  3 x", "bounds  planner-resolved"),
         ),
         FormatPlanTestCase(
             description="human plan output omits identity hashes",
@@ -360,11 +360,11 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 "Query changed (1)",
                 "fact_orders",
                 "rebuild last 30d",
-                "cursor: event_time",
-                "mode: microbatch",
+                "cursor  event_time",
+                "mode  microbatch",
                 "2026-03-26",
                 "2026-04-24",
-                "policy: replay_on_change=bounded-30d",
+                "policy  replay_on_change=bounded-30d",
                 "query diff:",
             ),
         ),
@@ -448,8 +448,8 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             expected_fragments=(
                 "hourly_order_activity",
                 "full rebuild",
-                "cursor: activity_hour",
-                "mode: microbatch",
+                "cursor  activity_hour",
+                "mode  microbatch",
             ),
             unexpected_fragments=(
                 "range:",
@@ -489,7 +489,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 "Upstream changed (1)",
                 "fact_daily_revenue",
                 "rebuild last 90d",
-                "cause: fact_orders (90d)",
+                "cause  fact_orders (90d)",
             ),
             unexpected_fragments=("Normal",),
         ),
@@ -520,7 +520,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 "Upstream changed (1)",
                 "dim_summary",
                 "full rebuild",
-                "cause: fact_orders (full)",
+                "cause  fact_orders (full)",
             ),
         ),
         FormatPlanTestCase(
@@ -560,7 +560,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 ),
             ),
             expected_fragments=(
-                "Plan ready (3 selected)",
+                "Plan ready  3 selected",
                 "Functions (2 standard run)",
                 "is_completed_order",
                 "sql udf",
@@ -577,7 +577,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 source_load_entries=(build_source_load_entry(name="raw_orders"),),
             ),
             expected_fragments=(
-                "Plan ready (1 selected, 1 source to load)",
+                "Plan ready  1 selected, 1 source to load",
                 "Sources to load (1)",
                 "raw_orders",
             ),
@@ -608,7 +608,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 ),
             ),
             expected_fragments=(
-                "Plan ready (1 selected, 1 source to load, 3 Python nodes)",
+                "Plan ready  1 selected, 1 source to load, 3 Python nodes",
                 "Python ingress (2)",
                 "prepare_orders",
                 "task",
@@ -693,7 +693,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             ),
             full_refresh=True,
             expected_fragments=(
-                "Plan ready (full refresh, 1 selected, 1 source to reload)",
+                "Plan ready  full refresh, 1 selected, 1 source to reload",
                 "Sources to reload (1)",
                 "raw_orders",
             ),
@@ -721,7 +721,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 ),
             ),
             expected_fragments=(
-                "Plan ready (0 selected, 4 sources to load)",
+                "Plan ready  0 selected, 4 sources to load",
                 "raw_events",
                 "delete_insert (cursor: event_at)",
                 "raw_orders",
@@ -750,7 +750,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 "Changed functions (1)",
                 "is_completed_order",
                 "sql udf",
-                "policy: replay_on_change=full",
+                "policy  replay_on_change=full",
                 "query diff:",
                 "--- previous",
                 "+++ current",
@@ -784,11 +784,11 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 "Upstream changed (1)",
                 "daily_activity_rollup",
                 "full rebuild",
-                "cause: is_completed_order (function changed)",
+                "cause  is_completed_order (function changed)",
             ),
             unexpected_fragments=(
-                "cause: hourly_order_activity",
-                "cause: is_completed_order (full)",
+                "cause  hourly_order_activity",
+                "cause  is_completed_order (full)",
             ),
         ),
         FormatPlanTestCase(
@@ -844,7 +844,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             ),
             full_refresh=True,
             expected_fragments=(
-                "Plan ready (full refresh, 3 selected)",
+                "Plan ready  full refresh, 3 selected",
                 "Full refresh (3)",
                 "view",
                 "table",
@@ -855,7 +855,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
         FormatPlanTestCase(
             description="empty plan shows only header and selected zero",
             plan_output=build_plan_output(),
-            expected_fragments=("Plan ready (0 selected)",),
+            expected_fragments=("Plan ready  0 selected",),
             unexpected_fragments=("Normal", "Seeds", "Warnings"),
         ),
         FormatPlanTestCase(
@@ -874,7 +874,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                     ),
                 ),
             ),
-            expected_fragments=("cursor: event_time",),
+            expected_fragments=("cursor  event_time",),
             unexpected_fragments=("mode:",),
         ),
         FormatPlanTestCase(
@@ -976,8 +976,9 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 ),
             ),
             expected_fragments=(
-                "  hourly_activity_with_daily_context delete_insert (timestamp, microbatch)",
-                "  order_status_index                 delete_insert (integer)",
+                "\u251c\u2500\u2500 hourly_activity_with_daily_context "
+                "delete_insert (timestamp, microbatch)",
+                "\u2514\u2500\u2500 order_status_index                 delete_insert (integer)",
             ),
         ),
         FormatPlanTestCase(
@@ -1130,7 +1131,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             ),
             expected_fragments=(
                 "Providers",
-                "  marker_provider",
+                "\u2514\u2500\u2500 marker_provider",
                 "    hook mark_pre (MarkerProvider)",
                 "    loader raw_orders (MarkerProvider)",
                 "    task publish_orders (MarkerProvider)",
@@ -1194,11 +1195,12 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
                 ),
             ),
             expected_fragments=(
-                "\033[32m\033[1mPlan ready (1 selected)\033[0m",
+                "\033[34m\033[1mPlan ready\033[0m  \033[2m1 selected\033[0m",
                 "dim_customers",
                 "\033[32m      + discount  FLOAT   (added)\033[0m",
                 "\033[33m\033[1mWarnings (1)\033[0m",
-                "\033[33m- schema change requires rebuild\033[0m",
+                "\033[2m\u2514\u2500\u2500\033[0m dim_customers",
+                "    \033[2m\u2514\u2500\u2500\033[0m \033[33mschema change requires rebuild\033[0m",
             ),
         ),
         FormatPlanColorTestCase(
