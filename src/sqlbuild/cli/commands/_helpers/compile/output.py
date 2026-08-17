@@ -27,6 +27,12 @@ from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.lineage.models import ModelColumnLineage, ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.structure import (
+    format_phase_line,
+    format_status_cell,
+    format_surface_header,
+    tree_connector,
+)
 from sqlbuild.spec.contracts.models import SourceLocation
 
 _HUMAN_MODEL_LIMIT: int = 100
@@ -48,20 +54,24 @@ def format_compile_text(
 
     style: CliStyle = CliStyle(use_color=use_color)
     lines: list[str] = [
-        style.success_strong(
-            f"Compile ready ({_count_label(count=len(graph.project.models), singular='model')})"
+        format_surface_header(
+            style=style,
+            title="Compile ready",
+            context=_count_label(count=len(graph.project.models), singular="model"),
         ),
         "",
     ]
     visible_models: tuple[CompiledModel, ...] = graph.project.models[:_HUMAN_MODEL_LIMIT]
     model_name_width: int = _model_name_width(visible_models)
     error_models: frozenset[str] = _models_with_error_diagnostics(diagnostics)
-    for model in visible_models:
+    model_index: int
+    for model_index, model in enumerate(visible_models):
         model_name: str = _fit(text=model.name, width=model_name_width)
         status: str = "FAIL" if model.name in error_models else "OK"
+        connector: str = tree_connector(style=style, last=model_index == len(visible_models) - 1)
         lines.append(
-            f"  {style.object_name(model_name)} "
-            f"{style.status(status=status)} "
+            f"{connector} {style.object_name(model_name)} "
+            f"{format_status_cell(style=style, status=status, width=4)} "
             f"{style.muted(f'{_column_count(model)} columns')}"
         )
     hidden_model_count: int = len(graph.project.models) - len(visible_models)
@@ -86,13 +96,20 @@ def format_compile_text(
     warning_count: int = _diagnostic_count(
         diagnostics=diagnostics, severity=DiagnosticSeverity.WARNING
     )
-    lines.append(
-        f"  {style.success_strong('Compiled:')} "
+    compiled_summary: str = (
         f"{_count_label(count=len(graph.project.models), singular='model')}, "
         f"{_count_label(count=len(graph.project.seeds), singular='seed')}, "
         f"{_count_label(count=len(graph.project.functions), singular='function')}, "
         f"{_count_label(count=error_count, singular='error')}, "
         f"{_count_label(count=warning_count, singular='warning')}"
+    )
+    lines.append(
+        format_phase_line(
+            style=style,
+            ok=error_count == 0,
+            label="Project compiled",
+            summary=compiled_summary,
+        )
     )
     lines.append(f"  {style.muted('Wrote:')} {_relative_target_path(_compiled_sql_dir(written))}/")
     if manifest:
