@@ -27,12 +27,12 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
         VirtualSourceFreshnessPlanE2ETestCase(
             description="virtual plan observes current source freshness before build persistence",
             expected_unchanged_fragments=(
-                "Plan ready (0 selected)",
+                "Plan ready  0 selected",
                 "source freshness observed: 1",
                 "source freshness observed set: raw_orders",
             ),
             expected_fragments=(
-                "Plan ready (1 selected)",
+                "Plan ready  1 selected",
                 "source freshness observed: 1",
                 "source freshness observed set: raw_orders",
                 "stale model set: fact_orders",
@@ -95,7 +95,7 @@ def test_given_virtual_source_freshness_change_when_planning_then_selects_downst
         project_dir=project_dir,
     )
     assert unchanged_plan_result.returncode == 0, unchanged_plan_result.stderr
-    assert "Plan ready (1 selected)" in unchanged_plan_result.stdout
+    assert "Plan ready  1 selected" in unchanged_plan_result.stdout
     assert "fact_orders" in unchanged_plan_result.stdout
     for fragment in test_case.expected_unchanged_fragments[1:]:
         assert fragment in unchanged_plan_result.stdout, unchanged_plan_result.stdout
@@ -137,11 +137,11 @@ def test_given_virtual_source_freshness_change_when_planning_then_selects_downst
         VirtualSourceFreshnessPlanE2ETestCase(
             description="virtual plan respects timestamp source freshness lag tolerance",
             expected_unchanged_fragments=(
-                "Plan ready (0 selected)",
+                "Plan ready  0 selected",
                 "source freshness unchanged: 1",
                 "source freshness unchanged set: raw_orders",
             ),
-            expected_fragments=("Plan ready (1 selected)", "fact_orders"),
+            expected_fragments=("Plan ready  1 selected", "fact_orders"),
         )
     ],
     ids=lambda case: case.description,
@@ -225,13 +225,13 @@ def test_given_virtual_timestamp_lag_tolerance_when_planning_then_skips_within_t
         VirtualSourceFreshnessPlanE2ETestCase(
             description="virtual plan keeps unknown source freshness stale",
             expected_unchanged_fragments=(
-                "Plan ready (1 selected)",
+                "Plan ready  1 selected",
                 "source freshness incomplete: 1",
                 "source freshness incomplete set: raw_orders",
                 "source freshness incomplete models: fact_orders",
                 "stale model set: fact_orders",
             ),
-            expected_fragments=("Plan ready (1 selected)", "fact_orders"),
+            expected_fragments=("Plan ready  1 selected", "fact_orders"),
         )
     ],
     ids=lambda case: case.description,
@@ -293,9 +293,9 @@ def test_given_virtual_source_without_freshness_when_planning_then_downstream_st
     [
         VirtualSourceFreshnessPlanE2ETestCase(
             description="virtual plan propagates source freshness through views",
-            expected_unchanged_fragments=("Plan ready (0 selected)",),
+            expected_unchanged_fragments=("Plan ready  0 selected",),
             expected_fragments=(
-                "Plan ready (2 selected)",
+                "Plan ready  2 selected",
                 "source freshness observed: 1",
                 "source freshness observed set: raw_orders",
                 "stale model set: fact_orders, stg_orders",

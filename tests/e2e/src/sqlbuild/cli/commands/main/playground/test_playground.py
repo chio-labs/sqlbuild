@@ -28,10 +28,10 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
                 "Virtual State Initialized",
                 "Seeds (1)",
                 "waffle_price_tiers",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
             ),
             expected_test_fragments=(
-                "Test (1 selected",
+                "Test ready  1 selected",
                 "test_fact_waffle_orders",
                 "PASS=1",
             ),
@@ -49,14 +49,14 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
             expected_branch_fragments=(
                 "Virtual environment",
                 "name: pr",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
             ),
             expected_diff_fragments=(
                 "Virtual diff",
                 "No schema differences",
             ),
             expected_promote_fragments=(
-                "Virtual promotion complete",
+                "\u2713 Virtual promotion complete",
                 "pr -> dev",
             ),
         )
@@ -161,7 +161,7 @@ def test_given_virtual_playground_when_running_lifecycle_then_it_succeeds(
                 "raw_orders",
                 "fact_orders",
                 "orders_export",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
             ),
             expected_check_fragments=(
                 "check_orders_export",

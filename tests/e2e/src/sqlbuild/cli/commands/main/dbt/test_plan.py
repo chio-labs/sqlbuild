@@ -171,7 +171,7 @@ def test_given_relative_project_dir_when_running_dbt_plan_then_resolves_dbt_conf
             description="outputs grouped dbt and SQLBuild plan sections",
             command=("dbt", "plan", "--select", "tag:nightly"),
             expected_stdout_fragments=(
-                "Plan ready (5 selected resources)",
+                "Plan ready  5 selected resources",
                 "dbt (4 selected, 0 required)",
                 "dbt ls",
                 "model (1)",

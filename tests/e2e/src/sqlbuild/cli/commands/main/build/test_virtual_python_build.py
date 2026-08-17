@@ -733,7 +733,7 @@ def test_given_virtual_node_result_failure_when_building_then_persists_failed_st
             ),
             expected_warehouse_fingerprint_table_count=0,
             expected_changed_plan_fragments=(
-                "Plan ready (0 selected",
+                "Plan ready  0 selected",
                 "Python ingress (1)",
                 "prepare_orders",
                 "task (changed)",

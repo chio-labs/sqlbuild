@@ -84,7 +84,7 @@ def test_given_wide_virtual_dag_when_building_concurrently_then_physical_schema_
         VirtualBuildE2ETestCase(
             description="default VDE creates physical versions and queryable views",
             expected_build_fragments=("Virtual environment", "name: dev"),
-            expected_plan_fragments=("Plan ready (0 selected)", "status: finalized"),
+            expected_plan_fragments=("Plan ready  0 selected", "status: finalized"),
             expected_query_results=(("SELECT id FROM dev__dev.fact_orders ORDER BY id", ((7,),)),),
             expected_ref_rows=(("dim_customers",), ("fact_orders",), ("stg_orders",)),
             expected_physical_version_count=3,
@@ -173,7 +173,7 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
         project_dir=project_dir,
     )
     assert default_plan_result.returncode == 0, default_plan_result.stderr
-    assert f"Plan ready ({len(test_case.expected_ref_rows)} selected)" in default_plan_result.stdout
+    assert f"Plan ready  {len(test_case.expected_ref_rows} selected)" in default_plan_result.stdout
 
     default_repeat_build_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "build"),
@@ -240,7 +240,7 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
                 "-SELECT 1 AS id",
                 "+SELECT 2 AS id",
             ),
-            expected_final_plan_fragments=("Plan ready (0 selected)", "status: finalized"),
+            expected_final_plan_fragments=("Plan ready  0 selected", "status: finalized"),
         )
     ],
     ids=lambda case: case.description,
