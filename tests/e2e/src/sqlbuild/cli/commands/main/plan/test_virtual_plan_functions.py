@@ -38,9 +38,9 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "fact_orders",
                 "Upstream changed (1)",
                 "orders_rollup",
-                "cause: is_large_order (function changed)",
+                "cause  is_large_order (function changed)",
             ),
-            unexpected_fragments=("cause: fact_orders", "stg_orders", "First run"),
+            unexpected_fragments=("cause  fact_orders", "stg_orders", "First run"),
         )
     ],
     ids=lambda case: case.description,
@@ -125,7 +125,7 @@ def test_given_virtual_plan_with_function_change_when_running_cli_then_it_marks_
             expected_fragments=(
                 "Changed functions (1)",
                 "is_large_order",
-                "policy: replay_on_change=full",
+                "policy  replay_on_change=full",
                 "query diff:",
                 "--- previous",
                 "+++ current",
@@ -133,9 +133,9 @@ def test_given_virtual_plan_with_function_change_when_running_cli_then_it_marks_
                 "+amount > 5",
                 "Upstream changed (1)",
                 "orders_rollup",
-                "cause: is_large_order (function changed)",
+                "cause  is_large_order (function changed)",
             ),
-            unexpected_fragments=("reason: first run", "cause: fact_orders"),
+            unexpected_fragments=("reason: first run", "cause  fact_orders"),
         )
     ],
     ids=lambda case: case.description,
