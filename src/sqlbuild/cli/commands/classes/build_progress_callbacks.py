@@ -39,9 +39,11 @@ from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.coded_error_text import format_coded_error
 from sqlbuild.presentation.main.completion_line import format_completion_line
+from sqlbuild.presentation.main.inline_error_lines import format_inline_error_lines
 from sqlbuild.presentation.main.status_cell import format_status_cell
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
 from sqlbuild.presentation.main.terminal_columns import terminal_columns
+from sqlbuild.presentation.main.tree_connector import tree_connector
 from sqlbuild.presentation.types import CompletionState
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 
@@ -55,9 +57,7 @@ _HOOK_TYPE_WIDTH: int = 8
 _HOOK_MIN_LABEL_WIDTH: int = 24
 _HOOK_MAX_LABEL_WIDTH: int = 56
 _SPINNER_TICK_SECONDS: float = 0.1
-_MAX_ERROR_LINES: int = 4
 _SKIPPED_ROLLUP_CAP: int = 20
-_MAX_ERROR_LINE_LENGTH: int = 160
 _ROW_COUNT_BILLION: int = 1_000_000_000
 _ROW_COUNT_MILLION: int = 1_000_000
 _ROW_COUNT_THOUSAND: int = 1_000
@@ -488,14 +488,19 @@ class BuildProgressCallbacks:
         expectation_type_width: int = _TYPE_WIDTH - 2
         sub_nw: int = self._name_width - _SUB_INDENT
         step_result: StepResult
-        for step_result in test_result.step_results:
+        for index, step_result in enumerate(test_result.step_results):
             expectation_status: str = self._style.status(
                 status=_test_outcome_display(step_result.outcome)
             )
             expectation_name: str = format_expectation_name(step_result.model_name)
             expectation_detail: str = format_expectation_detail(step_result)
+            last: bool = (
+                index == len(test_result.step_results) - 1 and not test_result.error_message
+            )
+            connector: str = tree_connector(style=self._style, last=last)
             self._stream.write(
-                f"{expectation_pad}{self._style.muted(f'{"expect":<{expectation_type_width}}')}"
+                f"{expectation_pad}{connector} "
+                f"{self._style.muted(f'{"expect":<{expectation_type_width}}')}"
                 f"{expectation_name:<{sub_nw}} {expectation_status}{expectation_detail}\n"
             )
         if test_result.error_message:
@@ -503,6 +508,7 @@ class BuildProgressCallbacks:
                 error_code=test_result.error_code,
                 error_message=test_result.error_message,
                 error_help=test_result.error_help,
+                tree_child=True,
             )
         self._stream.flush()
 
@@ -549,21 +555,35 @@ class BuildProgressCallbacks:
         )
 
     def _write_error_detail(
-        self, *, error_code: str | None, error_message: str, error_help: str | None = None
+        self,
+        *,
+        error_code: str | None,
+        error_message: str,
+        error_help: str | None = None,
+        tree_child: bool = False,
     ) -> None:
-        pad: str = " " * self._prefix_width
-        label_padding: str = " " * max(0, _TYPE_WIDTH - 1 - len("error"))
+        child_offset: int = _SUB_INDENT + 2 if tree_child else 0
+        pad: str = " " * (self._prefix_width + child_offset)
+        connector: str = tree_connector(style=self._style, last=True) if tree_child else ""
+        connector_suffix: str = f"{connector} " if tree_child else ""
+        label_width: int = _TYPE_WIDTH - 4 if tree_child else _TYPE_WIDTH - 1
+        label_padding: str = " " * max(0, label_width - len("error"))
         label: str = f"{self._style.error_muted('error')}{label_padding}"
-        message: str = _format_result_error(
+        plain_prefix_width: int = len(pad) + (4 if tree_child else 0) + label_width + 1
+        content_width: int = max(terminal_columns() - plain_prefix_width, 1)
+        lines: list[str] = format_inline_error_lines(
             error_code=error_code,
             error_message=error_message,
             error_help=error_help,
-            use_color=self._use_color,
+            content_width=content_width,
+            style=self._style,
         )
-        line: str
-        for line_index, line in enumerate(_format_error_lines(message)):
-            display_label: str = label if line_index == 0 else " " * (_TYPE_WIDTH - 1)
-            self._stream.write(f"{pad}{display_label} {line}\n")
+        continuation_pad: str = " " * plain_prefix_width
+        for line_index, line in enumerate(lines):
+            if line_index == 0:
+                self._stream.write(f"{pad}{connector_suffix}{label} {line}\n")
+            else:
+                self._stream.write(f"{continuation_pad}{line}\n")
 
 
 def _count_build_footer_results(
@@ -974,25 +994,8 @@ def _format_result_error(
         message=error_message,
         help=error_help,
         use_color=use_color,
+        include_error_label=False,
     )
-
-
-def _format_error_lines(message: str) -> list[str]:
-    raw_lines: list[str] = message.splitlines() or [message]
-    formatted_lines: list[str] = []
-    raw_line: str
-    for raw_line in raw_lines[:_MAX_ERROR_LINES]:
-        if len(raw_line) <= _MAX_ERROR_LINE_LENGTH:
-            formatted_lines.append(raw_line)
-            continue
-        formatted_lines.append(raw_line[: _MAX_ERROR_LINE_LENGTH - 3] + "...")
-    if len(raw_lines) > _MAX_ERROR_LINES and formatted_lines:
-        last_line: str = formatted_lines[-1]
-        if len(last_line) > _MAX_ERROR_LINE_LENGTH - 3:
-            formatted_lines[-1] = last_line[: _MAX_ERROR_LINE_LENGTH - 3] + "..."
-        elif not last_line.endswith("..."):
-            formatted_lines[-1] = f"{last_line}..."
-    return formatted_lines
 
 
 def _format_duration(duration_ms: int | None) -> str:
@@ -1061,6 +1064,8 @@ def _audit_outcome_display(outcome: AuditOutcome) -> str:
 def _test_outcome_display(outcome: SqlTestOutcome) -> str:
     if outcome == SqlTestOutcome.PASS:
         return "PASS"
+    if outcome == SqlTestOutcome.ERROR:
+        return "ERROR"
     return "FAIL"
 
 

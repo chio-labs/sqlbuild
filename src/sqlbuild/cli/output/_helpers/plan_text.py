@@ -850,7 +850,7 @@ def _format_routine_models_section(
 ) -> list[str]:
     """Format routine model work by resource name."""
 
-    lines.append(section_header_style(f"Models ({len(entries)} standard run)"))
+    lines.append(section_header_style(f"Models ({len(entries)})"))
     visible: Sequence[ModelPlanEntry] = visible_entries(entries=entries, options=display_options)
     entry: ModelPlanEntry
     for entry in visible:
@@ -894,7 +894,10 @@ def _format_detail_entry(
     action_text: str = CliStyle(use_color=True).accent(_action_text(entry))
     lines.append(
         _format_name_value_line(
-            name=entry.name, value=action_text, name_column_width=name_column_width
+            name=entry.name,
+            value=action_text,
+            name_column_width=name_column_width,
+            dim_value=False,
         )
     )
     lines = _append_cursor_detail(
@@ -916,10 +919,19 @@ def _format_upstream_changed_entry(
     """Format a per-model entry in the Upstream changed group."""
 
     cascade: CascadeResult | None = entry.cascade
-    action_text: str = CliStyle(use_color=True).accent(_cascade_action_text(cascade))
+    action: str = _cascade_action_text(cascade)
+    if entry.action == PlanAction.CREATE_VIEW:
+        action = "recreate view"
+    elif entry.action == PlanAction.CUSTOM:
+        materialization: str = entry.custom_materialization_name or "custom materialization"
+        action = f"run {materialization}"
+    action_text: str = CliStyle(use_color=True).accent(action)
     lines.append(
         _format_name_value_line(
-            name=entry.name, value=action_text, name_column_width=name_column_width
+            name=entry.name,
+            value=action_text,
+            name_column_width=name_column_width,
+            dim_value=False,
         )
     )
     lines = _append_cursor_detail(
@@ -1070,6 +1082,11 @@ def _format_config_json(metadata_json: str) -> str:
 def _action_text(entry: ModelPlanEntry) -> str:
     """Human-readable action text for inline display."""
 
+    if entry.action == PlanAction.CREATE_VIEW:
+        return "recreate view"
+    if entry.action == PlanAction.CUSTOM:
+        materialization: str = entry.custom_materialization_name or "custom materialization"
+        return f"run {materialization}"
     if entry.backfill.action == BackfillAction.BOUNDED and entry.backfill.duration is not None:
         base: str = f"rebuild last {entry.backfill.duration}"
         suffix: str = _schema_change_suffix(entry)
@@ -1077,7 +1094,7 @@ def _action_text(entry: ModelPlanEntry) -> str:
     if entry.backfill.action == BackfillAction.FULL and entry.reason != PlanReason.FIRST_RUN:
         suffix = _schema_change_suffix(entry)
         return f"full rebuild, {suffix}" if suffix else "full rebuild"
-    return ""
+    return "continue forward"
 
 
 def _cascade_action_text(cascade: CascadeResult | None) -> str:
@@ -1092,7 +1109,7 @@ def _cascade_action_text(cascade: CascadeResult | None) -> str:
         and cascade.effective_duration is not None
     ):
         return f"rebuild last {cascade.effective_duration}"
-    return ""
+    return "continue forward"
 
 
 def _cascade_cause_description(cascade: CascadeResult) -> str:
@@ -1307,7 +1324,7 @@ def _format_routine_functions(
     if not unchanged_entries:
         return lines
     lines.append("")
-    lines.append(section_header_style(f"Functions ({len(unchanged_entries)} standard run)"))
+    lines.append(section_header_style(f"Functions ({len(unchanged_entries)})"))
     visible_unchanged: Sequence[FunctionPlanEntry] = visible_entries(
         entries=unchanged_entries, options=display_options
     )
@@ -1403,15 +1420,18 @@ def _format_warnings(
         message_lines: list[str] = warning.message.split("\n")
         if warning.model_name is not None:
             lines.append(f"{connector} {style.object_name(warning.model_name)}")
-            lines.append(
-                f"    {tree_connector(style=style, last=len(message_lines) == 1)} "
-                f"{style.warning(message_lines[0])}"
-            )
+            message_index: int
+            for message_index, message_line in enumerate(message_lines):
+                child_connector: str = tree_connector(
+                    style=style,
+                    last=message_index == len(message_lines) - 1,
+                )
+                lines.append(f"    {child_connector} {style.warning(message_line)}")
         else:
             lines.append(f"{connector} {style.warning(message_lines[0])}")
-        continuation: str
-        for continuation in message_lines[1:]:
-            lines.append(f"      {style.warning(continuation)}")
+            continuation: str
+            for continuation in message_lines[1:]:
+                lines.append(f"    {style.warning(continuation)}")
     return lines
 
 
@@ -1770,12 +1790,15 @@ def _resolve_name_column_width(
     return resolve_name_column_width(names=names)
 
 
-def _format_name_value_line(*, name: str, value: str, name_column_width: int) -> str:
+def _format_name_value_line(
+    *, name: str, value: str, name_column_width: int, dim_value: bool = True
+) -> str:
     style: CliStyle = CliStyle(use_color=True)
+    rendered_value: str = style.muted(value) if dim_value else value
     return format_aligned_name_value(
         plain_name=name,
         styled_name=style.object_name(name),
-        value=value,
+        value=rendered_value,
         name_column_width=name_column_width,
     )
 
@@ -1798,13 +1821,20 @@ def _treeify_plan_lines(lines: list[str]) -> list[str]:
         if kind == PlanRowKind.LEAF:
             last = _is_last_tree_row(kinds=kinds, index=index, row_kind=PlanRowKind.LEAF)
             connector = tree_connector(style=style, last=last)
-            content: str = line[len(_LEAF_ROW_PREFIX) :]
+            plain_line: str = _strip_ansi(line)
+            content: str = (
+                line[len(_LEAF_ROW_PREFIX) :]
+                if line.startswith(_LEAF_ROW_PREFIX)
+                else plain_line[len(_LEAF_ROW_PREFIX) :]
+            )
             key, separator, value = content.partition(_LEAF_KEY_SEPARATOR)
             if separator:
                 rendered_value: str = value
                 if any(marker in value for marker in _RUNTIME_PROMINENT_MARKERS):
                     rendered_value = style.section(value)
                 out.append(f"{_LEAF_ROW_PREFIX}{connector} {style.muted(key)}  {rendered_value}")
+            elif content.endswith(":"):
+                out.append(f"{_LEAF_ROW_PREFIX}{connector} {style.muted(content)}")
             else:
                 out.append(f"{_LEAF_ROW_PREFIX}{connector} {content}")
             continue
@@ -1816,12 +1846,12 @@ def _classify_plan_row(line: str) -> PlanRowKind:
     """Classify a rendered plan line for tree conversion."""
 
     plain: str = _strip_ansi(line)
-    if not plain.strip() or not line.startswith(_ENTRY_ROW_PREFIX):
+    if not plain.strip() or not plain.startswith(_ENTRY_ROW_PREFIX):
         return PlanRowKind.OTHER
-    if line.startswith(_NESTED_ROW_PREFIX):
-        return PlanRowKind.NESTED if line == plain else PlanRowKind.OTHER
-    if line.startswith(_LEAF_ROW_PREFIX):
-        if line != plain or plain[len(_LEAF_ROW_PREFIX)] in _TREE_EXEMPT_CHARS:
+    if plain.startswith(_NESTED_ROW_PREFIX):
+        return PlanRowKind.NESTED
+    if plain.startswith(_LEAF_ROW_PREFIX):
+        if plain[len(_LEAF_ROW_PREFIX)] in _TREE_EXEMPT_CHARS:
             return PlanRowKind.OTHER
         return PlanRowKind.LEAF
     if plain[len(_ENTRY_ROW_PREFIX)] in _TREE_EXEMPT_CHARS:

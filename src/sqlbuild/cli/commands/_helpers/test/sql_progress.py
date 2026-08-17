@@ -32,7 +32,7 @@ def build_test_expectation_rows(
     step_result: StepResult
     for step_result in result.step_results:
         expectation_name: str = format_expectation_name(step_result.model_name)
-        status_text: str = "PASS" if step_result.outcome == SqlTestOutcome.PASS else "FAIL"
+        status_text: str = test_outcome_status(outcome=step_result.outcome)
         rows.append(
             NestedProgressChildRow(
                 label="expect",
@@ -42,3 +42,13 @@ def build_test_expectation_rows(
             )
         )
     return tuple(rows)
+
+
+def test_outcome_status(*, outcome: SqlTestOutcome) -> str:
+    """Preserve the semantic distinction between assertion failures and execution errors."""
+
+    if outcome == SqlTestOutcome.PASS:
+        return "PASS"
+    if outcome == SqlTestOutcome.ERROR:
+        return "ERROR"
+    return "FAIL"
