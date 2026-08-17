@@ -107,19 +107,3 @@ class DbtAutoInitE2ETestCase:
 class DbtCliFlagAmbiguityE2ETestCase:
     description: str
     expected_stdout_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtInitMissingProdRelationBuildE2ETestCase:
-    description: str
-    expected_stdout_fragments: tuple[str, ...]
-    unexpected_stdout_fragments: tuple[str, ...]
-    expected_rows: tuple[tuple[object, ...], ...]
-
-
-@dataclass(frozen=True)
-class DbtInitDetectedReuseRefE2ETestCase:
-    description: str
-    production_ref: str
-    expected_config_git_ref: str
-    unexpected_stdout_fragments: tuple[str, ...]

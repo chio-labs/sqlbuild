@@ -87,28 +87,7 @@ def prepare_dbt_profile_workspace(*, tmp_path: Path, profiles_yml: str) -> Path:
     )
     (profiles_dir / "profiles.yml").write_text(profiles_yml, encoding="utf-8")
     write_dbt_profile_orders_model(workspace=workspace, order_id=1)
-    _init_workspace_git_repo(workspace=workspace, production_ref="main")
     return workspace
-
-
-def _init_workspace_git_repo(*, workspace: Path, production_ref: str) -> None:
-    """Initialize a git repo with a committed production ref on a side branch.
-
-    dbt reuse_from (scaffolded by sqb dbt init) archives the configured git_ref to
-    plan dependency-baseline reuse, so the dbt project must be committed under a ref
-    that is not the active branch.
-    """
-
-    def run_git(*args: str) -> None:
-        subprocess.run(("git", *args), cwd=workspace, capture_output=True, check=True, text=True)
-
-    run_git("init")
-    run_git("config", "user.email", "sqlbuild@example.invalid")
-    run_git("config", "user.name", "SQLBuild Test")
-    run_git("checkout", "-b", "work")
-    run_git("add", ".")
-    run_git("commit", "-m", "baseline")
-    run_git("branch", production_ref)
 
 
 def write_dbt_profile_orders_model(*, workspace: Path, order_id: int) -> None:

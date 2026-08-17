@@ -6,10 +6,6 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild.cli.commands._helpers.dbt_init.branch_detection import (
-    detect_default_production_git_ref,
-)
-from sqlbuild.cli.commands._helpers.dbt_init.prompt import resolve_production_git_ref
 from sqlbuild.cli.commands.classes.dbt_init_progress_reporter import DbtInitProgressReporter
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.integrations.dbt.main.profile.profile_init import run_dbt_profile_init
@@ -48,13 +44,6 @@ def ensure_sqlbuild_project_for_dbt_command(
         stream=progress_stream,
         use_color=use_color,
     )
-    production_git_ref: str = resolve_production_git_ref(
-        explicit_git_ref=None,
-        input_stream=sys.stdin,
-        output_stream=progress_stream,
-        use_color=use_color,
-        default_ref=detect_default_production_git_ref(git_probe_dir=dbt_project_dir),
-    )
     result: DbtInitResult = run_dbt_profile_init(
         request=DbtInitRequest(
             cwd=effective_project_dir,
@@ -66,7 +55,6 @@ def ensure_sqlbuild_project_for_dbt_command(
             dry_run=False,
             overwrite=False,
             skip_dbt_debug=True,
-            production_git_ref=production_git_ref,
             progress_callbacks=DbtInitProgressCallbacks(
                 start=progress.start,
                 complete=progress.complete,
@@ -84,21 +72,13 @@ def _render_auto_init_result(*, result: DbtInitResult, stream: TextIO, use_color
     doc.blank()
     doc.section("Setup summary")
     doc.fields(
-        rows=(
-            ("Config file", str(result.project_file)),
-            ("Production git ref", result.production_git_ref),
-            ("Production schema macro", str(result.macro_file)),
-        ),
+        rows=(("Config file", str(result.project_file)),),
         label_width=25,
     )
     doc.blank()
     doc.line(
-        f"{style.value('What SQLBuild created')}: a twin config plus a production "
-        "schema macro. The macro lives in the SQLBuild project, not your dbt project."
-    )
-    doc.line(
-        "SQLBuild injects it only while compiling the production git ref so reuse points "
-        "at the correct production relations."
+        f"{style.value('What SQLBuild created')}: a twin config that points SQLBuild "
+        "at your dbt project and profile."
     )
     stream.write("\n" + doc.render())
 

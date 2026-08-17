@@ -15,7 +15,6 @@ _DEFAULT_VALUES: dict[str, object] = {
     "dbt_target": None,
     "dbt_target_path": None,
     "dbt_profile": None,
-    "dbt_prod_git_ref": None,
     "sqb_output_dir": None,
     "dry_run": False,
     "overwrite": False,
@@ -131,7 +130,6 @@ class CliNamespace:
     dbt_target: str | None
     dbt_target_path: str | None
     dbt_profile: str | None
-    dbt_prod_git_ref: str | None
     sqb_output_dir: str | None
     dry_run: bool
     overwrite: bool

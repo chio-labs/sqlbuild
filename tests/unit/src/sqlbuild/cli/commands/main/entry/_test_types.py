@@ -60,7 +60,6 @@ class MainTestCase:
     expected_dbt_init_dry_run: bool = False
     expected_dbt_init_overwrite: bool = False
     expected_dbt_init_skip_dbt_debug: bool = False
-    expected_dbt_init_production_git_ref: str | None = None
 
 
 @dataclass(frozen=True)

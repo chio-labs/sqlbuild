@@ -349,8 +349,6 @@ def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_di
                 "--dry-run",
                 "--overwrite",
                 "--skip-dbt-debug",
-                "--prod-git-ref",
-                "prod",
             ],
             expected_exit_code=37,
             expected_project_dir=Path("/tmp/workspace"),
@@ -362,7 +360,6 @@ def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_di
             expected_dbt_init_dry_run=True,
             expected_dbt_init_overwrite=True,
             expected_dbt_init_skip_dbt_debug=True,
-            expected_dbt_init_production_git_ref="prod",
         ),
         MainTestCase(
             description="dispatches minimal dbt init with default optional flags",
@@ -401,7 +398,6 @@ def test_given_dbt_init_arguments_when_running_with_dependencies_then_it_dispatc
             dry_run=test_case.expected_dbt_init_dry_run,
             overwrite=test_case.expected_dbt_init_overwrite,
             skip_dbt_debug=test_case.expected_dbt_init_skip_dbt_debug,
-            production_git_ref=test_case.expected_dbt_init_production_git_ref,
         )
     ]
 

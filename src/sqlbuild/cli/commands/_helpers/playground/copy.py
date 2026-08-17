@@ -6,9 +6,6 @@ from importlib.resources import files
 from importlib.resources.abc import Traversable
 from pathlib import Path
 
-from sqlbuild.cli.commands._helpers.playground.dbt_scaffold import (
-    scaffold_dbt_playground,
-)
 from sqlbuild.cli.commands.constants import PLAYGROUND_TEMPLATE_VALUES
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.types import PlaygroundTemplate
@@ -16,7 +13,6 @@ from sqlbuild.cli.commands.types import PlaygroundTemplate
 _TEMPLATE_PACKAGE: str = "sqlbuild.cli.commands._helpers.playground"
 _WAFFLE_SHOP_TEMPLATE: str = "templates/waffle_shop"
 _LOADER_WAFFLE_SHOP_TEMPLATE: str = "templates/loader_waffle_shop"
-_DBT_REUSE_TEMPLATE: str = "templates/dbt_reuse"
 
 _PYTHON_NODES_PROJECT_TOML: str = """name = "python_nodes_demo"
 adapter = "duckdb"
@@ -580,10 +576,6 @@ def create_playground_project(
         _write_python_nodes_template_files(target_dir=target_dir)
         return
 
-    if resolved_template == PlaygroundTemplate.DBT:
-        _write_dbt_reuse_template_files(target_dir=target_dir)
-        return
-
     template_path: str = (
         _LOADER_WAFFLE_SHOP_TEMPLATE
         if resolved_template in (PlaygroundTemplate.LOADER_WAFFLE_SHOP, PlaygroundTemplate.VIRTUAL)
@@ -603,18 +595,6 @@ def create_playground_project(
         _write_rivers_template_files(target_dir=target_dir)
     if resolved_template == PlaygroundTemplate.VIRTUAL:
         _write_virtual_template_files(target_dir=target_dir)
-
-
-def _write_dbt_reuse_template_files(*, target_dir: Path) -> None:
-    template_root: Traversable = files(_TEMPLATE_PACKAGE).joinpath(_DBT_REUSE_TEMPLATE)
-    if not template_root.is_dir():
-        raise CliUserError(
-            "packaged playground template is missing",
-            code="C702",
-            help="reinstall SQLBuild or report a packaging issue",
-        )
-    _copy_tree(source=template_root, target=target_dir)
-    scaffold_dbt_playground(target_dir=target_dir)
 
 
 def _copy_tree(*, source: Traversable, target: Path) -> None:

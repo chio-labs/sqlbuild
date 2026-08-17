@@ -458,7 +458,6 @@ def _dispatch_dbt_command(
                 dry_run=args.dry_run,
                 overwrite=args.overwrite,
                 skip_dbt_debug=args.skip_dbt_debug,
-                production_git_ref=args.dbt_prod_git_ref,
             )
         )
     if args.dbt_command == DbtInteropCommand.PLAN:

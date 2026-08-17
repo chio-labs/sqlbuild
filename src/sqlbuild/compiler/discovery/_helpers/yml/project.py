@@ -15,14 +15,13 @@ from sqlbuild.compiler.discovery.constants import (
     CONFIG_CONCURRENCY_KEY,
     DBT_DEFER_CLONE_CONFIG_KEY,
     DBT_LEGACY_REUSE_FROM_CONFIG_KEY,
-    DBT_MACRO_PATH_PREFIX,
+    DBT_PRODUCTION_REF_CONFIG_KEY,
     DBT_REPLAY_ON_CHANGE_CONFIG_KEY,
     LEGACY_CONFIG_CONCURRENCY_KEY,
     LEGACY_LOCAL_CONFIG_FILENAME,
     LEGACY_PROJECT_CONFIG_FILENAME,
     LOCAL_CONFIG_FILENAME,
     MODELS_DIRECTORY_NAME,
-    PARENT_DIRECTORY_PATH_PART,
     PROJECT_CONFIG_FILENAME,
     TOML_FILE_SUFFIX,
 )
@@ -31,7 +30,6 @@ from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.spec.contracts.models import (
     ClonePolicy,
     DbtConfig,
-    DbtProductionRefConfig,
     DefaultsConfig,
     JanitorConfig,
     LocalClonePolicy,
@@ -675,10 +673,15 @@ def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
     """Load optional dbt interop configuration."""
 
     mapping: dict[str, object] = _coerce_mapping(payload=payload, label="dbt", file_path=file_path)
-    if DBT_LEGACY_REUSE_FROM_CONFIG_KEY in mapping:
+    reuse_keys: tuple[str, ...] = tuple(
+        key
+        for key in (DBT_LEGACY_REUSE_FROM_CONFIG_KEY, DBT_PRODUCTION_REF_CONFIG_KEY)
+        if key in mapping
+    )
+    if reuse_keys:
         raise ProjectConfigError(
-            f"{file_path} [dbt.reuse_from] was renamed to [dbt.production_ref]; "
-            "rename the table and its keys accordingly"
+            f"{file_path} [dbt] reuse option(s) were removed: {', '.join(reuse_keys)}; "
+            "dbt production-ref reuse is no longer supported"
         )
     removed_keys: tuple[str, ...] = tuple(
         key
@@ -699,7 +702,6 @@ def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
                 "target",
                 "target_path",
                 "vars",
-                "production_ref",
             }
         ),
         label="dbt",
@@ -711,10 +713,6 @@ def _load_dbt(*, payload: object, file_path: Path) -> DbtConfig:
         target=_optional_str(payload=mapping, key="target"),
         target_path=_optional_str(payload=mapping, key="target_path"),
         vars=_load_object_mapping(payload=mapping.get("vars"), file_path=file_path),
-        production_ref=_load_dbt_production_ref(
-            payload=mapping.get("production_ref"),
-            file_path=file_path,
-        ),
     )
 
 
@@ -737,72 +735,6 @@ def _load_local_dbt(*, payload: object, file_path: Path) -> LocalDbtConfig:
         target=_optional_str(payload=mapping, key="target"),
         vars=_load_object_mapping(payload=mapping.get("vars"), file_path=file_path),
     )
-
-
-def _load_dbt_production_ref(*, payload: object, file_path: Path) -> DbtProductionRefConfig:
-    mapping: dict[str, object] = _coerce_mapping(
-        payload=payload,
-        label="dbt.production_ref",
-        file_path=file_path,
-    )
-    _validate_allowed_keys(
-        mapping=mapping,
-        allowed_keys=frozenset(
-            {"git_ref", "generate_schema_name_override", "refresh", "git_timeout_seconds"}
-        ),
-        label="dbt.production_ref",
-        file_path=file_path,
-    )
-    if not mapping:
-        return DbtProductionRefConfig()
-
-    git_ref: str = _require_str(payload=mapping, key="git_ref", file_path=file_path)
-    generate_schema_name_override: str = _require_str(
-        payload=mapping,
-        key="generate_schema_name_override",
-        file_path=file_path,
-    )
-    _validate_dbt_production_ref_macro_path(
-        value=generate_schema_name_override,
-        file_path=file_path,
-    )
-    git_timeout_seconds: int = _optional_int(
-        mapping=mapping,
-        key="git_timeout_seconds",
-        default=30,
-    )
-    if git_timeout_seconds <= 0:
-        raise ProjectConfigError(f"{file_path} dbt.production_ref.git_timeout_seconds must be > 0")
-    return DbtProductionRefConfig(
-        git_ref=git_ref,
-        generate_schema_name_override=generate_schema_name_override,
-        refresh=_optional_bool(mapping=mapping, key="refresh", default=True),
-        git_timeout_seconds=git_timeout_seconds,
-    )
-
-
-def _validate_dbt_production_ref_macro_path(*, value: str, file_path: Path) -> None:
-    macro_path: Path = Path(value)
-    if macro_path.is_absolute() or PARENT_DIRECTORY_PATH_PART in macro_path.parts:
-        raise ProjectConfigError(
-            f"{file_path} dbt.production_ref.generate_schema_name_override must be a relative "
-            "path under dbt/macros/"
-        )
-    dbt_macro_path_part_count: int = 3
-    if (
-        len(macro_path.parts) < dbt_macro_path_part_count
-        or macro_path.parts[:2] != DBT_MACRO_PATH_PREFIX
-    ):
-        raise ProjectConfigError(
-            f"{file_path} dbt.production_ref.generate_schema_name_override must be under "
-            "dbt/macros/"
-        )
-    resolved_macro_path: Path = file_path.parent / macro_path
-    if not resolved_macro_path.is_file():
-        raise ProjectConfigError(
-            f"{file_path} dbt.production_ref.generate_schema_name_override file not found: "
-            f"{resolved_macro_path}"
-        )
 
 
 def _load_scenario_snapshot_limits(

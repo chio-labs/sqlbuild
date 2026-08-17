@@ -59,14 +59,6 @@ def _suggested_commands(*, template: PlaygroundTemplate, display_path: str) -> t
                 "sqb check --select check_orders_export",
             ]
         )
-    elif template == PlaygroundTemplate.DBT:
-        commands.extend(
-            [
-                "sqb dbt init --project-dir dbt_project --profiles-dir profiles",
-                "sqb dbt build",
-                "sqb dbt build",
-            ]
-        )
     else:
         commands.extend(["sqb compile", "sqb build", "sqb test", "sqb audit"])
     if template == PlaygroundTemplate.DAGSTER:
@@ -83,6 +75,5 @@ def _example_name(template: PlaygroundTemplate) -> str:
         PlaygroundTemplate.VIRTUAL: "virtual environments waffle shop",
         PlaygroundTemplate.LOADER_WAFFLE_SHOP: "loader-focused waffle shop",
         PlaygroundTemplate.PYTHON_NODES: "Python nodes demo",
-        PlaygroundTemplate.DBT: "dbt change-aware build, clone, and diff demo",
     }
     return labels.get(template, "waffle shop")

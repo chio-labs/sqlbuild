@@ -23,13 +23,14 @@ from tests.unit.src.sqlbuild.integrations.dbt.profile._test_types import (
                 'source = "dbt_profile"',
                 'profile = "analytics"',
                 'target = "dev"',
-                "[dbt.production_ref]",
-                'git_ref = "main"',
-                'generate_schema_name_override = "dbt/macros/generate_schema_name.sql"',
                 "[targets.dev]",
                 'schema = "main"',
             ),
-            unexpected_fragments=("/tmp/secret-profile.duckdb",),
+            unexpected_fragments=(
+                "/tmp/secret-profile.duckdb",
+                "[dbt.production_ref]",
+                "generate_schema_name_override",
+            ),
         )
     ],
     ids=lambda case: case.description,
@@ -74,11 +75,6 @@ def test_given_dbt_duckdb_profile_when_building_init_project_then_toml_omits_sec
     )
 
     assert result.project_file.exists()
-    assert result.macro_file.exists()
-    macro_text: str = result.macro_file.read_text(encoding="utf-8")
-    assert "macro generate_schema_name" in macro_text
-    assert "{{ custom_schema_name | trim }}" in macro_text
-    assert "{{ target.schema }}_{{ custom_schema_name | trim }}" not in macro_text
     for fragment in test_case.expected_fragments:
         assert fragment in result.toml
     for fragment in test_case.unexpected_fragments:

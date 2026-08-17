@@ -532,7 +532,6 @@ class DbtInitCommandRequest:
     dry_run: bool
     overwrite: bool
     skip_dbt_debug: bool
-    production_git_ref: str | None = None
 
 
 @dataclass(frozen=True)
