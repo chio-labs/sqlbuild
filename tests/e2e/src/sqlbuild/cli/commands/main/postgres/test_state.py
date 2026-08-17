@@ -2487,7 +2487,7 @@ def test_given_postgres_virtual_incremental_change_when_building_then_seeds_with
                 "status: finalized",
                 "Query changed (1)",
                 "stale root set: stg_orders",
-                "cause: stg_orders (query changed)",
+                "cause  stg_orders (query changed)",
                 "missing stale required upstream models: stg_orders",
                 "Plan ready  2 selected",
                 '"virtual_environment_name": "dev"',
@@ -2692,7 +2692,7 @@ def test_given_postgres_virtual_plan_and_partial_build_when_running_then_matches
                 "Changed functions (1)",
                 "is_large_order",
                 "query diff:",
-                "cause: is_large_order (function changed)",
+                "cause  is_large_order (function changed)",
             ),
         )
     ],

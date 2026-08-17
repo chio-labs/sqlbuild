@@ -43,7 +43,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "stg_orders",
                 "Upstream changed (1)",
                 "fact_orders",
-                "cause: stg_orders (query changed)",
+                "cause  stg_orders (query changed)",
             ),
             unexpected_fragments=("dim_customers", "First run"),
         )

@@ -39,7 +39,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 '"materialized": "table"',
                 "Upstream changed (1)",
                 "fact_orders",
-                "cause: stg_orders (config changed)",
+                "cause  stg_orders (config changed)",
             ),
             unexpected_fragments=("Query changed", "query diff:"),
         )
@@ -108,10 +108,10 @@ def test_given_virtual_plan_with_config_change_when_running_cli_then_it_uses_con
                 "Plan ready  2 selected",
                 "Runs despite unchanged (1)",
                 "rolling_orders",
-                "run_despite_unchanged: 30d",
+                "run_despite_unchanged  30d",
                 "Upstream changed (1)",
                 "orders_mart",
-                "cause: rolling_orders ran despite unchanged inputs",
+                "cause  rolling_orders ran despite unchanged inputs",
             ),
         )
     ],
@@ -204,7 +204,7 @@ def test_given_virtual_expired_run_despite_unchanged_when_planning_then_skips_ta
                 "Plan ready  2 selected",
                 "Runs despite unchanged (1)",
                 "rolling_orders",
-                "run_despite_unchanged: always",
+                "run_despite_unchanged  always",
                 "orders_mart",
             ),
         )
