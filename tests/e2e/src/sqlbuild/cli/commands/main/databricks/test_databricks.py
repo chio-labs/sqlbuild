@@ -229,9 +229,10 @@ def test_given_python_result_when_running_check_on_databricks_then_persists_node
             command=("--no-color", "freshness", "--select", "raw_orders"),
             expected_stdout_fragments=(
                 "Observed (1)",
-                "raw_orders  timestamp",
-                "adapter",
-                "Summary: observed=1 changed=0 unchanged=0 tolerated=0 unknown=0 errors=0",
+                "raw_orders  value ",
+                "kind timestamp",
+                "via adapter",
+                "OBSERVED=1  CHANGED=0  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
         )
     ],
