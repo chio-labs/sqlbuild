@@ -2484,15 +2484,15 @@ def test_given_postgres_virtual_incremental_change_when_building_then_seeds_with
             description="postgres virtual plan and partial build parity",
             expected_stdout_fragments=(
                 "Plan ready  0 selected",
-                "status: finalized",
+                "finalized, up to date",
                 "Query changed (1)",
-                "stale root set: stg_orders",
+                "directly affected (1)  stg_orders",
                 "cause  stg_orders (query changed)",
                 "missing stale required upstream models: stg_orders",
                 "Plan ready  2 selected",
                 '"virtual_environment_name": "dev"',
-                "status: working",
-                "remaining stale after selection",
+                "working, build required",
+                "outside this plan",
                 "Plan ready  0 selected",
             ),
             expected_rows=((2,),),
@@ -2534,7 +2534,7 @@ def test_given_postgres_virtual_plan_and_partial_build_when_running_then_matches
             project_dir=project_dir,
         )
         assert build_result.returncode == test_case.expected_exit_code, build_result.stderr
-        assert "name: dev" in build_result.stdout
+        assert "Virtual environment  dev" in build_result.stdout
         assert fetch_postgres_rows(
             sql=(
                 "SELECT id FROM "

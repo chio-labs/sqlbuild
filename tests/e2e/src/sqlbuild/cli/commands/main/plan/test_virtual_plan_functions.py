@@ -28,10 +28,9 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             command=("--no-color", "plan", "--changes-only"),
             expected_fragments=(
                 "Plan ready  3 selected",
-                "stale roots: 1",
-                "stale root set: fact_orders",
-                "stale models: 2",
-                "stale model set: fact_orders, orders_rollup",
+                "Models needing build (2)",
+                "directly affected (1)  fact_orders",
+                "downstream affected (1)  orders_rollup",
                 "Changed functions (1)",
                 "is_large_order",
                 "Query changed (1)",
