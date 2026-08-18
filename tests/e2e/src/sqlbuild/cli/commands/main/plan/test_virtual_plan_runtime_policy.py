@@ -31,7 +31,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             command=("--no-color", "plan", "--changes-only"),
             expected_fragments=(
                 "Plan ready  2 selected",
-                "stale root set: stg_orders",
+                "directly affected (1)  stg_orders",
                 "Config changed (1)",
                 "stg_orders",
                 "config diff:",
@@ -297,7 +297,7 @@ def test_given_virtual_run_despite_unchanged_when_planning_json_then_outputs_met
                 "Plan ready  1 selected",
                 "Runs despite unchanged (1)",
                 "rolling_orders",
-                "remaining stale after selection: orders_mart",
+                "outside this plan (1)  orders_mart",
             ),
             unexpected_fragments=("Upstream changed (1)",),
         )

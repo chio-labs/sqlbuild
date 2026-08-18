@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 
 from scripts.cli_preview._helpers.workflow import execute_preview_scene, preview_scenes
-from scripts.cli_preview.constants import ALL_SCENES
+from scripts.cli_preview.constants import ALL_SCENES, ALL_VIRTUAL_SCENES, VIRTUAL_TEMPLATE
 from scripts.cli_preview.exceptions import PreviewSetupError
 from scripts.cli_preview.models import PreviewScene
 
@@ -44,7 +44,12 @@ def _build_parser(*, scenes: tuple[PreviewScene, ...]) -> argparse.ArgumentParse
         description="Render real SQLBuild CLI output from temporary DuckDB playgrounds."
     )
     names: tuple[str, ...] = tuple(scene.name for scene in scenes)
-    parser.add_argument("scene", nargs="?", choices=(*names, ALL_SCENES), default=ALL_SCENES)
+    parser.add_argument(
+        "scene",
+        nargs="?",
+        choices=(*names, ALL_VIRTUAL_SCENES, ALL_SCENES),
+        default=ALL_SCENES,
+    )
     parser.add_argument("--list", action="store_true", help="list available preview scenes")
     parser.add_argument("--no-color", action="store_true", help="disable ANSI styling")
     parser.add_argument("--keep", action="store_true", help="keep generated playground projects")
@@ -56,4 +61,6 @@ def _select_scenes(
 ) -> tuple[PreviewScene, ...]:
     if requested_name == ALL_SCENES:
         return scenes
+    if requested_name == ALL_VIRTUAL_SCENES:
+        return tuple(scene for scene in scenes if scene.template == VIRTUAL_TEMPLATE)
     return tuple(scene for scene in scenes if scene.name == requested_name)

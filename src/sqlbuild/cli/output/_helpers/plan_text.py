@@ -48,6 +48,7 @@ from sqlbuild.presentation.main.tree_connector import tree_connector
 from sqlbuild.presentation.main.visible_entries import visible_entries
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
+from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 
 _DIFF_HEADER_MARKER: str = "# "
 _ENTRY_ROW_PREFIX: str = "  "
@@ -1502,58 +1503,81 @@ def _format_virtual_metadata(
         if isinstance(raw_incomplete_model_names, (tuple, list))
         else ()
     )
+    unchanged_source_name_set: frozenset[str] = frozenset(unchanged_source_names)
+    new_or_changed_source_names: tuple[str, ...] = tuple(
+        name for name in observed_source_names if name not in unchanged_source_name_set
+    )
+    stale_root_name_set: frozenset[str] = frozenset(stale_root_names)
+    downstream_stale_model_names: tuple[str, ...] = tuple(
+        name for name in stale_model_names if name not in stale_root_name_set
+    )
+    status_summary: str = virtual_environment_status
+    if virtual_environment_status == VirtualEnvironmentStatus.FINALIZED:
+        status_summary = "finalized, up to date"
+    elif stale_model_names:
+        status_summary = f"{virtual_environment_status}, build required"
     lines.append("")
-    lines.append(section_header_style("Virtual environment"))
-    lines.append(f"  name: {virtual_environment_name}")
-    lines.append(f"  status: {virtual_environment_status}")
+    lines.append(
+        section_header_style(f"Virtual environment  {virtual_environment_name} ({status_summary})")
+    )
     if observed_source_names or incomplete_source_names:
-        lines.append(f"  source freshness observed: {len(observed_source_names)}")
-        if observed_source_names:
-            observed_source_set: str = _format_capped_name_list(
-                names=observed_source_names,
+        source_count: int = len(observed_source_names) + len(incomplete_source_names)
+        lines.append(f"  Source freshness ({len(observed_source_names)} of {source_count} checked)")
+        if new_or_changed_source_names:
+            new_or_changed_source_set: str = _format_capped_name_list(
+                names=new_or_changed_source_names,
                 display_options=display_options,
             )
-            lines.append(f"  source freshness observed set: {observed_source_set}")
-        lines.append(f"  source freshness unchanged: {len(unchanged_source_names)}")
+            lines.append(
+                f"    new or changed ({len(new_or_changed_source_names)}): "
+                f"{new_or_changed_source_set}"
+            )
         if unchanged_source_names:
             unchanged_source_set: str = _format_capped_name_list(
                 names=unchanged_source_names,
                 display_options=display_options,
             )
-            lines.append(f"  source freshness unchanged set: {unchanged_source_set}")
-        lines.append(f"  source freshness incomplete: {len(incomplete_source_names)}")
+            lines.append(f"    unchanged ({len(unchanged_source_names)}): {unchanged_source_set}")
         if incomplete_source_names:
             incomplete_source_set: str = _format_capped_name_list(
                 names=incomplete_source_names,
                 display_options=display_options,
             )
-            lines.append(f"  source freshness incomplete set: {incomplete_source_set}")
+            lines.append(
+                f"    not verifiable ({len(incomplete_source_names)}): {incomplete_source_set}"
+            )
         if incomplete_model_names:
             incomplete_model_set: str = _format_capped_name_list(
                 names=incomplete_model_names,
                 display_options=display_options,
             )
-            lines.append(f"  source freshness incomplete models: {incomplete_model_set}")
-    lines.append(f"  stale roots: {len(stale_root_names)}")
+            lines.append(
+                f"    affected models ({len(incomplete_model_names)}): {incomplete_model_set}"
+            )
+    lines.append(f"  Models needing build ({len(stale_model_names)})")
     if stale_root_names:
         stale_root_set: str = _format_capped_name_list(
             names=stale_root_names,
             display_options=display_options,
         )
-        lines.append(f"  stale root set: {stale_root_set}")
-    lines.append(f"  stale models: {len(stale_model_names)}")
-    if stale_model_names:
-        stale_model_set: str = _format_capped_name_list(
-            names=stale_model_names,
+        lines.append(f"    directly affected ({len(stale_root_names)}): {stale_root_set}")
+    if downstream_stale_model_names:
+        downstream_stale_model_set: str = _format_capped_name_list(
+            names=downstream_stale_model_names,
             display_options=display_options,
         )
-        lines.append(f"  stale model set: {stale_model_set}")
+        lines.append(
+            f"    downstream affected ({len(downstream_stale_model_names)}): "
+            f"{downstream_stale_model_set}"
+        )
     if remaining_stale_model_names:
         remaining_stale_set: str = _format_capped_name_list(
             names=remaining_stale_model_names,
             display_options=display_options,
         )
-        lines.append(f"  remaining stale after selection: {remaining_stale_set}")
+        lines.append(
+            f"    outside this plan ({len(remaining_stale_model_names)}): {remaining_stale_set}"
+        )
     return lines
 
 
