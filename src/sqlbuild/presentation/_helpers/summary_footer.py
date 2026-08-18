@@ -12,8 +12,10 @@ def format_summary_footer(
     parts: list[str] = []
     label: str
     value: int
-    success_labels: frozenset[str] = frozenset({"PASS", "OK", "SYNC_PASS", "REFRESH_PASS"})
-    warning_labels: frozenset[str] = frozenset({"WARN"})
+    success_labels: frozenset[str] = frozenset(
+        {"PASS", "OK", "SYNC_PASS", "REFRESH_PASS", "UNCHANGED"}
+    )
+    warning_labels: frozenset[str] = frozenset({"WARN", "TOLERATED", "UNKNOWN"})
     error_labels: frozenset[str] = frozenset({"FAIL", "ERROR", "SYNC_FAIL", "REFRESH_FAIL"})
     skip_labels: frozenset[str] = frozenset({"SKIP"})
     for label, value in counts:

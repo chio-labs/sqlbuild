@@ -73,16 +73,30 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.freshness._test_types import 
             ),
             expected_text_fragments=(
                 "Observed (4)",
-                "raw_orders  timestamp  2026-01-01T00:00:00  timestamp  tolerance 15m  age warn",
-                "raw_clicks  timestamp  2026-01-01T00:30:00  timestamp  age pass",
-                "raw_shipments  timestamp  2025-12-31T20:00:00  timestamp  age error",
-                "raw_inventory  integer  42  integer  age unknown",
+                "├── raw_orders",
+                "value 2026-01-01T00:00:00  kind timestamp  via timestamp  tolerance 15m  age warn",
+                "value 2026-01-01T00:30:00  kind timestamp  via timestamp  age pass",
+                "value 2025-12-31T20:00:00  kind timestamp  via timestamp  age error",
+                "└── raw_inventory",
+                "value 42  kind integer  via integer  age unknown",
                 "Unknown (1)",
-                "raw_payments  no freshness config and adapter metadata unavailable",
+                "└── raw_payments",
+                "no freshness config and adapter metadata unavailable",
                 "Errors (1)",
-                "raw_events  freshness query failed",
-                "Summary: observed=4 changed=0 unchanged=0 tolerated=0 unknown=1 errors=1",
-                "Age policy: pass=1 warn=1 error=1 unknown=1",
+                "└── raw_events",
+                "freshness query failed",
+                "OBSERVED=4  CHANGED=0  UNCHANGED=0  TOLERATED=0  UNKNOWN=1  ERROR=1",
+                "Age policy  PASS=1  WARN=1  ERROR=1  UNKNOWN=1",
+            ),
+            expected_color_fragments=(
+                "\033[34m\033[1mSource freshness\033[0m",
+                "\033[33mage warn\033[0m",
+                "\033[32mage pass\033[0m",
+                "\033[38;5;167mage error\033[0m",
+                "\033[33mno freshness config and adapter metadata unavailable\033[0m",
+                "\033[38;5;167mfreshness query failed\033[0m",
+                "\033[2mUNKNOWN=\033[0m\033[33m1\033[0m",
+                "\033[2mERROR=\033[0m\033[38;5;167m1\033[0m",
             ),
             expected_summary={
                 "observed": 4,
@@ -111,12 +125,15 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.freshness._test_types import 
 def test_given_freshness_result_when_formatting_then_includes_status_groups(
     test_case: FreshnessOutputTestCase,
 ) -> None:
-    text_output: str = format_freshness_text(test_case.result)
+    text_output: str = format_freshness_text(result=test_case.result)
+    color_text_output: str = format_freshness_text(result=test_case.result, use_color=True)
     json_output: dict[str, object] = json.loads(format_freshness_json(test_case.result))
 
     fragment: str
     for fragment in test_case.expected_text_fragments:
         assert fragment in text_output
+    for fragment in test_case.expected_color_fragments:
+        assert fragment in color_text_output
     assert json_output["summary"] == test_case.expected_summary
     sources: list[dict[str, object]] = json_output["sources"]
     assert {str(source["name"]): source["age_status"] for source in sources} == (
