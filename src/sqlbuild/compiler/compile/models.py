@@ -16,6 +16,7 @@ from sqlbuild.compiler.compile.types import (
     SqlTestMode,
 )
 from sqlbuild.compiler.discovery.models import (
+    ConstantDeclaration,
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
     DiscoveredHookFunction,
@@ -31,6 +32,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlScenarioFile,
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
+    EnumDeclaration,
 )
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
@@ -151,6 +153,14 @@ class MacroContext:
 
 
 @dataclass(frozen=True)
+class DeclarationResolutionContext:
+    """Project-global declarations available during authored SQL expansion."""
+
+    enums: dict[str, EnumDeclaration] = field(default_factory=dict)
+    constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class ModelInputBuildContext:
     """Run-constant config and macros for building model compile inputs."""
 
@@ -161,6 +171,8 @@ class ModelInputBuildContext:
     run_id: str
     macro_context: MacroContext
     loaded_macros: dict[str, LoadedMacro]
+    public_enums: dict[str, EnumDeclaration] = field(default_factory=dict)
+    public_constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -291,6 +303,9 @@ class CompileModelInput:
     schema_entry: SchemaModelEntry | None = None
     schema_file: DiscoveredSchemaFile | None = None
     sql_validation_enabled: bool = False
+    enum_declarations: tuple[EnumDeclaration, ...] = field(default_factory=tuple)
+    constant_declarations: tuple[ConstantDeclaration, ...] = field(default_factory=tuple)
+    enum_columns: dict[str, EnumDeclaration] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -365,6 +380,8 @@ class CompileProjectInputs:
     effective_settings: SettingsConfig = field(default_factory=SettingsConfig)
     effective_vars: dict[str, object] = field(default_factory=dict)
     loaded_macros: dict[str, LoadedMacro] = field(default_factory=dict)
+    public_enums: dict[str, EnumDeclaration] = field(default_factory=dict)
+    public_constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
     model_inputs: tuple[CompileModelInput, ...] = field(default_factory=tuple)
     seed_inputs: tuple[CompileSeedInput, ...] = field(default_factory=tuple)
     source_inputs: tuple[CompileSourceInput, ...] = field(default_factory=tuple)
@@ -407,6 +424,9 @@ class CompiledModel:
     authored_sql: str = ""
     output_column_locations: dict[str, SourceLocation] = field(default_factory=dict)
     macro_deps: tuple[str, ...] = field(default_factory=tuple)
+    enum_declarations: tuple[EnumDeclaration, ...] = field(default_factory=tuple)
+    constant_declarations: tuple[ConstantDeclaration, ...] = field(default_factory=tuple)
+    enum_columns: dict[str, EnumDeclaration] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -517,6 +537,8 @@ class CompiledProject:
     loader_functions: tuple[DiscoveredLoaderFunction, ...] = field(default_factory=tuple)
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
     materialization_files: tuple[DiscoveredMaterializationFile, ...] = field(default_factory=tuple)
+    public_enums: dict[str, EnumDeclaration] = field(default_factory=dict)
+    public_constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
 

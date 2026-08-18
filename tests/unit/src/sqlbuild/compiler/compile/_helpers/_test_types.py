@@ -37,6 +37,30 @@ class ExpandSqlMacrosErrorTestCase:
 
 
 @dataclass(frozen=True)
+class CompileDeclarationsErrorTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class CompileDeclarationsTestCase:
+    description: str
+    expected_query_sql: str
+
+
+@dataclass(frozen=True)
+class DeclarationFingerprintTestCase:
+    description: str
+    declaration_path: str
+    initial_declaration: str
+    changed_declaration: str
+    model_sql: str
+    expected_query_hash_changed: bool
+    expected_metadata_changed: bool
+
+
+@dataclass(frozen=True)
 class ExtractSqlTestCtesTestCase:
     description: str
     sql: str

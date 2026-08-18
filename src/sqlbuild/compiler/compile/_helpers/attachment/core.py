@@ -33,6 +33,11 @@ from sqlbuild.compiler.compile._helpers.config.model_validation import (
     validate_snapshot_config,
 )
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
+from sqlbuild.compiler.compile._helpers.render.declarations import (
+    build_model_declaration_indexes,
+    expand_declaration_references,
+    resolve_enum_contract_columns,
+)
 from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros,
 )
@@ -65,11 +70,13 @@ from sqlbuild.compiler.compile.types import (
     CompileContextKey,
 )
 from sqlbuild.compiler.discovery.models import (
+    ConstantDeclaration,
     DiscoveredHookFunction,
     DiscoveredProjectInputs,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSqlModelFile,
+    EnumDeclaration,
     PythonHookEntry,
     SqlHookEntry,
 )
@@ -125,6 +132,13 @@ def build_model_inputs(
     model_inputs: list[CompileModelInput] = []
     model_file: DiscoveredSqlModelFile
     for model_file in discovered_inputs.model_files:
+        local_enums: dict[str, EnumDeclaration]
+        local_constants: dict[str, ConstantDeclaration]
+        local_enums, local_constants = build_model_declaration_indexes(model_file=model_file)
+        visible_enums: dict[str, EnumDeclaration] = context.public_enums | local_enums
+        visible_constants: dict[str, ConstantDeclaration] = (
+            context.public_constants | local_constants
+        )
         matched_path_default: str | None = find_matching_path_default(
             model_file=model_file,
             path_defaults=discovered_inputs.project_config.path_defaults,
@@ -151,8 +165,14 @@ def build_model_inputs(
             file_path=model_file.file_path,
             effective_vars=effective_vars,
         )
-        expanded_query_sql: str = expand_sql_macros(
+        declaration_expanded_sql: str = expand_declaration_references(
             sql=var_substituted_sql,
+            file_path=model_file.file_path,
+            enums=visible_enums,
+            constants=visible_constants,
+        )
+        expanded_query_sql: str = expand_sql_macros(
+            sql=declaration_expanded_sql,
             file_path=model_file.file_path,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
@@ -229,6 +249,8 @@ def build_model_inputs(
                 ),
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
+                enums=visible_enums,
+                constants=visible_constants,
             ),
             matched_path_default=effective_config.matched_path_default,
             logical_schema=effective_config.logical_schema,
@@ -251,6 +273,11 @@ def build_model_inputs(
             column_locations=model_file.header_column_locations,
         )
         model_config: CompileModelConfig = strip_model_header_metadata_from_config(expanded_config)
+        header_schema_entry, enum_columns = resolve_enum_contract_columns(
+            schema_entry=header_schema_entry,
+            config_values=model_config.values,
+            enums=visible_enums,
+        )
         schema_match: tuple[SchemaModelEntry, DiscoveredSchemaFile] | None = (
             find_schema_model_match(
                 model_file=model_file,
@@ -271,9 +298,12 @@ def build_model_inputs(
                     model_file=model_file,
                     config=model_config,
                     query_sql=expanded_query_sql,
-                    macro_source_sql=var_substituted_sql,
+                    macro_source_sql=declaration_expanded_sql,
                     references=references,
                     sql_validation_enabled=sql_validation_enabled,
+                    enum_declarations=tuple(local_enums.values()),
+                    constant_declarations=tuple(local_constants.values()),
+                    enum_columns=enum_columns,
                 )
             )
             continue
@@ -283,10 +313,13 @@ def build_model_inputs(
                 model_file=model_file,
                 config=model_config,
                 query_sql=expanded_query_sql,
-                macro_source_sql=var_substituted_sql,
+                macro_source_sql=declaration_expanded_sql,
                 references=references,
                 schema_entry=header_schema_entry,
                 sql_validation_enabled=sql_validation_enabled,
+                enum_declarations=tuple(local_enums.values()),
+                constant_declarations=tuple(local_constants.values()),
+                enum_columns=enum_columns,
             )
         )
 
@@ -474,6 +507,8 @@ def expand_model_hook_macros(
     context_values: dict[str, str | None],
     loaded_macros: dict[str, LoadedMacro],
     macro_context: MacroContext,
+    enums: dict[str, EnumDeclaration],
+    constants: dict[str, ConstantDeclaration],
 ) -> dict[str, object]:
     """Expand SQL interpolation and macros within executable hook SQL strings."""
 
@@ -490,6 +525,8 @@ def expand_model_hook_macros(
             context_values=context_values,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
+            enums=enums,
+            constants=constants,
             hook_key=hook_key,
         )
     return expanded_values
@@ -671,6 +708,8 @@ def expand_sql_macros_in_value(
     context_values: dict[str, str | None],
     loaded_macros: dict[str, LoadedMacro],
     macro_context: MacroContext,
+    enums: dict[str, EnumDeclaration],
+    constants: dict[str, ConstantDeclaration],
     hook_key: str | None = None,
     hook_index: int | None = None,
 ) -> object:
@@ -690,6 +729,8 @@ def expand_sql_macros_in_value(
             context_values=context_values,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
+            enums=enums,
+            constants=constants,
         )
     if isinstance(value, SqlHookEntry):
         expanded_statement: object = expand_sql_macros_in_value(
@@ -699,6 +740,8 @@ def expand_sql_macros_in_value(
             context_values=context_values,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
+            enums=enums,
+            constants=constants,
             hook_key=hook_key,
             hook_index=hook_index,
         )
@@ -714,6 +757,8 @@ def expand_sql_macros_in_value(
                 context_values=context_values,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
+                enums=enums,
+                constants=constants,
                 hook_key=hook_key,
                 hook_index=index,
             )
@@ -728,6 +773,8 @@ def expand_sql_macros_in_value(
                 context_values=context_values,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
+                enums=enums,
+                constants=constants,
                 hook_key=hook_key,
                 hook_index=index,
             )

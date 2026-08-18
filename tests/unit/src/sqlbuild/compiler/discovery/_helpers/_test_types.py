@@ -180,6 +180,22 @@ class ParseModelSqlErrorTestCase:
 
 
 @dataclass(frozen=True)
+class ParseDeclarationFileTestCase:
+    description: str
+    contents: str
+    expected_names: tuple[str, ...]
+    expected_scalar_types: tuple[str, ...]
+    expected_values: tuple[tuple[str | int, ...], ...]
+
+
+@dataclass(frozen=True)
+class ParseDeclarationFileErrorTestCase:
+    description: str
+    contents: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class ModelHeaderColumnLocationTestCase:
     description: str
     contents: str

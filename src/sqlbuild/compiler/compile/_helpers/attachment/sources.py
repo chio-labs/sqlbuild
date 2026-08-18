@@ -22,8 +22,10 @@ from sqlbuild.compiler.compile.models import (
     MacroContext,
 )
 from sqlbuild.compiler.discovery.models import (
+    ConstantDeclaration,
     DiscoveredProjectInputs,
     DiscoveredSourceFile,
+    EnumDeclaration,
 )
 from sqlbuild.spec.contracts.models import (
     SchemaAuditInstance,
@@ -47,6 +49,8 @@ def build_source_inputs(
     effective_settings: SettingsConfig,
     macro_context: MacroContext,
     loaded_macros: dict[str, LoadedMacro],
+    public_enums: dict[str, EnumDeclaration] | None = None,
+    public_constants: dict[str, ConstantDeclaration] | None = None,
     no_sql_validation: bool = False,
 ) -> tuple[CompileSourceInput, ...]:
     """Normalize discovered source declarations into one collection."""
@@ -67,6 +71,8 @@ def build_source_inputs(
                 effective_vars=effective_vars,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
+                public_enums=public_enums,
+                public_constants=public_constants,
             )
             source_expression: str | None = source_entry.expression
             should_validate_expression: bool = (
@@ -94,6 +100,8 @@ def expand_source_entry_templates(
     effective_vars: dict[str, object],
     loaded_macros: dict[str, LoadedMacro],
     macro_context: MacroContext,
+    public_enums: dict[str, EnumDeclaration] | None = None,
+    public_constants: dict[str, ConstantDeclaration] | None = None,
 ) -> SourceEntry:
     """Apply config templating and SQL interpolation to source metadata."""
 
@@ -105,6 +113,8 @@ def expand_source_entry_templates(
             effective_vars=effective_vars,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
+            enums=public_enums,
+            constants=public_constants,
         )
     return replace(
         source_entry,

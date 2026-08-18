@@ -40,10 +40,12 @@ from sqlbuild.compiler.compile.types import (
     SqlTestMode,
 )
 from sqlbuild.compiler.discovery.models import (
+    ConstantDeclaration,
     DiscoveredProjectInputs,
     DiscoveredSqlScenarioFile,
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
+    EnumDeclaration,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 
@@ -61,6 +63,8 @@ def build_test_inputs(
     effective_vars: dict[str, object] | None = None,
     macro_context: MacroContext,
     loaded_macros: dict[str, LoadedMacro],
+    public_enums: dict[str, EnumDeclaration] | None = None,
+    public_constants: dict[str, ConstantDeclaration] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> tuple[CompileSqlTestInput, ...]:
     """Build compile-time test inputs from discovered SQL-native test blocks."""
@@ -114,6 +118,8 @@ def build_test_inputs(
                 effective_vars=vars_for_substitution,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
+                enums=public_enums,
+                constants=public_constants,
             )
             test_ctes: CompileSqlTestCtes = extract_sql_test_ctes(
                 sql=expanded_sql_body,
@@ -190,6 +196,8 @@ def _infer_tested_direct_logic_resource_names(
     raw_test_ctes: CompileSqlTestCtes,
     test_file: DiscoveredSqlTestFile,
     loaded_macros: dict[str, LoadedMacro],
+    public_enums: dict[str, EnumDeclaration] | None = None,
+    public_constants: dict[str, ConstantDeclaration] | None = None,
     known_function_names: set[str],
     known_table_function_names: set[str],
 ) -> tuple[str, ...]:
@@ -323,6 +331,8 @@ def build_scenario_inputs(
     effective_vars: dict[str, object] | None = None,
     macro_context: MacroContext,
     loaded_macros: dict[str, LoadedMacro],
+    public_enums: dict[str, EnumDeclaration] | None = None,
+    public_constants: dict[str, ConstantDeclaration] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> tuple[CompileSqlScenarioInput, ...]:
     """Build compile-time scenario inputs from discovered SQL-native scenario files."""
@@ -344,6 +354,8 @@ def build_scenario_inputs(
             effective_vars=vars_for_substitution,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
+            enums=public_enums,
+            constants=public_constants,
         )
         scenario_ctes: CompileSqlScenarioCtes = extract_sql_scenario_ctes(
             sql=expanded_sql_body,
