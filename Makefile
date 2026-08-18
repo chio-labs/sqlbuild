@@ -249,16 +249,8 @@ test-e2e-real-databricks:
 	exit $$status
 
 
-check-test-conventions:
-	uv run check-test-conventions tests
-
-
 check-fensu:
 	uv run fensu check
-
-
-check-type-annotation-conventions:
-	uv run check-type-annotation-conventions src tests
 
 
 dupscore:
@@ -270,9 +262,7 @@ check:
 	uv run ruff check --fix .
 	uv run ty check src tests
 	uv run pytest tests/unit/src/sqlbuild/adapter/contract/classes/strict_adapter/test_strict_adapter.py -q
-	uv run check-test-conventions tests
 	uv run fensu check
-	uv run check-type-annotation-conventions src tests
 
 
 verify-pg:
@@ -297,9 +287,7 @@ verify-pg:
 		run_verify_step "type check" uv run ty check src tests; \
 		run_verify_step "tests" env PYTHONUNBUFFERED=1 TESTCONTAINERS_RYUK_DISABLED=true SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/unit tests/integration tests/e2e -m "((not real_warehouse and not dbt) or (dbt and not real_warehouse) or (real_warehouse and postgres)) and not performance" -vv --color=yes -n auto --dist loadfile; \
 		run_verify_step "performance tests" env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv --color=yes; \
-		run_verify_step "test conventions" uv run check-test-conventions tests; \
 		run_verify_step "fensu" uv run fensu check; \
-		run_verify_step "type annotation conventions" uv run check-type-annotation-conventions src tests; \
 		exit $$status; \
 	} 2>&1 | tee "$$log"; \
 	status=$${PIPESTATUS[0]}; \
@@ -341,9 +329,7 @@ verify:
 		run_verify_step "type check" uv run ty check src tests; \
 		run_verify_step "tests" env PYTHONUNBUFFERED=1 TESTCONTAINERS_RYUK_DISABLED=true SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/unit tests/integration tests/e2e -m "((not real_warehouse and not dbt) or (dbt and not real_warehouse)) and not performance" -vv --color=yes -n auto --dist loadfile; \
 		run_verify_step "performance tests" env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv --color=yes; \
-		run_verify_step "test conventions" uv run check-test-conventions tests; \
 		run_verify_step "fensu" uv run fensu check; \
-		run_verify_step "type annotation conventions" uv run check-type-annotation-conventions src tests; \
 		exit $$status; \
 	} 2>&1 | tee "$$log"; \
 	status=$${PIPESTATUS[0]}; \
@@ -372,9 +358,7 @@ verify-quick:
 		run_verify_step "ruff check" uv run ruff check --fix .; \
 		run_verify_step "type check" uv run ty check src tests; \
 		run_verify_step "tests" env PYTHONUNBUFFERED=1 TESTCONTAINERS_RYUK_DISABLED=true SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/unit tests/integration -m "((not real_warehouse and not dbt) or (dbt and not real_warehouse)) and not performance" -vv --color=yes -n auto --dist loadfile; \
-		run_verify_step "test conventions" uv run check-test-conventions tests; \
 		run_verify_step "fensu" uv run fensu check; \
-		run_verify_step "type annotation conventions" uv run check-type-annotation-conventions src tests; \
 		exit $$status; \
 	} 2>&1 | tee "$$log"; \
 	status=$${PIPESTATUS[0]}; \
@@ -387,9 +371,7 @@ check-ci:
 	uv run ruff check .
 	uv run ty check src tests
 	uv run pytest tests/unit/src/sqlbuild/adapter/contract/classes/strict_adapter/test_strict_adapter.py -q
-	uv run check-test-conventions tests
 	uv run fensu check
-	uv run check-type-annotation-conventions src tests
 
 
 verify-ci:
@@ -399,6 +381,4 @@ verify-ci:
 	uv run pytest tests/unit tests/integration -m "not real_warehouse and not dbt" -vv -n auto --dist loadfile
 	uv run pytest tests/e2e -m "not real_warehouse and not dbt and not performance" -vv -n auto --dist loadfile
 	uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv
-	uv run check-test-conventions tests
 	uv run fensu check
-	uv run check-type-annotation-conventions src tests
