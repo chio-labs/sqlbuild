@@ -83,8 +83,11 @@ def test_given_wide_virtual_dag_when_building_concurrently_then_physical_schema_
     [
         VirtualBuildE2ETestCase(
             description="default VDE creates physical versions and queryable views",
-            expected_build_fragments=("Virtual environment", "name: dev"),
-            expected_plan_fragments=("Plan ready  0 selected", "status: finalized"),
+            expected_build_fragments=("Virtual environment  dev (working, build required)",),
+            expected_plan_fragments=(
+                "Plan ready  0 selected",
+                "Virtual environment  dev (finalized, up to date)",
+            ),
             expected_query_results=(("SELECT id FROM dev__dev.fact_orders ORDER BY id", ((7,),)),),
             expected_ref_rows=(("dim_customers",), ("fact_orders",), ("stg_orders",)),
             expected_physical_version_count=3,
@@ -223,11 +226,11 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
     [
         VirtualBuildE2ETestCase(
             description="explicit VDE graph selection diverges refs and leaves downstream working",
-            expected_build_fragments=("name: kevin",),
+            expected_build_fragments=("Virtual environment  kevin",),
             expected_plan_fragments=(
-                "status: working",
-                "stale roots: 0",
-                "stale model set: orders_rollup",
+                "working, build required",
+                "Models needing build (1)",
+                "downstream affected (1)  orders_rollup",
             ),
             expected_query_results=(
                 ("SELECT id FROM dev__dev.fact_orders ORDER BY id", ((1,),)),
@@ -240,7 +243,10 @@ def test_given_virtual_default_vde_when_building_then_it_creates_physical_versio
                 "-SELECT 1 AS id",
                 "+SELECT 2 AS id",
             ),
-            expected_final_plan_fragments=("Plan ready  0 selected", "status: finalized"),
+            expected_final_plan_fragments=(
+                "Plan ready  0 selected",
+                "finalized, up to date",
+            ),
         )
     ],
     ids=lambda case: case.description,
