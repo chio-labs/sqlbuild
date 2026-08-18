@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.50.0](https://github.com/chio-labs/sqlbuild/compare/v0.49.0...v0.50.0) (2026-08-18)
+
+
+### Features
+
+* **cli:** adopt balanced color hierarchy for human output (CHI-45) ([eac4ddc](https://github.com/chio-labs/sqlbuild/commit/eac4ddc9842a670038a1f57c9821fb6ab92d8fe4))
+* **cli:** clarify virtual state and expand previews ([3b94316](https://github.com/chio-labs/sqlbuild/commit/3b943167e06784f8cc174b92ef71ef489b2f67ee))
+* **cli:** dim kind columns, accent change actions, fix spinner wrap and error-label padding ([b17b1ef](https://github.com/chio-labs/sqlbuild/commit/b17b1efc31f98fa77c0596707a282373dff95025))
+* **cli:** refine hierarchy and add output previews ([7607c4f](https://github.com/chio-labs/sqlbuild/commit/7607c4f08636a00d525fdc406a7b65e4939d8804))
+* **cli:** structural output hierarchy across SQLBuild CLI (CHI-45) ([7c46d43](https://github.com/chio-labs/sqlbuild/commit/7c46d43174f1e61238e919a4201e37e699b63d80))
+* **cli:** structure source freshness output ([c0e42f4](https://github.com/chio-labs/sqlbuild/commit/c0e42f4ef110995d985b9b32e559ae154b657ae7))
+* **cli:** structured build surface - phase lines, status cells, dim timings ([e321e11](https://github.com/chio-labs/sqlbuild/commit/e321e11232e414fc9d954c61c23cafd59da5a1d2))
+* **cli:** structured clone completion and connection phase lines ([e5a154d](https://github.com/chio-labs/sqlbuild/commit/e5a154d711125854449c8e309eaee285bbb7e7a5))
+* **cli:** structured dbt plan, compile, lineage, promote, rollback surfaces ([7c9e51a](https://github.com/chio-labs/sqlbuild/commit/7c9e51aa1f9d4cb9bf0e8e69ac22b11318d038e8))
+* **cli:** structured load, seed, test surfaces and e2e/integration expectations ([16667c5](https://github.com/chio-labs/sqlbuild/commit/16667c547bc756a5e42509828ed3287d74f30eff))
+* **cli:** structured plan surface - tree entries, dim leaf details, warnings tree ([ded8df1](https://github.com/chio-labs/sqlbuild/commit/ded8df1b4f7a0dc92eb001cefba3b1f23ead9910))
+* **cli:** surface failing tests inline and roll up skipped nodes in the build footer ([0be7a8e](https://github.com/chio-labs/sqlbuild/commit/0be7a8e9a6f8cc2801866e71f67bcb9c0cad71c0))
+
+
+### Bug Fixes
+
+* repair mangled f-string in virtual build state e2e ([90fed70](https://github.com/chio-labs/sqlbuild/commit/90fed70e95943fd0d5f1ddef99462e6d00408a10))
+
+
+### Documentation
+
+* **readme:** drop stale dbt clone/diff and standard changes-only references ([e2455cd](https://github.com/chio-labs/sqlbuild/commit/e2455cddb58554a8cb1bbde7366e05258af808d5))
+* rename chained unit tests to multi-model tests ([89a6bd6](https://github.com/chio-labs/sqlbuild/commit/89a6bd665f4c9feaaff670beb5311a52d249e226))
+
 ## [0.49.0](https://github.com/chio-labs/sqlbuild/compare/v0.48.7...v0.49.0) (2026-08-16)
 
 
