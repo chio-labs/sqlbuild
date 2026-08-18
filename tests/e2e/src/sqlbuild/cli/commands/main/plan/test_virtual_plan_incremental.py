@@ -188,11 +188,11 @@ def test_given_denied_virtual_snapshot_full_refresh_when_planning_then_matches_b
             expected_build_exit_code=0,
             expected_fragments=(
                 "Plan ready  1 selected, 1 source to load",
-                "source freshness observed: 1",
+                "new or changed (1)  raw_orders",
                 "raw_orders",
                 "fact_orders",
             ),
-            unexpected_plan_fragments=("source freshness incomplete: 1", "First run"),
+            unexpected_plan_fragments=("not verifiable", "First run"),
         )
     ],
     ids=lambda case: case.description,

@@ -30,10 +30,8 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             command=("--no-color", "plan", "--changes-only"),
             expected_fragments=(
                 "Plan ready  0 selected",
-                "Virtual environment",
-                "name: dev",
-                "status: finalized",
-                "stale models: 0",
+                "Virtual environment  dev (finalized, up to date)",
+                "Models needing build (0)",
             ),
             unexpected_fragments=("First run", "fact_orders", "dim_customers", "stg_orders"),
         )
@@ -80,10 +78,9 @@ def test_given_virtual_plan_with_matching_refs_when_running_cli_then_it_selects_
             command=("--no-color", "plan", "--changes-only"),
             expected_fragments=(
                 "Plan ready  3 selected",
-                "stale roots: 2",
-                "stale root set: dim_customers, stg_orders",
-                "stale models: 3",
-                "stale model set: dim_customers, fact_orders, stg_orders",
+                "Models needing build (3)",
+                "directly affected (2)  dim_customers, stg_orders",
+                "downstream affected (1)  fact_orders",
                 "Query changed (2)",
                 "stg_orders",
                 "dim_customers",
@@ -152,8 +149,7 @@ def test_given_virtual_plan_with_multiple_stale_roots_when_running_cli_then_it_e
             expected_fragments=(
                 "Plan ready  1 selected",
                 "Virtual environment",
-                "stale roots: 1",
-                "stale root set: stg_orders",
+                "directly affected (1)  stg_orders",
                 "dim_customers",
             ),
             unexpected_fragments=("Upstream changed (1)",),

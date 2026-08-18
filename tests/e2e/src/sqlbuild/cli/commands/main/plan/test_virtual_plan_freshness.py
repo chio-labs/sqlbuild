@@ -28,14 +28,15 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             description="virtual plan observes current source freshness before build persistence",
             expected_unchanged_fragments=(
                 "Plan ready  0 selected",
-                "source freshness observed: 1",
-                "source freshness observed set: raw_orders",
+                "Source freshness (1 of 1 checked)",
+                "unchanged (1)  raw_orders",
             ),
             expected_fragments=(
                 "Plan ready  1 selected",
-                "source freshness observed: 1",
-                "source freshness observed set: raw_orders",
-                "stale model set: fact_orders",
+                "Source freshness (1 of 1 checked)",
+                "new or changed (1)  raw_orders",
+                "Models needing build (1)",
+                "downstream affected (1)  fact_orders",
                 "fact_orders",
             ),
         )
@@ -138,8 +139,8 @@ def test_given_virtual_source_freshness_change_when_planning_then_selects_downst
             description="virtual plan respects timestamp source freshness lag tolerance",
             expected_unchanged_fragments=(
                 "Plan ready  0 selected",
-                "source freshness unchanged: 1",
-                "source freshness unchanged set: raw_orders",
+                "Source freshness (1 of 1 checked)",
+                "unchanged (1)  raw_orders",
             ),
             expected_fragments=("Plan ready  1 selected", "fact_orders"),
         )
@@ -226,10 +227,10 @@ def test_given_virtual_timestamp_lag_tolerance_when_planning_then_skips_within_t
             description="virtual plan keeps unknown source freshness stale",
             expected_unchanged_fragments=(
                 "Plan ready  1 selected",
-                "source freshness incomplete: 1",
-                "source freshness incomplete set: raw_orders",
-                "source freshness incomplete models: fact_orders",
-                "stale model set: fact_orders",
+                "Source freshness (0 of 1 checked)",
+                "not verifiable (1)  raw_orders",
+                "affected models (1)  fact_orders",
+                "Models needing build (1)",
             ),
             expected_fragments=("Plan ready  1 selected", "fact_orders"),
         )
@@ -296,9 +297,10 @@ def test_given_virtual_source_without_freshness_when_planning_then_downstream_st
             expected_unchanged_fragments=("Plan ready  0 selected",),
             expected_fragments=(
                 "Plan ready  2 selected",
-                "source freshness observed: 1",
-                "source freshness observed set: raw_orders",
-                "stale model set: fact_orders, stg_orders",
+                "Source freshness (1 of 1 checked)",
+                "new or changed (1)  raw_orders",
+                "Models needing build (2)",
+                "downstream affected (2)  fact_orders, stg_orders",
                 "stg_orders",
                 "fact_orders",
             ),
