@@ -12,6 +12,7 @@ class FreshnessOutputTestCase:
     description: str
     result: FreshnessCommandResult
     expected_text_fragments: tuple[str, ...]
+    expected_color_fragments: tuple[str, ...]
     expected_summary: dict[str, int]
     expected_json_age_statuses: dict[str, str | None]
 

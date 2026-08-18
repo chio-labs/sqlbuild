@@ -20,7 +20,6 @@ from sqlbuild.compiler.planner.types import (
     MaterializationType,
     PlanAction,
     PlanReason,
-    RelationReuseKind,
     SchemaChangeKind,
     WarningSeverity,
 )
@@ -36,14 +35,11 @@ from tests.unit.src.sqlbuild.cli.output.main.plan._test_types import (
     FormatPlanTestCase,
 )
 from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
-    build_dependency_baseline_entry,
     build_discovered_provider_usage,
-    build_existing_destination_input_entry,
     build_function_entry,
     build_model_entry,
     build_plan_output,
     build_plan_provider_usage,
-    build_relation_reuse_plan,
     build_schema_finding,
     build_seed_entry,
     build_source_load_entry,
@@ -55,48 +51,12 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
     "test_case",
     [
         FormatPlanTestCase(
-            description="direct reuse inputs use destination and reuse origin terminology",
-            plan_output=build_plan_output(
-                dependency_baseline_entries=(
-                    build_dependency_baseline_entry(name="stg_orders"),
-                    build_dependency_baseline_entry(name="stg_payments"),
-                )
-            ),
-            expected_fragments=(
-                "Reused inputs (2)",
-                "stg_orders",
-                "cheap clone from reuse origin target",
-                "stg_payments",
-            ),
-            unexpected_fragments=("Dependency baseline", "baseline reuse", "Trusted inputs"),
-        ),
-        FormatPlanTestCase(
-            description="existing destination inputs show current and stale statuses",
-            plan_output=build_plan_output(
-                existing_destination_input_entries=(
-                    build_existing_destination_input_entry(name="stg_orders"),
-                    build_existing_destination_input_entry(
-                        name="stg_payments",
-                        status="stale",
-                    ),
-                )
-            ),
-            expected_fragments=(
-                "Existing destination inputs (2)",
-                "stg_orders",
-                "current in destination target",
-                "stg_payments",
-                "stale in destination target",
-            ),
-            unexpected_fragments=("may be stale",),
-        ),
-        FormatPlanTestCase(
             description="changes-only pruned models are visible as current skips",
             plan_output=build_plan_output(
                 metadata={"standard_pruned_model_names": ("customer_revenue_check",)}
             ),
             expected_fragments=(
-                "Plan ready (0 selected)",
+                "Plan ready  0 selected",
                 "Skipped current models (1 already up to date)",
             ),
             unexpected_fragments=("customer_revenue_check", "changes-only", "Execution"),
@@ -210,7 +170,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 ),
             ),
             expected_fragments=(
-                "Models (3 standard run)",
+                "Models (3)",
                 "stg_orders",
                 "fact_orders",
                 "fact_events",
@@ -245,13 +205,13 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 ),
             ),
             expected_fragments=(
-                "cursor: event_date (timestamp)",
-                "requested: 2014-01-01 -> 2014-03-31",
-                "range: 2014-01-01 \u2192 2014-03-31",
-                "grain: day",
-                "batch size: 1mo",
-                "batches: 3 x 1mo",
-                "bounds: planner-resolved",
+                "cursor  event_date (timestamp)",
+                "requested  2014-01-01 -> 2014-03-31",
+                "range  2014-01-01 \u2192 2014-03-31",
+                "grain  day",
+                "batch size  1mo",
+                "batches  3 x 1mo",
+                "bounds  planner-resolved",
             ),
             unexpected_fragments=("resolved at runtime",),
         ),
@@ -284,48 +244,11 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 ),
             ),
             expected_fragments=(
-                "requested: 2014-01-01 -> 2014-03-31",
-                "batches: resolved at runtime after upstream models complete",
-                "bounds: runtime-owned (model-backed cursor input)",
+                "requested  2014-01-01 -> 2014-03-31",
+                "batches  resolved at runtime after upstream models complete",
+                "bounds  runtime-owned (model-backed cursor input)",
             ),
-            unexpected_fragments=("batches: 3 x", "bounds: planner-resolved"),
-        ),
-        FormatPlanTestCase(
-            description="relation reuse is visible and hash-free in plan output",
-            plan_output=build_plan_output(
-                model_entries=(
-                    build_model_entry(
-                        name="orders",
-                        action=PlanAction.CREATE_TABLE,
-                        reason=PlanReason.FIRST_RUN,
-                        materialization_type=MaterializationType.TABLE,
-                        fingerprint_version_hash="expected_hash",
-                        relation_reuse=build_relation_reuse_plan(
-                            kind=RelationReuseKind.COMPLETE_RELATION_REUSE,
-                            hard_copy=True,
-                        ),
-                    ),
-                    build_model_entry(
-                        name="customer_snapshot",
-                        action=PlanAction.SNAPSHOT,
-                        reason=PlanReason.FIRST_RUN,
-                        materialization_type=MaterializationType.SNAPSHOT,
-                        snapshot_strategy="timestamp",
-                        relation_reuse=build_relation_reuse_plan(
-                            kind=RelationReuseKind.SEEDED_RELATION_REUSE,
-                            origin_name="customer_snapshot",
-                            hard_copy=False,
-                        ),
-                    ),
-                ),
-            ),
-            expected_fragments=(
-                "orders",
-                "table (hard-copy reuse from reuse origin target prod)",
-                "customer_snapshot",
-                "snapshot (timestamp) (cheap seeded reuse from reuse origin target prod)",
-            ),
-            unexpected_fragments=("expected_hash", "version_hash"),
+            unexpected_fragments=("batches  3 x", "bounds  planner-resolved"),
         ),
         FormatPlanTestCase(
             description="human plan output omits identity hashes",
@@ -437,11 +360,11 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 "Query changed (1)",
                 "fact_orders",
                 "rebuild last 30d",
-                "cursor: event_time",
-                "mode: microbatch",
+                "cursor  event_time",
+                "mode  microbatch",
                 "2026-03-26",
                 "2026-04-24",
-                "policy: replay_on_change=bounded-30d",
+                "policy  replay_on_change=bounded-30d",
                 "query diff:",
             ),
         ),
@@ -525,8 +448,8 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             expected_fragments=(
                 "hourly_order_activity",
                 "full rebuild",
-                "cursor: activity_hour",
-                "mode: microbatch",
+                "cursor  activity_hour",
+                "mode  microbatch",
             ),
             unexpected_fragments=(
                 "range:",
@@ -566,7 +489,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 "Upstream changed (1)",
                 "fact_daily_revenue",
                 "rebuild last 90d",
-                "cause: fact_orders (90d)",
+                "cause  fact_orders (90d)",
             ),
             unexpected_fragments=("Normal",),
         ),
@@ -597,8 +520,28 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 "Upstream changed (1)",
                 "dim_summary",
                 "full rebuild",
-                "cause: fact_orders (full)",
+                "cause  fact_orders (full)",
             ),
+        ),
+        FormatPlanTestCase(
+            description="upstream changed view shows recreate action",
+            plan_output=build_plan_output(
+                model_entries=(
+                    build_model_entry(
+                        name="stg_orders",
+                        action=PlanAction.CREATE_VIEW,
+                        reason=PlanReason.NO_CHANGE,
+                        materialization_type=MaterializationType.VIEW,
+                        cascade=CascadeResult(
+                            effective_action=BackfillAction.FULL,
+                            effective_duration=None,
+                            root_cause="raw_orders",
+                        ),
+                    ),
+                ),
+            ),
+            expected_fragments=("stg_orders", "recreate view"),
+            unexpected_fragments=("full rebuild",),
         ),
         FormatPlanTestCase(
             description="seeds section shows seed names",
@@ -637,8 +580,8 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 ),
             ),
             expected_fragments=(
-                "Plan ready (3 selected)",
-                "Functions (2 standard run)",
+                "Plan ready  3 selected",
+                "Functions (2)",
                 "is_completed_order",
                 "sql udf",
                 "is_completed_order_py",
@@ -654,7 +597,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 source_load_entries=(build_source_load_entry(name="raw_orders"),),
             ),
             expected_fragments=(
-                "Plan ready (1 selected, 1 source to load)",
+                "Plan ready  1 selected, 1 source to load",
                 "Sources to load (1)",
                 "raw_orders",
             ),
@@ -685,7 +628,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 ),
             ),
             expected_fragments=(
-                "Plan ready (1 selected, 1 source to load, 3 Python nodes)",
+                "Plan ready  1 selected, 1 source to load, 3 Python nodes",
                 "Python ingress (2)",
                 "prepare_orders",
                 "task",
@@ -770,7 +713,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             ),
             full_refresh=True,
             expected_fragments=(
-                "Plan ready (full refresh, 1 selected, 1 source to reload)",
+                "Plan ready  full refresh, 1 selected, 1 source to reload",
                 "Sources to reload (1)",
                 "raw_orders",
             ),
@@ -798,7 +741,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 ),
             ),
             expected_fragments=(
-                "Plan ready (0 selected, 4 sources to load)",
+                "Plan ready  0 selected, 4 sources to load",
                 "raw_events",
                 "delete_insert (cursor: event_at)",
                 "raw_orders",
@@ -827,7 +770,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 "Changed functions (1)",
                 "is_completed_order",
                 "sql udf",
-                "policy: replay_on_change=full",
+                "policy  replay_on_change=full",
                 "query diff:",
                 "--- previous",
                 "+++ current",
@@ -861,11 +804,11 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 "Upstream changed (1)",
                 "daily_activity_rollup",
                 "full rebuild",
-                "cause: is_completed_order (function changed)",
+                "cause  is_completed_order (function changed)",
             ),
             unexpected_fragments=(
-                "cause: hourly_order_activity",
-                "cause: is_completed_order (full)",
+                "cause  hourly_order_activity",
+                "cause  is_completed_order (full)",
             ),
         ),
         FormatPlanTestCase(
@@ -891,6 +834,22 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 "Warnings (1)",
                 "stg_customers",
                 "type change detected",
+            ),
+        ),
+        FormatPlanTestCase(
+            description="multiline warning messages terminate their child tree",
+            plan_output=build_plan_output(
+                warnings=(
+                    build_warning(
+                        model_name="stg_customers",
+                        message="type change detected\nrebuild required",
+                        severity=WarningSeverity.WARNING,
+                    ),
+                ),
+            ),
+            expected_fragments=(
+                "├── type change detected",
+                "└── rebuild required",
             ),
         ),
         FormatPlanTestCase(
@@ -921,7 +880,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             ),
             full_refresh=True,
             expected_fragments=(
-                "Plan ready (full refresh, 3 selected)",
+                "Plan ready  full refresh, 3 selected",
                 "Full refresh (3)",
                 "view",
                 "table",
@@ -932,7 +891,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
         FormatPlanTestCase(
             description="empty plan shows only header and selected zero",
             plan_output=build_plan_output(),
-            expected_fragments=("Plan ready (0 selected)",),
+            expected_fragments=("Plan ready  0 selected",),
             unexpected_fragments=("Normal", "Seeds", "Warnings"),
         ),
         FormatPlanTestCase(
@@ -951,7 +910,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                     ),
                 ),
             ),
-            expected_fragments=("cursor: event_time",),
+            expected_fragments=("cursor  event_time",),
             unexpected_fragments=("mode:",),
         ),
         FormatPlanTestCase(
@@ -1024,8 +983,8 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             expected_ordered_fragments=(
                 "Changed functions (1)",
                 "Query changed (1)",
-                "Models (1 standard run)",
-                "Functions (1 standard run)",
+                "Models (1)",
+                "Functions (1)",
                 "Seeds (1)",
             ),
         ),
@@ -1053,56 +1012,53 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 ),
             ),
             expected_fragments=(
-                "  hourly_activity_with_daily_context delete_insert (timestamp, microbatch)",
-                "  order_status_index                 delete_insert (integer)",
+                "\u251c\u2500\u2500 hourly_activity_with_daily_context "
+                "delete_insert (timestamp, microbatch)",
+                "\u2514\u2500\u2500 order_status_index                 delete_insert (integer)",
             ),
         ),
         FormatPlanTestCase(
-            description="virtual metadata shows roots first and caps stale model list",
+            description="virtual metadata explains status and caps affected model list",
             plan_output=build_plan_output(
                 metadata={
                     "virtual_environment_name": "dev",
                     "virtual_environment_status": "working",
-                    "virtual_stale_root_names": ("root_a", "root_b"),
+                    "virtual_stale_root_names": ("model_00", "model_01"),
                     "virtual_stale_model_names": tuple(f"model_{index:02d}" for index in range(55)),
                 },
             ),
             expected_fragments=(
-                "Virtual environment",
-                "name: dev",
-                "status: working",
-                "stale roots: 2",
-                "stale root set: root_a, root_b",
-                "stale models: 55",
-                "stale model set: model_00",
-                "... (+35 more; use --verbose to show all)",
+                "Virtual environment  dev (working, build required)",
+                "Models needing build (55)",
+                "directly affected (2)  model_00, model_01",
+                "downstream affected (53)  model_02",
+                "... (+33 more; use --verbose to show all)",
             ),
             expected_ordered_fragments=(
-                "stale roots: 2",
-                "stale root set: root_a, root_b",
-                "stale models: 55",
-                "stale model set: model_00",
+                "Models needing build (55)",
+                "directly affected (2)  model_00, model_01",
+                "downstream affected (53)  model_02",
             ),
         ),
         FormatPlanTestCase(
-            description="virtual metadata shows full stale sets in verbose output",
+            description="virtual metadata shows full affected sets in verbose output",
             plan_output=build_plan_output(
                 metadata={
                     "virtual_environment_name": "dev",
                     "virtual_environment_status": "working",
-                    "virtual_stale_root_names": tuple(f"root_{index:02d}" for index in range(3)),
+                    "virtual_stale_root_names": ("model_00",),
                     "virtual_stale_model_names": tuple(f"model_{index:02d}" for index in range(3)),
                 },
             ),
             display_options=DisplayOptions(max_entries_per_section=None),
             expected_fragments=(
-                "stale root set: root_00, root_01, root_02",
-                "stale model set: model_00, model_01, model_02",
+                "directly affected (1)  model_00",
+                "downstream affected (2)  model_01, model_02",
             ),
             unexpected_fragments=("use --verbose",),
         ),
         FormatPlanTestCase(
-            description="virtual metadata shows remaining stale models after partial selection",
+            description="virtual metadata shows models outside partial selection",
             plan_output=build_plan_output(
                 metadata={
                     "virtual_environment_name": "dev",
@@ -1113,14 +1069,45 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 },
             ),
             expected_fragments=(
-                "stale models: 3",
-                "stale model set: fact_orders, orders_rollup, stg_orders",
-                "remaining stale after selection: orders_rollup",
+                "Models needing build (3)",
+                "directly affected (1)  stg_orders",
+                "downstream affected (2)  fact_orders, orders_rollup",
+                "outside this plan (1)  orders_rollup",
             ),
             expected_ordered_fragments=(
-                "stale model set: fact_orders, orders_rollup, stg_orders",
-                "remaining stale after selection: orders_rollup",
+                "directly affected (1)  stg_orders",
+                "downstream affected (2)  fact_orders, orders_rollup",
+                "outside this plan (1)  orders_rollup",
             ),
+        ),
+        FormatPlanTestCase(
+            description="virtual metadata explains source freshness outcomes",
+            plan_output=build_plan_output(
+                metadata={
+                    "virtual_environment_name": "dev",
+                    "virtual_environment_status": "working",
+                    "virtual_stale_root_names": ("fact_orders",),
+                    "virtual_stale_model_names": ("fact_orders", "orders_rollup"),
+                    "virtual_source_freshness_observed_source_names": (
+                        "raw_customers",
+                        "raw_orders",
+                    ),
+                    "virtual_source_freshness_unchanged_source_names": ("raw_customers",),
+                    "virtual_source_freshness_incomplete_source_names": ("raw_payments",),
+                    "virtual_source_freshness_incomplete_model_names": ("fact_payments",),
+                },
+            ),
+            expected_fragments=(
+                "Source freshness (2 of 3 checked)",
+                "new or changed (1)  raw_orders",
+                "unchanged (1)  raw_customers",
+                "not verifiable (1)  raw_payments",
+                "affected models (1)  fact_payments",
+                "Models needing build (2)",
+                "directly affected (1)  fact_orders",
+                "downstream affected (1)  orders_rollup",
+            ),
+            unexpected_fragments=("source freshness observed", "stale model set"),
         ),
         FormatPlanTestCase(
             description="direct metadata caps remaining stale models after partial selection",
@@ -1207,10 +1194,10 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             ),
             expected_fragments=(
                 "Providers",
-                "  marker_provider",
-                "    hook mark_pre (MarkerProvider)",
-                "    loader raw_orders (MarkerProvider)",
-                "    task publish_orders (MarkerProvider)",
+                "\u2514\u2500\u2500 marker_provider",
+                "    ├── hook mark_pre (MarkerProvider)",
+                "    ├── loader raw_orders (MarkerProvider)",
+                "    └── task publish_orders (MarkerProvider)",
             ),
             unexpected_fragments=("used by 3 selected Python surfaces", "parameter"),
         ),
@@ -1271,11 +1258,12 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
                 ),
             ),
             expected_fragments=(
-                "\033[32m\033[1mPlan ready (1 selected)\033[0m",
-                "\033[34m\033[1mdim_customers\033[0m",
+                "\033[34m\033[1mPlan ready\033[0m  \033[2m1 selected\033[0m",
+                "dim_customers",
                 "\033[32m      + discount  FLOAT   (added)\033[0m",
                 "\033[33m\033[1mWarnings (1)\033[0m",
-                "\033[33m- schema change requires rebuild\033[0m",
+                "\033[2m\u2514\u2500\u2500\033[0m dim_customers",
+                "    \033[2m\u2514\u2500\u2500\033[0m \033[33mschema change requires rebuild\033[0m",
             ),
         ),
         FormatPlanColorTestCase(
@@ -1290,7 +1278,7 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
                 ),
             ),
             expected_fragments=(
-                "\033[34m\033[1mmarker_provider\033[0m",
+                "marker_provider",
                 "\033[2mused by 1 selected Python surface\033[0m",
             ),
         ),
@@ -1317,15 +1305,63 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
             ),
             expected_fragments=(
                 "\033[2mobserved:\033[0m 1",
-                "\033[2mobserved set:\033[0m \033[34m\033[1mraw_orders\033[0m",
+                "\033[2mobserved set:\033[0m raw_orders",
                 "\033[2mchanged:\033[0m \033[33m1\033[0m",
                 "\033[2mchanged set:\033[0m \033[33mraw_orders\033[0m",
                 "\033[2munchanged:\033[0m \033[2m0\033[0m",
                 "\033[2msource-stale models:\033[0m \033[33mfact_orders\033[0m",
-                "\033[2m    query diff:\033[0m",
+                "\033[2mquery diff:\033[0m",
                 "\033[2m      --- previous\033[0m",
                 "\033[2m      +++ current\033[0m",
                 "\033[2m      @@",
+            ),
+        ),
+        FormatPlanColorTestCase(
+            description="dims routine kinds and accents changed view actions",
+            plan_output=build_plan_output(
+                model_entries=(
+                    build_model_entry(
+                        name="stg_orders",
+                        action=PlanAction.CREATE_VIEW,
+                        reason=PlanReason.NO_CHANGE,
+                        materialization_type=MaterializationType.VIEW,
+                    ),
+                    build_model_entry(
+                        name="stg_payments",
+                        action=PlanAction.CREATE_VIEW,
+                        reason=PlanReason.QUERY_CHANGED,
+                        materialization_type=MaterializationType.VIEW,
+                        backfill_action=BackfillAction.FORWARD_ONLY,
+                        previous_query_sql="SELECT payment_id FROM raw_payments",
+                    ),
+                    build_model_entry(
+                        name="fact_payments",
+                        action=PlanAction.INCREMENTAL_DELETE_INSERT,
+                        reason=PlanReason.QUERY_CHANGED,
+                        materialization_type=MaterializationType.INCREMENTAL,
+                        backfill_action=BackfillAction.FORWARD_ONLY,
+                        previous_query_sql="SELECT payment_id FROM stg_payments",
+                    ),
+                    build_model_entry(
+                        name="partitioned_payments",
+                        action=PlanAction.CUSTOM,
+                        reason=PlanReason.QUERY_CHANGED,
+                        materialization_type=MaterializationType.CUSTOM,
+                        backfill_action=BackfillAction.FORWARD_ONLY,
+                        custom_materialization_name="partition_tracked",
+                        previous_query_sql="SELECT payment_id FROM stg_payments",
+                    ),
+                ),
+            ),
+            expected_fragments=(
+                "stg_orders",
+                "\033[2mview\033[0m",
+                "stg_payments",
+                "\033[34mrecreate view\033[0m",
+                "fact_payments",
+                "\033[34mcontinue forward\033[0m",
+                "partitioned_payments",
+                "\033[34mrun partition_tracked\033[0m",
             ),
         ),
         FormatPlanColorTestCase(
@@ -1367,7 +1403,7 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
             ),
             expected_fragments=(
                 "\033[2m         # tasks/helpers.py :: tasks.helpers :: order_label\033[0m",
-                "\033[31m      -    return 'old'\033[0m",
+                "\033[38;5;167m      -    return 'old'\033[0m",
                 "\033[32m      +    return 'new'\033[0m",
             ),
         ),

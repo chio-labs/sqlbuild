@@ -11,8 +11,6 @@ from sqlbuild.cli.output.models import CursorPlanDetails
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
-    DependencyBaselinePlanEntry,
-    ExistingDestinationInputPlanEntry,
     FunctionPlanEntry,
     ModelPlanEntry,
     PlanOutput,
@@ -32,9 +30,6 @@ def format_plan_json(
     """Serialize a PlanOutput to JSON."""
 
     models: list[dict[str, object]] = [_serialize_model_entry(e) for e in plan.model_entries]
-    dependency_baseline_models: list[dict[str, object]] = [
-        _serialize_dependency_baseline_entry(e) for e in plan.dependency_baseline_entries
-    ]
     seeds: list[dict[str, object]] = [_serialize_seed_entry(e) for e in plan.seed_entries]
     functions: list[dict[str, object]] = [
         _serialize_function_entry(e) for e in plan.function_entries
@@ -58,12 +53,6 @@ def format_plan_json(
         "source_load_count": len(source_loads),
         "python_node_count": len(python_nodes),
         "models": models,
-        "dependency_baseline_models": dependency_baseline_models,
-        "existing_destination_inputs": [
-            _serialize_existing_destination_input_entry(e)
-            for e in plan.existing_destination_input_entries
-        ],
-        "reuse": _serialize_reuse_summary(plan),
         "seeds": seeds,
         "source_loads": source_loads,
         "functions": functions,
@@ -74,52 +63,6 @@ def format_plan_json(
     if plan.metadata:
         result["metadata"] = plan.metadata
     return json.dumps(result, indent=2)
-
-
-def _serialize_dependency_baseline_entry(
-    entry: DependencyBaselinePlanEntry,
-) -> dict[str, object]:
-    result: dict[str, object] = {
-        "name": entry.name,
-        "resource_label": entry.resource_label,
-        "destination": entry.destination.qualified_name,
-        "reuse_from_target": entry.relation_reuse.reuse_from_target_name,
-        "origin_relation": entry.relation_reuse.origin.qualified_name,
-        "hard_copy": entry.relation_reuse.hard_copy,
-    }
-    if entry.fingerprint_version_hash is not None:
-        result["fingerprint_version_hash"] = entry.fingerprint_version_hash
-    return result
-
-
-def _serialize_existing_destination_input_entry(
-    entry: ExistingDestinationInputPlanEntry,
-) -> dict[str, object]:
-    return {
-        "name": entry.name,
-        "destination": entry.destination.qualified_name,
-        "status": entry.status,
-        "expected_version_hash": entry.expected_version_hash,
-        "destination_version_hash": entry.destination_version_hash,
-    }
-
-
-def _serialize_reuse_summary(plan: PlanOutput) -> dict[str, object]:
-    return {
-        "cloned_selected": [
-            _serialize_model_entry(entry)
-            for entry in plan.model_entries
-            if entry.relation_reuse is not None
-        ],
-        "reused_inputs": [
-            _serialize_dependency_baseline_entry(entry)
-            for entry in plan.dependency_baseline_entries
-        ],
-        "existing_destination_inputs": [
-            _serialize_existing_destination_input_entry(entry)
-            for entry in plan.existing_destination_input_entries
-        ],
-    }
 
 
 def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
@@ -167,13 +110,6 @@ def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
 
     if entry.destination.qualified_name is not None:
         model["qualified_name"] = entry.destination.qualified_name
-    if entry.relation_reuse is not None:
-        model["relation_reuse"] = {
-            "kind": entry.relation_reuse.kind.value,
-            "reuse_from_target": entry.relation_reuse.reuse_from_target_name,
-            "origin_relation": entry.relation_reuse.origin.qualified_name,
-            "hard_copy": entry.relation_reuse.hard_copy,
-        }
     if entry.run_despite_unchanged is not None:
         decision: RunDespiteUnchangedDecision = entry.run_despite_unchanged
         model["run_despite_unchanged"] = {

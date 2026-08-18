@@ -1614,7 +1614,7 @@ def test_given_postgres_query_tracking_disabled_when_running_tracked_only_janito
             description="postgres rollback restores previous finalized checkpoint",
             expected_rows=((1,),),
             expected_stdout_fragments=(
-                "Virtual rollback complete",
+                "\u2713 Virtual rollback complete",
                 "virtual environment  dev",
                 "status               finalized",
                 "rolled back models   1",
@@ -2483,17 +2483,17 @@ def test_given_postgres_virtual_incremental_change_when_building_then_seeds_with
         PostgresVirtualParityE2ETestCase(
             description="postgres virtual plan and partial build parity",
             expected_stdout_fragments=(
-                "Plan ready (0 selected)",
-                "status: finalized",
+                "Plan ready  0 selected",
+                "finalized, up to date",
                 "Query changed (1)",
-                "stale root set: stg_orders",
-                "cause: stg_orders (query changed)",
+                "directly affected (1)  stg_orders",
+                "cause  stg_orders (query changed)",
                 "missing stale required upstream models: stg_orders",
-                "Plan ready (2 selected)",
+                "Plan ready  2 selected",
                 '"virtual_environment_name": "dev"',
-                "status: working",
-                "remaining stale after selection",
-                "Plan ready (0 selected)",
+                "working, build required",
+                "outside this plan",
+                "Plan ready  0 selected",
             ),
             expected_rows=((2,),),
         )
@@ -2534,7 +2534,7 @@ def test_given_postgres_virtual_plan_and_partial_build_when_running_then_matches
             project_dir=project_dir,
         )
         assert build_result.returncode == test_case.expected_exit_code, build_result.stderr
-        assert "name: dev" in build_result.stdout
+        assert "Virtual environment  dev" in build_result.stdout
         assert fetch_postgres_rows(
             sql=(
                 "SELECT id FROM "
@@ -2692,7 +2692,7 @@ def test_given_postgres_virtual_plan_and_partial_build_when_running_then_matches
                 "Changed functions (1)",
                 "is_large_order",
                 "query diff:",
-                "cause: is_large_order (function changed)",
+                "cause  is_large_order (function changed)",
             ),
         )
     ],
@@ -2829,7 +2829,7 @@ def test_given_postgres_config_and_function_changes_when_planning_then_reasons_m
             expected_stdout_fragments=(
                 "whole-VDE virtual diff requires finalized VDEs",
                 "Virtual diff",
-                "Virtual promotion complete",
+                "\u2713 Virtual promotion complete",
                 "pr_full -> dev",
                 "target status          finalized",
                 "promoted models        4",
@@ -3097,7 +3097,7 @@ def test_given_postgres_virtual_diff_and_promotion_when_running_then_matches_duc
         PostgresVirtualParityE2ETestCase(
             description="postgres virtual promotion publishes function definitions",
             expected_stdout_fragments=(
-                "Virtual promotion complete",
+                "\u2713 Virtual promotion complete",
                 "pr -> dev",
                 "target status          finalized",
             ),

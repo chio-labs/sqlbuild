@@ -18,7 +18,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver._test_types import (
     SqlServerBuildE2ETestCase,
     SqlServerCloneE2ETestCase,
     SqlServerDbtProfileE2ETestCase,
-    SqlServerDependencyBaselineE2ETestCase,
     SqlServerDiffE2ETestCase,
     SqlServerIntermediateDagStrategyE2ETestCase,
     SqlServerJanitorDetachedVdeE2ETestCase,
@@ -39,7 +38,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.sqlserver.helpers import (
     adapt_sqlserver_project_files,
     adapt_sqlserver_sql,
     assert_current_sqlserver_snapshot_rows_from_case,
-    assert_sqlserver_dependency_baseline_case,
     assert_sqlserver_snapshot_apply_rows,
     assert_sqlserver_snapshot_matrix_rows,
     build_sqlserver_config,
@@ -340,37 +338,6 @@ def test_given_sqlserver_targets_when_running_diff_then_all_modes_execute_end_to
         cleanup_sqlserver_schema(schema_name=prod_schema, config=config)
 
 
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        SqlServerDependencyBaselineE2ETestCase(
-            description="direct dependency baseline copies prod upstream on SQL Server",
-            schema_prefix="sqb_dep_base",
-            command=("--no-color", "build", "--select", "downstream"),
-            expected_stdout_fragments=(
-                "Plan ready (1 selected)",
-                "Reused inputs (1)",
-                "upstream",
-                "from reuse origin target",
-                "downstream",
-                "Completed successfully.",
-            ),
-            expected_absent_stdout_fragments=("cannot build selected scope",),
-            expected_upstream_rows=((1, 900),),
-            expected_downstream_rows=((1, 900),),
-            expected_fingerprint_rows=(("model", "downstream"),),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_downstream_selection_when_sqlserver_upstream_missing_then_baselines_from_prod(
-    tmp_path: Path,
-    test_case: SqlServerDependencyBaselineE2ETestCase,
-) -> None:
-    assert test_case.expected_upstream_rows == ((1, 900),)
-    assert_sqlserver_dependency_baseline_case(tmp_path=tmp_path, test_case=test_case)
-
-
 @pytest.mark.dbt
 @pytest.mark.parametrize(
     "test_case",
@@ -588,71 +555,6 @@ def test_given_waffle_shop_when_running_full_build_on_sqlserver_then_expected_ta
             config=config,
         )
         assert int(str(source_rows[0][0])) == test_case.expected_row_count
-    finally:
-        cleanup_sqlserver_schema(schema_name=schema_name, config=config)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        SqlServerBuildE2ETestCase(
-            description="direct changes only build prunes unchanged SQL Server model",
-            expected_table_name="orders",
-            expected_row_count=1,
-            expected_stdout_fragments=(
-                "Plan ready (0 selected)",
-                "Skipped current models (1 already up to date)",
-            ),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_built_direct_project_when_building_changes_only_on_sqlserver_then_prunes_model(
-    tmp_path: Path,
-    test_case: SqlServerBuildE2ETestCase,
-) -> None:
-    config: dict[str, object] = build_sqlserver_config()
-    schema_name: str = build_unique_schema_name(prefix="sqb_changes_only")
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="sqlserver_changes_only",
-        repo_files={
-            "sqlbuild_project.toml": build_sqlserver_project_toml(
-                project_name="sqlserver_changes_only",
-                schema_name=schema_name,
-                config=config,
-            ),
-            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS order_id\n",
-        },
-    )
-    ensure_sqlserver_schema_ready(schema_name=schema_name, config=config)
-
-    try:
-        initial_result: subprocess.CompletedProcess[str] = run_sqb(
-            command=("--no-color", "build"),
-            project_dir=project_dir,
-        )
-        assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
-
-        changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
-            command=("--no-color", "build", "--changes-only"),
-            project_dir=project_dir,
-        )
-
-        assert changes_only_result.returncode == test_case.expected_return_code, (
-            changes_only_result.stdout + changes_only_result.stderr
-        )
-        fragment: str
-        for fragment in test_case.expected_stdout_fragments:
-            assert fragment in changes_only_result.stdout, changes_only_result.stdout
-        rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
-            sql=(
-                "SELECT COUNT(*) FROM "
-                f"{relation_name(schema_name=schema_name, name=test_case.expected_table_name)}"
-            ),
-            config=config,
-        )
-        assert int(str(rows[0][0])) == test_case.expected_row_count
     finally:
         cleanup_sqlserver_schema(schema_name=schema_name, config=config)
 

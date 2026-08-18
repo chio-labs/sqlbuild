@@ -12,7 +12,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery._test_types import (
     BigQueryCliTestCase,
     BigQueryCloneE2ETestCase,
     BigQueryDbtProfileE2ETestCase,
-    BigQueryDependencyBaselineE2ETestCase,
     BigQueryDiffE2ETestCase,
     BigQueryErrorE2ETestCase,
     BigQueryIntermediateDagStrategyE2ETestCase,
@@ -35,7 +34,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.bigquery.helpers import (
     assert_bigquery_snapshot_matrix_rows,
     assert_current_bigquery_snapshot_rows,
     bigquery_relation_row_count,
-    build_bigquery_dependency_baseline_project_toml,
     build_bigquery_local_config,
     build_bigquery_project_toml,
     build_bigquery_source_deferral_project_toml,
@@ -66,7 +64,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     assert_dbt_profile_lifecycle,
-    assert_real_adapter_dependency_baseline_case,
     build_current_check_customers_model_sql,
     build_current_customers_model_sql,
     build_current_delete_customers_model_sql,
@@ -83,59 +80,6 @@ from tests.integration.src.sqlbuild.adapters.bigquery.helpers import (
     build_bigquery_connection_config,
     build_unique_dataset_name,
 )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        BigQueryDependencyBaselineE2ETestCase(
-            description="direct dependency baseline copies prod upstream on BigQuery",
-            schema_prefix="sqb_dep_base",
-            command=("--no-color", "build", "--select", "downstream"),
-            expected_stdout_fragments=(
-                "Plan ready (1 selected)",
-                "Reused inputs (1)",
-                "upstream",
-                "from reuse origin target",
-                "downstream",
-                "Completed successfully.",
-            ),
-            expected_absent_stdout_fragments=("cannot build selected scope",),
-            expected_upstream_rows=((1, 900),),
-            expected_downstream_rows=((1, 900),),
-            expected_fingerprint_rows=(("model", "downstream"),),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_downstream_selection_when_bigquery_upstream_missing_then_baselines_from_prod(
-    tmp_path: Path,
-    test_case: BigQueryDependencyBaselineE2ETestCase,
-) -> None:
-    assert test_case.expected_upstream_rows == ((1, 900),)
-    dataset_base: str = build_unique_dataset_name(prefix=test_case.schema_prefix)
-    dev_dataset_name: str = f"{dataset_base}_dev"
-    prod_dataset_name: str = f"{dataset_base}_prod"
-    assert_real_adapter_dependency_baseline_case(
-        tmp_path=tmp_path,
-        test_case=test_case,
-        project_name="bigquery_dependency_baseline",
-        dev_schema_name=dev_dataset_name,
-        prod_schema_name=prod_dataset_name,
-        project_toml=build_bigquery_dependency_baseline_project_toml(
-            project_name="bigquery_dependency_baseline",
-            dev_dataset_name=dev_dataset_name,
-            prod_dataset_name=prod_dataset_name,
-        ),
-        ensure_schema_ready=lambda dataset_name: ensure_bigquery_dataset_ready(
-            dataset_name=dataset_name
-        ),
-        cleanup_schema=lambda dataset_name: cleanup_bigquery_dataset(dataset_name=dataset_name),
-        fetch_rows=lambda sql: fetch_bigquery_rows(dataset_name=dev_dataset_name, sql=sql),
-        relation_name=lambda dataset_name, name: relation_name(
-            dataset_name=dataset_name, name=name
-        ),
-    )
 
 
 @pytest.mark.dbt
@@ -293,9 +237,10 @@ def test_given_python_result_when_running_check_on_bigquery_then_persists_node_r
             command=("--no-color", "freshness", "--select", "raw_orders"),
             expected_stdout_fragments=(
                 "Observed (1)",
-                "raw_orders  timestamp",
-                "adapter",
-                "Summary: observed=1 changed=0 unchanged=0 tolerated=0 unknown=0 errors=0",
+                "raw_orders  value ",
+                "kind timestamp",
+                "via adapter",
+                "OBSERVED=1  CHANGED=0  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
         )
     ],
@@ -440,70 +385,6 @@ def test_given_virtual_incremental_change_when_building_on_bigquery_then_seeds_w
         ) == [(test_case.expected_seed_strategy,)]
     finally:
         cleanup_bigquery_dataset(dataset_name=dataset_name)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        BigQueryBuildE2ETestCase(
-            description="direct changes only build prunes unchanged bigquery model",
-            expected_table_name="orders",
-            expected_row_count=1,
-            expected_stdout_fragments=(
-                "Plan ready (0 selected)",
-                "Skipped current models (1 already up to date)",
-            ),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_built_direct_project_when_building_changes_only_on_bigquery_then_prunes_model(
-    tmp_path: Path,
-    test_case: BigQueryBuildE2ETestCase,
-) -> None:
-    dataset_name: str = build_unique_dataset_name(prefix="sqlbuild_changes_only")
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="bigquery_changes_only",
-        repo_files={
-            "sqlbuild_project.toml": build_bigquery_project_toml(
-                project_name="bigquery_changes_only",
-                dataset_name=dataset_name,
-            ),
-            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS order_id\n",
-        },
-    )
-
-    try:
-        ensure_bigquery_dataset_ready(dataset_name=dataset_name)
-        initial_result: subprocess.CompletedProcess[str] = run_sqb(
-            command=("--no-color", "build"),
-            project_dir=project_dir,
-        )
-        assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
-
-        changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
-            command=("--no-color", "build", "--changes-only"),
-            project_dir=project_dir,
-        )
-
-        assert changes_only_result.returncode == test_case.expected_return_code, (
-            changes_only_result.stdout + changes_only_result.stderr
-        )
-        fragment: str
-        for fragment in test_case.expected_stdout_fragments:
-            assert fragment in changes_only_result.stdout, changes_only_result.stdout
-        assert (
-            bigquery_relation_row_count(
-                dataset_name=dataset_name,
-                relation=test_case.expected_table_name,
-            )
-            == test_case.expected_row_count
-        )
-    finally:
-        cleanup_bigquery_dataset(dataset_name=dataset_name)
-        cleanup_bigquery_dataset(dataset_name=f"{dataset_name}__dev")
-        cleanup_bigquery_dataset(dataset_name=f"{dataset_name}__sqb_physical")
 
 
 @pytest.mark.parametrize(

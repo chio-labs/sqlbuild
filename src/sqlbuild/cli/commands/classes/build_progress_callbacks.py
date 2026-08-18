@@ -38,7 +38,13 @@ from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.coded_error_text import format_coded_error
+from sqlbuild.presentation.main.completion_line import format_completion_line
+from sqlbuild.presentation.main.inline_error_lines import format_inline_error_lines
+from sqlbuild.presentation.main.status_cell import format_status_cell
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
+from sqlbuild.presentation.main.terminal_columns import terminal_columns
+from sqlbuild.presentation.main.tree_connector import tree_connector
+from sqlbuild.presentation.types import CompletionState
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 
 _TYPE_WIDTH: int = 10
@@ -51,8 +57,7 @@ _HOOK_TYPE_WIDTH: int = 8
 _HOOK_MIN_LABEL_WIDTH: int = 24
 _HOOK_MAX_LABEL_WIDTH: int = 56
 _SPINNER_TICK_SECONDS: float = 0.1
-_MAX_ERROR_LINES: int = 4
-_MAX_ERROR_LINE_LENGTH: int = 160
+_SKIPPED_ROLLUP_CAP: int = 20
 _ROW_COUNT_BILLION: int = 1_000_000_000
 _ROW_COUNT_MILLION: int = 1_000_000
 _ROW_COUNT_THOUSAND: int = 1_000
@@ -87,8 +92,7 @@ class BuildProgressCallbacks:
         }
         self._test_results_by_model: dict[str, SqlTestExecutionResult] = {}
         self._total: int = (
-            len(plan.dependency_baseline_entries)
-            + len(plan.model_entries)
+            len(plan.model_entries)
             + len(plan.seed_entries)
             + len(plan.function_entries)
             + sum(
@@ -120,11 +124,6 @@ class BuildProgressCallbacks:
         self._prefix_width: int = 2 + ctr_width + 2
 
         max_name_len: int = 0
-        baseline_entry: object
-        for baseline_entry in plan.dependency_baseline_entries:
-            max_name_len = max(
-                max_name_len, len(getattr(baseline_entry, "name", str(baseline_entry)))
-            )
         entry: ModelPlanEntry
         for entry in plan.model_entries:
             annotation: str = model_execution_annotation(entry)
@@ -209,9 +208,12 @@ class BuildProgressCallbacks:
         if self._current_sub_message:
             name_display = f"{name_display}  {self._current_sub_message}"
         nw: int = self._name_width
-        line: str = f"  {ctr}  {display_type:<{_TYPE_WIDTH}}{name_display:<{nw}} {status}"
+        plain_part: str = f"  {ctr}  {display_type:<{_TYPE_WIDTH}}{name_display:<{nw}} "
+        max_plain_width: int = max(terminal_columns() - 2, _MIN_NAME_WIDTH)
+        if len(plain_part) > max_plain_width:
+            plain_part = f"{plain_part[: max_plain_width - 4]}... "
         with self._write_lock:
-            self._stream.write(f"\r\033[K{line}")
+            self._stream.write(f"\r\033[K{plain_part}{status}")
             self._stream.flush()
 
     def _start_spinner_loop(self) -> None:
@@ -256,6 +258,9 @@ class BuildProgressCallbacks:
 
     def on_node_complete(self, node_result: object) -> None:
         if isinstance(node_result, SqlTestExecutionResult):
+            if node_result.outcome != SqlTestOutcome.PASS:
+                self._write_failed_test_result(test_result=node_result)
+                return
             step: object
             for step in node_result.step_results:
                 if hasattr(step, "model_name"):
@@ -273,7 +278,7 @@ class BuildProgressCallbacks:
         ctr: str = f"{self._counter}/{self._total}".rjust(len(str(self._total)) * 2 + 1)
 
         if isinstance(node_result, SeedExecutionResult):
-            status: str = self._style.status(status=_execution_status_display(node_result.status))
+            status: str = _execution_status_display(node_result.status)
             duration: str = _format_duration(node_result.duration_ms)
             seed_name: str = _truncate_name(name=node_result.seed_name, width=self._name_width)
             self._write_top_level_result_line(
@@ -293,7 +298,7 @@ class BuildProgressCallbacks:
             return
 
         if isinstance(node_result, FunctionExecutionResult):
-            status: str = self._style.status(status=_execution_status_display(node_result.status))
+            status: str = _execution_status_display(node_result.status)
             duration: str = _format_duration(node_result.duration_ms)
             function_name: str = _truncate_name(
                 name=node_result.function_name, width=self._name_width
@@ -315,7 +320,7 @@ class BuildProgressCallbacks:
             return
 
         if isinstance(node_result, LoadExecutionResult):
-            status = self._style.status(status=_execution_status_display(node_result.status))
+            status = _execution_status_display(node_result.status)
             duration = _format_duration(node_result.duration_ms)
             source_name: str = _truncate_name(name=node_result.source_name, width=self._name_width)
             detail: str = _load_result_detail(node_result)
@@ -354,7 +359,7 @@ class BuildProgressCallbacks:
             name_display = f"{model_result.model_name}  ({annotation})"
         name_display = _truncate_name(name=name_display, width=self._name_width)
 
-        status: str = self._style.status(status=_execution_status_display(model_result.status))
+        status: str = _execution_status_display(model_result.status)
         duration: str = _format_duration(model_result.duration_ms)
         detail: str = ""
         if model_result.status == ExecutionStatus.FAILED and model_result.failed_phase is not None:
@@ -405,7 +410,8 @@ class BuildProgressCallbacks:
             test_status: str = self._style.status(status=_test_outcome_display(test_result.outcome))
             test_name: str = test_result.test_name
             self._stream.write(
-                f"{sub_pad}{'test':<{_TYPE_WIDTH}}{test_name:<{sub_nw}} {test_status}\n"
+                f"{sub_pad}{self._style.muted(f'{"test":<{_TYPE_WIDTH}}')}"
+                f"{test_name:<{sub_nw}} {test_status}\n"
             )
             expectation_pad: str = f"{sub_pad}  "
             expectation_type_width: int = _TYPE_WIDTH - 2
@@ -417,7 +423,7 @@ class BuildProgressCallbacks:
                 expectation_name: str = format_expectation_name(step_result.model_name)
                 expectation_detail: str = format_expectation_detail(step_result)
                 self._stream.write(
-                    f"{expectation_pad}{'expect':<{expectation_type_width}}"
+                    f"{expectation_pad}{self._style.muted(f'{"expect":<{expectation_type_width}}')}"
                     f"{expectation_name:<{sub_nw}} {expectation_status}{expectation_detail}\n"
                 )
 
@@ -438,8 +444,8 @@ class BuildProgressCallbacks:
             if entry.batch_total > 1:
                 audit_detail = f"  {entry.batch_pass}/{entry.batch_total}" + audit_detail
             audit_line: str = (
-                f"{sub_pad}{entry.label:<{_TYPE_WIDTH}}{audit_name:<{sub_nw}}"
-                f" {audit_status}{audit_detail}\n"
+                f"{sub_pad}{self._style.muted(f'{entry.label:<{_TYPE_WIDTH}}')}"
+                f"{audit_name:<{sub_nw}} {audit_status}{audit_detail}\n"
             )
             self._stream.write(audit_line)
 
@@ -462,6 +468,50 @@ class BuildProgressCallbacks:
 
         self._stream.flush()
 
+    def _write_failed_test_result(self, *, test_result: SqlTestExecutionResult) -> None:
+        """Write a failing test row inline since its host model rows will not run."""
+
+        self._stop_spinner_loop()
+        if self._is_tty:
+            with self._write_lock:
+                self._stream.write("\r\033[K")
+                self._stream.flush()
+            self._show_cursor()
+        blank_ctr: str = " " * (len(str(self._total)) * 2 + 1)
+        test_status: str = self._style.status(status=_test_outcome_display(test_result.outcome))
+        test_name: str = _truncate_name(name=test_result.test_name, width=self._name_width)
+        self._stream.write(
+            f"  {blank_ctr}  {self._style.muted(f'{"test":<{_TYPE_WIDTH}}')}"
+            f"{test_name:<{self._name_width}} {test_status}\n"
+        )
+        expectation_pad: str = " " * (self._prefix_width + _SUB_INDENT + 2)
+        expectation_type_width: int = _TYPE_WIDTH - 2
+        sub_nw: int = self._name_width - _SUB_INDENT
+        step_result: StepResult
+        for index, step_result in enumerate(test_result.step_results):
+            expectation_status: str = self._style.status(
+                status=_test_outcome_display(step_result.outcome)
+            )
+            expectation_name: str = format_expectation_name(step_result.model_name)
+            expectation_detail: str = format_expectation_detail(step_result)
+            last: bool = (
+                index == len(test_result.step_results) - 1 and not test_result.error_message
+            )
+            connector: str = tree_connector(style=self._style, last=last)
+            self._stream.write(
+                f"{expectation_pad}{connector} "
+                f"{self._style.muted(f'{"expect":<{expectation_type_width}}')}"
+                f"{expectation_name:<{sub_nw}} {expectation_status}{expectation_detail}\n"
+            )
+        if test_result.error_message:
+            self._write_error_detail(
+                error_code=test_result.error_code,
+                error_message=test_result.error_message,
+                error_help=test_result.error_help,
+                tree_child=True,
+            )
+        self._stream.flush()
+
     def _write_hook_results(
         self,
         *,
@@ -481,8 +531,8 @@ class BuildProgressCallbacks:
             label: str = "pre_hook" if phase == HookPhase.PRE_HOOKS else "post_hook"
             detail: str = _hook_skip_detail(hook_result)
             self._stream.write(
-                f"{sub_pad}{label:<{_HOOK_PHASE_WIDTH}}"
-                f"{hook_result.hook_type:<{_HOOK_TYPE_WIDTH}}"
+                f"{sub_pad}{self._style.muted(f'{label:<{_HOOK_PHASE_WIDTH}}')}"
+                f"{self._style.muted(f'{hook_result.hook_type:<{_HOOK_TYPE_WIDTH}}')}"
                 f"{hook_name:<{label_width}} {hook_status}{detail}\n"
             )
 
@@ -497,25 +547,43 @@ class BuildProgressCallbacks:
         detail: str = "",
     ) -> None:
         nw: int = self._name_width
+        status_cell: str = format_status_cell(style=self._style, status=status)
+        rendered_duration: str = self._style.muted(duration) if duration else ""
+        rendered_type: str = self._style.muted(f"{resource_type:<{_TYPE_WIDTH}}")
         self._stream.write(
-            f"  {ctr}  {resource_type:<{_TYPE_WIDTH}}{name:<{nw}} {status:<6} {duration}{detail}\n"
+            f"  {ctr}  {rendered_type}{name:<{nw}} {status_cell} {rendered_duration}{detail}\n"
         )
 
     def _write_error_detail(
-        self, *, error_code: str | None, error_message: str, error_help: str | None = None
+        self,
+        *,
+        error_code: str | None,
+        error_message: str,
+        error_help: str | None = None,
+        tree_child: bool = False,
     ) -> None:
-        pad: str = " " * self._prefix_width
-        label: str = self._style.error_muted("error")
-        message: str = _format_result_error(
+        child_offset: int = _SUB_INDENT + 2 if tree_child else 0
+        pad: str = " " * (self._prefix_width + child_offset)
+        connector: str = tree_connector(style=self._style, last=True) if tree_child else ""
+        connector_suffix: str = f"{connector} " if tree_child else ""
+        label_width: int = _TYPE_WIDTH - 4 if tree_child else _TYPE_WIDTH - 1
+        label_padding: str = " " * max(0, label_width - len("error"))
+        label: str = f"{self._style.error_muted('error')}{label_padding}"
+        plain_prefix_width: int = len(pad) + (4 if tree_child else 0) + label_width + 1
+        content_width: int = max(terminal_columns() - plain_prefix_width, 1)
+        lines: list[str] = format_inline_error_lines(
             error_code=error_code,
             error_message=error_message,
             error_help=error_help,
-            use_color=self._use_color,
+            content_width=content_width,
+            style=self._style,
         )
-        line: str
-        for line_index, line in enumerate(_format_error_lines(message)):
-            display_label: str = label if line_index == 0 else ""
-            self._stream.write(f"{pad}{display_label:<{_TYPE_WIDTH - 1}} {line}\n")
+        continuation_pad: str = " " * plain_prefix_width
+        for line_index, line in enumerate(lines):
+            if line_index == 0:
+                self._stream.write(f"{pad}{connector_suffix}{label} {line}\n")
+            else:
+                self._stream.write(f"{continuation_pad}{line}\n")
 
 
 def _count_build_footer_results(
@@ -612,29 +680,32 @@ def format_build_footer(
         if python_result.status == PythonNodeStatus.FAILED
     )
 
-    if result.status == BuildStatus.FAILED or python_fail_count:
-        lines.append(style.error("Completed with errors."))
-    elif result.warning_count > 0:
-        lines.append(style.warning("Completed with warnings."))
-    else:
-        lines.append(style.success("Completed successfully."))
-
     counts: ExecutionCounts = _count_build_footer_results(
         result=result, python_node_results=python_node_results
     )
     elapsed_str: str = f"{elapsed:.2f}s"
+    counts_summary: str = format_summary_footer(
+        counts=(
+            ("PASS", counts.pass_count),
+            ("WARN", counts.warn_count),
+            ("FAIL", counts.fail_count),
+            ("SKIP", counts.skip_count),
+            ("TOTAL", counts.total_count),
+        ),
+        use_color=style.use_color,
+        elapsed=elapsed_str,
+    )
+    if result.status == BuildStatus.FAILED or python_fail_count:
+        state: CompletionState = CompletionState.FAIL
+        label: str = "Completed with errors"
+    elif result.warning_count > 0:
+        state = CompletionState.WARN
+        label = "Completed with warnings"
+    else:
+        state = CompletionState.OK
+        label = "Completed successfully"
     lines.append(
-        format_summary_footer(
-            counts=(
-                ("PASS", counts.pass_count),
-                ("WARN", counts.warn_count),
-                ("FAIL", counts.fail_count),
-                ("SKIP", counts.skip_count),
-                ("TOTAL", counts.total_count),
-            ),
-            use_color=style.use_color,
-            elapsed=elapsed_str,
-        )
+        format_completion_line(style=style, state=state, label=label, summary=counts_summary)
     )
 
     failure_lines: list[str] = _format_failure_details(result=result, style=style)
@@ -642,11 +713,63 @@ def format_build_footer(
     if failure_lines:
         lines.extend(failure_lines)
 
+    skipped_lines: list[str] = _format_skipped_rollup(
+        result=result, python_node_results=python_node_results, style=style
+    )
+    if skipped_lines:
+        lines.extend(skipped_lines)
+
     warning_lines: list[str] = _format_warning_details(result=result, style=style)
     if warning_lines:
         lines.extend(warning_lines)
 
     return "\n".join(lines)
+
+
+def _format_skipped_rollup(
+    *,
+    result: BuildExecutionResult,
+    python_node_results: tuple[PythonNodeExecutionResult, ...],
+    style: CliStyle,
+) -> list[str]:
+    """Render a dim rollup of nodes skipped because upstream work failed."""
+
+    skipped_names: list[str] = [
+        model_result.model_name
+        for model_result in result.model_results
+        if model_result.status == ExecutionStatus.SKIPPED
+    ]
+    skipped_names.extend(
+        seed_result.seed_name
+        for seed_result in result.seed_results
+        if seed_result.status == ExecutionStatus.SKIPPED
+    )
+    skipped_names.extend(
+        function_result.function_name
+        for function_result in result.function_results
+        if function_result.status == ExecutionStatus.SKIPPED
+    )
+    skipped_names.extend(
+        load_result.source_name
+        for load_result in result.load_results
+        if load_result.status == ExecutionStatus.SKIPPED
+    )
+    skipped_names.extend(
+        python_result.node_name
+        for python_result in python_node_results
+        if python_result.status == PythonNodeStatus.SKIPPED
+    )
+    if not skipped_names:
+        return []
+    visible_names: list[str] = skipped_names[:_SKIPPED_ROLLUP_CAP]
+    remaining_count: int = len(skipped_names) - len(visible_names)
+    rendered: str = ", ".join(visible_names)
+    if remaining_count > 0:
+        rendered = f"{rendered}, ... (+{remaining_count} more)"
+    return [
+        "",
+        style.muted(f"Skipped ({len(skipped_names)}): {rendered}"),
+    ]
 
 
 def _format_python_failure_details(
@@ -846,7 +969,8 @@ def _format_failure_error_block(
     *, error_code: str | None, error_message: str, error_help: str | None, style: CliStyle
 ) -> list[str]:
     lines: list[str] = []
-    label: str = style.error_muted("error")
+    label_padding: str = " " * max(0, _TYPE_WIDTH - len("error"))
+    label: str = f"{style.error_muted('error')}{label_padding}"
     message: str = _format_result_error(
         error_code=error_code,
         error_message=error_message,
@@ -855,8 +979,8 @@ def _format_failure_error_block(
     )
     formatted_line: str
     for index, formatted_line in enumerate(message.splitlines() or [message]):
-        display_label: str = label if index == 0 else ""
-        lines.append(f"    {display_label:<{_TYPE_WIDTH}}{formatted_line}")
+        display_label: str = label if index == 0 else " " * _TYPE_WIDTH
+        lines.append(f"    {display_label}{formatted_line}")
     return lines
 
 
@@ -870,25 +994,8 @@ def _format_result_error(
         message=error_message,
         help=error_help,
         use_color=use_color,
+        include_error_label=False,
     )
-
-
-def _format_error_lines(message: str) -> list[str]:
-    raw_lines: list[str] = message.splitlines() or [message]
-    formatted_lines: list[str] = []
-    raw_line: str
-    for raw_line in raw_lines[:_MAX_ERROR_LINES]:
-        if len(raw_line) <= _MAX_ERROR_LINE_LENGTH:
-            formatted_lines.append(raw_line)
-            continue
-        formatted_lines.append(raw_line[: _MAX_ERROR_LINE_LENGTH - 3] + "...")
-    if len(raw_lines) > _MAX_ERROR_LINES and formatted_lines:
-        last_line: str = formatted_lines[-1]
-        if len(last_line) > _MAX_ERROR_LINE_LENGTH - 3:
-            formatted_lines[-1] = last_line[: _MAX_ERROR_LINE_LENGTH - 3] + "..."
-        elif not last_line.endswith("..."):
-            formatted_lines[-1] = f"{last_line}..."
-    return formatted_lines
 
 
 def _format_duration(duration_ms: int | None) -> str:
@@ -957,6 +1064,8 @@ def _audit_outcome_display(outcome: AuditOutcome) -> str:
 def _test_outcome_display(outcome: SqlTestOutcome) -> str:
     if outcome == SqlTestOutcome.PASS:
         return "PASS"
+    if outcome == SqlTestOutcome.ERROR:
+        return "ERROR"
     return "FAIL"
 
 

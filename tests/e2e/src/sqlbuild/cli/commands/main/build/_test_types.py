@@ -50,25 +50,6 @@ class BuildNoTestsNoAuditsFlagE2ETestCase:
 
 
 @dataclass(frozen=True)
-class DependencyBaselineBuildE2ETestCase:
-    """Test case for direct-mode dependency baseline reuse_from behavior."""
-
-    description: str
-    project_name: str
-    upstream_sql: str
-    downstream_sql: str
-    prod_setup_sql: str
-    setup_commands: tuple[tuple[str, ...], ...]
-    command: tuple[str, ...]
-    expected_stdout_fragments: tuple[str, ...]
-    unexpected_stdout_fragments: tuple[str, ...]
-    expected_upstream_rows: tuple[tuple[object, ...], ...]
-    expected_downstream_rows: tuple[tuple[object, ...], ...]
-    expected_fingerprint_rows: tuple[tuple[object, ...], ...]
-    dev_setup_sql: str | None = None
-
-
-@dataclass(frozen=True)
 class DeferCloneBuildE2ETestCase:
     """Test case for direct-mode build defer clone behavior."""
 
@@ -98,32 +79,6 @@ class SelectionAwareStalenessBuildE2ETestCase:
     expected_replan_stdout_fragments: tuple[str, ...]
     unexpected_replan_stdout_fragments: tuple[str, ...]
     expected_c_rows: tuple[tuple[object, ...], ...]
-
-
-@dataclass(frozen=True)
-class NodeSourceWatermarkBuildE2ETestCase:
-    description: str
-    project_name: str
-    expected_source_versions_by_node: dict[str, tuple[str, ...]]
-    expected_source_kinds_by_node: dict[str, tuple[str, ...]]
-    expected_unknown_reasons_by_node: dict[str, tuple[str, ...]] = field(default_factory=dict)
-    expected_absent_nodes: tuple[str, ...] = field(default_factory=tuple)
-    frontier_actions: tuple[tuple[tuple[int, ...], tuple[tuple[str, ...], ...]], ...] = field(
-        default_factory=tuple
-    )
-
-
-@dataclass(frozen=True)
-class NodeSourceWatermarkWarningBuildE2ETestCase:
-    description: str
-    project_name: str
-    models: dict[str, str]
-    setup_build_command: tuple[str, ...]
-    command: tuple[str, ...]
-    expected_stdout_fragments: tuple[str, ...]
-    unexpected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
-    expected_stdout_occurrences: dict[str, int] = field(default_factory=dict)
-    setup_after_source_advance_commands: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -835,38 +790,6 @@ class SchemaBackfillBuildE2ETestCase:
     expected_backfill_action: str | None = None
     expected_backfill_duration: str | None = None
     expected_warning_entries: tuple[tuple[str, str], ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class DirectChangesOnlyStateBuildE2ETestCase:
-    """Test case for standard changes-only state/data behavior."""
-
-    description: str
-    project_name: str
-    initial_amount_cents: int
-    changed_amount_cents: int
-    expected_initial_amount_dollars: float
-    expected_changed_amount_dollars: float
-
-
-@dataclass(frozen=True)
-class DirectChangesOnlySeedBuildE2ETestCase:
-    description: str
-    project_name: str
-    initial_seed_contents: str
-    changed_seed_contents: str
-    expected_plan_selected_count: int
-    expected_amount_dollars: float
-
-
-@dataclass(frozen=True)
-class DirectSeedChangesOnlyGapE2ETestCase:
-    description: str
-    project_name: str
-    expected_plan_fragment: str = ""
-    expected_seed_payload: tuple[dict[str, object], ...] = field(default_factory=tuple)
-    expected_fact_order_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
-    expected_customer_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

@@ -30,8 +30,12 @@ from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.aligned_name_value import format_aligned_name_value
 from sqlbuild.presentation.main.coded_error_text import format_coded_error
+from sqlbuild.presentation.main.completion_line import format_completion_line
 from sqlbuild.presentation.main.resolve_name_column_width import resolve_name_column_width
+from sqlbuild.presentation.main.status_cell import format_status_cell
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
+from sqlbuild.presentation.main.surface_header import format_surface_header
+from sqlbuild.presentation.types import CompletionState
 
 
 @dataclass(frozen=True)
@@ -64,7 +68,7 @@ def format_build_output(
         result.test_results
     )
     lines: list[str] = []
-    lines.append(_format_header(target=target, concurrency=concurrency))
+    lines.append(_format_header(target=target, concurrency=concurrency, use_color=use_color))
     lines.append("")
 
     counter: int = 0
@@ -162,10 +166,12 @@ def format_build_output(
     lines.append("")
     lines.append(
         _format_completion_message(
-            status=result.status, warning_count=result.warning_count, use_color=use_color
+            status=result.status,
+            warning_count=result.warning_count,
+            use_color=use_color,
+            summary=_format_summary_counts(result=result, elapsed_seconds=elapsed_seconds),
         )
     )
-    lines.append(_format_summary_counts(result=result, elapsed_seconds=elapsed_seconds))
 
     failure_lines: list[str] = _format_failure_details(result=result, use_color=use_color)
     if failure_lines:
@@ -282,15 +288,14 @@ def aggregate_build_result(
     )
 
 
-def _format_header(*, target: str | None, concurrency: int) -> str:
-    parts: list[str] = ["sqb build"]
+def _format_header(*, target: str | None, concurrency: int, use_color: bool) -> str:
+    style: CliStyle = CliStyle(use_color=use_color)
     context_parts: list[str] = []
     if target is not None:
         context_parts.append(f"target: {target}")
     context_parts.append(f"concurrency: {concurrency}")
-    if context_parts:
-        parts.append(f"  ({', '.join(context_parts)})")
-    return "".join(parts)
+    context: str = f"sqb build  ({', '.join(context_parts)})"
+    return format_surface_header(style=style, title="Execution", context=context)
 
 
 def _format_seed_line(
@@ -304,14 +309,14 @@ def _format_seed_line(
     counter_str: str = f"{counter}/{total}".rjust(len(str(total)) * 2 + 1)
     status: str = _execution_status_to_display(seed_result.status)
     style: CliStyle = CliStyle(use_color=use_color)
-    colored_status: str = style.status(status=status)
+    status_cell: str = format_status_cell(style=style, status=status)
     duration: str = _format_duration(seed_result.duration_ms)
     return format_aligned_name_value(
         plain_name=seed_result.seed_name,
         styled_name=seed_result.seed_name,
-        value=f"{colored_status:<6} {duration}",
+        value=f"{status_cell} {style.muted(duration) if duration else ''}",
         name_column_width=name_width,
-        prefix=f"  {counter_str}  seed   ",
+        prefix=f"  {counter_str}  {style.muted('seed  ')} ",
     )
 
 
@@ -332,7 +337,7 @@ def _format_model_line(
 
     status: str = _execution_status_to_display(model_result.status)
     style: CliStyle = CliStyle(use_color=use_color)
-    colored_status: str = style.status(status=status)
+    status_cell: str = format_status_cell(style=style, status=status)
     duration: str = _format_duration(model_result.duration_ms)
     detail: str = ""
     if model_result.status == ExecutionStatus.FAILED and model_result.failed_phase is not None:
@@ -340,12 +345,13 @@ def _format_model_line(
     elif model_result.status == ExecutionStatus.SKIPPED:
         duration = ""
         detail = _model_skip_detail(model_result)
+    rendered_duration: str = style.muted(duration) if duration else ""
     line: str = format_aligned_name_value(
         plain_name=name_and_annotation,
         styled_name=name_and_annotation,
-        value=f"{colored_status:<6} {duration}{detail}",
+        value=f"{status_cell} {rendered_duration}{detail}",
         name_column_width=name_width,
-        prefix=f"  {counter_str}  {resource_type:<6} ",
+        prefix=f"  {counter_str}  {style.muted(f'{resource_type:<6}')} ",
     )
     return line
 
@@ -457,7 +463,7 @@ def _format_sub_line(
         styled_name=name,
         value=colored_status,
         name_column_width=name_width,
-        prefix=f"{padding}  {sub_type:<6} ",
+        prefix=f"{padding}  {style.muted(f'{sub_type:<6}')} ",
     )
 
 
@@ -497,7 +503,7 @@ def _format_test_expectation_sub_line(
         styled_name=name,
         value=colored_status,
         name_column_width=name_width,
-        prefix=f"{'':>14}{'expect':<6} ",
+        prefix=f"{'':>14}{style.muted(f'{"expect":<6}')} ",
     )
 
 
@@ -507,12 +513,24 @@ def _format_test_expectation_name(model_name: str) -> str:
     return f"expected {model_name}"
 
 
-def _format_completion_message(*, status: BuildStatus, warning_count: int, use_color: bool) -> str:
+def _format_completion_message(
+    *, status: BuildStatus, warning_count: int, use_color: bool, summary: str | None = None
+) -> str:
+    style: CliStyle = CliStyle(use_color=use_color)
     if status == BuildStatus.FAILED:
-        return CliStyle(use_color=use_color).error("Completed with errors.")
+        return format_completion_line(
+            style=style, state=CompletionState.FAIL, label="Completed with errors", summary=summary
+        )
     if warning_count > 0:
-        return CliStyle(use_color=use_color).warning("Completed with warnings.")
-    return CliStyle(use_color=use_color).success("Completed successfully.")
+        return format_completion_line(
+            style=style,
+            state=CompletionState.WARN,
+            label="Completed with warnings",
+            summary=summary,
+        )
+    return format_completion_line(
+        style=style, state=CompletionState.OK, label="Completed successfully", summary=summary
+    )
 
 
 def _top_level_name_width(*, result: BuildExecutionResult, plan: PlanOutput) -> int:

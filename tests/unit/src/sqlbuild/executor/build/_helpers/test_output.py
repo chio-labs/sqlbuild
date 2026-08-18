@@ -100,7 +100,7 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
                 "orders",
                 "OK",
                 "0.15s",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
                 "PASS=1",
                 "FAIL=0",
             ),
@@ -157,7 +157,7 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
                 "1/1",
                 "FAIL",
                 "staging",
-                "Completed with errors.",
+                "\u2717 Completed with errors",
                 "FAIL=1",
                 "Failures:",
                 "orders  (staging)",
@@ -183,7 +183,7 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
             ),
             use_color=True,
             expected_output_fragments=(
-                "\033[31m\033[1merror[R007]:\033[0m promotion failed",
+                "\033[38;5;167m\033[1merror[R007]:\033[0m promotion failed",
                 "\033[2m= help:\033[0m inspect staging relation",
             ),
         ),
@@ -243,7 +243,7 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
             expected_output_fragments=(
                 "WARN",
                 "3 rows",
-                "Completed with warnings.",
+                "\u2713 Completed with warnings",
                 "WARN=1",
                 "Warnings:",
                 "not_null (email) returned 3 rows",
@@ -360,7 +360,7 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
                 warning_count=1,
             ),
             expected_output_fragments=(
-                "Completed with warnings.",
+                "\u2713 Completed with warnings",
                 "PASS=1",
                 "WARN=1",
                 "Warnings:",
@@ -471,7 +471,7 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
                 "SKIP",
                 "expect expected orders",
                 "FAIL  1 mismatched",
-                "Completed with errors.",
+                "\u2717 Completed with errors",
                 "FAIL=1",
                 "SKIP=1",
                 "Failures:",
@@ -725,7 +725,7 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
             expected_absent_fragments=("CREATE TABLE",),
         ),
         BuildOutputTestCase(
-            description="colorized verbose mode shows lifecycle log messages in muted blue",
+            description="colorized verbose mode shows lifecycle log messages dimmed",
             result=BuildExecutionResult(
                 status=BuildStatus.SUCCESS,
                 model_results=(
@@ -745,9 +745,7 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
             ),
             verbose=True,
             use_color=True,
-            expected_output_fragments=(
-                "\033[34m\033[2m    log  building partition 2024-01-01\033[0m",
-            ),
+            expected_output_fragments=("\033[2m    log  building partition 2024-01-01\033[0m",),
         ),
     ],
     ids=lambda case: case.description,

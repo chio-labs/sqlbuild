@@ -33,12 +33,11 @@ def build_stale_out_of_selection_warnings(
     snapshot: WarehouseSnapshot,
     version_identities: StandardModelVersionIdentities,
     source_freshness: StandardSourceFreshnessPlanningResult | None,
-    reuse_satisfied_model_names: frozenset[str] = frozenset(),
     include_sources: bool = True,
 ) -> tuple[PlanWarning, ...]:
     """Warn for selected models stale through changed upstreams outside the run set."""
 
-    run_model_names: frozenset[str] = reuse_satisfied_model_names | frozenset(
+    run_model_names: frozenset[str] = frozenset(
         key.name
         for key in execution_scope.selected_keys
         if key.resource_type == CompiledResourceType.MODEL
@@ -68,8 +67,7 @@ def build_stale_out_of_selection_warnings(
             changes=changes,
             snapshot=snapshot,
             version_identities=version_identities,
-        )
-        - reuse_satisfied_model_names,
+        ),
         changed_seed_names=_changed_seed_names(
             snapshot=snapshot,
             version_identities=version_identities,

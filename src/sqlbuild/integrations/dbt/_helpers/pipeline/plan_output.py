@@ -30,9 +30,6 @@ from sqlbuild.integrations.dbt.constants import DBT_FULL_REFRESH_FLAG
 from sqlbuild.integrations.dbt.main.profile._resolve_connection_config import (
     resolve_connection_config,
 )
-from sqlbuild.integrations.dbt.main.selection._adapt_project_for_sql_tests import (
-    adapt_project_for_dbt_sql_tests,
-)
 from sqlbuild.integrations.dbt.models import (
     DbtCommandResult,
     DbtInteropCompiledProject,
@@ -59,15 +56,7 @@ def build_sqlbuild_plan_output(
 
     if not request.selected_model_names:
         return None
-    planning_project: CompiledProject = (
-        environment.project
-        if request.test_manifest is None
-        else adapt_project_for_dbt_sql_tests(
-            project=environment.project,
-            manifest=request.test_manifest,
-            target_names=request.selected_model_names,
-        )
-    )
+    planning_project: CompiledProject = environment.project
     connection_config: dict[str, object] = resolve_connection_config(
         raw_config=build_effective_connection_config(
             discovered_inputs=environment.discovered_inputs

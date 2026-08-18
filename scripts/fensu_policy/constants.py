@@ -159,12 +159,11 @@ POLICY_EVALUATION_SCOPES: frozenset[str] = frozenset({"root", "tooling"})
 POLICY_IMPLEMENTATION_PATH_PREFIX: str = "scripts/fensu_policy/"
 PROVIDER_CLASS_NAME: str = "Provider"
 PROVIDER_MODULE_PARTS: tuple[str, ...] = ("src", "sqlbuild", "providers.py")
-PUBLIC_COLOR_ENTRY_PARTS: tuple[str, ...] = (
-    "src",
-    "sqlbuild",
-    "presentation",
-    "main",
-    "supports_color.py",
+PUBLIC_COLOR_ENTRY_PARTS: frozenset[tuple[str, ...]] = frozenset(
+    {
+        ("src", "sqlbuild", "presentation", "main", "supports_color.py"),
+        ("src", "sqlbuild", "presentation", "main", "terminal_columns.py"),
+    }
 )
 ROOT_SCOPE_NAME: str = "root"
 RUNTIME_ROOT_PARTS: tuple[str, ...] = ("src", "sqlbuild")

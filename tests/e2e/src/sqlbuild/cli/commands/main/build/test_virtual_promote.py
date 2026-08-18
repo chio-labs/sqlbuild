@@ -31,7 +31,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             description="whole VDE promotion swaps target refs and views",
             promote_command=("--no-color", "promote", "--from", "pr", "--to", "dev"),
             expected_promote_fragments=(
-                "Virtual promotion complete",
+                "\u2713 Virtual promotion complete",
                 "pr -> dev",
                 "target status          finalized",
                 "promoted models        3",
@@ -277,7 +277,7 @@ def test_given_seed_change_when_partially_promoting_then_it_updates_upstream_see
             description="whole VDE promotion carries function definitions",
             promote_command=("--no-color", "promote", "--from", "pr", "--to", "dev"),
             expected_promote_fragments=(
-                "Virtual promotion complete",
+                "\u2713 Virtual promotion complete",
                 "pr -> dev",
                 "target status          finalized",
             ),
@@ -366,7 +366,7 @@ def test_given_function_change_when_promoting_then_it_publishes_target_function_
             description="finalized source promotes after workspace changes again",
             promote_command=("--no-color", "promote", "--from", "pr", "--to", "dev"),
             expected_promote_fragments=(
-                "Virtual promotion complete",
+                "\u2713 Virtual promotion complete",
                 "target status          finalized",
             ),
             expected_query_results=(("SELECT id FROM dev__dev.stg_orders ORDER BY id", ((2,),)),),
@@ -437,7 +437,7 @@ def test_given_finalized_source_vde_when_workspace_changes_again_then_whole_prom
                 "independent",
             ),
             expected_promote_fragments=(
-                "Virtual promotion complete",
+                "\u2713 Virtual promotion complete",
                 "promoted models        1",
             ),
             expected_query_results=(),
@@ -904,7 +904,7 @@ def test_given_view_refresh_failure_when_promoting_then_operation_is_marked_fail
                 "whole-VDE promotion requires a finalized source virtual environment",
                 "--select",
             ),
-            expected_promote_fragments=("Virtual promotion complete", "target status"),
+            expected_promote_fragments=("\u2713 Virtual promotion complete", "target status"),
             expected_query_results=(
                 ("SELECT id FROM dev__dev.fact_orders ORDER BY id", ((2,),)),
                 ("SELECT order_count FROM dev__dev.orders_rollup", ((1,),)),

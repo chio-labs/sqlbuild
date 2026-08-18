@@ -21,7 +21,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.types import BeforeModelMaterializeCallback, BuildStatus
-from sqlbuild.executor.custom.models import MaterializationResult, PrepareVersionContext
+from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.models import ModelExecutionResult
@@ -77,9 +77,6 @@ class BuildCustomizations:
     """User-supplied materializations, hooks, and loader functions."""
 
     custom_materializations: Mapping[str, Callable[..., MaterializationResult]] | None = None
-    custom_prepare_version_functions: (
-        Mapping[str, Callable[[PrepareVersionContext], None]] | None
-    ) = None
     loader_functions: tuple[DiscoveredLoaderFunction, ...] = ()
 
 

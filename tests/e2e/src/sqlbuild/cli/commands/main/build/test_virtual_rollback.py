@@ -288,7 +288,7 @@ def test_given_unknown_checkpoint_when_showing_checkpoint_then_it_blocks_cleanly
             description="whole VDE rollback restores previous finalized checkpoint",
             rollback_command=("--no-color", "rollback"),
             expected_rollback_fragments=(
-                "Virtual rollback complete",
+                "\u2713 Virtual rollback complete",
                 "virtual environment  dev",
                 "status               finalized",
                 "rolled back models   2",
@@ -577,7 +577,7 @@ def test_given_seed_change_when_partial_rollback_then_restores_upstream_seed_ref
             description="whole VDE rollback restores checkpointed function definitions",
             rollback_command=("--no-color", "rollback"),
             expected_rollback_fragments=(
-                "Virtual rollback complete",
+                "\u2713 Virtual rollback complete",
                 "status               finalized",
             ),
             expected_query_results=(

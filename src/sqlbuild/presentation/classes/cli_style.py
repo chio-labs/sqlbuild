@@ -12,21 +12,20 @@ from sqlbuild.presentation.models import CliTheme, TextStyle
 
 _BOLD: str = "\033[1m"
 _DIM: str = "\033[2m"
-_RED: str = "\033[31m"
+_RED: str = "\033[38;5;167m"
 _GREEN: str = "\033[32m"
 _YELLOW: str = "\033[33m"
 _BLUE: str = "\033[34m"
-_LIGHT_GREEN: str = "\033[92m"
 _ORANGE: str = "\033[38;5;208m"
 
 default_cli_theme: CliTheme = CliTheme(
-    title=TextStyle(_GREEN + _BOLD),
+    title=TextStyle(_BLUE + _BOLD),
     section=TextStyle(_BOLD),
     label=TextStyle(_DIM),
-    value=TextStyle(_BLUE + _BOLD),
+    value=TextStyle(_BLUE),
     accent=TextStyle(_BLUE),
-    plan_section=TextStyle(_LIGHT_GREEN),
-    object_name=TextStyle(_BLUE + _BOLD),
+    plan_section=TextStyle(_BOLD),
+    object_name=TextStyle(""),
     command=TextStyle(_DIM),
     success=TextStyle(_GREEN),
     success_strong=TextStyle(_GREEN + _BOLD),
@@ -35,13 +34,13 @@ default_cli_theme: CliTheme = CliTheme(
     error=TextStyle(_RED),
     error_strong=TextStyle(_RED + _BOLD),
     error_muted=TextStyle(_RED + _DIM),
-    log_label=TextStyle(_BLUE + _DIM),
+    log_label=TextStyle(_DIM),
     skipped=TextStyle(_DIM),
     muted=TextStyle(_DIM),
-    dbt_section=TextStyle(_ORANGE + _BOLD),
+    dbt_section=TextStyle(_BOLD),
     dbt_label=TextStyle(_ORANGE),
-    dbt_object_name=TextStyle(_ORANGE + _BOLD),
-    dbt_execution_label=TextStyle(_ORANGE + _BOLD),
+    dbt_object_name=TextStyle(""),
+    dbt_execution_label=TextStyle(_ORANGE),
 )
 
 

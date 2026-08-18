@@ -66,14 +66,11 @@ def prepare_build_execution(
         concurrency=effective_concurrency,
         use_color=invocation.use_color,
     )
-    has_external_source_loads: bool = any(
-        entry.integration_kind is not None
-        for entry in pipeline_result.plan_output.source_load_entries
-    )
+    has_ingress_source_loads: bool = bool(pipeline_result.plan_output.source_load_entries)
     execution_connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=invocation.adapter_name,
         stream=invocation.progress_stream,
-        blank_line_before_start=has_external_source_loads,
+        blank_line_before_start=has_ingress_source_loads,
         blank_line_after_complete=True,
         use_color=invocation.use_color,
     )
@@ -166,7 +163,6 @@ def execute_build_plan(
         ),
         customizations=BuildCustomizations(
             custom_materializations=pipeline_result.custom_materializations,
-            custom_prepare_version_functions=pipeline_result.custom_prepare_version_functions,
             loader_functions=preparation.python_lifecycle.loader_functions,
         ),
         initial_state=BuildInitialState(

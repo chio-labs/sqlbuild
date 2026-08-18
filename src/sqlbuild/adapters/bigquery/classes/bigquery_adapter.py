@@ -40,17 +40,8 @@ from sqlbuild.adapter.contract.types import (
     PromotionStrategy,
     TablePromotionMode,
 )
-from sqlbuild.adapter.state_sql.main.render_create_node_source_watermark_table_sql import (
-    render_create_node_source_watermark_table_sql,
-)
-from sqlbuild.adapter.state_sql.main.render_insert_node_source_watermark_records_sql import (
-    render_insert_node_source_watermark_records_sql,
-)
 from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
     render_insert_source_freshness_records_sql,
-)
-from sqlbuild.adapter.state_sql.main.render_read_latest_node_source_watermarks_sql import (
-    render_read_latest_node_source_watermarks_sql,
 )
 from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
     conditional_result_nullability,
@@ -77,7 +68,6 @@ from sqlbuild.adapters.bigquery.constants import (
     TIMESTAMP_TYPE_TOKEN,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.node_source_watermarks.models import NodeSourceWatermarkRecord
 from sqlbuild.compiler.planner.types import InitialValidFrom, SnapshotStrategy
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.diagnostics.main.log_sql import log_sql
@@ -142,32 +132,6 @@ class BigQueryAdapter(BaseAdapter):
         del database, schema
         return ()
 
-    def render_create_node_source_watermark_table_sql(
-        self,
-        *,
-        database: str | None,
-        schema: str,
-    ) -> str:
-        return render_create_node_source_watermark_table_sql(
-            database=database,
-            schema=schema,
-            render_qualified_name=self.render_qualified_name,
-            render_framework_type=self.render_framework_type,
-            transient=self.state_tables_transient,
-        )
-
-    def render_read_latest_node_source_watermarks_sql(
-        self,
-        *,
-        database: str | None,
-        schema: str,
-    ) -> str:
-        return render_read_latest_node_source_watermarks_sql(
-            database=database,
-            schema=schema,
-            render_qualified_name=self.render_qualified_name,
-        )
-
     def render_insert_source_freshness_records_sql(
         self,
         *,
@@ -176,20 +140,6 @@ class BigQueryAdapter(BaseAdapter):
         records: tuple[SourceFreshnessRecord, ...],
     ) -> str:
         return render_insert_source_freshness_records_sql(
-            database=database,
-            schema=schema,
-            records=records,
-            render_qualified_name=self.render_qualified_name,
-        )
-
-    def render_insert_node_source_watermark_records_sql(
-        self,
-        *,
-        database: str | None,
-        schema: str,
-        records: tuple[NodeSourceWatermarkRecord, ...],
-    ) -> str:
-        return render_insert_node_source_watermark_records_sql(
             database=database,
             schema=schema,
             records=records,

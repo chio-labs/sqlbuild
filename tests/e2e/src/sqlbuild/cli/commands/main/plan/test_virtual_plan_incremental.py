@@ -33,10 +33,10 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_build_exit_code=0,
             expected_fragments=(
                 "rebuild last 7d",
-                "policy: replay_on_change=bounded-7d",
-                "range: 2026-01-02 \u2192 2026-01-04",
+                "policy  replay_on_change=bounded-7d",
+                "range  2026-01-02 \u2192 2026-01-04",
             ),
-            unexpected_plan_fragments=("policy: replay_on_change=full",),
+            unexpected_plan_fragments=("policy  replay_on_change=full",),
         )
     ],
     ids=lambda case: case.description,
@@ -187,12 +187,12 @@ def test_given_denied_virtual_snapshot_full_refresh_when_planning_then_matches_b
             expected_plan_exit_code=0,
             expected_build_exit_code=0,
             expected_fragments=(
-                "Plan ready (1 selected, 1 source to load)",
-                "source freshness observed: 1",
+                "Plan ready  1 selected, 1 source to load",
+                "new or changed (1)  raw_orders",
                 "raw_orders",
                 "fact_orders",
             ),
-            unexpected_plan_fragments=("source freshness incomplete: 1", "First run"),
+            unexpected_plan_fragments=("not verifiable", "First run"),
         )
     ],
     ids=lambda case: case.description,

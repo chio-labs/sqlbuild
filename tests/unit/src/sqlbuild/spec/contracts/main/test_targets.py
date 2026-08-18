@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.spec.contracts.exceptions import SpecConfigError
 from sqlbuild.spec.contracts.main.resolve_effective_changes_only import (
     resolve_effective_changes_only,
 )
@@ -19,8 +18,6 @@ from sqlbuild.spec.contracts.models import (
 from tests.unit.src.sqlbuild.spec.contracts.main._test_types import (
     EffectiveChangesOnlyResolutionTestCase,
     TargetConfigResolutionTestCase,
-    TargetConfigReuseErrorTestCase,
-    TargetConfigReuseLocalSourceTestCase,
 )
 
 
@@ -106,7 +103,6 @@ def test_given_changes_only_config_when_resolving_then_precedence_is_applied(
                             connection={"host": "shared-state", "port": 5432},
                             allow_reset=False,
                         ),
-                        reuse_from="prod",
                         defer_clone_from="prod",
                     ),
                     "prod": TargetConfig(),
@@ -122,7 +118,6 @@ def test_given_changes_only_config_when_resolving_then_precedence_is_applied(
                         ),
                         changes_only=False,
                         loader_schema="raw_local",
-                        reuse_hard_copy=True,
                         defer_clone_from="staging",
                     )
                 }
@@ -137,10 +132,8 @@ def test_given_changes_only_config_when_resolving_then_precedence_is_applied(
             },
             expected_allow_reset=True,
             expected_loader_schema="raw_local",
-            expected_reuse_from="prod",
             expected_defer_clone_from="staging",
             expected_changes_only=False,
-            expected_reuse_hard_copy=True,
         )
     ],
     ids=lambda case: case.description,
@@ -159,69 +152,5 @@ def test_given_project_and_local_state_config_when_resolving_then_local_override
     assert target_config.state.connection == test_case.expected_connection
     assert target_config.state.allow_reset is test_case.expected_allow_reset
     assert target_config.loader_schema == test_case.expected_loader_schema
-    assert target_config.reuse_from == test_case.expected_reuse_from
     assert target_config.defer_clone_from == test_case.expected_defer_clone_from
     assert target_config.changes_only is test_case.expected_changes_only
-    assert target_config.reuse_hard_copy is test_case.expected_reuse_hard_copy
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TargetConfigReuseErrorTestCase(
-            description="rejects unknown reuse_from target",
-            target_name="dev",
-            reuse_from="missing",
-            expected_error_fragment="Target 'dev' reuse_from references unknown target 'missing'",
-        ),
-        TargetConfigReuseErrorTestCase(
-            description="rejects self reuse_from target",
-            target_name="dev",
-            reuse_from="dev",
-            expected_error_fragment="Target 'dev' cannot reuse from itself",
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_invalid_reuse_from_when_resolving_target_then_it_raises(
-    test_case: TargetConfigReuseErrorTestCase,
-) -> None:
-    with pytest.raises(SpecConfigError, match=test_case.expected_error_fragment):
-        resolve_target_config(
-            project_config=ProjectConfig(
-                name="demo",
-                adapter="duckdb",
-                targets={
-                    test_case.target_name: TargetConfig(reuse_from=test_case.reuse_from),
-                    "prod": TargetConfig(),
-                },
-            ),
-            local_config=LocalConfig(),
-            target_name=test_case.target_name,
-        )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TargetConfigReuseLocalSourceTestCase(
-            description="allows reuse_from target defined only in local config",
-            expected_reuse_from="prod_local",
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_reuse_from_exists_only_in_local_config_when_resolving_then_it_is_allowed(
-    test_case: TargetConfigReuseLocalSourceTestCase,
-) -> None:
-    target_config: TargetConfig = resolve_target_config(
-        project_config=ProjectConfig(
-            name="demo",
-            adapter="duckdb",
-            targets={"dev": TargetConfig(reuse_from=test_case.expected_reuse_from)},
-        ),
-        local_config=LocalConfig(targets={test_case.expected_reuse_from: LocalTargetConfig()}),
-        target_name="dev",
-    )
-
-    assert target_config.reuse_from == test_case.expected_reuse_from

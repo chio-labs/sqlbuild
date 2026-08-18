@@ -251,22 +251,6 @@ def test_given_dbt_command_without_sqlbuild_project_when_dispatching_then_does_n
             ),
         ),
         MainTestCase(
-            description="dispatches dbt test and preserves dbt args",
-            argv=[
-                "--project-dir",
-                "/tmp/demo",
-                "dbt",
-                "test",
-                "--select",
-                "test_type:data",
-                "--indirect-selection",
-                "eager",
-            ],
-            expected_exit_code=23,
-            expected_project_dir=Path("/tmp/demo"),
-            expected_dbt_args=("--select", "test_type:data", "--indirect-selection", "eager"),
-        ),
-        MainTestCase(
             description="dispatches dbt debug and preserves dbt args",
             argv=[
                 "--project-dir",
@@ -310,78 +294,6 @@ def test_given_dbt_command_without_sqlbuild_project_when_dispatching_then_does_n
                 "profiles",
             ),
         ),
-        MainTestCase(
-            description="dispatches dbt lineage and preserves dbt args",
-            argv=[
-                "--project-dir",
-                "/tmp/demo",
-                "dbt",
-                "lineage",
-                "downstream_orders",
-                "--format",
-                "json",
-                "--project-dir",
-                "dbt_project",
-            ],
-            expected_exit_code=31,
-            expected_project_dir=Path("/tmp/demo"),
-            expected_dbt_args=(
-                "downstream_orders",
-                "--format",
-                "json",
-                "--project-dir",
-                "dbt_project",
-            ),
-        ),
-        MainTestCase(
-            description="dispatches dbt diff and preserves dbt args",
-            argv=[
-                "--project-dir",
-                "/tmp/demo",
-                "dbt",
-                "diff",
-                "--select",
-                "dbt_orders",
-                "--full",
-                "--target",
-                "prod",
-            ],
-            expected_exit_code=41,
-            expected_project_dir=Path("/tmp/demo"),
-            expected_dbt_args=("--select", "dbt_orders", "--full", "--target", "prod"),
-        ),
-        MainTestCase(
-            description="dispatches dbt diff with sqb project dir alias",
-            argv=[
-                "--sqb-project-dir",
-                "/tmp/demo",
-                "dbt",
-                "diff",
-                "--select",
-                "dbt_orders",
-                "--schema-only",
-            ],
-            expected_exit_code=41,
-            expected_project_dir=Path("/tmp/demo"),
-            expected_dbt_args=("--select", "dbt_orders", "--schema-only"),
-        ),
-        MainTestCase(
-            description="dispatches dbt clone and preserves dbt args",
-            argv=[
-                "--project-dir",
-                "/tmp/demo",
-                "dbt",
-                "clone",
-                "--select",
-                "dbt_orders",
-                "--hard-copy",
-                "--target",
-                "dev",
-            ],
-            expected_exit_code=43,
-            expected_project_dir=Path("/tmp/demo"),
-            expected_dbt_args=("--select", "dbt_orders", "--hard-copy", "--target", "dev"),
-        ),
     ],
     ids=lambda case: case.description,
 )
@@ -404,11 +316,7 @@ def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_di
             run_dbt_plan=run_dbt_execution,
             run_dbt_run=run_dbt_execution,
             run_dbt_build=run_dbt_execution,
-            run_dbt_test=run_dbt_execution,
             run_dbt_debug=run_dbt_execution,
-            run_dbt_lineage=run_dbt_execution,
-            run_dbt_diff=run_dbt_execution,
-            run_dbt_clone=run_dbt_execution,
         ),
     )
 
@@ -441,8 +349,6 @@ def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_di
                 "--dry-run",
                 "--overwrite",
                 "--skip-dbt-debug",
-                "--prod-git-ref",
-                "prod",
             ],
             expected_exit_code=37,
             expected_project_dir=Path("/tmp/workspace"),
@@ -454,7 +360,6 @@ def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_di
             expected_dbt_init_dry_run=True,
             expected_dbt_init_overwrite=True,
             expected_dbt_init_skip_dbt_debug=True,
-            expected_dbt_init_production_git_ref="prod",
         ),
         MainTestCase(
             description="dispatches minimal dbt init with default optional flags",
@@ -493,7 +398,6 @@ def test_given_dbt_init_arguments_when_running_with_dependencies_then_it_dispatc
             dry_run=test_case.expected_dbt_init_dry_run,
             overwrite=test_case.expected_dbt_init_overwrite,
             skip_dbt_debug=test_case.expected_dbt_init_skip_dbt_debug,
-            production_git_ref=test_case.expected_dbt_init_production_git_ref,
         )
     ]
 
@@ -2354,7 +2258,7 @@ def test_given_parser_error_and_color_support_when_running_main_then_it_colorize
     rendered_stderr: str = capsys.readouterr().err
 
     assert exit_code == test_case.expected_exit_code
-    assert "\033[31m\033[1merror[C900]:\033[0m" in rendered_stderr
+    assert "\033[38;5;167m\033[1merror[C900]:\033[0m" in rendered_stderr
     assert rendered_stderr.endswith("\n\n")
 
 
@@ -2381,7 +2285,7 @@ def test_given_parser_error_and_no_color_when_running_main_then_it_renders_plain
 
     assert exit_code == test_case.expected_exit_code
     assert "error[C900]:" in rendered_stderr
-    assert "\033[31m" not in rendered_stderr
+    assert "\033[38;5;167m" not in rendered_stderr
     assert rendered_stderr.endswith("\n\n")
 
 
@@ -2504,7 +2408,7 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
                 help="pass SQL as the query argument",
             ),
             expected_stderr_fragment=(
-                "\033[31m\033[1merror[C102]:\033[0m query requires SQL\n"
+                "\033[38;5;167m\033[1merror[C102]:\033[0m query requires SQL\n"
                 "  \033[2m= help:\033[0m pass SQL as the query argument"
             ),
             expected_exit_code=1,

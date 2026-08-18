@@ -23,9 +23,9 @@ from tests.unit.src.sqlbuild.presentation.main._test_types import SummaryFooterT
             expected_color_fragments=(
                 "\033[2mPASS=\033[0m\033[32m2\033[0m",
                 "\033[2mWARN=\033[0m\033[33m1\033[0m",
-                "\033[2mFAIL=\033[0m\033[31m0\033[0m",
+                "\033[2mFAIL=\033[0m\033[38;5;167m0\033[0m",
                 "\033[2mSKIP=\033[0m\033[2m3\033[0m",
-                "\033[2mTOTAL=\033[0m\033[34m\033[1m6\033[0m",
+                "\033[2mTOTAL=\033[0m\033[34m6\033[0m",
                 "\033[2m(0.12s)\033[0m",
             ),
         ),
@@ -39,7 +39,7 @@ from tests.unit.src.sqlbuild.presentation.main._test_types import SummaryFooterT
             expected_no_color="SYNC_PASS=2  SYNC_FAIL=0",
             expected_color_fragments=(
                 "\033[2mSYNC_PASS=\033[0m\033[32m2\033[0m",
-                "\033[2mSYNC_FAIL=\033[0m\033[31m0\033[0m",
+                "\033[2mSYNC_FAIL=\033[0m\033[38;5;167m0\033[0m",
             ),
         ),
     ),

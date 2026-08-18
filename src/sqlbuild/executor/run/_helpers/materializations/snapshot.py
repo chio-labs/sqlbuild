@@ -25,7 +25,6 @@ from sqlbuild.compiler.planner.types import (
     HistoricalInput,
     InitialValidFrom,
     PlanReason,
-    RelationReuseKind,
     SnapshotSchemaChangePolicy,
     SnapshotStrategy,
 )
@@ -40,12 +39,10 @@ from sqlbuild.executor.run._helpers.execution.hook_phases import (
     run_post_hook_phase,
     run_pre_hook_phase,
 )
-from sqlbuild.executor.run._helpers.execution.promotion import promote_relation_to_destination
 from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
 )
-from sqlbuild.executor.run._helpers.reuse.core import create_relation_from_reuse_plan
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run._helpers.validation.contracts import validate_runtime_contract
 from sqlbuild.executor.run.constants import SNAPSHOT_ALL_CHECK_COLUMNS
@@ -93,13 +90,6 @@ def execute_snapshot_entry(
         schema=target_schema,
         name=delta_table,
     )
-    seed_table: str = f"{target_table}__reuse_seed"
-    seed_qualified: str = resolve_qualified_name_parts(
-        adapter=adapter,
-        database=target_database,
-        schema=target_schema,
-        name=seed_table,
-    )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
     hook_results: list[HookExecutionResult] = []
@@ -136,35 +126,6 @@ def execute_snapshot_entry(
 
     try:
         with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_delta"):
-            if (
-                entry.relation_reuse is not None
-                and entry.relation_reuse.kind == RelationReuseKind.SEEDED_RELATION_REUSE
-            ):
-                adapter.drop(
-                    connection=connection,
-                    destination=seed_qualified,
-                    if_exists=True,
-                    statement_recorder=statement_recorder,
-                )
-                create_relation_from_reuse_plan(
-                    adapter=adapter,
-                    connection=connection,
-                    model_name=entry.name,
-                    expected_version_hash=entry.fingerprint_version_hash,
-                    relation_reuse=entry.relation_reuse,
-                    destination_relation=seed_qualified,
-                    statement_recorder=statement_recorder,
-                )
-                promote_relation_to_destination(
-                    adapter=adapter,
-                    connection=connection,
-                    origin_relation=seed_qualified,
-                    destination_relation=target_qualified,
-                    destination_database=target_database,
-                    destination_schema=target_schema,
-                    destination_name=target_table,
-                    statement_recorder=statement_recorder,
-                )
             adapter.drop(
                 connection=connection,
                 destination=delta_qualified,

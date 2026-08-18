@@ -81,11 +81,11 @@ PROVIDER_MARKER_FILE: str = (
             description="plan output shows provider usage for selected Python surfaces",
             expected_text_fragments=(
                 "Providers",
-                "  marker_provider",
-                "    custom materialization copy_table (MarkerProvider)",
-                "    hook mark_pre (MarkerProvider)",
-                "    loader raw_orders (MarkerProvider)",
-                "    task publish_orders (MarkerProvider)",
+                "\u2514\u2500\u2500 marker_provider",
+                "    ├── custom materialization copy_table (MarkerProvider)",
+                "    ├── hook mark_pre (MarkerProvider)",
+                "    ├── loader raw_orders (MarkerProvider)",
+                "    └── task publish_orders (MarkerProvider)",
             ),
             expected_provider_name="marker_provider",
             expected_used_by=(

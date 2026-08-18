@@ -56,6 +56,7 @@ def resolve_plan_invocation(*, request: PlanCommandRequest) -> PlanInvocation:
         command_name="plan",
         virtual_env=request.virtual_env,
         include_stale_upstreams=request.include_stale_upstreams,
+        changes_only=effective_changes_only,
     )
     adapter_context: AdapterConnectionContext = resolve_adapter_connection_context(
         discovered_inputs=discovered_inputs,

@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import fields, replace
-from datetime import UTC, datetime
+from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -14,14 +12,7 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
-from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
-from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner._helpers.graph.scope import build_planner_scope
-from sqlbuild.compiler.planner._helpers.identity.standard import (
-    build_standard_model_version_identities,
-)
 from sqlbuild.compiler.planner.main.execution.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
     DeferralInputs,
@@ -29,78 +20,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerPolicies,
     PlannerSelection,
     PlanOutput,
-    StandardModelVersionIdentities,
 )
-from tests.unit.src.sqlbuild.integrations.dbt.helpers import build_compiled_project_with_models
-
-
-def build_standard_pruning_project(
-    sql_by_model_name: dict[str, str],
-    *,
-    model_configs: dict[str, dict[str, object]] | None = None,
-) -> CompiledProject:
-    project: CompiledProject = build_compiled_project_with_models(sql_by_model_name)
-    configs: dict[str, dict[str, object]] = model_configs or {}
-    models: list[CompiledModel] = []
-    model: CompiledModel
-    for model in project.models:
-        models.append(
-            replace(
-                model,
-                config=CompileModelConfig(values=configs.get(model.name, model.config.values)),
-                destination=replace(
-                    model.destination,
-                    schema="staging",
-                    qualified_name=f"staging.{model.name}",
-                ),
-            )
-        )
-    return replace(project, effective_target_schema="staging", models=tuple(models))
-
-
-def write_standard_model_state(
-    *, adapter: DuckDbAdapter, connection: object, project: CompiledProject
-) -> StandardModelVersionIdentities:
-    adapter.execute(connection=connection, sql="CREATE SCHEMA IF NOT EXISTS staging")
-    identities: StandardModelVersionIdentities = build_standard_model_version_identities(
-        functions=project.functions,
-        seeds=project.seeds,
-        scope=build_planner_scope(
-            project=project,
-            select=(),
-            exclude=(),
-            auto_load_sources=False,
-        ),
-    )
-    model: CompiledModel
-    for model in project.models:
-        adapter.execute(
-            connection=connection,
-            sql=f"CREATE OR REPLACE TABLE staging.{model.name} AS SELECT 1 AS id",
-        )
-        write_fingerprint(
-            connection=connection,
-            execute=adapter.execute,
-            database=None,
-            schema="staging",
-            fingerprint=Fingerprint(
-                node_type=NODE_TYPE_MODEL,
-                node_name=model.name,
-                target_database=None,
-                target_schema="staging",
-                target_name=model.name,
-                run_id="previous_run",
-                definition_hash=compute_query_hash(model.query_sql),
-                version_hash=identities.model_version_hashes[model.name],
-                schema_fingerprint=compute_query_hash(""),
-                definition=model.query_sql,
-                metadata_json=identities.model_metadata_jsons[model.name],
-                ts=datetime.now(UTC),
-            ),
-            render_qualified_name=adapter.render_qualified_name,
-            render_framework_type=adapter.render_framework_type,
-        )
-    return identities
 
 
 def model_definition_hash(project: CompiledProject, name: str) -> str:

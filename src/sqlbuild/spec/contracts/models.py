@@ -61,9 +61,7 @@ class TargetConfig:
     loader_schema: str | None = None
     defer_sources_to: str | None = None
     defer_clone_from: str | None = None
-    reuse_from: str | None = None
     changes_only: bool | None = None
-    reuse_hard_copy: bool = False
     clone: ClonePolicy = field(default_factory=ClonePolicy)
     state: StateConfig = field(default_factory=StateConfig)
 
@@ -79,9 +77,7 @@ class LocalTargetConfig:
     loader_schema: str | None = None
     defer_sources_to: str | None = None
     defer_clone_from: str | None = None
-    reuse_from: str | None = None
     changes_only: bool | None = None
-    reuse_hard_copy: bool | None = None
     clone: LocalClonePolicy = field(default_factory=LocalClonePolicy)
     state: LocalStateConfig = field(default_factory=LocalStateConfig)
 
@@ -168,16 +164,6 @@ class ScenarioConfig:
 
 
 @dataclass(frozen=True)
-class DbtProductionRefConfig:
-    """dbt production ref configuration."""
-
-    git_ref: str | None = None
-    generate_schema_name_override: str | None = None
-    refresh: bool = True
-    git_timeout_seconds: int = 30
-
-
-@dataclass(frozen=True)
 class DbtConfig:
     """dbt interop configuration."""
 
@@ -186,7 +172,6 @@ class DbtConfig:
     target: str | None = None
     target_path: str | None = None
     vars: dict[str, object] = field(default_factory=dict)
-    production_ref: DbtProductionRefConfig = field(default_factory=DbtProductionRefConfig)
 
 
 @dataclass(frozen=True)

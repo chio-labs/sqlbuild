@@ -6,21 +6,8 @@ from dataclasses import replace
 
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.output.plan_output import build_plan_output
-from sqlbuild.compiler.planner._helpers.pruning.node_source_watermark_staleness import (
-    build_node_source_watermark_staleness_warnings,
-)
 from sqlbuild.compiler.planner._helpers.pruning.selection_staleness import (
     build_stale_out_of_selection_warnings,
-)
-from sqlbuild.compiler.planner._helpers.reuse.standard_reuse_decisions import (
-    is_standard_reuse_decision_reusable,
-)
-from sqlbuild.compiler.planner._helpers.reuse.standard_reuse_planning import (
-    serialize_standard_reuse_metadata,
-    serialize_standard_reuse_plan_metadata,
-)
-from sqlbuild.compiler.planner._helpers.warehouse.node_source_watermarks import (
-    read_latest_node_source_watermarks_for_plan,
 )
 from sqlbuild.compiler.planner.models import (
     PlannerChangeReconciliation,
@@ -28,7 +15,6 @@ from sqlbuild.compiler.planner.models import (
     PlannerEntryResults,
     PlannerIdentityContext,
     PlannerOverrides,
-    PlannerReuseResolution,
     PlannerRuntime,
     PlannerScopePruningResult,
     PlannerScopeResolution,
@@ -65,8 +51,6 @@ def assemble_base_plan_output(
         model_entry_results=entries.model_entry_results,
         reload_sources=overrides.reload_sources,
         extras=PlanOutputExtras(
-            dependency_baseline_entries=entries.dependency_baseline_entries,
-            existing_destination_input_entries=entries.existing_destination_input_entries,
             seed_version_hashes=identities.version_identities.seed_version_hashes,
             seed_metadata_jsons=identities.version_identities.seed_metadata_jsons,
         ),
@@ -90,22 +74,12 @@ def with_plan_warnings(
     warehouse: PlannerWarehouseState,
     identities: PlannerIdentityContext,
     stale_warning_changes: PlannerChangeResults,
-    reuse: PlannerReuseResolution,
     pruning: PlannerScopePruningResult,
     source_freshness: StandardSourceFreshnessPlanningResult,
     plan_output: PlanOutput,
 ) -> PlanOutput:
-    """Append stale-out-of-selection and node-source-watermark warnings to the plan."""
+    """Append stale-out-of-selection warnings to the plan."""
 
-    reuse_satisfied_model_names: frozenset[str] = (
-        frozenset(
-            name
-            for name, decision in reuse.standard_reuse.decisions.models.items()
-            if is_standard_reuse_decision_reusable(decision.decision)
-        )
-        if reuse.standard_reuse is not None
-        else frozenset()
-    )
     stale_out_of_selection_warnings: tuple[PlanWarning, ...] = (
         build_stale_out_of_selection_warnings(
             original_scope=scopes.stale_warning_scope,
@@ -114,25 +88,9 @@ def with_plan_warnings(
             snapshot=warehouse.snapshot,
             version_identities=identities.stale_warning_identities,
             source_freshness=source_freshness,
-            reuse_satisfied_model_names=reuse_satisfied_model_names,
             include_sources=False,
         )
     )
-    node_source_watermark_warnings: tuple[PlanWarning, ...] = (
-        build_node_source_watermark_staleness_warnings(
-            plan=plan_output,
-            watermark_records=read_latest_node_source_watermarks_for_plan(
-                plan=plan_output,
-                adapter=runtime.adapter,
-                connection=runtime.connection,
-            ),
-        )
-    )
-    if node_source_watermark_warnings:
-        plan_output = replace(
-            plan_output,
-            warnings=(*plan_output.warnings, *node_source_watermark_warnings),
-        )
     if stale_out_of_selection_warnings:
         plan_output = replace(
             plan_output,
@@ -145,10 +103,9 @@ def with_plan_metadata(
     *,
     plan_output: PlanOutput,
     pruning: PlannerScopePruningResult,
-    reuse: PlannerReuseResolution,
     source_freshness: StandardSourceFreshnessPlanningResult,
 ) -> PlanOutput:
-    """Attach standard source-freshness and reuse metadata to the plan output."""
+    """Attach standard source-freshness metadata to the plan output."""
 
     standard_remaining_stale_model_names: tuple[str, ...] = tuple(
         sorted(
@@ -176,21 +133,6 @@ def with_plan_metadata(
             ),
         },
     )
-    if reuse.standard_reuse is not None:
-        plan_output = replace(
-            plan_output,
-            metadata={
-                **plan_output.metadata,
-                **serialize_standard_reuse_plan_metadata(
-                    model_entries=plan_output.model_entries,
-                    dependency_baseline_entries=plan_output.dependency_baseline_entries,
-                    existing_destination_input_entries=(
-                        plan_output.existing_destination_input_entries
-                    ),
-                ),
-                **serialize_standard_reuse_metadata(reuse.standard_reuse),
-            },
-        )
     return plan_output
 
 

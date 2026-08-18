@@ -41,7 +41,6 @@ def execute_dbt_interop_from_project(request: DbtInteropExecutionRequest) -> int
     if request.command not in (
         DbtInteropCommand.RUN,
         DbtInteropCommand.BUILD,
-        DbtInteropCommand.TEST,
     ):
         raise DbtInteropArgumentError(
             f"unsupported dbt interop execution command: {request.command}"
@@ -50,7 +49,7 @@ def execute_dbt_interop_from_project(request: DbtInteropExecutionRequest) -> int
     manifest: DbtManifestIndex = load_compiled_dbt_manifest(
         runner=invocation.runner,
         dbt_options=invocation.dbt_options,
-        full_refresh=request.command == DbtInteropCommand.TEST,
+        full_refresh=False,
         on_progress=request.on_progress,
     )
     compiled: DbtInteropCompiledProject = compile_dbt_interop_project(
@@ -85,7 +84,6 @@ def execute_dbt_interop_from_project(request: DbtInteropExecutionRequest) -> int
         request=request,
         invocation=invocation,
         merged_dbt_argv=merged_dbt_argv,
-        plan=resolution.plan,
     )
     write_dbt_execution_summary(
         request=request,

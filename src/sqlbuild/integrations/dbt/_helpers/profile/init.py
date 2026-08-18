@@ -79,7 +79,6 @@ def build_dbt_init_project(*, request: DbtInitRequest) -> DbtInitResult:
         target_path=_display_path(path=target_path, root=output_dir),
         target_schema=normalized.target_schema,
         target_database=normalized.target_database,
-        production_git_ref=request.production_git_ref,
     )
     _complete_progress(
         callbacks=request.progress_callbacks, message="Rendered dbt profile connection."
@@ -101,21 +100,13 @@ def build_dbt_init_project(*, request: DbtInitRequest) -> DbtInitResult:
         )
         output_dir.mkdir(parents=True, exist_ok=True)
         project_file.write_text(toml, encoding="utf-8")
-        macro_file: Path = output_dir / "dbt" / "macros" / "generate_schema_name.sql"
-        macro_file.parent.mkdir(parents=True, exist_ok=True)
-        if not macro_file.exists() or request.overwrite:
-            macro_file.write_text(_default_generate_schema_name_macro(), encoding="utf-8")
         _complete_progress(
             callbacks=request.progress_callbacks, message="Wrote SQLBuild project config."
         )
-    else:
-        macro_file = output_dir / "dbt" / "macros" / "generate_schema_name.sql"
     return DbtInitResult(
         output_dir=output_dir,
         project_file=project_file,
         project_name=metadata.project_name.replace("-", "_"),
-        macro_file=macro_file,
-        production_git_ref=request.production_git_ref,
         adapter=normalized.adapter,
         target_name=selected.target_name,
         profile_name=profile_name,
@@ -198,7 +189,6 @@ def _build_project_toml(
     target_path: str,
     target_schema: str | None,
     target_database: str | None,
-    production_git_ref: str,
 ) -> str:
     target_lines: list[str] = [f"[targets.{_quote_key(target_name)}]"]
     if target_database is not None:
@@ -222,24 +212,7 @@ def _build_project_toml(
         f'project_dir = "{_escape(dbt_project_dir)}"\n'
         f'profiles_dir = "{_escape(profiles_dir)}"\n'
         f'target_path = "{_escape(target_path)}"\n'
-        f'target = "{_escape(target_name)}"\n\n'
-        "[dbt.production_ref]\n"
-        f'git_ref = "{_escape(production_git_ref)}"\n'
-        'generate_schema_name_override = "dbt/macros/generate_schema_name.sql"\n\n'
-        + "\n".join(target_lines)
-        + "\n"
-    )
-
-
-def _default_generate_schema_name_macro() -> str:
-    return (
-        "{% macro generate_schema_name(custom_schema_name, node) -%}\n"
-        "    {%- if custom_schema_name is none -%}\n"
-        "        {{ target.schema }}\n"
-        "    {%- else -%}\n"
-        "        {{ custom_schema_name | trim }}\n"
-        "    {%- endif -%}\n"
-        "{%- endmacro %}\n"
+        f'target = "{_escape(target_name)}"\n\n' + "\n".join(target_lines) + "\n"
     )
 
 

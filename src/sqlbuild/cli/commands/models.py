@@ -532,7 +532,6 @@ class DbtInitCommandRequest:
     dry_run: bool
     overwrite: bool
     skip_dbt_debug: bool
-    production_git_ref: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1214,12 +1213,7 @@ class CliEntrypointHandlers:
     run_dbt_plan: Callable[[Path | None, tuple[str, ...], bool], int]
     run_dbt_run: Callable[[Path | None, tuple[str, ...], bool], int]
     run_dbt_build: Callable[[Path | None, tuple[str, ...], bool], int]
-    run_dbt_test: Callable[[Path | None, tuple[str, ...], bool], int]
-    run_dbt_scenario: Callable[[Path | None, tuple[str, ...], bool], int]
     run_dbt_debug: Callable[[Path | None, tuple[str, ...], bool], int]
-    run_dbt_lineage: Callable[[Path | None, tuple[str, ...], bool], int]
-    run_dbt_diff: Callable[[Path | None, tuple[str, ...], bool], int]
-    run_dbt_clone: Callable[[Path | None, tuple[str, ...], bool], int]
     run_dbt_init: Callable[[DbtInitCommandRequest], int]
     run_build: Callable[[BuildCommandRequest], int]
     run_freshness: Callable[[FreshnessCommandRequest], int]

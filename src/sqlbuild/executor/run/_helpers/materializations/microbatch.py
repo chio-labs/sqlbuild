@@ -867,7 +867,8 @@ def _format_resolved_microbatch_progress(
         cursor_type=cursor_type,
         cursor_grain=cursor_grain,
     )
-    return f"resolved runtime range {start} -> {end} ({batch_count} batches x {batch_size})"
+    batch_noun: str = "batch" if batch_count == 1 else "batches"
+    return f"resolved runtime range {start} -> {end} ({batch_count} {batch_noun} x {batch_size})"
 
 
 def compute_batch_windows(

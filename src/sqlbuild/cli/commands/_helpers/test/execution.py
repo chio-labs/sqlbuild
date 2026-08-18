@@ -7,6 +7,7 @@ from collections.abc import Callable
 from sqlbuild.cli.commands._helpers.test.sql_progress import (
     build_test_expectation_rows,
     resolve_test_name_width,
+    test_outcome_status,
 )
 from sqlbuild.cli.commands.models import (
     TestExecutionPreparation,
@@ -22,9 +23,9 @@ from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.executor.pipeline.main.run import run_test_pipeline
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
-from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.presentation.main.surface_header import format_surface_header
 
 
 def prepare_test_execution(
@@ -40,9 +41,12 @@ def prepare_test_execution(
         for step in entry.chain:
             model_names.add(step.model_name)
     model_count: int = len(model_names)
-    header: str = f"Test ({test_count} selected, {model_count} models)"
     style: CliStyle = CliStyle(use_color=invocation.use_color)
-    styled_header: str = style.success_strong(header)
+    styled_header: str = format_surface_header(
+        style=style,
+        title="Test ready",
+        context=f"{test_count} selected, {model_count} models",
+    )
     progress: NestedCommandProgressCallbacks = NestedCommandProgressCallbacks(
         total=test_count,
         label="test",
@@ -111,7 +115,7 @@ def _build_on_complete(
         if result.step_results:
             model_name = result.step_results[0].model_name
         group_name: str = model_name or "(unknown)"
-        status_text: str = "PASS" if result.outcome == SqlTestOutcome.PASS else "FAIL"
+        status_text: str = test_outcome_status(outcome=result.outcome)
         progress.on_item_complete(
             group_name=group_name,
             item_name=result.test_name,

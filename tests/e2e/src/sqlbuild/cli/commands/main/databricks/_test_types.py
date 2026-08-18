@@ -10,19 +10,6 @@ class DatabricksDltE2ETestCase:
 
 
 @dataclass(frozen=True)
-class DatabricksDependencyBaselineE2ETestCase:
-    description: str
-    schema_prefix: str
-    command: tuple[str, ...]
-    expected_stdout_fragments: tuple[str, ...]
-    expected_absent_stdout_fragments: tuple[str, ...]
-    expected_upstream_rows: tuple[tuple[object, ...], ...]
-    expected_downstream_rows: tuple[tuple[object, ...], ...]
-    expected_fingerprint_rows: tuple[tuple[object, ...], ...]
-    expected_return_code: int = 0
-
-
-@dataclass(frozen=True)
 class DatabricksCliTestCase:
     description: str
     command: tuple[str, ...]

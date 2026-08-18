@@ -63,8 +63,8 @@ from tests.unit.src.sqlbuild.cli.commands.main.init._test_types import InitScaff
                 "8. sqb build",
             ),
             expected_color_fragments=(
-                "\033[32m\033[1mSQLBuild project created\033[0m",
-                "  \033[34m\033[1mProject\033[0m: demo_project",
+                "\033[34m\033[1mSQLBuild project created\033[0m",
+                "  \033[34mProject\033[0m: demo_project",
                 "\033[1mNext steps\033[0m:",
                 "  7. \033[2msqb compile\033[0m",
             ),
@@ -107,8 +107,8 @@ def test_given_empty_directory_when_running_init_then_scaffolds_project_director
             expected_gitkeep_files=(),
             expected_config_fragment='name = "color_project"',
             expected_color_fragments=(
-                "\033[32m\033[1mSQLBuild project created\033[0m",
-                "  \033[34m\033[1mProject\033[0m: color_project",
+                "\033[34m\033[1mSQLBuild project created\033[0m",
+                "  \033[34mProject\033[0m: color_project",
                 "\033[1mNext steps\033[0m:",
                 "  7. \033[2msqb compile\033[0m",
             ),

@@ -15,15 +15,14 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
 )
 from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, RelationReusePlan
-from sqlbuild.compiler.planner.types import PlanReason, RelationReuseKind
+from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
+from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.main._execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import (
     MaterializationContext,
     MaterializationResult,
-    PrepareVersionContext,
 )
 from sqlbuild.executor.run._helpers.execution.final_audits import run_final_scope_audits
 from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks
@@ -31,7 +30,6 @@ from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
 )
-from sqlbuild.executor.run._helpers.reuse.core import read_current_reuse_origin_fingerprint
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.models import (
     CustomLifecyclePhaseOutcome,
@@ -57,7 +55,6 @@ def execute_custom_entry(
     target: str,
     effective_vars: dict[str, object],
     existing_relation: RelationInfo | None,
-    prepare_version_fn: Callable[[PrepareVersionContext], None] | None = None,
     on_progress: Callable[[str], None] | None = None,
 ) -> ModelExecutionResult:
     """Execute one model through the custom materialization lifecycle."""
@@ -95,17 +92,6 @@ def execute_custom_entry(
         config=dict(entry.custom_config),
         placeholders=dict(entry.custom_placeholders),
     )
-    prepare_version_exit: ModelExecutionResult | None = _prepare_custom_version(
-        context=context,
-        declared_columns=declared_columns,
-        prepare_version_fn=prepare_version_fn,
-        target=target,
-        effective_vars=effective_vars,
-        setup=setup,
-        state=state,
-    )
-    if prepare_version_exit is not None:
-        return prepare_version_exit
     materialization_outcome: CustomMaterializationPhaseOutcome = _run_custom_materialization(
         context=context,
         declared_columns=declared_columns,
@@ -184,81 +170,6 @@ def _run_custom_pre_hooks(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.PRE_HOOK,
-            error=str(exc),
-            warnings=state.warnings,
-            audit_results=state.audit_results,
-            statement_recorder=state.statement_recorder,
-            hook_results=state.hook_results,
-        )
-    return None
-
-
-def _prepare_custom_version(
-    *,
-    context: ModelMaterializationContext,
-    declared_columns: tuple[ColumnInfo, ...],
-    prepare_version_fn: Callable[[PrepareVersionContext], None] | None,
-    target: str,
-    effective_vars: dict[str, object],
-    setup: CustomMaterializationSetup,
-    state: CustomLifecycleState,
-) -> ModelExecutionResult | None:
-    entry: ModelPlanEntry = context.entry
-    relation_reuse: RelationReusePlan | None = entry.relation_reuse
-    if relation_reuse is None or relation_reuse.kind != RelationReuseKind.SEEDED_RELATION_REUSE:
-        return None
-    if prepare_version_fn is None:
-        return build_failed_result(
-            entry=entry,
-            phase=ExecutionPhase.CUSTOM_MATERIALIZATION,
-            error=(
-                f"custom materialization '{entry.custom_materialization_name}' cannot use "
-                "baseline reuse without prepare_version(ctx)"
-            ),
-            warnings=state.warnings,
-            audit_results=state.audit_results,
-            statement_recorder=state.statement_recorder,
-            hook_results=state.hook_results,
-        )
-    try:
-        read_current_reuse_origin_fingerprint(
-            adapter=context.adapter,
-            connection=context.connection,
-            model_name=entry.name,
-            expected_version_hash=entry.fingerprint_version_hash,
-            reuse_from_target_name=relation_reuse.reuse_from_target_name,
-            reuse_origin_fingerprint_database=relation_reuse.fingerprint_database,
-            reuse_origin_fingerprint_schema=relation_reuse.fingerprint_schema,
-        )
-        with diagnostics_context(sqlbuild_phase="prepare_version", sqlbuild_action_name="custom"):
-            invoke_with_providers(
-                function=prepare_version_fn,
-                context=PrepareVersionContext(
-                    adapter=context.adapter,
-                    connection=context.connection,
-                    origin_relation=resolve_relation_location_qualified_name(
-                        adapter=context.adapter,
-                        location=relation_reuse.origin,
-                    ),
-                    destination=setup.destination_qualified,
-                    destination_database=entry.destination.database,
-                    destination_schema=entry.destination.schema,
-                    destination_name=entry.destination.name,
-                    config=setup.config,
-                    placeholders=setup.placeholders,
-                    run_id=context.run_id,
-                    environment=context.effective_target_name or target,
-                    vars=effective_vars,
-                    unique_key=entry.unique_key,
-                    declared_columns=declared_columns,
-                    statement_recorder=state.statement_recorder,
-                ),
-                providers=context.providers,
-            )
-    except Exception as exc:
-        return build_failed_result(
-            entry=entry,
-            phase=ExecutionPhase.CUSTOM_MATERIALIZATION,
             error=str(exc),
             warnings=state.warnings,
             audit_results=state.audit_results,

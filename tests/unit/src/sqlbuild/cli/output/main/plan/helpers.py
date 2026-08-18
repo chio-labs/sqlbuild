@@ -15,14 +15,11 @@ from sqlbuild.compiler.planner.models import (
     CascadeResult,
     CursorBounds,
     CursorInputRelation,
-    DependencyBaselinePlanEntry,
-    ExistingDestinationInputPlanEntry,
     FunctionPlanEntry,
     ModelPlanEntry,
     PlanOutput,
     PlanProviderUsage,
     PlanWarning,
-    RelationReusePlan,
     SchemaFinding,
     SeedPlanEntry,
     SourceLoadPlanEntry,
@@ -32,7 +29,6 @@ from sqlbuild.compiler.planner.types import (
     MaterializationType,
     PlanAction,
     PlanReason,
-    RelationReuseKind,
     SchemaChangeKind,
     SchemaColumnSource,
     WarningSeverity,
@@ -71,7 +67,6 @@ def build_model_entry(
     schema_findings: tuple[SchemaFinding, ...] = (),
     cascade: CascadeResult | None = None,
     custom_materialization_name: str | None = None,
-    relation_reuse: RelationReusePlan | None = None,
 ) -> ModelPlanEntry:
     """Build a minimal ModelPlanEntry for formatter tests."""
 
@@ -111,38 +106,12 @@ def build_model_entry(
         backfill=BackfillResult(action=backfill_action, duration=backfill_duration),
         cascade=cascade,
         custom_materialization_name=custom_materialization_name,
-        relation_reuse=relation_reuse,
-    )
-
-
-def build_relation_reuse_plan(
-    *,
-    kind: RelationReuseKind = RelationReuseKind.COMPLETE_RELATION_REUSE,
-    reuse_from_target_name: str = "prod",
-    origin_schema: str = "prod",
-    origin_name: str = "orders",
-    hard_copy: bool = True,
-) -> RelationReusePlan:
-    return RelationReusePlan(
-        kind=kind,
-        origin=CompiledRelationLocation(
-            database=None,
-            schema=origin_schema,
-            name=origin_name,
-            qualified_name=f"{origin_schema}.{origin_name}",
-        ),
-        reuse_from_target_name=reuse_from_target_name,
-        hard_copy=hard_copy,
-        fingerprint_database=None,
-        fingerprint_schema=origin_schema,
     )
 
 
 def build_plan_output(
     *,
     model_entries: tuple[ModelPlanEntry, ...] = (),
-    dependency_baseline_entries: tuple[DependencyBaselinePlanEntry, ...] = (),
-    existing_destination_input_entries: tuple[ExistingDestinationInputPlanEntry, ...] = (),
     seed_entries: tuple[SeedPlanEntry, ...] = (),
     function_entries: tuple[FunctionPlanEntry, ...] = (),
     source_load_entries: tuple[SourceLoadPlanEntry, ...] = (),
@@ -158,8 +127,6 @@ def build_plan_output(
     return PlanOutput(
         execution_order=tuple(e.key for e in (*function_entries, *model_entries, *seed_entries)),
         model_entries=model_entries,
-        dependency_baseline_entries=dependency_baseline_entries,
-        existing_destination_input_entries=existing_destination_input_entries,
         seed_entries=seed_entries,
         function_entries=function_entries,
         source_load_entries=source_load_entries,
@@ -167,38 +134,6 @@ def build_plan_output(
         warnings=warnings,
         provider_usages=provider_usages,
         metadata=metadata or {},
-    )
-
-
-def build_dependency_baseline_entry(
-    *,
-    name: str = "upstream_orders",
-    relation_reuse: RelationReusePlan | None = None,
-) -> DependencyBaselinePlanEntry:
-    return DependencyBaselinePlanEntry(
-        name=name,
-        destination=CompiledRelationLocation(
-            database=None, schema="main", name=name, qualified_name=f"main.{name}"
-        ),
-        relation_reuse=relation_reuse
-        or build_relation_reuse_plan(origin_name=name, hard_copy=False),
-        fingerprint_version_hash="expected_hash",
-    )
-
-
-def build_existing_destination_input_entry(
-    *,
-    name: str = "upstream_orders",
-    status: str = "current",
-) -> ExistingDestinationInputPlanEntry:
-    return ExistingDestinationInputPlanEntry(
-        name=name,
-        destination=CompiledRelationLocation(
-            database=None, schema="main", name=name, qualified_name=f"main.{name}"
-        ),
-        status=status,
-        expected_version_hash="expected_hash",
-        destination_version_hash={"current": "expected_hash", "stale": "old_hash"}[status],
     )
 
 

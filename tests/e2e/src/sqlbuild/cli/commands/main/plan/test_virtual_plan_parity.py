@@ -31,19 +31,16 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             seed_matching_refs=True,
             command=("--no-color", "plan", "--changes-only"),
             expected_fragments=(
-                "Plan ready (2 selected)",
-                "Virtual environment",
-                "name: dev",
-                "status: working",
-                "stale models: 2",
-                "stale model set: fact_orders, stg_orders",
-                "stale roots: 1",
-                "stale root set: stg_orders",
+                "Plan ready  2 selected",
+                "Virtual environment  dev (working, build required)",
+                "Models needing build (2)",
+                "directly affected (1)  stg_orders",
+                "downstream affected (1)  fact_orders",
                 "Query changed (1)",
                 "stg_orders",
                 "Upstream changed (1)",
                 "fact_orders",
-                "cause: stg_orders (query changed)",
+                "cause  stg_orders (query changed)",
             ),
             unexpected_fragments=("dim_customers", "First run"),
         )
@@ -95,9 +92,9 @@ def test_given_virtual_plan_with_seeded_baseline_when_running_cli_then_it_uses_v
     [
         VirtualSourceFreshnessPlanE2ETestCase(
             description="virtual seed change selects seed and downstream model",
-            expected_unchanged_fragments=("Plan ready (0 selected)",),
+            expected_unchanged_fragments=("Plan ready  0 selected",),
             expected_fragments=(
-                "Plan ready (2 selected)",
+                "Plan ready  2 selected",
                 "fact_orders",
                 "order_amounts  (seed_changed)",
             ),
@@ -150,7 +147,7 @@ def test_given_virtual_seed_change_when_planning_changes_only_then_selects_depen
         project_dir=project_dir,
     )
     assert default_plan_result.returncode == 0, default_plan_result.stderr
-    assert "Plan ready (2 selected)" in default_plan_result.stdout
+    assert "Plan ready  2 selected" in default_plan_result.stdout
     assert "order_amounts" in default_plan_result.stdout
     assert "fact_orders" in default_plan_result.stdout
 
@@ -183,7 +180,7 @@ def test_given_virtual_seed_change_when_planning_changes_only_then_selects_depen
     [
         VirtualChangesOnlyCurrentSeedParityE2ETestCase(
             description="virtual changes-only plan matches build when a current seed is pruned",
-            expected_plan_selected_fragment="Plan ready (1 selected)",
+            expected_plan_selected_fragment="Plan ready  1 selected",
             expected_kept_model="fact_orders",
             expected_pruned_seed="order_amounts",
         )
@@ -236,7 +233,7 @@ def test_given_virtual_current_seed_when_planning_changes_only_then_matches_buil
     assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
     assert test_case.expected_plan_selected_fragment in plan_result.stdout
     assert test_case.expected_kept_model in plan_result.stdout
-    assert "Plan ready (0 selected)" not in plan_result.stdout
+    assert "Plan ready  0 selected" not in plan_result.stdout
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "build", "--changes-only"),
@@ -312,7 +309,7 @@ def test_given_detached_virtual_environment_when_planning_and_building_then_both
             description="new virtual environment inherits current baseline read only",
             expected_plan_exit_code=0,
             expected_build_exit_code=0,
-            expected_fragments=("Plan ready (0 selected)",),
+            expected_fragments=("Plan ready  0 selected",),
             unexpected_plan_fragments=("First run",),
         )
     ],
@@ -377,7 +374,7 @@ def test_given_new_virtual_environment_when_planning_then_inherits_baseline_with
             description="explicit model selection includes stale upstream seed",
             expected_plan_exit_code=0,
             expected_build_exit_code=0,
-            expected_fragments=("Plan ready (2 selected)", "order_amounts", "fact_orders"),
+            expected_fragments=("Plan ready  2 selected", "order_amounts", "fact_orders"),
         )
     ],
     ids=lambda case: case.description,

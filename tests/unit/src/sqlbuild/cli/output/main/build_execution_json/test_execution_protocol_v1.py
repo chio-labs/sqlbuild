@@ -8,7 +8,7 @@ import pytest
 
 from sqlbuild.cli.output.main._build_execution_json import format_build_execution_json
 from sqlbuild.compiler.auditing.types import AuditOutcome
-from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
+from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
 from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
@@ -24,7 +24,6 @@ from tests.unit.src.sqlbuild.cli.output.main.build_execution_json._test_types im
 from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
     build_model_entry,
     build_plan_output,
-    build_relation_reuse_plan,
     build_seed_entry,
 )
 
@@ -80,59 +79,6 @@ def test_given_build_result_with_python_nodes_when_formatting_json_then_includes
     assert assets[test_case.expected_asset_name]["kind"] == "asset"
     assert assets[test_case.expected_asset_name]["metadata"] == {"uri": "s3://orders"}
     assert assets[test_case.expected_asset_name]["materialized"] is False
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        ExecutionJsonRelationReuseTestCase(
-            description="build json includes relation reuse metadata",
-            expected_asset_name="orders",
-            expected_relation_reuse={
-                "kind": "complete_relation_reuse",
-                "reuse_from_target": "prod",
-                "origin_relation": "prod_marts.orders",
-                "hard_copy": True,
-            },
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_reused_model_when_formatting_build_json_then_includes_relation_reuse_metadata(
-    test_case: ExecutionJsonRelationReuseTestCase,
-) -> None:
-    result: str = format_build_execution_json(
-        result=BuildExecutionResult(
-            status=BuildStatus.SUCCESS,
-            model_results=(
-                ModelExecutionResult(
-                    model_name="orders",
-                    status=ExecutionStatus.SUCCESS,
-                    promoted_relation="dev.orders",
-                ),
-            ),
-        ),
-        plan=build_plan_output(
-            model_entries=(
-                build_model_entry(
-                    name="orders",
-                    action=PlanAction.CREATE_TABLE,
-                    reason=PlanReason.FIRST_RUN,
-                    materialization_type=MaterializationType.TABLE,
-                    relation_reuse=build_relation_reuse_plan(
-                        origin_schema="prod_marts",
-                        origin_name="orders",
-                        hard_copy=True,
-                    ),
-                ),
-            ),
-        ),
-    )
-    payload: dict[str, object] = json.loads(result)
-    assets: list[dict[str, object]] = payload["assets"]  # type: ignore[assignment]
-
-    assert assets[0]["name"] == test_case.expected_asset_name
-    assert assets[0]["relation_reuse"] == test_case.expected_relation_reuse
 
 
 @pytest.mark.parametrize(

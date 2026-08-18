@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditOutcome,
@@ -21,11 +19,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.compiler.node_source_watermarks.main.read import read_latest_node_source_watermarks
-from sqlbuild.compiler.node_source_watermarks.models import (
-    NodeSourceWatermarkIdentity,
-    NodeSourceWatermarkRecord,
-)
 from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
     PlanOutput,
@@ -43,42 +36,6 @@ from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SeedCsvSettings, SourceColumnEntry, SourceEntry
 from sqlbuild.spec.contracts.types import SourceWriteStrategy
-
-
-def node_source_hashes_by_name(
-    records: dict[str, NodeSourceWatermarkRecord], names: Collection[str]
-) -> dict[str, tuple[str, ...]]:
-    hashes_by_name: dict[str, tuple[str, ...]] = {}
-    for name in names:
-        hashes: list[str] = []
-        for entry in records[name].payload.sources:
-            hashes.append(entry.data_version_hash)
-        hashes_by_name[name] = tuple(hashes)
-    return hashes_by_name
-
-
-def node_source_kinds_by_name(
-    records: dict[str, NodeSourceWatermarkRecord], names: Collection[str]
-) -> dict[str, tuple[str, ...]]:
-    kinds_by_name: dict[str, tuple[str, ...]] = {}
-    for name in names:
-        kinds: list[str] = []
-        for entry in records[name].payload.sources:
-            kinds.append(entry.watermark_kind)
-        kinds_by_name[name] = tuple(kinds)
-    return kinds_by_name
-
-
-def node_source_unknown_reasons_by_name(
-    records: dict[str, NodeSourceWatermarkRecord], names: Collection[str]
-) -> dict[str, tuple[str, ...]]:
-    reasons_by_name: dict[str, tuple[str, ...]] = {}
-    for name in names:
-        reasons: list[str] = []
-        for entry in records[name].payload.unknown_sources:
-            reasons.append(entry.reason)
-        reasons_by_name[name] = tuple(reasons)
-    return reasons_by_name
 
 
 @dataclass(frozen=True)
@@ -193,25 +150,6 @@ def build_source_freshness_record(
         data_version_hash=data_hash,
         observed_at=datetime(2026, 6, 30, 12, 1),
     )
-
-
-def read_node_source_watermark_records(
-    *,
-    adapter: DuckDbAdapter,
-    connection: object,
-) -> dict[str, NodeSourceWatermarkRecord]:
-    records: dict[NodeSourceWatermarkIdentity, NodeSourceWatermarkRecord] = (
-        read_latest_node_source_watermarks(
-            connection=connection,
-            execute=adapter.execute,
-            table_exists=True,
-            database=None,
-            schema="main",
-            render_qualified_name=adapter.render_qualified_name,
-            render_read_latest_sql=adapter.render_read_latest_node_source_watermarks_sql,
-        ).records
-    )
-    return {identity.node_name: record for identity, record in records.items()}
 
 
 def build_seed_plan_entry(*, name: str) -> SeedPlanEntry:

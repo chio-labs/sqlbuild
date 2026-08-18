@@ -87,7 +87,6 @@ def compile_plan_pipeline(
             defer_sources_to=request.defer_sources_to,
             cursor_overrides=request.cursor_overrides,
             full_refresh=request.full_refresh,
-            changes_only=invocation.effective_changes_only,
             auto_load_sources=invocation.should_load_sources,
             select=request.select,
             exclude=request.exclude,

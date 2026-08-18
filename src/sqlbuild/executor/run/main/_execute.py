@@ -10,7 +10,6 @@ from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import CursorBounds, ModelPlanEntry
-from sqlbuild.compiler.planner.types import RelationReuseKind
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.models import AuditExecutionResult
@@ -38,9 +37,6 @@ from sqlbuild.executor.run._helpers.materializations.snapshot import (
 )
 from sqlbuild.executor.run._helpers.materializations.view import (
     execute_view_entry as execute_view_entry,
-)
-from sqlbuild.executor.run._helpers.reuse.core import (
-    create_relation_from_reuse_plan,
 )
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run._helpers.validation.contracts import validate_runtime_contract
@@ -439,32 +435,12 @@ def _direct_lifecycle(
 
     try:
         with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_table"):
-            if (
-                entry.relation_reuse is not None
-                and entry.relation_reuse.kind == RelationReuseKind.COMPLETE_RELATION_REUSE
-            ):
-                adapter.drop(
-                    connection=connection,
-                    destination=target_qualified,
-                    if_exists=True,
-                    statement_recorder=statement_recorder,
-                )
-                reuse_origin_fingerprint = create_relation_from_reuse_plan(
-                    adapter=adapter,
-                    connection=connection,
-                    model_name=entry.name,
-                    expected_version_hash=entry.fingerprint_version_hash,
-                    relation_reuse=entry.relation_reuse,
-                    destination_relation=target_qualified,
-                    statement_recorder=statement_recorder,
-                )
-            else:
-                adapter.create_table_as(
-                    connection=connection,
-                    destination=target_qualified,
-                    sql=state.resolved_sql,
-                    statement_recorder=statement_recorder,
-                )
+            adapter.create_table_as(
+                connection=connection,
+                destination=target_qualified,
+                sql=state.resolved_sql,
+                statement_recorder=statement_recorder,
+            )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
