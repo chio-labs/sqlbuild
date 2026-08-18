@@ -14,13 +14,8 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.node_source_watermarks.models import (
-    NodeSourceWatermarkIdentity,
-    NodeSourceWatermarkRecord,
-)
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
-    GraphChangesOnlyPropagationResult,
     GraphIdentityNode,
     GraphNodeKey,
     MissingUpstream,
@@ -159,60 +154,6 @@ class SelectionStalenessGraphWarningTestCase:
 
 
 @dataclass(frozen=True)
-class NodeSourceWatermarkWarningTestCase:
-    description: str
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
-    model_names: tuple[str, ...]
-    source_names: tuple[str, ...]
-    watermark_records: dict[NodeSourceWatermarkIdentity, NodeSourceWatermarkRecord]
-    expected_warning_fragments: tuple[str, ...]
-    expected_warning_count: int
-    unexpected_warning_fragments: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class StandardReuseFromTargetSnapshotTestCase:
-    description: str
-    fingerprint_rows: tuple[tuple[object, ...], ...]
-    existing_relations: frozenset[tuple[str | None, str | None, str]]
-    expected_target_name: str
-    expected_model_relation_exists: dict[str, bool]
-    expected_model_built_version_hashes: dict[str, str | None]
-    expected_model_fingerprint_schemas: dict[str, str] = field(default_factory=dict)
-    expected_model_fingerprint_databases: dict[str, str | None] = field(default_factory=dict)
-    expected_model_names: tuple[str, ...] = ()
-    selected_model_names: frozenset[str] | None = None
-
-
-@dataclass(frozen=True)
-class StandardReuseFromTargetSnapshotErrorTestCase:
-    description: str
-    fingerprint_table_exists: bool
-    expected_error_fragment: str
-    fingerprint_read_fails: bool = False
-
-
-@dataclass(frozen=True)
-class StandardReuseFromTargetMultiSchemaTestCase:
-    description: str
-    expected_origin_schemas: dict[str, str]
-    expected_origin_fingerprint_schemas: dict[str, str]
-    expected_origin_fingerprint_databases: dict[str, str | None]
-
-
-@dataclass(frozen=True)
-class StandardReuseFromTargetNoConfigTestCase:
-    description: str
-    expected_snapshot: object
-
-
-@dataclass(frozen=True)
-class StandardReuseDecisionTestCase:
-    description: str
-    expected_decisions: dict[str, str]
-
-
-@dataclass(frozen=True)
 class VersionStalenessTestCase:
     description: str
     model_names: tuple[str, ...]
@@ -245,21 +186,6 @@ class GraphIdentityWritePerfTestCase:
     description: str
     layer_count: int
     expected_max_seconds: float
-
-
-@dataclass(frozen=True)
-class GraphChangesOnlyPropagationTestCase:
-    description: str
-    upstream_deps: dict[GraphNodeKey, tuple[GraphNodeKey, ...]]
-    model_keys: frozenset[GraphNodeKey]
-    selected_model_keys: frozenset[GraphNodeKey]
-    current_model_keys: frozenset[GraphNodeKey]
-    run_model_keys: frozenset[GraphNodeKey]
-    version_mismatch_model_keys: frozenset[GraphNodeKey]
-    expected_result: GraphChangesOnlyPropagationResult
-    changed_seed_keys: frozenset[GraphNodeKey] = frozenset()
-    changed_source_keys: frozenset[GraphNodeKey] = frozenset()
-    blocked_source_keys: frozenset[GraphNodeKey] = frozenset()
 
 
 @dataclass(frozen=True)

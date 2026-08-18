@@ -46,7 +46,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
                 "Plan ready",
                 "dbt execution",
                 "SQLBuild execution",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
             ),
             expected_query_assertions=(
                 DbtExecutionQueryAssertion(
@@ -95,7 +95,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
                 "Plan ready",
                 "dbt execution",
                 "SQLBuild execution",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
             ),
             expected_query_assertions=(
                 DbtExecutionQueryAssertion(
@@ -127,7 +127,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             expected_stdout_fragments=(
                 "dbt execution",
                 "SQLBuild execution",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
             ),
             expected_query_assertions=(
                 DbtExecutionQueryAssertion(
@@ -193,7 +193,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
                 "--event-time-start 2025-12-31",
                 "--event-time-end 2026-01-02",
                 "SQLBuild execution",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
             ),
             expected_query_assertions=(
                 DbtExecutionQueryAssertion(
@@ -216,7 +216,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
                 "--full-refresh",
                 "event_time_orders",
                 "SQLBuild execution",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
             ),
             expected_query_assertions=(
                 DbtExecutionQueryAssertion(
@@ -237,7 +237,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             expected_stdout_fragments=(
                 "dbt execution",
                 "SQLBuild execution",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
             ),
             expected_query_assertions=(
                 DbtExecutionQueryAssertion(
@@ -268,7 +268,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             expected_stdout_fragments=(
                 "downstream_orders",
                 "downstream_orders",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
             ),
             expected_query_assertions=(
                 DbtExecutionQueryAssertion(
@@ -284,7 +284,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             command=("dbt", "build", "--select", "tag:sqb_only", "--exclude", "tag:deprecated"),
             expected_row_counts=(("local_only", 1),),
             unexpected_relations=("deprecated_orders",),
-            expected_stdout_fragments=("local_only", "Completed successfully."),
+            expected_stdout_fragments=("local_only", "\u2713 Completed successfully"),
             expected_query_assertions=(
                 DbtExecutionQueryAssertion(
                     description="exclude leaves local only row",
@@ -351,7 +351,7 @@ def test_given_dbt_interop_project_when_running_execution_command_then_outputs_e
             expected_stdout_fragments=(
                 "Skipping dbt: no dbt work selected.",
                 "SQLBuild execution",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
             ),
             expected_query_assertions=(
                 DbtExecutionQueryAssertion(

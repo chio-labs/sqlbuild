@@ -31,7 +31,7 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.scenario_output._test_types i
                 "orders_paid",
                 "\033[32mPASS\033[0m",
                 "expected fact_orders",
-                "\033[31mFAIL\033[0m  2 mismatched",
+                "\033[38;5;167mFAIL\033[0m  2 mismatched",
             ),
         ),
         ScenarioRunOutputTestCase(
@@ -79,7 +79,7 @@ def test_given_scenario_result_when_writing_output_then_styles_statuses(
                 "orders_paid",
                 "\033[32mPASS\033[0m",
                 "source   raw__orders",
-                "\033[31mFAIL\033[0m  4 rows, 128 B",
+                "\033[38;5;167mFAIL\033[0m  4 rows, 128 B",
             ),
         ),
         ScenarioCaptureOutputTestCase(

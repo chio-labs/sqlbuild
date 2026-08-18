@@ -39,7 +39,7 @@ sqb lineage fact_orders
 - DuckDB-backed local execution
 - SQL models across staging, intermediate, and mart layers
 - Seeds, expression-backed sources, and Python source loaders
-- SQL unit tests and chain tests
+- SQL unit tests and multi-model tests
 - Built-in and custom audits
 - SQL functions
 - Macros and custom materialization hooks

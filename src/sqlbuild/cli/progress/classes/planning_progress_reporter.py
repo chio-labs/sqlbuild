@@ -40,6 +40,12 @@ class PlanningProgressReporter:
         self._status.complete(message=message)
         self._active = False
 
+    def complete_styled(self, message: str) -> None:
+        """Complete with a pre-styled message written verbatim."""
+
+        self._status.complete_styled(message=message)
+        self._active = False
+
     def finish(self, *, blank_line_after: bool = False) -> None:
         self._status.close()
         self._active = False

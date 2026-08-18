@@ -31,9 +31,9 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.diff._test_types import (
                 "working VDEs            yes (partial allowed)",
             ),
             expected_color_fragments=(
-                "\033[32m\033[1mVirtual diff\033[0m",
-                "\033[34m\033[1mdev\033[0m -> \033[34m\033[1mpr\033[0m",
-                "selected models         \033[34m\033[1m3\033[0m",
+                "\033[34m\033[1mVirtual diff\033[0m",
+                "dev -> pr",
+                "selected models         \033[34m3\033[0m",
                 "unchanged refs skipped  \033[2m1\033[0m",
                 "working VDEs            \033[33m\033[1myes\033[0m\033[2m (partial allowed)\033[0m",
             ),

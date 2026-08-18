@@ -8,101 +8,13 @@ import subprocess
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from shutil import copytree
-from typing import Any, Protocol
+from typing import Any
 
 REPO_ROOT: Path = Path(__file__).resolve().parents[7]
 WAFFLE_SHOP_DIR: Path = REPO_ROOT / "tests" / "e2e" / "fixtures" / "waffle_shop"
 SOURCE_LOADER_STRATEGIES_DIR: Path = (
     REPO_ROOT / "tests" / "e2e" / "fixtures" / "source_loader_strategies"
 )
-
-
-class RealAdapterDependencyBaselineCase(Protocol):
-    description: str
-    schema_prefix: str
-    command: tuple[str, ...]
-    expected_stdout_fragments: tuple[str, ...]
-    expected_absent_stdout_fragments: tuple[str, ...]
-    expected_upstream_rows: tuple[tuple[object, ...], ...]
-    expected_downstream_rows: tuple[tuple[object, ...], ...]
-    expected_fingerprint_rows: tuple[tuple[object, ...], ...]
-    expected_return_code: int
-
-
-def assert_real_adapter_dependency_baseline_case(
-    *,
-    tmp_path: Path,
-    test_case: RealAdapterDependencyBaselineCase,
-    project_name: str,
-    dev_schema_name: str,
-    prod_schema_name: str,
-    project_toml: str,
-    ensure_schema_ready: Callable[[str], None],
-    cleanup_schema: Callable[[str], None],
-    fetch_rows: Callable[[str], tuple[tuple[object, ...], ...]],
-    relation_name: Callable[[str, str], str],
-) -> None:
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name=project_name,
-        repo_files={
-            "sqlbuild_project.toml": project_toml,
-            "models/upstream.sql": (
-                "MODEL (materialized table);\n\nSELECT 1 AS id, 900 AS amount\n"
-            ),
-            "models/downstream.sql": (
-                "MODEL (materialized table);\n\n"
-                'SELECT id, amount AS downstream_amount FROM __ref("upstream")\n'
-            ),
-        },
-    )
-    try:
-        ensure_schema_ready(dev_schema_name)
-        ensure_schema_ready(prod_schema_name)
-        (project_dir / "sqlbuild_local.toml").write_text('target = "prod"\n', encoding="utf-8")
-        prod_result: subprocess.CompletedProcess[str] = run_sqb(
-            command=("--no-color", "build", "--select", "upstream"),
-            project_dir=project_dir,
-        )
-        assert prod_result.returncode == 0, prod_result.stdout + prod_result.stderr
-        (project_dir / "sqlbuild_local.toml").write_text('target = "dev"\n', encoding="utf-8")
-
-        result: subprocess.CompletedProcess[str] = run_sqb(
-            command=test_case.command,
-            project_dir=project_dir,
-        )
-
-        assert result.returncode == test_case.expected_return_code, result.stdout + result.stderr
-        expected_fragment: str
-        for expected_fragment in test_case.expected_stdout_fragments:
-            assert expected_fragment in result.stdout
-        absent_fragment: str
-        for absent_fragment in test_case.expected_absent_stdout_fragments:
-            assert absent_fragment not in result.stdout
-        assert (
-            fetch_rows(
-                f"SELECT id, amount FROM {relation_name(dev_schema_name, 'upstream')} ORDER BY id"
-            )
-            == test_case.expected_upstream_rows
-        )
-        assert (
-            fetch_rows(
-                "SELECT id, downstream_amount FROM "
-                f"{relation_name(dev_schema_name, 'downstream')} ORDER BY id"
-            )
-            == test_case.expected_downstream_rows
-        )
-        assert (
-            fetch_rows(
-                "SELECT node_type, node_name FROM "
-                f"{relation_name(dev_schema_name, '_sqlbuild_fingerprints')} "
-                "WHERE node_type = 'model' ORDER BY node_name"
-            )
-            == test_case.expected_fingerprint_rows
-        )
-    finally:
-        cleanup_schema(dev_schema_name)
-        cleanup_schema(prod_schema_name)
 
 
 def prepare_waffle_shop(tmp_path: Path) -> Path:
@@ -175,28 +87,7 @@ def prepare_dbt_profile_workspace(*, tmp_path: Path, profiles_yml: str) -> Path:
     )
     (profiles_dir / "profiles.yml").write_text(profiles_yml, encoding="utf-8")
     write_dbt_profile_orders_model(workspace=workspace, order_id=1)
-    _init_workspace_git_repo(workspace=workspace, production_ref="main")
     return workspace
-
-
-def _init_workspace_git_repo(*, workspace: Path, production_ref: str) -> None:
-    """Initialize a git repo with a committed production ref on a side branch.
-
-    dbt reuse_from (scaffolded by sqb dbt init) archives the configured git_ref to
-    plan dependency-baseline reuse, so the dbt project must be committed under a ref
-    that is not the active branch.
-    """
-
-    def run_git(*args: str) -> None:
-        subprocess.run(("git", *args), cwd=workspace, capture_output=True, check=True, text=True)
-
-    run_git("init")
-    run_git("config", "user.email", "sqlbuild@example.invalid")
-    run_git("config", "user.name", "SQLBuild Test")
-    run_git("checkout", "-b", "work")
-    run_git("add", ".")
-    run_git("commit", "-m", "baseline")
-    run_git("branch", production_ref)
 
 
 def write_dbt_profile_orders_model(*, workspace: Path, order_id: int) -> None:

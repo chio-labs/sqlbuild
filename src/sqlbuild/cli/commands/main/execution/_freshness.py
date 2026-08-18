@@ -35,6 +35,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
+from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
@@ -131,9 +132,21 @@ def run_freshness(request: FreshnessCommandRequest) -> int:
                 json_output=False,
                 json_output_path=request.json_output_path,
             )
-        sys.stdout.write(format_freshness_text(result))
+        sys.stdout.write(
+            _format_freshness_for_terminal(
+                result=result,
+                no_color=request.no_color,
+            )
+        )
     if request.fail_on_stale and (
         result.changed_count or result.unknown_count or result.error_count
     ):
         return 1
     return 1 if request.fail_on_error and (result.unknown_count or result.error_count) else 0
+
+
+def _format_freshness_for_terminal(*, result: FreshnessCommandResult, no_color: bool) -> str:
+    return format_freshness_text(
+        result=result,
+        use_color=not no_color and supports_color(),
+    )

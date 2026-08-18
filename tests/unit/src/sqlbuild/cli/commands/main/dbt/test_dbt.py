@@ -120,13 +120,6 @@ def test_given_dbt_plan_when_running_then_writes_progress_to_expected_stream(
             expected_forwarded_args=("--select", "tag:nightly"),
             expected_progress_stream=sys.stdout,
         ),
-        DbtExecutionWrapperTestCase(
-            description="dbt test strips local json and verbose flags before execution",
-            command_name="test",
-            args=("--json", "--verbose", "--select", "test_type:data"),
-            expected_forwarded_args=("--select", "test_type:data"),
-            expected_progress_stream=sys.stderr,
-        ),
     ],
     ids=lambda case: case.description,
 )
@@ -311,8 +304,6 @@ def test_given_existing_sqlbuild_project_when_running_dbt_command_then_uses_expe
             output_dir=output_dir,
             project_file=output_dir / "sqlbuild_project.toml",
             project_name="demo",
-            macro_file=output_dir / "dbt" / "macros" / "generate_schema_name.sql",
-            production_git_ref=request.production_git_ref,
             adapter="duckdb",
             target_name=request.target_name or "dev",
             profile_name="demo",
@@ -401,8 +392,6 @@ def test_given_missing_sqlbuild_twin_when_running_dbt_command_then_initializes_a
             output_dir=output_dir,
             project_file=output_dir / "sqlbuild_project.toml",
             project_name="demo",
-            macro_file=output_dir / "dbt" / "macros" / "generate_schema_name.sql",
-            production_git_ref=request.production_git_ref,
             adapter="duckdb",
             target_name=request.target_name or "dev",
             profile_name="demo",
@@ -442,8 +431,7 @@ def test_given_missing_sqlbuild_twin_when_running_dbt_command_then_initializes_a
     captured: CaptureResult[str] = capsys.readouterr()
     assert "Inspecting dbt project and profile..." in captured.err
     assert "SQLBuild dbt setup created" in captured.err
-    assert "Production schema macro" in captured.err
-    assert "not your dbt project" in captured.err
+    assert "twin config" in captured.err
     assert "Inspecting dbt project and profile..." not in captured.out
     assert forwarded_project_dirs[0].name == test_case.expected_forwarded_project_dir_name
     assert Path(forwarded_args[0][forwarded_args[0].index("--project-dir") + 1]).is_absolute()
@@ -458,4 +446,3 @@ def test_given_missing_sqlbuild_twin_when_running_dbt_command_then_initializes_a
     assert request.sqb_output_dir is not None
     assert request.sqb_output_dir.name == "sqlbuild_project"
     assert request.skip_dbt_debug is True
-    assert request.production_git_ref == "main"

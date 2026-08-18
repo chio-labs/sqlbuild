@@ -14,30 +14,18 @@ All state is persisted as append-only tables in the warehouse alongside your dat
 
 ## Key features
 
-- **Test your logic, not just your columns.** Chained SQL unit tests resolve every intermediate model from its real SQL, plus end-to-end scenarios with local DuckDB replay for fast CI with no warehouse. Catch wrong logic before it ships, not just nulls.
+- **Test your logic, not just your columns.** Multi-model SQL tests resolve every intermediate model from its real SQL, plus end-to-end scenarios with local DuckDB replay for fast CI with no warehouse. Catch wrong logic before it ships, not just nulls.
 - **Verify early.** Define models as SQL files with `MODEL()` headers. SQLBuild resolves references, validates SQL, infers columns, checks contracts, and computes column lineage before anything runs, all offline. It fails at compile, not halfway through a warehouse run.
 - **Fast and open static analysis.** SQL parsing, validation, column inference, lineage, and transpilation run on [Polyglot](https://github.com/tobilg/polyglot), a Rust SQL engine (MIT, 32+ dialects), so compile stays fast on large projects. The analysis is part of the Apache-2.0 core: no proprietary engine, no login, no paid tier.
 - **Audits that block bad data.** Audits run before data reaches the target table. Full table builds materialize into a staging table and only promote if audits pass; incremental models validate each batch before DML.
 - **Deploy reversibly (opt-in).** Virtual environments add instant low-copy branching, partial promotion, rollback, checkpoints, and reconciliation. Opt-in, not a tax you pay upfront.
-- **Opt-in change-aware execution.** Models, seeds, UDFs, and Python nodes are fingerprinted, and source freshness is tracked. Commands run the selected work by default; pass `--changes-only` or set `changes_only = true` to skip work that is already current.
-- **Works with your existing dbt project.** Point SQLBuild at a dbt project and run ordinary dbt selections alongside SQLBuild models. It reads the manifest and drives the `dbt` CLI as a subprocess; it never edits your dbt files. dbt-native `--state` and `--defer` remain available, while `sqb dbt clone` and `sqb dbt diff` work against a production-shaped git ref. See [dbt compatibility](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
+- **Opt-in change-aware execution.** Models, seeds, UDFs, and Python nodes are fingerprinted, and source freshness is tracked. In virtual environments, pass `--changes-only` or set `changes_only = true` to skip work that is already current; commands otherwise run the full selected scope.
+- **Works with your existing dbt project.** Point SQLBuild at a dbt project and run ordinary dbt selections alongside SQLBuild models. It reads the manifest and drives the `dbt` CLI as a subprocess; it never edits your dbt files. dbt-native `--state` and `--defer` remain available for production-shaped, state-aware selections. See [dbt compatibility](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
 - **Warehouse-native state.** All change-tracking state lives in append-only tables (`_sqlbuild_fingerprints`, `_sqlbuild_source_freshness`, `_sqlbuild_node_results`) in your warehouse schemas. No external state machine, no corruption risk.
 - **Cursor-based incremental processing.** Automatic gap detection and resume, with microbatch mode for large ranges. No external checkpoint to maintain.
 - **Ingestion and Python nodes.** Load external data with Python `@loader` functions, and run `@task`, `@asset`, and `@check` nodes as first-class members of the same DAG as your SQL models.
 
 See the [documentation](https://docs.sqlbuild.com) for the full feature set, including providers, lifecycle hooks, Python macros, UDFs, custom materializations, data diffs, zero-copy cloning, and virtual environments.
-
-Enable change-aware execution for individual commands with `--changes-only`, for a project with `[settings]`, or for one target:
-
-```toml
-[settings]
-changes_only = true
-
-[targets.dev]
-changes_only = true
-```
-
-The CLI flag takes precedence, followed by the selected target, explicit local settings, and project settings. For native `plan` and `build` execution, the full selected scope runs when no configuration source enables changes-only mode; the former execution `--force` option is no longer used.
 
 ## Works with your existing dbt project
 
@@ -53,7 +41,7 @@ SQLBuild preserves dbt-native state and defer arguments when you need dbt's own 
 sqb dbt build --state path/to/state --defer --select state:modified+
 ```
 
-Ordinary `sqb dbt plan`, `run`, `build`, and `test` commands do not fingerprint dbt models, inspect production state, or clone deferred relations automatically. Use `sqb dbt clone` and `sqb dbt diff` explicitly for production-shaped comparisons. See [dbt compatibility](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
+Ordinary `sqb dbt plan`, `run`, and `build` commands do not fingerprint dbt models or inspect production state automatically. Use dbt-native `--state`/`--defer` for production-shaped comparisons. See [dbt compatibility](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
 
 ## Quick start
 

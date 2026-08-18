@@ -25,7 +25,7 @@ from sqlbuild.executor.build.models import (
     NodeCompletion,
     SeedExecutionResult,
 )
-from sqlbuild.executor.custom.models import MaterializationResult, PrepareVersionContext
+from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.main._execute import (
     execute_custom_entry,
@@ -75,8 +75,6 @@ def _dispatch_model(
     snapshots: SnapshotsConfig,
     allow_snapshot_schema_change: bool,
     custom_materializations: Mapping[str, Callable[..., MaterializationResult]] | None = None,
-    custom_prepare_version_functions: Mapping[str, Callable[[PrepareVersionContext], None]]
-    | None = None,
     target: str = "",
     effective_vars: dict[str, object] | None = None,
     warehouse_relations: dict[str, RelationInfo] | None = None,
@@ -96,9 +94,6 @@ def _dispatch_model(
     if entry.action == PlanAction.CUSTOM:
         mat_name: str | None = entry.custom_materialization_name
         registry: Mapping[str, Callable[..., MaterializationResult]] = custom_materializations or {}
-        prepare_registry: Mapping[str, Callable[[PrepareVersionContext], None]] = (
-            custom_prepare_version_functions or {}
-        )
         if mat_name is None or mat_name not in registry:
             return ModelExecutionResult(
                 model_name=entry.name,
@@ -111,7 +106,6 @@ def _dispatch_model(
             context=context,
             declared_columns=entry.declared_columns,
             materialize_fn=registry[mat_name],
-            prepare_version_fn=prepare_registry.get(mat_name),
             target=target,
             effective_vars=effective_vars or {},
             existing_relation=existing,

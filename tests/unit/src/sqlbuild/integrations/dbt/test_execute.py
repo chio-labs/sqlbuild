@@ -12,7 +12,6 @@ from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt._helpers.pipeline import execute as dbt_execute_module
 from sqlbuild.integrations.dbt._helpers.pipeline import execution_phases as phases_module
-from sqlbuild.integrations.dbt._helpers.pipeline import interop_prologue as prologue_module
 from sqlbuild.integrations.dbt._helpers.pipeline.execute import (
     build_failed_sqlbuild_model_names,
     build_merged_dbt_execution_argv,
@@ -43,7 +42,6 @@ from sqlbuild.integrations.dbt.types import (
     DbtInteropCommand,
 )
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
-    DbtArgvTestCase,
     DbtCompileFullRefreshPipelineTestCase,
     DbtExecutionSelectionStatusTestCase,
     DbtExecutionSummaryFooterTestCase,
@@ -62,7 +60,7 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import CompileOnlyDbtRunne
     ],
     ids=lambda case: case.description,
 )
-def test_given_ordinary_plan_when_compiling_then_never_compiles_production_ref(
+def test_given_ordinary_plan_when_compiling_then_uses_single_current_compile(
     test_case: DbtCompileFullRefreshPipelineTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -110,11 +108,6 @@ def test_given_ordinary_plan_when_compiling_then_never_compiles_production_ref(
         ),
     )
     monkeypatch.setattr(plan_module, "attach_sqlbuild_plan_output", lambda **kwargs: plan)
-    monkeypatch.setattr(
-        prologue_module,
-        "compile_production_ref_manifest",
-        lambda **kwargs: pytest.fail("ordinary plan compiled production_ref"),
-    )
 
     result: DbtInteropPlan = plan_module.plan_dbt_interop_from_project(
         project_dir=Path("/project"),
@@ -139,15 +132,10 @@ def test_given_ordinary_plan_when_compiling_then_never_compiles_production_ref(
             command="build",
             expected_full_refresh_values=(False,),
         ),
-        DbtCompileFullRefreshPipelineTestCase(
-            description="test keeps intentional full refresh current compile",
-            command="test",
-            expected_full_refresh_values=(True,),
-        ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_ordinary_execution_when_compiling_then_never_uses_production_ref_or_dbt_state(
+def test_given_ordinary_execution_when_compiling_then_never_uses_dbt_state(
     test_case: DbtCompileFullRefreshPipelineTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -217,11 +205,6 @@ def test_given_ordinary_execution_when_compiling_then_never_uses_production_ref_
         lambda **kwargs: None,
     )
     monkeypatch.setattr(execute_module, "write_sqlbuild_skip_notice", lambda **kwargs: None)
-    monkeypatch.setattr(
-        prologue_module,
-        "compile_production_ref_manifest",
-        lambda **kwargs: pytest.fail("ordinary execution compiled production_ref"),
-    )
 
     result: int = execute_module.execute_dbt_interop_from_project(
         DbtInteropExecutionRequest(command=command, project_dir=Path("/project"), args=())
@@ -270,13 +253,6 @@ def test_given_ordinary_dbt_events_when_executing_then_no_fingerprint_or_waterma
         request=DbtInteropExecutionRequest(command=command, project_dir=Path("/project"), args=()),
         invocation=invocation,
         merged_dbt_argv=("dbt", "run"),
-        plan=build_dbt_interop_plan(
-            command=command,
-            dbt_command_argv=("dbt", "run"),
-            dbt_ls_nodes=(),
-            sqlbuild_command_argvs=(),
-            selection=DbtInteropSelectionResult(),
-        ),
     )
 
     assert result.returncode == 0
@@ -441,61 +417,6 @@ def test_given_dbt_native_state_when_building_execution_argv_then_preserves_nati
         selector,
         "fqn:analytics.required",
     )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DbtArgvTestCase(
-            description="dbt test executes the exact tests selected during planning",
-            select=("fact_orders",),
-            exclude=(),
-            resource_types=("model", "test", "unit_test"),
-            expected_argv=(
-                "dbt",
-                "test",
-                "--project-dir",
-                "/dbt",
-                "--select",
-                "fqn:analytics.not_null_fact_orders_order_id",
-                "fqn:analytics.fact_orders_unit",
-            ),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_planned_dbt_tests_when_building_execution_argv_then_replaces_model_selector(
-    test_case: DbtArgvTestCase,
-) -> None:
-    nodes: tuple[DbtLsNode, ...] = tuple(
-        DbtLsNode(
-            unique_id=f"{resource_type}.analytics.{name}",
-            resource_type=resource_type,
-            name=name,
-            fqn=("analytics", name),
-        )
-        for resource_type, name in zip(
-            test_case.resource_types,
-            ("fact_orders", "not_null_fact_orders_order_id", "fact_orders_unit"),
-            strict=True,
-        )
-    )
-    plan: DbtInteropPlan = build_dbt_interop_plan(
-        command=DbtInteropCommand.TEST,
-        dbt_command_argv=("dbt", "ls"),
-        dbt_ls_nodes=nodes,
-        sqlbuild_command_argvs=(),
-        selection=DbtInteropSelectionResult(),
-    )
-
-    result: tuple[str, ...] | None = build_merged_dbt_execution_argv(
-        command=DbtInteropCommand.TEST,
-        options=DbtCliOptions(project_dir=Path("/dbt")),
-        routed_args=("--select", *test_case.select),
-        plan=plan,
-    )
-
-    assert result == test_case.expected_argv
 
 
 @pytest.mark.parametrize(

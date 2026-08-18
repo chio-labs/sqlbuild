@@ -67,10 +67,10 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.debug._test_types import (
             ),
             expected_json_fragment='"success": false',
             expected_color_fragments=(
-                "\033[32m\033[1mSQLBuild Diagnostics\033[0m",
+                "\033[34m\033[1mSQLBuild Diagnostics\033[0m",
                 "\033[1mRuntime:\033[0m",
                 "\033[32m[OK found and valid]\033[0m",
-                "\033[31m[ERROR authentication failed]\033[0m",
+                "\033[38;5;167m[ERROR authentication failed]\033[0m",
                 "\033[2m[SKIP connection failed]\033[0m",
             ),
         )

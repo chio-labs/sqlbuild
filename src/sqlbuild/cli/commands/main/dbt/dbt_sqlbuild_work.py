@@ -4,13 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.cli.commands._helpers.dbt.sqlbuild_work import (
-    execute_sqlbuild_build_work,
-    execute_sqlbuild_test_work,
-)
+from sqlbuild.cli.commands._helpers.dbt.sqlbuild_work import execute_sqlbuild_build_work
 from sqlbuild.cli.commands.models import DbtSqlbuildWorkContext
 from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSqlbuildTestAction
+from sqlbuild.integrations.dbt.types import DbtInteropCommand
 
 
 def execute_dbt_sqlbuild_work(
@@ -21,12 +18,9 @@ def execute_dbt_sqlbuild_work(
     project_dir: Path,
     fail_fast: bool,
     verbose: bool,
-    actions: tuple[DbtInteropSqlbuildTestAction, ...],
 ) -> int:
-    """Execute SQLBuild work selected by a dbt interop command."""
+    """Execute SQLBuild build work selected by a dbt interop command."""
 
-    if command == DbtInteropCommand.TEST:
-        return execute_sqlbuild_test_work(context=context, actions=actions)
     return execute_sqlbuild_build_work(
         context=context,
         command=command,

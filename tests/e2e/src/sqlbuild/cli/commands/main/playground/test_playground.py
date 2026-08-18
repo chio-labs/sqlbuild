@@ -7,11 +7,7 @@ import pytest
 
 from sqlbuild.cli.commands.main.workspace._playground import run_playground
 from sqlbuild.cli.commands.models import PlaygroundCommandRequest
-from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
-    skip_unless_dbt_is_runnable,
-)
 from tests.e2e.src.sqlbuild.cli.commands.main.playground._test_types import (
-    DbtPlaygroundLifecycleTestCase,
     PythonNodesPlaygroundLifecycleTestCase,
     VirtualPlaygroundLifecycleTestCase,
 )
@@ -28,10 +24,10 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
                 "Virtual State Initialized",
                 "Seeds (1)",
                 "waffle_price_tiers",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
             ),
             expected_test_fragments=(
-                "Test (1 selected",
+                "Test ready  1 selected",
                 "test_fact_waffle_orders",
                 "PASS=1",
             ),
@@ -49,14 +45,14 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
             expected_branch_fragments=(
                 "Virtual environment",
                 "name: pr",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
             ),
             expected_diff_fragments=(
                 "Virtual diff",
                 "No schema differences",
             ),
             expected_promote_fragments=(
-                "Virtual promotion complete",
+                "\u2713 Virtual promotion complete",
                 "pr -> dev",
             ),
         )
@@ -161,7 +157,7 @@ def test_given_virtual_playground_when_running_lifecycle_then_it_succeeds(
                 "raw_orders",
                 "fact_orders",
                 "orders_export",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
             ),
             expected_check_fragments=(
                 "check_orders_export",
@@ -226,73 +222,3 @@ def test_given_python_nodes_playground_when_running_lifecycle_then_it_succeeds(
     assert check_result.returncode == 0
     for expected_fragment in test_case.expected_check_fragments:
         assert expected_fragment in check_output
-
-
-@pytest.mark.dbt
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DbtPlaygroundLifecycleTestCase(
-            description="dbt playground runs ordinary dbt work on consecutive builds",
-            project_name="dbt_playground_lifecycle",
-            expected_first_build_fragments=(
-                "dbt build",
-                "model     stg_orders",
-                "model     fct_orders",
-            ),
-            expected_second_build_fragments=(
-                "dbt build",
-                "model     stg_orders",
-                "model     fct_orders",
-            ),
-            expected_second_build_absent_fragments=(
-                "Compiling dbt production ref",
-                "dbt defer clone",
-                "dbt fingerprint",
-            ),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_dbt_playground_when_building_twice_then_runs_ordinary_dbt_each_time(
-    test_case: DbtPlaygroundLifecycleTestCase,
-    tmp_path: Path,
-) -> None:
-    skip_unless_dbt_is_runnable()
-    assert (
-        run_playground(
-            PlaygroundCommandRequest(
-                project_dir=tmp_path, target_path=test_case.project_name, template="dbt"
-            )
-        )
-        == 0
-    )
-    workspace: Path = tmp_path / test_case.project_name
-
-    init_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("dbt", "init", "--project-dir", "dbt_project", "--profiles-dir", "profiles"),
-        project_dir=workspace,
-    )
-    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
-
-    sqlbuild_project_dir: Path = workspace / "sqlbuild_project"
-    first_build: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "dbt", "build"),
-        project_dir=sqlbuild_project_dir,
-    )
-    assert first_build.returncode == 0, first_build.stdout + first_build.stderr
-    first_output: str = first_build.stdout + first_build.stderr
-    fragment: str
-    for fragment in test_case.expected_first_build_fragments:
-        assert fragment in first_output
-
-    second_build: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "dbt", "build"),
-        project_dir=sqlbuild_project_dir,
-    )
-    assert second_build.returncode == 0, second_build.stdout + second_build.stderr
-    second_output: str = second_build.stdout + second_build.stderr
-    for fragment in test_case.expected_second_build_fragments:
-        assert fragment in second_output
-    for fragment in test_case.expected_second_build_absent_fragments:
-        assert fragment not in second_output

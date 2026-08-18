@@ -14,11 +14,7 @@ from sqlbuild.cli.commands.constants import (
     DBT_JSON_OUTPUT_OPTION,
     DBT_VERBOSE_OPTIONS,
 )
-from sqlbuild.cli.commands.main.dbt._dbt_clone import run_dbt_clone_command
 from sqlbuild.cli.commands.main.dbt._dbt_debug import run_dbt_debug_command
-from sqlbuild.cli.commands.main.dbt._dbt_diff import run_dbt_diff_command
-from sqlbuild.cli.commands.main.dbt._dbt_lineage import run_dbt_lineage_command
-from sqlbuild.cli.commands.main.dbt._dbt_scenario import run_dbt_scenario_command
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.integrations.dbt.main.cli.validate_execution_args import validate_dbt_execution_args
 from sqlbuild.integrations.dbt.main.pipeline.execute import execute_dbt_interop_from_project
@@ -51,22 +47,6 @@ def run_dbt_command(
         )
     if command == DbtInteropCommand.DEBUG:
         return run_dbt_debug_command(
-            project_dir=effective_project_dir, args=forwarded_args, no_color=no_color
-        )
-    if command == DbtInteropCommand.LINEAGE:
-        return run_dbt_lineage_command(
-            project_dir=effective_project_dir, args=forwarded_args, no_color=no_color
-        )
-    if command == DbtInteropCommand.DIFF:
-        return run_dbt_diff_command(
-            project_dir=effective_project_dir, args=forwarded_args, no_color=no_color
-        )
-    if command == DbtInteropCommand.CLONE:
-        return run_dbt_clone_command(
-            project_dir=effective_project_dir, args=forwarded_args, no_color=no_color
-        )
-    if command == DbtInteropCommand.SCENARIO:
-        return run_dbt_scenario_command(
             project_dir=effective_project_dir, args=forwarded_args, no_color=no_color
         )
     return _run_dbt_execution_command(

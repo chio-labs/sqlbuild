@@ -68,6 +68,15 @@ class TransientStatusReporter:
             self._stream.write("\n")
             self._stream.flush()
 
+    def complete_styled(self, *, message: str, blank_line_after: bool = False) -> None:
+        """Complete with a pre-styled message written verbatim."""
+
+        self.close()
+        self._stream.write(f"{message}\n")
+        if blank_line_after:
+            self._stream.write("\n")
+        self._stream.flush()
+
     def error(self, message: str) -> None:
         self.close()
         self._write_message(message=message, dim_output=False)

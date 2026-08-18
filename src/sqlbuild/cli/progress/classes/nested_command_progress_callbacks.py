@@ -7,7 +7,9 @@ from typing import TextIO
 
 from sqlbuild.cli.progress.models import NestedProgressChildRow
 from sqlbuild.presentation.classes.cli_style import CliStyle
-from sqlbuild.presentation.main.coded_error_text import format_coded_error
+from sqlbuild.presentation.main.inline_error_lines import format_inline_error_lines
+from sqlbuild.presentation.main.terminal_columns import terminal_columns
+from sqlbuild.presentation.main.tree_connector import tree_connector
 
 _LABEL_WIDTH: int = 10
 _NAME_WIDTH: int = 50
@@ -97,22 +99,45 @@ class NestedCommandProgressCallbacks:
             f"    {self._label:<{_LABEL_WIDTH}}{item_name:<{self._name_width}} {status}{detail}\n"
         )
         child_row: NestedProgressChildRow
-        for child_row in child_rows:
+        for index, child_row in enumerate(child_rows):
             child_status: str = self._style.status(status=child_row.status_text)
+            last: bool = index == len(child_rows) - 1 and error_message is None
+            connector: str = tree_connector(style=self._style, last=last)
             self._stream.write(
-                f"      {child_row.label:<{_LABEL_WIDTH - 2}}"
+                f"      {connector} {child_row.label:<{_LABEL_WIDTH - 2}}"
                 f"{child_row.name:<{self._name_width}} "
                 f"{child_status}{child_row.detail}\n"
             )
         if error_message is not None:
-            rendered_error: str = _format_nested_error(
+            self._write_error(
                 error_code=error_code,
                 error_message=error_message,
                 error_help=error_help,
-                use_color=self._use_color,
             )
-            self._stream.write(f"{'':>14}{rendered_error}\n")
         self._stream.flush()
+
+    def _write_error(
+        self, *, error_code: str | None, error_message: str, error_help: str | None
+    ) -> None:
+        pad: str = " " * 6
+        connector: str = tree_connector(style=self._style, last=True)
+        label_width: int = _LABEL_WIDTH - 2
+        label: str = self._style.error_muted(f"{'error':<{label_width}}")
+        plain_prefix_width: int = len(pad) + 4 + label_width
+        content_width: int = max(terminal_columns() - plain_prefix_width, 1)
+        lines: list[str] = format_inline_error_lines(
+            error_code=error_code,
+            error_message=error_message,
+            error_help=error_help,
+            content_width=content_width,
+            style=self._style,
+        )
+        continuation_pad: str = " " * plain_prefix_width
+        for index, line in enumerate(lines):
+            if index == 0:
+                self._stream.write(f"{pad}{connector} {label}{line}\n")
+            else:
+                self._stream.write(f"{continuation_pad}{line}\n")
 
     def _write_spinner_line(self) -> None:
         spinner: str = self._style.status(status=_ACTIVE_SPINNER_FRAMES[self._spinner_frame_index])
@@ -163,16 +188,3 @@ class NestedCommandProgressCallbacks:
             self._stream.write("\033[?25h")
             self._stream.flush()
         self._cursor_hidden = False
-
-
-def _format_nested_error(
-    *, error_code: str | None, error_message: str, error_help: str | None, use_color: bool
-) -> str:
-    if error_code is None:
-        return error_message
-    return format_coded_error(
-        code=error_code,
-        message=error_message,
-        help=error_help,
-        use_color=use_color,
-    )

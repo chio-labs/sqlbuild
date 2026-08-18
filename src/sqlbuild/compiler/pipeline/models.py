@@ -24,7 +24,6 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonRunPhase,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-from sqlbuild.executor.custom.models import PrepareVersionContext
 
 
 @dataclass(frozen=True)
@@ -40,7 +39,6 @@ class CompilePipelineOptions:
     exclude: tuple[str, ...] = ()
     cursor_overrides: CursorOverrides | None = None
     full_refresh: bool = False
-    changes_only: bool = False
     auto_load_sources: bool = False
     reload_sources: bool = False
     connection_config: dict[str, object] | None = None
@@ -80,9 +78,6 @@ class CompilePipelineResult:
     project: CompiledProject
     plan_output: PlanOutput
     custom_materializations: dict[str, Callable[..., Any]] = field(default_factory=dict)
-    custom_prepare_version_functions: dict[str, Callable[[PrepareVersionContext], None]] = field(
-        default_factory=dict
-    )
     python_node_names: frozenset[str] = field(default_factory=frozenset)
     python_plan_entries: tuple[PythonPlanEntry, ...] = field(default_factory=tuple)
 

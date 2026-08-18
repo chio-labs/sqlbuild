@@ -6,7 +6,6 @@ import pytest
 
 from sqlbuild.compiler.compile._helpers.attachment.core import resolve_run_id
 from sqlbuild.compiler.compile.main.effective_runtime import build_effective_runtime_config
-from sqlbuild.compiler.compile.main.effective_target import build_effective_target_config
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
@@ -16,7 +15,6 @@ from sqlbuild.spec.contracts.models import (
 )
 from tests.unit.src.sqlbuild.compiler.compile._test_types import (
     BuildEffectiveRuntimeConfigTestCase,
-    BuildEffectiveTargetConfigTestCase,
     RunIdGenerationTestCase,
 )
 
@@ -94,48 +92,6 @@ def test_given_runtime_config_inputs_when_building_effective_runtime_then_return
     assert target_name == test_case.expected_target_name
     assert effective_vars == test_case.expected_vars
     assert re.fullmatch(r"\d{8}T\d{6}Z_[0-9a-f]{12}", run_id)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        BuildEffectiveTargetConfigTestCase(
-            description="exposes resolved target reuse metadata",
-            selected_target=None,
-            expected_reuse_from="prod",
-            expected_reuse_hard_copy=True,
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_runtime_config_inputs_when_building_effective_target_then_exposes_reuse_metadata(
-    test_case: BuildEffectiveTargetConfigTestCase,
-) -> None:
-    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
-        project_config=ProjectConfig(
-            name="demo",
-            adapter="duckdb",
-            default_target="dev",
-            targets={
-                "dev": TargetConfig(reuse_from="staging", reuse_hard_copy=False),
-                "prod": TargetConfig(),
-            },
-        ),
-        local_config=LocalConfig(
-            targets={
-                "dev": LocalTargetConfig(reuse_from="prod", reuse_hard_copy=True),
-            }
-        ),
-    )
-
-    target_config: TargetConfig | None = build_effective_target_config(
-        discovered_inputs=discovered_inputs,
-        selected_target=test_case.selected_target,
-    )
-
-    assert target_config is not None
-    assert target_config.reuse_from == test_case.expected_reuse_from
-    assert target_config.reuse_hard_copy is test_case.expected_reuse_hard_copy
 
 
 @pytest.mark.parametrize(

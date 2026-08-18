@@ -20,7 +20,7 @@ PROMOTED_MODELS: tuple[str, ...] = tuple(f"model_{index:02d}" for index in range
             remaining_stale=(),
             verbose=False,
             expected_fragments=(
-                "Virtual promotion complete  pr -> dev",
+                "\u2713 Virtual promotion complete  pr -> dev",
                 "target status          finalized",
                 "promoted models        25",
                 "promoted model set: model_00",
@@ -28,10 +28,10 @@ PROMOTED_MODELS: tuple[str, ...] = tuple(f"model_{index:02d}" for index in range
                 "remaining stale models 0",
             ),
             expected_color_fragments=(
-                "\033[32m\033[1mVirtual promotion complete\033[0m",
-                "\033[34m\033[1mpr\033[0m -> \033[34m\033[1mdev\033[0m",
-                "target status          \033[32m\033[1mfinalized\033[0m",
-                "promoted models        \033[34m\033[1m25\033[0m",
+                "\033[32m\u2713\033[0m Virtual promotion complete",
+                "pr -> dev",
+                "\033[2mtarget status\033[0m          \033[32m\033[1mfinalized\033[0m",
+                "\033[2mpromoted models\033[0m        \033[34m25\033[0m",
                 "\033[2mpromoted model set\033[0m: model_00",
                 "\033[2m  ... 5 more; use --verbose to show all\033[0m",
             ),

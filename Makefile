@@ -1,9 +1,16 @@
 SHELL := /bin/bash
 
-.PHONY: verify verify-quick verify-pg coverage
+.PHONY: verify verify-quick verify-pg coverage cli-preview
 
 format:
 	uv run ruff format .
+
+
+SCENE ?= all
+PREVIEW_ARGS ?=
+
+cli-preview:
+	uv run python scripts/preview_cli.py $(SCENE) $(PREVIEW_ARGS)
 
 
 lint:

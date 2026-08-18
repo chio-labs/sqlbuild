@@ -33,13 +33,6 @@ class DbtDebugWrapperTestCase:
 
 
 @dataclass(frozen=True)
-class DbtCloneCommandOutputTestCase:
-    description: str
-    expected_stderr_fragments: tuple[str, ...]
-    expected_stdout_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class DbtAutoInitTestCase:
     description: str
     has_current_sqlbuild_project: bool
@@ -62,16 +55,6 @@ class DbtInitOutputTestCase:
 
 
 @dataclass(frozen=True)
-class DbtInitPromptTestCase:
-    description: str
-    explicit_git_ref: str | None
-    input_text: str
-    input_is_tty: bool
-    expected_git_ref: str
-    expected_output_fragments: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
 class DbtInitProjectDirDefaultTestCase:
     description: str
     dbt_project_text: str
@@ -81,6 +64,4 @@ class DbtInitProjectDirDefaultTestCase:
 @dataclass(frozen=True)
 class DbtInitValidationOrderTestCase:
     description: str
-    input_text: str
     expected_error_fragment: str
-    unexpected_output_fragments: tuple[str, ...]

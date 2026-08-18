@@ -30,5 +30,4 @@ def write_playground_project(*, target: PlaygroundTarget) -> None:
     """Create the playground project files and refresh bundled skills."""
 
     create_playground_project(target_dir=target.target_dir, template=target.template.value)
-    if target.template != PlaygroundTemplate.DBT:
-        _ = update_sqlbuild_skills(project_dir=target.target_dir)
+    _ = update_sqlbuild_skills(project_dir=target.target_dir)

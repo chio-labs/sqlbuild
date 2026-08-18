@@ -60,32 +60,6 @@ def build_databricks_project_toml(*, project_name: str, schema_name: str) -> str
     )
 
 
-def build_databricks_dependency_baseline_project_toml(
-    *, project_name: str, dev_schema_name: str, prod_schema_name: str
-) -> str:
-    catalog_name: str = str(build_databricks_connection_config(schema=dev_schema_name)["catalog"])
-    return (
-        f'name = "{project_name}"\n'
-        'adapter = "databricks"\n'
-        'default_target = "dev"\n\n'
-        "[connection]\n"
-        'server_hostname = "${ENV:SQB_TEST_DATABRICKS_SERVER_HOSTNAME}"\n'
-        'http_path = "${ENV:SQB_TEST_DATABRICKS_HTTP_PATH}"\n'
-        'token = "${ENV:SQB_TEST_DATABRICKS_TOKEN}"\n'
-        'catalog = "${ENV:SQB_TEST_DATABRICKS_CATALOG}"\n\n'
-        "[targets.prod]\n"
-        f'database = "{catalog_name}"\n'
-        f'schema = "{prod_schema_name}"\n\n'
-        "[targets.dev]\n"
-        f'database = "{catalog_name}"\n'
-        f'schema = "{dev_schema_name}"\n'
-        'reuse_from = "prod"\n'
-        "reuse_hard_copy = true\n\n"
-        "[defaults]\n"
-        'materialized = "table"\n'
-    )
-
-
 def build_databricks_virtual_project_toml(
     *, project_name: str, schema_name: str, unsuffixed_virtual_env: str | None = None
 ) -> str:

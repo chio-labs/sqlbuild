@@ -44,42 +44,7 @@ class DbtInteropCommand(StrEnum):
     PLAN = "plan"
     RUN = "run"
     BUILD = "build"
-    TEST = "test"
-    SCENARIO = "scenario"
     DEBUG = "debug"
-    LINEAGE = "lineage"
-    DIFF = "diff"
-    CLONE = "clone"
-
-
-class DbtLineageDirection(StrEnum):
-    """Traversal direction for mixed dbt/SQLBuild lineage."""
-
-    UPSTREAM = "upstream"
-    DOWNSTREAM = "downstream"
-    BOTH = "both"
-
-
-class DbtLineageOutputFormat(StrEnum):
-    """Output format for mixed dbt/SQLBuild lineage."""
-
-    TREE = "tree"
-    JSON = "json"
-    LIST = "list"
-
-
-class DbtInteropSqlbuildTestAction(StrEnum):
-    """SQLBuild validation actions used by `sqb dbt test`."""
-
-    TEST = "test"
-    AUDIT = "audit"
-
-
-class DbtChainNodeBoundaryKind(StrEnum):
-    """dbt node kinds that must be mocked as boundaries in a SQLBuild test chain."""
-
-    SNAPSHOT = "snapshot"
-    EPHEMERAL = "ephemeral"
 
 
 class DbtInteropSkipReason(StrEnum):
@@ -87,13 +52,3 @@ class DbtInteropSkipReason(StrEnum):
 
     NO_DBT_WORK = "no_dbt_work"
     NO_SQLBUILD_WORK = "no_sqlbuild_work"
-
-
-class DbtReuseUnavailableReason(StrEnum):
-    """Why production_ref could not run, to drive clear user-facing messaging."""
-
-    NO_GIT_REPOSITORY = "no_git_repository"
-    PROJECT_OUTSIDE_GIT_ROOT = "project_outside_git_root"
-    GIT_REF_IS_CURRENT_BRANCH = "git_ref_is_current_branch"
-    GIT_REF_MISSING = "git_ref_missing"
-    REMOTE_REFRESH_FAILED = "remote_refresh_failed"

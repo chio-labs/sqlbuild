@@ -10,7 +10,7 @@ from typing import cast
 
 from sqlbuild.cli.output._helpers.cursor_plan import build_cursor_plan_details
 from sqlbuild.cli.output.models import CursorPlanDetails
-from sqlbuild.cli.output.types import CursorBoundsOwner, CursorResolutionStatus
+from sqlbuild.cli.output.types import CursorBoundsOwner, CursorResolutionStatus, PlanRowKind
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.main.changes.query_diff import format_query_diff
 from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
@@ -21,8 +21,6 @@ from sqlbuild.compiler.planner.main.execution.model_materialization_label import
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
     CursorBounds,
-    DependencyBaselinePlanEntry,
-    ExistingDestinationInputPlanEntry,
     FunctionPlanEntry,
     ModelPlanEntry,
     PlanOutput,
@@ -45,12 +43,21 @@ from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.aligned_name_value import format_aligned_name_value
 from sqlbuild.presentation.main.append_overflow_line import append_overflow_line
 from sqlbuild.presentation.main.resolve_name_column_width import resolve_name_column_width
+from sqlbuild.presentation.main.surface_header import format_surface_header
+from sqlbuild.presentation.main.tree_connector import tree_connector
 from sqlbuild.presentation.main.visible_entries import visible_entries
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
+from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 
 _DIFF_HEADER_MARKER: str = "# "
+_ENTRY_ROW_PREFIX: str = "  "
+_LEAF_KEY_SEPARATOR: str = ": "
+_LEAF_ROW_PREFIX: str = "    "
+_NESTED_ROW_PREFIX: str = "      "
+_RUNTIME_PROMINENT_MARKERS: tuple[str, ...] = ("runtime", "deferred")
 _STALE_INPUT_WARNING_TITLE: str = "Stale inputs detected"
+_TREE_EXEMPT_CHARS: frozenset[str] = frozenset({" ", "."})
 
 _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
     PlanReason.QUERY_CHANGED,
@@ -125,7 +132,7 @@ def format_plan(
             python_plan_entries=python_plan_entries,
             full_refresh=False,
         )
-        lines.append(style.success_strong(header))
+        lines.append(format_surface_header(style=style, title="Plan ready", context=header))
 
     lines = _format_virtual_metadata(
         lines=lines,
@@ -174,21 +181,6 @@ def format_plan(
     _format_source_loads(
         lines=lines,
         plan=plan,
-        name_column_width=name_column_width,
-        display_options=resolved_display_options,
-        section_header_style=resolved_section_header_style,
-    )
-
-    _format_dependency_baseline_entries(
-        lines=lines,
-        entries=plan.dependency_baseline_entries,
-        name_column_width=name_column_width,
-        display_options=resolved_display_options,
-        section_header_style=resolved_section_header_style,
-    )
-    lines = _format_existing_destination_input_entries(
-        lines=lines,
-        entries=plan.existing_destination_input_entries,
         name_column_width=name_column_width,
         display_options=resolved_display_options,
         section_header_style=resolved_section_header_style,
@@ -286,6 +278,7 @@ def format_plan(
         display_options=resolved_display_options,
         section_header_style=resolved_section_header_style,
     )
+    lines = _treeify_plan_lines(lines)
     lines = _format_warnings(
         lines=lines,
         plan=plan,
@@ -315,13 +308,15 @@ def _format_full_refresh(
 
     if include_header:
         lines.append(
-            CliStyle(use_color=True).success_strong(
-                _plan_ready_header(
+            format_surface_header(
+                style=CliStyle(use_color=True),
+                title="Plan ready",
+                context=_plan_ready_header(
                     selected_count=selected_count,
                     source_load_entries=plan.source_load_entries,
                     python_plan_entries=python_plan_entries,
                     full_refresh=True,
-                )
+                ),
             )
         )
 
@@ -400,106 +395,6 @@ def _selected_count(plan: PlanOutput) -> int:
     return len(plan.model_entries) + len(plan.seed_entries) + len(plan.function_entries)
 
 
-def _format_dependency_baseline_entries(
-    *,
-    lines: list[str],
-    entries: tuple[DependencyBaselinePlanEntry, ...],
-    name_column_width: int,
-    display_options: DisplayOptions,
-    section_header_style: Callable[[str], str],
-) -> None:
-    if not entries:
-        return
-    lines = _format_reuse_input_entries(
-        lines=lines,
-        entries=entries,
-        label="Reused inputs",
-        name_column_width=name_column_width,
-        display_options=display_options,
-        section_header_style=section_header_style,
-    )
-
-
-def _format_reuse_input_entries(
-    *,
-    lines: list[str],
-    entries: tuple[DependencyBaselinePlanEntry, ...],
-    label: str,
-    name_column_width: int,
-    display_options: DisplayOptions,
-    section_header_style: Callable[[str], str],
-) -> list[str]:
-    if not entries:
-        return lines
-    lines.append("")
-    lines.append(section_header_style(f"{label} ({len(entries)})"))
-    visible: Sequence[DependencyBaselinePlanEntry] = visible_entries(
-        entries=entries, options=display_options
-    )
-    entry: DependencyBaselinePlanEntry
-    for entry in visible:
-        lines.append(
-            "  "
-            + _format_name_value_line(
-                name=entry.name,
-                value=_reuse_input_detail(entry),
-                name_column_width=name_column_width,
-            )
-        )
-    lines = append_overflow_line(
-        lines=lines,
-        total_count=len(entries),
-        visible_count=len(visible),
-        indent="  ",
-        options=display_options,
-    )
-    return lines
-
-
-def _reuse_input_detail(entry: DependencyBaselinePlanEntry) -> str:
-    copy_kind: str = "hard-copy" if entry.relation_reuse.hard_copy else "cheap clone"
-    return f"{entry.resource_label}  {copy_kind} from reuse origin target"
-
-
-def _format_existing_destination_input_entries(
-    *,
-    lines: list[str],
-    entries: tuple[ExistingDestinationInputPlanEntry, ...],
-    name_column_width: int,
-    display_options: DisplayOptions,
-    section_header_style: Callable[[str], str],
-) -> list[str]:
-    if not entries:
-        return lines
-    lines.append("")
-    lines.append(section_header_style(f"Existing destination inputs ({len(entries)})"))
-    visible: Sequence[ExistingDestinationInputPlanEntry] = visible_entries(
-        entries=entries, options=display_options
-    )
-    entry: ExistingDestinationInputPlanEntry
-    for entry in visible:
-        lines.append(
-            "  "
-            + _format_name_value_line(
-                name=entry.name,
-                value=_existing_destination_input_detail(entry),
-                name_column_width=name_column_width,
-            )
-        )
-    lines = append_overflow_line(
-        lines=lines,
-        total_count=len(entries),
-        visible_count=len(visible),
-        indent="  ",
-        options=display_options,
-    )
-    return lines
-
-
-def _existing_destination_input_detail(entry: ExistingDestinationInputPlanEntry) -> str:
-    return f"{entry.status} in destination target"
-
-
 def _plan_ready_header(
     *,
     selected_count: int,
@@ -521,7 +416,7 @@ def _plan_ready_header(
     if python_count:
         node_noun: str = "node" if python_count == 1 else "nodes"
         parts.append(f"{python_count} Python {node_noun}")
-    return f"Plan ready ({', '.join(parts)})"
+    return ", ".join(parts)
 
 
 def _python_plan_entries_for_phase(
@@ -956,7 +851,7 @@ def _format_routine_models_section(
 ) -> list[str]:
     """Format routine model work by resource name."""
 
-    lines.append(section_header_style(f"Models ({len(entries)} standard run)"))
+    lines.append(section_header_style(f"Models ({len(entries)})"))
     visible: Sequence[ModelPlanEntry] = visible_entries(entries=entries, options=display_options)
     entry: ModelPlanEntry
     for entry in visible:
@@ -997,10 +892,13 @@ def _format_detail_entry(
         lines = _append_cursor_detail(lines=lines, entry=entry)
         return lines
 
-    action_text: str = _action_text(entry)
+    action_text: str = CliStyle(use_color=True).accent(_action_text(entry))
     lines.append(
         _format_name_value_line(
-            name=entry.name, value=action_text, name_column_width=name_column_width
+            name=entry.name,
+            value=action_text,
+            name_column_width=name_column_width,
+            dim_value=False,
         )
     )
     lines = _append_cursor_detail(
@@ -1022,10 +920,19 @@ def _format_upstream_changed_entry(
     """Format a per-model entry in the Upstream changed group."""
 
     cascade: CascadeResult | None = entry.cascade
-    action_text: str = _cascade_action_text(cascade)
+    action: str = _cascade_action_text(cascade)
+    if entry.action == PlanAction.CREATE_VIEW:
+        action = "recreate view"
+    elif entry.action == PlanAction.CUSTOM:
+        materialization: str = entry.custom_materialization_name or "custom materialization"
+        action = f"run {materialization}"
+    action_text: str = CliStyle(use_color=True).accent(action)
     lines.append(
         _format_name_value_line(
-            name=entry.name, value=action_text, name_column_width=name_column_width
+            name=entry.name,
+            value=action_text,
+            name_column_width=name_column_width,
+            dim_value=False,
         )
     )
     lines = _append_cursor_detail(
@@ -1176,6 +1083,11 @@ def _format_config_json(metadata_json: str) -> str:
 def _action_text(entry: ModelPlanEntry) -> str:
     """Human-readable action text for inline display."""
 
+    if entry.action == PlanAction.CREATE_VIEW:
+        return "recreate view"
+    if entry.action == PlanAction.CUSTOM:
+        materialization: str = entry.custom_materialization_name or "custom materialization"
+        return f"run {materialization}"
     if entry.backfill.action == BackfillAction.BOUNDED and entry.backfill.duration is not None:
         base: str = f"rebuild last {entry.backfill.duration}"
         suffix: str = _schema_change_suffix(entry)
@@ -1183,7 +1095,7 @@ def _action_text(entry: ModelPlanEntry) -> str:
     if entry.backfill.action == BackfillAction.FULL and entry.reason != PlanReason.FIRST_RUN:
         suffix = _schema_change_suffix(entry)
         return f"full rebuild, {suffix}" if suffix else "full rebuild"
-    return ""
+    return "continue forward"
 
 
 def _cascade_action_text(cascade: CascadeResult | None) -> str:
@@ -1198,7 +1110,7 @@ def _cascade_action_text(cascade: CascadeResult | None) -> str:
         and cascade.effective_duration is not None
     ):
         return f"rebuild last {cascade.effective_duration}"
-    return ""
+    return "continue forward"
 
 
 def _cascade_cause_description(cascade: CascadeResult) -> str:
@@ -1413,7 +1325,7 @@ def _format_routine_functions(
     if not unchanged_entries:
         return lines
     lines.append("")
-    lines.append(section_header_style(f"Functions ({len(unchanged_entries)} standard run)"))
+    lines.append(section_header_style(f"Functions ({len(unchanged_entries)})"))
     visible_unchanged: Sequence[FunctionPlanEntry] = visible_entries(
         entries=unchanged_entries, options=display_options
     )
@@ -1503,14 +1415,24 @@ def _format_warnings(
     lines.append("")
     lines.append(style.warning_strong(f"Warnings ({len(warning_entries)})"))
     warning: PlanWarning
-    for warning in warning_entries:
-        if warning.model_name is not None:
-            lines.append(f"  {style.object_name(warning.model_name)}")
+    warning_index: int
+    for warning_index, warning in enumerate(warning_entries):
+        connector: str = tree_connector(style=style, last=warning_index == len(warning_entries) - 1)
         message_lines: list[str] = warning.message.split("\n")
-        lines.append(f"  {style.warning(f'- {message_lines[0]}')}")
-        continuation: str
-        for continuation in message_lines[1:]:
-            lines.append(f"    {style.warning(continuation)}")
+        if warning.model_name is not None:
+            lines.append(f"{connector} {style.object_name(warning.model_name)}")
+            message_index: int
+            for message_index, message_line in enumerate(message_lines):
+                child_connector: str = tree_connector(
+                    style=style,
+                    last=message_index == len(message_lines) - 1,
+                )
+                lines.append(f"    {child_connector} {style.warning(message_line)}")
+        else:
+            lines.append(f"{connector} {style.warning(message_lines[0])}")
+            continuation: str
+            for continuation in message_lines[1:]:
+                lines.append(f"    {style.warning(continuation)}")
     return lines
 
 
@@ -1581,58 +1503,81 @@ def _format_virtual_metadata(
         if isinstance(raw_incomplete_model_names, (tuple, list))
         else ()
     )
+    unchanged_source_name_set: frozenset[str] = frozenset(unchanged_source_names)
+    new_or_changed_source_names: tuple[str, ...] = tuple(
+        name for name in observed_source_names if name not in unchanged_source_name_set
+    )
+    stale_root_name_set: frozenset[str] = frozenset(stale_root_names)
+    downstream_stale_model_names: tuple[str, ...] = tuple(
+        name for name in stale_model_names if name not in stale_root_name_set
+    )
+    status_summary: str = virtual_environment_status
+    if virtual_environment_status == VirtualEnvironmentStatus.FINALIZED:
+        status_summary = "finalized, up to date"
+    elif stale_model_names:
+        status_summary = f"{virtual_environment_status}, build required"
     lines.append("")
-    lines.append(section_header_style("Virtual environment"))
-    lines.append(f"  name: {virtual_environment_name}")
-    lines.append(f"  status: {virtual_environment_status}")
+    lines.append(
+        section_header_style(f"Virtual environment  {virtual_environment_name} ({status_summary})")
+    )
     if observed_source_names or incomplete_source_names:
-        lines.append(f"  source freshness observed: {len(observed_source_names)}")
-        if observed_source_names:
-            observed_source_set: str = _format_capped_name_list(
-                names=observed_source_names,
+        source_count: int = len(observed_source_names) + len(incomplete_source_names)
+        lines.append(f"  Source freshness ({len(observed_source_names)} of {source_count} checked)")
+        if new_or_changed_source_names:
+            new_or_changed_source_set: str = _format_capped_name_list(
+                names=new_or_changed_source_names,
                 display_options=display_options,
             )
-            lines.append(f"  source freshness observed set: {observed_source_set}")
-        lines.append(f"  source freshness unchanged: {len(unchanged_source_names)}")
+            lines.append(
+                f"    new or changed ({len(new_or_changed_source_names)}): "
+                f"{new_or_changed_source_set}"
+            )
         if unchanged_source_names:
             unchanged_source_set: str = _format_capped_name_list(
                 names=unchanged_source_names,
                 display_options=display_options,
             )
-            lines.append(f"  source freshness unchanged set: {unchanged_source_set}")
-        lines.append(f"  source freshness incomplete: {len(incomplete_source_names)}")
+            lines.append(f"    unchanged ({len(unchanged_source_names)}): {unchanged_source_set}")
         if incomplete_source_names:
             incomplete_source_set: str = _format_capped_name_list(
                 names=incomplete_source_names,
                 display_options=display_options,
             )
-            lines.append(f"  source freshness incomplete set: {incomplete_source_set}")
+            lines.append(
+                f"    not verifiable ({len(incomplete_source_names)}): {incomplete_source_set}"
+            )
         if incomplete_model_names:
             incomplete_model_set: str = _format_capped_name_list(
                 names=incomplete_model_names,
                 display_options=display_options,
             )
-            lines.append(f"  source freshness incomplete models: {incomplete_model_set}")
-    lines.append(f"  stale roots: {len(stale_root_names)}")
+            lines.append(
+                f"    affected models ({len(incomplete_model_names)}): {incomplete_model_set}"
+            )
+    lines.append(f"  Models needing build ({len(stale_model_names)})")
     if stale_root_names:
         stale_root_set: str = _format_capped_name_list(
             names=stale_root_names,
             display_options=display_options,
         )
-        lines.append(f"  stale root set: {stale_root_set}")
-    lines.append(f"  stale models: {len(stale_model_names)}")
-    if stale_model_names:
-        stale_model_set: str = _format_capped_name_list(
-            names=stale_model_names,
+        lines.append(f"    directly affected ({len(stale_root_names)}): {stale_root_set}")
+    if downstream_stale_model_names:
+        downstream_stale_model_set: str = _format_capped_name_list(
+            names=downstream_stale_model_names,
             display_options=display_options,
         )
-        lines.append(f"  stale model set: {stale_model_set}")
+        lines.append(
+            f"    downstream affected ({len(downstream_stale_model_names)}): "
+            f"{downstream_stale_model_set}"
+        )
     if remaining_stale_model_names:
         remaining_stale_set: str = _format_capped_name_list(
             names=remaining_stale_model_names,
             display_options=display_options,
         )
-        lines.append(f"  remaining stale after selection: {remaining_stale_set}")
+        lines.append(
+            f"    outside this plan ({len(remaining_stale_model_names)}): {remaining_stale_set}"
+        )
     return lines
 
 
@@ -1863,22 +1808,98 @@ def _format_capped_name_list(
 def _resolve_name_column_width(
     *, plan: PlanOutput, python_plan_entries: tuple[PythonPlanEntry, ...] = ()
 ) -> int:
-    names: list[str] = [
-        entry.name for entry in (*plan.dependency_baseline_entries, *plan.model_entries)
-    ]
+    names: list[str] = [entry.name for entry in plan.model_entries]
     names.extend(entry.name for entry in plan.function_entries)
     names.extend(entry.name for entry in python_plan_entries)
     return resolve_name_column_width(names=names)
 
 
-def _format_name_value_line(*, name: str, value: str, name_column_width: int) -> str:
+def _format_name_value_line(
+    *, name: str, value: str, name_column_width: int, dim_value: bool = True
+) -> str:
     style: CliStyle = CliStyle(use_color=True)
+    rendered_value: str = style.muted(value) if dim_value else value
     return format_aligned_name_value(
         plain_name=name,
         styled_name=style.object_name(name),
-        value=value,
+        value=rendered_value,
         name_column_width=name_column_width,
     )
+
+
+def _treeify_plan_lines(lines: list[str]) -> list[str]:
+    """Convert section entry and detail lines into tree-connected rows."""
+
+    style: CliStyle = CliStyle(use_color=True)
+    kinds: list[PlanRowKind] = [_classify_plan_row(line) for line in lines]
+    out: list[str] = []
+    index: int
+    line: str
+    for index, line in enumerate(lines):
+        kind: PlanRowKind = kinds[index]
+        if kind == PlanRowKind.ENTRY:
+            last: bool = _is_last_tree_row(kinds=kinds, index=index, row_kind=PlanRowKind.ENTRY)
+            connector: str = tree_connector(style=style, last=last)
+            out.append(f"{connector} {line[len(_ENTRY_ROW_PREFIX) :]}")
+            continue
+        if kind == PlanRowKind.LEAF:
+            last = _is_last_tree_row(kinds=kinds, index=index, row_kind=PlanRowKind.LEAF)
+            connector = tree_connector(style=style, last=last)
+            plain_line: str = _strip_ansi(line)
+            content: str = (
+                line[len(_LEAF_ROW_PREFIX) :]
+                if line.startswith(_LEAF_ROW_PREFIX)
+                else plain_line[len(_LEAF_ROW_PREFIX) :]
+            )
+            key, separator, value = content.partition(_LEAF_KEY_SEPARATOR)
+            if separator:
+                rendered_value: str = value
+                if any(marker in value for marker in _RUNTIME_PROMINENT_MARKERS):
+                    rendered_value = style.section(value)
+                out.append(f"{_LEAF_ROW_PREFIX}{connector} {style.muted(key)}  {rendered_value}")
+            elif content.endswith(":"):
+                out.append(f"{_LEAF_ROW_PREFIX}{connector} {style.muted(content)}")
+            else:
+                out.append(f"{_LEAF_ROW_PREFIX}{connector} {content}")
+            continue
+        out.append(line)
+    return out
+
+
+def _classify_plan_row(line: str) -> PlanRowKind:
+    """Classify a rendered plan line for tree conversion."""
+
+    plain: str = _strip_ansi(line)
+    if not plain.strip() or not plain.startswith(_ENTRY_ROW_PREFIX):
+        return PlanRowKind.OTHER
+    if plain.startswith(_NESTED_ROW_PREFIX):
+        return PlanRowKind.NESTED
+    if plain.startswith(_LEAF_ROW_PREFIX):
+        if plain[len(_LEAF_ROW_PREFIX)] in _TREE_EXEMPT_CHARS:
+            return PlanRowKind.OTHER
+        return PlanRowKind.LEAF
+    if plain[len(_ENTRY_ROW_PREFIX)] in _TREE_EXEMPT_CHARS:
+        return PlanRowKind.OTHER
+    return PlanRowKind.ENTRY
+
+
+def _is_last_tree_row(*, kinds: list[PlanRowKind], index: int, row_kind: PlanRowKind) -> bool:
+    """Return whether the row is the final one of its kind within its block."""
+
+    scan: int = index + 1
+    while scan < len(kinds):
+        kind: PlanRowKind = kinds[scan]
+        if kind == PlanRowKind.OTHER:
+            return True
+        if row_kind == PlanRowKind.ENTRY and kind == PlanRowKind.ENTRY:
+            return False
+        if row_kind == PlanRowKind.LEAF:
+            if kind == PlanRowKind.LEAF:
+                return False
+            if kind == PlanRowKind.ENTRY:
+                return True
+        scan += 1
+    return True
 
 
 def _format_schema_findings(findings: tuple[SchemaFinding, ...]) -> list[str]:

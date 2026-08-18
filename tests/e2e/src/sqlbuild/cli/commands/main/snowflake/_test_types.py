@@ -10,30 +10,6 @@ class SnowflakeDltE2ETestCase:
 
 
 @dataclass(frozen=True)
-class SnowflakeDbtCloneE2ETestCase:
-    description: str
-    schema_prefix: str
-    command: tuple[str, ...]
-    prod_model_sql: str
-    feature_model_sql: str
-    expected_stdout_fragments: tuple[str, ...]
-    expected_rows: tuple[tuple[object, ...], ...]
-
-
-@dataclass(frozen=True)
-class SnowflakeDependencyBaselineE2ETestCase:
-    description: str
-    schema_prefix: str
-    command: tuple[str, ...]
-    expected_stdout_fragments: tuple[str, ...]
-    expected_absent_stdout_fragments: tuple[str, ...]
-    expected_upstream_rows: tuple[tuple[object, ...], ...]
-    expected_downstream_rows: tuple[tuple[object, ...], ...]
-    expected_fingerprint_rows: tuple[tuple[object, ...], ...]
-    expected_return_code: int = 0
-
-
-@dataclass(frozen=True)
 class SnowflakeCliTestCase:
     description: str
     command: tuple[str, ...]

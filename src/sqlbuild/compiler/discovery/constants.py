@@ -34,6 +34,7 @@ CONFIG_CONCURRENCY_KEY: str = "concurrency"
 LEGACY_CONFIG_CONCURRENCY_KEY: str = "max_concurrency"
 SQL_ANALYSIS_SETTING_KEY: str = "sql_analysis"
 DBT_LEGACY_REUSE_FROM_CONFIG_KEY: str = "reuse_from"
+DBT_PRODUCTION_REF_CONFIG_KEY: str = "production_ref"
 DBT_DEFER_CLONE_CONFIG_KEY: str = "defer_clone_from"
 DBT_REPLAY_ON_CHANGE_CONFIG_KEY: str = "replay_on_change"
 SOURCE_LOADER_CONFIG_KEY: str = "loader"
@@ -41,8 +42,6 @@ SOURCE_AGE_POLICY_CONFIG_KEY: str = "age_policy"
 
 MODELS_DIRECTORY_NAME: str = "models"
 SEEDS_DIRECTORY_NAME: str = "seeds"
-DBT_MACRO_PATH_PREFIX: tuple[str, str] = ("dbt", "macros")
-PARENT_DIRECTORY_PATH_PART: str = ".."
 CURRENT_DIRECTORY_PATH: str = "."
 
 NOT_NULL_AUDIT_NAME: str = "not_null"

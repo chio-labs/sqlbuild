@@ -11,7 +11,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.databricks._test_types import (
     DatabricksCliTestCase,
     DatabricksCloneE2ETestCase,
     DatabricksDbtProfileE2ETestCase,
-    DatabricksDependencyBaselineE2ETestCase,
     DatabricksDiffE2ETestCase,
     DatabricksErrorE2ETestCase,
     DatabricksIntermediateDagStrategyE2ETestCase,
@@ -30,7 +29,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.databricks.helpers import (
     assert_current_databricks_snapshot_rows,
     assert_databricks_snapshot_apply_rows,
     assert_databricks_snapshot_matrix_rows,
-    build_databricks_dependency_baseline_project_toml,
     build_databricks_project_toml,
     build_databricks_virtual_project_toml,
     cleanup_databricks_schema,
@@ -58,7 +56,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     assert_dbt_profile_lifecycle,
-    assert_real_adapter_dependency_baseline_case,
     build_current_check_customers_model_sql,
     build_current_customers_model_sql,
     build_current_delete_customers_model_sql,
@@ -75,57 +72,6 @@ from tests.integration.src.sqlbuild.adapters.databricks.helpers import (
     build_databricks_connection_config,
     build_unique_schema_name,
 )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DatabricksDependencyBaselineE2ETestCase(
-            description="direct dependency baseline copies prod upstream on Databricks",
-            schema_prefix="sqb_dep_base",
-            command=("--no-color", "build", "--select", "downstream"),
-            expected_stdout_fragments=(
-                "Plan ready (1 selected)",
-                "Reused inputs (1)",
-                "upstream",
-                "from reuse origin target",
-                "downstream",
-                "Completed successfully.",
-            ),
-            expected_absent_stdout_fragments=("cannot build selected scope",),
-            expected_upstream_rows=((1, 900),),
-            expected_downstream_rows=((1, 900),),
-            expected_fingerprint_rows=(("model", "downstream"),),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_downstream_selection_when_databricks_upstream_missing_then_baselines_from_prod(
-    tmp_path: Path,
-    test_case: DatabricksDependencyBaselineE2ETestCase,
-) -> None:
-    assert test_case.expected_upstream_rows == ((1, 900),)
-    schema_base: str = build_unique_schema_name(prefix=test_case.schema_prefix)
-    dev_schema_name: str = f"{schema_base}_dev"
-    prod_schema_name: str = f"{schema_base}_prod"
-    assert_real_adapter_dependency_baseline_case(
-        tmp_path=tmp_path,
-        test_case=test_case,
-        project_name="databricks_dependency_baseline",
-        dev_schema_name=dev_schema_name,
-        prod_schema_name=prod_schema_name,
-        project_toml=build_databricks_dependency_baseline_project_toml(
-            project_name="databricks_dependency_baseline",
-            dev_schema_name=dev_schema_name,
-            prod_schema_name=prod_schema_name,
-        ),
-        ensure_schema_ready=lambda schema_name: ensure_databricks_schema_ready(
-            schema_name=schema_name
-        ),
-        cleanup_schema=lambda schema_name: cleanup_databricks_schema(schema_name=schema_name),
-        fetch_rows=lambda sql: fetch_databricks_rows(schema_name=dev_schema_name, sql=sql),
-        relation_name=lambda schema_name, name: relation_name(schema_name=schema_name, name=name),
-    )
 
 
 @pytest.mark.dbt
@@ -283,9 +229,10 @@ def test_given_python_result_when_running_check_on_databricks_then_persists_node
             command=("--no-color", "freshness", "--select", "raw_orders"),
             expected_stdout_fragments=(
                 "Observed (1)",
-                "raw_orders  timestamp",
-                "adapter",
-                "Summary: observed=1 changed=0 unchanged=0 tolerated=0 unknown=0 errors=0",
+                "raw_orders  value ",
+                "kind timestamp",
+                "via adapter",
+                "OBSERVED=1  CHANGED=0  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
         )
     ],
@@ -1454,75 +1401,6 @@ def test_given_waffle_shop_when_running_full_build_on_databricks_then_expected_v
             assert daily_revenue_rows == test_case.expected_daily_revenue_rows
     finally:
         with databricks_e2e_timing("cleanup schema"):
-            cleanup_databricks_schema(schema_name=schema_name)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DatabricksBuildE2ETestCase(
-            description="direct changes only build prunes unchanged databricks model",
-            expected_table_name="orders",
-            expected_row_count=1,
-            expected_fact_order_rows=(),
-            expected_udf_rows=(),
-            expected_daily_revenue_rows=(),
-            expected_stdout_fragments=(
-                "Plan ready (0 selected)",
-                "Skipped current models (1 already up to date)",
-            ),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_built_direct_project_when_building_changes_only_on_databricks_then_prunes_model(
-    tmp_path: Path,
-    test_case: DatabricksBuildE2ETestCase,
-) -> None:
-    schema_name: str = build_unique_schema_name(prefix="sqlbuild_changes_only")
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="databricks_changes_only",
-        repo_files={
-            "sqlbuild_project.toml": build_databricks_project_toml(
-                project_name="databricks_changes_only",
-                schema_name=schema_name,
-            ),
-            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS order_id\n",
-        },
-    )
-
-    try:
-        with databricks_e2e_timing("prepare changes-only schema"):
-            ensure_databricks_schema_ready(schema_name=schema_name)
-        with databricks_e2e_timing("initial sqb build"):
-            initial_result: subprocess.CompletedProcess[str] = run_sqb(
-                command=("--no-color", "build"),
-                project_dir=project_dir,
-            )
-        assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
-
-        with databricks_e2e_timing("changes-only sqb build"):
-            changes_only_result: subprocess.CompletedProcess[str] = run_sqb(
-                command=("--no-color", "build", "--changes-only"),
-                project_dir=project_dir,
-            )
-
-        assert changes_only_result.returncode == test_case.expected_return_code, (
-            changes_only_result.stdout + changes_only_result.stderr
-        )
-        fragment: str
-        for fragment in test_case.expected_stdout_fragments:
-            assert fragment in changes_only_result.stdout, changes_only_result.stdout
-        assert (
-            databricks_relation_row_count(
-                schema_name=schema_name,
-                relation=test_case.expected_table_name,
-            )
-            == test_case.expected_row_count
-        )
-    finally:
-        with databricks_e2e_timing("cleanup changes-only schema"):
             cleanup_databricks_schema(schema_name=schema_name)
 
 

@@ -16,10 +16,8 @@ class TargetConfigResolutionTestCase:
     expected_connection: dict[str, object]
     expected_allow_reset: bool
     expected_loader_schema: str | None = None
-    expected_reuse_from: str | None = None
     expected_defer_clone_from: str | None = None
     expected_changes_only: bool | None = None
-    expected_reuse_hard_copy: bool = False
 
 
 @dataclass(frozen=True)
@@ -29,17 +27,3 @@ class EffectiveChangesOnlyResolutionTestCase:
     local_config: LocalConfig
     cli_changes_only: bool
     expected_changes_only: bool
-
-
-@dataclass(frozen=True)
-class TargetConfigReuseErrorTestCase:
-    description: str
-    target_name: str
-    reuse_from: str
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
-class TargetConfigReuseLocalSourceTestCase:
-    description: str
-    expected_reuse_from: str

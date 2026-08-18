@@ -11,8 +11,6 @@ from types import MappingProxyType
 from typing import Any, cast
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
-from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,
@@ -22,29 +20,20 @@ from sqlbuild.compiler.compile.models import (
     CompiledSeed,
     CompiledSource,
     CompileModelConfig,
-    CompileModelInput,
-    CompileProjectInputs,
     CompileSqlReference,
     FunctionArgument,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
 from sqlbuild.compiler.discovery.models import (
-    DiscoveredProjectInputs,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
-    DiscoveredSqlModelFile,
 )
-from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_MODEL
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner._helpers.graph.scope import build_planner_scope
 from sqlbuild.compiler.planner._helpers.identity.functions import (
     build_compiled_function_fingerprint_sql,
-)
-from sqlbuild.compiler.planner._helpers.identity.standard import (
-    build_standard_model_version_identities,
 )
 from sqlbuild.compiler.planner.main.execution.execution import build_execution_plan
 from sqlbuild.compiler.planner.models import (
@@ -53,12 +42,9 @@ from sqlbuild.compiler.planner.models import (
     PlannerPolicies,
     PlannerSelection,
     PlanOutput,
-    StandardModelVersionIdentities,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import (
-    LocalConfig,
-    ProjectConfig,
     SchemaSeedEntry,
     SettingsConfig,
     SourceEntry,
@@ -193,112 +179,6 @@ def build_project_from_test_case(
         seeds=tuple(seeds),
         functions=tuple(functions),
     )
-
-
-def build_standard_pruning_project(
-    sql_by_model_name: dict[str, str],
-    model_configs: dict[str, dict[str, object]] | None = None,
-) -> CompiledProject:
-    """Build a compiled standard project with real refs and a staging target schema."""
-
-    model_inputs: list[CompileModelInput] = []
-    model_name: str
-    sql: str
-    for model_name, sql in sql_by_model_name.items():
-        relative_path: Path = Path(f"models/{model_name}.sql")
-        model_file: DiscoveredSqlModelFile = DiscoveredSqlModelFile(
-            file_path=Path("/repo") / relative_path,
-            relative_path=relative_path,
-            contents=f"MODEL ();\n\n{sql}\n",
-            header_values={},
-            header_column_locations={},
-            output_column_locations={},
-            query_sql=sql,
-        )
-        config_values: dict[str, object] = (model_configs or {}).get(model_name, {})
-        model_inputs.append(
-            CompileModelInput(
-                model_file=model_file,
-                config=CompileModelConfig(values=config_values),
-                query_sql=sql,
-                references=extract_sql_references(sql),
-            )
-        )
-    project: CompiledProject = assemble_compiled_project(
-        inputs=CompileProjectInputs(
-            project_config=ProjectConfig(name="demo", adapter="duckdb"),
-            local_config=LocalConfig(),
-            discovered_inputs=DiscoveredProjectInputs(
-                project_config=ProjectConfig(name="demo", adapter="duckdb"),
-                local_config=LocalConfig(),
-            ),
-            model_inputs=tuple(model_inputs),
-        )
-    )
-    models: list[CompiledModel] = []
-    model: CompiledModel
-    for model in project.models:
-        models.append(
-            replace(
-                model,
-                destination=replace(
-                    model.destination,
-                    schema="staging",
-                    qualified_name=f"staging.{model.name}",
-                ),
-            )
-        )
-    return replace(project, effective_target_schema="staging", models=tuple(models))
-
-
-def write_standard_model_state(
-    *, adapter: DuckDbAdapter, connection: Any, project: CompiledProject
-) -> StandardModelVersionIdentities:
-    """Create prior model relations and matching standard fingerprints."""
-
-    adapter.execute(connection=connection, sql="CREATE SCHEMA IF NOT EXISTS staging")
-    identities: StandardModelVersionIdentities = build_standard_model_version_identities(
-        functions=project.functions,
-        seeds=project.seeds,
-        scope=build_planner_scope(
-            project=project,
-            select=(),
-            exclude=(),
-            auto_load_sources=False,
-        ),
-    )
-    model: CompiledModel
-    for model in project.models:
-        config_values: dict[str, object] = model.config.values
-        materialized: object | None = config_values.get("materialized")
-        existing_relation_sql: str = {"view": "VIEW"}.get(str(materialized), "TABLE")
-        adapter.execute(
-            connection=connection,
-            sql=f"CREATE OR REPLACE {existing_relation_sql} staging.{model.name} AS SELECT 1 AS id",
-        )
-        write_fingerprint(
-            connection=connection,
-            execute=adapter.execute,
-            database=None,
-            schema="staging",
-            fingerprint=Fingerprint(
-                node_type=NODE_TYPE_MODEL,
-                node_name=model.name,
-                target_database=None,
-                target_schema="staging",
-                target_name=model.name,
-                run_id="previous_run",
-                definition_hash=compute_query_hash(model.query_sql),
-                version_hash=identities.model_version_hashes[model.name],
-                schema_fingerprint=compute_query_hash(""),
-                definition=model.query_sql,
-                metadata_json=identities.model_metadata_jsons[model.name],
-                ts=datetime.now(UTC),
-            ),
-            render_qualified_name=adapter.render_qualified_name,
-            render_framework_type=adapter.render_framework_type,
-        )
-    return identities
 
 
 def _settings_bool(settings: dict[str, object], key: str, *, default: bool) -> bool:

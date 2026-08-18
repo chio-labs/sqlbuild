@@ -10,29 +10,19 @@ import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditRunScope
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
 )
-from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry, RelationReusePlan
-from sqlbuild.compiler.planner.types import OnSchemaChange, RelationReuseKind
-from sqlbuild.executor.run._helpers.materializations.microbatch import execute_microbatch_entry
-from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
+from sqlbuild.compiler.planner.types import OnSchemaChange
+from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.run.types import ExecutionPhase
-from sqlbuild.executor.scheduling.types import ExecutionStatus
-from tests.integration.src.sqlbuild.executor.run.helpers import (
-    build_test_audit_gate_metadata,
-    build_test_audit_plan_entry,
-    write_matching_reuse_origin_fingerprint,
-)
 from tests.integration.src.sqlbuild.executor.run.microbatch._test_types import (
     MicrobatchFailureTestCase,
     MicrobatchSuccessTestCase,
 )
 from tests.integration.src.sqlbuild.executor.run.microbatch.helpers import (
-    build_microbatch_plan_entry,
     fail_microbatch_hook,
     insert_microbatch_hook_log,
     run_failure_test,
@@ -731,112 +721,6 @@ def test_given_microbatch_model_when_execution_fails_then_reports_correct_phase(
     )
     assert result.failed_phase == test_case.expected_failed_phase
     verify_failure_state(result=result, test_case=test_case, connection=connection)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        MicrobatchFailureTestCase(
-            description="microbatch executes audits despite accepted origin proof",
-            setup_sql=(
-                "CREATE TABLE main.orders_origin AS "
-                "SELECT NULL::INTEGER AS id, TIMESTAMP '2026-01-01 00:00:00' AS event_time",
-                "CREATE TABLE main.raw_events AS "
-                "SELECT NULL::INTEGER AS id, TIMESTAMP '2026-01-01 00:30:00' AS event_time",
-                "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP)",
-            ),
-            model_sql=(
-                "SELECT id, event_time FROM main.raw_events "
-                f"WHERE event_time >= '{MICROBATCH_START_SENTINEL}' "
-                f"AND event_time < '{MICROBATCH_END_SENTINEL}'"
-            ),
-            target_schema="main",
-            target_name="orders",
-            incremental_strategy="append",
-            cursor_column="event_time",
-            cursor_type="timestamp",
-            batch_size="1h",
-            microbatch_start="2026-01-01T00:00:00",
-            microbatch_end="2026-01-01T01:00:00",
-            expected_failed_phase=ExecutionPhase.AUDIT,
-            expected_audit_count=1,
-            expected_error_fragment="final audit for 'orders' failed after target update",
-            expected_row_count=1,
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_microbatch_with_origin_proof_when_running_then_audit_executes(
-    test_case: MicrobatchFailureTestCase,
-    adapter: DuckDbAdapter,
-    connection: Any,
-) -> None:
-    statement: str
-    for statement in test_case.setup_sql:
-        connection.execute(statement)
-    origin_audit: AuditPlanEntry = build_test_audit_plan_entry(
-        name="orders_id_not_null",
-        unresolved_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
-        attached_target_name="orders",
-        resolved_target_name="main.orders_origin",
-        severity="error",
-    )
-    planned_audit: AuditPlanEntry = build_test_audit_plan_entry(
-        name="orders_id_not_null",
-        unresolved_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
-        attached_target_name="orders",
-        resolved_target_name="main.orders",
-        severity="error",
-    )
-    write_matching_reuse_origin_fingerprint(
-        adapter=adapter,
-        connection=connection,
-        schema="main",
-        model_name="orders",
-        target_name="orders_origin",
-        metadata_json=build_test_audit_gate_metadata(audit=origin_audit),
-    )
-    entry: ModelPlanEntry = dataclasses.replace(
-        build_microbatch_plan_entry(test_case=test_case),
-        fingerprint_version_hash="expected_version",
-        relation_reuse=RelationReusePlan(
-            kind=RelationReuseKind.SEEDED_RELATION_REUSE,
-            origin=CompiledRelationLocation(
-                database=None,
-                schema="main",
-                name="orders_origin",
-                qualified_name="main.orders_origin",
-            ),
-            reuse_from_target_name="prod",
-            hard_copy=True,
-            fingerprint_database=None,
-            fingerprint_schema="main",
-        ),
-    )
-
-    result: ModelExecutionResult = execute_microbatch_entry(
-        context=ModelMaterializationContext(
-            entry=entry,
-            adapter=adapter,
-            connection=connection,
-            model_locations={"orders": entry.destination},
-            seed_locations={},
-            source_map={},
-            model_audits=(planned_audit,),
-            run_id="test_run",
-            query_change_tracking=False,
-        ),
-        declared_columns=(),
-    )
-
-    assert result.status == ExecutionStatus.FAILED
-    assert result.failed_phase == test_case.expected_failed_phase
-    assert result.error_message is not None
-    assert test_case.expected_error_fragment is not None
-    assert test_case.expected_error_fragment in result.error_message
-    assert len(result.audit_results) == test_case.expected_audit_count
-    assert result.audit_results[0].reused is False
-    assert connection.execute("SELECT COUNT(*) FROM main.orders").fetchone()[0] == 1
 
 
 @pytest.mark.parametrize(

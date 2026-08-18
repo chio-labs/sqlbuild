@@ -458,7 +458,6 @@ def _dispatch_dbt_command(
                 dry_run=args.dry_run,
                 overwrite=args.overwrite,
                 skip_dbt_debug=args.skip_dbt_debug,
-                production_git_ref=args.dbt_prod_git_ref,
             )
         )
     if args.dbt_command == DbtInteropCommand.PLAN:
@@ -467,18 +466,8 @@ def _dispatch_dbt_command(
         return handlers.run_dbt_run(project_dir, tuple(args.dbt_args), args.no_color)
     if args.dbt_command == DbtInteropCommand.BUILD:
         return handlers.run_dbt_build(project_dir, tuple(args.dbt_args), args.no_color)
-    if args.dbt_command == DbtInteropCommand.TEST:
-        return handlers.run_dbt_test(project_dir, tuple(args.dbt_args), args.no_color)
-    if args.dbt_command == DbtInteropCommand.SCENARIO:
-        return handlers.run_dbt_scenario(project_dir, tuple(args.dbt_args), args.no_color)
     if args.dbt_command == DbtInteropCommand.DEBUG:
         return handlers.run_dbt_debug(project_dir, tuple(args.dbt_args), args.no_color)
-    if args.dbt_command == DbtInteropCommand.LINEAGE:
-        return handlers.run_dbt_lineage(project_dir, tuple(args.dbt_args), args.no_color)
-    if args.dbt_command == DbtInteropCommand.DIFF:
-        return handlers.run_dbt_diff(project_dir, tuple(args.dbt_args), args.no_color)
-    if args.dbt_command == DbtInteropCommand.CLONE:
-        return handlers.run_dbt_clone(project_dir, tuple(args.dbt_args), args.no_color)
     raise CliUserError("dbt requires a subcommand such as 'plan'", code="C237")
 
 

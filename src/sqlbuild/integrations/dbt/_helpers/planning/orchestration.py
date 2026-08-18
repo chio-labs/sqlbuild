@@ -18,9 +18,6 @@ from sqlbuild.integrations.dbt._helpers.manifest.sqlbuild_refs import (
 from sqlbuild.integrations.dbt._helpers.planning.plan import build_dbt_interop_plan
 from sqlbuild.integrations.dbt._helpers.selection.core import resolve_dbt_interop_sqlbuild_selection
 from sqlbuild.integrations.dbt._helpers.selection.selector_terms import dbt_fqn_selector_term
-from sqlbuild.integrations.dbt._helpers.selection.sql_test_targets import (
-    resolve_dbt_sql_test_target_names,
-)
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.constants import DBT_PATH_SELECTOR_SEPARATOR
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
@@ -33,10 +30,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtLsResult,
     DbtManifestIndex,
 )
-from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSqlbuildTestAction
-
-_DBT_DATA_TEST_SELECTOR: str = "test_type:data"
-_DBT_UNIT_TEST_SELECTOR: str = "test_type:unit"
+from sqlbuild.integrations.dbt.types import DbtInteropCommand
 
 
 def plan_dbt_interop_command(
@@ -85,23 +79,6 @@ def plan_dbt_interop_command(
         exclude=exclude,
         dbt_anchor_unique_ids_by_term=anchors_by_term,
     )
-    if normalized_command == DbtInteropCommand.TEST:
-        dbt_test_target_names: tuple[str, ...] = resolve_dbt_sql_test_target_names(
-            project=project,
-            manifest=manifest,
-            selected_dbt_unique_ids=tuple(node.unique_id for node in full_dbt_ls.nodes),
-            select=tuple(select),
-        )
-        if dbt_test_target_names:
-            selection = DbtInteropSelectionResult(
-                sqlbuild_model_names=tuple(
-                    dict.fromkeys((*selection.sqlbuild_model_names, *dbt_test_target_names))
-                ),
-                dbt_required_unique_ids=selection.dbt_required_unique_ids,
-                dbt_anchor_terms=selection.dbt_anchor_terms,
-                dbt_anchor_unique_ids_by_term=selection.dbt_anchor_unique_ids_by_term,
-                path_translations=selection.path_translations,
-            )
     dbt_required_selector_terms: tuple[str, ...] = _build_required_dbt_selector_terms(
         project=project,
         manifest=manifest,
@@ -125,7 +102,6 @@ def plan_dbt_interop_command(
         sqlbuild_command_argvs=_build_sqlbuild_argvs(
             command=normalized_command,
             sqlbuild_executable=sqlbuild_executable,
-            select=select,
             selected_model_names=selection.sqlbuild_model_names,
             sqlbuild_command_args=sqlbuild_command_args,
         ),
@@ -196,8 +172,6 @@ def _build_supplemental_dbt_argvs(
     options: DbtCliOptions,
     selector_terms: Sequence[str],
 ) -> tuple[tuple[str, ...], ...]:
-    if command == DbtInteropCommand.TEST:
-        return ()
     if not selector_terms:
         return ()
     dbt_command: str = "ls" if command == DbtInteropCommand.PLAN else command.value
@@ -216,23 +190,11 @@ def _build_sqlbuild_argvs(
     *,
     command: DbtInteropCommand,
     sqlbuild_executable: str,
-    select: Sequence[str],
     selected_model_names: Sequence[str],
     sqlbuild_command_args: Sequence[str],
 ) -> tuple[tuple[str, ...], ...]:
     if not selected_model_names:
         return ()
-    if command == DbtInteropCommand.TEST:
-        return tuple(
-            (
-                sqlbuild_executable,
-                action.value,
-                "--select",
-                *selected_model_names,
-                *sqlbuild_command_args,
-            )
-            for action in resolve_sqlbuild_test_actions(select=select)
-        )
     sqlbuild_command: tuple[str, ...] = (
         ("build", "--no-tests", "--no-audits")
         if command == DbtInteropCommand.RUN
@@ -247,27 +209,6 @@ def _build_sqlbuild_argvs(
             *sqlbuild_command_args,
         ),
     )
-
-
-def resolve_sqlbuild_test_actions(
-    *, select: Sequence[str]
-) -> tuple[DbtInteropSqlbuildTestAction, ...]:
-    """Map dbt test-type selectors to SQLBuild validation actions."""
-
-    has_data_selector: bool = False
-    has_unit_selector: bool = False
-    term: str
-    for term in select:
-        parsed: SelectorExpansion = split_selector_expansion(term)
-        if parsed.core == _DBT_DATA_TEST_SELECTOR:
-            has_data_selector = True
-        elif parsed.core == _DBT_UNIT_TEST_SELECTOR:
-            has_unit_selector = True
-    if has_data_selector and not has_unit_selector:
-        return (DbtInteropSqlbuildTestAction.AUDIT,)
-    if has_unit_selector and not has_data_selector:
-        return (DbtInteropSqlbuildTestAction.TEST,)
-    return (DbtInteropSqlbuildTestAction.TEST, DbtInteropSqlbuildTestAction.AUDIT)
 
 
 def _append_dbt_options(*, argv: tuple[str, ...], options: DbtCliOptions) -> tuple[str, ...]:

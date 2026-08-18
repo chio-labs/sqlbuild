@@ -30,9 +30,6 @@ from sqlbuild.compiler.pipeline._helpers.graph import build_static_all_keys
 from sqlbuild.compiler.pipeline._helpers.materializations import load_custom_materializations
 from sqlbuild.compiler.pipeline._helpers.python_plan_entries import build_python_run_plan_outputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
-from sqlbuild.compiler.pipeline.main.prepare_versions import (
-    load_custom_prepare_version_functions,
-)
 from sqlbuild.compiler.pipeline.models import (
     CompilePipelineOptions,
     CompilePipelineResult,
@@ -53,7 +50,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerSelection,
     PlanOutput,
 )
-from sqlbuild.compiler.planner.types import StandardScopePruning, WorkSelectionPolicy
+from sqlbuild.compiler.planner.types import WorkSelectionPolicy
 from sqlbuild.compiler.python_nodes.main._run_selection import (
     resolve_python_sql_run_selection_from_inputs,
 )
@@ -127,9 +124,6 @@ def _build_result(
     options: CompilePipelineOptions,
     on_progress: Callable[[str], None] | None = None,
 ) -> CompilePipelineResult:
-    work_selection_policy: WorkSelectionPolicy = (
-        WorkSelectionPolicy.STALE_ONLY if options.changes_only else WorkSelectionPolicy.ALL_SELECTED
-    )
     select: tuple[str, ...] = options.select
     exclude: tuple[str, ...] = options.exclude
     deferred_locations: dict[str, CompiledRelationLocation] | None = None
@@ -167,10 +161,6 @@ def _build_result(
         selected_sql_keys = run_selection.sql_keys
         selected_python_node_names = run_selection.python_node_names
 
-    custom_prepare_version_functions: dict[str, Any] = load_custom_prepare_version_functions(
-        discovered_inputs.materialization_files
-    )
-
     plan_output: PlanOutput = build_execution_plan(
         project=project,
         adapter=adapter,
@@ -192,15 +182,7 @@ def _build_result(
             source_deferral_enabled=options.source_deferral_enabled,
         ),
         policies=PlannerPolicies(
-            standard_scope_pruning=(
-                StandardScopePruning.PRUNE_UNCHANGED
-                if work_selection_policy == WorkSelectionPolicy.STALE_ONLY
-                else StandardScopePruning.NONE
-            ),
             auto_load_sources=options.auto_load_sources,
-            custom_prepare_version_materializations=frozenset(
-                custom_prepare_version_functions.keys()
-            ),
         ),
         on_progress=on_progress,
         project_config=discovered_inputs.project_config,
@@ -214,14 +196,13 @@ def _build_result(
         plan_output=plan_output,
         run_selection=run_selection,
         selected_python_node_names=selected_python_node_names,
-        work_selection_policy=work_selection_policy,
+        work_selection_policy=WorkSelectionPolicy.ALL_SELECTED,
     )
 
     return CompilePipelineResult(
         project=project,
         plan_output=python_outputs.plan_output,
         custom_materializations=custom_materializations,
-        custom_prepare_version_functions=custom_prepare_version_functions,
         python_node_names=python_outputs.selected_python_node_names,
         python_plan_entries=python_outputs.python_plan_entries,
     )

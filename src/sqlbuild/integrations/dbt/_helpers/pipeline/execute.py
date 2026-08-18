@@ -151,45 +151,18 @@ def build_merged_dbt_execution_argv(
     """Merge original dbt selection with dbt models required by SQLBuild work."""
 
     required_terms: tuple[str, ...] = plan.dbt_required_selector_terms
-    if command == DbtInteropCommand.TEST:
-        test_nodes: tuple[DbtLsNode, ...] = dbt_test_execution_nodes(plan=plan)
-        if not test_nodes:
-            return None
-        merged_args: tuple[str, ...] = _replace_dbt_select_terms(
-            args=_strip_resolved_dbt_options(routed_args),
-            select_terms=tuple(node.selector_term for node in test_nodes),
-        )
-    elif not plan.dbt_selected_unique_ids and not required_terms:
+    if not plan.dbt_selected_unique_ids and not required_terms:
         return None
-    else:
-        merged_args = _merge_dbt_select_terms(
-            args=_strip_resolved_dbt_options(routed_args),
-            extra_terms=required_terms,
-        )
+    merged_args: tuple[str, ...] = _merge_dbt_select_terms(
+        args=_strip_resolved_dbt_options(routed_args),
+        extra_terms=required_terms,
+    )
     return build_dbt_command_argv(
         dbt_executable=plan.dbt_command_argv[0],
         command=command.value,
         options=options,
         args=merged_args,
     )
-
-
-def dbt_test_execution_nodes(*, plan: DbtInteropPlan) -> tuple[DbtLsNode, ...]:
-    """Return the deduplicated dbt tests selected during interop planning."""
-
-    selected: list[DbtLsNode] = []
-    seen: set[str] = set()
-    for node in plan.dbt_selected_nodes:
-        if node.resource_type not in (
-            DbtSupportedResourceType.TEST,
-            DbtSupportedResourceType.UNIT_TEST,
-        ):
-            continue
-        if node.unique_id in seen:
-            continue
-        seen.add(node.unique_id)
-        selected.append(node)
-    return tuple(selected)
 
 
 def build_failed_sqlbuild_model_names(
@@ -429,20 +402,3 @@ def _merge_dbt_select_terms(
             index += 1
         merged.extend(term for term in extra_terms if term not in merged)
     return tuple(merged)
-
-
-def _replace_dbt_select_terms(
-    *, args: tuple[str, ...], select_terms: tuple[str, ...]
-) -> tuple[str, ...]:
-    replaced: list[str] = []
-    index: int = 0
-    while index < len(args):
-        token: str = args[index]
-        if token != DBT_SELECT_FLAG:
-            replaced.append(token)
-            index += 1
-            continue
-        index += 1
-        while index < len(args) and not args[index].startswith("--"):
-            index += 1
-    return (*replaced, DBT_SELECT_FLAG, *select_terms)

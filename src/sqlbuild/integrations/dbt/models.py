@@ -10,20 +10,14 @@ from typing import Any, TextIO
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.executor.clone.models import CloneExecutionResult
-from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.integrations.dbt._helpers.selection.selector_terms import dbt_fqn_selector_term
 from sqlbuild.integrations.dbt.types import (
     DbtCombinedGraphOwner,
     DbtCombinedGraphResourceType,
     DbtInteropCommand,
     DbtInteropSkipReason,
-    DbtLineageDirection,
-    DbtLineageOutputFormat,
 )
-from sqlbuild.spec.contracts.models import DbtProductionRefConfig, ScenarioConfig, SourceColumnEntry
 
 
 @dataclass(frozen=True)
@@ -218,7 +212,6 @@ class DbtInitRequest:
     dry_run: bool = False
     overwrite: bool = False
     skip_dbt_debug: bool = False
-    production_git_ref: str = "main"
     progress_callbacks: DbtInitProgressCallbacks = field(default_factory=DbtInitProgressCallbacks)
 
 
@@ -229,8 +222,6 @@ class DbtInitResult:
     output_dir: Path
     project_file: Path
     project_name: str
-    macro_file: Path
-    production_git_ref: str
     adapter: str
     target_name: str
     profile_name: str
@@ -247,87 +238,6 @@ class DbtCommandResult:
     returncode: int
     stdout: str = ""
     stderr: str = ""
-
-
-@dataclass(frozen=True)
-class DbtProductionRefCompileResult:
-    """Manifest produced by compiling a dbt project at a production git ref."""
-
-    git_ref: str
-    manifest_contents: str
-    command: DbtCommandResult
-    cache_hit: bool = False
-
-
-@dataclass(frozen=True)
-class DbtDiffOptions:
-    """Parsed SQLBuild dbt diff options."""
-
-    dbt_args: tuple[str, ...]
-    select: tuple[str, ...]
-    exclude: tuple[str, ...]
-    full: bool
-    schema_only: bool
-    bounded: str | None
-    verbose: bool
-    max_column_examples: int
-    max_row_only_examples: int
-
-
-@dataclass(frozen=True)
-class DbtDiffRun:
-    """dbt diff execution result with rendering labels."""
-
-    result: DiffExecutionResult
-    from_label: str
-    to_label: str
-    mode_label: str
-    verbose: bool
-    max_column_examples: int
-    max_row_only_examples: int
-
-
-@dataclass(frozen=True)
-class DbtCloneOptions:
-    """Parsed SQLBuild dbt clone options."""
-
-    dbt_args: tuple[str, ...]
-    select: tuple[str, ...]
-    exclude: tuple[str, ...]
-    hard_copy: bool
-    no_sql_validation: bool
-
-
-@dataclass(frozen=True)
-class DbtCloneRun:
-    """dbt clone execution result with rendering labels."""
-
-    result: CloneExecutionResult
-    origin_label: str
-    destination_label: str
-
-
-@dataclass(frozen=True)
-class DbtComparisonPreparation:
-    """Current and production-ref manifests prepared for clone/diff commands."""
-
-    discovered_inputs: DiscoveredProjectInputs
-    production_ref: DbtProductionRefConfig
-    production_git_ref: str
-    dbt_options: DbtCliOptions
-    runner: Any
-    current_manifest: DbtManifestIndex
-    reuse_manifest: DbtManifestIndex
-
-
-@dataclass(frozen=True)
-class DbtInteropConnection:
-    """Open warehouse connection resolved for a dbt interop command."""
-
-    adapter: BaseAdapter
-    adapter_name: str
-    connection_config: dict[str, object]
-    connection: Any
 
 
 @dataclass(frozen=True)
@@ -425,82 +335,6 @@ class DbtCombinedGraph:
     nodes: frozenset[DbtCombinedGraphKey]
     upstream_deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]]
     downstream_deps: dict[DbtCombinedGraphKey, tuple[DbtCombinedGraphKey, ...]]
-
-
-@dataclass(frozen=True)
-class DbtLineageNode:
-    """One displayable mixed dbt/SQLBuild lineage graph node."""
-
-    key: DbtCombinedGraphKey
-    label: str
-    qualified_name: str | None = None
-    relative_path: str | None = None
-
-
-@dataclass(frozen=True)
-class DbtLineageGraph:
-    """Selected mixed dbt/SQLBuild lineage graph slice."""
-
-    nodes: tuple[DbtLineageNode, ...]
-    edges: tuple[tuple[DbtCombinedGraphKey, DbtCombinedGraphKey], ...]
-    focus_keys: tuple[DbtCombinedGraphKey, ...] = field(default_factory=tuple)
-    direction: DbtLineageDirection | None = None
-
-
-@dataclass(frozen=True)
-class DbtColumnLineageTrace:
-    """Selected mixed dbt/SQLBuild column lineage trace."""
-
-    target: QualifiedLineageColumn
-    trace: tuple[ColumnLineageEdge, ...]
-    direction: DbtLineageDirection
-    max_depth: int | None
-    analyzed_model_count: int
-    truncated: bool = False
-    warnings: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class DbtSourceSchemaInspectionResult:
-    """Best-effort dbt source schemas for column lineage analysis."""
-
-    columns_by_unique_id: dict[str, tuple[SourceColumnEntry, ...]]
-    warnings: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class DbtLineageArgs:
-    """Parsed arguments for `sqb dbt lineage`."""
-
-    target: str
-    output_format: DbtLineageOutputFormat = DbtLineageOutputFormat.TREE
-    direction: DbtLineageDirection = DbtLineageDirection.UPSTREAM
-    depth: int | None = None
-    no_sql_validation: bool = False
-    dbt_args: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class DbtLineagePreparation:
-    """Compiled dbt/SQLBuild inputs shared by lineage selection and rendering."""
-
-    lineage_args: DbtLineageArgs
-    manifest: DbtManifestIndex
-    adapter: BaseAdapter
-    project: CompiledProject
-    graph: DbtCombinedGraph
-    connection_config: dict[str, object]
-
-
-@dataclass(frozen=True)
-class DbtScenarioBuild:
-    """Adapted SQLBuild project and connection inputs for a dbt scenario run."""
-
-    project: CompiledProject
-    adapter_name: str
-    connection_config: dict[str, object]
-    project_name: str
-    scenario_config: ScenarioConfig
 
 
 @dataclass(frozen=True)
@@ -654,4 +488,3 @@ class DbtSqlbuildPlanRequest:
     selected_model_names: tuple[str, ...]
     sqlbuild_args: tuple[str, ...]
     external_blocked_model_names: tuple[str, ...] = ()
-    test_manifest: DbtManifestIndex | None = None

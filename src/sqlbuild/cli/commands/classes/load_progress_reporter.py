@@ -10,7 +10,9 @@ from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.completion_line import format_completion_line
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
+from sqlbuild.presentation.types import CompletionState
 from sqlbuild.spec.contracts.models import SourceEntry
 
 _SPINNER_TICK_SECONDS: float = 0.1
@@ -181,23 +183,21 @@ def format_load_footer(
     use_color: bool,
 ) -> str:
     style: CliStyle = CliStyle(use_color=use_color)
-    completion_message: str = (
-        style.success("Completed successfully.")
-        if fail_count == 0
-        else style.error("Completed with errors.")
+    counts_summary: str = format_summary_footer(
+        counts=(
+            ("PASS", success_count),
+            ("WARN", 0),
+            ("FAIL", fail_count),
+            ("SKIP", skip_count),
+            ("TOTAL", total_count),
+        ),
+        use_color=use_color,
+        elapsed=f"{elapsed:.2f}s",
     )
-    return (
-        f"\n{completion_message}\n"
-        + format_summary_footer(
-            counts=(
-                ("PASS", success_count),
-                ("WARN", 0),
-                ("FAIL", fail_count),
-                ("SKIP", skip_count),
-                ("TOTAL", total_count),
-            ),
-            use_color=use_color,
-            elapsed=f"{elapsed:.2f}s",
-        )
-        + "\n"
+    completion_message: str = format_completion_line(
+        style=style,
+        state=CompletionState.OK if fail_count == 0 else CompletionState.FAIL,
+        label="Completed successfully" if fail_count == 0 else "Completed with errors",
+        summary=counts_summary,
     )
+    return f"\n{completion_message}\n"

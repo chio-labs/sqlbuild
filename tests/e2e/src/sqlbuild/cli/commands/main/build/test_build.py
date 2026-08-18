@@ -14,7 +14,6 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     BuildE2ETestCase,
     DeferCloneBuildE2ETestCase,
-    DependencyBaselineBuildE2ETestCase,
     DirectChangesOnlyBuildE2ETestCase,
     PythonBuildE2ETestCase,
     PythonLoaderPersistedResultBuildE2ETestCase,
@@ -26,12 +25,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     assert_defer_clone_build_case,
-    assert_dependency_baseline_build_case,
     build_freshness_error_branch_source_yml,
-    downstream_model_sql,
-    incremental_upstream_model_sql,
-    raw_orders_setup_sql,
-    table_upstream_model_sql,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     execute_duckdb,
@@ -72,12 +66,9 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
             expected_stdout_fragments=(
                 "Prephase  defer clone",
-                "Existing destination inputs (1)",
-                "upstream",
-                "[for downstream]",
                 "First run (1)",
                 "downstream",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
             ),
             unexpected_stdout_fragments=("cannot build selected scope",),
             expected_prod_upstream_rows=((1, "prod_version"),),
@@ -99,100 +90,6 @@ def test_given_selected_downstream_when_building_with_defer_clone_then_clones_bo
 @pytest.mark.parametrize(
     "test_case",
     [
-        DependencyBaselineBuildE2ETestCase(
-            description="missing table upstream is baselined before downstream build",
-            project_name="dependency_baseline_missing_table",
-            upstream_sql=table_upstream_model_sql(amount=100),
-            downstream_sql=downstream_model_sql(),
-            prod_setup_sql=raw_orders_setup_sql(
-                rows_sql="(1, 100, TIMESTAMP '2026-01-01 00:00:00')"
-            ),
-            setup_commands=(("--no-color", "build", "--target", "prod", "--select", "upstream"),),
-            command=("--no-color", "build", "--select", "downstream"),
-            expected_stdout_fragments=(
-                "Plan ready (1 selected)",
-                "Reused inputs (1)",
-                "upstream",
-                "from reuse origin target",
-                "downstream",
-                "Completed successfully.",
-            ),
-            unexpected_stdout_fragments=("cannot build selected scope",),
-            expected_upstream_rows=((1, 100),),
-            expected_downstream_rows=((1, 100),),
-            expected_fingerprint_rows=(("model", "downstream"),),
-        ),
-        DependencyBaselineBuildE2ETestCase(
-            description="current table upstream does not baseline",
-            project_name="dependency_baseline_current_table",
-            upstream_sql=table_upstream_model_sql(amount=110),
-            downstream_sql=downstream_model_sql(),
-            prod_setup_sql=raw_orders_setup_sql(
-                rows_sql="(1, 110, TIMESTAMP '2026-01-01 00:00:00')"
-            ),
-            setup_commands=(
-                ("--no-color", "build", "--target", "prod", "--select", "upstream"),
-                ("--no-color", "build", "--target", "dev", "--select", "upstream"),
-            ),
-            command=("--no-color", "build", "--select", "downstream"),
-            expected_stdout_fragments=("Plan ready (1 selected)", "downstream"),
-            unexpected_stdout_fragments=("Reused inputs",),
-            expected_upstream_rows=((1, 110),),
-            expected_downstream_rows=((1, 110),),
-            expected_fingerprint_rows=(("model", "downstream"), ("model", "upstream")),
-        ),
-        DependencyBaselineBuildE2ETestCase(
-            description="stale table upstream is baselined before downstream build",
-            project_name="dependency_baseline_stale_table",
-            upstream_sql=table_upstream_model_sql(amount=120),
-            downstream_sql=downstream_model_sql(),
-            prod_setup_sql=raw_orders_setup_sql(
-                rows_sql="(1, 120, TIMESTAMP '2026-01-01 00:00:00')"
-            ),
-            dev_setup_sql=(
-                "CREATE SCHEMA dev;\nCREATE TABLE dev.upstream AS SELECT 1 AS id, 999 AS amount;\n"
-            ),
-            setup_commands=(("--no-color", "build", "--target", "prod", "--select", "upstream"),),
-            command=("--no-color", "build", "--select", "downstream"),
-            expected_stdout_fragments=("Reused inputs (1)", "from reuse origin target"),
-            unexpected_stdout_fragments=("cannot build selected scope",),
-            expected_upstream_rows=((1, 120),),
-            expected_downstream_rows=((1, 120),),
-            expected_fingerprint_rows=(("model", "downstream"),),
-        ),
-        DependencyBaselineBuildE2ETestCase(
-            description="incremental upstream baselines whole relation without catch-up",
-            project_name="dependency_baseline_incremental_whole_relation",
-            upstream_sql=incremental_upstream_model_sql(),
-            downstream_sql=downstream_model_sql(),
-            prod_setup_sql=raw_orders_setup_sql(
-                rows_sql="(1, 130, TIMESTAMP '2026-01-01 00:00:00')"
-            ),
-            setup_commands=(("--no-color", "build", "--target", "prod", "--select", "upstream"),),
-            dev_setup_sql=(
-                "INSERT INTO main.raw_orders VALUES (2, 131, TIMESTAMP '2026-01-02 00:00:00');\n"
-            ),
-            command=("--no-color", "build", "--select", "downstream"),
-            expected_stdout_fragments=("Reused inputs (1)", "from reuse origin target"),
-            unexpected_stdout_fragments=("incremental_append",),
-            expected_upstream_rows=((1, 130),),
-            expected_downstream_rows=((1, 130),),
-            expected_fingerprint_rows=(("model", "downstream"),),
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_dependency_baseline_project_when_building_downstream_then_prepares_upstream(
-    tmp_path: Path,
-    test_case: DependencyBaselineBuildE2ETestCase,
-) -> None:
-    assert test_case.expected_stdout_fragments
-    assert_dependency_baseline_build_case(tmp_path=tmp_path, test_case=test_case)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
         SelectionAwareStalenessBuildE2ETestCase(
             description="out of selection changed upstream warns without rerunning leaf",
             project_name="selection_aware_staleness_build",
@@ -202,7 +99,7 @@ def test_given_dependency_baseline_project_when_building_downstream_then_prepare
             expected_mixed_stdout_fragments=(
                 "selected model 'c' will build on",
                 "- a",
-                "Completed successfully.",
+                "\u2713 Completed successfully",
             ),
             expected_replan_stdout_fragments=(
                 "selected model 'c' will build on",
@@ -282,137 +179,6 @@ def test_given_changed_unselected_upstream_when_building_leaf_then_warns_and_noo
     "test_case",
     [
         DirectChangesOnlyBuildE2ETestCase(
-            description="standard changes-only build prunes unchanged selected model",
-            expected_exit_code=0,
-            expected_output_fragments=(
-                "Plan ready (0 selected)",
-                "Skipped current models (1 already up to date)",
-            ),
-            unexpected_output_fragments=(
-                "Execution  sqb build",
-                "Completed successfully.",
-                "TOTAL=0",
-                "1/1",
-                "orders up to date",
-            ),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_built_direct_project_when_building_changes_only_then_prunes_unchanged_model(
-    test_case: DirectChangesOnlyBuildE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="direct_changes_only_build",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "direct_changes_only_build"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "warehouse.duckdb"\n'
-            ),
-            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS order_id\n",
-        },
-    )
-    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"),
-        project_dir=project_dir,
-    )
-    assert initial_build_result.returncode == 0, (
-        initial_build_result.stdout + initial_build_result.stderr
-    )
-
-    build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
-        project_dir=project_dir,
-    )
-
-    assert build_result.returncode == test_case.expected_exit_code, (
-        build_result.stdout + build_result.stderr
-    )
-    output: str = build_result.stdout
-    fragment: str
-    for fragment in test_case.expected_output_fragments:
-        assert fragment in output, output
-    for fragment in test_case.unexpected_output_fragments:
-        assert fragment not in output, output
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DirectChangesOnlyBuildE2ETestCase(
-            description="standard changes-only build executes changed selected model",
-            expected_exit_code=0,
-            expected_output_fragments=(
-                "Plan ready (1 selected)",
-                "Query changed (1)",
-                "1/1",
-                "orders",
-                "TOTAL=1",
-            ),
-            unexpected_output_fragments=("Plan ready (0 selected)",),
-            expected_query_results=((2,),),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_direct_query_change_when_building_changes_only_then_executes_changed_model(
-    test_case: DirectChangesOnlyBuildE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="direct_changed_changes_only_build",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "direct_changed_changes_only_build"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "warehouse.duckdb"\n'
-            ),
-            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS order_id\n",
-        },
-    )
-    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"),
-        project_dir=project_dir,
-    )
-    assert initial_build_result.returncode == 0, (
-        initial_build_result.stdout + initial_build_result.stderr
-    )
-    (project_dir / "models" / "orders.sql").write_text(
-        "MODEL (materialized table);\n\nSELECT 2 AS order_id\n",
-        encoding="utf-8",
-    )
-
-    build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--changes-only"),
-        project_dir=project_dir,
-    )
-
-    assert build_result.returncode == test_case.expected_exit_code, (
-        build_result.stdout + build_result.stderr
-    )
-    output: str = build_result.stdout
-    fragment: str
-    for fragment in test_case.expected_output_fragments:
-        assert fragment in output, output
-    for fragment in test_case.unexpected_output_fragments:
-        assert fragment not in output, output
-    rows: list[tuple[Any, ...]] = query_duckdb(
-        db_path=project_dir / "warehouse.duckdb",
-        sql="SELECT order_id FROM orders",
-    )
-    assert tuple(rows) == test_case.expected_query_results
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DirectChangesOnlyBuildE2ETestCase(
             description="direct build persists function hashes in model metadata",
             expected_exit_code=0,
             expected_output_fragments=("fact_orders",),
@@ -473,169 +239,10 @@ def test_given_direct_function_dependency_when_building_then_persists_function_h
     "test_case",
     [
         DirectChangesOnlyBuildE2ETestCase(
-            description="standard changes-only build prunes read-side Python for unchanged SQL",
-            expected_exit_code=0,
-            expected_output_fragments=(
-                "Plan ready (0 selected)",
-                "Skipped current models (1 already up to date)",
-            ),
-            unexpected_output_fragments=(
-                "Execution  sqb build",
-                "Completed successfully.",
-                "TOTAL=0",
-                "profile_orders up to date",
-                "Python read-side",
-            ),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_unchanged_direct_model_when_building_changes_only_then_prunes_read_side_python(
-    test_case: DirectChangesOnlyBuildE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="direct_changes_only_python_build",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "direct_changes_only_python_build"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "warehouse.duckdb"\n'
-            ),
-            "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS order_id\n",
-            "tasks/profile.py": (
-                "from pathlib import Path\n"
-                "from sqlbuild.refs import model\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task(depends_on=model('orders'))\n"
-                "def profile_orders(ctx):\n"
-                "    output = Path(__file__).parents[1].joinpath('profile.txt')\n"
-                "    output.write_text('ran')\n"
-                "    return ctx.result(metadata={'profiled': True})\n"
-            ),
-        },
-    )
-    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--select", "orders profile_orders"),
-        project_dir=project_dir,
-    )
-    assert initial_build_result.returncode == 0, (
-        initial_build_result.stdout + initial_build_result.stderr
-    )
-    marker_path: Path = project_dir / "profile.txt"
-    assert marker_path.read_text(encoding="utf-8") == "ran"
-    marker_path.unlink()
-
-    build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=(
-            "--no-color",
-            "build",
-            "--select",
-            "orders profile_orders",
-            "--changes-only",
-        ),
-        project_dir=project_dir,
-    )
-
-    assert build_result.returncode == test_case.expected_exit_code, (
-        build_result.stdout + build_result.stderr
-    )
-    output: str = build_result.stdout
-    fragment: str
-    for fragment in test_case.expected_output_fragments:
-        assert fragment in output, output
-    for fragment in test_case.unexpected_output_fragments:
-        assert fragment not in output, output
-    assert not marker_path.exists()
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DirectChangesOnlyBuildE2ETestCase(
-            description="standard normal build appends source freshness after success",
-            expected_exit_code=0,
-            expected_output_fragments=("Plan ready (1 selected)", "orders", "TOTAL=1"),
-            unexpected_output_fragments=(),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_source_freshness_when_building_normally_then_writes_state_after_success(
-    test_case: DirectChangesOnlyBuildE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="direct_changes_only_source_freshness_build_read_only",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "direct_changes_only_source_freshness_build_read_only"\n'
-                'adapter = "duckdb"\n\n'
-                "[settings]\n"
-                "changes_only = true\n\n"
-                "[connection]\n"
-                'database = "warehouse.duckdb"\n'
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n"
-                "    expression: SELECT 1 AS order_id\n"
-                "    freshness:\n"
-                "      strategy: sql\n"
-                "      type: integer\n"
-                "      query: SELECT 1 AS data_version\n"
-            ),
-            "models/orders.sql": (
-                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
-            ),
-        },
-    )
-    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"),
-        project_dir=project_dir,
-    )
-    assert initial_build_result.returncode == 0, (
-        initial_build_result.stdout + initial_build_result.stderr
-    )
-    fragment: str
-    for fragment in test_case.expected_output_fragments:
-        assert fragment in initial_build_result.stdout, initial_build_result.stdout
-    assert table_exists(
-        db_path=project_dir / "warehouse.duckdb",
-        table_name="_sqlbuild_source_freshness",
-    )
-
-    rows: list[tuple[Any, ...]] = query_duckdb(
-        db_path=project_dir / "warehouse.duckdb",
-        sql="SELECT source_name, data_version FROM main._sqlbuild_source_freshness",
-    )
-    assert rows == [("raw_orders", "1")]
-
-    build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"),
-        project_dir=project_dir,
-    )
-
-    assert build_result.returncode == test_case.expected_exit_code, (
-        build_result.stdout + build_result.stderr
-    )
-    assert "Plan ready (0 selected)" in build_result.stdout
-    assert "Skipped current models (1 already up to date)" in build_result.stdout
-    assert "Execution  sqb build" not in build_result.stdout
-    assert "TOTAL=0" not in build_result.stdout
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DirectChangesOnlyBuildE2ETestCase(
             description="standard changes-only persists plan-time source freshness observation",
             expected_exit_code=0,
-            expected_output_fragments=("Plan ready (1 selected)", "orders", "TOTAL=1"),
-            unexpected_output_fragments=("Plan ready (0 selected)",),
+            expected_output_fragments=("Plan ready  1 selected", "orders", "TOTAL=1"),
+            unexpected_output_fragments=("Plan ready  0 selected",),
         )
     ],
     ids=lambda case: case.description,
@@ -716,96 +323,6 @@ def test_given_source_freshness_changes_during_build_when_appending_then_persist
     )
     assert freshness_control_rows == [(2,)]
     assert freshness_rows == [("raw_orders", "0"), ("raw_orders", "1")]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DirectChangesOnlyBuildE2ETestCase(
-            description="direct timestamp source freshness respects lag tolerance",
-            expected_exit_code=0,
-            expected_output_fragments=(
-                "Plan ready (0 selected)",
-                "Skipped current models (1 already up to date)",
-            ),
-            unexpected_output_fragments=("Execution  sqb build", "TOTAL=0"),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_timestamp_lag_tolerance_when_building_changes_only_then_skips_within_tolerance(
-    test_case: DirectChangesOnlyBuildE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    source_yml: str = (
-        "sources:\n"
-        "  - name: raw_orders\n"
-        "    expression: SELECT 1 AS order_id\n"
-        "    freshness:\n"
-        "      strategy: sql\n"
-        "      type: timestamp\n"
-        "      lag_tolerance: 10m\n"
-        "      query: SELECT CAST('{data_version}' AS TIMESTAMP) AS data_version\n"
-    )
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="direct_changes_only_source_freshness_lag_tolerance",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "direct_changes_only_source_freshness_lag_tolerance"\n'
-                'adapter = "duckdb"\n\n'
-                "[settings]\n"
-                "changes_only = true\n\n"
-                "[connection]\n"
-                'database = "warehouse.duckdb"\n'
-            ),
-            "sources/raw.yml": source_yml.format(data_version="2026-01-01T12:00:00"),
-            "models/orders.sql": (
-                'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
-            ),
-        },
-    )
-    initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"),
-        project_dir=project_dir,
-    )
-    assert initial_build_result.returncode == 0, (
-        initial_build_result.stdout + initial_build_result.stderr
-    )
-    baseline_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"),
-        project_dir=project_dir,
-    )
-    assert baseline_result.returncode == 0, baseline_result.stdout + baseline_result.stderr
-
-    (project_dir / "sources" / "raw.yml").write_text(
-        source_yml.format(data_version="2026-01-01T12:05:00"), encoding="utf-8"
-    )
-    within_tolerance_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"),
-        project_dir=project_dir,
-    )
-
-    assert within_tolerance_result.returncode == test_case.expected_exit_code, (
-        within_tolerance_result.stdout + within_tolerance_result.stderr
-    )
-    fragment: str
-    for fragment in test_case.expected_output_fragments:
-        assert fragment in within_tolerance_result.stdout, within_tolerance_result.stdout
-
-    (project_dir / "sources" / "raw.yml").write_text(
-        source_yml.format(data_version="2026-01-01T12:11:00"), encoding="utf-8"
-    )
-    beyond_tolerance_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"),
-        project_dir=project_dir,
-    )
-
-    assert beyond_tolerance_result.returncode == 0, (
-        beyond_tolerance_result.stdout + beyond_tolerance_result.stderr
-    )
-    assert "Plan ready (1 selected)" in beyond_tolerance_result.stdout
-    assert "orders" in beyond_tolerance_result.stdout
 
 
 @pytest.mark.parametrize(
