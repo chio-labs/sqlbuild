@@ -50,6 +50,8 @@ class DiscoveredSqlModelFile:
     header_column_locations: dict[str, SourceLocation]
     output_column_locations: dict[str, SourceLocation]
     query_sql: str
+    enum_declarations: tuple[EnumDeclaration, ...] = field(default_factory=tuple)
+    constant_declarations: tuple[ConstantDeclaration, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,56 @@ class DiscoveredSqlFunctionFile:
     contents: str
     header_values: dict[str, object]
     body_sql: str
+
+
+@dataclass(frozen=True)
+class EnumMember:
+    """One named member in a SQLBuild enum declaration."""
+
+    name: str
+    value: str | int
+
+
+@dataclass(frozen=True)
+class EnumDeclaration:
+    """One validated public or model-local enum declaration."""
+
+    name: str
+    members: tuple[EnumMember, ...]
+    scalar_type: str
+    relative_path: Path
+    model_name: str | None = None
+
+
+@dataclass(frozen=True)
+class ConstantDeclaration:
+    """One validated public or model-local constant declaration."""
+
+    name: str
+    value: str | int
+    scalar_type: str
+    relative_path: Path
+    model_name: str | None = None
+
+
+@dataclass(frozen=True)
+class DiscoveredEnumFile:
+    """A public SQL file containing one or more enum declarations."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    declarations: tuple[EnumDeclaration, ...]
+
+
+@dataclass(frozen=True)
+class DiscoveredConstantFile:
+    """A public SQL file containing one or more constant declarations."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    declarations: tuple[ConstantDeclaration, ...]
 
 
 @dataclass(frozen=True)
@@ -306,6 +358,8 @@ class DiscoveredProjectInputs:
     project_config: ProjectConfig
     local_config: LocalConfig
     model_files: tuple[DiscoveredSqlModelFile, ...] = field(default_factory=tuple)
+    enum_files: tuple[DiscoveredEnumFile, ...] = field(default_factory=tuple)
+    constant_files: tuple[DiscoveredConstantFile, ...] = field(default_factory=tuple)
     sql_function_files: tuple[DiscoveredSqlFunctionFile, ...] = field(default_factory=tuple)
     python_function_files: tuple[DiscoveredPythonFunctionFile, ...] = field(default_factory=tuple)
     schema_files: tuple[DiscoveredSchemaFile, ...] = field(default_factory=tuple)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from sqlbuild.compiler.auditing.main._builtins import build_builtin_audit_resolution
 from sqlbuild.compiler.compile._helpers.attachment.audits import (
     build_audit_inputs,
@@ -21,6 +23,7 @@ from sqlbuild.compiler.compile._helpers.attachment.sql_tests import (
     build_scenario_inputs,
     build_test_inputs,
 )
+from sqlbuild.compiler.compile._helpers.render.declarations import build_public_declaration_indexes
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
     CompileAuditInput,
@@ -32,14 +35,17 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlFunctionInput,
     CompileSqlScenarioInput,
     CompileSqlTestInput,
+    DeclarationResolutionContext,
     LoadedMacro,
     MacroContext,
     ModelInputBuildContext,
 )
 from sqlbuild.compiler.discovery.models import (
+    ConstantDeclaration,
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
     DiscoveredProjectInputs,
+    EnumDeclaration,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
@@ -98,17 +104,20 @@ def build_compile_inputs(
     )
     resolved_run_id: str = resolve_run_id(selected_run_id=run_id)
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
-    model_inputs: tuple[CompileModelInput, ...] = build_model_inputs(
+    model_context: ModelInputBuildContext = ModelInputBuildContext(
+        effective_vars=effective_vars,
+        effective_settings=effective_settings,
+        target_config=effective_target,
+        effective_target_name=effective_target_name,
+        run_id=resolved_run_id,
+        macro_context=macro_context,
+        loaded_macros=loaded_macros,
+    )
+    model_inputs: tuple[CompileModelInput, ...]
+    declarations: DeclarationResolutionContext
+    model_inputs, declarations = _build_models_with_declarations(
         discovered_inputs=discovered_inputs,
-        context=ModelInputBuildContext(
-            effective_vars=effective_vars,
-            effective_settings=effective_settings,
-            target_config=effective_target,
-            effective_target_name=effective_target_name,
-            run_id=resolved_run_id,
-            macro_context=macro_context,
-            loaded_macros=loaded_macros,
-        ),
+        context=model_context,
         no_sql_validation=no_sql_validation,
         defer_model_sql_validation=defer_model_sql_validation,
         external_sql_reference_resolver=external_sql_reference_resolver,
@@ -122,6 +131,7 @@ def build_compile_inputs(
         adapter_name=macro_context.adapter_name,
         macro_context=macro_context,
         loaded_macros=loaded_macros,
+        declarations=declarations,
         no_sql_validation=no_sql_validation,
         python_functions_inherit_default_namespace=(python_functions_inherit_default_namespace),
     )
@@ -131,6 +141,8 @@ def build_compile_inputs(
         effective_settings=effective_settings,
         macro_context=macro_context,
         loaded_macros=loaded_macros,
+        public_enums=declarations.enums,
+        public_constants=declarations.constants,
         no_sql_validation=no_sql_validation,
     )
     test_inputs: tuple[CompileSqlTestInput, ...] = build_test_inputs(
@@ -138,6 +150,8 @@ def build_compile_inputs(
         effective_vars=effective_vars,
         macro_context=macro_context,
         loaded_macros=loaded_macros,
+        public_enums=declarations.enums,
+        public_constants=declarations.constants,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = build_scenario_inputs(
@@ -145,6 +159,8 @@ def build_compile_inputs(
         effective_vars=effective_vars,
         macro_context=macro_context,
         loaded_macros=loaded_macros,
+        public_enums=declarations.enums,
+        public_constants=declarations.constants,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     project_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = (
@@ -163,6 +179,8 @@ def build_compile_inputs(
         effective_vars=effective_vars,
         macro_context=macro_context,
         loaded_macros=loaded_macros,
+        public_enums=declarations.enums,
+        public_constants=declarations.constants,
         generic_audit_definitions=generic_audit_definitions,
     )
     return CompileProjectInputs(
@@ -185,6 +203,8 @@ def build_compile_inputs(
         effective_settings=effective_settings,
         effective_vars=effective_vars,
         loaded_macros=loaded_macros,
+        public_enums=declarations.enums,
+        public_constants=declarations.constants,
         model_inputs=model_inputs,
         seed_inputs=seed_inputs,
         source_inputs=source_inputs,
@@ -195,3 +215,37 @@ def build_compile_inputs(
         diagnostics=diagnostics,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
+
+
+def _build_models_with_declarations(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    context: ModelInputBuildContext,
+    no_sql_validation: bool,
+    defer_model_sql_validation: bool,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
+) -> tuple[
+    tuple[CompileModelInput, ...],
+    DeclarationResolutionContext,
+]:
+    public_enums: dict[str, EnumDeclaration]
+    public_constants: dict[str, ConstantDeclaration]
+    public_enums, public_constants = build_public_declaration_indexes(
+        discovered_inputs=discovered_inputs
+    )
+    declarations: DeclarationResolutionContext = DeclarationResolutionContext(
+        enums=public_enums,
+        constants=public_constants,
+    )
+    model_inputs: tuple[CompileModelInput, ...] = build_model_inputs(
+        discovered_inputs=discovered_inputs,
+        context=replace(
+            context,
+            public_enums=public_enums,
+            public_constants=public_constants,
+        ),
+        no_sql_validation=no_sql_validation,
+        defer_model_sql_validation=defer_model_sql_validation,
+        external_sql_reference_resolver=external_sql_reference_resolver,
+    )
+    return model_inputs, declarations

@@ -4,13 +4,19 @@ from types import MappingProxyType
 from typing import cast
 
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
+from sqlbuild.compiler.compile.main._assemble_project import assemble_project
+from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
+    CompiledModel,
     CompiledModelSqlTestPayload,
+    CompiledProject,
     CompiledSqlTest,
+    CompileProjectInputs,
     LoadedMacro,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
+from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
 
 
 def build_loaded_macros(tmp_path: Path, macro_file_contents: str) -> dict[str, LoadedMacro]:
@@ -27,6 +33,21 @@ def build_loaded_macros(tmp_path: Path, macro_file_contents: str) -> dict[str, L
             ),
         )
     )
+
+
+def compile_first_model(*, project_dir: Path) -> CompiledModel:
+    """Compile a fixture project and return its first model."""
+
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    compile_inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discovered_inputs,
+        run_id="test_run",
+    )
+    compiled_project: CompiledProject = assemble_project(
+        inputs=compile_inputs,
+        skip_column_inference=True,
+    )
+    return compiled_project.models[0]
 
 
 def compiled_sql_test_expected_model_names(test: CompiledSqlTest) -> tuple[str, ...]:

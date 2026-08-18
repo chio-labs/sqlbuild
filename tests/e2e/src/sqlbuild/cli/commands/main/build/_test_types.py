@@ -30,6 +30,16 @@ class BuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class EnumContractBuildE2ETestCase:
+    """Test case for enum-backed contract enforcement."""
+
+    description: str
+    selected_member: str
+    expected_exit_code: int
+    expected_stdout_fragment: str
+
+
+@dataclass(frozen=True)
 class ManifestArtifactGatingE2ETestCase:
     description: str
     expected_manifest_after_build: bool

@@ -16,6 +16,12 @@ from pydantic import ValidationError
 
 from sqlbuild.compiler.discovery._helpers.python.functions import parse_python_function
 from sqlbuild.compiler.discovery._helpers.sql.audits import parse_sql_audit_file
+from sqlbuild.compiler.discovery._helpers.sql.declarations import (
+    parse_constant_declaration_file,
+    parse_enum_declaration_file,
+    parse_model_constant_declarations,
+    parse_model_enum_declarations,
+)
 from sqlbuild.compiler.discovery._helpers.sql.functions import parse_function_sql
 from sqlbuild.compiler.discovery._helpers.sql.model_files import (
     model_header_column_locations,
@@ -46,6 +52,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
     DiscoveredAuditFile,
     DiscoveredCheckFunction,
+    DiscoveredConstantFile,
+    DiscoveredEnumFile,
     DiscoveredHookFunction,
     DiscoveredLoaderFunction,
     DiscoveredMacroFile,
@@ -144,9 +152,71 @@ def discover_model_files(
                     extract_implicit_alias_columns=extract_implicit_alias_columns,
                 ),
                 query_sql=query_sql,
+                enum_declarations=parse_model_enum_declarations(
+                    raw_value=header_values.get("enums"),
+                    model_name=file_path.stem,
+                    relative_path=relative_path,
+                ),
+                constant_declarations=parse_model_constant_declarations(
+                    raw_value=header_values.get("constants"),
+                    model_name=file_path.stem,
+                    relative_path=relative_path,
+                ),
             )
         )
     return tuple(discovered_model_files)
+
+
+def discover_enum_files(*, project_dir: Path) -> tuple[DiscoveredEnumFile, ...]:
+    """Discover public enum declaration files under enums/."""
+
+    enum_root: Path = project_dir / "enums"
+    if not enum_root.is_dir():
+        return ()
+    discovered_files: list[DiscoveredEnumFile] = []
+    file_path: Path
+    for file_path in sorted(enum_root.rglob("*.sql")):
+        contents: str = file_path.read_text(encoding="utf-8")
+        relative_path: Path = file_path.relative_to(project_dir)
+        discovered_files.append(
+            DiscoveredEnumFile(
+                file_path=file_path,
+                relative_path=relative_path,
+                contents=contents,
+                declarations=parse_enum_declaration_file(
+                    contents=contents,
+                    file_path=file_path,
+                    relative_path=relative_path,
+                ),
+            )
+        )
+    return tuple(discovered_files)
+
+
+def discover_constant_files(*, project_dir: Path) -> tuple[DiscoveredConstantFile, ...]:
+    """Discover public constant declaration files under constants/."""
+
+    constant_root: Path = project_dir / "constants"
+    if not constant_root.is_dir():
+        return ()
+    discovered_files: list[DiscoveredConstantFile] = []
+    file_path: Path
+    for file_path in sorted(constant_root.rglob("*.sql")):
+        contents: str = file_path.read_text(encoding="utf-8")
+        relative_path: Path = file_path.relative_to(project_dir)
+        discovered_files.append(
+            DiscoveredConstantFile(
+                file_path=file_path,
+                relative_path=relative_path,
+                contents=contents,
+                declarations=parse_constant_declaration_file(
+                    contents=contents,
+                    file_path=file_path,
+                    relative_path=relative_path,
+                ),
+            )
+        )
+    return tuple(discovered_files)
 
 
 def discover_sql_function_files(*, project_dir: Path) -> tuple[DiscoveredSqlFunctionFile, ...]:
