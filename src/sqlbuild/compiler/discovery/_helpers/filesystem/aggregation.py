@@ -7,6 +7,8 @@ from pathlib import Path
 from sqlbuild.compiler.discovery._helpers.filesystem.core import (
     discover_adapter_file,
     discover_audit_files,
+    discover_constant_files,
+    discover_enum_files,
     discover_hook_functions,
     discover_macro_files,
     discover_materialization_files,
@@ -65,6 +67,8 @@ def build_discovered_project_inputs(
             project_dir=project_dir,
             extract_implicit_alias_columns=sql_analysis_enabled,
         ),
+        enum_files=discover_enum_files(project_dir=project_dir),
+        constant_files=discover_constant_files(project_dir=project_dir),
         sql_function_files=discover_sql_function_files(project_dir=project_dir),
         python_function_files=discover_python_function_files(project_dir=project_dir),
         schema_files=discover_schema_files(project_dir=project_dir),

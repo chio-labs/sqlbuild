@@ -44,7 +44,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
             ),
             expected_branch_fragments=(
                 "Virtual environment",
-                "name: pr",
+                "pr (working, build required)",
                 "\u2713 Completed successfully",
             ),
             expected_diff_fragments=(

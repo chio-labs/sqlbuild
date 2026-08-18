@@ -1,0 +1,342 @@
+"""Parsing helpers for authored enum and constant declaration files."""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Sequence
+from pathlib import Path
+from typing import cast
+
+from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_header_values
+from sqlbuild.compiler.discovery.exceptions import DeclarationParseError, ModelSqlParseError
+from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration, EnumMember
+
+_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_DECLARATION_START_PATTERN: re.Pattern[str] = re.compile(r"(?P<kind>ENUM|CONSTANT)\s*\(")
+_VARCHAR_TYPE: str = "VARCHAR"
+_INTEGER_TYPE: str = "INTEGER"
+_STATEMENT_TERMINATOR: str = ";"
+_ESCAPE_CHARACTER: str = "\\"
+_QUOTE_TOKENS: frozenset[str] = frozenset({"'", '"'})
+_OPEN_PARENTHESIS: str = "("
+_CLOSE_PARENTHESIS: str = ")"
+
+
+def parse_enum_declaration_file(
+    *, contents: str, file_path: Path, relative_path: Path
+) -> tuple[EnumDeclaration, ...]:
+    """Parse all public enum declarations in one file."""
+
+    return tuple(
+        _parse_enum_declaration(
+            values=values,
+            file_path=file_path,
+            relative_path=relative_path,
+            model_name=None,
+        )
+        for values in _parse_declaration_headers(
+            contents=contents,
+            file_path=file_path,
+            expected_kind="ENUM",
+        )
+    )
+
+
+def parse_constant_declaration_file(
+    *, contents: str, file_path: Path, relative_path: Path
+) -> tuple[ConstantDeclaration, ...]:
+    """Parse all public constant declarations in one file."""
+
+    return tuple(
+        _parse_constant_declaration(
+            name=values.get("name"),
+            value=values.get("value"),
+            file_path=file_path,
+            relative_path=relative_path,
+            model_name=None,
+            unknown_keys=set(values) - {"name", "value"},
+        )
+        for values in _parse_declaration_headers(
+            contents=contents,
+            file_path=file_path,
+            expected_kind="CONSTANT",
+        )
+    )
+
+
+def parse_model_enum_declarations(
+    *, raw_value: object | None, model_name: str, relative_path: Path
+) -> tuple[EnumDeclaration, ...]:
+    """Normalize model-header enum declarations into scoped facts."""
+
+    if raw_value is None:
+        return ()
+    if not isinstance(raw_value, dict):
+        raise DeclarationParseError(f"{relative_path} model 'enums' must be a mapping")
+    declarations: list[EnumDeclaration] = []
+    raw_name: object
+    raw_members: object
+    for raw_name, raw_members in cast(dict[object, object], raw_value).items():
+        declarations.append(
+            _parse_enum_declaration(
+                values={"name": raw_name, "members": raw_members},
+                file_path=relative_path,
+                relative_path=relative_path,
+                model_name=model_name,
+            )
+        )
+    return tuple(declarations)
+
+
+def parse_model_constant_declarations(
+    *, raw_value: object | None, model_name: str, relative_path: Path
+) -> tuple[ConstantDeclaration, ...]:
+    """Normalize model-header constant declarations into scoped facts."""
+
+    if raw_value is None:
+        return ()
+    if not isinstance(raw_value, dict):
+        raise DeclarationParseError(f"{relative_path} model 'constants' must be a mapping")
+    declarations: list[ConstantDeclaration] = []
+    raw_name: object
+    raw_value_item: object
+    for raw_name, raw_value_item in cast(dict[object, object], raw_value).items():
+        declarations.append(
+            _parse_constant_declaration(
+                name=raw_name,
+                value=raw_value_item,
+                file_path=relative_path,
+                relative_path=relative_path,
+                model_name=model_name,
+                unknown_keys=set(),
+            )
+        )
+    return tuple(declarations)
+
+
+def _parse_declaration_headers(
+    *, contents: str, file_path: Path, expected_kind: str
+) -> tuple[dict[str, object], ...]:
+    headers: list[dict[str, object]] = []
+    cursor: int = 0
+    while cursor < len(contents):
+        cursor = _skip_whitespace(contents=contents, start=cursor)
+        if cursor == len(contents):
+            break
+        match: re.Match[str] | None = _DECLARATION_START_PATTERN.match(contents, cursor)
+        if match is None:
+            raise DeclarationParseError(
+                f"{file_path} must contain only {expected_kind}(...) declarations"
+            )
+        actual_kind: str = match.group("kind")
+        if actual_kind != expected_kind:
+            raise DeclarationParseError(
+                f"{file_path} contains {actual_kind}(...) under the {expected_kind.lower()}s root"
+            )
+        open_index: int = match.end() - 1
+        close_index: int = _find_closing_parenthesis(
+            contents=contents,
+            open_index=open_index,
+            file_path=file_path,
+        )
+        cursor = _skip_whitespace(contents=contents, start=close_index + 1)
+        if cursor >= len(contents) or contents[cursor] != _STATEMENT_TERMINATOR:
+            raise DeclarationParseError(f"{expected_kind}(...) in '{file_path}' must end with ';'")
+        try:
+            headers.append(
+                parse_header_values(
+                    header=contents[open_index + 1 : close_index],
+                    file_path=file_path,
+                    statement_name=expected_kind,
+                )
+            )
+        except ModelSqlParseError as error:
+            raise DeclarationParseError(str(error)) from error
+        cursor += 1
+    if not headers:
+        raise DeclarationParseError(f"{file_path} contains no {expected_kind}(...) declarations")
+    return tuple(headers)
+
+
+def _parse_enum_declaration(
+    *,
+    values: dict[str, object],
+    file_path: Path,
+    relative_path: Path,
+    model_name: str | None,
+) -> EnumDeclaration:
+    unknown_keys: set[str] = set(values) - {"name", "members"}
+    if unknown_keys:
+        raise DeclarationParseError(
+            f"{file_path} enum has unknown keys: {', '.join(sorted(unknown_keys))}"
+        )
+    name: str = _parse_declaration_name(
+        raw_name=values.get("name"),
+        file_path=file_path,
+        kind="enum",
+        model_name=model_name,
+    )
+    raw_members: object | None = values.get("members")
+    members: tuple[EnumMember, ...]
+    if isinstance(raw_members, list):
+        members = _parse_shorthand_members(
+            raw_members=raw_members,
+            file_path=file_path,
+            enum_name=name,
+        )
+    elif isinstance(raw_members, dict):
+        members = _parse_explicit_members(
+            raw_members=cast(dict[object, object], raw_members),
+            file_path=file_path,
+            enum_name=name,
+        )
+    else:
+        raise DeclarationParseError(f"{file_path} enum '{name}' members must use [...] or (...)")
+    if not members:
+        raise DeclarationParseError(f"{file_path} enum '{name}' must declare at least one member")
+    member_types: set[type[object]] = {type(member.value) for member in members}
+    if len(member_types) != 1:
+        raise DeclarationParseError(
+            f"{file_path} enum '{name}' members must use one consistent scalar type"
+        )
+    return EnumDeclaration(
+        name=name,
+        members=members,
+        scalar_type=_scalar_type(value=members[0].value),
+        relative_path=relative_path,
+        model_name=model_name,
+    )
+
+
+def _parse_shorthand_members(
+    *, raw_members: Sequence[object], file_path: Path, enum_name: str
+) -> tuple[EnumMember, ...]:
+    members: list[EnumMember] = []
+    seen_names: set[str] = set()
+    raw_member: object
+    for raw_member in raw_members:
+        if not isinstance(raw_member, str) or not _IDENTIFIER_PATTERN.fullmatch(raw_member):
+            raise DeclarationParseError(
+                f"{file_path} enum '{enum_name}' shorthand members must be identifiers"
+            )
+        if raw_member in seen_names:
+            raise DeclarationParseError(
+                f"{file_path} enum '{enum_name}' has duplicate member '{raw_member}'"
+            )
+        seen_names.add(raw_member)
+        members.append(EnumMember(name=raw_member, value=raw_member))
+    return tuple(members)
+
+
+def _parse_explicit_members(
+    *, raw_members: dict[object, object], file_path: Path, enum_name: str
+) -> tuple[EnumMember, ...]:
+    members: list[EnumMember] = []
+    raw_name: object
+    raw_value: object
+    for raw_name, raw_value in raw_members.items():
+        member_name: str = _parse_identifier(
+            raw_value=raw_name,
+            file_path=file_path,
+            label=f"enum '{enum_name}' member",
+        )
+        scalar_value: str | int = _parse_scalar(
+            raw_value=raw_value,
+            file_path=file_path,
+            label=f"enum '{enum_name}' member '{member_name}'",
+        )
+        members.append(EnumMember(name=member_name, value=scalar_value))
+    return tuple(members)
+
+
+def _parse_constant_declaration(
+    *,
+    name: object | None,
+    value: object | None,
+    file_path: Path,
+    relative_path: Path,
+    model_name: str | None,
+    unknown_keys: set[str],
+) -> ConstantDeclaration:
+    if unknown_keys:
+        raise DeclarationParseError(
+            f"{file_path} constant has unknown keys: {', '.join(sorted(unknown_keys))}"
+        )
+    parsed_name: str = _parse_declaration_name(
+        raw_name=name,
+        file_path=file_path,
+        kind="constant",
+        model_name=model_name,
+    )
+    scalar_value: str | int = _parse_scalar(
+        raw_value=value,
+        file_path=file_path,
+        label=f"constant '{parsed_name}'",
+    )
+    return ConstantDeclaration(
+        name=parsed_name,
+        value=scalar_value,
+        scalar_type=_scalar_type(value=scalar_value),
+        relative_path=relative_path,
+        model_name=model_name,
+    )
+
+
+def _parse_declaration_name(
+    *, raw_name: object | None, file_path: Path, kind: str, model_name: str | None
+) -> str:
+    name: str = _parse_identifier(raw_value=raw_name, file_path=file_path, label=kind)
+    if model_name is None and name.startswith("_"):
+        raise DeclarationParseError(f"{file_path} public {kind} '{name}' must not start with '_'")
+    if model_name is not None and not name.startswith("_"):
+        raise DeclarationParseError(f"{file_path} model-local {kind} '{name}' must start with '_'")
+    return name
+
+
+def _parse_identifier(*, raw_value: object | None, file_path: Path, label: str) -> str:
+    if not isinstance(raw_value, str) or not _IDENTIFIER_PATTERN.fullmatch(raw_value):
+        raise DeclarationParseError(f"{file_path} {label} name must be a SQL identifier")
+    return raw_value
+
+
+def _parse_scalar(*, raw_value: object | None, file_path: Path, label: str) -> str | int:
+    if isinstance(raw_value, bool) or not isinstance(raw_value, str | int):
+        raise DeclarationParseError(f"{file_path} {label} value must be a string or integer")
+    return raw_value
+
+
+def _scalar_type(*, value: str | int) -> str:
+    return _VARCHAR_TYPE if isinstance(value, str) else _INTEGER_TYPE
+
+
+def _find_closing_parenthesis(*, contents: str, open_index: int, file_path: Path) -> int:
+    depth: int = 1
+    quote: str | None = None
+    index: int = open_index + 1
+    while index < len(contents):
+        character: str = contents[index]
+        if quote is not None:
+            if character == _ESCAPE_CHARACTER:
+                index += 2
+                continue
+            if character == quote:
+                quote = None
+            index += 1
+            continue
+        if character in _QUOTE_TOKENS:
+            quote = character
+        elif character == _OPEN_PARENTHESIS:
+            depth += 1
+        elif character == _CLOSE_PARENTHESIS:
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    raise DeclarationParseError(f"{file_path} has an unterminated declaration header")
+
+
+def _skip_whitespace(*, contents: str, start: int) -> int:
+    index: int = start
+    while index < len(contents) and contents[index].isspace():
+        index += 1
+    return index

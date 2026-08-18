@@ -72,9 +72,10 @@ def parse_model_sql(*, contents: str, file_path: Path) -> tuple[dict[str, object
             "non-whitespace content"
         )
 
-    header_values: dict[str, object] = _parse_model_header(
+    header_values: dict[str, object] = parse_header_values(
         header=header_match.group("header"),
         file_path=file_path,
+        statement_name="MODEL",
     )
     query: str = header_match.group("sql").strip()
     if not query:
@@ -441,7 +442,9 @@ def _keyword_at(*, sql: str, keyword: str, index: int) -> bool:
     )
 
 
-def _parse_model_header(*, header: str, file_path: Path) -> dict[str, object]:
+def parse_header_values(*, header: str, file_path: Path, statement_name: str) -> dict[str, object]:
+    """Parse one SQLBuild parenthesized header into nested Python values."""
+
     try:
         parser: _ModelHeaderParser = _ModelHeaderParser(header=header)
         return parser.parse()
@@ -449,7 +452,8 @@ def _parse_model_header(*, header: str, file_path: Path) -> dict[str, object]:
         raise
     except ModelHeaderSyntaxError as error:
         raise ModelSqlParseError(
-            f"MODEL(...) in '{file_path}' contains invalid SQLBuild header syntax: {error}"
+            f"{statement_name}(...) in '{file_path}' contains invalid SQLBuild header syntax: "
+            f"{error}"
         ) from error
 
 
@@ -471,6 +475,8 @@ class _ModelHeaderParser:
             if self._match_symbol(_MODEL_HEADER_COMMA):
                 continue
             key: str = self._consume_key()
+            if key in values:
+                raise ModelHeaderSyntaxError(f"duplicate key '{key}'")
             if self._match_symbol(_MODEL_HEADER_KEY_VALUE_SEPARATOR):
                 raise ModelHeaderSyntaxError(
                     f"unexpected ':' after key '{key}'; use SQLBuild syntax '{key} value'"
