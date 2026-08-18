@@ -91,7 +91,7 @@ from tests.unit.src.sqlbuild.cli.commands.shared._helpers._test_types import (
                 CliStyle(use_color=True).muted("Connecting to duckdb..."),
                 "\033[32m\u2713\033[0m Warehouse connected  "
                 + CliStyle(use_color=True).muted("duckdb  (0.03s)"),
-                "\033[31m\u2717\033[0m \033[31m\033[1mWarehouse connection failed\033[0m  "
+                "\033[38;5;167m\u2717\033[0m \033[38;5;167m\033[1mWarehouse connection failed\033[0m  "
                 + CliStyle(use_color=True).muted("duckdb  (after 0.03s)"),
             ),
         ),

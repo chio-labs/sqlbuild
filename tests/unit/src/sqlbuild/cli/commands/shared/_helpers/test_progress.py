@@ -488,9 +488,9 @@ def test_given_audit_results_when_aggregating_then_produces_expected_entries(
                 ),
             ),
             expected_fragments=(
-                "\033[31m\u2717\033[0m \033[31m\033[1mCompleted with errors\033[0m",
-                "\033[31m\033[1mFailures:\033[0m",
-                "\033[31m\033[2merror\033[0m",
+                "\033[38;5;167m\u2717\033[0m \033[38;5;167m\033[1mCompleted with errors\033[0m",
+                "\033[38;5;167m\033[1mFailures:\033[0m",
+                "\033[38;5;167m\033[2merror\033[0m",
             ),
             use_color=True,
         ),
@@ -657,8 +657,8 @@ def test_given_execution_context_when_writing_header_then_renders_expected_outpu
                 error_message="warehouse said no",
             ),
             expected_fragments=(
-                "\033[31mFAIL\033[0m",
-                "\033[31m\033[2merror\033[0m",
+                "\033[38;5;167mFAIL\033[0m",
+                "\033[38;5;167m\033[2merror\033[0m",
                 "warehouse said no",
             ),
             use_color=True,
