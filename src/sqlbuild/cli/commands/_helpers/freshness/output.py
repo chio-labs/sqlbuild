@@ -9,46 +9,65 @@ from sqlbuild.cli.commands.models import (
     FreshnessSourceResult,
 )
 from sqlbuild.cli.commands.types import FreshnessSourceStatus
+from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.summary_footer import format_summary_footer
+from sqlbuild.presentation.main.tree_connector import tree_connector
+
+_FRESHNESS_GROUPS: tuple[tuple[FreshnessSourceStatus, str], ...] = (
+    (FreshnessSourceStatus.OBSERVED, "Observed"),
+    (FreshnessSourceStatus.CHANGED, "Changed"),
+    (FreshnessSourceStatus.UNCHANGED, "Unchanged"),
+    (FreshnessSourceStatus.TOLERATED, "Tolerated"),
+    (FreshnessSourceStatus.UNKNOWN, "Unknown"),
+    (FreshnessSourceStatus.ERROR, "Errors"),
+)
 
 
-def format_freshness_text(result: FreshnessCommandResult) -> str:
+def format_freshness_text(*, result: FreshnessCommandResult, use_color: bool = False) -> str:
     """Format source freshness observations for humans."""
 
-    lines: list[str] = ["Source freshness", ""]
-    observed: tuple[FreshnessSourceResult, ...] = tuple(
-        source for source in result.sources if source.status == FreshnessSourceStatus.OBSERVED
-    )
-    unknown: tuple[FreshnessSourceResult, ...] = tuple(
-        source for source in result.sources if source.status == FreshnessSourceStatus.UNKNOWN
-    )
-    errors: tuple[FreshnessSourceResult, ...] = tuple(
-        source for source in result.sources if source.status == FreshnessSourceStatus.ERROR
-    )
-    changed: tuple[FreshnessSourceResult, ...] = tuple(
-        source for source in result.sources if source.status == FreshnessSourceStatus.CHANGED
-    )
-    unchanged: tuple[FreshnessSourceResult, ...] = tuple(
-        source for source in result.sources if source.status == FreshnessSourceStatus.UNCHANGED
-    )
-    tolerated: tuple[FreshnessSourceResult, ...] = tuple(
-        source for source in result.sources if source.status == FreshnessSourceStatus.TOLERATED
-    )
-    lines = _append_group(lines=lines, title="Observed", sources=observed)
-    lines = _append_group(lines=lines, title="Changed", sources=changed)
-    lines = _append_group(lines=lines, title="Unchanged", sources=unchanged)
-    lines = _append_group(lines=lines, title="Tolerated", sources=tolerated)
-    lines = _append_group(lines=lines, title="Unknown", sources=unknown)
-    lines = _append_group(lines=lines, title="Errors", sources=errors)
+    style: CliStyle = CliStyle(use_color=use_color)
+    lines: list[str] = [style.title("Source freshness")]
+    name_width: int = max((len(source.name) for source in result.sources), default=0)
+    status: FreshnessSourceStatus
+    title: str
+    for status, title in _FRESHNESS_GROUPS:
+        sources: tuple[FreshnessSourceResult, ...] = tuple(
+            source for source in result.sources if source.status == status
+        )
+        lines = _append_group(
+            lines=lines,
+            title=title,
+            sources=sources,
+            name_width=name_width,
+            style=style,
+        )
+    lines.append("")
     lines.append(
-        f"Summary: observed={result.observed_count} "
-        f"changed={result.changed_count} unchanged={result.unchanged_count} "
-        f"tolerated={result.tolerated_count} "
-        f"unknown={result.unknown_count} errors={result.error_count}"
+        format_summary_footer(
+            counts=(
+                ("OBSERVED", result.observed_count),
+                ("CHANGED", result.changed_count),
+                ("UNCHANGED", result.unchanged_count),
+                ("TOLERATED", result.tolerated_count),
+                ("UNKNOWN", result.unknown_count),
+                ("ERROR", result.error_count),
+            ),
+            use_color=use_color,
+        )
     )
     if any(source.age_status is not None for source in result.sources):
         lines.append(
-            f"Age policy: pass={result.age_pass_count} warn={result.age_warn_count} "
-            f"error={result.age_error_count} unknown={result.age_unknown_count}"
+            f"{style.section('Age policy')}  "
+            + format_summary_footer(
+                counts=(
+                    ("PASS", result.age_pass_count),
+                    ("WARN", result.age_warn_count),
+                    ("ERROR", result.age_error_count),
+                    ("UNKNOWN", result.age_unknown_count),
+                ),
+                use_color=use_color,
+            )
         )
     return "\n".join(lines) + "\n"
 
@@ -77,50 +96,70 @@ def format_freshness_json(result: FreshnessCommandResult) -> str:
 
 
 def _append_group(
-    *, lines: list[str], title: str, sources: tuple[FreshnessSourceResult, ...]
+    *,
+    lines: list[str],
+    title: str,
+    sources: tuple[FreshnessSourceResult, ...],
+    name_width: int,
+    style: CliStyle,
 ) -> list[str]:
     if not sources:
         return lines
-    lines.append(f"{title} ({len(sources)})")
-    source: FreshnessSourceResult
-    for source in sources:
-        lines.append("  " + _format_source_line(source))
     lines.append("")
+    lines.append(style.section(f"{title} ({len(sources)})"))
+    source: FreshnessSourceResult
+    for index, source in enumerate(sources):
+        connector: str = tree_connector(style=style, last=index == len(sources) - 1)
+        detail: str = _format_source_detail(source=source, style=style)
+        suffix: str = f"  {detail}" if detail else ""
+        lines.append(f"{connector} {style.object_name(f'{source.name:<{name_width}}')}{suffix}")
     return lines
 
 
-def _format_source_line(source: FreshnessSourceResult) -> str:
+def _format_source_detail(*, source: FreshnessSourceResult, style: CliStyle) -> str:
     if source.status == FreshnessSourceStatus.OBSERVED:
-        parts: list[str] = [source.name]
-        if source.value_kind is not None:
-            parts.append(source.value_kind)
+        parts: list[str] = []
         if source.current_data_version is not None:
-            parts.append(source.current_data_version)
+            parts.append(style.muted(f"value {source.current_data_version}"))
+        if source.value_kind is not None:
+            parts.append(style.muted(f"kind {source.value_kind}"))
         if source.strategy is not None:
-            parts.append(source.strategy)
+            parts.append(style.muted(f"via {source.strategy}"))
         if source.lag_tolerance is not None:
-            parts.append(f"tolerance {source.lag_tolerance}")
+            parts.append(style.muted(f"tolerance {source.lag_tolerance}"))
         if source.age_status is not None:
-            parts.append(f"age {source.age_status.value}")
+            parts.append(
+                style.status(
+                    status=source.age_status.value,
+                    text=f"age {source.age_status.value}",
+                )
+            )
         return "  ".join(parts)
     if source.status in {
         FreshnessSourceStatus.CHANGED,
         FreshnessSourceStatus.UNCHANGED,
         FreshnessSourceStatus.TOLERATED,
     }:
-        parts = [source.name]
+        parts = []
         if source.previous_data_version is not None:
-            parts.append(f"previous {source.previous_data_version}")
+            parts.append(style.muted(f"previous {source.previous_data_version}"))
         if source.current_data_version is not None:
-            parts.append(f"current {source.current_data_version}")
+            parts.append(style.muted(f"current {source.current_data_version}"))
         if source.lag_tolerance is not None:
-            parts.append(f"tolerance {source.lag_tolerance}")
+            parts.append(style.muted(f"tolerance {source.lag_tolerance}"))
         if source.age_status is not None:
-            parts.append(f"age {source.age_status.value}")
+            parts.append(
+                style.status(
+                    status=source.age_status.value,
+                    text=f"age {source.age_status.value}",
+                )
+            )
         return "  ".join(parts)
     if source.message is not None:
-        return f"{source.name}  {source.message}"
-    return source.name
+        if source.status == FreshnessSourceStatus.ERROR:
+            return style.error(source.message)
+        return style.warning(source.message)
+    return ""
 
 
 def _source_payload(source: FreshnessSourceResult) -> dict[str, object]:

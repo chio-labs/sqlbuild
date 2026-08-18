@@ -34,8 +34,8 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_fragments=(
                 "Source freshness",
                 "Observed (1)",
-                "raw_orders  integer  1  sql",
-                "Summary: observed=1 changed=0 unchanged=0 tolerated=0 unknown=0 errors=0",
+                "raw_orders  value 1  kind integer  via sql",
+                "OBSERVED=1  CHANGED=0  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
         )
     ],
@@ -119,7 +119,7 @@ def test_given_configured_source_freshness_when_running_then_observes_read_only(
             expected_fragments=(
                 "Unknown (1)",
                 "raw_unknown  no freshness config and adapter metadata unavailable",
-                "Summary: observed=0 changed=0 unchanged=0 tolerated=0 unknown=1 errors=0",
+                "OBSERVED=0  CHANGED=0  UNCHANGED=0  TOLERATED=0  UNKNOWN=1  ERROR=0",
             ),
         )
     ],
@@ -151,7 +151,7 @@ def test_given_unknown_source_freshness_when_fail_on_error_then_returns_nonzero(
                 "Errors (1)",
                 "raw_error  source 'raw_error' freshness query failed: "
                 'Binder Error: Referenced column "missing_column"',
-                "Summary: observed=0 changed=0 unchanged=0 tolerated=0 unknown=0 errors=1",
+                "OBSERVED=0  CHANGED=0  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=1",
             ),
         )
     ],
@@ -181,8 +181,8 @@ def test_given_source_freshness_error_when_fail_on_error_then_returns_nonzero(
             description="model selector observes upstream source freshness",
             expected_fragments=(
                 "Observed (1)",
-                "raw_orders  integer  1  sql",
-                "Summary: observed=1 changed=0 unchanged=0 tolerated=0 unknown=0 errors=0",
+                "raw_orders  value 1  kind integer  via sql",
+                "OBSERVED=1  CHANGED=0  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
         )
     ],
@@ -212,7 +212,7 @@ def test_given_model_selector_when_running_freshness_then_observes_upstream_sour
             description="excluded model removes upstream source freshness",
             expected_fragments=(
                 "Source freshness",
-                "Summary: observed=0 changed=0 unchanged=0 tolerated=0 unknown=0 errors=0",
+                "OBSERVED=0  CHANGED=0  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
         )
     ],
@@ -243,8 +243,8 @@ def test_given_model_excluded_when_running_freshness_then_skips_upstream_sources
             description="managed source with explicit freshness is observed read only",
             expected_fragments=(
                 "Observed (1)",
-                "raw_managed  integer  5  sql",
-                "Summary: observed=1 changed=0 unchanged=0 tolerated=0 unknown=0 errors=0",
+                "raw_managed  value 5  kind integer  via sql",
+                "OBSERVED=1  CHANGED=0  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
         )
     ],
@@ -282,7 +282,7 @@ def test_given_managed_source_with_freshness_when_running_then_observes_read_onl
             description="existing source freshness state table is not modified",
             expected_fragments=(
                 "Observed (1)",
-                "Summary: observed=1 changed=0 unchanged=0 tolerated=0 unknown=0 errors=0",
+                "OBSERVED=1  CHANGED=0  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
         )
     ],
@@ -340,7 +340,7 @@ def test_given_existing_source_freshness_state_when_running_then_does_not_write_
                 "Changed (1)",
                 "raw_orders  previous 2026-01-01T00:00:00  current 2026-01-01T00:11:00",
                 "tolerance 10m",
-                "Summary: observed=0 changed=1 unchanged=0 tolerated=0 unknown=0 errors=0",
+                "OBSERVED=0  CHANGED=1  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
         )
     ],
@@ -403,7 +403,7 @@ def test_given_timestamp_freshness_beyond_tolerance_when_state_then_returns_nonz
                 "Changed (1)",
                 "raw_orders  previous 2026-01-01T00:10:00  current 2026-01-01T00:05:00",
                 "tolerance 10m",
-                "Summary: observed=0 changed=1 unchanged=0 tolerated=0 unknown=0 errors=0",
+                "OBSERVED=0  CHANGED=1  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
         )
     ],
@@ -465,7 +465,7 @@ def test_given_timestamp_freshness_moves_backwards_when_state_then_returns_nonze
             expected_fragments=(
                 "Unchanged (1)",
                 "raw_orders  previous 1  current 1",
-                "Summary: observed=0 changed=0 unchanged=1 tolerated=0 unknown=0 errors=0",
+                "OBSERVED=0  CHANGED=0  UNCHANGED=1  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
         )
     ],
@@ -501,7 +501,7 @@ def test_given_source_freshness_state_in_secondary_schema_when_running_state_the
             expected_fragments=(
                 "Unchanged (1)",
                 "raw_orders  previous 1  current 1",
-                "Summary: observed=0 changed=0 unchanged=1 tolerated=0 unknown=0 errors=0",
+                "OBSERVED=0  CHANGED=0  UNCHANGED=1  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
         )
     ],
@@ -544,7 +544,7 @@ def test_given_persisted_source_freshness_when_running_state_then_reports_unchan
             expected_fragments=(
                 "Changed (1)",
                 "raw_orders  previous 1  current 2",
-                "Summary: observed=0 changed=1 unchanged=0 tolerated=0 unknown=0 errors=0",
+                "OBSERVED=0  CHANGED=1  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
         )
     ],
@@ -611,7 +611,7 @@ def test_given_changed_source_freshness_when_running_state_fail_on_stale_then_re
                 "Tolerated (1)",
                 "raw_orders  previous 2026-01-01T00:00:00  current 2026-01-01T00:05:00",
                 "tolerance 10m",
-                "Summary: observed=0 changed=0 unchanged=0 tolerated=1 unknown=0 errors=0",
+                "OBSERVED=0  CHANGED=0  UNCHANGED=0  TOLERATED=1  UNKNOWN=0  ERROR=0",
             ),
         )
     ],
@@ -691,7 +691,7 @@ def test_given_timestamp_freshness_within_tolerance_when_running_state_then_repo
             expected_fragments=(
                 "Unknown (1)",
                 "raw_orders  previous source freshness state missing",
-                "Summary: observed=0 changed=0 unchanged=0 tolerated=0 unknown=1 errors=0",
+                "OBSERVED=0  CHANGED=0  UNCHANGED=0  TOLERATED=0  UNKNOWN=1  ERROR=0",
             ),
         )
     ],
@@ -729,7 +729,7 @@ def test_given_missing_previous_freshness_when_running_state_fail_on_stale_then_
             expected_fragments=(
                 "Unchanged (1)",
                 "raw_orders  previous 1  current 1",
-                "Summary: observed=0 changed=0 unchanged=1 tolerated=0 unknown=0 errors=0",
+                "OBSERVED=0  CHANGED=0  UNCHANGED=1  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
         )
     ],
@@ -777,7 +777,7 @@ def test_given_virtual_source_freshness_state_when_running_state_then_reports_un
             expected_fragments=(
                 "Unknown (1)",
                 "raw_orders  previous source freshness state missing",
-                "Summary: observed=0 changed=0 unchanged=0 tolerated=0 unknown=1 errors=0",
+                "OBSERVED=0  CHANGED=0  UNCHANGED=0  TOLERATED=0  UNKNOWN=1  ERROR=0",
             ),
         )
     ],
@@ -830,7 +830,7 @@ def test_given_missing_virtual_freshness_state_when_state_then_returns_nonzero(
             expected_fragments=(
                 "Changed (1)",
                 "raw_orders  previous 1  current 2",
-                "Summary: observed=0 changed=1 unchanged=0 tolerated=0 unknown=0 errors=0",
+                "OBSERVED=0  CHANGED=1  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
         )
     ],
@@ -904,7 +904,7 @@ def test_given_virtual_source_freshness_changes_when_state_then_returns_nonzero(
                 "Tolerated (1)",
                 "raw_orders  previous 2026-01-01T00:00:00  current 2026-01-01T00:05:00",
                 "tolerance 10m",
-                "Summary: observed=0 changed=0 unchanged=0 tolerated=1 unknown=0 errors=0",
+                "OBSERVED=0  CHANGED=0  UNCHANGED=0  TOLERATED=1  UNKNOWN=0  ERROR=0",
             ),
         )
     ],
@@ -967,7 +967,7 @@ def test_given_virtual_timestamp_freshness_within_tolerance_when_state_then_repo
                 "Changed (1)",
                 "raw_orders  previous 2026-01-01T00:00:00  current 2026-01-01T00:11:00",
                 "tolerance 10m",
-                "Summary: observed=0 changed=1 unchanged=0 tolerated=0 unknown=0 errors=0",
+                "OBSERVED=0  CHANGED=1  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
         )
     ],
@@ -1030,7 +1030,7 @@ def test_given_virtual_timestamp_freshness_beyond_tolerance_when_state_then_retu
                 "Changed (1)",
                 "raw_orders  previous 2026-01-01T00:10:00  current 2026-01-01T00:05:00",
                 "tolerance 10m",
-                "Summary: observed=0 changed=1 unchanged=0 tolerated=0 unknown=0 errors=0",
+                "OBSERVED=0  CHANGED=1  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
         )
     ],
@@ -1093,7 +1093,7 @@ def test_given_virtual_timestamp_freshness_moves_backwards_when_state_then_retur
                 "Errors (1)",
                 "raw_orders  source 'raw_orders' freshness query failed: "
                 'Binder Error: Referenced column "missing_column"',
-                "Summary: observed=0 changed=0 unchanged=0 tolerated=0 unknown=0 errors=1",
+                "OBSERVED=0  CHANGED=0  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=1",
             ),
         )
     ],
