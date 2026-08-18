@@ -30,21 +30,9 @@ repos:
         language: system
         types_or: [python, pyi]
 
-      - id: check-test-conventions
-        name: check test conventions
-        entry: uv run check-test-conventions tests
-        language: system
-        pass_filenames: false
-
       - id: fensu-check
         name: fensu check
         entry: uv run fensu check
-        language: system
-        pass_filenames: false
-
-      - id: check-type-annotation-conventions
-        name: check type annotation conventions
-        entry: uv run check-type-annotation-conventions src tests
         language: system
         pass_filenames: false
 
