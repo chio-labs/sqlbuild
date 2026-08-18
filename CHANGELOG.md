@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.51.0](https://github.com/chio-labs/sqlbuild/compare/v0.50.0...v0.51.0) (2026-08-18)
+
+
+### Features
+
+* **compiler:** add enum and constant declarations ([9100727](https://github.com/chio-labs/sqlbuild/commit/91007278a55f3a588e04ff0f4401c184bf0e68b7))
+
+
+### Bug Fixes
+
+* **ci:** keep release lockfile synchronized ([55bba3b](https://github.com/chio-labs/sqlbuild/commit/55bba3bc6ac8a33ee921cdc75f355b68de889264))
+
 ## [0.50.0](https://github.com/chio-labs/sqlbuild/compare/v0.49.0...v0.50.0) (2026-08-18)
 
 
