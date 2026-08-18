@@ -6,8 +6,8 @@ from typing import Any
 
 from sqlbuild.compiler.compile.models import CompiledModel
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner._helpers.identity.model_metadata import contract_output_signature
 from sqlbuild.compiler.planner.constants import (
-    MODEL_CONTRACT_CONFIG_KEY,
     MODEL_CUSTOM_CONFIG_KEY,
     MODEL_PLACEHOLDERS_CONFIG_KEY,
     MODEL_POST_HOOKS_CONFIG_KEY,
@@ -16,7 +16,6 @@ from sqlbuild.compiler.planner.constants import (
 from sqlbuild.compiler.planner.main.identity._version_identity_metadata import (
     build_version_identity_metadata_json,
 )
-from sqlbuild.compiler.planner.types import ContractPolicy
 
 
 def build_model_version_identity_metadata_json(
@@ -48,7 +47,7 @@ def build_model_version_identity_metadata_json(
 
 def _model_execution_signature(model: CompiledModel) -> dict[str, object]:
     signature: dict[str, object] = {}
-    contract_signature: dict[str, object] | None = _contract_output_signature(model)
+    contract_signature: dict[str, object] | None = contract_output_signature(model=model)
     if contract_signature is not None:
         signature["contract"] = contract_signature
     if MODEL_CUSTOM_CONFIG_KEY in model.config.values:
@@ -60,22 +59,3 @@ def _model_execution_signature(model: CompiledModel) -> dict[str, object]:
     if MODEL_POST_HOOKS_CONFIG_KEY in model.config.values:
         signature["post_hooks"] = model.config.values[MODEL_POST_HOOKS_CONFIG_KEY]
     return signature
-
-
-def _contract_output_signature(model: CompiledModel) -> dict[str, object] | None:
-    if model.config.values.get(MODEL_CONTRACT_CONFIG_KEY) != ContractPolicy.ENFORCED:
-        return None
-    schema_entry: Any | None = model.schema_entry
-    if schema_entry is None or not schema_entry.columns:
-        return None
-    return {
-        "enforced": True,
-        "columns": [
-            {
-                "name": column.name,
-                "type": column.type,
-                "nullable": column.nullable,
-            }
-            for column in schema_entry.columns
-        ],
-    }

@@ -91,3 +91,9 @@ class ProviderDiscoveryError(DiscoveryError):
     """Raised when project providers cannot be discovered."""
 
     code: str = "D012"
+
+
+class DeclarationParseError(DiscoveryError):
+    """Raised when an authored enum or constant declaration is invalid."""
+
+    code: str = "D013"

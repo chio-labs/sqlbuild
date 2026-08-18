@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from sqlbuild.compiler.discovery._helpers.sql.model_files import _parse_model_header
+from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_header_values
 from sqlbuild.compiler.discovery.exceptions import ModelSqlParseError
 
 _FUNCTION_HEADER_PATTERN: re.Pattern[str] = re.compile(
@@ -24,9 +24,10 @@ def parse_function_sql(*, contents: str, file_path: Path) -> tuple[dict[str, obj
             "non-whitespace content"
         )
 
-    header_values: dict[str, object] = _parse_model_header(
+    header_values: dict[str, object] = parse_header_values(
         header=header_match.group("header"),
         file_path=file_path,
+        statement_name="FUNCTION",
     )
     body_sql: str = header_match.group("sql").strip()
     if not body_sql:

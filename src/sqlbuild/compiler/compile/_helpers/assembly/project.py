@@ -180,6 +180,8 @@ def assemble_compiled_project(
         loader_functions=inputs.discovered_inputs.loader_functions,
         hook_functions=inputs.discovered_inputs.hook_functions,
         materialization_files=inputs.discovered_inputs.materialization_files,
+        public_enums=inputs.public_enums,
+        public_constants=inputs.public_constants,
         diagnostics=inputs.diagnostics,
         external_sql_reference_resolver=inputs.external_sql_reference_resolver,
     )
@@ -274,6 +276,9 @@ def _assemble_compiled_model(
         authored_sql=model_input.model_file.contents,
         output_column_locations=model_input.model_file.output_column_locations,
         macro_deps=find_macro_call_names(model_input.macro_source_sql),
+        enum_declarations=model_input.enum_declarations,
+        constant_declarations=model_input.constant_declarations,
+        enum_columns=model_input.enum_columns,
     )
 
 

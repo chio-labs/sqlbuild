@@ -11,6 +11,7 @@ from pathlib import Path
 from types import ModuleType
 
 from sqlbuild.compiler.compile.constants import (
+    DECLARATION_REFERENCE_NAMES,
     MACRO_CALL_PATTERN,
     MACRO_CONTEXT_PARAMETER_NAME,
     MACRO_TOKEN,
@@ -130,7 +131,7 @@ def find_macro_call_names(sql: str) -> tuple[str, ...]:
         if macro_start_index is None:
             break
         macro_name: str = _parse_macro_name(sql=sql, call_start_index=macro_start_index)
-        if macro_name not in seen:
+        if macro_name not in seen and macro_name not in DECLARATION_REFERENCE_NAMES:
             seen.add(macro_name)
             names.append(macro_name)
         opening_paren_index: int = _skip_whitespace(

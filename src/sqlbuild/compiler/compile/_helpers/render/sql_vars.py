@@ -6,6 +6,7 @@ import os
 from collections.abc import Mapping
 from pathlib import Path
 
+from sqlbuild.compiler.compile._helpers.render.declarations import expand_declaration_references
 from sqlbuild.compiler.compile._helpers.render.macros import expand_sql_macros
 from sqlbuild.compiler.compile.constants import (
     SQL_CONTEXT_NAME_EXTRA_TOKENS,
@@ -19,6 +20,7 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
 )
+from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
 from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
     is_identifier_character as _is_identifier_continue,
 )
@@ -56,6 +58,8 @@ def expand_authored_sql(
     loaded_macros: dict[str, LoadedMacro],
     macro_context: MacroContext,
     context_values: Mapping[str, str | None] | None = None,
+    enums: dict[str, EnumDeclaration] | None = None,
+    constants: dict[str, ConstantDeclaration] | None = None,
 ) -> str:
     """Apply SQL interpolation and macro expansion to authored SQL text."""
 
@@ -65,8 +69,14 @@ def expand_authored_sql(
         effective_vars=effective_vars,
         context_values=context_values,
     )
-    return expand_sql_macros(
+    declaration_expanded_sql: str = expand_declaration_references(
         sql=interpolated_sql,
+        file_path=file_path,
+        enums=enums or {},
+        constants=constants or {},
+    )
+    return expand_sql_macros(
+        sql=declaration_expanded_sql,
         file_path=file_path,
         loaded_macros=loaded_macros,
         macro_context=macro_context,

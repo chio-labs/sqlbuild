@@ -33,6 +33,7 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompileSqlFunctionInput,
     CompileSqlReference,
+    DeclarationResolutionContext,
     FunctionArgument,
     FunctionReturnColumn,
     LoadedMacro,
@@ -84,6 +85,7 @@ def build_sql_function_inputs(
     adapter_name: str,
     macro_context: MacroContext,
     loaded_macros: dict[str, LoadedMacro],
+    declarations: DeclarationResolutionContext | None = None,
     no_sql_validation: bool = False,
     python_functions_inherit_default_namespace: bool = True,
 ) -> tuple[CompileSqlFunctionInput, ...]:
@@ -150,6 +152,8 @@ def build_sql_function_inputs(
             effective_vars=effective_vars,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
+            enums=declarations.enums if declarations is not None else None,
+            constants=declarations.constants if declarations is not None else None,
         )
         if (
             effective_settings.sql_analysis
