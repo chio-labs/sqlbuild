@@ -183,7 +183,7 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
             ),
             use_color=True,
             expected_output_fragments=(
-                "\033[31m\033[1merror[R007]:\033[0m promotion failed",
+                "\033[38;5;167m\033[1merror[R007]:\033[0m promotion failed",
                 "\033[2m= help:\033[0m inspect staging relation",
             ),
         ),

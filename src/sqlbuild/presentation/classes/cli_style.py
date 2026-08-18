@@ -12,7 +12,7 @@ from sqlbuild.presentation.models import CliTheme, TextStyle
 
 _BOLD: str = "\033[1m"
 _DIM: str = "\033[2m"
-_RED: str = "\033[31m"
+_RED: str = "\033[38;5;167m"
 _GREEN: str = "\033[32m"
 _YELLOW: str = "\033[33m"
 _BLUE: str = "\033[34m"

@@ -1376,7 +1376,7 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
             ),
             expected_fragments=(
                 "\033[2m         # tasks/helpers.py :: tasks.helpers :: order_label\033[0m",
-                "\033[31m      -    return 'old'\033[0m",
+                "\033[38;5;167m      -    return 'old'\033[0m",
                 "\033[32m      +    return 'new'\033[0m",
             ),
         ),
