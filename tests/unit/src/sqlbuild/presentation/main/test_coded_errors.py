@@ -46,7 +46,7 @@ from tests.unit.src.sqlbuild.presentation.main._test_types import FormatCodedErr
             help="fix failing audit rows",
             use_color=True,
             expected_rendered=(
-                "\033[31m\033[1merror[R006]:\033[0m audit failed\n"
+                "\033[38;5;167m\033[1merror[R006]:\033[0m audit failed\n"
                 "  \033[2m= help:\033[0m fix failing audit rows"
             ),
         ),
@@ -77,7 +77,7 @@ from tests.unit.src.sqlbuild.presentation.main._test_types import FormatCodedErr
             help=None,
             use_color=True,
             expected_rendered=(
-                "\033[31m\033[1merror[D012]:\033[0m "
+                "\033[38;5;167m\033[1merror[D012]:\033[0m "
                 "Provider 'slack_provider' in providers/slack.py has invalid settings:\n"
                 "\033[2m1 validation error for SlackProvider\033[0m\n"
                 "\033[2mSLACK_TOKEN\033[0m"

@@ -2258,7 +2258,7 @@ def test_given_parser_error_and_color_support_when_running_main_then_it_colorize
     rendered_stderr: str = capsys.readouterr().err
 
     assert exit_code == test_case.expected_exit_code
-    assert "\033[31m\033[1merror[C900]:\033[0m" in rendered_stderr
+    assert "\033[38;5;167m\033[1merror[C900]:\033[0m" in rendered_stderr
     assert rendered_stderr.endswith("\n\n")
 
 
@@ -2285,7 +2285,7 @@ def test_given_parser_error_and_no_color_when_running_main_then_it_renders_plain
 
     assert exit_code == test_case.expected_exit_code
     assert "error[C900]:" in rendered_stderr
-    assert "\033[31m" not in rendered_stderr
+    assert "\033[38;5;167m" not in rendered_stderr
     assert rendered_stderr.endswith("\n\n")
 
 
@@ -2408,7 +2408,7 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
                 help="pass SQL as the query argument",
             ),
             expected_stderr_fragment=(
-                "\033[31m\033[1merror[C102]:\033[0m query requires SQL\n"
+                "\033[38;5;167m\033[1merror[C102]:\033[0m query requires SQL\n"
                 "  \033[2m= help:\033[0m pass SQL as the query argument"
             ),
             expected_exit_code=1,
