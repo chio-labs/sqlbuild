@@ -9,7 +9,11 @@ import pytest
 from sqlbuild.lint.main.run_format import run_format
 from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import LintConfig, LintRunResult
-from tests.unit.src.sqlbuild.lint._test_types import FormatProjectTestCase, LintProjectTestCase
+from tests.unit.src.sqlbuild.lint._test_types import (
+    FormatNewlineTestCase,
+    FormatProjectTestCase,
+    LintProjectTestCase,
+)
 
 CLEAN_MODEL: str = 'MODEL (\n  materialized table,\n  description "ok"\n);\nSELECT 1 AS x FROM t\n'
 NO_DESCRIPTION_MODEL: str = "MODEL (\n  materialized table\n);\nSELECT 1 AS x FROM t\n"
@@ -113,15 +117,28 @@ def test_given_synthetic_project_when_formatting_then_results_match_expected(
         assert fragment in written
 
 
-def test_given_crlf_file_when_formatting_then_newline_style_is_preserved(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FormatNewlineTestCase(
+            description="CRLF newline style is preserved",
+            contents=(
+                b"-- Description.\r\nMODEL (\r\n  materialized table  \r\n);\r\nSELECT 1\r\n"
+            ),
+            expected_newline=b"\r\n",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_authored_newline_style_when_formatting_then_style_is_preserved(
+    test_case: FormatNewlineTestCase, tmp_path: Path
+) -> None:
     target: Path = tmp_path / "models" / "crlf.sql"
     _ = target.parent.mkdir(parents=True)
-    target.write_bytes(
-        b"-- Description.\r\nMODEL (\r\n  materialized table  \r\n);\r\nSELECT 1\r\n"
-    )
+    target.write_bytes(test_case.contents)
 
     _ = run_format(project_dir=tmp_path, config=LintConfig(sqruff_enabled=False))
 
     written: bytes = target.read_bytes()
-    assert b"\r\n" in written
-    assert written.count(b"\r\n") == written.count(b"\n")
+    assert test_case.expected_newline in written
+    assert written.count(test_case.expected_newline) == written.count(b"\n")
