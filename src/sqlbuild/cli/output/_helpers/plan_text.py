@@ -1044,7 +1044,7 @@ def _append_query_diff(*, lines: list[str], entry: ModelPlanEntry) -> list[str]:
 
     if entry.previous_query_sql is None:
         return lines
-    if entry.reason != PlanReason.QUERY_CHANGED:
+    if not entry.query_changed:
         return lines
     style: CliStyle = CliStyle(use_color=True)
     lines.append(style.label("    query diff:"))
@@ -1057,7 +1057,7 @@ def _append_query_diff(*, lines: list[str], entry: ModelPlanEntry) -> list[str]:
 def _append_config_diff(*, lines: list[str], entry: ModelPlanEntry) -> list[str]:
     """Append version-identity config diff lines if metadata changed."""
 
-    if entry.reason != PlanReason.CONFIG_CHANGED:
+    if not entry.config_changed:
         return lines
     if entry.previous_metadata_json is None or entry.fingerprint_metadata_json is None:
         return lines
