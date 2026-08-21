@@ -652,6 +652,8 @@ class ModelPlanEntry:
     previous_metadata_json: str | None = None
     fingerprint_version_hash: str | None = None
     previous_version_hash: str | None = None
+    query_changed: bool = False
+    config_changed: bool = False
     schema_actions: tuple[SchemaAction, ...] = field(default_factory=tuple)
     schema_findings: tuple[SchemaFinding, ...] = field(default_factory=tuple)
     backfill: BackfillResult = field(

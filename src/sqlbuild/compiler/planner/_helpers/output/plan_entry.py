@@ -526,6 +526,8 @@ def plan_model_from_change(
         previous_metadata_json=change_result.previous_metadata_json,
         fingerprint_version_hash=change_result.fingerprint_version_hash,
         previous_version_hash=change_result.previous_version_hash,
+        query_changed=change_result.query_changed,
+        config_changed=change_result.config_changed,
         schema_actions=schema_actions,
         schema_findings=change_result.schema_findings,
         backfill=backfill,

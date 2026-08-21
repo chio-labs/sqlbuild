@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.lint.constants import DEFAULT_SQRUFF_CONFIG_CONTENT
+
 
 def scaffold_blank_project(*, base_dir: Path, project_name: str) -> None:
     """Create the default blank SQLBuild project structure."""
@@ -29,6 +31,10 @@ def scaffold_blank_project(*, base_dir: Path, project_name: str) -> None:
         (base_dir / directory).mkdir(parents=True, exist_ok=True)
 
     (base_dir / "sqlbuild_project.toml").write_text(_build_project_toml(project_name=project_name))
+
+    sqruff_config: Path = base_dir / ".sqruff"
+    if not sqruff_config.exists():
+        sqruff_config.write_text(DEFAULT_SQRUFF_CONFIG_CONTENT)
 
     for directory in directories:
         gitkeep: Path = base_dir / directory / ".gitkeep"

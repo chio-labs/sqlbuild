@@ -189,3 +189,8 @@ reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers 
 rule = "FFL101"
 path = "scripts/fensu_policy/rules/orchestration_dataflow.py"
 reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers imports, despite FFR704 requiring that layout."
+
+[[rule_exceptions]]
+rule = "FFL102"
+path = "src/sqlbuild/lint/_helpers/native.py"
+reason = "The lint layer reuses the compiler's MODEL() header parser; the compiler exposes no public facade for it."
