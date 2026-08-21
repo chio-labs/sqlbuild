@@ -8,6 +8,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.constants import MACRO_TOKEN, SQL_QUOTE_TOKENS
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.models import ExpansionSpan
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredConstantFile,
@@ -85,14 +86,34 @@ def expand_declaration_references(
 ) -> str:
     """Resolve enum-member and constant references to SQL scalar literals."""
 
+    rendered_sql: str
+    rendered_sql, _spans = expand_declaration_references_with_spans(
+        sql=sql, file_path=file_path, enums=enums, constants=constants
+    )
+    return rendered_sql
+
+
+def expand_declaration_references_with_spans(
+    *,
+    sql: str,
+    file_path: Path,
+    enums: dict[str, EnumDeclaration],
+    constants: dict[str, ConstantDeclaration],
+) -> tuple[str, tuple[ExpansionSpan, ...]]:
+    """Resolve declaration references, returning the span of every substitution."""
+
     rendered_parts: list[str] = []
+    spans: list[ExpansionSpan] = []
+    output_length: int = 0
     cursor: int = 0
     while cursor < len(sql):
         reference_start: int | None = _find_next_reference_start(sql=sql, start=cursor)
         if reference_start is None:
             rendered_parts.append(sql[cursor:])
             break
-        rendered_parts.append(sql[cursor:reference_start])
+        leading_literal: str = sql[cursor:reference_start]
+        rendered_parts.append(leading_literal)
+        output_length += len(leading_literal)
         start_match: re.Match[str] | None = _DECLARATION_REFERENCE_START_PATTERN.match(
             sql, reference_start
         )
@@ -116,8 +137,17 @@ def expand_declaration_references(
                 constants=constants,
             )
         rendered_parts.append(replacement)
+        spans.append(
+            ExpansionSpan(
+                source_start=reference_start,
+                source_end=next_cursor,
+                output_start=output_length,
+                output_end=output_length + len(replacement),
+            )
+        )
+        output_length += len(replacement)
         cursor = next_cursor
-    return "".join(rendered_parts)
+    return "".join(rendered_parts), tuple(spans)
 
 
 def resolve_enum_contract_columns(
