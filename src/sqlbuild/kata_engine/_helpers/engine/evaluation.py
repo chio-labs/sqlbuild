@@ -12,6 +12,7 @@ from sqlbuild.kata_engine._helpers.engine.cache import (
     encode_entry,
     load_cache,
     model_fingerprint,
+    project_fingerprint,
     save_cache,
 )
 from sqlbuild.kata_engine._helpers.engine.ruleset import resolve_ruleset
@@ -46,15 +47,23 @@ def evaluate_project(
     cache_entries: dict[str, dict[str, object]] = (
         load_cache(project_dir=project_dir) if cache_enabled else {}
     )
+    shared_project_fingerprint: str | None = (
+        project_fingerprint(project=project, ruleset=ruleset, project_dir=project_dir)
+        if cache_enabled
+        else None
+    )
     models: tuple[CompiledModel, ...] = tuple(
         sorted(project.models, key=lambda item: item.relative_path.as_posix())
     )
     for model_index, model in enumerate(models):
-        fingerprint: str = model_fingerprint(
-            model=model,
-            project=project,
-            ruleset=ruleset,
-            project_dir=project_dir,
+        fingerprint: str = (
+            model_fingerprint(
+                model=model,
+                ruleset=ruleset,
+                project_fingerprint=shared_project_fingerprint,
+            )
+            if cache_enabled
+            else ""
         )
         cache_key: str = model.relative_path.as_posix()
         cached_faults: list[KataFault] | None = (

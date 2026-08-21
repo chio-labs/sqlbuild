@@ -53,9 +53,8 @@ def save_cache(*, project_dir: Path, entries: dict[str, dict[str, object]]) -> N
 def model_fingerprint(
     *,
     model: CompiledModel,
-    project: CompiledProject,
     ruleset: ResolvedRuleset,
-    project_dir: Path,
+    project_fingerprint: str | None,
 ) -> str:
     """Fingerprint model-local inputs plus global inputs required by active rules."""
 
@@ -78,12 +77,20 @@ def model_fingerprint(
         "constant_declarations": model.constant_declarations,
         "enum_columns": model.enum_columns,
     }
+    if project_fingerprint is not None:
+        payload["project"] = project_fingerprint
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def project_fingerprint(
+    *, project: CompiledProject, ruleset: ResolvedRuleset, project_dir: Path
+) -> str | None:
+    """Fingerprint shared project inputs once when selected rules consume them."""
+
     needs_project: bool = any(
         rule.project_wide or rule.code.startswith("KTX") for rule in ruleset.rules
     ) or any(rule.custom for rule in ruleset.rules)
-    if needs_project:
-        payload["project"] = _project_fingerprint(project=project, project_dir=project_dir)
-    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
+    return _project_fingerprint(project=project, project_dir=project_dir) if needs_project else None
 
 
 def decode_faults(*, entry: dict[str, object], expected_fingerprint: str) -> list[KataFault] | None:
