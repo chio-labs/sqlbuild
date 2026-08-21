@@ -21,6 +21,7 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
+    ExpansionSpan,
     LoadedMacro,
     MacroContext,
 )
@@ -79,17 +80,42 @@ def expand_sql_macros(
 ) -> str:
     """Expand authored Python macros in one executable SQL string."""
 
+    expanded_sql: str
+    expanded_sql, _spans = expand_sql_macros_with_spans(
+        sql=sql,
+        file_path=file_path,
+        loaded_macros=loaded_macros,
+        macro_overrides=macro_overrides,
+        macro_context=macro_context,
+    )
+    return expanded_sql
+
+
+def expand_sql_macros_with_spans(
+    *,
+    sql: str,
+    file_path: Path,
+    loaded_macros: dict[str, LoadedMacro],
+    macro_overrides: dict[str, str] | None = None,
+    macro_context: MacroContext,
+) -> tuple[str, tuple[ExpansionSpan, ...]]:
+    """Expand authored Python macros, returning the span of every substitution."""
+
     if MACRO_TOKEN not in sql:
-        return sql
+        return sql, ()
 
     rendered_sql_parts: list[str] = []
+    spans: list[ExpansionSpan] = []
+    output_length: int = 0
     cursor: int = 0
     while cursor < len(sql):
         macro_start_index: int | None = _find_next_macro_start(sql=sql, start_index=cursor)
         if macro_start_index is None:
             rendered_sql_parts.append(sql[cursor:])
             break
-        rendered_sql_parts.append(sql[cursor:macro_start_index])
+        leading_literal: str = sql[cursor:macro_start_index]
+        rendered_sql_parts.append(leading_literal)
+        output_length += len(leading_literal)
         macro_result: object
         next_index: int
         macro_result, next_index = _evaluate_macro_call(
@@ -113,8 +139,17 @@ def expand_sql_macros(
                 f"call '{matched_call.group(0).rstrip()}'. Compose macros in Python instead."
             )
         rendered_sql_parts.append(macro_result)
+        spans.append(
+            ExpansionSpan(
+                source_start=macro_start_index,
+                source_end=next_index,
+                output_start=output_length,
+                output_end=output_length + len(macro_result),
+            )
+        )
+        output_length += len(macro_result)
         cursor = next_index
-    return "".join(rendered_sql_parts)
+    return "".join(rendered_sql_parts), tuple(spans)
 
 
 def find_macro_call_names(sql: str) -> tuple[str, ...]:

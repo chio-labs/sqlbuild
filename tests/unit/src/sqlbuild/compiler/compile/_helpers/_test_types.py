@@ -445,3 +445,15 @@ class MapThroughPassesTestCase:
     offset: int
     expected_offset: int
     expected_generated: bool
+
+
+@dataclass(frozen=True)
+class ExpandWithSpansTestCase:
+    description: str
+    macro_file_contents: str
+    sql: str
+    effective_vars: dict[str, object]
+    expected_expanded_sql: str
+    probe_expanded_offset: int
+    expected_authored_offset: int
+    expected_generated: bool
