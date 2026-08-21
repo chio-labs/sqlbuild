@@ -1,0 +1,23 @@
+"""Run the format command."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from sqlbuild.cli.commands._helpers.lint.runs import prepare_lint_run, render_lint_result
+from sqlbuild.lint.main.run_format import run_format
+from sqlbuild.lint.models import LintConfig, LintRunResult
+
+
+def run_format_command(*, project_dir: Path | None, no_sqruff: bool = False) -> int:
+    """Apply autofixes in place; non-zero when faults remain after formatting."""
+
+    base_dir: Path = project_dir if project_dir is not None else Path.cwd()
+    prepared: tuple[LintConfig, str | None] = prepare_lint_run(
+        project_dir=base_dir, no_sqruff=no_sqruff
+    )
+    if prepared[1] is not None:
+        print(f"WARN  {prepared[1]}")
+    result: LintRunResult = run_format(project_dir=base_dir, config=prepared[0])
+    _ = render_lint_result(result=result, show_formatted=True)
+    return 1 if result.violations else 0

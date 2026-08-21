@@ -6,8 +6,14 @@ import os
 from collections.abc import Mapping
 from pathlib import Path
 
-from sqlbuild.compiler.compile._helpers.render.declarations import expand_declaration_references
-from sqlbuild.compiler.compile._helpers.render.macros import expand_sql_macros
+from sqlbuild.compiler.compile._helpers.render.declarations import (
+    expand_declaration_references,
+    expand_declaration_references_with_spans,
+)
+from sqlbuild.compiler.compile._helpers.render.macros import (
+    expand_sql_macros,
+    expand_sql_macros_with_spans,
+)
 from sqlbuild.compiler.compile.constants import (
     SQL_CONTEXT_NAME_EXTRA_TOKENS,
     SQL_IDENTIFIER_EXTRA_TOKEN,
@@ -17,6 +23,7 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.models import (
+    ExpansionSpan,
     LoadedMacro,
     MacroContext,
 )
@@ -83,6 +90,46 @@ def expand_authored_sql(
     )
 
 
+def expand_authored_sql_with_spans(
+    *,
+    sql: str,
+    file_path: Path,
+    effective_vars: dict[str, object],
+    loaded_macros: dict[str, LoadedMacro],
+    macro_context: MacroContext,
+    context_values: Mapping[str, str | None] | None = None,
+    enums: dict[str, EnumDeclaration] | None = None,
+    constants: dict[str, ConstantDeclaration] | None = None,
+) -> tuple[str, tuple[tuple[ExpansionSpan, ...], ...]]:
+    """Expand authored SQL, returning each pass's substitution spans in order."""
+
+    interpolated_sql: str
+    interpolation_spans: tuple[ExpansionSpan, ...]
+    interpolated_sql, interpolation_spans = substitute_sql_vars_with_spans(
+        sql=sql,
+        file_path=file_path,
+        effective_vars=effective_vars,
+        context_values=context_values,
+    )
+    declaration_expanded_sql: str
+    declaration_spans: tuple[ExpansionSpan, ...]
+    declaration_expanded_sql, declaration_spans = expand_declaration_references_with_spans(
+        sql=interpolated_sql,
+        file_path=file_path,
+        enums=enums or {},
+        constants=constants or {},
+    )
+    macro_expanded_sql: str
+    macro_spans: tuple[ExpansionSpan, ...]
+    macro_expanded_sql, macro_spans = expand_sql_macros_with_spans(
+        sql=declaration_expanded_sql,
+        file_path=file_path,
+        loaded_macros=loaded_macros,
+        macro_context=macro_context,
+    )
+    return macro_expanded_sql, (interpolation_spans, declaration_spans, macro_spans)
+
+
 def substitute_sql_vars(
     *,
     sql: str,
@@ -92,33 +139,63 @@ def substitute_sql_vars(
 ) -> str:
     """Replace @@name, @@ENV:NAME, and allowed @@CTX:name references in SQL text."""
 
+    rendered_sql: str
+    rendered_sql, _spans = substitute_sql_vars_with_spans(
+        sql=sql,
+        file_path=file_path,
+        effective_vars=effective_vars,
+        context_values=context_values,
+    )
+    return rendered_sql
+
+
+def substitute_sql_vars_with_spans(
+    *,
+    sql: str,
+    file_path: Path,
+    effective_vars: dict[str, object],
+    context_values: Mapping[str, str | None] | None = None,
+) -> tuple[str, tuple[ExpansionSpan, ...]]:
+    """Replace SQL interpolation tokens, returning the span of every substitution."""
+
     if SQL_INTERPOLATION_TOKEN not in sql:
-        return sql
+        return sql, ()
 
     parts: list[str] = []
+    spans: list[ExpansionSpan] = []
+    output_length: int = 0
     cursor: int = 0
     while cursor < len(sql):
         character: str = sql[cursor]
         if character in SQL_QUOTE_TOKENS:
             end: int = skip_quoted_text(sql=sql, start=cursor, context=_CONTEXT)
-            parts.append(
-                _interpolate_sql_segment(
-                    segment=sql[cursor:end],
-                    file_path=file_path,
-                    effective_vars=effective_vars,
-                    context_values=context_values,
-                )
+            segment_text: str
+            segment_spans: tuple[ExpansionSpan, ...]
+            segment_text, segment_spans = _interpolate_sql_segment(
+                segment=sql[cursor:end],
+                file_path=file_path,
+                effective_vars=effective_vars,
+                context_values=context_values,
             )
+            parts.append(segment_text)
+            segment_span: ExpansionSpan
+            for segment_span in segment_spans:
+                spans.append(
+                    _rebased_span(span=segment_span, source_base=cursor, output_base=output_length)
+                )
+            output_length += len(segment_text)
             cursor = end
             continue
         if sql.startswith("--", cursor):
             end = skip_line_comment(sql=sql, start=cursor)
             parts.append(sql[cursor:end])
+            output_length += end - cursor
             cursor = end
             continue
         if sql.startswith("/*", cursor):
             end = skip_block_comment(sql=sql, start=cursor, context=_CONTEXT)
             parts.append(sql[cursor:end])
+            output_length += end - cursor
             cursor = end
             continue
         if sql.startswith("@@", cursor):
@@ -132,11 +209,30 @@ def substitute_sql_vars(
                 context_values=context_values,
             )
             parts.append(rendered_token)
+            spans.append(
+                ExpansionSpan(
+                    source_start=cursor,
+                    source_end=next_cursor,
+                    output_start=output_length,
+                    output_end=output_length + len(rendered_token),
+                )
+            )
+            output_length += len(rendered_token)
             cursor = next_cursor
             continue
         parts.append(character)
+        output_length += 1
         cursor += 1
-    return "".join(parts)
+    return "".join(parts), tuple(spans)
+
+
+def _rebased_span(*, span: ExpansionSpan, source_base: int, output_base: int) -> ExpansionSpan:
+    return ExpansionSpan(
+        source_start=span.source_start + source_base,
+        source_end=span.source_end + source_base,
+        output_start=span.output_start + output_base,
+        output_end=span.output_end + output_base,
+    )
 
 
 def _interpolate_sql_segment(
@@ -145,10 +241,12 @@ def _interpolate_sql_segment(
     file_path: Path,
     effective_vars: dict[str, object],
     context_values: Mapping[str, str | None] | None,
-) -> str:
+) -> tuple[str, tuple[ExpansionSpan, ...]]:
     if SQL_INTERPOLATION_TOKEN not in segment:
-        return segment
+        return segment, ()
     parts: list[str] = []
+    spans: list[ExpansionSpan] = []
+    output_length: int = 0
     cursor: int = 0
     while cursor < len(segment):
         if segment.startswith("@@", cursor):
@@ -162,11 +260,21 @@ def _interpolate_sql_segment(
                 context_values=context_values,
             )
             parts.append(rendered_token)
+            spans.append(
+                ExpansionSpan(
+                    source_start=cursor,
+                    source_end=next_cursor,
+                    output_start=output_length,
+                    output_end=output_length + len(rendered_token),
+                )
+            )
+            output_length += len(rendered_token)
             cursor = next_cursor
             continue
         parts.append(segment[cursor])
+        output_length += 1
         cursor += 1
-    return "".join(parts)
+    return "".join(parts), tuple(spans)
 
 
 def _render_interpolation_token(

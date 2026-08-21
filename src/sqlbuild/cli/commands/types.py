@@ -50,6 +50,8 @@ class CliCommand(StrEnum):
     SCENARIO = "scenario"
     DBT = "dbt"
     SKILLS = "skills"
+    LINT = "lint"
+    FORMAT = "format"
 
 
 class DagCommandHandler(Protocol):
@@ -145,6 +147,15 @@ class SkillsUpdateCommandHandler(Protocol):
         global_install: bool,
         targets: tuple[str, ...],
         force: bool,
+    ) -> int: ...
+
+
+class LintCommandHandler(Protocol):
+    def __call__(
+        self,
+        project_dir: Path | None,
+        *,
+        no_sqruff: bool,
     ) -> int: ...
 
 

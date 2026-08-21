@@ -640,6 +640,36 @@ class CompiledModelSqlTestPayload:
 
 
 @dataclass(frozen=True)
+class SqlExpansionContext:
+    """Everything needed to expand one project's authored SQL bodies."""
+
+    effective_vars: dict[str, object]
+    loaded_macros: dict[str, LoadedMacro]
+    macro_context: MacroContext
+    enums: dict[str, EnumDeclaration]
+    constants: dict[str, ConstantDeclaration]
+    local_declarations: dict[Path, DeclarationResolutionContext] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ExpansionSpan:
+    """One substituted region, pairing its source range with its rendered range."""
+
+    source_start: int
+    source_end: int
+    output_start: int
+    output_end: int
+
+
+@dataclass(frozen=True)
+class MappedOffset:
+    """An offset in rendered SQL resolved back onto the text that produced it."""
+
+    offset: int
+    generated: bool
+
+
+@dataclass(frozen=True)
 class CompiledDirectLogicSqlTestPayload:
     """Compiled direct-logic SQL test payload."""
 
