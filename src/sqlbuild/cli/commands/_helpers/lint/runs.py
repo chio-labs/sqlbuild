@@ -5,7 +5,6 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
-from sqlbuild.lint._helpers.sqruff_scaffold import ensure_sqruff_config
 from sqlbuild.lint.constants import (
     DEFAULT_MAX_DESCRIPTION_LINES,
     DEFAULT_SQRUFF_CONFIG_PATH,
@@ -15,6 +14,7 @@ from sqlbuild.lint.constants import (
     SQRUFF_CONFIG_PATH_KEY,
     SQRUFF_ENABLED_KEY,
 )
+from sqlbuild.lint.main.ensure_config import ensure_sqruff_config
 from sqlbuild.lint.models import LintConfig, LintRunResult
 
 

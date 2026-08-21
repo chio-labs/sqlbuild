@@ -82,3 +82,43 @@ class SqruffNoBodiesTestCase:
 
     description: str
     expected_violation_files: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class NeutralizeInterpolationTestCase:
+    """Test case for interpolation neutralization."""
+
+    description: str
+    body: str
+    expected_neutralized: str
+    expected_original_texts: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MapOffsetTestCase:
+    """Test case for neutralized-to-original offset mapping."""
+
+    description: str
+    body: str
+    neutralized_offset: int
+    expected_original_offset: int
+
+
+@dataclass(frozen=True)
+class RestoreInterpolationTestCase:
+    """Test case for restoring sentinels after sqruff fixes."""
+
+    description: str
+    body: str
+    fixed_neutralized: str
+    expected_restored: str
+
+
+@dataclass(frozen=True)
+class RestoreFailureTestCase:
+    """Test case for sentinel restoration that must fail loudly."""
+
+    description: str
+    body: str
+    fixed_neutralized: str
+    expected_message_fragment: str

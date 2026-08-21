@@ -9,7 +9,10 @@ from pathlib import Path
 from sqlbuild.lint.constants import (
     ADAPTER_CONFIG_KEY,
     ADAPTER_DIALECT_TRANSLATIONS,
+    CONFIG_QUOTE_CHARACTERS,
     DEFAULT_SQRUFF_CONFIG_TEMPLATE,
+    FALLBACK_SQRUFF_DIALECT,
+    MINIMUM_QUOTED_LENGTH,
     PROJECT_CONFIG_FILENAME_KEY,
     SQRUFF_CONFIG_DIALECT_KEY,
     SQRUFF_CONFIG_SECTION,
@@ -25,12 +28,7 @@ def translate_adapter_dialect(*, adapter: str) -> str | None:
 def ensure_sqruff_config(
     *, project_dir: Path, config_path: str, sqruff_enabled: bool
 ) -> str | None:
-    """Create the sqruff config when missing; return a drift warning when present.
-
-    The translated project adapter dialect is written into a newly scaffolded
-    config. An existing config is never modified; a dialect that disagrees with
-    the project adapter yields a warning string instead.
-    """
+    """Create the sqruff config when missing; return a drift warning when present."""
 
     if not sqruff_enabled:
         return None
@@ -38,7 +36,7 @@ def ensure_sqruff_config(
     adapter: str | None = _read_project_adapter(project_dir=project_dir)
     translated: str | None = None if adapter is None else translate_adapter_dialect(adapter=adapter)
     if not config_file.exists():
-        dialect: str = translated if translated is not None else "ansi"
+        dialect: str = translated if translated is not None else FALLBACK_SQRUFF_DIALECT
         _ = config_file.write_text(
             DEFAULT_SQRUFF_CONFIG_TEMPLATE.format(dialect=dialect), encoding="utf-8"
         )
@@ -78,6 +76,10 @@ def _read_configured_dialect(*, config_file: Path) -> str | None:
 
 
 def _strip_quotes(value: str) -> str:
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+    if (
+        len(value) >= MINIMUM_QUOTED_LENGTH
+        and value[0] == value[-1]
+        and value[0] in CONFIG_QUOTE_CHARACTERS
+    ):
         return value[1:-1]
     return value

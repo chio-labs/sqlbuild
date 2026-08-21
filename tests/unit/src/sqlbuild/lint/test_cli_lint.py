@@ -33,7 +33,8 @@ PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n'
             description="lint scaffolds a missing sqruff config from the adapter",
             files={"models/fine.sql": CLEAN_MODEL, "sqlbuild_project.toml": PROJECT_TOML},
             expected_exit_code=0,
-            no_sqruff=False,
+            extra_arguments=(),
+            expected_file_fragments={".sqruff": 'dialect = "duckdb"'},
         ),
     ],
     ids=lambda case: case.description,
@@ -49,17 +50,23 @@ def test_given_project_when_running_lint_then_exit_code_and_output_match_expecte
         write_target: Path = tmp_path / file_relative_path
         _ = write_target.parent.mkdir(parents=True, exist_ok=True)
         _ = write_target.write_text(file_contents, encoding="utf-8")
-    arguments: list[str] = ["--project-dir", str(tmp_path), "lint"]
-    if test_case.no_sqruff:
-        arguments.append("--no-sqruff")
+    arguments: list[str] = [
+        "--project-dir",
+        str(tmp_path),
+        "lint",
+        *test_case.extra_arguments,
+    ]
     exit_code: int = main(arguments)
     assert exit_code == test_case.expected_exit_code
     output: str = capsys.readouterr().out
     fragment: str
     for fragment in test_case.expected_output_fragments:
         assert fragment in output
-    if "sqlbuild_project.toml" in test_case.files:
-        assert 'dialect = "duckdb"' in (tmp_path / ".sqruff").read_text(encoding="utf-8")
+    relative_path: str
+    file_fragment: str
+    for relative_path, file_fragment in test_case.expected_file_fragments.items():
+        written: str = (tmp_path / relative_path).read_text(encoding="utf-8")
+        assert file_fragment in written
 
 
 @pytest.mark.parametrize(

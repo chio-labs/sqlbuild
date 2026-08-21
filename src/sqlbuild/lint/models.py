@@ -18,6 +18,18 @@ class HeaderSpan:
 
 
 @dataclass(frozen=True)
+class InterpolationSite:
+    """One sqlbuild interpolation occurrence replaced by a unique sentinel."""
+
+    sentinel: str
+    neutralized_start: int
+    neutralized_end: int
+    original_start: int
+    original_end: int
+    original_text: str
+
+
+@dataclass(frozen=True)
 class LintViolation:
     """One lint diagnostic reported against an authored file."""
 

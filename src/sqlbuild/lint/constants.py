@@ -76,3 +76,24 @@ SQRUFF_CONFIG_SECTION: str = "core"
 SQRUFF_CONFIG_DIALECT_KEY: str = "dialect"
 ADAPTER_CONFIG_KEY: str = "adapter"
 DEFAULT_SQRUFF_CONFIG_TEMPLATE: str = '[core]\ndialect = "{dialect}"\n'
+FALLBACK_SQRUFF_DIALECT: str = "ansi"
+CONFIG_QUOTE_CHARACTERS: frozenset[str] = frozenset({"'", '"'})
+MINIMUM_QUOTED_LENGTH: int = 2
+
+SQL_QUOTE_CHARACTERS: frozenset[str] = frozenset({"'", '"'})
+SQL_ESCAPE_CHARACTER: str = "\\"
+SINGLE_QUOTE_CHARACTER: str = "'"
+OPENING_PAREN_CHARACTER: str = "("
+CLOSING_PAREN_CHARACTER: str = ")"
+IDENTIFIER_EXTRA_CHARACTER: str = "_"
+INTERPOLATION_NAME_EXTRA_CHARACTERS: frozenset[str] = frozenset({"_", ":", "."})
+SENTINEL_TEMPLATE: str = "__sqb_lint_{index}__"
+EXPECTED_SENTINEL_OCCURRENCES: int = 1
+TEMPLATE_INTERPOLATION_START: str = "${"
+TEMPLATE_INTERPOLATION_END: str = "}"
+
+SQRUFF_EXPECTED_EXIT_CODES: frozenset[int] = frozenset({0, 1})
+SQRUFF_RANGE_KEY: str = "range"
+SQRUFF_START_KEY: str = "start"
+SQRUFF_LINE_KEY: str = "line"
+SQRUFF_CHARACTER_KEY: str = "character"
