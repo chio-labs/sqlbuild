@@ -13,6 +13,7 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
     SupportedDialectTestCase,
     UnsupportedDialectTestCase,
 )
+from tests.unit.src.sqlbuild.lint._helpers.helpers import lint_bodies_for
 
 CLEAN_BODY: str = "SELECT 1 AS x\n"
 
@@ -41,7 +42,8 @@ def test_given_unsupported_dialect_when_linting_then_error_is_raised(
     config: LintConfig = LintConfig(sqruff_enabled=True, sqruff_config_path=".sqruff")
     with pytest.raises(UnsupportedDialectError) as error:
         _ = run_sqruff_lint(
-            bodies={body_path: (CLEAN_BODY, ((0, len(CLEAN_BODY)),))},
+            bodies=lint_bodies_for(file_path=body_path, contents=CLEAN_BODY),
+            contents_by_path={body_path: CLEAN_BODY},
             config=config,
             project_dir=tmp_path,
         )
@@ -73,7 +75,8 @@ def test_given_supported_dialect_when_linting_then_run_completes(
     body_path: Path = tmp_path / "model.sql"
     config: LintConfig = LintConfig(sqruff_enabled=True, sqruff_config_path=".sqruff")
     violations: dict[Path, tuple[LintViolation, ...]] = run_sqruff_lint(
-        bodies={body_path: (CLEAN_BODY, ((0, len(CLEAN_BODY)),))},
+        bodies=lint_bodies_for(file_path=body_path, contents=CLEAN_BODY),
+        contents_by_path={body_path: CLEAN_BODY},
         config=config,
         project_dir=tmp_path,
     )

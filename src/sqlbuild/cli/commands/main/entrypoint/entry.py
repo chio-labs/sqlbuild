@@ -21,6 +21,7 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
+from sqlbuild.lint.exceptions import LintError
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.virtual.state.exceptions import StateBackendError
 
@@ -207,6 +208,13 @@ def _main_with_dependencies(
         logging.getLogger("sqlbuild.cli").exception("cli user error")
         print(
             format_expected_error(error=error, fallback_code="C000", use_color=use_color),
+            file=sys.stderr,
+        )
+        return 1
+    except LintError as error:
+        logging.getLogger("sqlbuild.cli").exception("lint failed")
+        print(
+            format_expected_error(error=error, fallback_code="L001", use_color=use_color),
             file=sys.stderr,
         )
         return 1

@@ -62,8 +62,16 @@ class SqruffEngineLintTestCase:
     expected_lines: tuple[int, ...]
     expected_columns: tuple[int, ...]
     expected_codes: tuple[str, ...]
-    bodies_empty: bool = False
-    expected_engine_calls: int = 1
+
+
+@dataclass(frozen=True)
+class SqruffUnknownPathTestCase:
+    """Test case for diagnostics reported against a path the engine never wrote."""
+
+    description: str
+    contents: str
+    stdout: str
+    expected_message_fragment: str
 
 
 @dataclass(frozen=True)
