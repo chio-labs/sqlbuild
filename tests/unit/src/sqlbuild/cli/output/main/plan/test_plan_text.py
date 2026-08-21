@@ -353,6 +353,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                         incremental_mode="microbatch",
                         cursor_bounds=CursorBounds(start="2026-03-26", end="2026-04-25"),
                         previous_query_sql="SELECT order_id FROM raw",
+                        query_changed=True,
                     ),
                 ),
             ),
@@ -412,6 +413,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                         fingerprint_metadata_json=(
                             '{"config":{"materialized":"table"},"model_name":"fact_orders"}'
                         ),
+                        config_changed=True,
                     ),
                 ),
             ),
@@ -423,6 +425,35 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 '"materialized": "table"',
             ),
             unexpected_fragments=("query diff:",),
+        ),
+        FormatPlanTestCase(
+            description="query and config changes show both diffs",
+            plan_output=build_plan_output(
+                model_entries=(
+                    build_model_entry(
+                        name="fact_orders",
+                        action=PlanAction.CREATE_TABLE,
+                        reason=PlanReason.QUERY_CHANGED,
+                        previous_query_sql="SELECT order_id FROM raw",
+                        previous_metadata_json=(
+                            '{"config":{"materialized":"view"},"model_name":"fact_orders"}'
+                        ),
+                        fingerprint_metadata_json=(
+                            '{"config":{"materialized":"table"},"model_name":"fact_orders"}'
+                        ),
+                        query_changed=True,
+                        config_changed=True,
+                    ),
+                ),
+            ),
+            expected_fragments=(
+                "Query changed (1)",
+                "fact_orders",
+                "query diff:",
+                "config diff:",
+                '"materialized": "view"',
+                '"materialized": "table"',
+            ),
         ),
         FormatPlanTestCase(
             description="full rebuild hides cursor range placeholders",
@@ -1291,6 +1322,7 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
                         action=PlanAction.CREATE_TABLE,
                         reason=PlanReason.QUERY_CHANGED,
                         previous_query_sql="SELECT old_amount FROM raw_orders",
+                        query_changed=True,
                     ),
                 ),
                 metadata={
