@@ -16,6 +16,7 @@ from sqlbuild.cli.commands.models import (
     DiffCommandRequest,
     FreshnessCommandRequest,
     JanitorCommandRequest,
+    KataCommandRequest,
     LoadCommandRequest,
     PlanCommandRequest,
     PlaygroundCommandRequest,
@@ -138,6 +139,54 @@ def test_given_dbt_plan_arguments_when_running_with_dependencies_then_it_dispatc
     assert exit_code == test_case.expected_exit_code
     assert received_args == [
         (test_case.expected_project_dir, test_case.expected_dbt_args, test_case.expected_no_color)
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="dispatches typed kata request",
+            argv=[
+                "--project-dir",
+                "/tmp/kata-project",
+                "kata",
+                "--json",
+                "--select",
+                "market__mart__prices",
+                "--exclude",
+                "legacy_model",
+            ],
+            expected_exit_code=17,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_kata_arguments_when_running_then_dispatches_typed_request(
+    test_case: MainTestCase,
+) -> None:
+    received: list[KataCommandRequest] = []
+
+    def run_kata(request: KataCommandRequest) -> int:
+        received.append(request)
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_kata=run_kata),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received == [
+        KataCommandRequest(
+            project_dir=Path("/tmp/kata-project"),
+            json_output=True,
+            rule_code=None,
+            skills=False,
+            skills_check=False,
+            select=("market__mart__prices",),
+            exclude=("legacy_model",),
+        )
     ]
 
 

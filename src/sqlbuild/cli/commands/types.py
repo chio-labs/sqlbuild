@@ -52,6 +52,7 @@ class CliCommand(StrEnum):
     SKILLS = "skills"
     LINT = "lint"
     FORMAT = "format"
+    KATA = "kata"
 
 
 class DagCommandHandler(Protocol):

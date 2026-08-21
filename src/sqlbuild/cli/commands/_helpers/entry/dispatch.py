@@ -10,6 +10,7 @@ from sqlbuild.cli.commands._helpers.entry.parsing import read_selector_files
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.constants import (
     DBT_INIT_COMMAND,
+    KATA_SKILLS_COMMAND,
     SCENARIO_CAPTURE_COMMAND,
     SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
     SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
@@ -30,6 +31,7 @@ from sqlbuild.cli.commands.models import (
     DiffCommandRequest,
     FreshnessCommandRequest,
     JanitorCommandRequest,
+    KataCommandRequest,
     LoadCommandRequest,
     PlanCommandRequest,
     PlaygroundCommandRequest,
@@ -398,6 +400,21 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
             virtual_environment=args.virtual_env,
             allow_copy=getattr(args, "allow_copy", False),
         )
+    return _dispatch_local_command(
+        args=args,
+        handlers=handlers,
+        project_dir=project_dir,
+        select=select,
+    )
+
+
+def _dispatch_local_command(
+    *,
+    args: CliNamespace,
+    handlers: CliEntrypointHandlers,
+    project_dir: Path | None,
+    select: tuple[str, ...],
+) -> int:
     if args.command == CliCommand.INIT:
         return handlers.run_init(project_dir)
     if args.command == CliCommand.PLAYGROUND:
@@ -426,7 +443,25 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
         )
     if args.command == CliCommand.LINT or args.command == CliCommand.FORMAT:
         return _dispatch_lint_format_command(args=args, handlers=handlers, project_dir=project_dir)
+    if args.command == CliCommand.KATA:
+        return _dispatch_kata_command(args=args, handlers=handlers, project_dir=project_dir)
     return 0
+
+
+def _dispatch_kata_command(
+    *, args: CliNamespace, handlers: CliEntrypointHandlers, project_dir: Path | None
+) -> int:
+    return handlers.run_kata(
+        KataCommandRequest(
+            project_dir=project_dir,
+            json_output=args.json,
+            rule_code=args.kata_rule_code,
+            skills=args.kata_command == KATA_SKILLS_COMMAND,
+            skills_check=args.kata_skills_check,
+            select=tuple(args.select),
+            exclude=tuple(args.exclude),
+        )
+    )
 
 
 def _configure_diagnostics(*, args: CliNamespace, effective_project_dir: Path) -> None:

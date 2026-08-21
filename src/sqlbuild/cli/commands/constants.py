@@ -65,3 +65,4 @@ DBT_CLI_OUTPUT_OPTIONS: frozenset[str] = frozenset({DBT_JSON_OUTPUT_OPTION, *DBT
 DBT_NO_CONNECTION_OPTION: str = "--no-connection"
 RECONCILE_ATTACH_COMMAND: str = "attach"
 STATE_CHECKPOINTS_COMMAND: str = "checkpoints"
+KATA_SKILLS_COMMAND: str = "skills"

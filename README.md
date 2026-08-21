@@ -106,6 +106,55 @@ SELECT 1
 
 See the [documentation](https://docs.sqlbuild.com) for incremental models, scenarios, loaders, and more.
 
+## Kata SQL architecture checks
+
+Kata is SQLBuild's opt-in, error-only SQL model shape checker. It runs offline over the
+compiled project and Polyglot AST, reports coded faults with remediations, and never rewrites SQL.
+
+Enable rule families in `sqlbuild_project.toml`:
+
+```toml
+[kata]
+select = ["KTS", "KTL", "KTR", "KTX"]
+ignore = ["KTS302"]
+
+[kata.thresholds]
+min_audits_per_model = 1
+min_tests_per_model = 1
+```
+
+Run `sqb kata`, inspect metadata with `sqb kata rule KTS101`, and generate agent guidance from
+the same active ruleset with `sqb kata skills`. Use `sqb kata skills --check` in CI to detect stale
+guidance. `--json`, `--select`, and `--exclude` are available for automation and model scoping.
+
+Repository rules use the public API:
+
+```python
+from sqlbuild.kata import RuleContext, kata
+
+
+@kata(
+    code="XPRICE001",
+    family="prices",
+    slug="typed-currency",
+    message="price models must declare a currency column",
+    remediation="Declare currency in the MODEL columns contract at this model path.",
+)
+def typed_currency(*, model, ctx: RuleContext):
+    return [] if any(column.name == "currency" for column in ctx.declared_columns) else [
+        ctx.path_fault()
+    ]
+```
+
+Load repository-owned files through `rule_paths = ["kata/rules"]` or dotted packages through
+`rule_modules`. Test each custom rule with `RuleCase` and `evaluate_rule`. Selecting custom rules
+disables caching unless `[kata.cache] require_cacheable = true`; cacheable rules may import only
+the supported pure modules and must access project files through `RuleContext`.
+
+Exact `rule_exceptions` require a rule, file, and reason and fail when stale. Broader
+`rule_ignores` and lone-star allowances also require reasons but are intentionally not
+stale-checked.
+
 ## Supported adapters
 
 | Adapter | Status |
