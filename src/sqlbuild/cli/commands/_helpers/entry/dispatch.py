@@ -55,19 +55,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
 
     project_dir: Path | None = None if args.project_dir is None else Path(args.project_dir)
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
-    if args.command is not None and not (
-        args.command == CliCommand.DBT
-        and args.dbt_command != DBT_INIT_COMMAND
-        and not (effective_project_dir / PROJECT_CONFIG_FILENAME).exists()
-    ):
-        _ = configure_diagnostics(
-            target_dir=effective_project_dir / "target",
-            debug=args.debug,
-            use_color=(not args.no_color) and supports_color(),
-        )
-        logging.getLogger("sqlbuild.cli").debug(
-            "command=%s project_dir=%s", args.command, effective_project_dir
-        )
+    _configure_diagnostics(args=args, effective_project_dir=effective_project_dir)
     select: tuple[str, ...] = (*tuple(args.select), *read_selector_files(args.select_file))
     if args.command == CliCommand.COMPILE:
         return handlers.run_compile(
@@ -436,7 +424,42 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
             project_dir=project_dir,
             select=select,
         )
+    if args.command == CliCommand.LINT or args.command == CliCommand.FORMAT:
+        return _dispatch_lint_format_command(args=args, handlers=handlers, project_dir=project_dir)
     return 0
+
+
+def _configure_diagnostics(*, args: CliNamespace, effective_project_dir: Path) -> None:
+    """Configure diagnostics for commands that run inside a project."""
+
+    if args.command is None or (
+        args.command == CliCommand.DBT
+        and args.dbt_command != DBT_INIT_COMMAND
+        and not (effective_project_dir / PROJECT_CONFIG_FILENAME).exists()
+    ):
+        return
+    _ = configure_diagnostics(
+        target_dir=effective_project_dir / "target",
+        debug=args.debug,
+        use_color=(not args.no_color) and supports_color(),
+    )
+    logging.getLogger("sqlbuild.cli").debug(
+        "command=%s project_dir=%s", args.command, effective_project_dir
+    )
+
+
+def _dispatch_lint_format_command(
+    *,
+    args: CliNamespace,
+    handlers: CliEntrypointHandlers,
+    project_dir: Path | None,
+) -> int:
+    """Route lint and format commands to their handlers."""
+
+    no_sqruff: bool = getattr(args, "no_sqruff", False)
+    if args.command == CliCommand.LINT:
+        return handlers.run_lint(project_dir, no_sqruff=no_sqruff)
+    return handlers.run_format(project_dir, no_sqruff=no_sqruff)
 
 
 def _dispatch_dbt_command(
