@@ -115,6 +115,24 @@ class RestoreInterpolationTestCase:
 
 
 @dataclass(frozen=True)
+class UnsupportedDialectTestCase:
+    """Test case for rejecting an unsupported dialect in the sqruff config."""
+
+    description: str
+    sqruff_config: str
+    expected_message_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SupportedDialectTestCase:
+    """Test case for accepting a dialect the engine recognises."""
+
+    description: str
+    sqruff_config: str
+    expected_violation_count: int
+
+
+@dataclass(frozen=True)
 class RestoreFailureTestCase:
     """Test case for sentinel restoration that must fail loudly."""
 
