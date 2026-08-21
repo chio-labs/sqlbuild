@@ -5,6 +5,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledObjectKey,
     CompileSqlReference,
+    ExpansionSpan,
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, SqlTestMode
@@ -426,3 +427,21 @@ class SubstitutePlaceholderDefaultsTestCase:
     query_sql: str
     placeholders: dict[str, str]
     expected_sql: str
+
+
+@dataclass(frozen=True)
+class MapOutputOffsetTestCase:
+    description: str
+    spans: tuple[ExpansionSpan, ...]
+    offset: int
+    expected_offset: int
+    expected_generated: bool
+
+
+@dataclass(frozen=True)
+class MapThroughPassesTestCase:
+    description: str
+    passes: tuple[tuple[ExpansionSpan, ...], ...]
+    offset: int
+    expected_offset: int
+    expected_generated: bool
