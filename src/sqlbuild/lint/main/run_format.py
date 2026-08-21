@@ -8,6 +8,7 @@ from sqlbuild.compiler.compile.models import SqlExpansionContext
 from sqlbuild.lint._helpers.expansion import build_lint_expansion_context, prepare_lint_body
 from sqlbuild.lint._helpers.headers import scan_headers, sql_body_ranges
 from sqlbuild.lint._helpers.native import format_native_headers, lint_native_headers
+from sqlbuild.lint._helpers.newlines import newline_style, with_newline_style
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
 from sqlbuild.lint._helpers.sqruff_engine import run_sqruff_fix, run_sqruff_lint
 from sqlbuild.lint.models import (
@@ -24,7 +25,7 @@ def run_format(*, project_dir: Path, config: LintConfig) -> LintRunResult:
 
     files: dict[Path, str] = collect_project_files(project_dir=project_dir)
     newline_by_path: dict[Path, str] = {
-        file_path: _newline_style(contents=contents) for file_path, contents in files.items()
+        file_path: newline_style(contents=contents) for file_path, contents in files.items()
     }
     updated_contents: dict[Path, str] = _apply_fixes(
         files=files, config=config, project_dir=project_dir
@@ -35,7 +36,7 @@ def run_format(*, project_dir: Path, config: LintConfig) -> LintRunResult:
     for file_path, new_contents in updated_contents.items():
         with file_path.open("w", encoding="utf-8", newline="") as handle:
             _ = handle.write(
-                _with_newline_style(contents=new_contents, newline=newline_by_path[file_path])
+                with_newline_style(contents=new_contents, newline=newline_by_path[file_path])
             )
         formatted.append(file_path)
     violations: list[LintViolation] = _lint_final_contents(
@@ -46,15 +47,6 @@ def run_format(*, project_dir: Path, config: LintConfig) -> LintRunResult:
         violations=sort_violations(violations),
         formatted_files=tuple(sorted(formatted)),
     )
-
-
-def _newline_style(*, contents: str) -> str:
-    return "\r\n" if "\r\n" in contents else "\n"
-
-
-def _with_newline_style(*, contents: str, newline: str) -> str:
-    normalized: str = contents.replace("\r\n", "\n")
-    return normalized if newline == "\n" else normalized.replace("\n", newline)
 
 
 def _apply_fixes(

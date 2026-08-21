@@ -30,6 +30,15 @@ class FormatProjectTestCase:
 
 
 @dataclass(frozen=True)
+class FormatNewlineTestCase:
+    """Test case for preserving newline conventions while formatting."""
+
+    description: str
+    contents: bytes
+    expected_newline: bytes
+
+
+@dataclass(frozen=True)
 class LintCliTestCase:
     """Test case for the sqb lint command."""
 

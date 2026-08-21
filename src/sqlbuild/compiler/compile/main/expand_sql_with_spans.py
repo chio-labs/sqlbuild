@@ -5,7 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_with_spans
-from sqlbuild.compiler.compile.models import ExpansionSpan, SqlExpansionContext
+from sqlbuild.compiler.compile.models import (
+    ConstantDeclaration,
+    DeclarationResolutionContext,
+    EnumDeclaration,
+    ExpansionSpan,
+    SqlExpansionContext,
+)
 
 
 def expand_sql_with_spans(
@@ -13,9 +19,11 @@ def expand_sql_with_spans(
 ) -> tuple[str, tuple[tuple[ExpansionSpan, ...], ...]]:
     """Expand authored SQL and return each expansion pass's substitution spans."""
 
-    local_declarations = context.local_declarations.get(file_path)
-    enums = context.enums
-    constants = context.constants
+    local_declarations: DeclarationResolutionContext | None = context.local_declarations.get(
+        file_path
+    )
+    enums: dict[str, EnumDeclaration] = context.enums
+    constants: dict[str, ConstantDeclaration] = context.constants
     if local_declarations is not None:
         enums = enums | local_declarations.enums
         constants = constants | local_declarations.constants
