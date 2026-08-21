@@ -6,11 +6,13 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile._helpers.attachment.core import build_effective_vars
 from sqlbuild.compiler.compile._helpers.render.declarations import (
+    build_model_declaration_indexes,
     build_public_declaration_indexes,
 )
 from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.compile.models import (
     ConstantDeclaration,
+    DeclarationResolutionContext,
     EnumDeclaration,
     LoadedMacro,
     MacroContext,
@@ -38,6 +40,15 @@ def build_sql_expansion_context(
     enums: dict[str, EnumDeclaration]
     constants: dict[str, ConstantDeclaration]
     enums, constants = build_public_declaration_indexes(discovered_inputs=discovered_inputs)
+    local_declarations: dict[Path, DeclarationResolutionContext] = {}
+    for model_file in discovered_inputs.model_files:
+        local_enums: dict[str, EnumDeclaration]
+        local_constants: dict[str, ConstantDeclaration]
+        local_enums, local_constants = build_model_declaration_indexes(model_file=model_file)
+        local_declarations[model_file.file_path] = DeclarationResolutionContext(
+            enums=local_enums,
+            constants=local_constants,
+        )
     return SqlExpansionContext(
         effective_vars=effective_vars,
         loaded_macros=loaded_macros,
@@ -49,4 +60,5 @@ def build_sql_expansion_context(
         ),
         enums=enums,
         constants=constants,
+        local_declarations=local_declarations,
     )

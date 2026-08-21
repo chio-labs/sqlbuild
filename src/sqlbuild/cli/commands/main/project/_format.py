@@ -20,4 +20,4 @@ def run_format_command(*, project_dir: Path | None, no_sqruff: bool = False) -> 
         print(f"WARN  {prepared[1]}")
     result: LintRunResult = run_format(project_dir=base_dir, config=prepared[0])
     _ = render_lint_result(result=result, show_formatted=True)
-    return 1 if result.faults else 0
+    return 1 if result.violations else 0

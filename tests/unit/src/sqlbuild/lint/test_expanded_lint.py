@@ -52,6 +52,20 @@ HEADER: str = 'MODEL (\n  materialized table,\n  description "ok"\n);\n'
             expected_positions=(),
             expected_message_fragments=(),
         ),
+        ExpandedLintTestCase(
+            description="model-local declarations expand in their owning model",
+            project_files={
+                "sqlbuild_project.toml": PROJECT_TOML,
+                "models/demo.sql": (
+                    'MODEL (\n  description "ok",\n'
+                    "  enums (_status [A]),\n"
+                    "  constants (_limit 1)\n);\n"
+                    'SELECT @enum("_status").A AS status, @const("_limit") AS amount\n'
+                ),
+            },
+            expected_positions=(),
+            expected_message_fragments=(),
+        ),
     ],
     ids=lambda case: case.description,
 )

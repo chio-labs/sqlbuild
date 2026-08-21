@@ -54,6 +54,13 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
             ),
             expected_kinds=("MODEL",),
         ),
+        ScanHeadersTestCase(
+            description="ignores header-like text inside comments",
+            contents=(
+                '-- TEST ();\n/*\nMODEL (not a header);\n*/\nMODEL (description "ok");\nSELECT 1\n'
+            ),
+            expected_kinds=("MODEL",),
+        ),
     ],
     ids=lambda case: case.description,
 )

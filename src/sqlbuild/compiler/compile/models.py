@@ -648,6 +648,7 @@ class SqlExpansionContext:
     macro_context: MacroContext
     enums: dict[str, EnumDeclaration]
     constants: dict[str, ConstantDeclaration]
+    local_declarations: dict[Path, DeclarationResolutionContext] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
