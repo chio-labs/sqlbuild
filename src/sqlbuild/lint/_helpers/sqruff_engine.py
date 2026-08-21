@@ -17,9 +17,11 @@ from sqlbuild.lint._helpers.sqlbuild_tokens import (
     neutralize_interpolation,
     restore_interpolation,
 )
+from sqlbuild.lint._helpers.sqruff_scaffold import read_configured_dialect
 from sqlbuild.lint.constants import (
     LINT_ENGINE_SQRUFF,
     SQRUFF_CHARACTER_KEY,
+    SQRUFF_DIALECTS_COMMAND,
     SQRUFF_EXPECTED_EXIT_CODES,
     SQRUFF_LINE_KEY,
     SQRUFF_RANGE_KEY,
@@ -27,7 +29,7 @@ from sqlbuild.lint.constants import (
     VIOLATION_SEVERITY_FAULT,
     VIOLATION_SEVERITY_WARNING,
 )
-from sqlbuild.lint.exceptions import SqruffOutputError
+from sqlbuild.lint.exceptions import SqruffOutputError, UnsupportedDialectError
 from sqlbuild.lint.models import InterpolationSite, LintConfig, LintViolation
 
 _SQRUFF_ERROR_SEVERITY: str = "Error"
@@ -222,6 +224,7 @@ def _invoke_sqruff(
         arguments: list[str] = ["fix" if fix else "lint", "--format", "json"]
         config_file: Path = project_dir / config.sqruff_config_path
         if config_file.is_file():
+            _assert_dialect_supported(config_file=config_file)
             arguments.extend(["--config", str(config_file)])
         arguments.extend(command_paths)
         outcome: tuple[int, str] = _invoke_run_cli(arguments=arguments)
@@ -255,6 +258,33 @@ def _invoke_run_cli(*, arguments: list[str]) -> tuple[int, str]:
             captured_bytes += chunk
         os.close(read_fd)
     return exit_code, captured_bytes.decode("utf-8", errors="replace")
+
+
+def _assert_dialect_supported(*, config_file: Path) -> None:
+    configured: str | None = read_configured_dialect(config_file=config_file)
+    if configured is None:
+        return
+    supported: frozenset[str] = _supported_dialects()
+    if configured in supported:
+        return
+    raise UnsupportedDialectError(
+        f"{config_file} declares dialect '{configured}', which sqruff does not support; "
+        f"sqruff would silently lint with its default dialect. Supported dialects: "
+        f"{', '.join(sorted(supported))}"
+    )
+
+
+def _supported_dialects() -> frozenset[str]:
+    _exit_code, stdout = _invoke_run_cli(arguments=[SQRUFF_DIALECTS_COMMAND])
+    dialects: frozenset[str] = frozenset(
+        line.strip() for line in stdout.splitlines() if line.strip()
+    )
+    if not dialects:
+        raise SqruffOutputError(
+            f"sqruff '{SQRUFF_DIALECTS_COMMAND}' returned no dialects; cannot validate "
+            f"the configured dialect"
+        )
+    return dialects
 
 
 def _diagnostic_start(*, violation: dict[str, object]) -> tuple[int, int]:

@@ -93,6 +93,7 @@ TEMPLATE_INTERPOLATION_START: str = "${"
 TEMPLATE_INTERPOLATION_END: str = "}"
 
 SQRUFF_EXPECTED_EXIT_CODES: frozenset[int] = frozenset({0, 1})
+SQRUFF_DIALECTS_COMMAND: str = "dialects"
 SQRUFF_RANGE_KEY: str = "range"
 SQRUFF_START_KEY: str = "start"
 SQRUFF_LINE_KEY: str = "line"

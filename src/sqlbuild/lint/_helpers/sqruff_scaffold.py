@@ -64,6 +64,12 @@ def _read_project_adapter(*, project_dir: Path) -> str | None:
     return None
 
 
+def read_configured_dialect(*, config_file: Path) -> str | None:
+    """Read the dialect declared in a sqruff config, if any."""
+
+    return _read_configured_dialect(config_file=config_file)
+
+
 def _read_configured_dialect(*, config_file: Path) -> str | None:
     parser: configparser.ConfigParser = configparser.ConfigParser()
     _ = parser.read(config_file, encoding="utf-8")

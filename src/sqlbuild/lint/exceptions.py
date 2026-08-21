@@ -13,3 +13,7 @@ class InterpolationRestorationError(LintError):
 
 class SqruffOutputError(LintError):
     """The sqruff engine produced output that could not be interpreted."""
+
+
+class UnsupportedDialectError(LintError):
+    """The configured sqruff dialect is not one the engine recognises."""
