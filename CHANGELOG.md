@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.52.0](https://github.com/chio-labs/sqlbuild/compare/v0.51.0...v0.52.0) (2026-08-21)
+
+
+### Features
+
+* **compiler:** add expansion span models and offset mapping ([9bfbd7b](https://github.com/chio-labs/sqlbuild/commit/9bfbd7b09e986de42b3a0b1dfd29890a58d0e3dc))
+* **compiler:** emit substitution spans from every expansion pass ([1ce9d32](https://github.com/chio-labs/sqlbuild/commit/1ce9d322faf17542fc72c938d78c2851d7f8f25b))
+* **lint:** add sqb lint and sqb format with sqruff and native header rules ([c4e47cd](https://github.com/chio-labs/sqlbuild/commit/c4e47cda9b1e6f6a49eb66be03437633710cb615))
+* **lint:** lint the SQL the project actually produces ([1833273](https://github.com/chio-labs/sqlbuild/commit/18332735d5825a29c3f23e14c442bff9f7f2568f))
+* **lint:** neutralize sqlbuild interpolation with unique sentinels ([e99a4be](https://github.com/chio-labs/sqlbuild/commit/e99a4befbc8e32671d4857f5eccba68d1d3d4bf0))
+* **lint:** reject unsupported sqruff dialects instead of linting silently ([a09157b](https://github.com/chio-labs/sqlbuild/commit/a09157b570aa4978083be85df866f524b60d0ca2))
+* **lint:** translate adapter dialect and scaffold .sqruff on lint/format ([504c425](https://github.com/chio-labs/sqlbuild/commit/504c425c630cda1f7e946f86984a535c9fe464a1))
+
+
+### Bug Fixes
+
+* **lint:** handle scoped declarations and formatting edge cases ([f367ed9](https://github.com/chio-labs/sqlbuild/commit/f367ed98cde77652250a7962af6376c68ba231dc))
+* **lint:** satisfy policy checks for formatting fixes ([76cc7cd](https://github.com/chio-labs/sqlbuild/commit/76cc7cd3269fe9eed3751c51a6ed6c36162f9559))
+* **plan:** render all model change diffs ([f57ac80](https://github.com/chio-labs/sqlbuild/commit/f57ac80d8fe210ae0fa4b0af5ab676ae26adc97c))
+* **plan:** render all model change diffs ([b8ae726](https://github.com/chio-labs/sqlbuild/commit/b8ae726b259005bdbcdb80ddb70ca72a0f2e68bf))
+
 ## [0.51.0](https://github.com/chio-labs/sqlbuild/compare/v0.50.0...v0.51.0) (2026-08-18)
 
 
