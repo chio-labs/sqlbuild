@@ -5,6 +5,7 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
+from sqlbuild.lint._helpers.sqruff_scaffold import ensure_sqruff_config
 from sqlbuild.lint.constants import (
     DEFAULT_MAX_DESCRIPTION_LINES,
     DEFAULT_SQRUFF_CONFIG_PATH,
@@ -49,6 +50,18 @@ def resolve_lint_config(*, project_dir: Path, no_sqruff: bool) -> LintConfig:
         sqruff_config_path=sqruff_config_path,
         max_description_lines=max_description_lines,
     )
+
+
+def prepare_lint_run(*, project_dir: Path, no_sqruff: bool) -> tuple[LintConfig, str | None]:
+    """Resolve config, scaffold a missing sqruff config, and return any drift warning."""
+
+    config: LintConfig = resolve_lint_config(project_dir=project_dir, no_sqruff=no_sqruff)
+    warning: str | None = ensure_sqruff_config(
+        project_dir=project_dir,
+        config_path=config.sqruff_config_path,
+        sqruff_enabled=config.sqruff_enabled,
+    )
+    return config, warning
 
 
 def render_lint_result(*, result: LintRunResult, show_formatted: bool) -> None:
