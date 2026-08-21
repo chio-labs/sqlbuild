@@ -13,6 +13,7 @@ from tests.unit.src.sqlbuild.lint._test_types import FormatProjectTestCase, Lint
 
 CLEAN_MODEL: str = 'MODEL (\n  materialized table,\n  description "ok"\n);\nSELECT 1 AS x FROM t\n'
 NO_DESCRIPTION_MODEL: str = "MODEL (\n  materialized table\n);\nSELECT 1 AS x FROM t\n"
+PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n'
 
 
 @pytest.mark.parametrize(
@@ -30,6 +31,7 @@ NO_DESCRIPTION_MODEL: str = "MODEL (\n  materialized table\n);\nSELECT 1 AS x FR
         ),
         LintProjectTestCase(
             description="sqruff engine violations are reported when enabled",
+            extra_files={"sqlbuild_project.toml": PROJECT_TOML},
             files={
                 "models/messy.sql": (
                     'MODEL (\n  materialized table,\n  description "ok"\n);\n'
@@ -48,7 +50,7 @@ def test_given_synthetic_project_when_linting_then_results_match_expected(
 ) -> None:
     relative_path: str
     contents: str
-    for relative_path, contents in test_case.files.items():
+    for relative_path, contents in {**test_case.files, **test_case.extra_files}.items():
         target: Path = tmp_path / relative_path
         _ = target.parent.mkdir(parents=True, exist_ok=True)
         _ = target.write_text(contents, encoding="utf-8")

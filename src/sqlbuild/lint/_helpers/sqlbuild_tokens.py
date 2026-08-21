@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.constants import MACRO_TOKEN, SQL_INTERPOLATION_TOKEN
+from sqlbuild.compiler.compile.models import ExpansionSpan
 from sqlbuild.lint.constants import (
     CLOSING_PAREN_CHARACTER,
     EXPECTED_SENTINEL_OCCURRENCES,
@@ -85,6 +86,32 @@ def restore_interpolation(*, fixed: str, sites: tuple[InterpolationSite, ...]) -
             )
         restored = restored.replace(site.sentinel, site.original_text)
     return restored
+
+
+def interpolation_text_at(*, body: str, start: int) -> str | None:
+    """Return the interpolation token beginning at an offset, if there is one."""
+
+    site_end: int | None = _interpolation_site_end(body=body, start=start)
+    if site_end is None:
+        return None
+    return body[start:site_end]
+
+
+def sentinel_spans(*, sites: tuple[InterpolationSite, ...]) -> tuple[ExpansionSpan, ...]:
+    """Express sentinel substitutions as expansion spans for offset mapping."""
+
+    spans: list[ExpansionSpan] = []
+    site: InterpolationSite
+    for site in sites:
+        spans.append(
+            ExpansionSpan(
+                source_start=site.original_start,
+                source_end=site.original_end,
+                output_start=site.neutralized_start,
+                output_end=site.neutralized_end,
+            )
+        )
+    return tuple(spans)
 
 
 def map_neutralized_offset(*, offset: int, sites: tuple[InterpolationSite, ...]) -> int:

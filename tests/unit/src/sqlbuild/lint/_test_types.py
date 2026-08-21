@@ -12,6 +12,7 @@ class LintProjectTestCase:
     description: str
     files: dict[str, str]
     sqruff_enabled: bool = False
+    extra_files: dict[str, str] = field(default_factory=dict)
     expected_fault_codes: tuple[tuple[str, str], ...] = ()
     expected_files_checked: int = 1
     expected_sqruff_engine_fault: bool = False
@@ -87,3 +88,22 @@ class SqruffScaffoldDisabledTestCase:
     project_adapter: str
     expected_config_exists: bool
     expected_warning: str | None
+
+
+@dataclass(frozen=True)
+class ExpandedLintTestCase:
+    """Test case for linting the SQL a project actually produces."""
+
+    description: str
+    project_files: dict[str, str]
+    expected_positions: tuple[tuple[int, int], ...]
+    expected_message_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LintCompileFailureTestCase:
+    """Test case for a project that cannot compile and therefore cannot be linted."""
+
+    description: str
+    project_files: dict[str, str]
+    expected_message_fragment: str

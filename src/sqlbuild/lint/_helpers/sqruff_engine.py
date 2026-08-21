@@ -12,25 +12,30 @@ from typing import cast
 
 from sqruff import run_cli
 
+from sqlbuild.compiler.compile.main.map_expanded_offset import map_expanded_offset
+from sqlbuild.compiler.compile.models import MappedOffset
 from sqlbuild.lint._helpers.sqlbuild_tokens import (
-    map_neutralized_offset,
+    interpolation_text_at,
     neutralize_interpolation,
     restore_interpolation,
 )
 from sqlbuild.lint._helpers.sqruff_scaffold import read_configured_dialect
 from sqlbuild.lint.constants import (
+    GENERATED_SQL_MESSAGE_SUFFIX,
+    GENERATED_SQL_MESSAGE_TEMPLATE,
     LINT_ENGINE_SQRUFF,
     SQRUFF_CHARACTER_KEY,
     SQRUFF_DIALECTS_COMMAND,
     SQRUFF_EXPECTED_EXIT_CODES,
     SQRUFF_LINE_KEY,
+    SQRUFF_MINIMUM_POSITION,
     SQRUFF_RANGE_KEY,
     SQRUFF_START_KEY,
     VIOLATION_SEVERITY_FAULT,
     VIOLATION_SEVERITY_WARNING,
 )
 from sqlbuild.lint.exceptions import SqruffOutputError, UnsupportedDialectError
-from sqlbuild.lint.models import InterpolationSite, LintConfig, LintViolation
+from sqlbuild.lint.models import InterpolationSite, LintBody, LintConfig, LintViolation
 
 _SQRUFF_ERROR_SEVERITY: str = "Error"
 _TEMP_BODY_PREFIX: str = "body_"
@@ -79,34 +84,6 @@ class _SqruffRun:
                 fixed=reloaded, sites=self.temp_sites[temp_file_name]
             )
 
-    def violations(
-        self,
-        *,
-        bodies: Mapping[Path, tuple[str, tuple[tuple[int, int], ...]]],
-        diagnostics: dict[str, list[dict[str, object]]],
-    ) -> dict[Path, list[LintViolation]]:
-        """Map sqruff diagnostics from neutralized temps back onto original files."""
-        violations_by_file: dict[Path, list[LintViolation]] = {}
-        reported_path: str
-        entries: list[dict[str, object]]
-        for reported_path, entries in diagnostics.items():
-            mapped: tuple[Path, int, int] | None = self.temp_to_original.get(
-                Path(reported_path).name
-            )
-            if mapped is None:
-                continue
-            violation: dict[str, object]
-            for violation in entries:
-                mapped_violation: LintViolation = self._map_violation_for_temp(
-                    violation=violation,
-                    temp_file_name=Path(reported_path).name,
-                    bodies=bodies,
-                    original_path=mapped[0],
-                    body_start=mapped[1],
-                )
-                violations_by_file.setdefault(mapped[0], []).append(mapped_violation)
-        return violations_by_file
-
     def spliced_contents(
         self, *, bodies: Mapping[Path, tuple[str, tuple[tuple[int, int], ...]]]
     ) -> dict[Path, str]:
@@ -133,63 +110,124 @@ class _SqruffRun:
             spliced[original_path] = updated
         return spliced
 
-    def _map_violation_for_temp(
-        self,
-        *,
-        violation: dict[str, object],
-        temp_file_name: str,
-        bodies: Mapping[Path, tuple[str, tuple[tuple[int, int], ...]]],
-        original_path: Path,
-        body_start: int,
-    ) -> LintViolation:
-        local_line: int
-        local_character: int
-        local_line, local_character = _diagnostic_start(violation=violation)
-        neutralized_starts: tuple[int, ...] = _line_starts(self.neutralized_bodies[temp_file_name])
-        clamped_line: int = min(local_line, len(neutralized_starts) - 1)
-        neutralized_offset: int = neutralized_starts[clamped_line] + local_character
-        original_offset: int = map_neutralized_offset(
-            offset=neutralized_offset, sites=self.temp_sites[temp_file_name]
-        )
-        absolute_offset: int = body_start + original_offset
-        original_starts: tuple[int, ...] = _line_starts(bodies[original_path][0])
-        absolute_line_index: int = bisect_right(original_starts, absolute_offset) - 1
-        line: int = absolute_line_index + 1
-        column: int = absolute_offset - original_starts[absolute_line_index] + 1
-        code: object = violation.get("code")
-        message: object = violation.get("message")
-        severity: object = violation.get("severity")
-        is_fault: bool = severity == _SQRUFF_ERROR_SEVERITY
-        return LintViolation(
-            file_path=original_path,
-            line=line,
-            column=column,
-            code=str(code) if code is not None else "sqruff",
-            message=str(message) if message is not None else "",
-            severity=VIOLATION_SEVERITY_FAULT if is_fault else VIOLATION_SEVERITY_WARNING,
-            engine=LINT_ENGINE_SQRUFF,
-        )
-
 
 def run_sqruff_lint(
     *,
-    bodies: Mapping[Path, tuple[str, tuple[tuple[int, int], ...]]],
+    bodies: tuple[LintBody, ...],
+    contents_by_path: Mapping[Path, str],
     config: LintConfig,
     project_dir: Path,
 ) -> dict[Path, tuple[LintViolation, ...]]:
-    """Run sqruff lint over extracted SQL bodies and map diagnostics back to files."""
+    """Lint expanded SQL bodies and map diagnostics back to authored positions."""
 
     if not bodies:
         return {}
-    sqruff_run: _SqruffRun = _SqruffRun()
-    exit_code, stdout = _invoke_sqruff(
-        bodies=bodies, config=config, project_dir=project_dir, fix=False, sqruff_run=sqruff_run
+    temp_to_body: dict[str, LintBody] = {}
+    stdout: str
+    with tempfile.TemporaryDirectory(prefix="sqlbuild-sqruff-") as temp_dir:
+        temp_path: Path = Path(temp_dir)
+        command_paths: list[str] = []
+        index: int = 0
+        body: LintBody
+        for body in bodies:
+            temp_file: Path = temp_path / f"{_TEMP_BODY_PREFIX}{index}.sql"
+            index += 1
+            _ = temp_file.write_text(body.lint_text, encoding="utf-8")
+            temp_to_body[temp_file.name] = body
+            command_paths.append(str(temp_file))
+        _stdout_exit_code, stdout = _invoke_run_cli(
+            arguments=_lint_arguments(
+                command_paths=command_paths, config=config, project_dir=project_dir
+            )
+        )
+        _assert_expected_exit_code(exit_code=_stdout_exit_code)
+    violations_by_file: dict[Path, list[LintViolation]] = _lint_violations(
+        diagnostics=_parse_diagnostics(stdout=stdout),
+        temp_to_body=temp_to_body,
+        contents_by_path=contents_by_path,
     )
-    _ = exit_code
-    violations_by_file: dict[Path, list[LintViolation]] = sqruff_run.violations(
-        bodies=bodies, diagnostics=_parse_diagnostics(stdout=stdout)
+    return {body.file_path: tuple(violations_by_file.get(body.file_path, ())) for body in bodies}
+
+
+def _lint_arguments(
+    *, command_paths: list[str], config: LintConfig, project_dir: Path
+) -> list[str]:
+    arguments: list[str] = ["lint", "--format", "json"]
+    config_file: Path = project_dir / config.sqruff_config_path
+    if config_file.is_file():
+        _assert_dialect_supported(config_file=config_file)
+        arguments.extend(["--config", str(config_file)])
+    arguments.extend(command_paths)
+    return arguments
+
+
+def _lint_violations(
+    *,
+    diagnostics: dict[str, list[dict[str, object]]],
+    temp_to_body: dict[str, LintBody],
+    contents_by_path: Mapping[Path, str],
+) -> dict[Path, list[LintViolation]]:
+    violations_by_file: dict[Path, list[LintViolation]] = {}
+    reported_path: str
+    entries: list[dict[str, object]]
+    for reported_path, entries in diagnostics.items():
+        body: LintBody | None = temp_to_body.get(Path(reported_path).name)
+        if body is None:
+            raise SqruffOutputError(
+                f"sqruff reported diagnostics for unknown path '{reported_path}'"
+            )
+        violation: dict[str, object]
+        for violation in entries:
+            violations_by_file.setdefault(body.file_path, []).append(
+                _authored_violation(
+                    violation=violation,
+                    body=body,
+                    contents=contents_by_path[body.file_path],
+                )
+            )
+    return violations_by_file
+
+
+def _authored_violation(
+    *, violation: dict[str, object], body: LintBody, contents: str
+) -> LintViolation:
+    local_line: int
+    local_character: int
+    local_line, local_character = _diagnostic_start(violation=violation)
+    lint_starts: tuple[int, ...] = _line_starts(body.lint_text)
+    clamped_line: int = min(local_line, len(lint_starts) - 1)
+    lint_offset: int = lint_starts[clamped_line] + local_character
+    mapped: MappedOffset = map_expanded_offset(offset=lint_offset, passes=body.passes)
+    absolute_offset: int = body.body_start + mapped.offset
+    starts: tuple[int, ...] = _line_starts(contents)
+    line_index: int = bisect_right(starts, absolute_offset) - 1
+    code: object = violation.get("code")
+    severity: object = violation.get("severity")
+    is_fault: bool = severity == _SQRUFF_ERROR_SEVERITY
+    return LintViolation(
+        file_path=body.file_path,
+        line=line_index + 1,
+        column=absolute_offset - starts[line_index] + 1,
+        code=str(code) if code is not None else "sqruff",
+        message=_violation_message(
+            violation=violation, mapped=mapped, contents=contents, absolute_offset=absolute_offset
+        ),
+        severity=VIOLATION_SEVERITY_FAULT if is_fault else VIOLATION_SEVERITY_WARNING,
+        engine=LINT_ENGINE_SQRUFF,
     )
-    return {file_path: tuple(violations_by_file.get(file_path, ())) for file_path in bodies}
+
+
+def _violation_message(
+    *, violation: dict[str, object], mapped: MappedOffset, contents: str, absolute_offset: int
+) -> str:
+    raw_message: object = violation.get("message")
+    message: str = str(raw_message) if raw_message is not None else ""
+    if not mapped.generated:
+        return message
+    token: str | None = interpolation_text_at(body=contents, start=absolute_offset)
+    if token is None:
+        return f"{message} {GENERATED_SQL_MESSAGE_SUFFIX}"
+    return f"{message} {GENERATED_SQL_MESSAGE_TEMPLATE.format(token=token)}"
 
 
 def run_sqruff_fix(
@@ -228,11 +266,7 @@ def _invoke_sqruff(
             arguments.extend(["--config", str(config_file)])
         arguments.extend(command_paths)
         outcome: tuple[int, str] = _invoke_run_cli(arguments=arguments)
-        if outcome[0] not in SQRUFF_EXPECTED_EXIT_CODES:
-            raise SqruffOutputError(
-                f"sqruff exited with unexpected code {outcome[0]}; expected one of "
-                f"{sorted(SQRUFF_EXPECTED_EXIT_CODES)}"
-            )
+        _assert_expected_exit_code(exit_code=outcome[0])
         if fix:
             sqruff_run.reload_fixed_bodies(temp_path=temp_path)
         return outcome
@@ -258,6 +292,15 @@ def _invoke_run_cli(*, arguments: list[str]) -> tuple[int, str]:
             captured_bytes += chunk
         os.close(read_fd)
     return exit_code, captured_bytes.decode("utf-8", errors="replace")
+
+
+def _assert_expected_exit_code(*, exit_code: int) -> None:
+    if exit_code in SQRUFF_EXPECTED_EXIT_CODES:
+        return
+    raise SqruffOutputError(
+        f"sqruff exited with unexpected code {exit_code}; expected one of "
+        f"{sorted(SQRUFF_EXPECTED_EXIT_CODES)}"
+    )
 
 
 def _assert_dialect_supported(*, config_file: Path) -> None:
@@ -307,7 +350,12 @@ def _diagnostic_start(*, violation: dict[str, object]) -> tuple[int, int]:
             f"sqruff diagnostic start must carry integer '{SQRUFF_LINE_KEY}' and "
             f"'{SQRUFF_CHARACTER_KEY}': {violation!r}"
         )
-    return raw_line, raw_character
+    if raw_line < SQRUFF_MINIMUM_POSITION or raw_character < SQRUFF_MINIMUM_POSITION:
+        raise SqruffOutputError(
+            f"sqruff diagnostic positions are one-based, got line {raw_line} character "
+            f"{raw_character}: {violation!r}"
+        )
+    return raw_line - SQRUFF_MINIMUM_POSITION, raw_character - SQRUFF_MINIMUM_POSITION
 
 
 def _parse_diagnostics(*, stdout: str) -> dict[str, list[dict[str, object]]]:

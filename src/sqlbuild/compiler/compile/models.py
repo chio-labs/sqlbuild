@@ -640,6 +640,17 @@ class CompiledModelSqlTestPayload:
 
 
 @dataclass(frozen=True)
+class SqlExpansionContext:
+    """Everything needed to expand one project's authored SQL bodies."""
+
+    effective_vars: dict[str, object]
+    loaded_macros: dict[str, LoadedMacro]
+    macro_context: MacroContext
+    enums: dict[str, EnumDeclaration]
+    constants: dict[str, ConstantDeclaration]
+
+
+@dataclass(frozen=True)
 class ExpansionSpan:
     """One substituted region, pairing its source range with its rendered range."""
 

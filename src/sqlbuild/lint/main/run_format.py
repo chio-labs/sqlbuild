@@ -4,11 +4,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.compiler.compile.models import SqlExpansionContext
+from sqlbuild.lint._helpers.expansion import build_lint_expansion_context, prepare_lint_body
 from sqlbuild.lint._helpers.headers import scan_headers, sql_body_ranges
 from sqlbuild.lint._helpers.native import format_native_headers, lint_native_headers
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
 from sqlbuild.lint._helpers.sqruff_engine import run_sqruff_fix, run_sqruff_lint
-from sqlbuild.lint.models import HeaderSpan, LintConfig, LintRunResult, LintViolation
+from sqlbuild.lint.models import (
+    HeaderSpan,
+    LintBody,
+    LintConfig,
+    LintRunResult,
+    LintViolation,
+)
 
 
 def run_format(*, project_dir: Path, config: LintConfig) -> LintRunResult:
@@ -79,10 +87,16 @@ def _lint_final_contents(
     """Lint final contents so reported violations match a follow-up lint run."""
 
     violations: list[LintViolation] = []
+    final_by_path: dict[Path, str] = {}
+    bodies: list[LintBody] = []
+    context: SqlExpansionContext | None = None
+    if config.sqruff_enabled:
+        context = build_lint_expansion_context(project_dir=project_dir)
     file_path: Path
     contents: str
     for file_path, contents in sorted(files.items()):
         final_contents: str = updated_contents.get(file_path, contents)
+        final_by_path[file_path] = final_contents
         headers: tuple[HeaderSpan, ...] = scan_headers(contents=final_contents)
         violations.extend(
             lint_native_headers(
@@ -92,18 +106,29 @@ def _lint_final_contents(
                 config=config,
             )
         )
-        if not config.sqruff_enabled:
+        if context is None:
             continue
-        sqruff_violations: dict[Path, tuple[LintViolation, ...]] = run_sqruff_lint(
-            bodies={
-                file_path: (
-                    final_contents,
-                    sql_body_ranges(contents=final_contents, headers=headers),
+        body_start: int
+        body_end: int
+        for body_start, body_end in sql_body_ranges(contents=final_contents, headers=headers):
+            bodies.append(
+                prepare_lint_body(
+                    file_path=file_path,
+                    contents=final_contents,
+                    body_start=body_start,
+                    body_end=body_end,
+                    context=context,
                 )
-            },
-            config=config,
-            project_dir=project_dir,
-        )
-        for entries in sqruff_violations.values():
-            violations.extend(entries)
+            )
+    if not bodies:
+        return violations
+    sqruff_violations: dict[Path, tuple[LintViolation, ...]] = run_sqruff_lint(
+        bodies=tuple(bodies),
+        contents_by_path=final_by_path,
+        config=config,
+        project_dir=project_dir,
+    )
+    entries: tuple[LintViolation, ...]
+    for entries in sqruff_violations.values():
+        violations.extend(entries)
     return violations

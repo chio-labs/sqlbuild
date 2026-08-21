@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlbuild.compiler.compile.models import ExpansionSpan
 from sqlbuild.lint.constants import VIOLATION_SEVERITY_FAULT, VIOLATION_SEVERITY_WARNING
 
 
@@ -27,6 +28,17 @@ class InterpolationSite:
     original_start: int
     original_end: int
     original_text: str
+
+
+@dataclass(frozen=True)
+class LintBody:
+    """One authored SQL body prepared for linting, with its expansion spans."""
+
+    file_path: Path
+    body_start: int
+    body_end: int
+    lint_text: str
+    passes: tuple[tuple[ExpansionSpan, ...], ...]
 
 
 @dataclass(frozen=True)
