@@ -14,6 +14,7 @@ dependencies = [
   "pydantic-settings>=2,<3",
   "PyYAML>=6.0.2",
   "rich>=15.0.0",
+  "sqruff>=0.40.0",
 ]
 
 [project.optional-dependencies]

@@ -46,6 +46,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.inspection._query import run_query
     from sqlbuild.cli.commands.main.project._compile import run_compile
     from sqlbuild.cli.commands.main.project._dag import run_dag
+    from sqlbuild.cli.commands.main.project._format import run_format_command
+    from sqlbuild.cli.commands.main.project._lint import run_lint_command
     from sqlbuild.cli.commands.main.project._plan import run_plan
     from sqlbuild.cli.commands.main.state._janitor import run_janitor
     from sqlbuild.cli.commands.main.state._promote import run_promote
@@ -168,6 +170,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             global_install=global_install,
             targets=targets,
             force=force,
+        ),
+        run_lint=lambda project_dir, no_sqruff: run_lint_command(
+            project_dir=project_dir,
+            no_sqruff=no_sqruff,
+        ),
+        run_format=lambda project_dir, no_sqruff: run_format_command(
+            project_dir=project_dir,
+            no_sqruff=no_sqruff,
         ),
         run_scenario=run_scenario,
         run_scenario_capture=run_scenario_capture,

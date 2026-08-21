@@ -209,6 +209,12 @@ def _add_quality_parsers(
     _ = add_vars_args(audit_parser)
     _ = add_dbt_config_args(parser=audit_parser)
 
+    lint_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.LINT)
+    lint_parser.add_argument("--no-sqruff", dest="no_sqruff", action="store_true", default=False)
+
+    format_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.FORMAT)
+    format_parser.add_argument("--no-sqruff", dest="no_sqruff", action="store_true", default=False)
+
 
 def _add_data_parsers(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
