@@ -111,3 +111,17 @@ def test_given_synthetic_project_when_formatting_then_results_match_expected(
     for relative_path, fragment in test_case.expected_written_fragments.items():
         written: str = (tmp_path / relative_path).read_text(encoding="utf-8")
         assert fragment in written
+
+
+def test_given_crlf_file_when_formatting_then_newline_style_is_preserved(tmp_path: Path) -> None:
+    target: Path = tmp_path / "models" / "crlf.sql"
+    _ = target.parent.mkdir(parents=True)
+    target.write_bytes(
+        b"-- Description.\r\nMODEL (\r\n  materialized table  \r\n);\r\nSELECT 1\r\n"
+    )
+
+    _ = run_format(project_dir=tmp_path, config=LintConfig(sqruff_enabled=False))
+
+    written: bytes = target.read_bytes()
+    assert b"\r\n" in written
+    assert written.count(b"\r\n") == written.count(b"\n")

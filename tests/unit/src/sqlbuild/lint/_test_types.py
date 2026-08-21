@@ -48,6 +48,7 @@ class FormatCliTestCase:
     description: str
     files: dict[str, str]
     expected_exit_code: int
+    extra_arguments: tuple[str, ...] = ("--no-sqruff",)
     expected_output_fragments: tuple[str, ...] = ()
     expected_file_fragments: dict[str, str] = field(default_factory=dict)
 

@@ -11,6 +11,9 @@ _OPEN_PAREN: str = "("
 _CLOSE_PAREN: str = ")"
 _STATEMENT_TERMINATOR: str = ";"
 _NEWLINE: str = "\n"
+_LINE_COMMENT_START: str = "--"
+_BLOCK_COMMENT_START: str = "/*"
+_BLOCK_COMMENT_END: str = "*/"
 
 
 def scan_headers(*, contents: str) -> tuple[HeaderSpan, ...]:
@@ -20,6 +23,14 @@ def scan_headers(*, contents: str) -> tuple[HeaderSpan, ...]:
     index: int = 0
     length: int = len(contents)
     while index < length:
+        if contents.startswith(_LINE_COMMENT_START, index):
+            newline_index: int = contents.find(_NEWLINE, index + len(_LINE_COMMENT_START))
+            index = length if newline_index < 0 else newline_index + 1
+            continue
+        if contents.startswith(_BLOCK_COMMENT_START, index):
+            comment_end: int = contents.find(_BLOCK_COMMENT_END, index + len(_BLOCK_COMMENT_START))
+            index = length if comment_end < 0 else comment_end + len(_BLOCK_COMMENT_END)
+            continue
         character: str = contents[index]
         if not (character.isalpha() or character == IDENTIFIER_SEPARATOR_CHARACTER):
             index += 1

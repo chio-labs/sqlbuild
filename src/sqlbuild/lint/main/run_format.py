@@ -23,6 +23,9 @@ def run_format(*, project_dir: Path, config: LintConfig) -> LintRunResult:
     """Format all DSL files in place and report the violations that remain."""
 
     files: dict[Path, str] = collect_project_files(project_dir=project_dir)
+    newline_by_path: dict[Path, str] = {
+        file_path: _newline_style(contents=contents) for file_path, contents in files.items()
+    }
     updated_contents: dict[Path, str] = _apply_fixes(
         files=files, config=config, project_dir=project_dir
     )
@@ -30,7 +33,10 @@ def run_format(*, project_dir: Path, config: LintConfig) -> LintRunResult:
     file_path: Path
     new_contents: str
     for file_path, new_contents in updated_contents.items():
-        file_path.write_text(new_contents, encoding="utf-8")
+        with file_path.open("w", encoding="utf-8", newline="") as handle:
+            _ = handle.write(
+                _with_newline_style(contents=new_contents, newline=newline_by_path[file_path])
+            )
         formatted.append(file_path)
     violations: list[LintViolation] = _lint_final_contents(
         files=files, updated_contents=updated_contents, config=config, project_dir=project_dir
@@ -40,6 +46,15 @@ def run_format(*, project_dir: Path, config: LintConfig) -> LintRunResult:
         violations=sort_violations(violations),
         formatted_files=tuple(sorted(formatted)),
     )
+
+
+def _newline_style(*, contents: str) -> str:
+    return "\r\n" if "\r\n" in contents else "\n"
+
+
+def _with_newline_style(*, contents: str, newline: str) -> str:
+    normalized: str = contents.replace("\r\n", "\n")
+    return normalized if newline == "\n" else normalized.replace("\n", newline)
 
 
 def _apply_fixes(

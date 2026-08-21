@@ -13,12 +13,18 @@ def expand_sql_with_spans(
 ) -> tuple[str, tuple[tuple[ExpansionSpan, ...], ...]]:
     """Expand authored SQL and return each expansion pass's substitution spans."""
 
+    local_declarations = context.local_declarations.get(file_path)
+    enums = context.enums
+    constants = context.constants
+    if local_declarations is not None:
+        enums = enums | local_declarations.enums
+        constants = constants | local_declarations.constants
     return expand_authored_sql_with_spans(
         sql=sql,
         file_path=file_path,
         effective_vars=context.effective_vars,
         loaded_macros=context.loaded_macros,
         macro_context=context.macro_context,
-        enums=context.enums,
-        constants=context.constants,
+        enums=enums,
+        constants=constants,
     )

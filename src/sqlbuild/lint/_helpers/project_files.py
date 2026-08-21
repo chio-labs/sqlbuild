@@ -18,7 +18,8 @@ def collect_project_files(*, project_dir: Path) -> dict[Path, str]:
             continue
         file_path: Path
         for file_path in sorted(root.rglob("*.sql")):
-            files[file_path] = file_path.read_text(encoding="utf-8")
+            with file_path.open("r", encoding="utf-8", newline="") as handle:
+                files[file_path] = handle.read()
     return files
 
 
