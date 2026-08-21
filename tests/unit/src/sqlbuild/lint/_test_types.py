@@ -35,6 +35,7 @@ class LintCliTestCase:
     description: str
     files: dict[str, str]
     expected_exit_code: int
+    no_sqruff: bool = True
     expected_output_fragments: tuple[str, ...] = ()
 
 
@@ -47,3 +48,24 @@ class FormatCliTestCase:
     expected_exit_code: int
     expected_output_fragments: tuple[str, ...] = ()
     expected_file_fragments: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class TranslateDialectTestCase:
+    """Test case for adapter-to-sqruff dialect translation."""
+
+    description: str
+    adapter: str
+    expected_dialect: str | None
+
+
+@dataclass(frozen=True)
+class SqruffScaffoldTestCase:
+    """Test case for sqruff config scaffolding and drift warnings."""
+
+    description: str
+    project_adapter: str
+    existing_config: str | None
+    sqruff_enabled: bool
+    expected_final_config: str | None
+    expected_warning: str | None

@@ -62,3 +62,17 @@ LINT_SECTION_KEY: str = "lint"
 SQRUFF_ENABLED_KEY: str = "sqruff"
 SQRUFF_CONFIG_PATH_KEY: str = "sqruff_config"
 MAX_DESCRIPTION_LINES_KEY: str = "max_description_lines"
+
+ADAPTER_DIALECT_TRANSLATIONS: dict[str, str] = {
+    "duckdb": "duckdb",
+    "motherduck": "duckdb",
+    "snowflake": "snowflake",
+    "bigquery": "bigquery",
+    "databricks": "databricks",
+    "postgres": "postgres",
+    "sqlserver": "tsql",
+}
+SQRUFF_CONFIG_SECTION: str = "core"
+SQRUFF_CONFIG_DIALECT_KEY: str = "dialect"
+ADAPTER_CONFIG_KEY: str = "adapter"
+DEFAULT_SQRUFF_CONFIG_TEMPLATE: str = '[core]\ndialect = "{dialect}"\n'

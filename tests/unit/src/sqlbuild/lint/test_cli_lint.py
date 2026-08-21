@@ -12,6 +12,7 @@ from tests.unit.src.sqlbuild.lint._test_types import FormatCliTestCase, LintCliT
 CLEAN_MODEL: str = 'MODEL (\n  materialized table,\n  description "ok"\n);\nSELECT 1 AS x FROM t\n'
 COMMENTED_MODEL: str = "-- A comment.\nMODEL (\n  materialized table\n);\nSELECT 1 AS x FROM t\n"
 NO_DESCRIPTION_MODEL: str = "MODEL (\n  materialized table\n);\nSELECT 1 AS x FROM t\n"
+PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n'
 
 
 @pytest.mark.parametrize(
@@ -28,6 +29,12 @@ NO_DESCRIPTION_MODEL: str = "MODEL (\n  materialized table\n);\nSELECT 1 AS x FR
             files={"models/fine.sql": CLEAN_MODEL},
             expected_exit_code=0,
         ),
+        LintCliTestCase(
+            description="lint scaffolds a missing sqruff config from the adapter",
+            files={"models/fine.sql": CLEAN_MODEL, "sqlbuild_project.toml": PROJECT_TOML},
+            expected_exit_code=0,
+            no_sqruff=False,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -42,12 +49,17 @@ def test_given_project_when_running_lint_then_exit_code_and_output_match_expecte
         write_target: Path = tmp_path / file_relative_path
         _ = write_target.parent.mkdir(parents=True, exist_ok=True)
         _ = write_target.write_text(file_contents, encoding="utf-8")
-    exit_code: int = main(["--project-dir", str(tmp_path), "lint", "--no-sqruff"])
+    arguments: list[str] = ["--project-dir", str(tmp_path), "lint"]
+    if test_case.no_sqruff:
+        arguments.append("--no-sqruff")
+    exit_code: int = main(arguments)
     assert exit_code == test_case.expected_exit_code
     output: str = capsys.readouterr().out
     fragment: str
     for fragment in test_case.expected_output_fragments:
         assert fragment in output
+    if "sqlbuild_project.toml" in test_case.files:
+        assert 'dialect = "duckdb"' in (tmp_path / ".sqruff").read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize(
