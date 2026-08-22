@@ -97,6 +97,17 @@ _WAREHOUSE_COLUMNS: tuple[ColumnInfo, ...] = (
             expected_ddl_fragment="WHEN NOT MATCHED THEN INSERT (order_id, name, amount)",
         ),
         BuildLogicalDdlTestCase(
+            description="merge exclusion only omits matched update column",
+            action=PlanAction.INCREMENTAL_MERGE,
+            resolved_sql=_SIMPLE_SQL,
+            qualified_name="staging.orders",
+            unique_key=("order_id",),
+            warehouse_columns=_WAREHOUSE_COLUMNS,
+            merge_exclude_columns=("NAME",),
+            expected_ddl_fragment="WHEN MATCHED THEN UPDATE SET amount = __source.amount",
+            unexpected_ddl_fragments=("UPDATE SET name = __source.name",),
+        ),
+        BuildLogicalDdlTestCase(
             description="merge on clause uses unique key",
             action=PlanAction.INCREMENTAL_MERGE,
             resolved_sql=_SIMPLE_SQL,
@@ -180,6 +191,10 @@ def test_given_action_and_sql_when_building_ddl_then_contains_expected_fragment(
         target=target,
         unique_key=test_case.unique_key,
         warehouse_columns=test_case.warehouse_columns,
+        merge_exclude_columns=test_case.merge_exclude_columns,
     )
 
     assert test_case.expected_ddl_fragment in result
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_ddl_fragments:
+        assert unexpected_fragment not in result

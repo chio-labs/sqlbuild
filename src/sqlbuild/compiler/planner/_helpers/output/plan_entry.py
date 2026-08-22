@@ -473,6 +473,7 @@ def plan_model_from_change(
         resolved_sql=resolved_sql,
         destination=model.destination,
         unique_key=unique_key,
+        merge_exclude_columns=_get_config_string_tuple(model=model, key="merge_exclude_columns"),
         warehouse_columns=warehouse_columns,
         cursor_column=cursor_column,
         cursor_bounds=ddl_cursor_bounds,
@@ -503,6 +504,8 @@ def plan_model_from_change(
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
         unique_key=unique_key,
+        merge_exclude_columns=_get_config_string_tuple(model=model, key="merge_exclude_columns"),
+        allow_full_refresh=_get_config_optional_bool(model=model, key="allow_full_refresh"),
         snapshot_strategy=snapshot_strategy,
         updated_at_column=updated_at_column,
         check_columns=check_columns,
@@ -717,6 +720,18 @@ def _get_unique_key(model: CompiledModel) -> tuple[str, ...]:
     return ()
 
 
+def _get_config_string_tuple(*, model: CompiledModel, key: str) -> tuple[str, ...]:
+    raw: object | None = model.config.values.get(key)
+    if isinstance(raw, list | tuple):
+        return tuple(value for value in raw if isinstance(value, str))
+    return ()
+
+
+def _get_config_optional_bool(*, model: CompiledModel, key: str) -> bool | None:
+    raw: object | None = model.config.values.get(key)
+    return raw if isinstance(raw, bool) else None
+
+
 def _get_check_columns(model: CompiledModel) -> tuple[str, ...]:
     """Extract check_columns from model config as a normalized tuple."""
 
@@ -850,6 +865,7 @@ def _build_logical_ddl_from_adapter(
     resolved_sql: str,
     destination: CompiledRelationLocation,
     unique_key: tuple[str, ...],
+    merge_exclude_columns: tuple[str, ...],
     warehouse_columns: tuple[ColumnInfo, ...],
     cursor_column: str | None = None,
     cursor_bounds: CursorBounds | None = None,
@@ -900,6 +916,7 @@ def _build_logical_ddl_from_adapter(
                 sql=resolved_sql,
                 unique_key=unique_key,
                 source_columns=source_columns,
+                exclude_columns=merge_exclude_columns,
             )
         )
 

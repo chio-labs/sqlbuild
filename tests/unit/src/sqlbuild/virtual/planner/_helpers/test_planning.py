@@ -906,6 +906,56 @@ def test_given_version_identity_config_key_when_building_expected_hashes_then_ha
     "test_case",
     [
         ExpectedVersionHashesTestCase(
+            description="merge exclusions change model version hash",
+            upstream_query_sql="SELECT 1 AS id",
+            downstream_query_sql="SELECT 1 AS order_id",
+            baseline_extra_config={"merge_exclude_columns": ["ingested_at"]},
+            changed_extra_config={"merge_exclude_columns": ["created_at"]},
+            expected_hashes_differ=True,
+        ),
+        ExpectedVersionHashesTestCase(
+            description="full refresh guard changes model version hash",
+            upstream_query_sql="SELECT 1 AS id",
+            downstream_query_sql="SELECT 1 AS order_id",
+            baseline_extra_config={"allow_full_refresh": True},
+            changed_extra_config={"allow_full_refresh": False},
+            expected_hashes_differ=True,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_safety_policy_change_when_building_expected_hashes_then_hashes_differ(
+    test_case: ExpectedVersionHashesTestCase,
+) -> None:
+    baseline_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_extra_config=test_case.baseline_extra_config,
+    )
+    changed_graph: ProjectGraph = build_virtual_planner_test_project(
+        upstream_query_sql=test_case.upstream_query_sql,
+        downstream_query_sql=test_case.downstream_query_sql,
+        upstream_extra_config=test_case.changed_extra_config,
+    )
+
+    baseline_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=baseline_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=baseline_graph),
+    )
+    changed_hashes: dict[str, str] = build_expected_version_hashes(
+        graph=changed_graph,
+        expected_local_hashes=build_expected_local_hashes(graph=changed_graph),
+    )
+
+    assert (
+        baseline_hashes["stg_orders"] != changed_hashes["stg_orders"]
+    ) is test_case.expected_hashes_differ
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedVersionHashesTestCase(
             description="enforced contract output shape changes model version hash",
             upstream_query_sql="SELECT 1 AS id",
             downstream_query_sql="SELECT 1 AS order_id",

@@ -397,6 +397,7 @@ class StrictAdapter(
         sql: str,
         unique_key: tuple[str, ...],
         source_columns: tuple[str, ...] = (),
+        exclude_columns: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
         """Render SQL statements that merge query rows into a destination."""
         ...

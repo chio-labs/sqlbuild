@@ -5,6 +5,7 @@ from __future__ import annotations
 from io import StringIO
 
 from sqlbuild.cli.commands._helpers.build_planning.full_refresh import (
+    enforce_model_full_refresh_policy,
     enforce_snapshot_full_refresh_policy,
 )
 from sqlbuild.cli.commands._helpers.planning.external_refs import (
@@ -77,7 +78,7 @@ def compile_plan_pipeline(
             output_stream=StringIO(),
         )
         return virtual_result
-    return run_compile_pipeline(
+    result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=invocation.discovered_inputs,
         adapter=invocation.adapter,
         options=CompilePipelineOptions(
@@ -110,3 +111,5 @@ def compile_plan_pipeline(
             ),
         ),
     )
+    enforce_model_full_refresh_policy(plan=result.plan_output)
+    return result

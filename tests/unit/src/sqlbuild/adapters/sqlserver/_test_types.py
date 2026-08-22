@@ -8,6 +8,13 @@ from sqlbuild.adapter.contract.models import (
 
 
 @dataclass(frozen=True)
+class SqlServerMergeExclusionTestCase:
+    description: str
+    expected_update_clause: str
+    expected_insert_clause: str
+
+
+@dataclass(frozen=True)
 class SqlServerAdapterDefaultsTestCase:
     description: str
     expected_default_schema: str

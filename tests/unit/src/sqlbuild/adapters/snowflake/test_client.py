@@ -28,6 +28,7 @@ from tests.unit.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeExpressionInferenceProfileTestCase,
     SnowflakeInformationSchemaFilterTestCase,
     SnowflakeLoadSeedTestCase,
+    SnowflakeMergeExclusionTestCase,
     SnowflakeMoveOrCopyRelationTestCase,
     SnowflakePruneSqlTestCase,
     SnowflakeQueryColumnNamesTestCase,
@@ -483,6 +484,43 @@ def test_given_identifier_when_rendering_then_snowflake_quotes_uppercase_identif
     identifier: str = adapter.render_identifier(test_case.name)
 
     assert identifier == test_case.expected_identifier
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeMergeExclusionTestCase(
+            description="snowflake selective merge",
+            expected_update_assignment='"STATUS" = __source."STATUS"',
+            expected_insert_clause=(
+                ' ("TENANT_ID", "ORDER_ID", "STATUS", "UPDATED_AT") VALUES '
+                '(__source."TENANT_ID", __source."ORDER_ID", __source."STATUS", '
+                '__source."UPDATED_AT")'
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_composite_key_and_case_different_exclusion_when_rendering_merge_then_updates_only_mutable_columns(  # noqa: E501
+    test_case: SnowflakeMergeExclusionTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+
+    rendered_sql: str = adapter.render_merge(
+        destination="ANALYTICS.ORDERS",
+        sql="SELECT tenant_id, order_id, status, updated_at FROM DELTA_ORDERS",
+        unique_key=("tenant_id", "order_id"),
+        source_columns=("tenant_id", "order_id", "status", "updated_at"),
+        exclude_columns=("UPDATED_AT",),
+    )[0]
+    update_clause, insert_clause = rendered_sql.split("WHEN NOT MATCHED THEN INSERT", maxsplit=1)
+    update_assignments: str = update_clause.split("WHEN MATCHED THEN UPDATE SET", maxsplit=1)[1]
+
+    assert '"TENANT_ID" = __source."TENANT_ID"' not in update_assignments
+    assert '"ORDER_ID" = __source."ORDER_ID"' not in update_assignments
+    assert '"UPDATED_AT" = __source."UPDATED_AT"' not in update_assignments
+    assert test_case.expected_update_assignment in update_assignments
+    assert insert_clause == test_case.expected_insert_clause
 
 
 @pytest.mark.parametrize(

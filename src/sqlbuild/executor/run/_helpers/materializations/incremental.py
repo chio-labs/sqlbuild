@@ -601,6 +601,7 @@ def _execute_dml(
             sql=merge_sql,
             unique_key=unique_key,
             statement_recorder=statement_recorder,
+            exclude_columns=entry.merge_exclude_columns,
         )
 
     raise ExecutorInputError(f"unsupported incremental strategy: {strategy}")

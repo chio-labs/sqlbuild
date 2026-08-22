@@ -19,6 +19,7 @@ from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.unit.src.sqlbuild.adapters.databricks._test_types import (
     DatabricksExpressionInferenceProfileTestCase,
+    DatabricksMergeExclusionTestCase,
     DatabricksPruneSqlTestCase,
     DatabricksPythonFunctionSupportTestCase,
     DatabricksRenderCloneTestCase,
@@ -339,6 +340,43 @@ def test_given_cursor_delete_insert_when_rendering_then_databricks_uses_replace_
     )
 
     assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksMergeExclusionTestCase(
+            description="databricks selective merge",
+            expected_update_assignment="`status` = __source.`status`",
+            expected_insert_clause=(
+                " (`tenant_id`, `order_id`, `status`, `updated_at`) VALUES "
+                "(__source.`tenant_id`, __source.`order_id`, __source.`status`, "
+                "__source.`updated_at`)"
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_composite_key_and_case_different_exclusion_when_rendering_merge_then_updates_only_mutable_columns(  # noqa: E501
+    test_case: DatabricksMergeExclusionTestCase,
+) -> None:
+    adapter: DatabricksAdapter = DatabricksAdapter()
+
+    rendered_sql: str = adapter.render_merge(
+        destination="`workspace`.`test`.`orders`",
+        sql="SELECT tenant_id, order_id, status, updated_at FROM delta_orders",
+        unique_key=("tenant_id", "order_id"),
+        source_columns=("tenant_id", "order_id", "status", "updated_at"),
+        exclude_columns=("UPDATED_AT",),
+    )[0]
+    update_clause, insert_clause = rendered_sql.split("WHEN NOT MATCHED THEN INSERT", maxsplit=1)
+    update_assignments: str = update_clause.split("WHEN MATCHED THEN UPDATE SET", maxsplit=1)[1]
+
+    assert "`tenant_id` = __source.`tenant_id`" not in update_assignments
+    assert "`order_id` = __source.`order_id`" not in update_assignments
+    assert "`updated_at` = __source.`updated_at`" not in update_assignments
+    assert test_case.expected_update_assignment in update_assignments
+    assert insert_clause == test_case.expected_insert_clause
 
 
 @pytest.mark.parametrize(

@@ -781,18 +781,24 @@ class SqlServerAdapter(BaseAdapter):
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
+        exclude_columns: tuple[str, ...] = (),
     ) -> int | None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         source_columns: tuple[str, ...] = self.query_column_names(connection=connection, sql=sql)
-        non_key_columns: tuple[str, ...] = tuple(col for col in source_columns if col not in keys)
+        immutable_columns: frozenset[str] = frozenset(
+            column.lower() for column in (*keys, *exclude_columns)
+        )
+        update_columns: tuple[str, ...] = tuple(
+            col for col in source_columns if col.lower() not in immutable_columns
+        )
         key_match_sql: str = " AND ".join(
             f"__target.{self.render_identifier(key)} = __source.{self.render_identifier(key)}"
             for key in keys
         )
-        if non_key_columns:
+        if update_columns:
             update_set: str = ", ".join(
                 f"__target.{self.render_identifier(col)} = __source.{self.render_identifier(col)}"
-                for col in non_key_columns
+                for col in update_columns
             )
             update_sql: str = (
                 f"UPDATE __target SET {update_set} FROM {destination} AS __target "
@@ -2213,7 +2219,11 @@ class SqlServerAdapter(BaseAdapter):
         sql: str,
         unique_key: tuple[str, ...],
         source_columns: tuple[str, ...] = (),
+        exclude_columns: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
+        immutable_columns: frozenset[str] = frozenset(
+            column.lower() for column in (*unique_key, *exclude_columns)
+        )
         join_condition: str = " AND ".join(
             f"__target.{self.render_identifier(k)} = __source.{self.render_identifier(k)}"
             for k in unique_key
@@ -2221,7 +2231,7 @@ class SqlServerAdapter(BaseAdapter):
         update_assignments: str = ", ".join(
             f"{self.render_identifier(col)} = __source.{self.render_identifier(col)}"
             for col in source_columns
-            if col not in unique_key
+            if col.lower() not in immutable_columns
         )
         insert_columns: str = ", ".join(self.render_identifier(col) for col in source_columns)
         insert_values: str = ", ".join(

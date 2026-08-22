@@ -136,6 +136,7 @@ def build_logical_ddl(
     target: CompiledRelationLocation,
     unique_key: tuple[str, ...],
     warehouse_columns: tuple[ColumnInfo, ...],
+    merge_exclude_columns: tuple[str, ...] = (),
 ) -> str:
     """Generate the logical DDL string for a model plan entry."""
 
@@ -163,6 +164,7 @@ def build_logical_ddl(
             resolved_sql=resolved_sql,
             unique_key=unique_key,
             warehouse_columns=warehouse_columns,
+            merge_exclude_columns=merge_exclude_columns,
         )
 
     return ""
@@ -410,6 +412,7 @@ def _build_merge_ddl(
     resolved_sql: str,
     unique_key: tuple[str, ...],
     warehouse_columns: tuple[ColumnInfo, ...],
+    merge_exclude_columns: tuple[str, ...],
 ) -> str:
     """Build logical DDL for merge/upsert strategy."""
 
@@ -417,8 +420,12 @@ def _build_merge_ddl(
         f"{_DDL_MERGE_TARGET_ALIAS}.{k} = {_DDL_MERGE_SOURCE_ALIAS}.{k}" for k in unique_key
     )
 
-    key_set: frozenset[str] = frozenset(unique_key)
-    non_key_columns: list[str] = [col.name for col in warehouse_columns if col.name not in key_set]
+    immutable_columns: frozenset[str] = frozenset(
+        column.lower() for column in (*unique_key, *merge_exclude_columns)
+    )
+    non_key_columns: list[str] = [
+        col.name for col in warehouse_columns if col.name.lower() not in immutable_columns
+    ]
     all_columns: list[str] = [col.name for col in warehouse_columns]
 
     update_clause: str = ", ".join(

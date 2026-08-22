@@ -15,6 +15,7 @@ from tests.unit.src.sqlbuild.adapter.contract.classes.base_adapter.helpers impor
 )
 from tests.unit.src.sqlbuild.adapters.duckdb._test_types import (
     DuckDbExpressionInferenceProfileTestCase,
+    DuckDbMergeExclusionTestCase,
     DuckDbMetadataSqlTestCase,
     DuckDbPruneSqlTestCase,
     DuckDbRelationMaxCursorTestCase,
@@ -390,3 +391,39 @@ def test_given_subquery_source_when_rendering_freshness_query_then_duckdb_omits_
     )
 
     assert sql == test_case.expected_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbMergeExclusionTestCase(
+            description="duckdb selective merge",
+            expected_update_clause='"status" = __source."status"',
+            expected_insert_clause=(
+                'INSERT ("order_id", "line_id", "status", "updated_at") '
+                'VALUES (__source."order_id", __source."line_id", __source."status", '
+                '__source."updated_at")'
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_composite_keys_when_rendering_merge_then_uses_expected_columns(
+    test_case: DuckDbMergeExclusionTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+
+    (merge_sql,) = adapter.render_merge(
+        destination="analytics.orders",
+        sql="SELECT order_id, line_id, status, updated_at FROM staging_orders",
+        unique_key=("order_id", "line_id"),
+        source_columns=("order_id", "line_id", "status", "updated_at"),
+        exclude_columns=("UPDATED_AT",),
+    )
+
+    update_clause: str = merge_sql.split("WHEN MATCHED THEN UPDATE SET ", maxsplit=1)[1].split(
+        " WHEN NOT MATCHED", maxsplit=1
+    )[0]
+    insert_clause: str = merge_sql.split("WHEN NOT MATCHED THEN ", maxsplit=1)[1]
+    assert update_clause == test_case.expected_update_clause
+    assert insert_clause == test_case.expected_insert_clause

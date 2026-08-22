@@ -183,6 +183,7 @@ class MaterializationMixin(ABC):
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
+        exclude_columns: tuple[str, ...] = (),
     ) -> int | None:
         """Upsert rows from a SELECT statement using MERGE or equivalent."""
         ...

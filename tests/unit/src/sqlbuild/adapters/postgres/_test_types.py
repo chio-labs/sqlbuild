@@ -4,6 +4,13 @@ from sqlbuild.adapter.contract.models import ColumnInfo, SchemaDiffResult
 
 
 @dataclass(frozen=True)
+class PostgresMergeExclusionTestCase:
+    description: str
+    expected_update_clause: str
+    expected_insert_clause: str
+
+
+@dataclass(frozen=True)
 class PostgresRenderCreateTableAsTestCase:
     description: str
     target: str

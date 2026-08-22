@@ -19,6 +19,7 @@ class IncrementalSuccessTestCase:
     expected_row_count: int
     expected_status: ExecutionStatus = ExecutionStatus.SUCCESS
     unique_key: tuple[str, ...] = field(default_factory=tuple)
+    merge_exclude_columns: tuple[str, ...] = field(default_factory=tuple)
     on_schema_change: OnSchemaChange | None = None
     cursor_column: str | None = None
     cursor_type: str | None = None
@@ -57,6 +58,7 @@ class IncrementalFailureTestCase:
     incremental_strategy: str
     expected_failed_phase: ExecutionPhase
     unique_key: tuple[str, ...] = field(default_factory=tuple)
+    merge_exclude_columns: tuple[str, ...] = field(default_factory=tuple)
     on_schema_change: OnSchemaChange | None = None
     cursor_column: str | None = None
     cursor_type: str | None = None

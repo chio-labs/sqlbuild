@@ -5,6 +5,13 @@ from sqlbuild.compiler.lineage.types import InferredNullability
 
 
 @dataclass(frozen=True)
+class DatabricksMergeExclusionTestCase:
+    description: str
+    expected_update_assignment: str
+    expected_insert_clause: str
+
+
+@dataclass(frozen=True)
 class DatabricksExpressionInferenceProfileTestCase:
     description: str
     expected_sql_analysis_dialect: str
