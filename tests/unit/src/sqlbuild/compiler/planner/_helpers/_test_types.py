@@ -390,6 +390,8 @@ class BuildLogicalDdlTestCase:
     unique_key: tuple[str, ...]
     warehouse_columns: tuple[ColumnInfo, ...]
     expected_ddl_fragment: str
+    merge_exclude_columns: tuple[str, ...] = ()
+    unexpected_ddl_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

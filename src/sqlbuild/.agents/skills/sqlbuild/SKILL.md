@@ -1204,6 +1204,9 @@ Most keys are overridden by the more specific layer, but three merge instead:
 - `row_diff_exclude_columns` lists are unioned across layers.
 - `row_diff_tolerances` mappings are deep-merged across layers, so a header tolerance for one column adds to (rather than replaces) tolerances declared in defaults or path defaults.
 
+Other lists, including `merge_exclude_columns`, use normal override behavior: a more specific
+path default or `MODEL()` header replaces the complete list from the earlier layer.
+
 ### Settings
 
 Global feature toggles:
@@ -2756,6 +2759,8 @@ Validation runs only when every broader knob allows it: `sql_analysis` must be o
 | `cursor_start` | Lower bound floor for the cursor |
 | `cursor_inputs` | Map of upstream ref/source names to their cursor columns |
 | `unique_key` | Column(s) used for merge and delete_insert matching |
+| `merge_exclude_columns` | Columns omitted from matched-row updates for `merge`; new rows still insert every column |
+| `allow_full_refresh` | Set to `false` to reject `--full-refresh` before model execution |
 | `incremental_mode` | Set to `microbatch` to enable batched execution |
 | `batch_size` | Batch window size (e.g. `1d`, `1h`, or an integer) |
 | `lookback` | Extend the replay window backwards to re-process recent data |
@@ -3464,6 +3469,8 @@ MODEL (
   materialized incremental,
   incremental_strategy merge,
   unique_key [customer_id],
+  merge_exclude_columns [ingested_at],
+  allow_full_refresh false,
   cursor last_ordered_at,
   cursor_type timestamp,
   cursor_grain second,
@@ -3482,6 +3489,25 @@ GROUP BY customer_id
 ```
 
 `merge` always requires `unique_key`. The cursor controls which upstream rows are scanned; the unique key determines how they're matched against the target.
+
+`merge_exclude_columns` removes columns only from the matched-row `UPDATE` set. Every source
+column remains in the unmatched-row `INSERT`, so an immutable creation timestamp can be retained
+for existing keys and populated for new keys. Exclusions are matched case-insensitively, cannot
+duplicate or overlap `unique_key`, and must name declared columns when `contract enforced` is used.
+
+New columns admitted by `on_schema_change append_new_columns` or `sync_all_columns` are updated by
+default. Add a new column to `merge_exclude_columns` only when its target value must remain
+immutable after first insertion. Changing the list changes model version identity and may trigger
+the model's configured `replay_on_change` behavior, but it does not rewrite values already stored
+in the target.
+
+Set `allow_full_refresh false` when the incremental target cannot be reconstructed from its current
+inputs. Both `sqb plan --full-refresh` and `sqb build --full-refresh` fail and name all selected
+protected models before model execution. Omitted or `true` preserves normal full-refresh behavior.
+
+These controls still implement a Type 1 upsert: each unique key has one current row. Preserving an
+immutable column does not create row versions and is not SCD Type 2 history; use a snapshot or an
+immutable archival model when historical states are required.
 
 ### Cursors
 

@@ -32,6 +32,7 @@ from tests.unit.src.sqlbuild.adapters.bigquery._test_types import (
     BigQueryCountRowsTestCase,
     BigQueryExecutionErrorTestCase,
     BigQueryExpressionInferenceProfileTestCase,
+    BigQueryMergeExclusionTestCase,
     BigQueryPruneSqlTestCase,
     BigQueryQueryTestCase,
     BigQueryRenderCloneTestCase,
@@ -720,6 +721,43 @@ def test_given_delete_insert_cursor_when_rendering_then_bigquery_uses_merge(
     unexpected_fragment: str
     for unexpected_fragment in test_case.unexpected_fragments:
         assert unexpected_fragment not in rendered_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryMergeExclusionTestCase(
+            description="bigquery selective merge",
+            expected_update_assignment="`status` = __source.`status`",
+            expected_insert_clause=(
+                " (`tenant_id`, `order_id`, `status`, `updated_at`) VALUES "
+                "(__source.`tenant_id`, __source.`order_id`, __source.`status`, "
+                "__source.`updated_at`)"
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_composite_key_and_case_different_exclusion_when_rendering_merge_then_updates_only_mutable_columns(  # noqa: E501
+    test_case: BigQueryMergeExclusionTestCase,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+
+    rendered_sql: str = adapter.render_merge(
+        destination="`example-project.dev.orders`",
+        sql="SELECT tenant_id, order_id, status, updated_at FROM delta_orders",
+        unique_key=("tenant_id", "order_id"),
+        source_columns=("tenant_id", "order_id", "status", "updated_at"),
+        exclude_columns=("UPDATED_AT",),
+    )[0]
+    update_clause, insert_clause = rendered_sql.split("WHEN NOT MATCHED THEN INSERT", maxsplit=1)
+    update_assignments: str = update_clause.split("WHEN MATCHED THEN UPDATE SET", maxsplit=1)[1]
+
+    assert "`tenant_id` = __source.`tenant_id`" not in update_assignments
+    assert "`order_id` = __source.`order_id`" not in update_assignments
+    assert "`updated_at` = __source.`updated_at`" not in update_assignments
+    assert test_case.expected_update_assignment in update_assignments
+    assert insert_clause == test_case.expected_insert_clause
 
 
 @pytest.mark.parametrize(

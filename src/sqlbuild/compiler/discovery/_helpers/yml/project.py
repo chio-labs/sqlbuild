@@ -373,6 +373,13 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
             file_path=file_path,
         )
     )
+    merge_exclude_columns: tuple[str, ...] = tuple(
+        _load_string_sequence(
+            payload=mapping.get("merge_exclude_columns"),
+            label="defaults.merge_exclude_columns",
+            file_path=file_path,
+        )
+    )
     tags: tuple[str, ...] = tuple(
         _load_string_sequence(
             payload=mapping.get("tags"),
@@ -391,6 +398,8 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
         contract=_optional_contract_policy(mapping=mapping, key="contract"),
         incremental_strategy=_optional_str(payload=mapping, key="incremental_strategy"),
         incremental_mode=_optional_str(payload=mapping, key="incremental_mode"),
+        merge_exclude_columns=merge_exclude_columns,
+        allow_full_refresh=_optional_nullable_bool(mapping=mapping, key="allow_full_refresh"),
         append_cursor_inclusive=_optional_templated_bool(
             mapping=mapping,
             key="append_cursor_inclusive",

@@ -131,6 +131,17 @@ def test_given_invalid_contract_config_when_validating_then_raises(
             ref_count=1,
         ),
         IncrementalConfigValidTestCase(
+            description="valid protected selective merge",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "merge",
+                "unique_key": ["order_id", "line_id"],
+                "merge_exclude_columns": ["ingested_at"],
+                "allow_full_refresh": False,
+            },
+            ref_count=1,
+        ),
+        IncrementalConfigValidTestCase(
             description="valid delete_insert without cursor with unique_key",
             config_values={
                 "materialized": "incremental",
@@ -350,6 +361,75 @@ def test_given_valid_config_when_validating_then_passes(
             expected_error_fragment="requires unique_key",
         ),
         IncrementalConfigErrorTestCase(
+            description="merge exclusions require merge strategy",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "append",
+                "merge_exclude_columns": ["ingested_at"],
+            },
+            ref_count=1,
+            expected_error_fragment="requires incremental_strategy=merge",
+        ),
+        IncrementalConfigErrorTestCase(
+            description="merge exclusions must contain strings",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "merge",
+                "unique_key": "order_id",
+                "merge_exclude_columns": ["ingested_at", 1],
+            },
+            ref_count=1,
+            expected_error_fragment="must be a list of non-empty strings",
+        ),
+        IncrementalConfigErrorTestCase(
+            description="merge exclusions reject case insensitive duplicates",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "merge",
+                "unique_key": "order_id",
+                "merge_exclude_columns": ["ingested_at", "INGESTED_AT"],
+            },
+            ref_count=1,
+            expected_error_fragment="contains duplicate columns",
+        ),
+        IncrementalConfigErrorTestCase(
+            description="merge exclusions reject unique keys",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "merge",
+                "unique_key": ["order_id", "line_id"],
+                "merge_exclude_columns": ["LINE_ID"],
+            },
+            ref_count=1,
+            expected_error_fragment="cannot include unique_key",
+        ),
+        IncrementalConfigErrorTestCase(
+            description="full refresh guard must be boolean",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "merge",
+                "unique_key": "order_id",
+                "allow_full_refresh": "false",
+            },
+            ref_count=1,
+            expected_error_fragment="allow_full_refresh must be a boolean",
+        ),
+        IncrementalConfigErrorTestCase(
+            description="enforced contract rejects undeclared merge exclusion",
+            config_values={
+                "materialized": "incremental",
+                "contract": "enforced",
+                "columns": {"order_id": {}},
+                "incremental_strategy": "merge",
+                "unique_key": "order_id",
+                "merge_exclude_columns": ["ingested_at"],
+            },
+            ref_count=1,
+            expected_error_fragment=(
+                "merge_exclude_columns references column 'ingested_at' not declared"
+            ),
+        ),
+        IncrementalConfigErrorTestCase(
             description="lookback without cursor raises",
             config_values={
                 "materialized": "incremental",
@@ -508,6 +588,16 @@ def test_given_valid_non_incremental_config_when_validating_then_passes(
             description="table model with append_cursor_inclusive raises",
             config_values={"materialized": "table", "append_cursor_inclusive": True},
             expected_error_fragment="append_cursor_inclusive is only valid for incremental",
+        ),
+        NonIncrementalConfigErrorTestCase(
+            description="table model with merge exclusions raises",
+            config_values={"materialized": "table", "merge_exclude_columns": ["created_at"]},
+            expected_error_fragment="merge_exclude_columns is only valid for incremental",
+        ),
+        NonIncrementalConfigErrorTestCase(
+            description="view model with full refresh guard raises",
+            config_values={"materialized": "view", "allow_full_refresh": False},
+            expected_error_fragment="allow_full_refresh is only valid for incremental",
         ),
     ],
     ids=lambda case: case.description,

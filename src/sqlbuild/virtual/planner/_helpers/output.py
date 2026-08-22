@@ -45,6 +45,10 @@ def rewrite_virtual_plan_entries(
                 replace(
                     entry,
                     reason=stale_root_reasons[entry.name],
+                    config_changed=(
+                        entry.config_changed
+                        or stale_root_reasons[entry.name] == PlanReason.CONFIG_CHANGED
+                    ),
                     cascade=None,
                     run_despite_unchanged=run_decision,
                     previous_query_sql=(previous_query_sqls or {}).get(

@@ -1717,7 +1717,11 @@ class DatabricksAdapter(BaseAdapter):
         sql: str,
         unique_key: tuple[str, ...],
         source_columns: tuple[str, ...] = (),
+        exclude_columns: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
+        immutable_columns: frozenset[str] = frozenset(
+            column.lower() for column in (*unique_key, *exclude_columns)
+        )
         join_condition: str = " AND ".join(
             f"__target.{self.render_identifier(key)} = __source.{self.render_identifier(key)}"
             for key in unique_key
@@ -1725,7 +1729,7 @@ class DatabricksAdapter(BaseAdapter):
         update_assignments: str = ", ".join(
             f"{self.render_identifier(column)} = __source.{self.render_identifier(column)}"
             for column in source_columns
-            if column not in unique_key
+            if column.lower() not in immutable_columns
         )
         insert_columns: str = ", ".join(self.render_identifier(column) for column in source_columns)
         insert_values: str = ", ".join(
@@ -2032,11 +2036,16 @@ class DatabricksAdapter(BaseAdapter):
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
+        exclude_columns: tuple[str, ...] = (),
     ) -> int | None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         source_columns: tuple[str, ...] = self.query_column_names(connection=connection, sql=sql)
         statements: tuple[str, ...] = self.render_merge(
-            destination=destination, sql=sql, unique_key=keys, source_columns=source_columns
+            destination=destination,
+            sql=sql,
+            unique_key=keys,
+            source_columns=source_columns,
+            exclude_columns=exclude_columns,
         )
         statement_recorder.record_many(statements)
         affected: int | None = None
