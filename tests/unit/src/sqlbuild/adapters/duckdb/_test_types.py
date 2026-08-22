@@ -4,6 +4,13 @@ from sqlbuild.compiler.lineage.types import InferredNullability
 
 
 @dataclass(frozen=True)
+class DuckDbMergeExclusionTestCase:
+    description: str
+    expected_update_clause: str
+    expected_insert_clause: str
+
+
+@dataclass(frozen=True)
 class DuckDbExpressionInferenceProfileTestCase:
     description: str
     expected_sql_analysis_dialect: str

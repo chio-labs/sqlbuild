@@ -632,7 +632,11 @@ class BaseAdapter(StrictAdapter):
         sql: str,
         unique_key: tuple[str, ...],
         source_columns: tuple[str, ...] = (),
+        exclude_columns: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
+        immutable_columns: frozenset[str] = frozenset(
+            column.lower() for column in (*unique_key, *exclude_columns)
+        )
         join_condition: str = " AND ".join(
             f"__target.{self.render_identifier(k)} = __source.{self.render_identifier(k)}"
             for k in unique_key
@@ -640,7 +644,7 @@ class BaseAdapter(StrictAdapter):
         update_assignments: str = ", ".join(
             f"{self.render_identifier(col)} = __source.{self.render_identifier(col)}"
             for col in source_columns
-            if col not in unique_key
+            if col.lower() not in immutable_columns
         )
         insert_columns: str = ", ".join(self.render_identifier(col) for col in source_columns)
         insert_values: str = ", ".join(
@@ -1363,6 +1367,7 @@ class BaseAdapter(StrictAdapter):
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
+        exclude_columns: tuple[str, ...] = (),
     ) -> int | None:
         raise AdapterUserError(message="merge requires an engine-specific implementation")
 

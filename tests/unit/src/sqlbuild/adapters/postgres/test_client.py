@@ -14,6 +14,7 @@ from tests.unit.src.sqlbuild.adapters.postgres._test_types import (
     PostgresIndexSqlTestCase,
     PostgresLatestReadSqlTestCase,
     PostgresLoadSeedTestCase,
+    PostgresMergeExclusionTestCase,
     PostgresMoveOrCopyRelationTestCase,
     PostgresPruneSqlTestCase,
     PostgresRenderCreateFunctionTestCase,
@@ -512,6 +513,44 @@ def test_given_identifier_when_rendering_then_postgres_quotes_identifier(
     identifier: str = adapter.render_identifier(test_case.name)
 
     assert identifier == test_case.expected_identifier
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresMergeExclusionTestCase(
+            description="postgres selective merge",
+            expected_update_clause='"status" = __source."status"',
+            expected_insert_clause=(
+                '("tenant_id", "order_id", "updated_at", "status") VALUES '
+                '(__source."tenant_id", __source."order_id", __source."updated_at", '
+                '__source."status")'
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_composite_keys_and_case_variant_exclusion_when_rendering_merge_then_postgres_updates_only_mutable_columns(  # noqa: E501
+    test_case: PostgresMergeExclusionTestCase,
+) -> None:
+    adapter: PostgresAdapter = PostgresAdapter()
+
+    (statement,) = adapter.render_merge(
+        destination="public.orders",
+        sql="SELECT * FROM staging.orders",
+        unique_key=("tenant_id", "order_id"),
+        source_columns=("tenant_id", "order_id", "updated_at", "status"),
+        exclude_columns=("UPDATED_AT",),
+    )
+
+    matched_clause, insert_clause = statement.split(" WHEN NOT MATCHED THEN INSERT ", maxsplit=1)
+    update_clause: str = matched_clause.split("WHEN MATCHED THEN UPDATE SET ", maxsplit=1)[1]
+
+    assert '"tenant_id"' not in update_clause
+    assert '"order_id"' not in update_clause
+    assert '"updated_at"' not in update_clause
+    assert update_clause == test_case.expected_update_clause
+    assert insert_clause == test_case.expected_insert_clause
 
 
 @pytest.mark.parametrize(
