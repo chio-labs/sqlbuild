@@ -206,6 +206,7 @@ from sqlbuild.compiler.sql_analysis.constants import (
 from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_SET_OPERATION_KINDS as _POLYGLOT_SET_OPERATION_KINDS,
 )
+from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
@@ -292,6 +293,7 @@ def analyze_columns_and_lineage_with_polyglot(
     references: tuple[CompileSqlReference, ...] = (),
     placeholders: dict[str, str] | None = None,
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
+    column_types_by_table: dict[str, dict[str, str]] | None = None,
     inference_profile: ExpressionInferenceProfile | None = None,
     allow_compact_analysis: bool = False,
 ) -> PolyglotAnalysisResult:
@@ -315,6 +317,7 @@ def analyze_columns_and_lineage_with_polyglot(
         dialect=profile.sql_analysis_dialect,
         references=references,
         column_nullability_by_table=column_nullability_by_table or {},
+        column_types_by_table=column_types_by_table or {},
         inference_profile=profile,
         allow_compact_analysis=allow_compact_analysis,
     )
@@ -358,6 +361,7 @@ def _analyze_columns_and_lineage_with_compact_polyglot(
     dialect: str | None,
     references: tuple[CompileSqlReference, ...],
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+    column_types_by_table: dict[str, dict[str, str]],
     inference_profile: ExpressionInferenceProfile,
     allow_compact_analysis: bool,
 ) -> tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | None:
@@ -367,7 +371,8 @@ def _analyze_columns_and_lineage_with_compact_polyglot(
         options: dict[str, object] = {"dialect": dialect or "generic"}
         schema: dict[str, object] | None = _compact_analysis_schema(
             column_nullability_by_table=column_nullability_by_table,
-            table_names=frozenset(reference.ref_name for reference in references),
+            column_types_by_table=column_types_by_table,
+            table_names=frozenset(_analysis_reference_name(reference) for reference in references),
         )
         if schema is not None:
             options["schema"] = schema
@@ -431,6 +436,19 @@ def _analyze_columns_and_lineage_with_compact_polyglot(
                 else ColumnLineageConfidence.UNKNOWN,
             )
         )
+    if has_star and len(references) == 1:
+        schema_name: str = _analysis_reference_name(references[0])
+        declared_order: dict[str, int] = {
+            column_name: index
+            for index, column_name in enumerate(
+                column_nullability_by_table.get(schema_name, {})
+            )
+        }
+        fallback_order: int = len(declared_order)
+        columns.sort(key=lambda column: declared_order.get(column.name, fallback_order))
+        lineage_columns.sort(
+            key=lambda column: declared_order.get(column.output_column, fallback_order)
+        )
     return tuple(columns), tuple(lineage_columns), has_star
 
 
@@ -457,6 +475,7 @@ def _compact_analysis_is_eligible(*, analysis: dict[str, Any], projections: list
 def _compact_analysis_schema(
     *,
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+    column_types_by_table: dict[str, dict[str, str]],
     table_names: frozenset[str] | None = None,
 ) -> dict[str, object] | None:
     tables: list[dict[str, object]] = []
@@ -472,9 +491,13 @@ def _compact_analysis_schema(
                 "name": table_name,
                 "columns": [
                     _compact_analysis_schema_column(
-                        column_name=column_name, nullability=columns[column_name]
+                        column_name=column_name,
+                        column_type=column_types_by_table.get(table_name, {}).get(
+                            column_name, "UNKNOWN"
+                        ),
+                        nullability=columns[column_name],
                     )
-                    for column_name in sorted(columns)
+                    for column_name in columns
                 ],
             }
         )
@@ -486,9 +509,10 @@ def _compact_analysis_schema(
 def _compact_analysis_schema_column(
     *,
     column_name: str,
+    column_type: str,
     nullability: InferredNullability,
 ) -> dict[str, object]:
-    column: dict[str, object] = {"name": column_name, "type": "UNKNOWN"}
+    column: dict[str, object] = {"name": column_name, "type": column_type}
     if nullability == InferredNullability.NON_NULL:
         column["nullable"] = False
     elif nullability == InferredNullability.NULLABLE:
@@ -505,7 +529,10 @@ def _lineage_reference_map(
         resource_type: CompiledResourceType | None = _lineage_resource_type(reference)
         if resource_type is None:
             continue
-        reference_map[reference.ref_name] = (resource_type, reference.ref_name)
+        reference_map[_analysis_reference_name(reference)] = (
+            resource_type,
+            reference.ref_name,
+        )
     return reference_map
 
 
@@ -872,7 +899,10 @@ def _polyglot_reference_alias_map(
         resource_type: CompiledResourceType | None = _lineage_resource_type(reference)
         if resource_type is None:
             continue
-        resource_by_name[reference.ref_name] = (resource_type, reference.ref_name)
+        resource_by_name[_analysis_reference_name(reference)] = (
+            resource_type,
+            reference.ref_name,
+        )
     alias_map: dict[str, tuple[CompiledResourceType, str]] = {}
     try:
         tables: tuple[Any, ...] = tuple(parsed.find_all(_POLYGLOT_KIND_TABLE))
@@ -903,7 +933,21 @@ def _lineage_resource_type(reference: CompileSqlReference) -> CompiledResourceTy
         return CompiledResourceType.SOURCE
     if reference.ref_kind == SqlReferenceKind.SEED:
         return CompiledResourceType.SEED
+    if reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION:
+        return CompiledResourceType.TABLE_FN
     return None
+
+
+def _analysis_reference_name(reference: CompileSqlReference) -> str:
+    if reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION:
+        return table_function_analysis_name(reference.ref_name)
+    return reference.ref_name
+
+
+def table_function_analysis_name(function_name: str) -> str:
+    """Return the stable relation stub used to analyze a table-function call."""
+
+    return f"__sqlbuild_table_function_{function_name}"
 
 
 def _polyglot_lineage_upstream_columns(
@@ -1416,8 +1460,25 @@ def _replace_refs_with_stubs(query_sql: str) -> str:
     result = _SOURCE_PATTERN.sub(r"\1", result)
     result = _DBT_REF_PATTERN.sub(r"\1", result)
     result = _UDF_PATTERN.sub(r"__sqlbuild_udf_\1", result)
-    result = _TABLE_FUNCTION_PATTERN.sub(r"__sqlbuild_table_function_\1", result)
+    result = _replace_table_function_calls_with_stubs(result)
     return result
+
+
+def _replace_table_function_calls_with_stubs(query_sql: str) -> str:
+    parts: list[str] = []
+    last_index: int = 0
+    match: re.Match[str]
+    for match in _TABLE_FUNCTION_PATTERN.finditer(query_sql):
+        parts.append(query_sql[last_index : match.start()])
+        call_end: int = find_matching_paren(
+            sql=query_sql,
+            open_paren_index=match.end(),
+            context="SQL table function analysis",
+        )
+        parts.append(table_function_analysis_name(match.group(1)))
+        last_index = call_end + 1
+    parts.append(query_sql[last_index:])
+    return "".join(parts)
 
 
 def _find_outermost_select(*, parsed: Any, expressions_module: Any) -> Any | None:

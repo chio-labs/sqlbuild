@@ -497,6 +497,11 @@ def plan_model_from_change(
         cursor_type=cursor_type,
         cursor_grain=cursor_grain,
         cursor_start=cursor_start,
+        lookback=(
+            resolve_microbatch_lookback(model)
+            if incremental_mode == IncrementalMode.MICROBATCH
+            else _get_config_str(model=model, key="lookback")
+        ),
         cursor_bounds=cursor_bounds,
         cursor_input_relations=cursor_input_relations,
         batch_size=batch_size,
@@ -855,6 +860,7 @@ def _compute_plan_cursor_bounds(
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
         is_microbatch=is_microbatch,
+        cursor_grain=_get_config_str(model=model, key="cursor_grain"),
     )
 
 

@@ -18,6 +18,9 @@ from sqlbuild.compiler.compile._helpers.attachment.core import (
     resolve_run_id,
 )
 from sqlbuild.compiler.compile._helpers.attachment.functions import build_sql_function_inputs
+from sqlbuild.compiler.compile._helpers.attachment.references import (
+    validate_table_function_call_arities,
+)
 from sqlbuild.compiler.compile._helpers.attachment.sources import build_source_inputs
 from sqlbuild.compiler.compile._helpers.attachment.sql_tests import (
     build_scenario_inputs,
@@ -123,15 +126,11 @@ def build_compile_inputs(
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     seed_inputs: tuple[CompileSeedInput, ...] = build_seed_inputs(discovered_inputs)
-    sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = build_sql_function_inputs(
+    sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = _build_sql_functions(
         discovered_inputs=discovered_inputs,
-        effective_vars=effective_vars,
-        effective_settings=effective_settings,
-        target_config=effective_target,
-        adapter_name=macro_context.adapter_name,
-        macro_context=macro_context,
-        loaded_macros=loaded_macros,
+        context=model_context,
         declarations=declarations,
+        model_inputs=model_inputs,
         no_sql_validation=no_sql_validation,
         python_functions_inherit_default_namespace=(python_functions_inherit_default_namespace),
     )
@@ -153,6 +152,7 @@ def build_compile_inputs(
         public_enums=declarations.enums,
         public_constants=declarations.constants,
         external_sql_reference_resolver=external_sql_reference_resolver,
+        sql_function_inputs=sql_function_inputs,
     )
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = build_scenario_inputs(
         discovered_inputs=discovered_inputs,
@@ -215,6 +215,34 @@ def build_compile_inputs(
         diagnostics=diagnostics,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
+
+
+def _build_sql_functions(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    context: ModelInputBuildContext,
+    declarations: DeclarationResolutionContext,
+    model_inputs: tuple[CompileModelInput, ...],
+    no_sql_validation: bool,
+    python_functions_inherit_default_namespace: bool,
+) -> tuple[CompileSqlFunctionInput, ...]:
+    sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = build_sql_function_inputs(
+        discovered_inputs=discovered_inputs,
+        effective_vars=context.effective_vars,
+        effective_settings=context.effective_settings,
+        target_config=context.target_config,
+        adapter_name=context.macro_context.adapter_name,
+        macro_context=context.macro_context,
+        loaded_macros=context.loaded_macros,
+        declarations=declarations,
+        no_sql_validation=no_sql_validation,
+        python_functions_inherit_default_namespace=python_functions_inherit_default_namespace,
+    )
+    validate_table_function_call_arities(
+        model_inputs=model_inputs,
+        sql_function_inputs=sql_function_inputs,
+    )
+    return sql_function_inputs
 
 
 def _build_models_with_declarations(

@@ -5,6 +5,13 @@ from sqlbuild.executor.run.types import AuditGateReuseReason, AuditGateStatus, E
 
 
 @dataclass(frozen=True)
+class CursorSentinelSubstitutionErrorTestCase:
+    description: str
+    sql: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class BuildQualifiedNameTestCase:
     description: str
     adapter_name: str
@@ -136,6 +143,16 @@ class RuntimeTargetMaxTestCase:
 class RuntimeTargetProbeFailureTestCase:
     description: str
     expected_error_type: type[BaseException]
+
+
+@dataclass(frozen=True)
+class RuntimeCursorPolicyTestCase:
+    description: str
+    expected_bounds: object
+    lookback: str | None = None
+    backfill_duration: str | None = None
+    read_destination_cursor: bool = True
+    slow_input_setup_sql: str = "INSERT INTO slow_input VALUES (20), (100)"
 
 
 @dataclass(frozen=True)

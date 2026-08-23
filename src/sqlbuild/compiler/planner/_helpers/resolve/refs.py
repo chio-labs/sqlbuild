@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
@@ -30,6 +31,9 @@ from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
+from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
+from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
+from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
 
 _REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
 _SEED_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SEED)
@@ -42,6 +46,7 @@ _UDF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.U
 _TABLE_FUNCTION_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(
     SqlReferenceKind.TABLE_FUNCTION
 )
+_SQL_QUOTE_TOKENS: frozenset[str] = frozenset({"'", '"', "`"})
 _CLAUSE_KEYWORDS: frozenset[str] = frozenset(
     {
         "WHERE",
@@ -194,7 +199,7 @@ def resolve_table_function_references(
     parts: list[str] = []
     last_index: int = 0
     match: re.Match[str]
-    for match in _TABLE_FUNCTION_PATTERN.finditer(query_sql):
+    for match in _iter_executable_matches(sql=query_sql, pattern=_TABLE_FUNCTION_PATTERN):
         parts.append(query_sql[last_index : match.start()])
         function_name: str = match.group(1)
         target: CompiledRelationLocation | None = function_locations.get(function_name)
@@ -228,6 +233,28 @@ def resolve_table_function_references(
 
     parts.append(query_sql[last_index:])
     return "".join(parts)
+
+
+def _iter_executable_matches(
+    *, sql: str, pattern: re.Pattern[str]
+) -> Iterator[re.Match[str]]:
+    index: int = 0
+    while index < len(sql):
+        if sql[index] in _SQL_QUOTE_TOKENS:
+            index = skip_quoted_text(sql=sql, start=index, context="SQL reference resolution")
+            continue
+        if sql.startswith("--", index):
+            index = skip_line_comment(sql=sql, start=index)
+            continue
+        if sql.startswith("/*", index):
+            index = skip_block_comment(sql=sql, start=index, context="SQL reference resolution")
+            continue
+        match: re.Match[str] | None = pattern.match(sql, index)
+        if match is None:
+            index += 1
+            continue
+        yield match
+        index = match.end()
 
 
 def _build_cursor_subquery(

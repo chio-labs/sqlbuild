@@ -26,7 +26,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
             start_cursor_override=None,
             end_cursor_override=None,
             expected_start="2024-01-15T00:00:00",
-            expected_end="2024-02-01T00:00:00",
+            expected_end="2024-02-01T00:00:01",
         ),
         CursorStartBoundsTestCase(
             description="lookback cannot move before configured floor",
@@ -40,7 +40,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
             start_cursor_override=None,
             end_cursor_override=None,
             expected_start="2024-02-05T00:00:00",
-            expected_end="2024-02-20T00:00:00",
+            expected_end="2024-02-20T00:00:01",
         ),
         CursorStartBoundsTestCase(
             description="bounded backfill cannot move before configured floor",
@@ -54,7 +54,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
             start_cursor_override=None,
             end_cursor_override=None,
             expected_start="2024-02-01T00:00:00",
-            expected_end="2024-02-20T00:00:00",
+            expected_end="2024-02-20T00:00:01",
         ),
         CursorStartBoundsTestCase(
             description="cli start below configured floor is clamped",
@@ -68,7 +68,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
             start_cursor_override="2024-02-01T00:00:00",
             end_cursor_override=None,
             expected_start="2024-02-05T00:00:00",
-            expected_end="2024-02-20T00:00:00",
+            expected_end="2024-02-20T00:00:01",
         ),
         CursorStartBoundsTestCase(
             description="cli start above configured floor wins naturally",
@@ -82,7 +82,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
             start_cursor_override="2024-02-12T00:00:00",
             end_cursor_override=None,
             expected_start="2024-02-12T00:00:00",
-            expected_end="2024-02-20T00:00:00",
+            expected_end="2024-02-20T00:00:01",
         ),
         CursorStartBoundsTestCase(
             description="integer cursor start clamps lower bound",
@@ -96,7 +96,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
             start_cursor_override=None,
             end_cursor_override=None,
             expected_start="100",
-            expected_end="200",
+            expected_end="201",
         ),
     ],
     ids=lambda case: case.description,

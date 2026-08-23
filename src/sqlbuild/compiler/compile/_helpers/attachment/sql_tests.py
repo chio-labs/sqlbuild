@@ -10,8 +10,10 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_seed_names,
     build_known_source_names,
     build_known_table_function_names,
+    validate_table_function_reference_arities,
 )
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
+from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
 from sqlbuild.compiler.compile._helpers.render.macros import (
     find_macro_call_names,
 )
@@ -26,6 +28,7 @@ from sqlbuild.compiler.compile.models import (
     CompileDirectLogicSqlTestInputPayload,
     CompileModelSqlTestCtes,
     CompileModelSqlTestInputPayload,
+    CompileSqlFunctionInput,
     CompileSqlReference,
     CompileSqlScenarioCte,
     CompileSqlScenarioCtes,
@@ -66,6 +69,7 @@ def build_test_inputs(
     public_enums: dict[str, EnumDeclaration] | None = None,
     public_constants: dict[str, ConstantDeclaration] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = (),
 ) -> tuple[CompileSqlTestInput, ...]:
     """Build compile-time test inputs from discovered SQL-native test blocks."""
 
@@ -92,6 +96,11 @@ def build_test_inputs(
         )
     known_function_names: set[str] = build_known_function_names(discovered_inputs)
     known_table_function_names: set[str] = build_known_table_function_names(discovered_inputs)
+    table_function_argument_counts: dict[str, int] = {
+        function_input.name: len(function_input.arguments)
+        for function_input in sql_function_inputs
+        if function_input.return_columns
+    }
     test_inputs: list[CompileSqlTestInput] = []
     test_file: DiscoveredSqlTestFile
     for test_file in discovered_inputs.test_files:
@@ -111,6 +120,7 @@ def build_test_inputs(
                     loaded_macros=loaded_macros,
                     known_function_names=known_function_names,
                     known_table_function_names=known_table_function_names,
+                    table_function_argument_counts=table_function_argument_counts,
                 )
             expanded_sql_body: str = expand_authored_sql(
                 sql=test_block.sql_body,
@@ -120,6 +130,10 @@ def build_test_inputs(
                 macro_context=macro_context,
                 enums=public_enums,
                 constants=public_constants,
+            )
+            reject_cursor_intrinsics(
+                sql=expanded_sql_body,
+                context=f"SQL test '{test_block.name or test_file.file_path.stem}'",
             )
             test_ctes: CompileSqlTestCtes = extract_sql_test_ctes(
                 sql=expanded_sql_body,
@@ -200,6 +214,7 @@ def _infer_tested_direct_logic_resource_names(
     public_constants: dict[str, ConstantDeclaration] | None = None,
     known_function_names: set[str],
     known_table_function_names: set[str],
+    table_function_argument_counts: dict[str, int],
 ) -> tuple[str, ...]:
     if not isinstance(raw_test_ctes.payload, CompileDirectLogicSqlTestCtes):
         raise CompileInputError(
@@ -219,6 +234,7 @@ def _infer_tested_direct_logic_resource_names(
             test_file=test_file,
             known_function_names=known_function_names,
             known_table_function_names=known_table_function_names,
+            table_function_argument_counts=table_function_argument_counts,
         )
     tested_macro_names: tuple[str, ...] = find_macro_call_names(
         raw_test_ctes.payload.actual_cte.sql_body
@@ -287,6 +303,7 @@ def _infer_tested_table_function_names(
     test_file: DiscoveredSqlTestFile,
     known_function_names: set[str],
     known_table_function_names: set[str],
+    table_function_argument_counts: dict[str, int],
 ) -> tuple[str, ...]:
     if not isinstance(raw_test_ctes.payload, CompileDirectLogicSqlTestCtes):
         raise CompileInputError(
@@ -295,6 +312,11 @@ def _infer_tested_table_function_names(
         )
     references: tuple[CompileSqlReference, ...] = extract_sql_references(
         raw_test_ctes.payload.actual_cte.sql_body
+    )
+    validate_table_function_reference_arities(
+        references=references,
+        argument_counts=table_function_argument_counts,
+        owner=f"SQL test file {test_file.relative_path}",
     )
     tested_table_function_names: tuple[str, ...] = tuple(
         dict.fromkeys(
@@ -356,6 +378,10 @@ def build_scenario_inputs(
             macro_context=macro_context,
             enums=public_enums,
             constants=public_constants,
+        )
+        reject_cursor_intrinsics(
+            sql=expanded_sql_body,
+            context=f"SQL scenario '{scenario_file.file_path.stem}'",
         )
         scenario_ctes: CompileSqlScenarioCtes = extract_sql_scenario_ctes(
             sql=expanded_sql_body,

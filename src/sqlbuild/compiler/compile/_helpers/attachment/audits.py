@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
     validate_audit_references,
 )
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
+from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
     expand_authored_sql,
 )
@@ -126,6 +127,10 @@ def build_audit_inputs(
                 macro_context=macro_context,
                 enums=public_enums,
                 constants=public_constants,
+            )
+            reject_cursor_intrinsics(
+                sql=expanded_sql_body,
+                context=f"Audit '{audit_block.name or audit_file.file_path.stem}'",
             )
             references: tuple[CompileSqlReference, ...] = extract_sql_references(expanded_sql_body)
             validate_audit_references(
@@ -336,6 +341,10 @@ def build_attached_audit_input(
         macro_context=context.macro_context,
         enums=context.public_enums,
         constants=context.public_constants,
+    )
+    reject_cursor_intrinsics(
+        sql=expanded_sql_body,
+        context=f"Audit '{audit_instance.definition_name}'",
     )
     references: tuple[CompileSqlReference, ...] = extract_sql_references(expanded_sql_body)
     validate_audit_references(

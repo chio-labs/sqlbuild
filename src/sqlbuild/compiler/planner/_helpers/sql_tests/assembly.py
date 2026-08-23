@@ -568,6 +568,11 @@ def _resolve_test_model_sql(
         function_locations=function_locations,
         adapter=adapter,
     )
+    result = resolve_table_function_references(
+        query_sql=result,
+        function_locations=function_locations,
+        adapter=adapter,
+    )
     return result, frozenset(reachable_mocks)
 
 
@@ -647,6 +652,7 @@ def _has_unresolved_test_reference(sql: str) -> bool:
         or _SOURCE_PATTERN.search(normalized_sql) is not None
         or _SEED_PATTERN.search(normalized_sql) is not None
         or _DBT_REF_PATTERN.search(normalized_sql) is not None
+        or SqlReferenceKind.TABLE_FUNCTION.function_name in normalized_sql
     )
 
 

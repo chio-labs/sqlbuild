@@ -6,6 +6,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
 )
+from sqlbuild.compiler.planner._helpers.graph.core import build_downstream_deps
 from sqlbuild.compiler.planner._helpers.graph.selectors import (
     parse_selector,
     resolve_selectors,
@@ -310,6 +311,65 @@ def test_given_selectors_when_resolving_then_returns_expected_names(
     result_names: frozenset[str] = frozenset(key.name for key in result)
 
     assert result_names == test_case.expected_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ResolveSelectorTestCase(
+            description="consumer selection includes required table function",
+            select=("customer_order_summary",),
+            exclude=(),
+            expected_names=frozenset({"customer_orders", "customer_order_summary"}),
+        ),
+        ResolveSelectorTestCase(
+            description="upstream expansion traverses through table function",
+            select=("+customer_order_summary",),
+            exclude=(),
+            expected_names=frozenset(
+                {"orders", "customer_orders", "customer_order_summary"}
+            ),
+        ),
+        ResolveSelectorTestCase(
+            description="table function downstream expansion reaches consumer",
+            select=("customer_orders+",),
+            exclude=(),
+            expected_names=frozenset({"customer_orders", "customer_order_summary"}),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_model_table_function_dependency_when_selecting_then_graph_expands(
+    test_case: ResolveSelectorTestCase,
+) -> None:
+    base_key: CompiledObjectKey = CompiledObjectKey(resource_type="model", name="orders")
+    function_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type="table_fn", name="customer_orders"
+    )
+    consumer_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type="model", name="customer_order_summary"
+    )
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {
+        base_key: (),
+        function_key: (base_key,),
+        consumer_key: (function_key,),
+    }
+    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_downstream_deps(
+        upstream
+    )
+    all_keys: dict[str, CompiledObjectKey] = {
+        key.name: key for key in (base_key, function_key, consumer_key)
+    }
+
+    selected: frozenset[CompiledObjectKey] = resolve_selectors(
+        select=test_case.select,
+        exclude=test_case.exclude,
+        all_keys=all_keys,
+        upstream=upstream,
+        downstream=downstream,
+    )
+
+    assert frozenset(key.name for key in selected) == test_case.expected_names
 
 
 @pytest.mark.parametrize(

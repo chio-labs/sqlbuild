@@ -117,6 +117,8 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                       ordered_at,
                       line_total_cents
                     FROM __ref("fact_orders")
+                    WHERE order_id >= __cursor_start()
+                      AND order_id < __cursor_end()
                     """
                 ).strip()
                 + "\n",
@@ -141,6 +143,8 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                       SUM(quantity) AS quantity_total,
                       SUM(line_total_cents) AS revenue_cents
                     FROM __ref("fact_orders")
+                    WHERE ordered_at >= __cursor_start()
+                      AND ordered_at < __cursor_end()
                     GROUP BY DATE_TRUNC('hour', ordered_at)
                     """
                 ).strip()
@@ -212,3 +216,31 @@ def test_given_inline_project_when_building_model_backed_cursor_models_then_it_s
         fragment: str
         for fragment in test_case.expected_absent_runtime_fragments:
             assert fragment not in runtime_sql
+
+    connection = duckdb.connect(str(db_path))
+    connection.execute("DELETE FROM raw_orders")
+    connection.close()
+    normal_incremental_path: Path = (
+        project_dir / "models" / "intermediate" / "order_status_index.sql"
+    )
+    normal_incremental_sql: str = normal_incremental_path.read_text(encoding="utf-8")
+    normal_incremental_path.write_text(
+        normal_incremental_sql.replace(
+            "WHERE order_id >= __cursor_start()\n  AND order_id < __cursor_end()",
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    full_refresh_result: object = run_sqb(
+        command=("--no-color", "build", "--full-refresh"), project_dir=project_dir
+    )
+
+    assert full_refresh_result.returncode == 0, (
+        full_refresh_result.stdout + full_refresh_result.stderr
+    )
+    for table_name in test_case.expected_table_names:
+        assert table_exists(db_path=db_path, table_name=table_name)
+        assert query_duckdb(
+            db_path=db_path, sql=f"SELECT COUNT(*) FROM main.{table_name}"
+        ) == [(0,)]

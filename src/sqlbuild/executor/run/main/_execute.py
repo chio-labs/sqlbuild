@@ -41,6 +41,7 @@ from sqlbuild.executor.run._helpers.materializations.view import (
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run._helpers.validation.contracts import validate_runtime_contract
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
+    build_runtime_cursor_spec,
     has_model_backed_cursor_inputs,
     resolve_runtime_cursor_bounds,
     substitute_cursor_sentinels,
@@ -53,7 +54,6 @@ from sqlbuild.executor.run.models import (
     ModelExecutionResult,
     ModelMaterializationContext,
     PostHookPhaseOutcome,
-    RuntimeCursorSpec,
     TableLifecycleState,
     TableTargets,
 )
@@ -66,6 +66,7 @@ def execute_table_entry(
     context: ModelMaterializationContext,
     declared_columns: tuple[ColumnInfo, ...],
     promotion_mode: TablePromotionMode,
+    is_full_refresh: bool = False,
 ) -> ModelExecutionResult:
     """Execute one table model through its full materialization lifecycle."""
 
@@ -77,7 +78,9 @@ def execute_table_entry(
     audit_results: list[AuditExecutionResult] = []
     hook_results: list[HookExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()
-    runtime_owned_cursor_bounds: bool = has_model_backed_cursor_inputs(entry.cursor_input_relations)
+    runtime_owned_cursor_bounds: bool = (
+        not is_full_refresh and has_model_backed_cursor_inputs(entry.cursor_input_relations)
+    )
     resolved_sql: str = entry.resolved_sql
 
     if runtime_owned_cursor_bounds:
@@ -99,15 +102,7 @@ def execute_table_entry(
                 target_database=targets.target_database,
                 target_schema=targets.target_schema,
                 target_name=targets.target_table,
-                spec=RuntimeCursorSpec(
-                    cursor_column=entry.cursor_column,
-                    cursor_type=entry.cursor_type,
-                    cursor_grain=entry.cursor_grain,
-                    cursor_start=entry.cursor_start,
-                    cursor_input_relations=entry.cursor_input_relations,
-                    start_cursor_override=entry.start_cursor_override,
-                    end_cursor_override=entry.end_cursor_override,
-                ),
+                spec=build_runtime_cursor_spec(entry=entry),
             )
         except Exception as exc:
             return build_failed_result(

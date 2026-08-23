@@ -131,7 +131,7 @@ MODEL (
   contract none,
 );
 
-select 1
+select __cursor_start  ( ) as batch_start, __cursor_end() as batch_end
 """.strip()
                 + "\n",
                 "seeds/schema.yml": """
@@ -176,7 +176,10 @@ sources:
                     "contract": "enforced",
                 },
             ),
-            expected_model_query_sqls=("select 1", "select 1"),
+            expected_model_query_sqls=(
+                "select __cursor_start() as batch_start, __cursor_end() as batch_end",
+                "select 1",
+            ),
             expected_model_path_defaults=("staging/nested", "staging"),
             expected_seed_names=("country_codes",),
             expected_source_names=("raw_orders",),
@@ -1823,7 +1826,7 @@ FUNCTION (
             expected_audit_references=(),
         ),
         BuildCompileInputsTestCase(
-            description="attaches SQL table function metadata with return columns and body refs",
+            description="attaches table function metadata and accepts a managed model dependency",
             repo_files=base_repo_files()
             | {
                 "sqlbuild_project.toml": """
@@ -1834,7 +1837,9 @@ adapter = "duckdb"
 sql_validation = false
 """.strip()
                 + "\n",
-                "models/fact_orders.sql": "MODEL ();\n\nSELECT 1 AS order_id, 7 AS customer_id\n",
+                "models/fact_orders.sql": (
+                    'MODEL ();\n\nSELECT * FROM __table_fn("customer_orders")(7)\n'
+                ),
                 "functions/sql/customer_orders.sql": """
 FUNCTION (
   arguments (p_customer_id INTEGER),
@@ -1855,7 +1860,7 @@ WHERE customer_id = p_customer_id
             run_id=None,
             expected_model_schema_names=(None,),
             expected_model_config_values=({},),
-            expected_model_query_sqls=("SELECT 1 AS order_id, 7 AS customer_id",),
+            expected_model_query_sqls=('SELECT * FROM __table_fn("customer_orders")(7)',),
             expected_model_path_defaults=(None,),
             expected_seed_names=(),
             expected_source_names=(),
@@ -1881,7 +1886,7 @@ WHERE customer_id = p_customer_id
             expected_effective_connection={},
             expected_effective_vars={},
             expected_effective_sql_validation=False,
-            expected_model_references=((),),
+            expected_model_references=((('table_fn', 'customer_orders'),),),
             expected_audit_references=(),
         ),
         BuildCompileInputsTestCase(
@@ -2747,7 +2752,7 @@ def test_given_project_and_local_environment_when_resolving_then_local_values_ov
     "test_case",
     [
         BuildCompileInputsErrorTestCase(
-            description="raises when a model references a table function",
+            description="raises when a model references an unknown table function",
             repo_files=base_repo_files()
             | {
                 "sqlbuild_project.toml": """
@@ -2761,22 +2766,162 @@ sql_validation = false
                 "models/orders.sql": """
 MODEL ();
 
-SELECT * FROM __table_fn("customer_orders")(1)
-""".strip()
-                + "\n",
-                "functions/sql/customer_orders.sql": """
-FUNCTION (
-  arguments (p_customer_id INTEGER),
-  returns table (order_id INTEGER)
-);
-
-SELECT 1 AS order_id
+SELECT * FROM __table_fn("missing_orders")(1)
 """.strip()
                 + "\n",
             },
             selected_target=None,
             run_id=None,
-            expected_error_fragment="table functions are terminal resources",
+            expected_error_fragment="references unknown table function 'missing_orders'",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when a table function query contradicts its return columns",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
+                "functions/sql/customer_orders.sql": """
+FUNCTION (
+  arguments (customer_id INTEGER),
+  returns table (order_id INTEGER, customer_id INTEGER)
+);
+
+SELECT customer_id AS order_id
+""".strip()
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="declares 2 return columns but its query produces 1",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when a model calls a scalar function as a table function",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": "name = \"demo\"\nadapter = \"duckdb\"\n",
+                "models/orders.sql": (
+                    'MODEL ();\n\nSELECT * FROM __table_fn("order_total")(1)\n'
+                ),
+                "functions/sql/order_total.sql": """
+FUNCTION (
+  arguments (order_id INTEGER),
+  returns INTEGER
+);
+
+order_id
+""".strip()
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="references scalar function 'order_total' with __table_fn(...)",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when a model omits table function call arguments",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
+                ),
+                "models/orders.sql": (
+                    'MODEL ();\n\nSELECT * FROM __table_fn("customer_orders")\n'
+                ),
+                "functions/sql/customer_orders.sql": """
+FUNCTION (
+  arguments (customer_id INTEGER),
+  returns table (order_id INTEGER)
+);
+
+SELECT customer_id AS order_id
+""".strip()
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="must be followed by an argument list",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when a table function name is not double quoted",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
+                ),
+                "models/orders.sql": (
+                    "MODEL ();\n\nSELECT * FROM __table_fn('customer_orders')(1)\n"
+                ),
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="name argument must be double quoted",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when table function argument count does not match",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
+                ),
+                "models/orders.sql": (
+                    'MODEL ();\n\nSELECT * FROM __table_fn("customer_orders")(1, 2)\n'
+                ),
+                "functions/sql/customer_orders.sql": """
+FUNCTION (
+  arguments (customer_id INTEGER),
+  returns table (order_id INTEGER)
+);
+
+SELECT customer_id AS order_id
+""".strip()
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="expects 1 argument but received 2",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when a table function call contains an empty argument",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
+                ),
+                "models/orders.sql": (
+                    'MODEL ();\n\nSELECT * FROM __table_fn("customer_orders")(1,)\n'
+                ),
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="contains an empty argument",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when a table function SQL test argument count does not match",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
+                "functions/sql/customer_orders.sql": """
+FUNCTION (
+  arguments (customer_id INTEGER),
+  returns table (order_id INTEGER)
+);
+
+SELECT customer_id AS order_id
+""".strip()
+                + "\n",
+                "tests/unit/test_customer_orders.sql": """
+TEST (mode: table_fn, name: "customer orders arity");
+
+WITH
+__table_fn_actual__ AS (
+  SELECT * FROM __table_fn("customer_orders")(1, 2)
+),
+__table_fn_expected__ AS (SELECT 1 AS order_id)
+SELECT 1
+""".strip()
+                + "\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment="expects 1 argument but received 2",
         ),
         BuildCompileInputsErrorTestCase(
             description="raises when a model references an unknown source",

@@ -146,7 +146,16 @@ def _graph_identity_nodes(
             nodes[function_key] = GraphIdentityNode(
                 key=function_key,
                 resource_kind=GraphResourceKind.FUNCTION,
-                upstream_keys=(),
+                upstream_keys=tuple(
+                    graph_key_for_compiled_resource(
+                        resource_type=dep.resource_type,
+                        name=dep.name,
+                    )
+                    for dep in scope.upstream_deps.get(
+                        CompiledObjectKey(resource_type=resource_type, name=function_name),
+                        (),
+                    )
+                ),
                 local_hash=function_hash,
             )
     seed_name: str

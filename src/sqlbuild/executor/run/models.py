@@ -170,6 +170,9 @@ class RuntimeCursorSpec:
     cursor_input_relations: tuple[CursorInputRelation, ...]
     start_cursor_override: str | None = None
     end_cursor_override: str | None = None
+    lookback: str | None = None
+    backfill_duration: str | None = None
+    read_destination_cursor: bool = True
 
 
 @dataclass(frozen=True)

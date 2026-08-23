@@ -7,6 +7,8 @@ import re
 from sqlbuild.compiler.compile.constants import TABLE_FUNCTION_RETURN_KEYS
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
+    CompileModelInput,
+    CompileSqlFunctionInput,
     CompileSqlReference,
 )
 from sqlbuild.compiler.discovery.models import (
@@ -115,12 +117,72 @@ def validate_model_references(
                 f"use {SqlReferenceKind.TABLE_FUNCTION.placeholder_call()} in SQL contexts "
                 "that support table-valued functions"
             )
-        if reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION:
+        if (
+            reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION
+            and reference.ref_name not in known_function_names
+        ):
             raise CompileInputError(
-                f"Model file {model_file.relative_path} references table function "
-                f"'{reference.ref_name}', but table functions are terminal resources and cannot "
-                "be model dependencies"
+                f"Model file {model_file.relative_path} references unknown table function "
+                f"'{reference.ref_name}'"
             )
+        if (
+            reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION
+            and reference.ref_name not in known_table_function_names
+        ):
+            raise CompileInputError(
+                f"Model file {model_file.relative_path} references scalar function "
+                f"'{reference.ref_name}' with "
+                f"{SqlReferenceKind.TABLE_FUNCTION.placeholder_call()}; use "
+                f"{SqlReferenceKind.UDF.placeholder_call()} for scalar UDFs"
+            )
+
+
+def validate_table_function_call_arities(
+    *,
+    model_inputs: tuple[CompileModelInput, ...],
+    sql_function_inputs: tuple[CompileSqlFunctionInput, ...],
+) -> None:
+    """Validate managed table-function calls against declared argument counts."""
+
+    argument_counts: dict[str, int] = {
+        function_input.name: len(function_input.arguments)
+        for function_input in sql_function_inputs
+        if function_input.return_columns
+    }
+    model_input: CompileModelInput
+    for model_input in model_inputs:
+        validate_table_function_reference_arities(
+            references=model_input.references,
+            argument_counts=argument_counts,
+            owner=f"Model file {model_input.model_file.relative_path}",
+        )
+    function_input: CompileSqlFunctionInput
+    for function_input in sql_function_inputs:
+        validate_table_function_reference_arities(
+            references=function_input.references,
+            argument_counts=argument_counts,
+            owner=f"SQL function file {function_input.function_file.relative_path}",
+        )
+
+
+def validate_table_function_reference_arities(
+    *,
+    references: tuple[CompileSqlReference, ...],
+    argument_counts: dict[str, int],
+    owner: str,
+) -> None:
+    reference: CompileSqlReference
+    for reference in references:
+        if reference.ref_kind != SqlReferenceKind.TABLE_FUNCTION:
+            continue
+        expected_count: int | None = argument_counts.get(reference.ref_name)
+        if expected_count is None or reference.call_argument_count == expected_count:
+            continue
+        expected_label: str = "argument" if expected_count == 1 else "arguments"
+        raise CompileInputError(
+            f"{owner} table function '{reference.ref_name}' expects {expected_count} "
+            f"{expected_label} but received {reference.call_argument_count}"
+        )
 
 
 def validate_function_references(
