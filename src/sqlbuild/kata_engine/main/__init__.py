@@ -1,0 +1,1 @@
+"""Kata public entrypoints."""

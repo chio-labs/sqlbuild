@@ -106,6 +106,64 @@ SELECT 1
 
 See the [documentation](https://docs.sqlbuild.com) for incremental models, scenarios, loaders, and more.
 
+## Kata SQL architecture checks
+
+Kata is SQLBuild's opt-in, error-only SQL model shape checker. It runs offline over the compiled
+project, reports coded faults with remediations, and never rewrites SQL. Its built-in lifecycle is
+native: Rust resolves rule policy, parses each model, evaluates built-ins, applies suppressions,
+and owns the persistent cache and deterministic result ordering.
+
+Select the default policy namespace and opt into additional exact rules in
+`sqlbuild_project.toml`. Prefix selectors activate default-enabled rules; exact selectors also
+activate opt-in rules:
+
+```toml
+[kata]
+select = ["SQBK", "SQBKS001", "SQBKS201", "SQBKX001", "SQBKX002"]
+ignore = ["SQBKS302"]
+
+[kata.thresholds]
+min_audits_per_model = 1
+min_tests_per_model = 1
+```
+
+Run `sqb kata`, inspect metadata with `sqb kata rule SQBKS101`, and generate agent guidance from
+the same active ruleset with `sqb kata skills`. Use `sqb kata skills --check` in CI to detect stale
+guidance. `--json`, `--select`, and `--exclude` are available for automation and model scoping.
+
+Repository rules use the public API:
+
+```python
+from sqlbuild.kata import RuleContext, kata
+
+
+@kata(
+    code="XSQBKP001",
+    family="prices",
+    slug="typed-currency",
+    message="price models must declare a currency column",
+    remediation="Declare currency in the MODEL columns contract at this model path.",
+)
+def typed_currency(*, model, ctx: RuleContext):
+    return [] if any(column.name == "currency" for column in ctx.declared_columns) else [
+        ctx.path_fault()
+    ]
+```
+
+Load repository-owned files through `rule_paths = ["kata/rules"]` or dotted packages through
+`rule_modules`. Test each custom rule with `RuleCase` and `evaluate_rule`. Selecting custom rules
+disables caching unless `[kata.cache] require_cacheable = true`; cacheable rules may import only
+the supported pure modules and must access project files through `RuleContext`.
+
+Python is used only for the SQLBuild compiler adapter and selected custom rules. Built-in-only
+runs cross into the native engine once as a compiled model batch and do not materialize or walk
+Python AST objects. A selected custom rule can still use the public `RuleContext` and raw
+Polyglot AST escape hatch; its findings rejoin native suppression, ordering, and cache policy.
+
+Exact `rule_exceptions` require a rule, file, and reason and fail when stale. Broader
+`rule_ignores` and lone-star allowances also require reasons but are intentionally not
+stale-checked.
+
 ## Supported adapters
 
 | Adapter | Status |
