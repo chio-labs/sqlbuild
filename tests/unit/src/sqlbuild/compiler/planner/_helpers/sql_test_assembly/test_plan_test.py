@@ -212,9 +212,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers
         PlanTestChainTestCase(
             description="single model resolves table function references in sql tests",
             model_queries={
-                "orders": (
-                    'SELECT order_id FROM __table_fn("customer_orders")(42)'
-                ),
+                "orders": ('SELECT order_id FROM __table_fn("customer_orders")(42)'),
             },
             mock_ref_ctes={},
             mock_source_ctes={},

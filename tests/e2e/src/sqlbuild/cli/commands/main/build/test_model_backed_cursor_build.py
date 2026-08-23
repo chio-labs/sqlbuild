@@ -241,6 +241,6 @@ def test_given_inline_project_when_building_model_backed_cursor_models_then_it_s
     )
     for table_name in test_case.expected_table_names:
         assert table_exists(db_path=db_path, table_name=table_name)
-        assert query_duckdb(
-            db_path=db_path, sql=f"SELECT COUNT(*) FROM main.{table_name}"
-        ) == [(0,)]
+        assert query_duckdb(db_path=db_path, sql=f"SELECT COUNT(*) FROM main.{table_name}") == [
+            (0,)
+        ]

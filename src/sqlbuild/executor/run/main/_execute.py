@@ -78,8 +78,8 @@ def execute_table_entry(
     audit_results: list[AuditExecutionResult] = []
     hook_results: list[HookExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()
-    runtime_owned_cursor_bounds: bool = (
-        not is_full_refresh and has_model_backed_cursor_inputs(entry.cursor_input_relations)
+    runtime_owned_cursor_bounds: bool = not is_full_refresh and has_model_backed_cursor_inputs(
+        entry.cursor_input_relations
     )
     resolved_sql: str = entry.resolved_sql
 

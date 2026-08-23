@@ -289,8 +289,8 @@ def test_given_dbt_ref_when_resolving_then_returns_expected_sql(
         ),
         RefResolutionTestCase(
             description="ignores table function marker in a string literal",
-            query_sql='SELECT \'__table_fn("customer_orders")(42)\' AS example',
-            expected_sql='SELECT \'__table_fn("customer_orders")(42)\' AS example',
+            query_sql="SELECT '__table_fn(\"customer_orders\")(42)' AS example",
+            expected_sql="SELECT '__table_fn(\"customer_orders\")(42)' AS example",
         ),
         RefResolutionTestCase(
             description="ignores table function marker in a quoted identifier",

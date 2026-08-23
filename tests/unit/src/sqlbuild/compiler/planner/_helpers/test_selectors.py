@@ -326,9 +326,7 @@ def test_given_selectors_when_resolving_then_returns_expected_names(
             description="upstream expansion traverses through table function",
             select=("+customer_order_summary",),
             exclude=(),
-            expected_names=frozenset(
-                {"orders", "customer_orders", "customer_order_summary"}
-            ),
+            expected_names=frozenset({"orders", "customer_orders", "customer_order_summary"}),
         ),
         ResolveSelectorTestCase(
             description="table function downstream expansion reaches consumer",
