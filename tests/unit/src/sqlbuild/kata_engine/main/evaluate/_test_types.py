@@ -17,6 +17,8 @@ class KataEvaluationTestCase:
     expected_codes: tuple[str, ...]
     kata_config: KataConfig = field(default_factory=KataConfig)
     references: tuple[CompileSqlReference, ...] = ()
+    authored_sql: str | None = None
+    enum_columns: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

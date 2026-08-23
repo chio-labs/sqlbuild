@@ -79,6 +79,163 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
             expected_codes=("SQBKJ002",),
         ),
         KataEvaluationTestCase(
+            description="direct enum member comparison passes",
+            model_name="market__int_clean__prices",
+            relative_path="models/intermediate/market__int_clean__prices.sql",
+            sql=(
+                'WITH upstream AS (SELECT * FROM __ref("market__stg__prices")), '
+                "filtered AS (SELECT status FROM upstream WHERE upstream.status = 'win') "
+                "SELECT status FROM filtered"
+            ),
+            authored_sql=(
+                'WITH upstream AS (SELECT * FROM __ref("market__stg__prices")), '
+                "filtered AS (SELECT status FROM upstream "
+                'WHERE upstream.status = @enum("status").WIN) SELECT status FROM filtered'
+            ),
+            config_values={"materialized": "table", "contract": "enforced"},
+            select=("SQBKH001",),
+            expected_codes=(),
+            references=(CompileSqlReference(ref_kind="ref", ref_name="market__stg__prices"),),
+            enum_columns=("status",),
+        ),
+        KataEvaluationTestCase(
+            description="modified controlled enum column faults",
+            model_name="market__int_clean__prices",
+            relative_path="models/intermediate/market__int_clean__prices.sql",
+            sql=(
+                'WITH upstream AS (SELECT * FROM __ref("market__stg__prices")), '
+                "filtered AS (SELECT status FROM upstream "
+                "WHERE LOWER(upstream.status) = 'win') SELECT status FROM filtered"
+            ),
+            authored_sql=(
+                'WITH upstream AS (SELECT * FROM __ref("market__stg__prices")), '
+                "filtered AS (SELECT status FROM upstream "
+                'WHERE LOWER(upstream.status) = @enum("status").WIN) '
+                "SELECT status FROM filtered"
+            ),
+            config_values={"materialized": "table", "contract": "enforced"},
+            select=("SQBKH001",),
+            expected_codes=("SQBKH001",),
+            references=(CompileSqlReference(ref_kind="ref", ref_name="market__stg__prices"),),
+            enum_columns=("status",),
+        ),
+        KataEvaluationTestCase(
+            description="uppercased controlled enum column faults",
+            model_name="market__int_clean__prices",
+            relative_path="models/intermediate/market__int_clean__prices.sql",
+            sql=(
+                'SELECT status FROM __ref("market__stg__prices") AS upstream '
+                "WHERE UPPER(upstream.status) = 'win'"
+            ),
+            authored_sql=(
+                'SELECT status FROM __ref("market__stg__prices") AS upstream '
+                'WHERE UPPER(upstream.status) = @enum("status").WIN'
+            ),
+            config_values={"materialized": "table", "contract": "enforced"},
+            select=("SQBKH001",),
+            expected_codes=("SQBKH001",),
+            references=(CompileSqlReference(ref_kind="ref", ref_name="market__stg__prices"),),
+            enum_columns=("status",),
+        ),
+        KataEvaluationTestCase(
+            description="cast controlled enum column faults",
+            model_name="market__int_clean__prices",
+            relative_path="models/intermediate/market__int_clean__prices.sql",
+            sql=(
+                'SELECT status FROM __ref("market__stg__prices") AS upstream '
+                "WHERE CAST(upstream.status AS VARCHAR) = 'win'"
+            ),
+            authored_sql=(
+                'SELECT status FROM __ref("market__stg__prices") AS upstream '
+                'WHERE CAST(upstream.status AS VARCHAR) = @enum("status").WIN'
+            ),
+            config_values={"materialized": "table", "contract": "enforced"},
+            select=("SQBKH001",),
+            expected_codes=("SQBKH001",),
+            references=(CompileSqlReference(ref_kind="ref", ref_name="market__stg__prices"),),
+            enum_columns=("status",),
+        ),
+        KataEvaluationTestCase(
+            description="direct source enum column modifier passes",
+            model_name="market__stg__prices__vendor",
+            relative_path="models/staging/market__stg__prices__vendor.sql",
+            sql=(
+                'WITH raw_prices AS (SELECT * FROM __source("vendor_prices")), '
+                "filtered AS (SELECT status FROM raw_prices "
+                "WHERE LOWER(raw_prices.status) = 'win') SELECT status FROM filtered"
+            ),
+            authored_sql=(
+                'WITH raw_prices AS (SELECT * FROM __source("vendor_prices")), '
+                "filtered AS (SELECT status FROM raw_prices "
+                'WHERE LOWER(raw_prices.status) = @enum("status").WIN) '
+                "SELECT status FROM filtered"
+            ),
+            config_values={"materialized": "table", "contract": "enforced"},
+            select=("SQBKH001",),
+            expected_codes=(),
+            references=(CompileSqlReference(ref_kind="source", ref_name="vendor_prices"),),
+            enum_columns=("status",),
+        ),
+        KataEvaluationTestCase(
+            description="transitive source enum column modifier faults",
+            model_name="market__stg__prices__vendor",
+            relative_path="models/staging/market__stg__prices__vendor.sql",
+            sql=(
+                'WITH raw_prices AS (SELECT * FROM __source("vendor_prices")), '
+                "renamed AS (SELECT status FROM raw_prices), "
+                "filtered AS (SELECT status FROM renamed "
+                "WHERE LOWER(renamed.status) = 'win') SELECT status FROM filtered"
+            ),
+            authored_sql=(
+                'WITH raw_prices AS (SELECT * FROM __source("vendor_prices")), '
+                "renamed AS (SELECT status FROM raw_prices), "
+                "filtered AS (SELECT status FROM renamed "
+                'WHERE LOWER(renamed.status) = @enum("status").WIN) '
+                "SELECT status FROM filtered"
+            ),
+            config_values={"materialized": "table", "contract": "enforced"},
+            select=("SQBKH001",),
+            expected_codes=("SQBKH001",),
+            references=(CompileSqlReference(ref_kind="source", ref_name="vendor_prices"),),
+            enum_columns=("status",),
+        ),
+        KataEvaluationTestCase(
+            description="modified enum member faults for direct source comparison",
+            model_name="market__stg__prices__vendor",
+            relative_path="models/staging/market__stg__prices__vendor.sql",
+            sql=(
+                'WITH raw_prices AS (SELECT * FROM __source("vendor_prices")), '
+                "filtered AS (SELECT status FROM raw_prices "
+                "WHERE raw_prices.status = LOWER('win')) SELECT status FROM filtered"
+            ),
+            authored_sql=(
+                'WITH raw_prices AS (SELECT * FROM __source("vendor_prices")), '
+                "filtered AS (SELECT status FROM raw_prices "
+                'WHERE raw_prices.status = LOWER(@enum("status").WIN)) '
+                "SELECT status FROM filtered"
+            ),
+            config_values={"materialized": "table", "contract": "enforced"},
+            select=("SQBKH001",),
+            expected_codes=("SQBKH001",),
+            references=(CompileSqlReference(ref_kind="source", ref_name="vendor_prices"),),
+            enum_columns=("status",),
+        ),
+        KataEvaluationTestCase(
+            description="bare string faults for direct source comparison",
+            model_name="market__stg__prices__vendor",
+            relative_path="models/staging/market__stg__prices__vendor.sql",
+            sql=(
+                'WITH raw_prices AS (SELECT * FROM __source("vendor_prices")), '
+                "filtered AS (SELECT status FROM raw_prices "
+                "WHERE LOWER(raw_prices.status) = 'win') SELECT status FROM filtered"
+            ),
+            config_values={"materialized": "table", "contract": "enforced"},
+            select=("SQBKH001",),
+            expected_codes=("SQBKH001",),
+            references=(CompileSqlReference(ref_kind="source", ref_name="vendor_prices"),),
+            enum_columns=("status",),
+        ),
+        KataEvaluationTestCase(
             description="numeric decision faults",
             model_name="market__mart__prices",
             relative_path="models/mart/market__mart__prices.sql",
@@ -244,6 +401,8 @@ def test_given_selected_rules_when_evaluating_then_reports_expected_faults(
             sql=test_case.sql,
             config_values=test_case.config_values,
             references=test_case.references,
+            authored_sql=test_case.authored_sql,
+            enum_columns=test_case.enum_columns,
         ),
         config=replace(test_case.kata_config, select=test_case.select),
         project_dir=tmp_path,

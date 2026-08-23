@@ -1,7 +1,6 @@
 pub(crate) const API_VERSION: u32 = 1;
 pub(crate) const BUILT_IN_RULE_NAMESPACE: &str = "SQBK";
 pub(crate) const CUSTOM_RULE_NAMESPACE: &str = "XSQBK";
-pub(crate) const DEFAULT_RULE_CODE: &str = "SQBKR401";
 pub(crate) const TARGET_DIRECTORY: &str = "target";
 pub(crate) const REFERENCE_KIND: &str = "ref";
 pub(crate) const VIEW_MATERIALIZATION: &str = "view";

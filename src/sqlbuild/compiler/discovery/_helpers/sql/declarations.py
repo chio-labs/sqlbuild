@@ -194,6 +194,15 @@ def _parse_enum_declaration(
         raise DeclarationParseError(f"{file_path} enum '{name}' members must use [...] or (...)")
     if not members:
         raise DeclarationParseError(f"{file_path} enum '{name}' must declare at least one member")
+    invalid_member: EnumMember | None = next(
+        (member for member in members if member.name != member.name.upper()),
+        None,
+    )
+    if invalid_member is not None:
+        raise DeclarationParseError(
+            f"{file_path} enum '{name}' member identifiers must be uppercase: "
+            f"'{invalid_member.name}'"
+        )
     member_types: set[type[object]] = {type(member.value) for member in members}
     if len(member_types) != 1:
         raise DeclarationParseError(
