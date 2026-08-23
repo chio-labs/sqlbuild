@@ -7,9 +7,14 @@ import pytest
 from sqlbuild.compiler.discovery._helpers.sql.declarations import (
     parse_constant_declaration_file,
     parse_enum_declaration_file,
+    parse_model_schema_declaration_file,
 )
 from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
-from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
+from sqlbuild.compiler.discovery.models import (
+    ConstantDeclaration,
+    EnumDeclaration,
+    ModelSchemaDeclaration,
+)
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseDeclarationFileErrorTestCase,
     ParseDeclarationFileTestCase,
@@ -161,6 +166,51 @@ def test_given_invalid_enum_declaration_when_parsing_then_raises_declaration_err
             contents=test_case.contents,
             file_path=Path("enums/domain.sql"),
             relative_path=Path("enums/domain.sql"),
+        )
+
+
+def test_given_model_schema_declarations_when_parsing_then_returns_typed_columns() -> None:
+    declarations: tuple[ModelSchemaDeclaration, ...] = parse_model_schema_declaration_file(
+        contents="""
+SCHEMA (
+  name order,
+  description "Canonical order",
+  columns (
+    order_id (type INTEGER, nullable false, audits [not_null]),
+    status (type order_status, description "Current status"),
+  ),
+);
+SCHEMA (
+  name sourced_order,
+  extends order,
+  columns (source (type VARCHAR)),
+);
+""",
+        file_path=Path("schemas/orders.sql"),
+        relative_path=Path("schemas/orders.sql"),
+    )
+
+    assert tuple(declaration.name for declaration in declarations) == ("order", "sourced_order")
+    assert declarations[0].description == "Canonical order"
+    assert declarations[1].extends == "order"
+    assert tuple(column.name for column in declarations[0].columns) == ("order_id", "status")
+    assert declarations[0].columns[0].nullable is False
+    assert declarations[0].columns[0].location is not None
+    assert declarations[0].columns[0].location.path == Path("schemas/orders.sql")
+    assert declarations[0].columns[0].location.line == 6
+    assert declarations[1].columns[0].location is not None
+    assert declarations[1].columns[0].location.line == 13
+    assert tuple(audit.definition_name for audit in declarations[0].columns[0].audits) == (
+        "not_null",
+    )
+
+
+def test_given_empty_model_schema_when_parsing_then_raises_declaration_error() -> None:
+    with pytest.raises(DeclarationParseError, match="must declare at least one column"):
+        parse_model_schema_declaration_file(
+            contents="SCHEMA (name empty, columns ());",
+            file_path=Path("schemas/empty.sql"),
+            relative_path=Path("schemas/empty.sql"),
         )
 
 

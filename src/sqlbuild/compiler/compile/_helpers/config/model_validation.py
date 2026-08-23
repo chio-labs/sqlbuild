@@ -21,6 +21,7 @@ from sqlbuild.compiler.planner.types import (
     SnapshotSchemaChangePolicy,
     SnapshotStrategy,
 )
+from sqlbuild.spec.contracts.models import SchemaColumn
 
 _VALID_STRATEGIES: frozenset[str] = frozenset(s.value for s in IncrementalStrategy)
 _VALID_CURSOR_TYPES: frozenset[str] = frozenset(ct.value for ct in CursorType)
@@ -82,6 +83,7 @@ def validate_incremental_config(
     model_name: str,
     ref_count: int,
     known_input_names: frozenset[str],
+    declared_columns: tuple[SchemaColumn, ...] | None = None,
 ) -> None:
     """Validate incremental model config rules after layering."""
 
@@ -178,7 +180,10 @@ def validate_incremental_config(
     if allow_full_refresh is not None and not isinstance(allow_full_refresh, bool):
         raise CompileInputError(f"model '{model_name}': allow_full_refresh must be a boolean")
 
-    declared_column_names: frozenset[str] | None = _contract_declared_column_names(config)
+    declared_column_names: frozenset[str] | None = _contract_declared_column_names(
+        config,
+        declared_columns=declared_columns,
+    )
     if declared_column_names is not None:
         if cursor is not None:
             _validate_declared_config_column(
@@ -316,6 +321,7 @@ def validate_snapshot_config(
     *,
     config: CompileModelConfig,
     model_name: str,
+    declared_columns: tuple[SchemaColumn, ...] | None = None,
 ) -> None:
     """Validate snapshot model config combinations after layering."""
 
@@ -450,7 +456,10 @@ def validate_snapshot_config(
                 f"model '{model_name}': valid_from_column and valid_to_column must differ"
             )
 
-    declared_column_names: frozenset[str] | None = _contract_declared_column_names(config)
+    declared_column_names: frozenset[str] | None = _contract_declared_column_names(
+        config,
+        declared_columns=declared_columns,
+    )
     if declared_column_names is not None:
         _validate_declared_config_columns(
             column_names=_string_sequence(unique_key),
@@ -566,9 +575,15 @@ def _has_config_value(value: object | None) -> bool:
     return value is not None and value != () and value != []
 
 
-def _contract_declared_column_names(config: CompileModelConfig) -> frozenset[str] | None:
+def _contract_declared_column_names(
+    config: CompileModelConfig,
+    *,
+    declared_columns: tuple[SchemaColumn, ...] | None = None,
+) -> frozenset[str] | None:
     if config.values.get("contract") != ContractPolicy.ENFORCED:
         return None
+    if declared_columns is not None:
+        return frozenset(column.name for column in declared_columns)
     raw_columns: object | None = config.values.get("columns")
     if not isinstance(raw_columns, dict):
         return frozenset()

@@ -18,6 +18,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.init._test_types import InitScaff
             expected_directories=(
                 "models/staging",
                 "models/marts",
+                "schemas",
                 "sources",
                 "seeds",
                 "loaders",
@@ -35,6 +36,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.init._test_types import InitScaff
             expected_gitkeep_files=(
                 "models/staging/.gitkeep",
                 "models/marts/.gitkeep",
+                "schemas/.gitkeep",
                 "sources/.gitkeep",
                 "seeds/.gitkeep",
                 "loaders/.gitkeep",

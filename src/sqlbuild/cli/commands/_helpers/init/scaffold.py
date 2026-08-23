@@ -13,6 +13,7 @@ def scaffold_blank_project(*, base_dir: Path, project_name: str) -> None:
     directories: tuple[str, ...] = (
         "models/staging",
         "models/marts",
+        "schemas",
         "sources",
         "seeds",
         "loaders",
