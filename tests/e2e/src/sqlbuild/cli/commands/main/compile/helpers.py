@@ -25,7 +25,7 @@ def run_advanced_compile_benchmark(
     }
     skip_actions[os.environ.get("SQLBUILD_SKIP_PERFORMANCE_TESTS") == "1"]()
 
-    _write_advanced_compile_project(project_dir=project_dir, model_count=model_count)
+    write_advanced_compile_project(project_dir=project_dir, model_count=model_count)
     with _fail_after_seconds(expected_max_seconds):
         start: float = time.perf_counter()
         exit_code: int = main(
@@ -57,7 +57,7 @@ def _fail_after_seconds(seconds: float) -> Iterator[None]:
         signal.signal(signal.SIGALRM, previous_handler)
 
 
-def _write_advanced_compile_project(*, project_dir: Path, model_count: int) -> None:
+def write_advanced_compile_project(*, project_dir: Path, model_count: int) -> None:
     models_dir: Path = project_dir / "models"
     models_dir.mkdir(parents=True)
     (project_dir / "sqlbuild_project.toml").write_text(

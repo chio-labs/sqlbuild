@@ -253,6 +253,8 @@ def _render_scalar(*, value: str | int) -> str:
 
 
 def _find_next_reference_start(*, sql: str, start: int) -> int | None:
+    if MACRO_TOKEN not in sql[start:]:
+        return None
     index: int = start
     while index < len(sql):
         character: str = sql[index]

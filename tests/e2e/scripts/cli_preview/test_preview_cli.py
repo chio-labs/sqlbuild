@@ -69,7 +69,8 @@ def test_given_preview_scene_when_running_cli_then_renders_real_command_output(
     result: subprocess.CompletedProcess[str] = subprocess.run(
         args=(
             sys.executable,
-            str(_REPO_ROOT / "scripts/preview_cli.py"),
+            "-m",
+            "scripts.preview_cli",
             test_case.scene,
             *test_case.arguments,
         ),

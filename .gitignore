@@ -52,6 +52,9 @@ data/
 
 # Local artifacts
 target/
+*.so
+*.pyd
+*.dylib
 .dlt/
 
 # Local SQLBuild overrides

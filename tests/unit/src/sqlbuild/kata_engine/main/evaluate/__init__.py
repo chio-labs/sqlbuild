@@ -1,0 +1,1 @@
+"""Kata evaluation tests."""

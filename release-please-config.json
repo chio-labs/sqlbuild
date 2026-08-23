@@ -10,6 +10,11 @@
       "extra-files": [
         {
           "type": "toml",
+          "path": "crates/sqlbuild-kata-native/Cargo.toml",
+          "jsonpath": "$.package.version"
+        },
+        {
+          "type": "toml",
           "path": "uv.lock",
           "jsonpath": "$.package[?(@.name.value == \"sqlbuild\")].version"
         }

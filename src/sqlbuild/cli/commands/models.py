@@ -1205,6 +1205,19 @@ class ParsedCliInvocation:
 
 
 @dataclass(frozen=True)
+class KataCommandRequest:
+    """Inputs for kata evaluation, inspection, or skill generation."""
+
+    project_dir: Path | None
+    json_output: bool
+    rule_code: str | None
+    skills: bool
+    skills_check: bool
+    select: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class CliEntrypointHandlers:
     """Injected command handlers for the CLI entrypoint."""
 
@@ -1240,6 +1253,7 @@ class CliEntrypointHandlers:
     run_format: LintCommandHandler
     run_scenario: Callable[[ScenarioTestCommandRequest], int]
     run_scenario_capture: Callable[[ScenarioCaptureCommandRequest], int]
+    run_kata: Callable[[KataCommandRequest], int]
 
 
 from sqlbuild.cli.commands.classes.build_progress_callbacks import (  # noqa: E402,F401

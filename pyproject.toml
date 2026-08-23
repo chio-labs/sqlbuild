@@ -1,6 +1,9 @@
 [build-system]
-requires = ["hatchling>=1.27.0"]
-build-backend = "hatchling.build"
+requires = [
+  "maturin>=1.9,<2",
+  "patchelf>=0.17.2; sys_platform == 'linux'",
+]
+build-backend = "maturin"
 
 [project]
 name = "sqlbuild"
@@ -68,6 +71,7 @@ dev = [
   "dlt[duckdb,filesystem,sql_database]>=1.28.0,<2",
   "ingestr>=1.0.0",
   "jsonschema>=4.23.0",
+  "maturin>=1.9,<2",
   "pre-commit>=4.3.0",
   "pytest>=8.4.2",
   "pytest-cov>=7.0.0",
@@ -78,8 +82,14 @@ dev = [
   "ty>=0.0.1a19",
 ]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/sqlbuild", "scripts"]
+[tool.maturin]
+manifest-path = "crates/sqlbuild-kata-native/Cargo.toml"
+module-name = "sqlbuild._kata_native"
+python-source = "src"
+features = ["extension-module"]
+include = [
+  { path = "scripts", format = ["sdist", "wheel"] },
+]
 
 [tool.commitizen]
 name = "cz_conventional_commits"
@@ -90,6 +100,7 @@ update_changelog_on_bump = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["--import-mode=importlib"]
+pythonpath = ["."]
 norecursedirs = [".venv", "dist", "*.egg-info", ".git", ".tox"]
 markers = [
   "dbt: tests that require dbt interop dependencies and dbt project setup",
@@ -120,3 +131,10 @@ max-statements = 70
 
 [tool.uv]
 package = true
+cache-keys = [
+  { file = "pyproject.toml" },
+  { file = "Cargo.toml" },
+  { file = "crates/sqlbuild-kata-native/Cargo.toml" },
+  { file = "crates/sqlbuild-kata-native/src/**/*.rs" },
+  { file = "src/sqlbuild/_kata_native.pyi" },
+]

@@ -48,6 +48,7 @@ def build_cli_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     _add_workspace_parsers(subparsers)
     _add_dbt_parsers(subparsers)
     _add_skills_parsers(subparsers)
+    _add_kata_parser(subparsers)
     return parser
 
 
@@ -493,3 +494,18 @@ def _add_skills_parsers(
         default=[],
     )
     skills_update_parser.add_argument("--force", dest="skills_force", action="store_true")
+
+
+def _add_kata_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    kata_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.KATA)
+    kata_parser.add_argument("--json", action="store_true", default=False)
+    add_select_args(kata_parser)
+    kata_subparsers: argparse._SubParsersAction[argparse.ArgumentParser] = (
+        kata_parser.add_subparsers(dest="kata_command")
+    )
+    rule_parser: argparse.ArgumentParser = kata_subparsers.add_parser("rule")
+    rule_parser.add_argument("kata_rule_code")
+    skills_parser: argparse.ArgumentParser = kata_subparsers.add_parser("skills")
+    skills_parser.add_argument("--check", dest="kata_skills_check", action="store_true")

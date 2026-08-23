@@ -1,0 +1,16 @@
+pub(crate) const API_VERSION: u32 = 1;
+pub(crate) const BUILT_IN_RULE_NAMESPACE: &str = "SQBK";
+pub(crate) const CUSTOM_RULE_NAMESPACE: &str = "XSQBK";
+pub(crate) const DEFAULT_RULE_CODE: &str = "SQBKR401";
+pub(crate) const TARGET_DIRECTORY: &str = "target";
+pub(crate) const REFERENCE_KIND: &str = "ref";
+pub(crate) const VIEW_MATERIALIZATION: &str = "view";
+pub(crate) const ENFORCED_CONTRACT: &str = "enforced";
+pub(crate) const BOOLEAN_TYPE: &str = "BOOLEAN";
+pub(crate) const TIMESTAMP_TYPE: &str = "TIMESTAMP";
+pub(crate) const DATE_TYPE: &str = "DATE";
+pub(crate) const NEGATION_OPERATOR: &str = "-";
+pub(crate) const TRIVIAL_JOIN_VALUE: &str = "1";
+pub(crate) const DECLARATION_DOMAIN_COMPONENTS: usize = 3;
+pub(crate) const SQL_AS_KEYWORD_LENGTH: usize = 2;
+pub(crate) const MEANINGLESS_FINAL_NAME: &str = "finalfinal";

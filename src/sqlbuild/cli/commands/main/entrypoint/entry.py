@@ -21,6 +21,7 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
+from sqlbuild.kata_engine.exceptions import KataError
 from sqlbuild.lint.exceptions import LintError
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.virtual.state.exceptions import StateBackendError
@@ -48,6 +49,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.project._compile import run_compile
     from sqlbuild.cli.commands.main.project._dag import run_dag
     from sqlbuild.cli.commands.main.project._format import run_format_command
+    from sqlbuild.cli.commands.main.project._kata import run_kata_command
     from sqlbuild.cli.commands.main.project._lint import run_lint_command
     from sqlbuild.cli.commands.main.project._plan import run_plan
     from sqlbuild.cli.commands.main.state._janitor import run_janitor
@@ -182,6 +184,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
         run_scenario=run_scenario,
         run_scenario_capture=run_scenario_capture,
+        run_kata=run_kata_command,
     )
     return _main_with_dependencies(argv=argv, handlers=handlers)
 
@@ -204,7 +207,7 @@ def _main_with_dependencies(
         if isinstance(error.code, int):
             return error.code
         return 1
-    except CliUserError as error:
+    except (CliUserError, KataError) as error:
         logging.getLogger("sqlbuild.cli").exception("cli user error")
         print(
             format_expected_error(error=error, fallback_code="C000", use_color=use_color),

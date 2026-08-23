@@ -7,14 +7,161 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
+  statuses: write
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v4
+        id: release
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      - name: Publish created release
+        if: steps.release.outputs.release_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          gh workflow run publish.yml --repo "${GITHUB_REPOSITORY}" --ref main \
+            -f "tag=${RELEASE_TAG}"
+
+      - name: Resolve release branch
+        id: release_branch
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          RELEASE_PRS: ${{ steps.release.outputs.prs }}
+        run: |
+          release_branch="$(jq -r '.[0].headBranchName // empty' <<< "${RELEASE_PRS}")"
+          if [[ -z "${release_branch}" ]]; then
+            echo "Release Please reported a created PR without a head branch" >&2
+            exit 1
+          fi
+          echo "name=${release_branch}" >> "${GITHUB_OUTPUT}"
+
+      - uses: actions/checkout@v4
+        if: steps.release.outputs.prs_created == 'true'
+        with:
+          ref: ${{ steps.release_branch.outputs.name }}
+
+      - uses: astral-sh/setup-uv@v5
+        if: steps.release.outputs.prs_created == 'true'
+        with:
+          version: "0.12.3"
+
+      - uses: dtolnay/rust-toolchain@master
+        if: steps.release.outputs.prs_created == 'true'
+        with:
+          toolchain: stable
+
+      - name: Install Python
+        if: steps.release.outputs.prs_created == 'true'
+        run: uv python install 3.12
+
+      - name: Refresh release lockfiles
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          RELEASE_BRANCH: ${{ steps.release_branch.outputs.name }}
+        run: |
+          cargo check --workspace
+          uv lock --python 3.12
+          uv sync --locked --all-groups --all-extras --python 3.12
+          if git diff --quiet -- Cargo.lock uv.lock; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock uv.lock
+          git commit -m "chore: refresh release lockfiles"
+          git push origin "HEAD:${RELEASE_BRANCH}"
+
+      - name: Run release pull request checks
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_BRANCH: ${{ steps.release_branch.outputs.name }}
+          RELEASE_PRS: ${{ steps.release.outputs.prs }}
+        run: |
+          release_pr="$(jq -r '.[0].number // empty' <<< "${RELEASE_PRS}")"
+          if [[ -z "${release_pr}" ]]; then
+            echo "Release Please reported a created PR without a number" >&2
+            exit 1
+          fi
+          head_sha="$(git rev-parse HEAD)"
+
+          workflows=(pull-request-metadata.yml version-guard.yml)
+          contexts=("Pull Request Metadata" "Block automatic 1.0 releases")
+          for context in "${contexts[@]}"; do
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
+              -f state=pending -f "context=${context}" \
+              -f description="Trusted release check is running" >/dev/null
+          done
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
+            -f state=pending -f context=Verify \
+            -f description="Validating trusted release metadata" >/dev/null
+
+          gh workflow run pull-request-metadata.yml --ref "${RELEASE_BRANCH}" \
+            -f "pr_number=${release_pr}"
+          gh workflow run version-guard.yml --ref "${RELEASE_BRANCH}"
+          for index in "${!workflows[@]}"; do
+            workflow="${workflows[${index}]}"
+            context="${contexts[${index}]}"
+            run_id=""
+            for _ in {1..30}; do
+              run_id="$(gh run list --workflow "${workflow}" --branch "${RELEASE_BRANCH}" \
+                --event workflow_dispatch --limit 20 --json databaseId,headSha \
+                --jq ".[] | select(.headSha == \"${head_sha}\") | .databaseId" | head -n 1)"
+              [[ -n "${run_id}" ]] && break
+              sleep 2
+            done
+            if [[ -z "${run_id}" ]]; then
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
+                -f state=failure -f "context=${context}" \
+                -f description="Trusted release check did not start" >/dev/null
+              exit 1
+            fi
+            run_url="$(gh run view "${run_id}" --json url --jq .url)"
+            if gh run watch "${run_id}" --exit-status; then
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
+                -f state=success -f "context=${context}" -f target_url="${run_url}" \
+                -f description="Trusted release check passed" >/dev/null
+            else
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
+                -f state=failure -f "context=${context}" -f target_url="${run_url}" \
+                -f description="Trusted release check failed" >/dev/null
+              exit 1
+            fi
+          done
+
+          unexpected_files="$(gh pr view "${release_pr}" --repo "${GITHUB_REPOSITORY}" \
+            --json files --jq '[.files[].path | select(. != ".release-please-manifest.json" and . != "CHANGELOG.md" and . != "pyproject.toml" and . != "uv.lock" and . != "Cargo.lock" and . != "crates/sqlbuild-kata-native/Cargo.toml")] | join("\n")')"
+          if [[ -n "${unexpected_files}" ]]; then
+            echo "Release pull request contains non-metadata changes:" >&2
+            echo "${unexpected_files}" >&2
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
+              -f state=failure -f context=Verify \
+              -f description="Release pull request contains non-metadata changes" >/dev/null
+            exit 1
+          fi
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
+            -f state=success -f context=Verify \
+            -f description="Product changes passed verification before release metadata update" >/dev/null
+
+      - name: Merge release pull request and continue release
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_PRS: ${{ steps.release.outputs.prs }}
+        run: |
+          release_pr="$(jq -r '.[0].number // empty' <<< "${RELEASE_PRS}")"
+          if [[ -z "${release_pr}" ]]; then
+            echo "Release Please reported a created PR without a number" >&2
+            exit 1
+          fi
+          gh pr merge "${release_pr}" --repo "${GITHUB_REPOSITORY}" --squash
+          gh workflow run release-please.yml --repo "${GITHUB_REPOSITORY}" --ref main
