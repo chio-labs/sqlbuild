@@ -29,6 +29,11 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/sources`
 - `concepts/seeds`
 - `concepts/models`
+- `concepts/models/materializations`
+- `concepts/models/schemas`
+- `concepts/models/contracts`
+- `concepts/models/hooks`
+- `concepts/models/configuration`
 - `concepts/kata`
 - `concepts/kata/custom-rules`
 - `concepts/enums-and-constants`
@@ -2278,67 +2283,91 @@ csv_settings:
 
 Source: `concepts/models.mdx`
 
-SQL model definitions, the MODEL() block, materialization types, and how the DAG is built.
+SQL model anatomy, references, dependencies, and the model documentation guide.
 
-A model is a SQL file that defines one transformation step. Each model produces one table or view in the warehouse.
+A model is a SQL file that defines one transformation step and produces a table or view in the warehouse.
 
-### MODEL() header
+### Model anatomy
 
-Every model file starts with a `MODEL()` block that declares its materialization, configuration, and schema metadata:
+Every model starts with a `MODEL()` header followed by its query:
 
 ```sql
 MODEL (
   materialized table,
   tags [marts],
-  description "Order fact table with waffle and payment details.",
+  description "Order fact table",
   columns (
-    order_id (audits [not_null]),
+    order_id (type INTEGER, audits [not_null]),
   ),
 );
 
 SELECT
   o.order_id,
   o.customer_id,
-  w.waffle_name,
-  w.price_cents * o.quantity AS line_total_cents
+  p.amount_cents
 FROM __ref("stg_orders") o
-LEFT JOIN __seed("waffle_types") w ON o.waffle_type_id = w.waffle_type_id
+JOIN __ref("stg_payments") p USING (order_id)
 ```
 
-### Materialization types
+The header controls how SQLBuild builds, validates, and documents the model. The query remains ordinary SQL apart from SQLBuild reference and macro calls.
 
-#### view
+### References
 
-Creates a database view. Rebuilt on every run.
+| Reference | Syntax | Resolves to |
+|-----------|--------|-------------|
+| Model | `__ref("name")` | Another model |
+| Seed | `__seed("name")` | A seed CSV table |
+| Source | `__source("name")` | An external source |
+| Scalar UDF | `__udf("name")` | A user-defined function |
+
+SQLBuild discovers the dependency graph from these calls and executes models in topological order. Upstream models are always built before downstream dependants. Seeds use `__seed()`, not `__ref()`.
+
+See [Functions](/concepts/functions) for scalar UDF and table-function references.
+
+### Model guide
+
+- [Materializations](/concepts/models/materializations): views, tables, incrementals, snapshots, and custom materializations.
+- [Schemas](/concepts/models/schemas): inline columns, reusable schemas, inheritance, audits, and model-local extensions.
+- [Contracts](/concepts/models/contracts): exact and open output validation, type enforcement, and enum-backed columns.
+- [Hooks](/concepts/models/hooks): SQL and Python lifecycle hooks.
+- [Configuration](/concepts/models/configuration): `MODEL()` field reference and SQL-validation controls.
+
+For deeper execution behavior, see [Incremental](/concepts/incremental), [Snapshots](/concepts/snapshots), and [Audits](/concepts/audits).
+
+## Materializations
+
+Source: `concepts/models/materializations.mdx`
+
+Choose how SQLBuild persists model output.
+
+The `materialized` field selects how a model becomes a warehouse relation.
+
+### View
+
+Creates a database view and replaces it on each build:
 
 ```sql
-MODEL (
-  materialized view,
-  tags [staging],
-);
+MODEL (materialized view);
 
 SELECT id AS order_id, customer_id, status
 FROM __source("raw__orders")
 ```
 
-#### table
+### Table
 
-Creates a table via `CREATE TABLE AS`. SQLBuild materializes into a staging table first, runs audits, then promotes to the target. Fully rebuilt each time.
+Creates a table through a staging relation. SQLBuild runs blocking audits before promoting the staging table to the destination.
 
 ```sql
-MODEL (
-  materialized table,
-  tags [marts],
-);
+MODEL (materialized table);
 
 SELECT customer_id, COUNT(*) AS total_orders
 FROM __ref("stg_orders")
 GROUP BY customer_id
 ```
 
-#### incremental
+### Incremental
 
-Inserts or updates into an existing table using a cursor-based strategy. See [Incremental](/concepts/incremental) for full configuration.
+Inserts or updates rows using append, delete/insert, or merge behavior. Cursor configuration controls replay bounds and may split work into microbatches.
 
 ```sql
 MODEL (
@@ -2347,25 +2376,15 @@ MODEL (
   cursor activity_hour,
   cursor_type timestamp,
   cursor_grain hour,
-  cursor_inputs (
-    fact_orders ordered_at,
-  ),
-  incremental_mode microbatch,
-  batch_size 1d,
-  tags [marts],
+  unique_key [activity_hour],
 );
-
-SELECT
-  DATE_TRUNC('hour', o.ordered_at) AS activity_hour,
-  COUNT(*) AS orders_placed,
-  SUM(o.quantity) AS waffles_ordered
-FROM __ref("fact_orders") o
-GROUP BY DATE_TRUNC('hour', o.ordered_at)
 ```
 
-#### snapshot
+See [Incremental](/concepts/incremental) for cursor semantics, replay, schema changes, and microbatch execution.
 
-Maintains historical row versions with SCD Type 2 semantics. Supports timestamp-based and value-check-based change detection, historical source inputs, hard delete invalidation, and configurable full-refresh safety policies.
+### Snapshot
+
+Maintains historical row versions with SCD Type 2 semantics:
 
 ```sql
 MODEL (
@@ -2375,25 +2394,19 @@ MODEL (
   updated_at updated_at,
 );
 
-SELECT
-  customer_id,
-  name,
-  plan,
-  status,
-  updated_at
+SELECT customer_id, name, plan, status, updated_at
 FROM __source("customers")
 ```
 
-See [Snapshots](/concepts/snapshots) for full configuration, historical input modes, and querying patterns.
+See [Snapshots](/concepts/snapshots) for timestamp and check strategies, historical inputs, and full-refresh policies.
 
-#### custom
+### Custom
 
-User-defined Python materialization function. Custom materializations get full access to the framework including adapter, schema change signals, query change detection, and audit hooks.
+A project-local Python materialization can manage specialized persistence while retaining adapter access, schema-change signals, query-change detection, and audit hooks.
 
 ```sql
 MODEL (
   materialized partition_tracked,
-  tags [marts],
   placeholders (
     partition_start "'2026-04-01'",
     partition_end "'2026-04-05'",
@@ -2401,94 +2414,49 @@ MODEL (
   config (
     tracking_table partition_state,
     partition_column order_date,
-    date_range_start 2026-04-01,
-    date_range_end 2026-04-05,
   ),
-  description "Partition-tracked daily order summary using custom materialization.",
-  columns (
-    order_date (audits [not_null]),
-  ),
-  audits [
-    expression_is_true (
-      name "waffles ordered is positive",
-      expression "waffles_ordered > 0",
-    ),
-  ],
 );
 
-SELECT
-  CAST(o.ordered_at AS DATE) AS order_date,
-  COUNT(DISTINCT o.order_id) AS order_count,
-  SUM(o.quantity) AS waffles_ordered,
-  COUNT(DISTINCT o.customer_id) AS unique_customers
-FROM __ref("stg_orders") o
-WHERE CAST(o.ordered_at AS DATE) >= CAST(@@@partition_start AS DATE)
-  AND CAST(o.ordered_at AS DATE) < CAST(@@@partition_end AS DATE)
-GROUP BY CAST(o.ordered_at AS DATE)
+SELECT *
+FROM __ref("stg_orders")
+WHERE ordered_at >= @@@partition_start
+  AND ordered_at < @@@partition_end
 ```
 
-Custom materializations use `@@@placeholder` syntax for values substituted at runtime. These deferred placeholders are preserved through compilation and resolved by the materialization at execution time. The `config` block passes arbitrary key-value pairs to the Python `materialize()` function via `ctx.config`.
+The `config` block is passed to the Python function through `ctx.config`. Runtime-owned `@@@placeholder` values remain unresolved until materialization execution.
 
-### References
+## Schemas
 
-Models use typed reference calls that SQLBuild resolves to qualified warehouse relation names during compilation:
+Source: `concepts/models/schemas.mdx`
 
-| Reference | Syntax | Resolves to |
-|-----------|--------|-------------|
-| Model | `__ref("name")` | Another model |
-| Seed | `__seed("name")` | A seed CSV table |
-| Source | `__source("name")` | An external source |
-| Scalar UDF | `__udf("name")` | A user-defined function |
+Declare model columns inline or reuse canonical inherited schemas.
 
-```sql
-SELECT
-  o.order_id,
-  o.customer_id,
-  w.waffle_name,
-  w.price_cents * o.quantity AS line_total_cents,
-  __udf("udf__is_completed_order")(o.status) AS is_completed
-FROM __ref("stg_orders") o
-LEFT JOIN __seed("waffle_types") w ON o.waffle_type_id = w.waffle_type_id
-```
+Schema metadata defines column names, types, nullability, descriptions, and column audits. It can live inline in one `MODEL()` header or in a reusable `SCHEMA()` declaration.
 
-Seeds use `__seed()`, not `__ref()`. Using `__ref()` with a seed name raises a compile error with a helpful message pointing you to `__seed()`.
+### Inline columns
 
-See [Functions](/concepts/functions) for UDF and table function details.
-
-### DAG ordering
-
-SQLBuild automatically discovers the dependency graph from reference calls, then executes models in topological order. Upstream models are always built before their downstream dependents.
-
-### Schema declarations
-
-Model metadata - description, columns, audits, and type information - normally lives directly in the `MODEL()` header. There is no separate `schema.yml` for models.
+Use inline columns for metadata owned by one model:
 
 ```sql
 MODEL (
   materialized view,
-  tags [staging],
-  description "Cleaned order records.",
+  description "Cleaned order records",
   columns (
-    order_id (audits [not_null, unique]),
-    customer_id (audits [not_null]),
+    order_id (type INTEGER, nullable false, audits [not_null, unique]),
+    customer_id (type INTEGER, nullable false, audits [not_null]),
     status (
-      audits [
-        accepted_values (values ["placed", "preparing", "ready", "completed", "cancelled"]),
-      ],
+      type VARCHAR,
+      audits [accepted_values (values ["placed", "completed", "cancelled"])],
     ),
   ),
 );
-
-SELECT
-  id AS order_id,
-  customer_id,
-  status
-FROM __source("raw__orders")
 ```
 
-#### Reusable model schemas
+See [Audits](/concepts/audits) for built-in audits, custom audits, arguments, severity, and incremental run scope.
 
-When multiple models implement the same relation shape, declare that shape once in a SQL file under `schemas/`. Schema files are discovered recursively and make their public names available throughout the project:
+### Reusable schemas
+
+When multiple models implement the same relation shape, declare it once under `schemas/`. SQLBuild discovers schema files recursively and makes public names available throughout the project.
 
 ```sql
 -- schemas/orders/order.sql
@@ -2503,7 +2471,7 @@ SCHEMA (
 );
 ```
 
-Bind a model to the declaration with `model_schema`:
+Bind a model with `model_schema`:
 
 ```sql
 MODEL (
@@ -2512,30 +2480,46 @@ MODEL (
   model_schema order,
   contract enforced,
 );
-
-SELECT
-  id AS order_id,
-  customer_id,
-  status
-FROM __source("raw__orders")
 ```
 
-`schema staging` is the model's warehouse destination schema. `model_schema order` is its reusable column declaration. A model cannot combine `model_schema` with an inline `columns` block.
+`schema staging` selects the warehouse destination schema. `model_schema order` selects reusable column metadata.
 
-The reusable schema description becomes the model description when the `MODEL()` header does not declare one. A model-owned description takes precedence.
+The reusable description becomes the model description when the model does not declare one. A model-owned description takes precedence.
 
-Contract policy retains its normal meaning:
+### Model-local columns
 
-| Configuration | Required output |
-|---------------|-----------------|
-| `model_schema order`, `contract enforced` | Exactly the named columns; additional columns fail validation |
-| `model_schema order`, `contract none` | Every named column with compatible metadata; additional columns are allowed |
+A bound model may add output columns that are not part of the reusable shape:
 
-Omitting `contract` uses the default `none` policy. Use the non-enforced form when a model intentionally adds local columns to a shared required shape. Use an enforced contract when the complete relation shape is known.
+```sql
+MODEL (
+  model_schema order,
+  columns (
+    ingestion_batch_id (type VARCHAR, nullable false),
+  ),
+  contract enforced,
+);
+```
 
-##### Schema inheritance
+Resolved schema columns retain their order and new model-local columns follow them. Use a named child schema when an extension is reusable; use inline columns for an extension owned by one model.
 
-A reusable schema may extend one parent schema with additional columns:
+### Model-specific column audits
+
+Audits in a reusable schema apply to every bound model. A model can add stricter audits to an inherited column by naming that column and declaring only `audits`:
+
+```sql
+MODEL (
+  model_schema order,
+  columns (
+    order_id (audits [unique]),
+  ),
+);
+```
+
+The effective `order_id` keeps the reusable type, nullability, description, and `not_null` audit, then adds `unique`. A model cannot remove reusable audits or override inherited metadata. An inherited-column entry containing `type`, `nullable`, or `description` fails compilation. Identical audit instances are deduplicated.
+
+### Inheritance
+
+A reusable schema may extend one parent with additional columns:
 
 ```sql
 SCHEMA (
@@ -2547,102 +2531,87 @@ SCHEMA (
 );
 ```
 
-Inheritance is additive and may be transitive. Resolved metadata lists parent columns first and then local child columns in declaration order. Contract matching is name- and type-based; it does not enforce physical output column order.
+Inheritance may be transitive. Parent columns resolve before child columns. An inherited column cannot be redeclared or overridden in a child schema. SQLBuild rejects unknown parents, cycles, case-insensitive duplicates, and multiple parents.
 
-An inherited column cannot be redeclared or overridden. SQLBuild rejects duplicate local or inherited names, unknown parents, inheritance cycles, and multiple parents. General schema composition, mixins, and parameterized schemas are not supported.
+Physical SQL output order is not currently enforced. Contract matching uses names, types, and nullability.
 
-Schema changes participate in the bound models' normal contract, schema-change, and change-aware planning behavior. A parent change also affects models bound to descendant schemas.
+### Contracts and planning
 
-#### Column-level audits
+`contract enforced` requires the actual output to equal the complete named-plus-local declaration. `contract none`, the default, requires declared columns but permits further undeclared output columns. See [Contracts](/concepts/models/contracts).
 
-Attach audits to individual columns inside the `columns` block. Simple audits like `not_null` and `unique` are listed by name. Parameterized audits like `accepted_values` pass arguments inline:
+Schema metadata and model-specific audit augmentation participate in model execution identity. Changing a parent affects models bound through descendants; unrelated reusable schemas do not affect other models.
 
-```sql
-columns (
-  order_id (audits [not_null, unique]),
-  status (
-    audits [
-      accepted_values (values ["placed", "preparing", "completed", "cancelled"]),
-    ],
-  ),
-),
-```
+### Limitations
 
-#### Model-level audits
+Reusable schemas intentionally support a narrow ownership model:
 
-Attach audits to the model itself for multi-column or expression-based checks:
+- One optional parent, with transitive inheritance.
+- Additive child and model-local output columns.
+- Audit-only model augmentation of inherited columns.
+- No general column overrides, multiple inheritance, composition, mixins, parameters, or generated projections.
+- No physical output ordinal enforcement.
 
-```sql
-MODEL (
-  materialized table,
-  audits [
-    expression_is_true (
-      name "revenue is non-negative",
-      expression "total_revenue_cents >= 0",
-    ),
-  ],
-);
-```
+## Contracts
 
-#### Type enforcement
+Source: `concepts/models/contracts.mdx`
 
-Type enforcement is implicit. If any column in the `MODEL()` header declares a `type`, type enforcement is automatically enabled for that model:
+Validate required or exact model output schemas.
 
-```sql
-MODEL (
-  materialized table,
-  columns (
-    order_id (type INTEGER, audits [not_null]),
-    amount_cents (type INTEGER),
-  ),
-);
-```
+A model's declared columns define required output metadata. The `contract` policy determines whether that declaration is open or exact.
 
-When enabled, SQLBuild casts columns to declared types and uses them for schema-change detection. There is no need to set `type_enforcement: true` explicitly.
-
-#### Contracts
-
-Contracts enforce that a model's output matches its declared column schema exactly - column names, column count, and column types. When `contract enforced` is set, the declared columns become the authoritative output contract.
+| Value | Behavior |
+|-------|----------|
+| `none` | Every declared column is required, while undeclared output columns are allowed. This is the default. |
+| `enforced` | Declared columns are the complete authoritative output schema; missing and additional columns fail. |
 
 ```sql
 MODEL (
   materialized table,
   contract enforced,
   columns (
-    order_id (type INTEGER, audits [not_null]),
-    customer_id (type INTEGER, audits [not_null]),
+    order_id (type INTEGER, nullable false),
+    customer_id (type INTEGER, nullable false),
     amount_cents (type INTEGER),
     status (type VARCHAR),
   ),
 );
 ```
 
-Contract enforcement happens at two levels:
+### Validation
 
-**Compile time** - config fields that reference columns (`unique_key`, `cursor`, `updated_at`, `check_columns`) are validated against the declared column names. If a referenced column is not in the contract, compilation fails.
+At compile time, SQLBuild checks inferred output names, types, and nullability. Configuration fields that reference columns, including `unique_key`, `cursor`, `updated_at`, and `check_columns`, are also checked against an enforced contract.
 
-**Runtime** - after materialization into the staging table, SQLBuild inspects the actual output columns and validates them against the contract before promotion:
+At runtime, SQLBuild validates the materialized staging relation before promotion:
 
-- Missing declared columns fail with code `K010`
-- Extra undeclared columns fail with code `K011`
-- Type mismatches (e.g. `VARCHAR` where `INTEGER` was declared) fail with code `K013`
+- Missing declared columns fail.
+- Additional columns fail only for `contract enforced`.
+- Type mismatches fail using adapter-aware type normalization.
 
-If any validation fails, the production table is untouched. Types are compared using adapter-aware normalization, so equivalent types across dialects are handled correctly.
+When pre-promotion validation fails, the existing production relation remains untouched.
 
-Contract values:
+### Type enforcement
 
-| Value | Behavior |
-|-------|----------|
-| `enforced` | Declared columns are the complete, authoritative output schema |
-| `none` | Declared columns are required when present, but additional output columns are allowed (default) |
+Declaring a column `type` enables type enforcement automatically. SQLBuild uses declared types for compile-time analysis, materialization casts where required, and schema-change detection. There is no separate `type_enforcement` setting.
 
-The core model default remains `none`. A repository can opt into
-[`SQBKR401`](/concepts/kata#layers-and-model-grammar) to require `contract enforced` through its
-Kata architecture policy.
+### Reusable schemas
 
-Contracts interact with schema change policies. For snapshot models, `snapshot_schema_change append_new_columns` is incompatible with `contract enforced` because appending columns would violate the contract.
+Contracts apply to the effective declaration, not only the reusable base:
 
-Columns may also use a declared enum as their type:
+```sql
+MODEL (
+  model_schema order,
+  columns (
+    ingestion_batch_id (type VARCHAR, nullable false),
+  ),
+  contract enforced,
+);
+```
+
+This requires exactly the resolved `order` columns plus `ingestion_batch_id`. Changing the policy to `none` still requires those columns but permits further output. See [Schemas](/concepts/models/schemas).
+
+### Enum columns
+
+A column may use a declared enum as its type:
 
 ```sql
 MODEL (
@@ -2653,39 +2622,23 @@ MODEL (
 );
 ```
 
-SQLBuild resolves the enum to its physical string or integer type and adds accepted-values validation for its members. See [Enums and Constants](/concepts/enums-and-constants).
+SQLBuild resolves the enum to its physical string or integer type and adds accepted-values validation. See [Enums and Constants](/concepts/enums-and-constants).
 
-#### Audit run scope
+### Related policies
 
-Audits on incremental models can specify `run_scope` to control when they execute:
+The core default is `contract none`. A repository can enable [`SQBKR401`](/concepts/kata#layers-and-model-grammar) to require enforced contracts through Kata architecture policy.
 
-```sql
-MODEL (
-  materialized incremental,
-  incremental_strategy delete_insert,
-  cursor activity_hour,
-  cursor_type timestamp,
-  cursor_grain hour,
-  columns (
-    activity_hour (audits [not_null (run_scope delta_and_final)]),
-  ),
-  audits [
-    expression_is_true (
-      name "orders placed is non-negative",
-      expression "orders_placed >= 0",
-      run_scope delta_and_final,
-    ),
-  ],
-);
-```
+Contracts also constrain schema-change behavior. For example, `snapshot_schema_change append_new_columns` is incompatible with `contract enforced` because an unannounced appended column would violate the exact declaration.
 
-`delta_and_final` runs the audit against each delta batch before DML and again against the target after all batches complete. See [Audits](/concepts/audits) for details.
+## Hooks
 
-### Hooks
+Source: `concepts/models/hooks.mdx`
 
-Pre-hooks and post-hooks run before and after materialization. Each entry is either a `sql("...")` hook that executes SQL, or a `python("hook_name")` hook that calls a Python function from the `hooks/` directory.
+Run validated SQL or Python lifecycle hooks around model materialization.
 
-#### SQL hooks
+Pre-hooks and post-hooks run before and after materialization. Each entry is either `sql("...")` or `python("hook_name")`.
+
+### SQL hooks
 
 ```sql
 MODEL (
@@ -2694,40 +2647,30 @@ MODEL (
 );
 ```
 
-SQL hooks support macro expansion (`@macro()`), project variables (`@@name`), environment variables (`@@ENV:NAME`), and context variables (`@@CTX:`). SQL is validated at compile time when SQL analysis is enabled.
-
-Available context variables in hooks:
+SQL hooks support macros, project variables, environment variables, and context variables. SQL is validated at compile time when SQL analysis is enabled.
 
 | Variable | Value |
 |----------|-------|
-| `@@CTX:destination.qualified` | Fully qualified destination relation name |
+| `@@CTX:destination.qualified` | Fully qualified destination relation |
 | `@@CTX:destination.schema` | Destination schema |
 | `@@CTX:destination.table` | Destination relation name |
 | `@@CTX:model.name` | Model name |
 | `@@CTX:run.target` | Active target name |
 | `@@CTX:run.id` | Current run ID |
 
-#### Python hooks
+### Python hooks
 
-Python hooks call `@hook`-decorated functions discovered from the `hooks/` directory:
+SQLBuild discovers `@hook` functions recursively under `hooks/`:
 
 ```python
-# hooks/permissions.py
 from sqlbuild.hooks import hook
 
 @hook
-def grant_analyst(ctx):
-    ctx.execute_sql(f"GRANT SELECT ON {ctx.destination.qualified} TO analyst_role")
+def grant_analyst(ctx, role="analyst_role"):
+    ctx.execute_sql(f"GRANT SELECT ON {ctx.destination.qualified} TO {role}")
 ```
 
-Reference a Python hook in the MODEL() header by name, with optional keyword arguments:
-
-```sql
-MODEL (
-  materialized table,
-  post_hooks [python("grant_analyst")],
-);
-```
+Reference the hook by name and optionally pass keyword arguments:
 
 ```sql
 MODEL (
@@ -2736,145 +2679,108 @@ MODEL (
 );
 ```
 
-You can mix SQL and Python hooks in the same list:
+SQL and Python hooks can appear in the same list.
 
-```sql
-MODEL (
-  materialized table,
-  pre_hooks [sql('SET search_path TO analytics')],
-  post_hooks [
-    python("grant_analyst"),
-    sql('ANALYZE @@CTX:destination.qualified'),
-  ],
-);
-```
+### Hook context
 
-#### Hook context
-
-Python hooks receive a `HookContext` as their first parameter (named `ctx`, `context`, or `hook_context`):
+Python hooks receive a `HookContext` as their first parameter, conventionally named `ctx`:
 
 | Field | Description |
 |-------|-------------|
-| `ctx.model_name` | Name of the model being built |
+| `ctx.model_name` | Model being built |
 | `ctx.phase` | `pre_hooks` or `post_hooks` |
-| `ctx.hook_name` | Name of the hook being invoked |
+| `ctx.hook_name` | Invoked hook name |
 | `ctx.run_id` | Current run ID |
-| `ctx.target` | Active target name |
-| `ctx.vars` | Project variables |
-| `ctx.destination.qualified` | Fully qualified destination relation name |
-| `ctx.destination.schema` | Destination schema |
-| `ctx.destination.name` | Destination relation name |
-| `ctx.destination.database` | Destination database |
+| `ctx.target` | Active target |
+| `ctx.vars` | Effective project variables |
+| `ctx.destination` | Destination relation metadata |
 | `ctx.adapter` | Adapter instance |
 | `ctx.connection` | Live connection |
-| `ctx.execute_sql(sql)` | Execute SQL on the connection |
+| `ctx.execute_sql(sql)` | Execute SQL |
 | `ctx.query(sql)` | Execute SQL and return rows |
-| `ctx.log(message)` | Log to the run output |
-| `ctx.skip(reason, mode=...)` | Skip the model's materialization. `mode` accepts `"soft"` (default) or `"hard"` (blocks downstream models). |
-| `ctx.providers` | Access discovered [providers](/concepts/python-nodes/providers) by name |
+| `ctx.log(message)` | Write run output |
+| `ctx.skip(reason, mode=...)` | Soft-skip the model or hard-block downstream models |
+| `ctx.providers` | Access discovered [providers](/concepts/python-nodes/providers) |
 
-Pre-hooks can return `ctx.skip(...)` to skip the model's materialization entirely. A soft skip skips only this model; a hard skip also blocks downstream models. Providers can also be injected directly as hook function parameters by name. See [Providers](/concepts/python-nodes/providers).
+Providers may also be injected into hook parameters by name.
 
-#### Hook decorator
+### Discovery and validation
 
-The `@hook` decorator accepts optional metadata:
+- Files beginning with `_`, including `__init__.py`, are skipped.
+- Hook names must be unique across the project.
+- The decorator accepts optional `name` and `description` arguments.
+- Unknown hooks, unknown keyword arguments, and missing required arguments fail compilation.
+- A function without `**kwargs` rejects undeclared hook arguments.
 
-```python
-from sqlbuild.hooks import hook
+## Configuration
 
-@hook
-def grant_analyst(ctx):
-    """Grant analyst role on the destination table."""
-    ctx.execute_sql(f"GRANT SELECT ON {ctx.destination.qualified} TO analyst_role")
+Source: `concepts/models/configuration.mdx`
 
-@hook(name="custom_name", description="Custom hook with explicit name")
-def my_hook(ctx, role="analyst_role"):
-    ctx.execute_sql(f"GRANT SELECT ON {ctx.destination.qualified} TO {role}")
-```
+MODEL() header fields and SQL-validation controls.
 
-| Argument | Description |
-|----------|-------------|
-| `name` | Override the hook name (defaults to the function name) |
-| `description` | Human-readable description (defaults to the function docstring) |
-
-#### Discovery rules
-
-- Hook functions are discovered from `.py` files under `hooks/` recursively
-- Files named `__init__.py` or starting with `_` are skipped
-- Each function decorated with `@hook` is registered by name
-- Hook names must be unique across all hook files
-- Python hook references in MODEL() headers are validated at compile time: unknown names, unknown kwargs, and missing required parameters all raise compile errors
-
-#### Validation
-
-At compile time, SQLBuild validates every `python("hook_name")` reference:
-
-- The hook name must match a discovered `@hook` function
-- Any keyword arguments passed in the MODEL() header must match parameters on the function signature
-- If the function does not accept `**kwargs`, unknown arguments raise a compile error
-
-### Config reference
-
-#### Common config
+### Common fields
 
 | Field | Description |
 |-------|-------------|
-| `materialized` | `view`, `table`, `incremental`, or a custom materialization name |
-| `tags` | List of tags for selector filtering |
-| `description` | Human-readable description of the model |
-| `columns` | Column declarations with optional types, audits, and descriptions |
+| `materialized` | `view`, `table`, `incremental`, `snapshot`, or a custom materialization name |
+| `tags` | Tags used by selectors |
+| `description` | Human-readable model description |
+| `columns` | Model-local column declarations or inherited-column audit augmentation |
+| `model_schema` | Reusable column schema name |
 | `audits` | Model-level audit instances |
-| `schema` | Override target schema |
-| `database` | Override target database |
-| `alias` | Override target relation name |
-| `pre_hooks` | Lifecycle hooks to run before materialization: `sql("...")` and/or `python("hook_name")` entries |
-| `post_hooks` | Lifecycle hooks to run after materialization: `sql("...")` and/or `python("hook_name")` entries |
-| `enabled` | Set to `false` to skip the model |
-| `contract` | `enforced` or `none`. When enforced, declared columns are the authoritative output schema. |
-| `sql_validation` | Per-model boolean override of the project `sql_validation` setting |
+| `schema` | Destination warehouse schema override |
+| `database` | Destination database override |
+| `alias` | Destination relation-name override |
+| `pre_hooks` | SQL or Python hooks before materialization |
+| `post_hooks` | SQL or Python hooks after materialization |
+| `enabled` | Set to `false` to disable the model |
+| `contract` | `none` or `enforced` |
+| `sql_validation` | Per-model SQL-validation override |
 
-Four knobs gate compile-time SQL validation, from broadest to narrowest:
+### SQL validation
 
-1. `settings.sql_analysis` - master switch for all SQL-analysis features
-2. `--no-sql-validation` - per-run CLI kill switch
-3. `settings.sql_validation` - project-level validation setting
-4. `MODEL (sql_validation ...)` - per-model override of the project setting
+Four controls gate compile-time SQL validation, from broadest to narrowest:
 
-Validation runs only when every broader knob allows it: `sql_analysis` must be on and `--no-sql-validation` absent before the project/model `sql_validation` values are consulted.
+1. `settings.sql_analysis`: project-wide master switch for SQL-analysis features.
+2. `--no-sql-validation`: per-run CLI kill switch.
+3. `settings.sql_validation`: project-level validation setting.
+4. `MODEL (sql_validation ...)`: per-model project-setting override.
 
-#### Incremental config
+Validation runs only when every broader control permits it.
+
+### Incremental fields
 
 | Field | Description |
 |-------|-------------|
 | `incremental_strategy` | `append`, `delete_insert`, or `merge` |
 | `cursor` | Output column used to track incremental position |
 | `cursor_type` | `timestamp` or `integer` |
-| `cursor_grain` | Time grain for timestamp cursors: `second`, `minute`, `hour`, `day`, `month`, `year` |
-| `cursor_start` | Lower bound floor for the cursor |
-| `cursor_inputs` | Map of upstream ref/source names to their cursor columns |
-| `unique_key` | Column(s) used for merge and delete_insert matching |
-| `incremental_mode` | Set to `microbatch` to enable batched execution |
-| `batch_size` | Batch window size (e.g. `1d`, `1h`, or an integer) |
-| `lookback` | Extend the replay window backwards to re-process recent data |
+| `cursor_grain` | Timestamp grain such as `second`, `hour`, or `day` |
+| `cursor_start` | Lower cursor bound |
+| `cursor_inputs` | Upstream names mapped to cursor columns |
+| `unique_key` | Merge or delete/insert matching columns |
+| `incremental_mode` | Set to `microbatch` for batched execution |
+| `batch_size` | Batch window such as `1d`, `1h`, or an integer |
+| `lookback` | Backward replay extension |
 | `on_schema_change` | `append_new_columns`, `sync_all_columns`, `ignore`, or `fail` |
-| `replay_on_change` | `forward` (default), `full`, or `bounded-<duration>` (e.g. `bounded-14d`) |
-| `run_despite_unchanged` | Force periodic rebuilds: `always` or a duration (e.g. `24h`, `30d`). Table materializations only. |
+| `replay_on_change` | `forward`, `full`, or `bounded-<duration>` |
+| `run_despite_unchanged` | `always` or a periodic duration |
 
-See [Incremental](/concepts/incremental) for detailed usage.
+See [Incremental](/concepts/incremental) for full semantics.
 
-#### Custom materialization config
-
-| Field | Description |
-|-------|-------------|
-| `config` | Arbitrary key-value pairs passed to `ctx.config` in the Python function |
-| `placeholders` | Default values for `@@@placeholder` tokens in the SQL |
-
-#### Diff config
+### Custom materialization fields
 
 | Field | Description |
 |-------|-------------|
-| `row_diff_exclude_columns` | Columns to exclude from row-level diff comparisons |
-| `row_diff_tolerances` | Tolerance rules for numeric diff comparisons |
+| `config` | Arbitrary values passed to `ctx.config` |
+| `placeholders` | Defaults for runtime `@@@placeholder` tokens |
+
+### Diff fields
+
+| Field | Description |
+|-------|-------------|
+| `row_diff_exclude_columns` | Columns excluded from row-level comparison |
+| `row_diff_tolerances` | Numeric comparison tolerances |
 
 ## Kata SQL Architecture Checks
 
@@ -3395,7 +3301,7 @@ The rule is simple: if it's any SQL that will be executed, it uses `@`. If it's 
 | `${CTX:...}` | TOML/YAML config values | Config compilation |
 | `${ENV:...}` | TOML/YAML config values | Config compilation |
 
-`@@CTX:` is intentionally SQL-hook-only. Model SQL describes a relation's data and should not reference its own destination identity. SQL hooks are the operational SQL layer where destination context is useful - grants, logging, post-materialization DDL. Python hooks access the same information through `ctx.destination` on the `HookContext` object (see [Hooks](/concepts/models#hooks)).
+`@@CTX:` is intentionally SQL-hook-only. Model SQL describes a relation's data and should not reference its own destination identity. SQL hooks are the operational SQL layer where destination context is useful - grants, logging, post-materialization DDL. Python hooks access the same information through `ctx.destination` on the `HookContext` object (see [Hooks](/concepts/models/hooks)).
 
 See [Enums and Constants](/concepts/enums-and-constants) for declaration syntax, visibility, and contract integration.
 
@@ -3633,7 +3539,7 @@ SELECT 1 AS id
 
 Hook SQL is validated at compile time, so invalid hook SQL is caught before execution. SQL hooks also support `@@CTX:` context variables, `@@name` project variables, and `@@ENV:NAME` environment variables directly without needing a macro wrapper.
 
-For hooks that need more than string interpolation, use `python(...)` hooks instead. See [Hooks](/concepts/models#hooks) for the full Python hook API.
+For hooks that need more than string interpolation, use `python(...)` hooks instead. See [Hooks](/concepts/models/hooks) for the full Python hook API.
 
 ### Macro context
 

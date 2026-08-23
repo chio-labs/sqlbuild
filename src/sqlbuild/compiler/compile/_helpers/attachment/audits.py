@@ -233,10 +233,15 @@ def build_model_attached_audit_inputs(
             column_entry.location.path if column_entry.location is not None else owner_file
         )
         for audit_instance in column_entry.audits:
+            audit_owner_file: Path = (
+                audit_instance.location.path
+                if audit_instance.location is not None
+                else column_owner_file
+            )
             attached_audit_inputs.append(
                 build_attached_audit_input(
                     audit_instance=audit_instance,
-                    owner_file=column_owner_file,
+                    owner_file=audit_owner_file,
                     implicit_arguments={
                         "model": model_input.model_file.file_path.stem,
                         "relation": SqlReferenceKind.REF.example_call(

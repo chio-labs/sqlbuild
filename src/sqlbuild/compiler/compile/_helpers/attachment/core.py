@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 import re
-from dataclasses import fields
+from dataclasses import dataclass, fields, replace
 from datetime import UTC, datetime
 from inspect import Parameter, Signature
 from pathlib import Path
@@ -73,7 +73,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import (
     CompileContextKey,
 )
-from sqlbuild.compiler.discovery._helpers.sql.schema_columns import parse_schema_columns
+from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_columns
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredHookFunction,
@@ -108,6 +108,14 @@ _HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
 )
 
 
+@dataclass(frozen=True)
+class _VisibleModelDeclarations:
+    local_enums: dict[str, EnumDeclaration]
+    local_constants: dict[str, ConstantDeclaration]
+    enums: dict[str, EnumDeclaration]
+    constants: dict[str, ConstantDeclaration]
+
+
 def build_model_inputs(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -138,12 +146,9 @@ def build_model_inputs(
     model_inputs: list[CompileModelInput] = []
     model_file: DiscoveredSqlModelFile
     for model_file in discovered_inputs.model_files:
-        local_enums: dict[str, EnumDeclaration]
-        local_constants: dict[str, ConstantDeclaration]
-        local_enums, local_constants = build_model_declaration_indexes(model_file=model_file)
-        visible_enums: dict[str, EnumDeclaration] = context.public_enums | local_enums
-        visible_constants: dict[str, ConstantDeclaration] = (
-            context.public_constants | local_constants
+        declarations: _VisibleModelDeclarations = _build_visible_declaration_indexes(
+            model_file=model_file,
+            context=context,
         )
         matched_path_default: str | None = find_matching_path_default(
             model_file=model_file,
@@ -163,7 +168,6 @@ def build_model_inputs(
         model_schema: ModelSchemaDeclaration | None = _resolve_model_schema(
             values=effective_config.values,
             model_name=model_file.file_path.stem,
-            model_path=model_file.relative_path,
             public_model_schemas=context.public_model_schemas,
         )
         model_schema_columns: tuple[SchemaColumn, ...] | None = (
@@ -183,8 +187,8 @@ def build_model_inputs(
         declaration_expanded_sql: str = expand_declaration_references(
             sql=var_substituted_sql,
             file_path=model_file.file_path,
-            enums=visible_enums,
-            constants=visible_constants,
+            enums=declarations.enums,
+            constants=declarations.constants,
         )
         expanded_query_sql: str = expand_sql_macros(
             sql=declaration_expanded_sql,
@@ -274,8 +278,8 @@ def build_model_inputs(
                 ),
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
-                enums=visible_enums,
-                constants=visible_constants,
+                enums=declarations.enums,
+                constants=declarations.constants,
             ),
             matched_path_default=effective_config.matched_path_default,
             logical_schema=effective_config.logical_schema,
@@ -314,7 +318,7 @@ def build_model_inputs(
         header_schema_entry, enum_columns = resolve_enum_contract_columns(
             schema_entry=header_schema_entry,
             config_values=model_config.values,
-            enums=visible_enums,
+            enums=declarations.enums,
         )
         schema_match: tuple[SchemaModelEntry, DiscoveredSchemaFile] | None = (
             find_schema_model_match(
@@ -339,8 +343,8 @@ def build_model_inputs(
                     macro_source_sql=declaration_expanded_sql,
                     references=references,
                     sql_validation_enabled=sql_validation_enabled,
-                    enum_declarations=tuple(local_enums.values()),
-                    constant_declarations=tuple(local_constants.values()),
+                    enum_declarations=tuple(declarations.local_enums.values()),
+                    constant_declarations=tuple(declarations.local_constants.values()),
                     enum_columns=enum_columns,
                 )
             )
@@ -355,8 +359,8 @@ def build_model_inputs(
                 references=references,
                 schema_entry=header_schema_entry,
                 sql_validation_enabled=sql_validation_enabled,
-                enum_declarations=tuple(local_enums.values()),
-                constant_declarations=tuple(local_constants.values()),
+                enum_declarations=tuple(declarations.local_enums.values()),
+                constant_declarations=tuple(declarations.local_constants.values()),
                 enum_columns=enum_columns,
             )
         )
@@ -366,6 +370,20 @@ def build_model_inputs(
         schema_files=discovered_inputs.schema_files,
     )
     return tuple(model_inputs)
+
+
+def _build_visible_declaration_indexes(
+    *, model_file: DiscoveredSqlModelFile, context: ModelInputBuildContext
+) -> _VisibleModelDeclarations:
+    local_enums: dict[str, EnumDeclaration]
+    local_constants: dict[str, ConstantDeclaration]
+    local_enums, local_constants = build_model_declaration_indexes(model_file=model_file)
+    return _VisibleModelDeclarations(
+        local_enums=local_enums,
+        local_constants=local_constants,
+        enums=context.public_enums | local_enums,
+        constants=context.public_constants | local_constants,
+    )
 
 
 def build_seed_inputs(discovered_inputs: DiscoveredProjectInputs) -> tuple[CompileSeedInput, ...]:
@@ -1004,10 +1022,16 @@ def build_model_header_schema_entry(
         key="description",
     )
     description: str | None = model_description or model_schema_description
-    columns: tuple[SchemaColumn, ...] = model_schema_columns or _parse_model_header_columns(
+    local_columns: tuple[SchemaColumn, ...] = _parse_model_header_columns(
         raw_columns=raw_columns,
         file_path=file_path,
         column_locations=column_locations or {},
+    )
+    columns: tuple[SchemaColumn, ...] = _merge_model_schema_columns(
+        model_name=model_name,
+        file_path=file_path,
+        model_schema_columns=model_schema_columns,
+        local_columns=local_columns,
     )
     audits: tuple[SchemaAuditInstance, ...] = _parse_model_header_audits(
         raw_audits=raw_audits,
@@ -1055,6 +1079,76 @@ def _parse_model_header_columns(
     )
 
 
+def _merge_model_schema_columns(
+    *,
+    model_name: str,
+    file_path: Path,
+    model_schema_columns: tuple[SchemaColumn, ...] | None,
+    local_columns: tuple[SchemaColumn, ...],
+) -> tuple[SchemaColumn, ...]:
+    if model_schema_columns is None:
+        return local_columns
+    merged_named_columns: list[SchemaColumn] = list(model_schema_columns)
+    named_index_by_name: dict[str, int] = {
+        column.name.lower(): index for index, column in enumerate(model_schema_columns)
+    }
+    additional_columns: list[SchemaColumn] = []
+    local_column: SchemaColumn
+    for local_column in local_columns:
+        named_index: int | None = named_index_by_name.get(local_column.name.lower())
+        if named_index is None:
+            additional_columns.append(local_column)
+            continue
+        named_column: SchemaColumn = merged_named_columns[named_index]
+        _validate_model_schema_audit_augmentation(
+            model_name=model_name,
+            file_path=file_path,
+            local_column=local_column,
+            named_column=named_column,
+        )
+        additional_audits: tuple[SchemaAuditInstance, ...] = tuple(
+            audit for audit in local_column.audits if audit not in named_column.audits
+        )
+        merged_named_columns[named_index] = replace(
+            named_column,
+            audits=(*named_column.audits, *additional_audits),
+        )
+    return (*merged_named_columns, *additional_columns)
+
+
+def _validate_model_schema_audit_augmentation(
+    *,
+    model_name: str,
+    file_path: Path,
+    local_column: SchemaColumn,
+    named_column: SchemaColumn,
+) -> None:
+    named_origin: str = (
+        f"{named_column.location.path}:{named_column.location.line}"
+        if named_column.location is not None
+        else "the named schema"
+    )
+    overridden_fields: list[str] = []
+    if local_column.type is not None:
+        overridden_fields.append("type")
+    if local_column.nullable is not None:
+        overridden_fields.append("nullable")
+    if local_column.description is not None:
+        overridden_fields.append("description")
+    if overridden_fields:
+        raise CompileInputError(
+            f"model '{model_name}' in {file_path} cannot override "
+            f"{', '.join(overridden_fields)} for named-schema column '{local_column.name}' from "
+            f"{named_origin}; only audit augmentation is supported"
+        )
+    if not local_column.audits:
+        raise CompileInputError(
+            f"model '{model_name}' in {file_path} redeclares named-schema column "
+            f"'{local_column.name}' from {named_origin} without audits; only audit augmentation "
+            "is supported"
+        )
+
+
 def _parse_model_header_audits(
     *, raw_audits: object | None, file_path: Path, label: str
 ) -> tuple[SchemaAuditInstance, ...]:
@@ -1087,7 +1181,6 @@ def _resolve_model_schema(
     *,
     values: dict[str, object],
     model_name: str,
-    model_path: Path,
     public_model_schemas: dict[str, ModelSchemaDeclaration],
 ) -> ModelSchemaDeclaration | None:
     raw_name: object | None = values.get("model_schema")
@@ -1095,10 +1188,6 @@ def _resolve_model_schema(
         return None
     if not isinstance(raw_name, str) or not raw_name.strip():
         raise CompileInputError(f"model '{model_name}': model_schema must be a non-empty string")
-    if values.get("columns") is not None:
-        raise CompileInputError(
-            f"model '{model_name}' in {model_path} cannot declare both model_schema and columns"
-        )
     declaration: ModelSchemaDeclaration | None = public_model_schemas.get(raw_name)
     if declaration is None:
         available: str = ", ".join(sorted(public_model_schemas)) or "none"

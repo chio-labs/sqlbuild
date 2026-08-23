@@ -18,6 +18,7 @@ from sqlbuild.compiler.discovery.models import (
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseDeclarationFileErrorTestCase,
     ParseDeclarationFileTestCase,
+    ParseModelSchemaDeclarationTestCase,
 )
 
 
@@ -169,9 +170,12 @@ def test_given_invalid_enum_declaration_when_parsing_then_raises_declaration_err
         )
 
 
-def test_given_model_schema_declarations_when_parsing_then_returns_typed_columns() -> None:
-    declarations: tuple[ModelSchemaDeclaration, ...] = parse_model_schema_declaration_file(
-        contents="""
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseModelSchemaDeclarationTestCase(
+            description="base and inherited schema declarations",
+            contents="""
 SCHEMA (
   name order,
   description "Canonical order",
@@ -186,29 +190,62 @@ SCHEMA (
   columns (source (type VARCHAR)),
 );
 """,
+            expected_names=("order", "sourced_order"),
+            expected_description="Canonical order",
+            expected_parent="order",
+            expected_base_column_names=("order_id", "status"),
+            expected_base_column_line=6,
+            expected_child_column_line=13,
+            expected_audit_names=("not_null",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_model_schema_declarations_when_parsing_then_returns_typed_columns(
+    test_case: ParseModelSchemaDeclarationTestCase,
+) -> None:
+    declarations: tuple[ModelSchemaDeclaration, ...] = parse_model_schema_declaration_file(
+        contents=test_case.contents,
         file_path=Path("schemas/orders.sql"),
         relative_path=Path("schemas/orders.sql"),
     )
 
-    assert tuple(declaration.name for declaration in declarations) == ("order", "sourced_order")
-    assert declarations[0].description == "Canonical order"
-    assert declarations[1].extends == "order"
-    assert tuple(column.name for column in declarations[0].columns) == ("order_id", "status")
+    assert tuple(declaration.name for declaration in declarations) == test_case.expected_names
+    assert declarations[0].description == test_case.expected_description
+    assert declarations[1].extends == test_case.expected_parent
+    assert (
+        tuple(column.name for column in declarations[0].columns)
+        == test_case.expected_base_column_names
+    )
     assert declarations[0].columns[0].nullable is False
     assert declarations[0].columns[0].location is not None
     assert declarations[0].columns[0].location.path == Path("schemas/orders.sql")
-    assert declarations[0].columns[0].location.line == 6
+    assert declarations[0].columns[0].location.line == test_case.expected_base_column_line
     assert declarations[1].columns[0].location is not None
-    assert declarations[1].columns[0].location.line == 13
-    assert tuple(audit.definition_name for audit in declarations[0].columns[0].audits) == (
-        "not_null",
+    assert declarations[1].columns[0].location.line == test_case.expected_child_column_line
+    assert (
+        tuple(audit.definition_name for audit in declarations[0].columns[0].audits)
+        == test_case.expected_audit_names
     )
 
 
-def test_given_empty_model_schema_when_parsing_then_raises_declaration_error() -> None:
-    with pytest.raises(DeclarationParseError, match="must declare at least one column"):
-        parse_model_schema_declaration_file(
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseDeclarationFileErrorTestCase(
+            description="empty model schema",
             contents="SCHEMA (name empty, columns ());",
+            expected_error_fragment="must declare at least one column",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_empty_model_schema_when_parsing_then_raises_declaration_error(
+    test_case: ParseDeclarationFileErrorTestCase,
+) -> None:
+    with pytest.raises(DeclarationParseError, match=test_case.expected_error_fragment):
+        parse_model_schema_declaration_file(
+            contents=test_case.contents,
             file_path=Path("schemas/empty.sql"),
             relative_path=Path("schemas/empty.sql"),
         )

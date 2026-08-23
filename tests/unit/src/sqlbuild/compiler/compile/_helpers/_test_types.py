@@ -69,6 +69,41 @@ class ModelSchemaErrorTestCase:
 
 
 @dataclass(frozen=True)
+class ModelSchemaCompilationTestCase:
+    description: str
+    expected_schema_paths: tuple[str, ...]
+    expected_exact_column_names: tuple[str, ...]
+    expected_exact_column_types: tuple[str | None, ...]
+    expected_superset_column_names: tuple[str, ...]
+    expected_superset_inferred_column_names: tuple[str, ...]
+    expected_exact_order_audit_names: tuple[str, ...]
+    expected_exact_order_audit_paths: tuple[str, ...]
+    expected_superset_order_audit_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ModelSchemaContractDiagnosticTestCase:
+    description: str
+    contract: str
+    projection: str
+    expected_code: str
+
+
+@dataclass(frozen=True)
+class ModelSchemaIdentityTestCase:
+    description: str
+    initial_type: str
+    changed_type: str
+    expected_identity_changed: bool
+
+
+@dataclass(frozen=True)
+class ModelSchemaCursorTestCase:
+    description: str
+    expected_column_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ExtractSqlTestCtesTestCase:
     description: str
     sql: str

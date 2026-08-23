@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
@@ -11,7 +12,7 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
 from sqlbuild.spec.contracts.models import SchemaAuditInstance, SchemaColumn, SourceLocation
 
-SchemaColumnParseError = type[CompileInputError] | type[DeclarationParseError]
+type _SchemaColumnParseError = type[CompileInputError] | type[DeclarationParseError]
 
 
 def parse_schema_columns(
@@ -19,7 +20,7 @@ def parse_schema_columns(
     raw_columns: object | None,
     file_path: Path,
     label: str,
-    error_class: SchemaColumnParseError,
+    error_class: _SchemaColumnParseError,
     column_locations: dict[str, SourceLocation] | None = None,
     require_columns: bool = False,
 ) -> tuple[SchemaColumn, ...]:
@@ -73,11 +74,15 @@ def parse_schema_columns(
             key="nullable",
             error_class=error_class,
         )
-        audits: tuple[SchemaAuditInstance, ...] = _parse_audits(
-            raw_audits=column_metadata.get("audits"),
-            file_path=file_path,
-            label=f"{label} column '{raw_column_name}'",
-            error_class=error_class,
+        column_location: SourceLocation | None = locations.get(raw_column_name)
+        audits: tuple[SchemaAuditInstance, ...] = tuple(
+            replace(audit, location=column_location)
+            for audit in _parse_audits(
+                raw_audits=column_metadata.get("audits"),
+                file_path=file_path,
+                label=f"{label} column '{raw_column_name}'",
+                error_class=error_class,
+            )
         )
         if nullable is True and any(
             audit.definition_name == NOT_NULL_AUDIT_NAME for audit in audits
@@ -112,14 +117,14 @@ def parse_schema_columns(
                     error_class=error_class,
                 ),
                 audits=audits,
-                location=locations.get(raw_column_name),
+                location=column_location,
             )
         )
     return tuple(parsed_columns)
 
 
 def _parse_audits(
-    *, raw_audits: object | None, file_path: Path, label: str, error_class: SchemaColumnParseError
+    *, raw_audits: object | None, file_path: Path, label: str, error_class: _SchemaColumnParseError
 ) -> tuple[SchemaAuditInstance, ...]:
     if raw_audits is None:
         return ()
@@ -142,7 +147,7 @@ def _optional_string(
     file_path: Path,
     label: str,
     key: str,
-    error_class: SchemaColumnParseError,
+    error_class: _SchemaColumnParseError,
 ) -> str | None:
     if raw_value is None:
         return None
@@ -157,7 +162,7 @@ def _optional_bool(
     file_path: Path,
     label: str,
     key: str,
-    error_class: SchemaColumnParseError,
+    error_class: _SchemaColumnParseError,
 ) -> bool | None:
     if raw_value is None:
         return None
