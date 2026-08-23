@@ -34,6 +34,7 @@ from sqlbuild.executor.run._helpers.execution.results import (
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run._helpers.validation.contracts import validate_runtime_contract
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
+    build_runtime_cursor_spec,
     has_model_backed_cursor_inputs,
     resolve_runtime_cursor_bounds,
     substitute_cursor_sentinels,
@@ -45,7 +46,6 @@ from sqlbuild.executor.run.models import (
     ModelExecutionResult,
     ModelMaterializationContext,
     PostHookPhaseOutcome,
-    RuntimeCursorSpec,
 )
 from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
@@ -380,15 +380,7 @@ def _prepare_delta_relation(
             target_database=target_database,
             target_schema=target_schema,
             target_name=target_table,
-            spec=RuntimeCursorSpec(
-                cursor_column=entry.cursor_column,
-                cursor_type=entry.cursor_type,
-                cursor_grain=entry.cursor_grain,
-                cursor_start=entry.cursor_start,
-                cursor_input_relations=entry.cursor_input_relations,
-                start_cursor_override=entry.start_cursor_override,
-                end_cursor_override=entry.end_cursor_override,
-            ),
+            spec=build_runtime_cursor_spec(entry=entry),
         )
         if runtime_cursor_bounds is None:
             raise ExecutorInputError(

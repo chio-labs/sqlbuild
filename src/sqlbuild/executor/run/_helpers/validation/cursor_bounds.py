@@ -7,9 +7,12 @@ from decimal import Decimal
 from typing import Any, cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
-from sqlbuild.compiler.planner.models import CursorBounds, CursorInputRelation
-from sqlbuild.compiler.planner.types import CursorGrain, CursorType
+from sqlbuild.compiler.planner.main.execution.cursor_replay_policy import apply_cursor_replay_policy
+from sqlbuild.compiler.planner.models import CursorBounds, CursorInputRelation, ModelPlanEntry
+from sqlbuild.compiler.planner.types import BackfillAction, CursorGrain, CursorType
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run.models import RuntimeCursorSpec
 
 _TIMESTAMP_GRAIN_ORDER: dict[str, int] = {
@@ -28,6 +31,29 @@ def has_model_backed_cursor_inputs(
     """Return whether any cursor input relation is backed by another model."""
 
     return any(relation.is_model_backed for relation in cursor_input_relations)
+
+
+def build_runtime_cursor_spec(
+    *, entry: ModelPlanEntry, read_destination_cursor: bool = True
+) -> RuntimeCursorSpec:
+    """Build runtime cursor policy from the corresponding immutable model plan entry."""
+
+    if entry.cursor_column is None:
+        raise ExecutorInputError("runtime-owned cursor resolution requires cursor_column")
+    return RuntimeCursorSpec(
+        cursor_column=entry.cursor_column,
+        cursor_type=entry.cursor_type,
+        cursor_grain=entry.cursor_grain,
+        cursor_start=entry.cursor_start,
+        cursor_input_relations=entry.cursor_input_relations,
+        start_cursor_override=entry.start_cursor_override,
+        end_cursor_override=entry.end_cursor_override,
+        lookback=entry.lookback,
+        backfill_duration=(
+            entry.backfill.duration if entry.backfill.action == BackfillAction.BOUNDED else None
+        ),
+        read_destination_cursor=read_destination_cursor,
+    )
 
 
 def resolve_runtime_cursor_bounds(
@@ -53,19 +79,21 @@ def resolve_runtime_cursor_bounds(
     if not upstream_parts:
         return None
 
-    target_max_raw: object | None = _query_target_max_raw(
-        adapter=adapter,
-        connection=connection,
-        target_relation=target_relation,
-        target_database=target_database,
-        target_schema=target_schema,
-        target_name=target_name,
-        cursor_column=spec.cursor_column,
-    )
+    target_max_raw: object | None = None
+    if spec.read_destination_cursor:
+        target_max_raw = _query_target_max_raw(
+            adapter=adapter,
+            connection=connection,
+            target_relation=target_relation,
+            target_database=target_database,
+            target_schema=target_schema,
+            target_name=target_name,
+            cursor_column=spec.cursor_column,
+        )
 
     derived_alias: str = " AS __cursor_bounds" if adapter.requires_derived_table_aliases() else ""
     sql: str = (
-        "SELECT MIN(_min), MAX(_max) FROM ("
+        "SELECT MIN(_min), CASE WHEN COUNT(*) = COUNT(_max) THEN MIN(_max) END FROM ("
         + " UNION ALL ".join(upstream_parts)
         + f"){derived_alias}"
     )
@@ -102,13 +130,6 @@ def resolve_runtime_cursor_bounds(
         end: str | None = _normalize_bound(value=row[1], is_end=True)
     if start is None or end is None:
         return None
-    if spec.start_cursor_override is not None:
-        start = spec.start_cursor_override
-    start = _apply_cursor_start_floor(
-        current_start=start,
-        cursor_start=spec.cursor_start,
-        cursor_type=cursor_type,
-    )
     if spec.end_cursor_override is not None:
         end = _apply_cursor_end_ceiling(
             current_end=end,
@@ -116,6 +137,17 @@ def resolve_runtime_cursor_bounds(
             cursor_type=cursor_type,
             effective_grain=effective_grain,
         )
+    if spec.start_cursor_override is not None:
+        start = spec.start_cursor_override
+    start = apply_cursor_replay_policy(
+        start=start,
+        end=end,
+        cursor_start=spec.cursor_start,
+        cursor_type=cursor_type,
+        lookback=spec.lookback,
+        backfill_duration=spec.backfill_duration,
+        has_start_override=spec.start_cursor_override is not None,
+    )
     return CursorBounds(start=start, end=end)
 
 
@@ -142,7 +174,11 @@ def substitute_cursor_sentinels(*, sql: str, bounds: CursorBounds) -> str:
     """Substitute runtime cursor sentinels with concrete bounds."""
 
     result: str = sql.replace(MICROBATCH_START_SENTINEL, bounds.start)
-    return result.replace(MICROBATCH_END_SENTINEL, bounds.end)
+    result = result.replace(MICROBATCH_END_SENTINEL, bounds.end)
+    _, has_intrinsics = resolve_cursor_intrinsics(sql=result)
+    if has_intrinsics or MICROBATCH_START_SENTINEL in result or MICROBATCH_END_SENTINEL in result:
+        raise ExecutorInputError("executable model SQL contains unresolved cursor markers")
+    return result
 
 
 def _query_target_max_raw(

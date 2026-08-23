@@ -660,6 +660,14 @@ class PlanEntryCursorOverrideTestCase:
 
 
 @dataclass(frozen=True)
+class PlanEntryCursorGrainTestCase:
+    description: str
+    cursor_grain: str
+    upstream_max: str
+    expected_end: str
+
+
+@dataclass(frozen=True)
 class CursorTypeCheckTestCase:
     description: str
     cursor_column: str | None

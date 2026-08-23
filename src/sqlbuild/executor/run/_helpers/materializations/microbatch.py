@@ -19,10 +19,6 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
-from sqlbuild.compiler.planner.constants import (
-    MICROBATCH_END_SENTINEL,
-    MICROBATCH_START_SENTINEL,
-)
 from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
 from sqlbuild.compiler.planner.main.execution.effective_microbatch_batch_size import (
     resolve_effective_microbatch_batch_size,
@@ -61,9 +57,11 @@ from sqlbuild.executor.run._helpers.materializations.incremental import (
 )
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
+    build_runtime_cursor_spec,
     has_model_backed_cursor_inputs,
     resolve_effective_timestamp_grain,
     resolve_runtime_cursor_bounds,
+    substitute_cursor_sentinels,
 )
 from sqlbuild.executor.run._helpers.validation.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.models import (
@@ -76,13 +74,14 @@ from sqlbuild.executor.run.models import (
     ModelExecutionResult,
     ModelMaterializationContext,
     PostHookPhaseOutcome,
-    RuntimeCursorSpec,
 )
 from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
+_EMPTY_INTEGER_CURSOR_BOUND: str = "0"
+_EMPTY_TIMESTAMP_CURSOR_BOUND: str = "1970-01-01T00:00:00"
 
 
 @dataclass(frozen=True)
@@ -706,8 +705,9 @@ def _plan_microbatch_windows(
     adapter: BaseAdapter = context.adapter
     connection: Any = context.connection
     runtime_owned_cursor_bounds: bool = has_model_backed_cursor_inputs(entry.cursor_input_relations)
+    runtime_discovery: bool = runtime_owned_cursor_bounds or is_full_refresh
     microbatch_range: CursorBounds | None = entry.microbatch_range
-    if runtime_owned_cursor_bounds:
+    if runtime_discovery:
         if entry.cursor_column is None:
             return _MicrobatchPlan(
                 early_exit=build_failed_result(
@@ -727,14 +727,9 @@ def _plan_microbatch_windows(
                 target_database=entry.destination.database,
                 target_schema=entry.destination.schema,
                 target_name=entry.destination.name,
-                spec=RuntimeCursorSpec(
-                    cursor_column=entry.cursor_column,
-                    cursor_type=entry.cursor_type,
-                    cursor_grain=entry.cursor_grain,
-                    cursor_start=entry.cursor_start,
-                    cursor_input_relations=entry.cursor_input_relations,
-                    start_cursor_override=entry.start_cursor_override,
-                    end_cursor_override=entry.end_cursor_override,
+                spec=build_runtime_cursor_spec(
+                    entry=entry,
+                    read_destination_cursor=not is_full_refresh,
                 ),
             )
         except Exception as exc:
@@ -748,40 +743,10 @@ def _plan_microbatch_windows(
                     statement_recorder=statement_recorder,
                 )
             )
-    elif is_full_refresh:
-        try:
-            microbatch_range = _discover_cursor_range(
-                adapter=adapter,
-                connection=connection,
-                cursor_type=entry.cursor_type,
-                cursor_start=entry.cursor_start,
-                cursor_input_relations=entry.cursor_input_relations,
-            )
-        except Exception as exc:
-            return _MicrobatchPlan(
-                early_exit=build_failed_result(
-                    entry=entry,
-                    phase=ExecutionPhase.STAGING,
-                    error=f"failed to discover microbatch cursor range: {exc}",
-                    warnings=warnings,
-                    audit_results=audit_results,
-                    statement_recorder=statement_recorder,
-                )
-            )
+    if is_full_refresh:
         if microbatch_range is None:
-            return _MicrobatchPlan(
-                early_exit=ModelExecutionResult(
-                    model_name=entry.name,
-                    status=ExecutionStatus.SUCCESS,
-                    promoted_relation=target_qualified,
-                    audit_results=tuple(audit_results),
-                    warning_messages=(
-                        *tuple(warnings),
-                        "microbatch range is empty; no batches to process",
-                    ),
-                    lifecycle_events=statement_recorder.snapshot(),
-                )
-            )
+            empty_bound: str = _empty_full_refresh_bound(entry=entry)
+            microbatch_range = CursorBounds(start=empty_bound, end=empty_bound)
 
     if microbatch_range is None:
         return _MicrobatchPlan(
@@ -810,7 +775,7 @@ def _plan_microbatch_windows(
         )
 
     effective_batch_size: str = batch_size
-    if runtime_owned_cursor_bounds:
+    if runtime_discovery:
         effective_timestamp_grain: str | None = resolve_effective_timestamp_grain(
             cursor_type=cursor_type,
             downstream_grain=entry.cursor_grain,
@@ -822,11 +787,15 @@ def _plan_microbatch_windows(
                 effective_grain=effective_timestamp_grain,
             )
 
-    batches: tuple[BatchWindow, ...] = compute_batch_windows(
-        start=microbatch_range.start,
-        end=microbatch_range.end,
-        batch_size=effective_batch_size,
-        cursor_type=cursor_type,
+    batches: tuple[BatchWindow, ...] = (
+        (BatchWindow(start=microbatch_range.start, end=microbatch_range.end, index=0),)
+        if is_full_refresh and microbatch_range.start == microbatch_range.end
+        else compute_batch_windows(
+            start=microbatch_range.start,
+            end=microbatch_range.end,
+            batch_size=effective_batch_size,
+            cursor_type=cursor_type,
+        )
     )
 
     if not batches:
@@ -845,6 +814,14 @@ def _plan_microbatch_windows(
         effective_batch_size=effective_batch_size,
         resolved_range=microbatch_range,
     )
+
+
+def _empty_full_refresh_bound(*, entry: ModelPlanEntry) -> str:
+    if entry.cursor_start is not None:
+        return entry.cursor_start
+    if entry.cursor_type == CursorType.INTEGER:
+        return _EMPTY_INTEGER_CURSOR_BOUND
+    return _EMPTY_TIMESTAMP_CURSOR_BOUND
 
 
 def _format_resolved_microbatch_progress(
@@ -911,9 +888,10 @@ def _substitute_sentinels(
 ) -> str:
     """Replace microbatch cursor sentinels with concrete batch bounds."""
 
-    result: str = sql.replace(MICROBATCH_START_SENTINEL, batch_start)
-    result = result.replace(MICROBATCH_END_SENTINEL, batch_end)
-    return result
+    return substitute_cursor_sentinels(
+        sql=sql,
+        bounds=CursorBounds(start=batch_start, end=batch_end),
+    )
 
 
 def _advance_discovered_end_bound(*, raw_max: Any) -> str:
@@ -951,7 +929,7 @@ def _discover_cursor_range(
             f"SELECT MIN({cursor_input.cursor_column}) AS _min, "
             f"MAX({cursor_input.cursor_column}) AS _max FROM {cursor_input.relation}"
         )
-    discovery_sql: str = "SELECT MIN(_min), MAX(_max) FROM (" + " UNION ALL ".join(parts) + ")"
+    discovery_sql: str = "SELECT MIN(_min), MIN(_max) FROM (" + " UNION ALL ".join(parts) + ")"
     cursor: Any = adapter.execute(connection=connection, sql=discovery_sql)
     row: Any = cursor.fetchone()
     if row is None or row[0] is None or row[1] is None:

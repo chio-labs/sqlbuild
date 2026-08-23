@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import advance_cursor_end
@@ -11,7 +11,7 @@ from sqlbuild.compiler.planner.constants import (
     MICROBATCH_START_SENTINEL,
 )
 from sqlbuild.compiler.planner.models import CursorBounds, Duration, ModelCursorSnapshot
-from sqlbuild.compiler.planner.types import CursorType
+from sqlbuild.compiler.planner.types import CursorGrain, CursorType
 
 
 def compute_cursor_bounds(
@@ -34,6 +34,12 @@ def compute_cursor_bounds(
     raw_end: str | None = _compute_raw_end(cursor_snapshot)
     if raw_end is None:
         return None
+    if cursor_type in {CursorType.INTEGER, CursorType.TIMESTAMP}:
+        raw_end = _advance_discovered_end(
+            value=raw_end,
+            cursor_type=cursor_type,
+            cursor_grain=cursor_grain,
+        )
 
     raw_start: str | None = _compute_raw_start(cursor_snapshot)
     if raw_start is None:
@@ -48,23 +54,45 @@ def compute_cursor_bounds(
             cursor_grain=cursor_grain,
         )
 
-    if backfill_duration is not None and start_cursor_override is None:
-        adjusted_start: str | None = _subtract_duration(value=raw_end, duration=backfill_duration)
-        if adjusted_start is not None:
-            raw_start = adjusted_start
-
-    if lookback is not None and start_cursor_override is None and backfill_duration is None:
-        adjusted_lookback: str | None = _subtract_duration(value=raw_start, duration=lookback)
-        if adjusted_lookback is not None:
-            raw_start = adjusted_lookback
-
-    raw_start = _apply_cursor_start_floor(
-        current_start=raw_start,
+    raw_start = apply_cursor_replay_policy(
+        start=raw_start,
+        end=raw_end,
         cursor_start=cursor_start,
         cursor_type=cursor_type,
+        lookback=lookback,
+        backfill_duration=backfill_duration,
+        has_start_override=start_cursor_override is not None,
     )
 
     return CursorBounds(start=raw_start, end=raw_end)
+
+
+def apply_cursor_replay_policy(
+    *,
+    start: str,
+    end: str,
+    cursor_start: str | None,
+    cursor_type: str | None,
+    lookback: str | None,
+    backfill_duration: str | None,
+    has_start_override: bool,
+) -> str:
+    """Apply replay, lookback, and configured lower-bound policy to a cursor start."""
+
+    effective_start: str = start
+    if backfill_duration is not None and not has_start_override:
+        adjusted_start: str | None = _subtract_duration(value=end, duration=backfill_duration)
+        if adjusted_start is not None:
+            effective_start = adjusted_start
+    if lookback is not None and not has_start_override and backfill_duration is None:
+        adjusted_lookback: str | None = _subtract_duration(value=effective_start, duration=lookback)
+        if adjusted_lookback is not None:
+            effective_start = adjusted_lookback
+    return _apply_cursor_start_floor(
+        current_start=effective_start,
+        cursor_start=cursor_start,
+        cursor_type=cursor_type,
+    )
 
 
 def _advance_inclusive_operator_end(
@@ -77,6 +105,36 @@ def _advance_inclusive_operator_end(
 
     return advance_cursor_end(
         value=end_cursor_override,
+        cursor_type=cursor_type,
+        cursor_grain=cursor_grain,
+    )
+
+
+def _advance_discovered_end(
+    *, value: str, cursor_type: str | None, cursor_grain: str | None
+) -> str:
+    if cursor_type == CursorType.TIMESTAMP and cursor_grain in {
+        CursorGrain.MONTH,
+        CursorGrain.YEAR,
+    }:
+        plain_date: date | None
+        try:
+            plain_date = date.fromisoformat(value)
+        except ValueError:
+            plain_date = None
+        duration: Duration = Duration(
+            months=1 if cursor_grain == CursorGrain.MONTH else 0,
+            years=1 if cursor_grain == CursorGrain.YEAR else 0,
+        )
+        if plain_date is not None:
+            advanced: datetime = duration.add_to(datetime.combine(plain_date, datetime.min.time()))
+            return advanced.date().isoformat()
+        try:
+            return duration.add_to(datetime.fromisoformat(value)).isoformat()
+        except ValueError:
+            return value
+    return advance_cursor_end(
+        value=value,
         cursor_type=cursor_type,
         cursor_grain=cursor_grain,
     )

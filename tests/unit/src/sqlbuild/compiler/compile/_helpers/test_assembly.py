@@ -418,6 +418,10 @@ FUNCTION (
 SELECT p_customer_id AS customer_id, 1 AS order_id
 """.strip()
                 + "\n",
+                "models/customer_order_summary.sql": (
+                    "MODEL ();\n\nSELECT customer_id, order_id "
+                    'FROM __table_fn("customer_orders")(42)\n'
+                ),
                 "tests/unit/test_customer_orders.sql": """
 TEST (mode: table_fn, name: "returns customer orders");
 
@@ -430,10 +434,17 @@ SELECT 1
 """.strip()
                 + "\n",
             },
-            expected_model_names=(),
-            expected_model_deps=(),
-            expected_model_target_names=(),
-            expected_model_target_schemas=(),
+            expected_model_names=("customer_order_summary",),
+            expected_model_deps=(
+                (
+                    CompiledObjectKey(
+                        resource_type=CompiledResourceType.TABLE_FN,
+                        name="customer_orders",
+                    ),
+                ),
+            ),
+            expected_model_target_names=("customer_order_summary",),
+            expected_model_target_schemas=(None,),
             expected_source_names=(),
             expected_seed_names=(),
             expected_audit_names=(),
@@ -447,7 +458,7 @@ SELECT 1
                 ),
             ),
             expected_test_expected_model_names=((),),
-            expected_model_macro_deps=(),
+            expected_model_macro_deps=((),),
             expected_test_modes=("table_fn",),
             expected_tested_macro_names=(("customer_orders",),),
         ),

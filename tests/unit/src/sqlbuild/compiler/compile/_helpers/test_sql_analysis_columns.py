@@ -309,7 +309,34 @@ def test_given_query_sql_when_inferring_columns_then_returns_expected(
                 ),
             ),
             expected_has_star=False,
-        )
+        ),
+        PolyglotAnalysisTestCase(
+            description="terminates direct lineage at a managed table function output",
+            query_sql='SELECT order_id FROM __table_fn("customer_orders")(42)',
+            references=(
+                CompileSqlReference(
+                    SqlReferenceKind.TABLE_FUNCTION,
+                    "customer_orders",
+                    call_argument_count=1,
+                ),
+            ),
+            expected_columns=(InferredColumn(name="order_id"),),
+            expected_lineage_columns=(
+                CompiledLineageColumnFact(
+                    output_column="order_id",
+                    upstream_columns=(
+                        CompiledLineageSourceFact(
+                            resource_type=CompiledResourceType.TABLE_FN,
+                            resource_name="customer_orders",
+                            column_name="order_id",
+                        ),
+                    ),
+                    transform_kind=ColumnTransformKind.DIRECT,
+                    confidence=ColumnLineageConfidence.HIGH,
+                ),
+            ),
+            expected_has_star=False,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -647,7 +674,61 @@ def test_given_star_projection_when_compact_analysis_disabled_then_marks_star_wi
                 ),
             ),
             expected_has_star=True,
-        )
+        ),
+        PolyglotAnalysisTestCase(
+            description="expands declared table function output columns on rich compact path",
+            query_sql='SELECT * FROM __table_fn("customer_orders")(42)',
+            references=(
+                CompileSqlReference(
+                    SqlReferenceKind.TABLE_FUNCTION,
+                    "customer_orders",
+                    call_argument_count=1,
+                ),
+            ),
+            column_nullability_by_table={
+                "__sqlbuild_table_function_customer_orders": {
+                    "status": InferredNullability.UNKNOWN,
+                    "order_id": InferredNullability.UNKNOWN,
+                }
+            },
+            column_types_by_table={
+                "__sqlbuild_table_function_customer_orders": {
+                    "status": "VARCHAR",
+                    "order_id": "BIGINT",
+                }
+            },
+            expected_columns=(
+                InferredColumn(name="status", type="VARCHAR"),
+                InferredColumn(name="order_id", type="BIGINT"),
+            ),
+            expected_lineage_columns=(
+                CompiledLineageColumnFact(
+                    output_column="status",
+                    upstream_columns=(
+                        CompiledLineageSourceFact(
+                            resource_type=CompiledResourceType.TABLE_FN,
+                            resource_name="customer_orders",
+                            column_name="status",
+                        ),
+                    ),
+                    transform_kind=ColumnTransformKind.DIRECT,
+                    confidence=ColumnLineageConfidence.HIGH,
+                ),
+                CompiledLineageColumnFact(
+                    output_column="order_id",
+                    upstream_columns=(
+                        CompiledLineageSourceFact(
+                            resource_type=CompiledResourceType.TABLE_FN,
+                            resource_name="customer_orders",
+                            column_name="order_id",
+                        ),
+                    ),
+                    transform_kind=ColumnTransformKind.DIRECT,
+                    confidence=ColumnLineageConfidence.HIGH,
+                ),
+            ),
+            expected_has_star=True,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -658,18 +739,13 @@ def test_given_star_projection_when_compact_analysis_enabled_then_expands_schema
         query_sql=test_case.query_sql,
         references=test_case.references,
         column_nullability_by_table=test_case.column_nullability_by_table,
+        column_types_by_table=test_case.column_types_by_table,
         allow_compact_analysis=True,
     )
 
     assert result.analysis_succeeded
-    assert (
-        tuple(sorted(result.columns or (), key=lambda column: column.name))
-        == test_case.expected_columns
-    )
-    assert (
-        tuple(sorted(result.lineage_columns, key=lambda column: column.output_column))
-        == test_case.expected_lineage_columns
-    )
+    assert result.columns == test_case.expected_columns
+    assert result.lineage_columns == test_case.expected_lineage_columns
     assert result.has_star is test_case.expected_has_star
 
 

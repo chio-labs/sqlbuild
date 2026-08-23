@@ -11,6 +11,7 @@ from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.compiler.compile._helpers.analysis.columns import (
     analyze_columns_and_lineage_with_polyglot,
     infer_columns_with_sql_analysis,
+    table_function_analysis_name,
 )
 from sqlbuild.compiler.compile._helpers.analysis.validation import validate_sql_syntax
 from sqlbuild.compiler.compile._helpers.deps.dependencies import (
@@ -18,6 +19,10 @@ from sqlbuild.compiler.compile._helpers.deps.dependencies import (
     function_build_deps,
     model_build_deps,
     sql_test_scope_deps,
+)
+from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
+    cursor_intrinsics_analysis_sql,
+    get_validated_model_cursor_intrinsics,
 )
 from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros,
@@ -106,12 +111,14 @@ def assemble_compiled_project(
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] = (
         _build_column_nullability_by_table(inputs)
     )
+    column_types_by_table: dict[str, dict[str, str]] = _build_column_types_by_table(inputs)
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
     model_sql_analysis_by_name: dict[str, _ModelSqlAnalysis] = {}
     if sql_analysis_enabled:
         model_sql_analysis_by_name = _analyze_model_sql_in_parallel(
             model_inputs=inputs.model_inputs,
             column_nullability_by_table=column_nullability_by_table,
+            column_types_by_table=column_types_by_table,
             inference_profile=profile,
             allow_compact_analysis=column_lineage_mode == ColumnLineageMode.RICH,
         )
@@ -139,6 +146,7 @@ def assemble_compiled_project(
                 sql_analysis_enabled=sql_analysis_enabled,
                 seed_names=seed_names,
                 column_nullability_by_table=column_nullability_by_table,
+                column_types_by_table=column_types_by_table,
                 inference_profile=profile,
                 sql_analysis=model_sql_analysis_by_name.get(model_input.model_file.file_path.stem),
                 allow_compact_analysis=column_lineage_mode == ColumnLineageMode.RICH,
@@ -207,11 +215,16 @@ def _assemble_compiled_model(
     sql_analysis_enabled: bool,
     seed_names: frozenset[str] = frozenset(),
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
+    column_types_by_table: dict[str, dict[str, str]] | None = None,
     inference_profile: ExpressionInferenceProfile | None = None,
     sql_analysis: _ModelSqlAnalysis | None = None,
     allow_compact_analysis: bool = False,
 ) -> CompiledModel:
     model_name: str = model_input.model_file.file_path.stem
+    analysis_query_sql: str = cursor_intrinsics_analysis_sql(
+        sql=model_input.query_sql,
+        cursor_type=model_input.config.values.get("cursor_type"),
+    )
     inferred_columns: tuple[InferredColumn, ...] | None = None
     fast_lineage_columns: tuple[CompiledLineageColumnFact, ...] | None = None
     fast_lineage_has_star: bool = False
@@ -224,10 +237,11 @@ def _assemble_compiled_model(
             sql_analysis.polyglot_analysis
             if sql_analysis is not None
             else analyze_columns_and_lineage_with_polyglot(
-                query_sql=model_input.query_sql,
+                query_sql=analysis_query_sql,
                 references=model_input.references,
                 placeholders=placeholders,
                 column_nullability_by_table=column_nullability_by_table,
+                column_types_by_table=column_types_by_table,
                 inference_profile=profile,
                 allow_compact_analysis=allow_compact_analysis,
             )
@@ -239,14 +253,14 @@ def _assemble_compiled_model(
         else:
             if model_input.sql_validation_enabled:
                 validate_sql_syntax(
-                    query_sql=model_input.query_sql,
+                    query_sql=analysis_query_sql,
                     model_name=model_name,
                     file_path=model_input.model_file.file_path,
                     placeholders=placeholders,
                     dialect=profile.sql_analysis_dialect,
                 )
             inferred_columns = infer_columns_with_sql_analysis(
-                query_sql=model_input.query_sql,
+                query_sql=analysis_query_sql,
                 placeholders=placeholders,
                 column_nullability_by_table=column_nullability_by_table,
                 inference_profile=profile,
@@ -254,7 +268,7 @@ def _assemble_compiled_model(
     elif model_input.sql_validation_enabled:
         profile = inference_profile or ExpressionInferenceProfile()
         validate_sql_syntax(
-            query_sql=model_input.query_sql,
+            query_sql=analysis_query_sql,
             model_name=model_name,
             file_path=model_input.model_file.file_path,
             placeholders=placeholders,
@@ -286,6 +300,7 @@ def _analyze_model_sql_in_parallel(
     *,
     model_inputs: tuple[CompileModelInput, ...],
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+    column_types_by_table: dict[str, dict[str, str]],
     inference_profile: ExpressionInferenceProfile,
     allow_compact_analysis: bool,
 ) -> dict[str, _ModelSqlAnalysis]:
@@ -296,6 +311,7 @@ def _analyze_model_sql_in_parallel(
             _model_name(model_input): _analyze_model_sql(
                 model_input=model_input,
                 column_nullability_by_table=column_nullability_by_table,
+                column_types_by_table=column_types_by_table,
                 inference_profile=inference_profile,
                 allow_compact_analysis=allow_compact_analysis,
             )
@@ -308,6 +324,7 @@ def _analyze_model_sql_in_parallel(
                 lambda model_input: _analyze_model_sql(
                     model_input=model_input,
                     column_nullability_by_table=column_nullability_by_table,
+                    column_types_by_table=column_types_by_table,
                     inference_profile=inference_profile,
                     allow_compact_analysis=allow_compact_analysis,
                 ),
@@ -324,16 +341,21 @@ def _analyze_model_sql(
     *,
     model_input: CompileModelInput,
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+    column_types_by_table: dict[str, dict[str, str]],
     inference_profile: ExpressionInferenceProfile,
     allow_compact_analysis: bool,
 ) -> _ModelSqlAnalysis:
     placeholders: dict[str, str] | None = _model_placeholders(model_input)
     return _ModelSqlAnalysis(
         polyglot_analysis=analyze_columns_and_lineage_with_polyglot(
-            query_sql=model_input.query_sql,
+            query_sql=cursor_intrinsics_analysis_sql(
+                sql=model_input.query_sql,
+                cursor_type=model_input.config.values.get("cursor_type"),
+            ),
             references=model_input.references,
             placeholders=placeholders,
             column_nullability_by_table=column_nullability_by_table,
+            column_types_by_table=column_types_by_table,
             inference_profile=inference_profile,
             allow_compact_analysis=allow_compact_analysis,
         ),
@@ -372,6 +394,23 @@ def _build_column_nullability_by_table(
         facts[source_input.source_entry.name] = _source_column_nullability(
             source_input.source_entry.columns
         )
+    for function_input in inputs.sql_function_inputs:
+        if not function_input.return_columns:
+            continue
+        facts[table_function_analysis_name(function_input.name)] = {
+            column.name: InferredNullability.UNKNOWN for column in function_input.return_columns
+        }
+    return facts
+
+
+def _build_column_types_by_table(inputs: CompileProjectInputs) -> dict[str, dict[str, str]]:
+    facts: dict[str, dict[str, str]] = {}
+    for function_input in inputs.sql_function_inputs:
+        if not function_input.return_columns:
+            continue
+        facts[table_function_analysis_name(function_input.name)] = {
+            column.name: column.type for column in function_input.return_columns
+        }
     return facts
 
 
@@ -723,12 +762,16 @@ def _build_test_model_query_overrides(
     for model_input in model_inputs:
         model_name: str = model_input.model_file.file_path.stem
         macro_source_sql: str = model_input.macro_source_sql or model_input.query_sql
-        overrides[model_name] = expand_sql_macros(
-            sql=macro_source_sql,
-            file_path=model_input.model_file.file_path,
-            loaded_macros=inputs.loaded_macros,
-            macro_overrides=test_input.payload.macro_mocks,
-            macro_context=macro_context,
+        overrides[model_name] = get_validated_model_cursor_intrinsics(
+            sql=expand_sql_macros(
+                sql=macro_source_sql,
+                file_path=model_input.model_file.file_path,
+                loaded_macros=inputs.loaded_macros,
+                macro_overrides=test_input.payload.macro_mocks,
+                macro_context=macro_context,
+            ),
+            config_values=model_input.config.values,
+            model_name=model_name,
         )
     return overrides
 

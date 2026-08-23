@@ -287,6 +287,26 @@ def test_given_dbt_ref_when_resolving_then_returns_expected_sql(
             query_sql='SELECT * FROM __table_fn("customer_orders")',
             expected_sql='SELECT * FROM __table_fn("customer_orders")',
         ),
+        RefResolutionTestCase(
+            description="ignores table function marker in a string literal",
+            query_sql="SELECT '__table_fn(\"customer_orders\")(42)' AS example",
+            expected_sql="SELECT '__table_fn(\"customer_orders\")(42)' AS example",
+        ),
+        RefResolutionTestCase(
+            description="ignores table function marker in a quoted identifier",
+            query_sql='SELECT "__table_fn(""customer_orders"")(42)"',
+            expected_sql='SELECT "__table_fn(""customer_orders"")(42)"',
+        ),
+        RefResolutionTestCase(
+            description="ignores table function marker in a line comment",
+            query_sql='SELECT 1 -- __table_fn("customer_orders")(42)',
+            expected_sql='SELECT 1 -- __table_fn("customer_orders")(42)',
+        ),
+        RefResolutionTestCase(
+            description="ignores table function marker in a block comment",
+            query_sql='SELECT /* __table_fn("customer_orders")(42) */ 1',
+            expected_sql='SELECT /* __table_fn("customer_orders")(42) */ 1',
+        ),
     ],
     ids=lambda case: case.description,
 )

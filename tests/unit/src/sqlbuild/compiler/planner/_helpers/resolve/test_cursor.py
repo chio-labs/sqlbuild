@@ -62,6 +62,40 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types impor
             expected_bounds=CursorBounds(start="2024-01-10", end="2024-01-15"),
         ),
         CursorBoundsTestCase(
+            description="typed timestamp advances the upstream maximum to an exclusive end",
+            cursor_snapshot=ModelCursorSnapshot(
+                target_max="2024-01-10T00:00:00",
+                upstream_mins=("2024-01-01T00:00:00",),
+                upstream_maxes=("2024-01-15T06:00:00",),
+            ),
+            lookback=None,
+            backfill_duration=None,
+            start_cursor_override=None,
+            end_cursor_override=None,
+            cursor_type=CursorType.TIMESTAMP,
+            cursor_grain=CursorGrain.HOUR,
+            is_microbatch=False,
+            expected_bounds=CursorBounds(
+                start="2024-01-10T00:00:00",
+                end="2024-01-15T07:00:00",
+            ),
+        ),
+        CursorBoundsTestCase(
+            description="typed integer advances the upstream maximum to an exclusive end",
+            cursor_snapshot=ModelCursorSnapshot(
+                target_max="100",
+                upstream_mins=("1",),
+                upstream_maxes=("200",),
+            ),
+            lookback=None,
+            backfill_duration=None,
+            start_cursor_override=None,
+            end_cursor_override=None,
+            cursor_type=CursorType.INTEGER,
+            is_microbatch=False,
+            expected_bounds=CursorBounds(start="100", end="201"),
+        ),
+        CursorBoundsTestCase(
             description="lookback subtracts from start value",
             cursor_snapshot=ModelCursorSnapshot(
                 target_max="2024-01-15T00:00:00",
@@ -141,7 +175,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types impor
             is_microbatch=False,
             expected_bounds=CursorBounds(
                 start="2024-02-15T00:00:00",
-                end="2024-04-01T00:00:00",
+                end="2024-05-01T00:00:00",
             ),
         ),
         CursorBoundsTestCase(
@@ -159,8 +193,8 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types impor
             cursor_grain=CursorGrain.MONTH,
             is_microbatch=False,
             expected_bounds=CursorBounds(
-                start="2024-02-01T00:00:00",
-                end="2024-04-01T00:00:00",
+                start="2024-03-01T00:00:00",
+                end="2024-05-01T00:00:00",
             ),
         ),
         CursorBoundsTestCase(

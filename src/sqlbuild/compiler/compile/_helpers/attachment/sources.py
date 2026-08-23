@@ -10,6 +10,7 @@ from typing import cast
 from sqlbuild.compiler.compile._helpers.analysis.validation import (
     validate_source_expression_syntax,
 )
+from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
     expand_authored_sql,
 )
@@ -75,6 +76,11 @@ def build_source_inputs(
                 public_constants=public_constants,
             )
             source_expression: str | None = source_entry.expression
+            if source_expression is not None:
+                reject_cursor_intrinsics(
+                    sql=source_expression,
+                    context=f"Source expression '{source_entry.name}'",
+                )
             should_validate_expression: bool = (
                 source_expression is not None and sql_validation_enabled
             )

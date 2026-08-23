@@ -6,7 +6,9 @@ from collections.abc import Callable, Mapping
 
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.contract.types import TablePromotionMode
+from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import (
     IncrementalMode,
@@ -14,6 +16,10 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
+from sqlbuild.compiler.references.main.assert_no_unresolved_sql_markers import (
+    assert_no_unresolved_sql_markers,
+)
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.build.constants import (
     BUILD_CUSTOM_MATERIALIZATION_MISSING_CODE,
     BUILD_SOURCE_FRESHNESS_BLOCKED_CODE,
@@ -91,6 +97,8 @@ def _dispatch_model(
             error_code=_plan_skip_error_code(entry),
         )
 
+    _assert_model_sql_ready_for_execution(entry)
+
     if entry.action == PlanAction.CUSTOM:
         mat_name: str | None = entry.custom_materialization_name
         registry: Mapping[str, Callable[..., MaterializationResult]] = custom_materializations or {}
@@ -149,7 +157,27 @@ def _dispatch_model(
         context=context,
         declared_columns=entry.declared_columns,
         promotion_mode=promotion_mode,
+        is_full_refresh=entry.reason == PlanReason.FULL_REFRESH,
     )
+
+
+def _assert_model_sql_ready_for_execution(entry: ModelPlanEntry) -> None:
+    """Reject compiler markers immediately before materialization dispatch."""
+
+    context: str = f"Model '{entry.name}' executable SQL"
+    assert_no_unresolved_sql_markers(sql=entry.resolved_sql, context=context)
+    _, has_intrinsics = resolve_cursor_intrinsics(sql=entry.resolved_sql)
+    if has_intrinsics:
+        raise ExecutorInputError(f"{context} contains unresolved cursor intrinsics")
+    has_cursor_markers: bool = (
+        MICROBATCH_START_SENTINEL in entry.resolved_sql
+        or MICROBATCH_END_SENTINEL in entry.resolved_sql
+    )
+    runtime_resolved: bool = entry.incremental_mode == IncrementalMode.MICROBATCH or any(
+        relation.is_model_backed for relation in entry.cursor_input_relations
+    )
+    if has_cursor_markers and not runtime_resolved:
+        raise ExecutorInputError(f"{context} contains unresolved cursor markers")
 
 
 def _plan_skip_reason(entry: ModelPlanEntry) -> str:

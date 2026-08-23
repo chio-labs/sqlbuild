@@ -521,7 +521,7 @@ def build_test_project(
             mode=SqlTestMode.TABLE_FN,
             actual_cte=CompileSqlTestCte(
                 name="__table_fn_actual__",
-                sql_body="SELECT * FROM __table_fn('customer_orders')(42)",
+                sql_body='SELECT * FROM __table_fn("customer_orders")(42)',
             ),
             expected_cte=CompileSqlTestCte(
                 name="__table_fn_expected__",
