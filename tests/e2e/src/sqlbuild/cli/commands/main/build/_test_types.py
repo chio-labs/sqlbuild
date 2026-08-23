@@ -37,6 +37,12 @@ class TableFunctionDependencyBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class ReusableModelSchemaBuildE2ETestCase:
+    description: str
+    expected_rows: tuple[tuple[int, str], ...]
+
+
+@dataclass(frozen=True)
 class EnumContractBuildE2ETestCase:
     """Test case for enum-backed contract enforcement."""
 

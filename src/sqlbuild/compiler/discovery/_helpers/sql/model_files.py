@@ -91,8 +91,19 @@ def model_header_column_locations(
     header_match: re.Match[str] | None = _MODEL_HEADER_PATTERN.match(contents)
     if header_match is None:
         return {}
-    header: str = header_match.group("header")
-    header_start: int = header_match.start("header")
+    return header_column_locations(
+        contents=contents,
+        header=header_match.group("header"),
+        header_start=header_match.start("header"),
+        relative_path=relative_path,
+    )
+
+
+def header_column_locations(
+    *, contents: str, header: str, header_start: int, relative_path: Path
+) -> dict[str, SourceLocation]:
+    """Return authored column locations from a parsed SQLBuild header."""
+
     tokens: list[_ModelHeaderToken] = _tokenize_model_header(header)
     line_starts: tuple[int, ...] | None = None
     locations: dict[str, SourceLocation] = {}

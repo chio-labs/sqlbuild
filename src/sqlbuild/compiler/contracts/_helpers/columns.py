@@ -113,7 +113,11 @@ def _extra_column_diagnostics(model: CompiledModel) -> tuple[CompilerDiagnostic,
                 column_name=inferred_column.name,
                 path=model.relative_path,
                 location=model.output_column_locations.get(inferred_column.name),
-                help="add the column to MODEL(columns) or remove it from the SELECT list",
+                help=(
+                    "add the column to the named SCHEMA or remove it from the SELECT list"
+                    if model.schema_entry.model_schema is not None
+                    else "add the column to MODEL(columns) or remove it from the SELECT list"
+                ),
             )
         )
     return tuple(diagnostics)
@@ -167,7 +171,11 @@ def _missing_column_diagnostic(*, model: CompiledModel, column: SchemaColumn) ->
         column_name=column.name,
         path=model.relative_path,
         location=column.location,
-        help=f"add {column.name} to the SELECT list or remove it from MODEL(columns)",
+        help=(
+            f"add {column.name} to the SELECT list or remove it from the named SCHEMA"
+            if model.schema_entry is not None and model.schema_entry.model_schema is not None
+            else f"add {column.name} to the SELECT list or remove it from MODEL(columns)"
+        ),
     )
 
 

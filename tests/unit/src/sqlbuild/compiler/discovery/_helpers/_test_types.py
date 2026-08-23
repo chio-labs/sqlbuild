@@ -196,6 +196,19 @@ class ParseDeclarationFileErrorTestCase:
 
 
 @dataclass(frozen=True)
+class ParseModelSchemaDeclarationTestCase:
+    description: str
+    contents: str
+    expected_names: tuple[str, ...]
+    expected_description: str
+    expected_parent: str
+    expected_base_column_names: tuple[str, ...]
+    expected_base_column_line: int
+    expected_child_column_line: int
+    expected_audit_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ModelHeaderColumnLocationTestCase:
     description: str
     contents: str
