@@ -127,7 +127,7 @@ MODEL (
   contract enforced,
   description "Exact order model",
   columns (
-    order_id (audits [not_null, unique]),
+    order_id (audits [not_null, unique, unique]),
     quality_flag (type BOOLEAN, nullable false),
   ),
 );
