@@ -255,6 +255,7 @@ class SchemaAuditInstance:
     severity: str | None = None
     run_scope: str | None = None
     always_run: bool = False
+    location: SourceLocation | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)

@@ -52,6 +52,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditFile,
     DiscoveredProjectInputs,
     EnumDeclaration,
+    ModelSchemaDeclaration,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
@@ -264,7 +265,9 @@ def _build_models_with_declarations(
     public_enums, public_constants = build_public_declaration_indexes(
         discovered_inputs=discovered_inputs
     )
-    public_model_schemas = build_public_model_schema_index(discovered_inputs=discovered_inputs)
+    public_model_schemas: dict[str, ModelSchemaDeclaration] = build_public_model_schema_index(
+        discovered_inputs=discovered_inputs
+    )
     declarations: DeclarationResolutionContext = DeclarationResolutionContext(
         enums=public_enums,
         constants=public_constants,

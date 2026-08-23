@@ -9,10 +9,24 @@ from textwrap import dedent
 import duckdb
 import pytest
 
+from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
+    ReusableModelSchemaBuildE2ETestCase,
+)
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ReusableModelSchemaBuildE2ETestCase(
+            description="view table and incremental consume inherited schemas",
+            expected_rows=((1, "feed"),),
+        )
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_reusable_inherited_schemas_when_building_then_all_materializations_succeed(
+    test_case: ReusableModelSchemaBuildE2ETestCase,
     tmp_path: Path,
 ) -> None:
     project_dir: Path = prepare_inline_project(
@@ -42,9 +56,9 @@ def test_given_reusable_inherited_schemas_when_building_then_all_materialization
                 """
                 SCHEMA (
                   name event,
-                  columns (
-                    event_id (type INTEGER, nullable false),
-                    observed_at (type TIMESTAMP, nullable false),
+                    columns (
+                        event_id (type INTEGER, nullable false, audits [not_null]),
+                        observed_at (type TIMESTAMP, nullable false, audits [not_null]),
                   ),
                 );
                 """
@@ -102,13 +116,18 @@ def test_given_reusable_inherited_schemas_when_building_then_all_materialization
                   cursor_type timestamp,
                   cursor_grain second,
                   model_schema sourced_event,
+                  columns (
+                    event_id (audits [unique]),
+                    batch_id (type INTEGER, nullable false),
+                  ),
                   contract enforced,
                 );
 
                 SELECT
                   event_id,
                   observed_at,
-                  source
+                  source,
+                  1::INTEGER AS batch_id
                 FROM __ref("event_table")
                 """
             ).strip()
@@ -136,7 +155,7 @@ def test_given_reusable_inherited_schemas_when_building_then_all_materialization
         "SELECT event_id, source FROM event_incremental ORDER BY event_id"
     ).fetchall()
     connection.close()
-    assert rows == [(1, "feed")]
+    assert tuple(rows) == test_case.expected_rows
 
 
 if __name__ == "__main__":

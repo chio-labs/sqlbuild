@@ -181,7 +181,7 @@ def validate_incremental_config(
         raise CompileInputError(f"model '{model_name}': allow_full_refresh must be a boolean")
 
     declared_column_names: frozenset[str] | None = _contract_declared_column_names(
-        config,
+        config=config,
         declared_columns=declared_columns,
     )
     if declared_column_names is not None:
@@ -457,7 +457,7 @@ def validate_snapshot_config(
             )
 
     declared_column_names: frozenset[str] | None = _contract_declared_column_names(
-        config,
+        config=config,
         declared_columns=declared_columns,
     )
     if declared_column_names is not None:
@@ -576,18 +576,17 @@ def _has_config_value(value: object | None) -> bool:
 
 
 def _contract_declared_column_names(
-    config: CompileModelConfig,
     *,
+    config: CompileModelConfig,
     declared_columns: tuple[SchemaColumn, ...] | None = None,
 ) -> frozenset[str] | None:
     if config.values.get("contract") != ContractPolicy.ENFORCED:
         return None
-    if declared_columns is not None:
-        return frozenset(column.name for column in declared_columns)
+    resolved_names: frozenset[str] = frozenset(column.name for column in declared_columns or ())
     raw_columns: object | None = config.values.get("columns")
     if not isinstance(raw_columns, dict):
-        return frozenset()
-    return frozenset(name for name in raw_columns if isinstance(name, str))
+        return resolved_names
+    return resolved_names | frozenset(name for name in raw_columns if isinstance(name, str))
 
 
 def _string_sequence(value: object | None) -> tuple[str, ...]:
