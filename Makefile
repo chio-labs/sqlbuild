@@ -10,7 +10,7 @@ SCENE ?= all
 PREVIEW_ARGS ?=
 
 cli-preview:
-	uv run python scripts/preview_cli.py $(SCENE) $(PREVIEW_ARGS)
+	uv run python -m scripts.preview_cli $(SCENE) $(PREVIEW_ARGS)
 
 
 lint:
