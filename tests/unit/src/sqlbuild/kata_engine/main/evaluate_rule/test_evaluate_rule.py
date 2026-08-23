@@ -25,7 +25,7 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate_rule.helpers import requi
                 config={"required_domain": "race"},
                 expected_fault_count=1,
             ),
-            expected_code="XDOMAIN001",
+            expected_code="XSQBKD001",
             expected_path="models/mart/market__mart__prices.sql",
         )
     ],

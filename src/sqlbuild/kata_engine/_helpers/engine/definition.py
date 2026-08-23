@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import inspect
-import re
 from collections.abc import Callable
 from typing import cast
 
@@ -13,7 +12,6 @@ from sqlbuild.kata_engine.models import KataRule, RuleOption
 from sqlbuild.kata_engine.types import KataCheck
 
 _RULE_ATTRIBUTE: str = "__sqlbuild_kata_rule__"
-_CODE_PATTERN: re.Pattern[str] = re.compile(r"^X(?:[A-Z]+)?\d{3}$")
 
 
 def define_kata(
@@ -29,9 +27,13 @@ def define_kata(
     """Attach validated custom kata metadata while returning the check unchanged."""
 
     def decorate(check: KataCheck) -> KataCheck:
-        if not _CODE_PATTERN.fullmatch(code):
-            raise KataError(f"custom kata rule {code!r} must use an exact X* rule code")
-        if not family.strip() or not slug.strip() or not message.strip() or not remediation.strip():
+        if (
+            not code.strip()
+            or not family.strip()
+            or not slug.strip()
+            or not message.strip()
+            or not remediation.strip()
+        ):
             raise KataError(f"custom kata rule {code} has an incomplete metadata envelope")
         names: tuple[str, ...] = tuple(option.name for option in options)
         if len(names) != len(set(names)):

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to publish, for example v0.2.0"
+        description: "Release tag to publish, for example v0.52.0"
         required: true
         type: string
 
@@ -15,13 +15,11 @@ permissions:
   contents: read
 
 jobs:
-  pypi:
-    name: Publish to PyPI
+  release-tag:
+    name: Resolve release tag
     runs-on: ubuntu-latest
-    environment: pypi
-    permissions:
-      contents: read
-      id-token: write
+    outputs:
+      tag: ${{ steps.release-tag.outputs.tag }}
     steps:
       - name: Resolve release tag
         id: release-tag
@@ -42,14 +40,87 @@ jobs:
 
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
+  wheels:
+    name: Build wheel (${{ matrix.platform.name }})
+    needs: release-tag
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: linux-x86_64
+            runner: ubuntu-latest
+            target: x86_64
+          - name: linux-aarch64
+            runner: ubuntu-24.04-arm
+            target: aarch64
+          - name: macos-x86_64
+            runner: macos-latest
+            target: x86_64
+          - name: macos-arm64
+            runner: macos-latest
+            target: aarch64
+          - name: windows-x86_64
+            runner: windows-latest
+            target: x86_64
+    steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ steps.release-tag.outputs.tag }}
+          ref: ${{ needs.release-tag.outputs.tag }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --out dist --features extension-module
+          target: ${{ matrix.platform.target }}
+          manylinux: auto
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.platform.name }}
+          path: dist
 
-      - uses: astral-sh/setup-uv@v5
+  sdist:
+    name: Build sdist
+    needs: release-tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-tag.outputs.tag }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist
 
-      - name: Build distributions
-        run: uv build
-
-      - name: Publish to PyPI
+  pypi:
+    name: Publish to PyPI
+    needs:
+      - release-tag
+      - wheels
+      - sdist
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish distributions
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist

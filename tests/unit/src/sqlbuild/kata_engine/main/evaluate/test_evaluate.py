@@ -30,8 +30,8 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
             relative_path="models/mart/market__mart__prices.sql",
             sql="SELECT * FROM prices",
             config_values={"materialized": "table", "contract": "enforced"},
-            select=("KTS",),
-            expected_codes=("KTS001", "KTS201"),
+            select=("SQBKS001", "SQBKS201"),
+            expected_codes=("SQBKS001", "SQBKS201"),
         ),
         KataEvaluationTestCase(
             description="contract rule faults missing enforced contract",
@@ -39,8 +39,8 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
             relative_path="models/mart/market__mart__prices.sql",
             sql="WITH prices AS (SELECT id FROM source_prices) SELECT id FROM prices",
             config_values={"materialized": "table"},
-            select=("KTR401",),
-            expected_codes=("KTR401",),
+            select=("SQBKR401",),
+            expected_codes=("SQBKR401",),
         ),
         KataEvaluationTestCase(
             description="meaningless cte and qualified table fault",
@@ -48,8 +48,8 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
             relative_path="models/mart/market__mart__prices.sql",
             sql="WITH t1 AS (SELECT id FROM raw.prices) SELECT id FROM t1",
             config_values={"materialized": "table", "contract": "enforced"},
-            select=("KTS501", "KTL101"),
-            expected_codes=("KTL101", "KTS501"),
+            select=("SQBKS501", "SQBKL101"),
+            expected_codes=("SQBKL101", "SQBKS501"),
         ),
         KataEvaluationTestCase(
             description="comma join faults",
@@ -57,8 +57,8 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
             relative_path="models/mart/market__mart__prices.sql",
             sql="WITH joined AS (SELECT a.id FROM a, b) SELECT id FROM joined",
             config_values={"materialized": "table", "contract": "enforced"},
-            select=("KTJ001",),
-            expected_codes=("KTJ001",),
+            select=("SQBKJ001",),
+            expected_codes=("SQBKJ001",),
         ),
         KataEvaluationTestCase(
             description="join without key faults",
@@ -66,8 +66,8 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
             relative_path="models/mart/market__mart__prices.sql",
             sql="WITH joined AS (SELECT a.id FROM a JOIN b) SELECT id FROM joined",
             config_values={"materialized": "table", "contract": "enforced"},
-            select=("KTJ101",),
-            expected_codes=("KTJ101",),
+            select=("SQBKJ101",),
+            expected_codes=("SQBKJ101",),
         ),
         KataEvaluationTestCase(
             description="cross join faults",
@@ -75,8 +75,8 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
             relative_path="models/mart/market__mart__prices.sql",
             sql="WITH joined AS (SELECT a.id FROM a CROSS JOIN b) SELECT id FROM joined",
             config_values={"materialized": "table", "contract": "enforced"},
-            select=("KTJ002",),
-            expected_codes=("KTJ002",),
+            select=("SQBKJ002",),
+            expected_codes=("SQBKJ002",),
         ),
         KataEvaluationTestCase(
             description="numeric decision faults",
@@ -84,8 +84,8 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
             relative_path="models/mart/market__mart__prices.sql",
             sql="WITH filtered AS (SELECT id FROM runners WHERE runner_count > 7) SELECT id FROM filtered",
             config_values={"materialized": "table", "contract": "enforced"},
-            select=("KTH002",),
-            expected_codes=("KTH002",),
+            select=("SQBKH002",),
+            expected_codes=("SQBKH002",),
         ),
         KataEvaluationTestCase(
             description="canonical numeric decision passes",
@@ -93,7 +93,7 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
             relative_path="models/mart/market__mart__prices.sql",
             sql="WITH filtered AS (SELECT id FROM runners WHERE runner_count > 0) SELECT id FROM filtered",
             config_values={"materialized": "table", "contract": "enforced"},
-            select=("KTH002",),
+            select=("SQBKH002",),
             expected_codes=(),
         ),
         KataEvaluationTestCase(
@@ -102,8 +102,8 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
             relative_path="models/mart/market__mart_v__prices.sql",
             sql="WITH prices AS (SELECT id FROM source_prices) SELECT id FROM prices",
             config_values={"materialized": "table", "contract": "enforced"},
-            select=("KTS401",),
-            expected_codes=("KTS401",),
+            select=("SQBKS401",),
+            expected_codes=("SQBKS401",),
         ),
         KataEvaluationTestCase(
             description="retired source token faults",
@@ -111,8 +111,8 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
             relative_path="models/staging/market__stg__prices__centrum_archive.sql",
             sql="WITH prices AS (SELECT id FROM source_prices) SELECT id FROM prices",
             config_values={"materialized": "table", "contract": "enforced"},
-            select=("KTR201",),
-            expected_codes=("KTR201",),
+            select=("SQBKR201",),
+            expected_codes=("SQBKR201",),
             kata_config=KataConfig(retired_source_tokens={"centrum_archive": "amtote_archive"}),
         ),
         KataEvaluationTestCase(
@@ -121,7 +121,7 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
             relative_path="models/mart/market__mart_v__prices.sql",
             sql="WITH prices AS (SELECT id FROM source_prices) SELECT * FROM prices",
             config_values={"materialized": "view", "contract": "enforced"},
-            select=("KTS201",),
+            select=("SQBKS201",),
             expected_codes=(),
             kata_config=KataConfig(
                 select_star_allow=(
@@ -141,7 +141,7 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
                 "final AS (SELECT id FROM prices) SELECT id FROM final"
             ),
             config_values={"materialized": "table", "contract": "enforced"},
-            select=("KTS101",),
+            select=("SQBKS101",),
             expected_codes=(),
             references=(CompileSqlReference(ref_kind="ref", ref_name="market__stg__prices"),),
         ),
@@ -155,8 +155,8 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
                 "SELECT id FROM final"
             ),
             config_values={"materialized": "table", "contract": "enforced"},
-            select=("KTS101",),
-            expected_codes=("KTS101",),
+            select=("SQBKS101",),
+            expected_codes=("SQBKS101",),
             references=(CompileSqlReference(ref_kind="ref", ref_name="market__stg__prices"),),
         ),
         KataEvaluationTestCase(
@@ -169,8 +169,8 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
                 "final AS (SELECT id FROM prices_a) SELECT id FROM final"
             ),
             config_values={"materialized": "table", "contract": "enforced"},
-            select=("KTS101",),
-            expected_codes=("KTS101",),
+            select=("SQBKS101",),
+            expected_codes=("SQBKS101",),
             references=(CompileSqlReference(ref_kind="ref", ref_name="market__stg__prices"),),
         ),
         KataEvaluationTestCase(
@@ -179,8 +179,8 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
             relative_path="models/mart/market__mart__prices.sql",
             sql="WITH final AS (SELECT 1 AS id) SELECT id + 1 AS id FROM final",
             config_values={"materialized": "table", "contract": "enforced"},
-            select=("KTS002",),
-            expected_codes=("KTS002",),
+            select=("SQBKS002",),
+            expected_codes=("SQBKS002",),
         ),
         KataEvaluationTestCase(
             description="positional union star faults",
@@ -191,8 +191,8 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
                 "SELECT id FROM combined"
             ),
             config_values={"materialized": "table", "contract": "enforced"},
-            select=("KTS202",),
-            expected_codes=("KTS202",),
+            select=("SQBKS202",),
+            expected_codes=("SQBKS202",),
         ),
         KataEvaluationTestCase(
             description="nested cte faults",
@@ -203,8 +203,8 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
                 "SELECT id FROM inner_rows) SELECT id FROM outer_rows"
             ),
             config_values={"materialized": "table", "contract": "enforced"},
-            select=("KTS301",),
-            expected_codes=("KTS301",),
+            select=("SQBKS301",),
+            expected_codes=("SQBKS301",),
         ),
         KataEvaluationTestCase(
             description="passthrough skips minimum checks",
@@ -214,7 +214,7 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
                 'WITH prices AS (SELECT * FROM __ref("market__stg__prices")) SELECT * FROM prices'
             ),
             config_values={"materialized": "view"},
-            select=("KTX001", "KTX002"),
+            select=("SQBKX001", "SQBKX002"),
             expected_codes=(),
             references=(CompileSqlReference(ref_kind="ref", ref_name="market__stg__prices"),),
         ),
@@ -227,8 +227,8 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
                 "SELECT id FROM unrelated"
             ),
             config_values={"materialized": "view"},
-            select=("KTX001", "KTX002"),
-            expected_codes=("KTX001", "KTX002"),
+            select=("SQBKX001", "SQBKX002"),
+            expected_codes=("SQBKX001", "SQBKX002"),
             references=(CompileSqlReference(ref_kind="ref", ref_name="market__stg__prices"),),
         ),
     ),

@@ -10,3 +10,11 @@ class SkillFreshnessTestCase:
     changed_rule: str
     expected_fresh: bool
     expected_stale: bool
+
+
+@dataclass(frozen=True)
+class SkillDivergenceTestCase:
+    description: str
+    selected_rule: str
+    local_edit: str
+    expected_error: str

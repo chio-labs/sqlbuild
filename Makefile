@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: verify verify-quick verify-pg coverage cli-preview
+.PHONY: verify verify-quick verify-pg coverage cli-preview rust-check
 
 format:
 	uv run ruff format .
@@ -19,6 +19,13 @@ lint:
 
 type:
 	uv run ty check src tests
+
+
+rust-check:
+	cargo fmt --all --check
+	cargo clippy --workspace --all-targets --all-features -- -D warnings
+	cargo run -p sqlbuild-structure-checker --quiet -- --config fensu-structure.toml
+	cargo test --workspace --all-features
 
 
 test:

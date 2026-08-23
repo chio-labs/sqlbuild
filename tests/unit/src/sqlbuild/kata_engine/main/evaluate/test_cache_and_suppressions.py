@@ -34,7 +34,7 @@ def test_given_unchanged_builtin_inputs_when_evaluating_twice_then_second_run_hi
         sql="SELECT * FROM prices",
         config_values={},
     )
-    config: KataConfig = KataConfig(select=("KTS001",))
+    config: KataConfig = KataConfig(select=("SQBKS001",))
 
     first: KataResult = evaluate(project=project, config=config, project_dir=tmp_path)
     second: KataResult = evaluate(project=project, config=config, project_dir=tmp_path)
@@ -78,7 +78,7 @@ def test_given_authored_sql_changes_when_compiled_sql_is_same_then_cache_is_inva
         project,
         models=(replace(project.models[0], authored_sql=compiled_sql),),
     )
-    config: KataConfig = KataConfig(select=("KTH002",))
+    config: KataConfig = KataConfig(select=("SQBKH002",))
     _ = evaluate(project=first_project, config=config, project_dir=tmp_path)
 
     result: KataResult = evaluate(project=bare_project, config=config, project_dir=tmp_path)
@@ -113,10 +113,10 @@ def test_given_exact_exception_when_fault_exists_then_suppresses_fault(
         config_values={},
     )
     config: KataConfig = KataConfig(
-        select=("KTS001",),
+        select=("SQBKS001",),
         rule_exceptions=(
             RuleExemption(
-                rule="KTS001",
+                rule="SQBKS001",
                 path=relative_path,
                 reason="Migration is tracked",
             ),
@@ -153,9 +153,9 @@ def test_given_stale_exact_exception_when_evaluating_then_raises_error(
         config_values={},
     )
     config: KataConfig = KataConfig(
-        select=("KTS001",),
+        select=("SQBKS001",),
         rule_exceptions=(
-            RuleExemption(rule="KTS001", path=relative_path, reason="Migration is tracked"),
+            RuleExemption(rule="SQBKS001", path=relative_path, reason="Migration is tracked"),
         ),
     )
 
@@ -185,10 +185,10 @@ def test_given_scoped_ignore_when_fault_exists_then_suppresses_fault(
         config_values={},
     )
     config: KataConfig = KataConfig(
-        select=("KTS001",),
+        select=("SQBKS001",),
         rule_ignores=(
             RuleIgnore(
-                rules=("KTS",),
+                rules=("SQBKS",),
                 paths=("models/legacy/**",),
                 reason="Legacy migration boundary",
             ),

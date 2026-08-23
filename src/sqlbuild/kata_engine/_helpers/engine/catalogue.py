@@ -6,7 +6,6 @@ import hashlib
 import importlib
 import importlib.util
 import inspect
-import re
 import sys
 from collections.abc import Mapping
 from dataclasses import replace
@@ -15,18 +14,10 @@ from pathlib import Path
 from types import ModuleType
 
 from sqlbuild.kata_engine._helpers.engine.definition import rule_from_value
-from sqlbuild.kata_engine._helpers.rules.joins import join_rules
-from sqlbuild.kata_engine._helpers.rules.layers import layer_rules
-from sqlbuild.kata_engine._helpers.rules.literals import literal_rules
-from sqlbuild.kata_engine._helpers.rules.naming import naming_rules
-from sqlbuild.kata_engine._helpers.rules.structure import structure_rules
-from sqlbuild.kata_engine._helpers.rules.tests import test_rules
-from sqlbuild.kata_engine.constants import CUSTOM_RULE_COVERAGE_CODE, KATA_DECORATOR_TOKEN
+from sqlbuild.kata_engine._helpers.engine.native import native_catalogue, native_selected_codes
+from sqlbuild.kata_engine.constants import KATA_DECORATOR_TOKEN
 from sqlbuild.kata_engine.exceptions import KataError
-from sqlbuild.kata_engine.models import KataConfig, KataRule, RuleOption
-
-_BUILTIN_CODE_PATTERN: re.Pattern[str] = re.compile(r"^KT[A-Z]\d{3}$")
-_CUSTOM_CODE_PATTERN: re.Pattern[str] = re.compile(r"^X(?:[A-Z]+)?\d{3}$")
+from sqlbuild.kata_engine.models import KataConfig, KataFault, KataRule, RuleOption
 
 
 def build_catalogue(*, config: KataConfig, project_dir: Path) -> tuple[KataRule, ...]:
@@ -36,15 +27,7 @@ def build_catalogue(*, config: KataConfig, project_dir: Path) -> tuple[KataRule,
         *_load_modules(names=config.rule_modules, project_dir=project_dir),
         *_load_paths(paths=config.rule_paths, project_dir=project_dir),
     )
-    rules: tuple[KataRule, ...] = (
-        *structure_rules(),
-        *layer_rules(),
-        *join_rules(),
-        *naming_rules(),
-        *literal_rules(),
-        *test_rules(),
-        *custom,
-    )
+    rules: tuple[KataRule, ...] = (*_builtins(), *custom)
     codes: tuple[str, ...] = tuple(rule.code for rule in rules)
     duplicates: tuple[str, ...] = tuple(
         sorted(code for code in set(codes) if codes.count(code) > 1)
@@ -52,9 +35,6 @@ def build_catalogue(*, config: KataConfig, project_dir: Path) -> tuple[KataRule,
     if duplicates:
         raise KataError(f"duplicate kata rule codes: {', '.join(duplicates)}")
     for rule in rules:
-        pattern: re.Pattern[str] = _CUSTOM_CODE_PATTERN if rule.custom else _BUILTIN_CODE_PATTERN
-        if not pattern.fullmatch(rule.code):
-            raise KataError(f"invalid kata rule code: {rule.code}")
         _validate_options(rule=rule, configured=config.rule_options.get(rule.code, {}))
     configured_codes: set[str] = set(config.rule_options)
     unknown_option_codes: set[str] = configured_codes - set(codes)
@@ -65,30 +45,36 @@ def build_catalogue(*, config: KataConfig, project_dir: Path) -> tuple[KataRule,
     return tuple(sorted(rules, key=lambda item: item.code))
 
 
-def select_rules(*, catalogue: tuple[KataRule, ...], config: KataConfig) -> tuple[KataRule, ...]:
-    """Resolve select and ignore prefixes against one catalogue."""
-
-    for selector in (*config.select, *config.ignore):
-        if not re.fullmatch(r"(?:KT[A-Z]?\d{0,3}|X[A-Z]*\d{0,3})", selector):
-            raise KataError(f"malformed kata rule selector: {selector}")
-        if not any(rule.code.startswith(selector) for rule in catalogue):
-            raise KataError(f"kata rule selector matches no rules: {selector}")
-    selected: list[KataRule] = []
-    for rule in catalogue:
-        if any(rule.code.startswith(value) for value in config.select):
-            selected.append(rule)
-    custom_selected: bool = any(rule.custom for rule in selected)
-    coverage_rule: KataRule | None = next(
-        (rule for rule in catalogue if rule.code == CUSTOM_RULE_COVERAGE_CODE),
-        None,
+def _builtins() -> tuple[KataRule, ...]:
+    return tuple(
+        KataRule(
+            code=str(item["code"]),
+            family=str(item["family"]),
+            slug=str(item["slug"]),
+            message=str(item["message"]),
+            remediation=str(item["remediation"]),
+            check=_native_builtin,
+            enabled_by_default=bool(item["enabled_by_default"]),
+            project_wide=bool(item["project_wide"]),
+        )
+        for item in native_catalogue()
     )
-    if custom_selected and coverage_rule is not None and coverage_rule not in selected:
-        selected.append(coverage_rule)
-    active: list[KataRule] = []
-    for rule in selected:
-        if not any(rule.code.startswith(value) for value in config.ignore):
-            active.append(rule)
-    return tuple(active)
+
+
+def _native_builtin(*, model: object, ctx: object) -> list[KataFault]:
+    del model, ctx
+    raise KataError("built-in kata rules execute only through the native engine")
+
+
+def select_rules(*, catalogue: tuple[KataRule, ...], config: KataConfig) -> tuple[KataRule, ...]:
+    """Resolve the active catalogue through the native Fensu policy owner."""
+
+    by_code: dict[str, KataRule] = {rule.code: rule for rule in catalogue}
+    codes: tuple[str, ...] = native_selected_codes(config=config, catalogue=catalogue)
+    try:
+        return tuple(by_code[code] for code in codes)
+    except KeyError as error:
+        raise KataError(f"native kata policy returned unknown rule {error.args[0]}") from error
 
 
 def _load_modules(*, names: tuple[str, ...], project_dir: Path) -> tuple[KataRule, ...]:

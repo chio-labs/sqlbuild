@@ -7,6 +7,14 @@ KATA_SKILL_PATHS: tuple[str, ...] = (
 )
 
 KATA_SKILLS_COMMAND: str = "skills"
+KATA_NATIVE_API_VERSION: int = 1
+CUSTOM_HOST_PROTOCOL_VERSION: int = 1
+CUSTOM_HOST_RUNTIME_VERSION: str = "sqlbuild-kata-custom-v1"
+CUSTOM_HOST_INPUT_TUPLE_SIZE: int = 2
+SKILL_FRESH: str = "fresh"
+SKILL_MISSING: str = "missing"
+SKILL_STALE: str = "stale"
+REPLACEABLE_SKILL_STATES: frozenset[str] = frozenset({SKILL_FRESH, SKILL_MISSING, SKILL_STALE})
 
 AST_COLUMN_KIND: str = "column"
 AST_ALIAS_KIND: str = "alias"
@@ -49,7 +57,7 @@ RULE_CHECK_PARAMETER_NAMES: tuple[str, str] = ("model", "ctx")
 MIN_AUDITS_PER_MODEL: str = "min_audits_per_model"
 MIN_TESTS_PER_MODEL: str = "min_tests_per_model"
 MIN_CUSTOM_RULE_TEST_CASES: str = "min_custom_rule_test_cases"
-CUSTOM_RULE_COVERAGE_CODE: str = "KTX201"
+CUSTOM_RULE_COVERAGE_CODE: str = "SQBKX201"
 KATA_THRESHOLD_DEFAULTS: dict[str, int] = {
     MIN_AUDITS_PER_MODEL: 1,
     MIN_TESTS_PER_MODEL: 1,

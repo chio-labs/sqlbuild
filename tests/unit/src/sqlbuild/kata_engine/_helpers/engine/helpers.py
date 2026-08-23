@@ -20,7 +20,7 @@ def write_rule(*, root: Path, body: str) -> Path:
                 "from sqlbuild.kata import RuleContext, kata",
                 "",
                 "@kata(",
-                '    code="XTEST001",',
+                '    code="XSQBKT001",',
                 '    family="project",',
                 '    slug="test-rule",',
                 '    message="test rule fault",',
@@ -47,7 +47,7 @@ def custom_rule_inputs(
         config_values={},
     )
     config: KataConfig = KataConfig(
-        select=("XTEST001",),
+        select=("XSQBKT001",),
         rule_paths=(rule_path.as_posix(),),
         thresholds={MIN_CUSTOM_RULE_TEST_CASES: test_case.minimum_custom_rule_cases},
         cache=KataCacheConfig(require_cacheable=test_case.require_cacheable),

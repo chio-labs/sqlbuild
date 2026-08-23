@@ -5,12 +5,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
+from sqlbuild.kata_engine._helpers.engine.native import render_native_owned_skill
 from sqlbuild.kata_engine._helpers.engine.ruleset import resolve_ruleset
 from sqlbuild.kata_engine.constants import KATA_THRESHOLD_DEFAULTS
 from sqlbuild.kata_engine.models import KataConfig, KataRule, ResolvedRuleset
 
 
-def render_skills(*, config: KataConfig, project_dir: Path) -> str:
+def render_skills(*, config: KataConfig, project_dir: Path) -> tuple[str, str]:
     """Render stable guidance from ordinary kata catalogue resolution."""
 
     ruleset: ResolvedRuleset = resolve_ruleset(config=config, project_dir=project_dir)
@@ -55,7 +56,7 @@ def render_skills(*, config: KataConfig, project_dir: Path) -> str:
             )
         for entry in config.select_star_allow:
             body.append(f"- Lone-star allowance `{','.join(entry.paths)}`: {entry.reason}")
-    if any(rule.code.startswith("KTX") for rule in rules):
+    if any(rule.code.startswith("SQBKX") for rule in rules):
         body.extend(("", "## Effective Thresholds", ""))
         thresholds: dict[str, int] = {**KATA_THRESHOLD_DEFAULTS, **config.thresholds}
         for name, value in sorted(thresholds.items()):
@@ -67,17 +68,20 @@ def render_skills(*, config: KataConfig, project_dir: Path) -> str:
         for retired, replacement in sorted(config.retired_source_tokens.items()):
             body.append(f"- Replace retired `{retired}` with `{replacement}`")
     content: str = "\n".join(body).rstrip() + "\n"
-    return f"<!-- kata-policy: {ruleset.fingerprint} -->\n{content}"
+    return (
+        render_native_owned_skill(content=content, input_fingerprint=ruleset.fingerprint),
+        ruleset.fingerprint,
+    )
 
 
 def _rule_example(*, rule: KataRule) -> str:
     examples: dict[str, str] = {
-        "KTS101": 'WITH upstream AS (SELECT * FROM __ref("domain__stg__entity")), ...',
-        "KTS201": "SELECT id, status FROM final; use a lone SELECT * only when allowed.",
-        "KTL001": "stg -> int_clean -> int_enriched -> mart; skipping layers is valid.",
-        "KTR001": "domain__int_clean__entity or domain__mart_v__entity.",
-        "KTR401": "MODEL (contract enforced, columns (...)); declare authoritative columns.",
-        "KTX001": "Attach not_null/unique audits to the model key.",
-        "KTX002": "Mock imports, assert __expected__<model>, then mutation-check the test.",
+        "SQBKS101": 'WITH upstream AS (SELECT * FROM __ref("domain__stg__entity")), ...',
+        "SQBKS201": "SELECT id, status FROM final; use a lone SELECT * only when allowed.",
+        "SQBKL001": "stg -> int_clean -> int_enriched -> mart; skipping layers is valid.",
+        "SQBKR001": "domain__int_clean__entity or domain__mart_v__entity.",
+        "SQBKR401": "MODEL (contract enforced, columns (...)); declare authoritative columns.",
+        "SQBKX001": "Attach not_null/unique audits to the model key.",
+        "SQBKX002": "Mock imports, assert __expected__<model>, then mutation-check the test.",
     }
     return examples.get(rule.code, f"Apply `{rule.slug}` at the SQL node named by the fault.")

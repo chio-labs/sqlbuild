@@ -12,7 +12,7 @@ REQUIRED_DOMAIN: RuleOption[str] = RuleOption.string(
 
 
 @kata(
-    code="XDOMAIN001",
+    code="XSQBKD001",
     family="project",
     slug="required-domain",
     message="model belongs to the wrong domain",

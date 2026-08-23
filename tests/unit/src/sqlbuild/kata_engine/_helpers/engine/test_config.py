@@ -16,7 +16,7 @@ from tests.unit.src.sqlbuild.kata_engine._helpers.engine._test_types import (
     (
         KataConfigErrorTestCase(
             description="unknown top-level key",
-            source='[kata]\nselect = ["KTS"]\nseverity = "warn"\n',
+            source='[kata]\nselect = ["SQBKS"]\nseverity = "warn"\n',
             expected_error_pattern="unknown kata config keys: severity",
         ),
         KataConfigErrorTestCase(
@@ -26,8 +26,13 @@ from tests.unit.src.sqlbuild.kata_engine._helpers.engine._test_types import (
         ),
         KataConfigErrorTestCase(
             description="reasonless ignore",
-            source=('[[kata.rule_ignores]]\nrules = ["KTS"]\npaths = ["models/**"]\n'),
+            source=('[[kata.rule_ignores]]\nrules = ["SQBKS"]\npaths = ["models/**"]\n'),
             expected_error_pattern="kata.rule_ignores.reason",
+        ),
+        KataConfigErrorTestCase(
+            description="transitional rule namespace",
+            source='[kata]\nselect = ["KTS"]\n',
+            expected_error_pattern="malformed kata rule selector: KTS",
         ),
     ),
     ids=lambda case: case.description,

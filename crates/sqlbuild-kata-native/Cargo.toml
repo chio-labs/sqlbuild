@@ -1,0 +1,31 @@
+[package]
+name = "sqlbuild-kata-native"
+version = "0.52.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "_kata_native"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+extension-module = ["pyo3/extension-module"]
+
+[dependencies]
+fensu-policy.workspace = true
+globset.workspace = true
+pyo3.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlparser.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

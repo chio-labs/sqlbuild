@@ -1,0 +1,19 @@
+schema-version = 1
+
+[tooling]
+package = "sqlbuild-structure-checker"
+runtime-forbidden-packages = [
+  "sqlbuild-structure-checker",
+  "fensu-structure-checker",
+]
+
+[raw-parser-boundary]
+packages = []
+remediation = "consume SQLBuild-owned SQL fact rows instead of raw parser types"
+restricted-paths = ["crates/sqlbuild-kata-native/src/rules"]
+
+[repository]
+crate-names = [
+  "sqlbuild-kata-native",
+  "sqlbuild-structure-checker",
+]
