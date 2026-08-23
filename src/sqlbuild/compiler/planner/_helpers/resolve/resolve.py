@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,
@@ -28,6 +29,7 @@ from sqlbuild.compiler.planner._helpers.resolve.sources import (
     resolve_source_references,
 )
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CursorBounds,
@@ -37,6 +39,9 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, IncrementalMode, MaterializationType
+from sqlbuild.compiler.references.main.assert_no_unresolved_sql_markers import (
+    assert_no_unresolved_sql_markers,
+)
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.contracts.models import SourceEntry
 
@@ -116,7 +121,31 @@ def resolve_model_sql(
         function_locations=function_locations or {},
         adapter=adapter,
     )
+    _, has_intrinsics = resolve_cursor_intrinsics(sql=query_sql)
+    if has_intrinsics:
+        if cursor_bounds is None:
+            if full_refresh:
+                raise PlannerInputError(
+                    f"Model '{model.name}' uses cursor intrinsics, but non-microbatch full "
+                    "refresh has no cursor interval"
+                )
+            raise PlannerInputError(
+                f"Model '{model.name}' uses cursor intrinsics, but cursor bounds could not be "
+                "resolved"
+            )
+        query_sql, _ = resolve_cursor_intrinsics(
+            sql=query_sql,
+            start_sql=adapter.render_cursor_bound_literal(
+                value=cursor_bounds.start,
+                cursor_type=cursor_type,
+            ),
+            end_sql=adapter.render_cursor_bound_literal(
+                value=cursor_bounds.end,
+                cursor_type=cursor_type,
+            ),
+        )
 
+    assert_no_unresolved_sql_markers(sql=query_sql, context=f"Model '{model.name}' planned SQL")
     return query_sql
 
 
@@ -160,11 +189,15 @@ def resolve_function_sql(
         function_locations=function_locations,
         adapter=adapter,
     )
-    return resolve_table_function_references(
+    query_sql = resolve_table_function_references(
         query_sql=query_sql,
         function_locations=function_locations,
         adapter=adapter,
     )
+    assert_no_unresolved_sql_markers(
+        sql=query_sql, context=f"Function '{function.name}' planned SQL"
+    )
+    return query_sql
 
 
 def _compute_model_cursor_bounds(
@@ -187,6 +220,11 @@ def _compute_model_cursor_bounds(
     if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
         return None
 
+    incremental_mode: str | None = get_config_str(model=model, key="incremental_mode")
+    is_microbatch: bool = incremental_mode == IncrementalMode.MICROBATCH
+    if is_microbatch:
+        return CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL)
+
     if full_refresh or suppress_runtime_cursor_bounds:
         return None
 
@@ -197,18 +235,12 @@ def _compute_model_cursor_bounds(
         cursor_inputs=_get_cursor_inputs(model),
     ):
         return CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL)
-    if start_cursor_override is not None and end_cursor_override is not None:
-        return CursorBounds(start=start_cursor_override, end=end_cursor_override)
-
     cursor_snapshot: ModelCursorSnapshot | None = snapshot.cursor_snapshots.get(model.name)
     if cursor_snapshot is None:
         return None
 
     lookback: str | None = get_config_str(model=model, key="lookback")
     cursor_start: str | None = get_config_cursor_start(model)
-    incremental_mode: str | None = get_config_str(model=model, key="incremental_mode")
-    is_microbatch: bool = incremental_mode == IncrementalMode.MICROBATCH
-
     backfill_duration: str | None = None
     if backfill.action == BackfillAction.BOUNDED:
         backfill_duration = backfill.duration
@@ -222,6 +254,7 @@ def _compute_model_cursor_bounds(
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
         is_microbatch=is_microbatch,
+        cursor_grain=get_config_str(model=model, key="cursor_grain"),
     )
 
 

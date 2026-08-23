@@ -10,17 +10,44 @@ import pytest
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import CursorBounds, CursorInputRelation
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
-from sqlbuild.executor.run._helpers.validation.cursor_bounds import resolve_runtime_cursor_bounds
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
+    resolve_runtime_cursor_bounds,
+    substitute_cursor_sentinels,
+)
 from sqlbuild.executor.run.models import RuntimeCursorSpec
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
+    CursorSentinelSubstitutionErrorTestCase,
     RuntimeCursorEndBoundTestCase,
     RuntimeCursorOverrideTestCase,
+    RuntimeCursorPolicyTestCase,
     RuntimeCursorStartTestCase,
     RuntimeExistingTargetOverrideTestCase,
     RuntimeTargetMaxTestCase,
     RuntimeTargetProbeFailureTestCase,
 )
 from tests.unit.src.sqlbuild.executor.run._helpers.helpers import FakeCursorAdapter
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CursorSentinelSubstitutionErrorTestCase(
+            description="unresolved cursor intrinsic",
+            sql="SELECT __cursor_start()",
+            expected_error_fragment="unresolved cursor markers",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_runtime_bounds_when_substituting_then_rejects_unresolved_intrinsics(
+    test_case: CursorSentinelSubstitutionErrorTestCase,
+) -> None:
+    with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
+        substitute_cursor_sentinels(
+            sql=test_case.sql,
+            bounds=CursorBounds(start="1", end="2"),
+        )
 
 
 @pytest.mark.parametrize(
@@ -402,3 +429,139 @@ def test_given_target_max_query_failure_when_resolving_bounds_then_propagates_er
                 ),
             ),
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RuntimeCursorPolicyTestCase(
+            description="multiple inputs use the slowest common watermark",
+            expected_bounds=CursorBounds(start="10", end="101"),
+        ),
+        RuntimeCursorPolicyTestCase(
+            description="an empty input has no common watermark",
+            expected_bounds=None,
+            slow_input_setup_sql="SELECT 1",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_multiple_runtime_inputs_when_resolving_then_uses_common_watermark(
+    test_case: RuntimeCursorPolicyTestCase,
+) -> None:
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
+    connection.execute("CREATE TABLE fast_input (cursor_value INTEGER)")
+    connection.execute("INSERT INTO fast_input VALUES (10), (200)")
+    connection.execute("CREATE TABLE slow_input (cursor_value INTEGER)")
+    connection.execute(test_case.slow_input_setup_sql)
+
+    bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
+        adapter=cast(BaseAdapter, FakeCursorAdapter()),
+        connection=connection,
+        target_relation="target_data",
+        target_database=None,
+        target_schema=None,
+        target_name="target_data",
+        spec=RuntimeCursorSpec(
+            cursor_column="cursor_value",
+            cursor_type=CursorType.INTEGER,
+            cursor_grain=None,
+            cursor_start=None,
+            cursor_input_relations=(
+                CursorInputRelation(relation="fast_input", cursor_column="cursor_value"),
+                CursorInputRelation(relation="slow_input", cursor_column="cursor_value"),
+            ),
+        ),
+    )
+
+    assert bounds == test_case.expected_bounds
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RuntimeCursorPolicyTestCase(
+            description="applies lookback from target watermark",
+            lookback="20s",
+            expected_bounds=CursorBounds(start="80", end="201"),
+        ),
+        RuntimeCursorPolicyTestCase(
+            description="applies bounded replay from exclusive end",
+            backfill_duration="30s",
+            expected_bounds=CursorBounds(start="171", end="201"),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_runtime_replay_policy_when_resolving_then_matches_planner_policy(
+    test_case: RuntimeCursorPolicyTestCase,
+) -> None:
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
+    connection.execute("CREATE TABLE upstream_data (cursor_value INTEGER)")
+    connection.execute("INSERT INTO upstream_data VALUES (50), (200)")
+    connection.execute("CREATE TABLE target_data (cursor_value INTEGER)")
+    connection.execute("INSERT INTO target_data VALUES (100)")
+
+    bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
+        adapter=cast(BaseAdapter, FakeCursorAdapter(target_relation_exists=True)),
+        connection=connection,
+        target_relation="target_data",
+        target_database=None,
+        target_schema=None,
+        target_name="target_data",
+        spec=RuntimeCursorSpec(
+            cursor_column="cursor_value",
+            cursor_type=CursorType.INTEGER,
+            cursor_grain=None,
+            cursor_start=None,
+            cursor_input_relations=(
+                CursorInputRelation(relation="upstream_data", cursor_column="cursor_value"),
+            ),
+            lookback=test_case.lookback,
+            backfill_duration=test_case.backfill_duration,
+        ),
+    )
+
+    assert bounds == test_case.expected_bounds
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RuntimeCursorPolicyTestCase(
+            description="full refresh ignores old destination watermark",
+            read_destination_cursor=False,
+            expected_bounds=CursorBounds(start="10", end="201"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_full_refresh_runtime_discovery_when_resolving_then_ignores_old_target(
+    test_case: RuntimeCursorPolicyTestCase,
+) -> None:
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
+    connection.execute("CREATE TABLE upstream_data (cursor_value INTEGER)")
+    connection.execute("INSERT INTO upstream_data VALUES (10), (200)")
+    connection.execute("CREATE TABLE target_data (cursor_value INTEGER)")
+    connection.execute("INSERT INTO target_data VALUES (150)")
+
+    bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
+        adapter=cast(BaseAdapter, FakeCursorAdapter(target_relation_exists=True)),
+        connection=connection,
+        target_relation="target_data",
+        target_database=None,
+        target_schema=None,
+        target_name="target_data",
+        spec=RuntimeCursorSpec(
+            cursor_column="cursor_value",
+            cursor_type=CursorType.INTEGER,
+            cursor_grain=None,
+            cursor_start=None,
+            cursor_input_relations=(
+                CursorInputRelation(relation="upstream_data", cursor_column="cursor_value"),
+            ),
+            read_destination_cursor=test_case.read_destination_cursor,
+        ),
+    )
+
+    assert bounds == test_case.expected_bounds

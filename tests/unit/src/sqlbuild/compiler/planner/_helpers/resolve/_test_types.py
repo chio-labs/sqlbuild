@@ -25,6 +25,16 @@ class CursorBoundsTestCase:
 
 
 @dataclass(frozen=True)
+class CursorIntrinsicResolutionTestCase:
+    description: str
+    model_config: dict[str, object]
+    full_refresh: bool
+    cursor_snapshots: dict[str, ModelCursorSnapshot]
+    expected_sql: str | None = None
+    expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
 class SourceResolutionTestCase:
     description: str
     query_sql: str

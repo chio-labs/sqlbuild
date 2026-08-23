@@ -222,6 +222,7 @@ class PolyglotAnalysisTestCase:
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] = field(
         default_factory=dict
     )
+    column_types_by_table: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

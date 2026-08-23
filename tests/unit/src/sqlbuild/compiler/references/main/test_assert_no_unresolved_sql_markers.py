@@ -49,7 +49,16 @@ def test_given_unresolved_executable_sql_when_validating_then_it_raises_clear_er
             sql="SELECT * FROM main.orders",
             context="audit 'not_null' executable SQL",
             expected_error_fragment="",
-        )
+        ),
+        AssertNoUnresolvedSqlMarkersTestCase(
+            description="ignores markers in comments and literals",
+            sql=(
+                "SELECT '__ref(\"orders\")' AS example "
+                "-- __table_fn(\"orders\")(1)\n/* __source(\"orders\") */"
+            ),
+            context="model 'orders' executable SQL",
+            expected_error_fragment="",
+        ),
     ],
     ids=lambda case: case.description,
 )

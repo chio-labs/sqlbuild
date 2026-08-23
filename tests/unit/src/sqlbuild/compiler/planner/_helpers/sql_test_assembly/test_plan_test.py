@@ -210,6 +210,23 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers
             },
         ),
         PlanTestChainTestCase(
+            description="single model resolves table function references in sql tests",
+            model_queries={
+                "orders": (
+                    'SELECT order_id FROM __table_fn("customer_orders")(42)'
+                ),
+            },
+            mock_ref_ctes={},
+            mock_source_ctes={},
+            helper_ctes={},
+            expected_model_names=("orders",),
+            expected_chain_length=1,
+            function_locations={"customer_orders": "main.customer_orders"},
+            expected_sql_fragments={
+                "orders": "FROM main.customer_orders(42)",
+            },
+        ),
+        PlanTestChainTestCase(
             description="two model chain resolves in dependency order",
             model_queries={
                 "stg_orders": 'SELECT id FROM __source("raw")',

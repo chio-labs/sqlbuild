@@ -33,6 +33,11 @@ from sqlbuild.compiler.compile._helpers.config.model_validation import (
     validate_snapshot_config,
 )
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
+from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
+    cursor_intrinsics_analysis_sql,
+    get_validated_model_cursor_intrinsics,
+    reject_cursor_intrinsics,
+)
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_model_declaration_indexes,
     expand_declaration_references,
@@ -177,6 +182,11 @@ def build_model_inputs(
             loaded_macros=loaded_macros,
             macro_context=macro_context,
         )
+        expanded_query_sql = get_validated_model_cursor_intrinsics(
+            sql=expanded_query_sql,
+            config_values=effective_config.values,
+            model_name=model_file.file_path.stem,
+        )
         raw_placeholders: object | None = effective_config.values.get("placeholders")
         sql_validation_placeholders: dict[str, str] | None = (
             {str(k): str(v) for k, v in raw_placeholders.items()}
@@ -190,7 +200,10 @@ def build_model_inputs(
         )
         if sql_validation_enabled and not defer_model_sql_validation:
             validate_sql_syntax(
-                query_sql=expanded_query_sql,
+                query_sql=cursor_intrinsics_analysis_sql(
+                    sql=expanded_query_sql,
+                    cursor_type=effective_config.values.get("cursor_type"),
+                ),
                 model_name=model_file.file_path.stem,
                 file_path=model_file.file_path,
                 placeholders=sql_validation_placeholders,
@@ -256,8 +269,18 @@ def build_model_inputs(
             logical_schema=effective_config.logical_schema,
             logical_database=effective_config.logical_database,
         )
+        hook_name: str
+        for hook_name in ("pre_hooks", "post_hooks"):
+            hook_value: object | None = expanded_config.values.get(hook_name)
+            if isinstance(hook_value, tuple):
+                hook_entry: object
+                for hook_entry in hook_value:
+                    if isinstance(hook_entry, SqlHookEntry):
+                        reject_cursor_intrinsics(
+                            sql=hook_entry.statement,
+                            context=f"Model '{model_file.file_path.stem}' {hook_name}",
+                        )
         if sql_validation_enabled:
-            hook_name: str
             for hook_name in ("pre_hooks", "post_hooks"):
                 validate_hook_sql_syntax(
                     value=expanded_config.values.get(hook_name),

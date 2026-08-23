@@ -30,6 +30,13 @@ class BuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class TableFunctionDependencyBuildE2ETestCase:
+    description: str
+    function_argument: int
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class EnumContractBuildE2ETestCase:
     """Test case for enum-backed contract enforcement."""
 

@@ -64,7 +64,13 @@ def build_standard_model_version_identities(
         graph_nodes[function_key] = GraphIdentityNode(
             key=function_key,
             resource_kind=GraphResourceKind.FUNCTION,
-            upstream_keys=(),
+            upstream_keys=tuple(
+                graph_key_for_compiled_resource(
+                    resource_type=dep.resource_type,
+                    name=dep.name,
+                )
+                for dep in function.deps
+            ),
             local_hash=function_hash,
         )
     seed_name: str

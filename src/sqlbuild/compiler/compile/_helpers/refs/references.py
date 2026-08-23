@@ -18,6 +18,8 @@ from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_com
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
 
 _CONTEXT: str = "SQL reference"
+_DOUBLE_QUOTE_TOKEN: str = '"'
+_PAIRED_QUOTE_CHARACTER_COUNT: int = 2
 _REFERENCE_PREFIXES: tuple[tuple[str, SqlReferenceKind], ...] = (
     ("__dbt_ref(", SqlReferenceKind.DBT_REF),
     ("__table_fn(", SqlReferenceKind.TABLE_FUNCTION),
@@ -108,10 +110,26 @@ def _parse_reference_at(*, sql: str, start: int) -> tuple[CompileSqlReference, i
             )
     elif len(argument_values) != 1:
         raise CompileInputError(f"{ref_prefix(ref_kind)} must contain exactly one name argument")
+    call_argument_count: int | None = None
+    if ref_kind == SqlReferenceKind.TABLE_FUNCTION:
+        call_suffix_start: int = _skip_whitespace(sql=sql, start=closing_paren_index + 1)
+        if call_suffix_start >= len(sql) or sql[call_suffix_start] != SQL_OPEN_PAREN_TOKEN:
+            raise CompileInputError(
+                f"{ref_prefix(ref_kind)} must be followed by an argument list"
+            )
+        call_suffix_end: int = find_matching_paren(
+            sql=sql,
+            open_paren_index=call_suffix_start,
+            context="SQL table function call",
+        )
+        call_argument_count = len(
+            _split_top_level_arguments(sql[call_suffix_start + 1 : call_suffix_end])
+        )
     return (
         CompileSqlReference(
             ref_kind=ref_kind,
             ref_name=_parse_reference_name(raw_value=argument_values[0], ref_kind=ref_kind),
+            call_argument_count=call_argument_count,
         ),
         closing_paren_index + 1,
     )
@@ -122,12 +140,28 @@ def ref_prefix(ref_kind: SqlReferenceKind | str) -> str:
     return _REFERENCE_PREFIX_BY_KIND[normalized_ref_kind]
 
 
+def _skip_whitespace(*, sql: str, start: int) -> int:
+    index: int = start
+    while index < len(sql) and sql[index].isspace():
+        index += 1
+    return index
+
+
 def _split_top_level_arguments(raw_arguments: str) -> tuple[str, ...]:
     arguments: list[str] = []
     current: list[str] = []
     depth: int = 0
     index: int = 0
+    saw_separator: bool = False
     while index < len(raw_arguments):
+        if raw_arguments.startswith("--", index):
+            index = skip_line_comment(sql=raw_arguments, start=index)
+            current.append(" ")
+            continue
+        if raw_arguments.startswith("/*", index):
+            index = skip_block_comment(sql=raw_arguments, start=index, context=_CONTEXT)
+            current.append(" ")
+            continue
         character: str = raw_arguments[index]
         if character in SQL_QUOTE_TOKENS:
             quoted_end: int = skip_quoted_text(sql=raw_arguments, start=index, context=_CONTEXT)
@@ -140,9 +174,11 @@ def _split_top_level_arguments(raw_arguments: str) -> tuple[str, ...]:
             depth -= 1
         elif character == SQL_ARGUMENT_SEPARATOR_TOKEN and depth == 0:
             argument_text: str = "".join(current).strip()
-            if argument_text:
-                arguments.append(argument_text)
+            if not argument_text:
+                raise CompileInputError(f"{_CONTEXT} contains an empty argument")
+            arguments.append(argument_text)
             current = []
+            saw_separator = True
             index += 1
             continue
         current.append(character)
@@ -151,14 +187,20 @@ def _split_top_level_arguments(raw_arguments: str) -> tuple[str, ...]:
     final_argument: str = "".join(current).strip()
     if final_argument:
         arguments.append(final_argument)
+    elif saw_separator:
+        raise CompileInputError(f"{_CONTEXT} contains an empty argument")
     return tuple(arguments)
 
 
 def _parse_reference_name(*, raw_value: str, ref_kind: SqlReferenceKind) -> str:
     stripped_value: str = raw_value.strip()
-    paired_quote_character_count: int = 2
+    if ref_kind == SqlReferenceKind.TABLE_FUNCTION and not (
+        len(stripped_value) >= _PAIRED_QUOTE_CHARACTER_COUNT
+        and stripped_value[0] == stripped_value[-1] == _DOUBLE_QUOTE_TOKEN
+    ):
+        raise CompileInputError(f"{ref_prefix(ref_kind)} name argument must be double quoted")
     if (
-        len(stripped_value) >= paired_quote_character_count
+        len(stripped_value) >= _PAIRED_QUOTE_CHARACTER_COUNT
         and stripped_value[0] == stripped_value[-1]
         and stripped_value[0] in SQL_REFERENCE_NAME_QUOTE_TOKENS
     ):

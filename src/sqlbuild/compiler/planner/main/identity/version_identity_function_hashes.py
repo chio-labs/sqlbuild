@@ -19,13 +19,20 @@ def build_function_local_hashes(
         arguments: list[tuple[str, str]] = []
         for argument in function.arguments:
             arguments.append((argument.name, argument.type))
+        return_columns: list[tuple[str, str]] = []
+        for column in function.return_columns:
+            return_columns.append((column.name, column.type))
         hashes[function.name] = _stable_hash(
             json.dumps(
                 {
                     "arguments": arguments,
                     "returns": function.returns,
+                    "return_columns": return_columns,
                     "body_sql": function.body_sql,
                     "language": function.language.value,
+                    "runtime_version": function.runtime_version,
+                    "entry_point": function.entry_point,
+                    "packages": function.packages,
                 },
                 sort_keys=True,
                 default=str,

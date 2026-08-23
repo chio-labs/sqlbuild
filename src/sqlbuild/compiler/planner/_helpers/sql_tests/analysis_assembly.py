@@ -98,7 +98,10 @@ class _TestMarkerResolver:
                 referenced_kind="dbt_ref",
                 mocks=self.mock_dbt_refs,
             )
-        if function_name == SqlReferenceKind.UDF.function_name:
+        if function_name in {
+            SqlReferenceKind.UDF.function_name,
+            SqlReferenceKind.TABLE_FUNCTION.function_name,
+        }:
             return self.function_locations.get(referenced_name)
         return None
 
