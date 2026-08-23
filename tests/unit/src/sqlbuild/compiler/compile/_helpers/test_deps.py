@@ -29,11 +29,19 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
                 CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="stg_orders"),
                 CompileSqlReference(ref_kind=SqlReferenceKind.SOURCE, ref_name="raw_orders"),
                 CompileSqlReference(ref_kind=SqlReferenceKind.DBT_REF, ref_name="dbt_customers"),
+                CompileSqlReference(
+                    ref_kind=SqlReferenceKind.TABLE_FUNCTION,
+                    ref_name="customer_orders",
+                ),
             ),
             expected_deps=(
                 CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="stg_orders"),
                 CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name="raw_orders"),
                 CompiledObjectKey(resource_type=CompiledResourceType.DBT_REF, name="dbt_customers"),
+                CompiledObjectKey(
+                    resource_type=CompiledResourceType.TABLE_FN,
+                    name="customer_orders",
+                ),
             ),
         ),
         ModelBuildDepsTestCase(

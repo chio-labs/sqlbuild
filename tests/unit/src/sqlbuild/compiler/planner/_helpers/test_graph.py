@@ -142,6 +142,23 @@ def test_given_upstream_deps_when_building_downstream_then_returns_expected(
             },
             expected_order=(source_key("raw_orders"), model_key("orders")),
         ),
+        TopologicalOrderTestCase(
+            description="orders a table function between its upstream and consuming model",
+            upstream={
+                model_key("customer_order_summary"): (
+                    CompiledObjectKey(resource_type="table_fn", name="customer_orders"),
+                ),
+                CompiledObjectKey(resource_type="table_fn", name="customer_orders"): (
+                    model_key("orders"),
+                ),
+                model_key("orders"): (),
+            },
+            expected_order=(
+                model_key("orders"),
+                CompiledObjectKey(resource_type="table_fn", name="customer_orders"),
+                model_key("customer_order_summary"),
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -161,6 +178,18 @@ def test_given_upstream_deps_when_ordering_topologically_then_returns_expected_o
             upstream={
                 model_key("a"): (model_key("b"),),
                 model_key("b"): (model_key("a"),),
+            },
+            expected_error_type=ValueError,
+        ),
+        CycleDetectionTestCase(
+            description="raises when a table function and consuming model form a cycle",
+            upstream={
+                model_key("orders"): (
+                    CompiledObjectKey(resource_type="table_fn", name="customer_orders"),
+                ),
+                CompiledObjectKey(resource_type="table_fn", name="customer_orders"): (
+                    model_key("orders"),
+                ),
             },
             expected_error_type=ValueError,
         ),

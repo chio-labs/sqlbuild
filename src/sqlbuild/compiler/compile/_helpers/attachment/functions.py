@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from sqlbuild.compiler.compile._helpers.analysis.columns import infer_columns_with_sql_analysis
 from sqlbuild.compiler.compile._helpers.analysis.validation import (
     validate_function_sql_syntax,
 )
@@ -19,6 +20,7 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
     validate_function_references,
 )
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
+from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
     expand_authored_sql,
 )
@@ -36,6 +38,7 @@ from sqlbuild.compiler.compile.models import (
     DeclarationResolutionContext,
     FunctionArgument,
     FunctionReturnColumn,
+    InferredColumn,
     LoadedMacro,
     MacroContext,
 )
@@ -155,6 +158,10 @@ def build_sql_function_inputs(
             enums=declarations.enums if declarations is not None else None,
             constants=declarations.constants if declarations is not None else None,
         )
+        reject_cursor_intrinsics(
+            sql=expanded_body_sql,
+            context=f"SQL function '{function_name}'",
+        )
         if (
             effective_settings.sql_analysis
             and not no_sql_validation
@@ -191,6 +198,12 @@ def build_sql_function_inputs(
                 function_name=function_name,
                 file_path=function_file.file_path,
             )
+            if return_columns:
+                _validate_table_function_output_contract(
+                    body_sql=expanded_body_sql,
+                    return_columns=return_columns,
+                    function_file=function_file,
+                )
         references: tuple[CompileSqlReference, ...] = extract_sql_references(expanded_body_sql)
         validate_function_references(
             references=references,
@@ -245,6 +258,27 @@ def build_sql_function_inputs(
             )
         )
     return tuple(function_inputs)
+
+
+def _validate_table_function_output_contract(
+    *,
+    body_sql: str,
+    return_columns: tuple[FunctionReturnColumn, ...],
+    function_file: DiscoveredSqlFunctionFile,
+) -> None:
+    inferred_columns: tuple[InferredColumn, ...] | None = infer_columns_with_sql_analysis(
+        query_sql=body_sql
+    )
+    if not inferred_columns:
+        return
+    declared_count: int = len(return_columns)
+    inferred_count: int = len(inferred_columns)
+    if declared_count == inferred_count:
+        return
+    raise CompileInputError(
+        f"SQL table function {function_file.relative_path} declares {declared_count} return "
+        f"columns but its query produces {inferred_count}"
+    )
 
 
 def _build_python_function_input(
