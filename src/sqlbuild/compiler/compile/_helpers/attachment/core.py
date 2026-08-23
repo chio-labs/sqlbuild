@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 import re
-from dataclasses import fields
+from dataclasses import dataclass, fields, replace
 from datetime import UTC, datetime
 from inspect import Parameter, Signature
 from pathlib import Path
@@ -58,7 +58,6 @@ from sqlbuild.compiler.compile.constants import (
     MACRO_CALL_PATTERN,
     MODEL_AUDIT_OVERRIDE_KEYS,
     MODEL_HEADER_METADATA_KEYS,
-    NOT_NULL_AUDIT_NAME,
     PRESERVE_TARGET_VALUE,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -74,6 +73,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import (
     CompileContextKey,
 )
+from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_columns
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredHookFunction,
@@ -82,6 +82,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSeedFile,
     DiscoveredSqlModelFile,
     EnumDeclaration,
+    ModelSchemaDeclaration,
     PythonHookEntry,
     SqlHookEntry,
 )
@@ -105,6 +106,14 @@ _MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
 _HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
     {"ctx", "context", "_ctx", "hook_context"}
 )
+
+
+@dataclass(frozen=True)
+class _VisibleModelDeclarations:
+    local_enums: dict[str, EnumDeclaration]
+    local_constants: dict[str, ConstantDeclaration]
+    enums: dict[str, EnumDeclaration]
+    constants: dict[str, ConstantDeclaration]
 
 
 def build_model_inputs(
@@ -137,12 +146,9 @@ def build_model_inputs(
     model_inputs: list[CompileModelInput] = []
     model_file: DiscoveredSqlModelFile
     for model_file in discovered_inputs.model_files:
-        local_enums: dict[str, EnumDeclaration]
-        local_constants: dict[str, ConstantDeclaration]
-        local_enums, local_constants = build_model_declaration_indexes(model_file=model_file)
-        visible_enums: dict[str, EnumDeclaration] = context.public_enums | local_enums
-        visible_constants: dict[str, ConstantDeclaration] = (
-            context.public_constants | local_constants
+        declarations: _VisibleModelDeclarations = _build_visible_declaration_indexes(
+            model_file=model_file,
+            context=context,
         )
         matched_path_default: str | None = find_matching_path_default(
             model_file=model_file,
@@ -159,6 +165,14 @@ def build_model_inputs(
             effective_target_name=effective_target_name,
             run_id=run_id,
         )
+        model_schema: ModelSchemaDeclaration | None = _resolve_model_schema(
+            values=effective_config.values,
+            model_name=model_file.file_path.stem,
+            public_model_schemas=context.public_model_schemas,
+        )
+        model_schema_columns: tuple[SchemaColumn, ...] | None = (
+            model_schema.columns if model_schema is not None else None
+        )
         validate_python_hook_config(
             values=effective_config.values,
             model_name=model_file.file_path.stem,
@@ -173,8 +187,8 @@ def build_model_inputs(
         declaration_expanded_sql: str = expand_declaration_references(
             sql=var_substituted_sql,
             file_path=model_file.file_path,
-            enums=visible_enums,
-            constants=visible_constants,
+            enums=declarations.enums,
+            constants=declarations.constants,
         )
         expanded_query_sql: str = expand_sql_macros(
             sql=declaration_expanded_sql,
@@ -224,6 +238,7 @@ def build_model_inputs(
             model_name=model_file.file_path.stem,
             ref_count=len(references),
             known_input_names=frozenset(reference.ref_name for reference in references),
+            declared_columns=model_schema_columns,
         )
         validate_contract_config(
             config=effective_config,
@@ -236,6 +251,7 @@ def build_model_inputs(
         validate_snapshot_config(
             config=effective_config,
             model_name=model_file.file_path.stem,
+            declared_columns=model_schema_columns,
         )
         validate_custom_materialization_config(
             config=effective_config,
@@ -262,8 +278,8 @@ def build_model_inputs(
                 ),
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
-                enums=visible_enums,
-                constants=visible_constants,
+                enums=declarations.enums,
+                constants=declarations.constants,
             ),
             matched_path_default=effective_config.matched_path_default,
             logical_schema=effective_config.logical_schema,
@@ -294,12 +310,15 @@ def build_model_inputs(
             model_header_values=expanded_config.values,
             file_path=model_file.relative_path,
             column_locations=model_file.header_column_locations,
+            model_schema_columns=model_schema_columns,
+            model_schema_name=model_schema.name if model_schema is not None else None,
+            model_schema_description=model_schema.description if model_schema is not None else None,
         )
         model_config: CompileModelConfig = strip_model_header_metadata_from_config(expanded_config)
         header_schema_entry, enum_columns = resolve_enum_contract_columns(
             schema_entry=header_schema_entry,
             config_values=model_config.values,
-            enums=visible_enums,
+            enums=declarations.enums,
         )
         schema_match: tuple[SchemaModelEntry, DiscoveredSchemaFile] | None = (
             find_schema_model_match(
@@ -324,8 +343,8 @@ def build_model_inputs(
                     macro_source_sql=declaration_expanded_sql,
                     references=references,
                     sql_validation_enabled=sql_validation_enabled,
-                    enum_declarations=tuple(local_enums.values()),
-                    constant_declarations=tuple(local_constants.values()),
+                    enum_declarations=tuple(declarations.local_enums.values()),
+                    constant_declarations=tuple(declarations.local_constants.values()),
                     enum_columns=enum_columns,
                 )
             )
@@ -340,8 +359,8 @@ def build_model_inputs(
                 references=references,
                 schema_entry=header_schema_entry,
                 sql_validation_enabled=sql_validation_enabled,
-                enum_declarations=tuple(local_enums.values()),
-                constant_declarations=tuple(local_constants.values()),
+                enum_declarations=tuple(declarations.local_enums.values()),
+                constant_declarations=tuple(declarations.local_constants.values()),
                 enum_columns=enum_columns,
             )
         )
@@ -351,6 +370,20 @@ def build_model_inputs(
         schema_files=discovered_inputs.schema_files,
     )
     return tuple(model_inputs)
+
+
+def _build_visible_declaration_indexes(
+    *, model_file: DiscoveredSqlModelFile, context: ModelInputBuildContext
+) -> _VisibleModelDeclarations:
+    local_enums: dict[str, EnumDeclaration]
+    local_constants: dict[str, ConstantDeclaration]
+    local_enums, local_constants = build_model_declaration_indexes(model_file=model_file)
+    return _VisibleModelDeclarations(
+        local_enums=local_enums,
+        local_constants=local_constants,
+        enums=context.public_enums | local_enums,
+        constants=context.public_constants | local_constants,
+    )
 
 
 def build_seed_inputs(discovered_inputs: DiscoveredProjectInputs) -> tuple[CompileSeedInput, ...]:
@@ -965,25 +998,40 @@ def build_model_header_schema_entry(
     model_header_values: dict[str, object],
     file_path: Path,
     column_locations: dict[str, SourceLocation] | None = None,
+    model_schema_columns: tuple[SchemaColumn, ...] | None = None,
+    model_schema_name: str | None = None,
+    model_schema_description: str | None = None,
 ) -> SchemaModelEntry | None:
     """Normalize model-owned MODEL(...) metadata into the existing schema entry shape."""
 
     raw_description: object | None = model_header_values.get("description")
     raw_columns: object | None = model_header_values.get("columns")
     raw_audits: object | None = model_header_values.get("audits")
-    if raw_description is None and raw_columns is None and raw_audits is None:
+    if (
+        raw_description is None
+        and raw_columns is None
+        and raw_audits is None
+        and model_schema_columns is None
+    ):
         return None
 
-    description: str | None = _optional_model_header_string(
+    model_description: str | None = _optional_model_header_string(
         raw_value=raw_description,
         file_path=file_path,
         label="model",
         key="description",
     )
-    columns: tuple[SchemaColumn, ...] = _parse_model_header_columns(
+    description: str | None = model_description or model_schema_description
+    local_columns: tuple[SchemaColumn, ...] = _parse_model_header_columns(
         raw_columns=raw_columns,
         file_path=file_path,
         column_locations=column_locations or {},
+    )
+    columns: tuple[SchemaColumn, ...] = _merge_model_schema_columns(
+        model_name=model_name,
+        file_path=file_path,
+        model_schema_columns=model_schema_columns,
+        local_columns=local_columns,
     )
     audits: tuple[SchemaAuditInstance, ...] = _parse_model_header_audits(
         raw_audits=raw_audits,
@@ -995,6 +1043,7 @@ def build_model_header_schema_entry(
     )
     return SchemaModelEntry(
         name=model_name,
+        model_schema=model_schema_name,
         description=description,
         type_enforcement=type_enforcement,
         columns=columns,
@@ -1021,74 +1070,83 @@ def strip_model_header_metadata_from_config(config: CompileModelConfig) -> Compi
 def _parse_model_header_columns(
     *, raw_columns: object | None, file_path: Path, column_locations: dict[str, SourceLocation]
 ) -> tuple[SchemaColumn, ...]:
-    if raw_columns is None:
-        return ()
-    if not isinstance(raw_columns, dict):
-        raise CompileInputError(f"{file_path} model 'columns' must be a mapping")
+    return parse_schema_columns(
+        raw_columns=raw_columns,
+        file_path=file_path,
+        label="model",
+        error_class=CompileInputError,
+        column_locations=column_locations,
+    )
 
-    parsed_columns: list[SchemaColumn] = []
-    column_mapping: dict[object, object] = cast(dict[object, object], raw_columns)
-    raw_column_name: object
-    raw_column_metadata: object
-    for raw_column_name, raw_column_metadata in column_mapping.items():
-        if not isinstance(raw_column_name, str):
-            raise CompileInputError(f"{file_path} model column names must be strings")
-        if not raw_column_name.strip():
-            raise CompileInputError(f"{file_path} model column names must be non-empty strings")
-        if not isinstance(raw_column_metadata, dict):
-            raise CompileInputError(
-                f"{file_path} model column '{raw_column_name}' metadata must be a mapping"
-            )
-        column_metadata: dict[str, object] = cast(dict[str, object], raw_column_metadata)
-        unknown_keys: set[str] = set(column_metadata) - {
-            "type",
-            "nullable",
-            "description",
-            "audits",
-        }
-        if unknown_keys:
-            raise CompileInputError(
-                f"{file_path} model column '{raw_column_name}' has unknown metadata keys: "
-                f"{', '.join(sorted(unknown_keys))}"
-            )
-        nullable: bool | None = _optional_model_header_bool(
-            raw_value=column_metadata.get("nullable"),
+
+def _merge_model_schema_columns(
+    *,
+    model_name: str,
+    file_path: Path,
+    model_schema_columns: tuple[SchemaColumn, ...] | None,
+    local_columns: tuple[SchemaColumn, ...],
+) -> tuple[SchemaColumn, ...]:
+    if model_schema_columns is None:
+        return local_columns
+    merged_named_columns: list[SchemaColumn] = list(model_schema_columns)
+    named_index_by_name: dict[str, int] = {
+        column.name.lower(): index for index, column in enumerate(model_schema_columns)
+    }
+    additional_columns: list[SchemaColumn] = []
+    local_column: SchemaColumn
+    for local_column in local_columns:
+        named_index: int | None = named_index_by_name.get(local_column.name.lower())
+        if named_index is None:
+            additional_columns.append(local_column)
+            continue
+        named_column: SchemaColumn = merged_named_columns[named_index]
+        _validate_model_schema_audit_augmentation(
+            model_name=model_name,
             file_path=file_path,
-            label=f"model column '{raw_column_name}'",
-            key="nullable",
+            local_column=local_column,
+            named_column=named_column,
         )
-        audits: tuple[SchemaAuditInstance, ...] = _parse_model_header_audits(
-            raw_audits=column_metadata.get("audits"),
-            file_path=file_path,
-            label=f"model column '{raw_column_name}'",
+        additional_audits: tuple[SchemaAuditInstance, ...] = tuple(
+            audit for audit in local_column.audits if audit not in named_column.audits
         )
-        _validate_nullable_audits(
-            file_path=file_path,
-            column_name=raw_column_name,
-            nullable=nullable,
-            audit_names=tuple(audit.definition_name for audit in audits),
+        merged_named_columns[named_index] = replace(
+            named_column,
+            audits=(*named_column.audits, *additional_audits),
         )
-        parsed_columns.append(
-            SchemaColumn(
-                name=raw_column_name,
-                type=_optional_model_header_string(
-                    raw_value=column_metadata.get("type"),
-                    file_path=file_path,
-                    label=f"model column '{raw_column_name}'",
-                    key="type",
-                ),
-                nullable=nullable,
-                description=_optional_model_header_string(
-                    raw_value=column_metadata.get("description"),
-                    file_path=file_path,
-                    label=f"model column '{raw_column_name}'",
-                    key="description",
-                ),
-                audits=audits,
-                location=column_locations.get(raw_column_name),
-            )
+    return (*merged_named_columns, *additional_columns)
+
+
+def _validate_model_schema_audit_augmentation(
+    *,
+    model_name: str,
+    file_path: Path,
+    local_column: SchemaColumn,
+    named_column: SchemaColumn,
+) -> None:
+    named_origin: str = (
+        f"{named_column.location.path}:{named_column.location.line}"
+        if named_column.location is not None
+        else "the named schema"
+    )
+    overridden_fields: list[str] = []
+    if local_column.type is not None:
+        overridden_fields.append("type")
+    if local_column.nullable is not None:
+        overridden_fields.append("nullable")
+    if local_column.description is not None:
+        overridden_fields.append("description")
+    if overridden_fields:
+        raise CompileInputError(
+            f"model '{model_name}' in {file_path} cannot override "
+            f"{', '.join(overridden_fields)} for named-schema column '{local_column.name}' from "
+            f"{named_origin}; only audit augmentation is supported"
         )
-    return tuple(parsed_columns)
+    if not local_column.audits:
+        raise CompileInputError(
+            f"model '{model_name}' in {file_path} redeclares named-schema column "
+            f"'{local_column.name}' from {named_origin} without audits; only audit augmentation "
+            "is supported"
+        )
 
 
 def _parse_model_header_audits(
@@ -1119,25 +1177,25 @@ def _optional_model_header_string(
     return raw_value
 
 
-def _optional_model_header_bool(
-    *, raw_value: object | None, file_path: Path, label: str, key: str
-) -> bool | None:
-    if raw_value is None:
+def _resolve_model_schema(
+    *,
+    values: dict[str, object],
+    model_name: str,
+    public_model_schemas: dict[str, ModelSchemaDeclaration],
+) -> ModelSchemaDeclaration | None:
+    raw_name: object | None = values.get("model_schema")
+    if raw_name is None:
         return None
-    if not isinstance(raw_value, bool):
-        raise CompileInputError(f"{file_path} {label} '{key}' must be a boolean")
-    return raw_value
-
-
-def _validate_nullable_audits(
-    *, file_path: Path, column_name: str, nullable: bool | None, audit_names: tuple[str, ...]
-) -> None:
-    if nullable is True and NOT_NULL_AUDIT_NAME in audit_names:
+    if not isinstance(raw_name, str) or not raw_name.strip():
+        raise CompileInputError(f"model '{model_name}': model_schema must be a non-empty string")
+    declaration: ModelSchemaDeclaration | None = public_model_schemas.get(raw_name)
+    if declaration is None:
+        available: str = ", ".join(sorted(public_model_schemas)) or "none"
         raise CompileInputError(
-            f"{file_path} column '{column_name}' cannot set nullable = true and audit not_null",
-            code="P002",
-            help="remove the not_null audit or set nullable = false",
+            f"model '{model_name}' references unknown model_schema '{raw_name}'; "
+            f"available schemas: {available}"
         )
+    return declaration
 
 
 def _merge_schema_tags(

@@ -33,6 +33,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
     EnumDeclaration,
+    ModelSchemaDeclaration,
 )
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
@@ -173,6 +174,7 @@ class ModelInputBuildContext:
     loaded_macros: dict[str, LoadedMacro]
     public_enums: dict[str, EnumDeclaration] = field(default_factory=dict)
     public_constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
+    public_model_schemas: dict[str, ModelSchemaDeclaration] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

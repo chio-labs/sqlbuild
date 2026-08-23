@@ -21,6 +21,7 @@ from sqlbuild.compiler.discovery._helpers.sql.declarations import (
     parse_enum_declaration_file,
     parse_model_constant_declarations,
     parse_model_enum_declarations,
+    parse_model_schema_declaration_file,
 )
 from sqlbuild.compiler.discovery._helpers.sql.functions import parse_function_sql
 from sqlbuild.compiler.discovery._helpers.sql.model_files import (
@@ -33,6 +34,7 @@ from sqlbuild.compiler.discovery._helpers.sql.tests import parse_sql_test_file
 from sqlbuild.compiler.discovery._helpers.yml.schema import parse_schema_yml
 from sqlbuild.compiler.discovery._helpers.yml.sources import parse_sources_yml
 from sqlbuild.compiler.discovery.constants import (
+    MODEL_SCHEMAS_DIRECTORY_NAME,
     PYTHON_FACTORY_FOLDER,
     PYTHON_INIT_MODULE_STEM,
     PYTHON_LOADER_FOLDER,
@@ -58,6 +60,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredLoaderFunction,
     DiscoveredMacroFile,
     DiscoveredMaterializationFile,
+    DiscoveredModelSchemaFile,
     DiscoveredProvider,
     DiscoveredProviderUsage,
     DiscoveredPythonFunctionFile,
@@ -210,6 +213,32 @@ def discover_constant_files(*, project_dir: Path) -> tuple[DiscoveredConstantFil
                 relative_path=relative_path,
                 contents=contents,
                 declarations=parse_constant_declaration_file(
+                    contents=contents,
+                    file_path=file_path,
+                    relative_path=relative_path,
+                ),
+            )
+        )
+    return tuple(discovered_files)
+
+
+def discover_model_schema_files(*, project_dir: Path) -> tuple[DiscoveredModelSchemaFile, ...]:
+    """Discover public reusable model schemas under schemas/."""
+
+    schema_root: Path = project_dir / MODEL_SCHEMAS_DIRECTORY_NAME
+    if not schema_root.is_dir():
+        return ()
+    discovered_files: list[DiscoveredModelSchemaFile] = []
+    file_path: Path
+    for file_path in sorted(schema_root.rglob("*.sql")):
+        contents: str = file_path.read_text(encoding="utf-8")
+        relative_path: Path = file_path.relative_to(project_dir)
+        discovered_files.append(
+            DiscoveredModelSchemaFile(
+                file_path=file_path,
+                relative_path=relative_path,
+                contents=contents,
+                declarations=parse_model_schema_declaration_file(
                     contents=contents,
                     file_path=file_path,
                     relative_path=relative_path,

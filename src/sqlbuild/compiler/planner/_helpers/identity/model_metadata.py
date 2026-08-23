@@ -9,15 +9,16 @@ from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry
 
 
 def contract_output_signature(*, model: CompiledModel) -> dict[str, object] | None:
-    """Build the enforced contract portion of a model's execution identity."""
+    """Build required model output metadata that participates in execution identity."""
 
-    if model.config.values.get("contract") != ContractPolicy.ENFORCED:
-        return None
     schema_entry: SchemaModelEntry | None = model.schema_entry
     if schema_entry is None or not schema_entry.columns:
         return None
+    enforced: bool = model.config.values.get("contract") == ContractPolicy.ENFORCED
+    if not enforced and schema_entry.model_schema is None:
+        return None
     return {
-        "enforced": True,
+        "enforced": enforced,
         "columns": [
             _column_output_signature(model=model, column=column) for column in schema_entry.columns
         ],

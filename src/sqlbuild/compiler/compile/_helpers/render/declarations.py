@@ -13,10 +13,12 @@ from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredConstantFile,
     DiscoveredEnumFile,
+    DiscoveredModelSchemaFile,
     DiscoveredProjectInputs,
     DiscoveredSqlModelFile,
     EnumDeclaration,
     EnumMember,
+    ModelSchemaDeclaration,
 )
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
@@ -75,6 +77,103 @@ def build_model_declaration_indexes(
         {declaration.name: declaration for declaration in model_file.enum_declarations},
         {declaration.name: declaration for declaration in model_file.constant_declarations},
     )
+
+
+def build_public_model_schema_index(
+    *, discovered_inputs: DiscoveredProjectInputs
+) -> dict[str, ModelSchemaDeclaration]:
+    """Build and resolve the collision-checked public model-schema index."""
+
+    authored: dict[str, ModelSchemaDeclaration] = {}
+    schema_file: DiscoveredModelSchemaFile
+    for schema_file in discovered_inputs.model_schema_files:
+        declaration: ModelSchemaDeclaration
+        for declaration in schema_file.declarations:
+            existing: ModelSchemaDeclaration | None = authored.get(declaration.name)
+            if existing is not None:
+                raise CompileInputError(
+                    f"Duplicate public schema '{declaration.name}' in "
+                    f"{existing.relative_path} and {declaration.relative_path}"
+                )
+            authored[declaration.name] = declaration
+
+    resolved: dict[str, ModelSchemaDeclaration] = {}
+    for schema_name in authored:
+        _declaration: ModelSchemaDeclaration
+        _declaration, resolved = _resolve_model_schema_declaration(
+            name=schema_name,
+            authored=authored,
+            resolved=resolved,
+            resolving=(),
+        )
+    return resolved
+
+
+def _resolve_model_schema_declaration(
+    *,
+    name: str,
+    authored: dict[str, ModelSchemaDeclaration],
+    resolved: dict[str, ModelSchemaDeclaration],
+    resolving: tuple[str, ...],
+) -> tuple[ModelSchemaDeclaration, dict[str, ModelSchemaDeclaration]]:
+    existing_resolved: ModelSchemaDeclaration | None = resolved.get(name)
+    if existing_resolved is not None:
+        return existing_resolved, resolved
+    if name in resolving:
+        cycle_start: int = resolving.index(name)
+        cycle: str = " -> ".join((*resolving[cycle_start:], name))
+        raise CompileInputError(f"Model schema inheritance cycle: {cycle}")
+    declaration: ModelSchemaDeclaration = authored[name]
+    inherited_columns: tuple[SchemaColumn, ...] = ()
+    if declaration.extends is not None:
+        parent: ModelSchemaDeclaration | None = authored.get(declaration.extends)
+        if parent is None:
+            raise CompileInputError(
+                f"Schema '{name}' in {declaration.relative_path} extends unknown schema "
+                f"'{declaration.extends}'"
+            )
+        resolved_parent: ModelSchemaDeclaration
+        resolved_parent, resolved = _resolve_model_schema_declaration(
+            name=parent.name,
+            authored=authored,
+            resolved=resolved,
+            resolving=(*resolving, name),
+        )
+        inherited_columns = resolved_parent.columns
+    _validate_no_inherited_column_overrides(
+        declaration=declaration,
+        inherited_columns=inherited_columns,
+    )
+    resolved_declaration: ModelSchemaDeclaration = replace(
+        declaration,
+        columns=(*inherited_columns, *declaration.columns),
+    )
+    return resolved_declaration, resolved | {name: resolved_declaration}
+
+
+def _validate_no_inherited_column_overrides(
+    *,
+    declaration: ModelSchemaDeclaration,
+    inherited_columns: tuple[SchemaColumn, ...],
+) -> None:
+    inherited_by_name: dict[str, SchemaColumn] = {
+        column.name.lower(): column for column in inherited_columns
+    }
+    local_column: SchemaColumn
+    for local_column in declaration.columns:
+        inherited: SchemaColumn | None = inherited_by_name.get(local_column.name.lower())
+        if inherited is None:
+            continue
+        inherited_origin: str = (
+            f"{inherited.location.path}:{inherited.location.line}"
+            if inherited.location is not None
+            else "an ancestor schema"
+        )
+        raise CompileInputError(
+            f"Schema '{declaration.name}' in {declaration.relative_path} redeclares inherited "
+            f"column '{local_column.name}' from {inherited_origin}; column overrides are not "
+            "supported"
+        )
 
 
 def expand_declaration_references(

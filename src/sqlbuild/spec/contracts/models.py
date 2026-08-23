@@ -255,6 +255,7 @@ class SchemaAuditInstance:
     severity: str | None = None
     run_scope: str | None = None
     always_run: bool = False
+    location: SourceLocation | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -275,6 +276,7 @@ class SchemaModelEntry:
     """One model metadata entry normalized from MODEL(...)."""
 
     name: str
+    model_schema: str | None = None
     description: str | None = None
     type_enforcement: bool | None = None
     meta: dict[str, object] = field(default_factory=dict)

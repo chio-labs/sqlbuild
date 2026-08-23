@@ -15,6 +15,7 @@ from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,
+    SchemaColumn,
     SchemaModelEntry,
     SchemaSeedEntry,
     SourceColumnEntry,
@@ -113,6 +114,27 @@ class DiscoveredConstantFile:
     relative_path: Path
     contents: str
     declarations: tuple[ConstantDeclaration, ...]
+
+
+@dataclass(frozen=True)
+class ModelSchemaDeclaration:
+    """One public reusable model column schema declaration."""
+
+    name: str
+    columns: tuple[SchemaColumn, ...]
+    relative_path: Path
+    extends: str | None = None
+    description: str | None = None
+
+
+@dataclass(frozen=True)
+class DiscoveredModelSchemaFile:
+    """A public SQL file containing reusable model schemas."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    declarations: tuple[ModelSchemaDeclaration, ...]
 
 
 @dataclass(frozen=True)
@@ -360,6 +382,7 @@ class DiscoveredProjectInputs:
     model_files: tuple[DiscoveredSqlModelFile, ...] = field(default_factory=tuple)
     enum_files: tuple[DiscoveredEnumFile, ...] = field(default_factory=tuple)
     constant_files: tuple[DiscoveredConstantFile, ...] = field(default_factory=tuple)
+    model_schema_files: tuple[DiscoveredModelSchemaFile, ...] = field(default_factory=tuple)
     sql_function_files: tuple[DiscoveredSqlFunctionFile, ...] = field(default_factory=tuple)
     python_function_files: tuple[DiscoveredPythonFunctionFile, ...] = field(default_factory=tuple)
     schema_files: tuple[DiscoveredSchemaFile, ...] = field(default_factory=tuple)

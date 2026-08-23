@@ -29,6 +29,13 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/sources`
 - `concepts/seeds`
 - `concepts/models`
+- `concepts/models/materializations`
+- `concepts/models/schemas`
+- `concepts/models/contracts`
+- `concepts/models/hooks`
+- `concepts/models/configuration`
+- `concepts/kata`
+- `concepts/kata/custom-rules`
 - `concepts/enums-and-constants`
 - `concepts/interpolation`
 - `concepts/macros`
@@ -74,6 +81,7 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `cli/playground`
 - `cli/skills`
 - `cli/compile`
+- `cli/kata`
 - `cli/plan`
 - `cli/build`
 - `cli/load`
@@ -141,13 +149,15 @@ __expected__fact_orders AS (
 SELECT 1
 ```
 
-See [Testing](/concepts/scenarios) for unit tests, scenarios, and local replay.
+See [Testing](/concepts/testing) for SQL unit tests and [Scenarios](/concepts/scenarios) for local
+E2E replay.
 
 ### Verify early
 
 Before any model runs, SQLBuild does static analysis of your project - offline, no warehouse connection needed.
 
 - **Catch errors at compile.** SQL syntax, type inference, contract checks, and column lineage all run before execution. A bad reference or a type mismatch fails at compile, with an error that points at the line - not halfway through a warehouse run.
+- **Enforce architecture deliberately.** Opt into [Kata](/concepts/kata) to check model structure, dependency CTEs, layer boundaries, joins, naming, contracts, and test coverage with coded faults and remediations.
 - **Fast, because it's Rust where it counts.** Static analysis runs on [Polyglot](https://github.com/tobilg/polyglot), a Rust SQL engine (MIT, 32+ dialects), so compile stays quick even on large projects.
 - **Open, not paywalled.** The static analysis is part of the Apache-2.0 core - no proprietary engine, no separate login, and no paid tier gating the smart checks.
 
@@ -166,7 +176,7 @@ When enabled, change detection covers the whole graph:
 - **Cascade propagation:** when a model does change, the signal propagates downstream, with configurable replay windows (`replay_on_change`).
 - **Python nodes:** loaders, tasks, assets, checks, and hooks are fingerprinted by source and dependency hashes; skip/run is user-controlled via `ctx.skip()`.
 
-State is plain append-only rows in your own warehouse (`_sqlbuild_fingerprints`, `_sqlbuild_source_freshness`, `_sqlbuild_node_results`) - no external state database, no manifest files, no state machine that can corrupt. Point SQLBuild at an [existing dbt project](/concepts/dbt-compatibility/overview) and the same opt-in change detection prunes unchanged dbt models from the run - nothing metered, no account, nothing to log into.
+State is plain append-only rows in your own warehouse (`_sqlbuild_fingerprints`, `_sqlbuild_source_freshness`, `_sqlbuild_node_results`) - no external state database, no manifest files, no state machine that can corrupt. SQLBuild-owned models can also depend on models from an [existing dbt project](/concepts/dbt-compatibility/overview) - nothing metered, no account, nothing to log into.
 
 ### Deploy reversibly (opt-in)
 
@@ -324,7 +334,7 @@ def materialize(ctx: MaterializationContext) -> MaterializationResult:
 ### Quick links
 
     Get a project running locally in minutes.
-    Full reference for every SQLBuild command.
+    Reference for SQLBuild commands and flags.
     Understand models, incremental strategies, audits, and selectors.
     E2E tests with local DuckDB replay.
 
@@ -544,6 +554,9 @@ waffle-shop/
     sql/
       udf__is_completed_order.sql    # scalar SQL UDF
       table_fn__customer_orders.sql  # table function
+  schemas/
+    orders/
+      order.sql                 # reusable model column schema
   models/
     staging/
       stg_customers.sql         # view (audits declared in MODEL() header)
@@ -582,6 +595,7 @@ waffle-shop/
 ### Next steps
 
 - [Models](/concepts/models) - understand `MODEL()` headers and materialization types
+- [Kata](/concepts/kata) - opt into repository architecture and model-shape checks
 - [Functions](/concepts/functions) - SQL UDFs, Python UDFs, and table functions
 - [Incremental](/concepts/incremental) - learn about cursor-based incremental strategies
 - [Audits](/concepts/audits) - configure data quality checks
@@ -625,6 +639,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | SQL validation | Offline, compile-time (Polyglot) | dbt Core: none; dbt Fusion engine: compile-time (proprietary; built on Apache-2.0 dbt Core v2) | Compile-time (SQLGlot) |
 | Column-level lineage | Compile-time, fast and rich modes | dbt Core: post-hoc via docs; dbt Fusion engine: compile-time | Compile-time |
 | Column contract validation | Compile-time inference plus runtime enforcement with `contract enforced` | YAML schema contracts at runtime | Schema contracts via plan |
+| SQL architecture policy | Opt-in Kata rules over compiled models with coded faults, remediations, suppressions, and custom rules | Project conventions through packages and external tooling | Built-in audits and external linting |
 | SQL transpilation | For local E2E replay into DuckDB | No | For cross-dialect model execution |
 | Python macros | `@macro()` syntax | No (Jinja only) | SQLMesh macro syntax |
 | Jinja support | No (Python macros instead) | Yes (core templating) | Yes |
@@ -698,7 +713,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Adapters | DuckDB, MotherDuck, Snowflake, BigQuery, Databricks, PostgreSQL, SQL Server | 30+ (community adapters) | DuckDB, Snowflake, BigQuery, Databricks, Spark, Redshift, Postgres, Trino, MySQL |
 | State requirements | Stateless by default | manifest.json + target/ | Requires state store (local database or PostgreSQL for production) |
 | Playground | `sqb playground` | Clone example repo | Example project |
-| AI agent skills | `sqb skills update` | No | No |
+| AI agent skills | General guidance with `sqb skills update`; policy-derived guidance with `sqb kata skills` | No | No |
 
 ### Where each tool fits
 
@@ -1204,9 +1219,6 @@ Most keys are overridden by the more specific layer, but three merge instead:
 - `row_diff_exclude_columns` lists are unioned across layers.
 - `row_diff_tolerances` mappings are deep-merged across layers, so a header tolerance for one column adds to (rather than replaces) tolerances declared in defaults or path defaults.
 
-Other lists, including `merge_exclude_columns`, use normal override behavior: a more specific
-path default or `MODEL()` header replaces the complete list from the earlier layer.
-
 ### Settings
 
 Global feature toggles:
@@ -1240,6 +1252,22 @@ default_audit_run_scope = "final"
 
 - **`staged`** (default for most adapters): Materializes into a staging table, runs audits, then swaps into the target. If audits fail, the production table is untouched.
 - **`direct`**: Creates the table directly at the target location. Audits run after materialization. Simpler but no pre-promotion safety net.
+
+### Kata
+
+Kata policy belongs in the shared `sqlbuild_project.toml` so local and CI evaluation use the same
+architecture rules:
+
+```toml
+[kata]
+select = ["SQBK"]
+```
+
+Kata is opt-in. `SQBK` activates every built-in rule; narrower prefixes activate a rule family, and
+exact codes activate individual rules. Audit, SQL test, and custom-rule test-case minimums each
+default to one and can be overridden under `[kata.thresholds]`. See
+[Kata SQL Architecture Checks](/concepts/kata) for the complete rule, configuration, and suppression
+reference.
 
 ### Project variables
 
@@ -2255,67 +2283,91 @@ csv_settings:
 
 Source: `concepts/models.mdx`
 
-SQL model definitions, the MODEL() block, materialization types, and how the DAG is built.
+SQL model anatomy, references, dependencies, and the model documentation guide.
 
-A model is a SQL file that defines one transformation step. Each model produces one table or view in the warehouse.
+A model is a SQL file that defines one transformation step and produces a table or view in the warehouse.
 
-### MODEL() header
+### Model anatomy
 
-Every model file starts with a `MODEL()` block that declares its materialization, configuration, and schema metadata:
+Every model starts with a `MODEL()` header followed by its query:
 
 ```sql
 MODEL (
   materialized table,
   tags [marts],
-  description "Order fact table with waffle and payment details.",
+  description "Order fact table",
   columns (
-    order_id (audits [not_null]),
+    order_id (type INTEGER, audits [not_null]),
   ),
 );
 
 SELECT
   o.order_id,
   o.customer_id,
-  w.waffle_name,
-  w.price_cents * o.quantity AS line_total_cents
+  p.amount_cents
 FROM __ref("stg_orders") o
-LEFT JOIN __seed("waffle_types") w ON o.waffle_type_id = w.waffle_type_id
+JOIN __ref("stg_payments") p USING (order_id)
 ```
 
-### Materialization types
+The header controls how SQLBuild builds, validates, and documents the model. The query remains ordinary SQL apart from SQLBuild reference and macro calls.
 
-#### view
+### References
 
-Creates a database view. Rebuilt on every run.
+| Reference | Syntax | Resolves to |
+|-----------|--------|-------------|
+| Model | `__ref("name")` | Another model |
+| Seed | `__seed("name")` | A seed CSV table |
+| Source | `__source("name")` | An external source |
+| Scalar UDF | `__udf("name")` | A user-defined function |
+
+SQLBuild discovers the dependency graph from these calls and executes models in topological order. Upstream models are always built before downstream dependants. Seeds use `__seed()`, not `__ref()`.
+
+See [Functions](/concepts/functions) for scalar UDF and table-function references.
+
+### Model guide
+
+- [Materializations](/concepts/models/materializations): views, tables, incrementals, snapshots, and custom materializations.
+- [Schemas](/concepts/models/schemas): inline columns, reusable schemas, inheritance, audits, and model-local extensions.
+- [Contracts](/concepts/models/contracts): exact and open output validation, type enforcement, and enum-backed columns.
+- [Hooks](/concepts/models/hooks): SQL and Python lifecycle hooks.
+- [Configuration](/concepts/models/configuration): `MODEL()` field reference and SQL-validation controls.
+
+For deeper execution behavior, see [Incremental](/concepts/incremental), [Snapshots](/concepts/snapshots), and [Audits](/concepts/audits).
+
+## Materializations
+
+Source: `concepts/models/materializations.mdx`
+
+Choose how SQLBuild persists model output.
+
+The `materialized` field selects how a model becomes a warehouse relation.
+
+### View
+
+Creates a database view and replaces it on each build:
 
 ```sql
-MODEL (
-  materialized view,
-  tags [staging],
-);
+MODEL (materialized view);
 
 SELECT id AS order_id, customer_id, status
 FROM __source("raw__orders")
 ```
 
-#### table
+### Table
 
-Creates a table via `CREATE TABLE AS`. SQLBuild materializes into a staging table first, runs audits, then promotes to the target. Fully rebuilt each time.
+Creates a table through a staging relation. SQLBuild runs blocking audits before promoting the staging table to the destination.
 
 ```sql
-MODEL (
-  materialized table,
-  tags [marts],
-);
+MODEL (materialized table);
 
 SELECT customer_id, COUNT(*) AS total_orders
 FROM __ref("stg_orders")
 GROUP BY customer_id
 ```
 
-#### incremental
+### Incremental
 
-Inserts or updates into an existing table using a cursor-based strategy. See [Incremental](/concepts/incremental) for full configuration.
+Inserts or updates rows using append, delete/insert, or merge behavior. Cursor configuration controls replay bounds and may split work into microbatches.
 
 ```sql
 MODEL (
@@ -2324,25 +2376,15 @@ MODEL (
   cursor activity_hour,
   cursor_type timestamp,
   cursor_grain hour,
-  cursor_inputs (
-    fact_orders ordered_at,
-  ),
-  incremental_mode microbatch,
-  batch_size 1d,
-  tags [marts],
+  unique_key [activity_hour],
 );
-
-SELECT
-  DATE_TRUNC('hour', o.ordered_at) AS activity_hour,
-  COUNT(*) AS orders_placed,
-  SUM(o.quantity) AS waffles_ordered
-FROM __ref("fact_orders") o
-GROUP BY DATE_TRUNC('hour', o.ordered_at)
 ```
 
-#### snapshot
+See [Incremental](/concepts/incremental) for cursor semantics, replay, schema changes, and microbatch execution.
 
-Maintains historical row versions with SCD Type 2 semantics. Supports timestamp-based and value-check-based change detection, historical source inputs, hard delete invalidation, and configurable full-refresh safety policies.
+### Snapshot
+
+Maintains historical row versions with SCD Type 2 semantics:
 
 ```sql
 MODEL (
@@ -2352,25 +2394,19 @@ MODEL (
   updated_at updated_at,
 );
 
-SELECT
-  customer_id,
-  name,
-  plan,
-  status,
-  updated_at
+SELECT customer_id, name, plan, status, updated_at
 FROM __source("customers")
 ```
 
-See [Snapshots](/concepts/snapshots) for full configuration, historical input modes, and querying patterns.
+See [Snapshots](/concepts/snapshots) for timestamp and check strategies, historical inputs, and full-refresh policies.
 
-#### custom
+### Custom
 
-User-defined Python materialization function. Custom materializations get full access to the framework including adapter, schema change signals, query change detection, and audit hooks.
+A project-local Python materialization can manage specialized persistence while retaining adapter access, schema-change signals, query-change detection, and audit hooks.
 
 ```sql
 MODEL (
   materialized partition_tracked,
-  tags [marts],
   placeholders (
     partition_start "'2026-04-01'",
     partition_end "'2026-04-05'",
@@ -2378,177 +2414,204 @@ MODEL (
   config (
     tracking_table partition_state,
     partition_column order_date,
-    date_range_start 2026-04-01,
-    date_range_end 2026-04-05,
   ),
-  description "Partition-tracked daily order summary using custom materialization.",
-  columns (
-    order_date (audits [not_null]),
-  ),
-  audits [
-    expression_is_true (
-      name "waffles ordered is positive",
-      expression "waffles_ordered > 0",
-    ),
-  ],
 );
 
-SELECT
-  CAST(o.ordered_at AS DATE) AS order_date,
-  COUNT(DISTINCT o.order_id) AS order_count,
-  SUM(o.quantity) AS waffles_ordered,
-  COUNT(DISTINCT o.customer_id) AS unique_customers
-FROM __ref("stg_orders") o
-WHERE CAST(o.ordered_at AS DATE) >= CAST(@@@partition_start AS DATE)
-  AND CAST(o.ordered_at AS DATE) < CAST(@@@partition_end AS DATE)
-GROUP BY CAST(o.ordered_at AS DATE)
+SELECT *
+FROM __ref("stg_orders")
+WHERE ordered_at >= @@@partition_start
+  AND ordered_at < @@@partition_end
 ```
 
-Custom materializations use `@@@placeholder` syntax for values substituted at runtime. These deferred placeholders are preserved through compilation and resolved by the materialization at execution time. The `config` block passes arbitrary key-value pairs to the Python `materialize()` function via `ctx.config`.
+The `config` block is passed to the Python function through `ctx.config`. Runtime-owned `@@@placeholder` values remain unresolved until materialization execution.
 
-### References
+## Schemas
 
-Models use typed reference calls that SQLBuild resolves to qualified warehouse relation names during compilation:
+Source: `concepts/models/schemas.mdx`
 
-| Reference | Syntax | Resolves to |
-|-----------|--------|-------------|
-| Model | `__ref("name")` | Another model |
-| Seed | `__seed("name")` | A seed CSV table |
-| Source | `__source("name")` | An external source |
-| Scalar UDF | `__udf("name")` | A user-defined function |
+Declare model columns inline or reuse canonical inherited schemas.
 
-```sql
-SELECT
-  o.order_id,
-  o.customer_id,
-  w.waffle_name,
-  w.price_cents * o.quantity AS line_total_cents,
-  __udf("udf__is_completed_order")(o.status) AS is_completed
-FROM __ref("stg_orders") o
-LEFT JOIN __seed("waffle_types") w ON o.waffle_type_id = w.waffle_type_id
-```
+Schema metadata defines column names, types, nullability, descriptions, and column audits. It can live inline in one `MODEL()` header or in a reusable `SCHEMA()` declaration.
 
-Seeds use `__seed()`, not `__ref()`. Using `__ref()` with a seed name raises a compile error with a helpful message pointing you to `__seed()`.
+### Inline columns
 
-See [Functions](/concepts/functions) for UDF and table function details.
-
-### DAG ordering
-
-SQLBuild automatically discovers the dependency graph from reference calls, then executes models in topological order. Upstream models are always built before their downstream dependents.
-
-### Schema declarations
-
-Model metadata - description, columns, audits, and type information - lives directly in the `MODEL()` header. There is no separate `schema.yml` for models.
+Use inline columns for metadata owned by one model:
 
 ```sql
 MODEL (
   materialized view,
-  tags [staging],
-  description "Cleaned order records.",
+  description "Cleaned order records",
   columns (
-    order_id (audits [not_null, unique]),
-    customer_id (audits [not_null]),
+    order_id (type INTEGER, nullable false, audits [not_null, unique]),
+    customer_id (type INTEGER, nullable false, audits [not_null]),
     status (
-      audits [
-        accepted_values (values ["placed", "preparing", "ready", "completed", "cancelled"]),
-      ],
+      type VARCHAR,
+      audits [accepted_values (values ["placed", "completed", "cancelled"])],
     ),
   ),
 );
-
-SELECT
-  id AS order_id,
-  customer_id,
-  status
-FROM __source("raw__orders")
 ```
 
-#### Column-level audits
+See [Audits](/concepts/audits) for built-in audits, custom audits, arguments, severity, and incremental run scope.
 
-Attach audits to individual columns inside the `columns` block. Simple audits like `not_null` and `unique` are listed by name. Parameterized audits like `accepted_values` pass arguments inline:
+### Reusable schemas
 
-```sql
-columns (
-  order_id (audits [not_null, unique]),
-  status (
-    audits [
-      accepted_values (values ["placed", "preparing", "completed", "cancelled"]),
-    ],
-  ),
-),
-```
-
-#### Model-level audits
-
-Attach audits to the model itself for multi-column or expression-based checks:
+When multiple models implement the same relation shape, declare it once under `schemas/`. SQLBuild discovers schema files recursively and makes public names available throughout the project.
 
 ```sql
-MODEL (
-  materialized table,
-  audits [
-    expression_is_true (
-      name "revenue is non-negative",
-      expression "total_revenue_cents >= 0",
-    ),
-  ],
-);
-```
-
-#### Type enforcement
-
-Type enforcement is implicit. If any column in the `MODEL()` header declares a `type`, type enforcement is automatically enabled for that model:
-
-```sql
-MODEL (
-  materialized table,
+-- schemas/orders/order.sql
+SCHEMA (
+  name order,
+  description "Canonical staged order shape",
   columns (
-    order_id (type INTEGER, audits [not_null]),
-    amount_cents (type INTEGER),
+    order_id (type INTEGER, nullable false, audits [not_null]),
+    customer_id (type INTEGER, nullable false, audits [not_null]),
+    status (type VARCHAR),
   ),
 );
 ```
 
-When enabled, SQLBuild casts columns to declared types and uses them for schema-change detection. There is no need to set `type_enforcement: true` explicitly.
+Bind a model with `model_schema`:
 
-#### Contracts
+```sql
+MODEL (
+  materialized view,
+  schema staging,
+  model_schema order,
+  contract enforced,
+);
+```
 
-Contracts enforce that a model's output matches its declared column schema exactly - column names, column count, and column types. When `contract enforced` is set, the declared columns become the authoritative output contract.
+`schema staging` selects the warehouse destination schema. `model_schema order` selects reusable column metadata.
+
+The reusable description becomes the model description when the model does not declare one. A model-owned description takes precedence.
+
+### Model-local columns
+
+A bound model may add output columns that are not part of the reusable shape:
+
+```sql
+MODEL (
+  model_schema order,
+  columns (
+    ingestion_batch_id (type VARCHAR, nullable false),
+  ),
+  contract enforced,
+);
+```
+
+Resolved schema columns retain their order and new model-local columns follow them. Use a named child schema when an extension is reusable; use inline columns for an extension owned by one model.
+
+### Model-specific column audits
+
+Audits in a reusable schema apply to every bound model. A model can add stricter audits to an inherited column by naming that column and declaring only `audits`:
+
+```sql
+MODEL (
+  model_schema order,
+  columns (
+    order_id (audits [unique]),
+  ),
+);
+```
+
+The effective `order_id` keeps the reusable type, nullability, description, and `not_null` audit, then adds `unique`. A model cannot remove reusable audits or override inherited metadata. An inherited-column entry containing `type`, `nullable`, or `description` fails compilation. Identical audit instances are deduplicated.
+
+### Inheritance
+
+A reusable schema may extend one parent with additional columns:
+
+```sql
+SCHEMA (
+  name sourced_order,
+  extends order,
+  columns (
+    source (type VARCHAR, nullable false),
+  ),
+);
+```
+
+Inheritance may be transitive. Parent columns resolve before child columns. An inherited column cannot be redeclared or overridden in a child schema. SQLBuild rejects unknown parents, cycles, case-insensitive duplicates, and multiple parents.
+
+Physical SQL output order is not currently enforced. Contract matching uses names, types, and nullability.
+
+### Contracts and planning
+
+`contract enforced` requires the actual output to equal the complete named-plus-local declaration. `contract none`, the default, requires declared columns but permits further undeclared output columns. See [Contracts](/concepts/models/contracts).
+
+Schema metadata and model-specific audit augmentation participate in model execution identity. Changing a parent affects models bound through descendants; unrelated reusable schemas do not affect other models.
+
+### Limitations
+
+Reusable schemas intentionally support a narrow ownership model:
+
+- One optional parent, with transitive inheritance.
+- Additive child and model-local output columns.
+- Audit-only model augmentation of inherited columns.
+- No general column overrides, multiple inheritance, composition, mixins, parameters, or generated projections.
+- No physical output ordinal enforcement.
+
+## Contracts
+
+Source: `concepts/models/contracts.mdx`
+
+Validate required or exact model output schemas.
+
+A model's declared columns define required output metadata. The `contract` policy determines whether that declaration is open or exact.
+
+| Value | Behavior |
+|-------|----------|
+| `none` | Every declared column is required, while undeclared output columns are allowed. This is the default. |
+| `enforced` | Declared columns are the complete authoritative output schema; missing and additional columns fail. |
 
 ```sql
 MODEL (
   materialized table,
   contract enforced,
   columns (
-    order_id (type INTEGER, audits [not_null]),
-    customer_id (type INTEGER, audits [not_null]),
+    order_id (type INTEGER, nullable false),
+    customer_id (type INTEGER, nullable false),
     amount_cents (type INTEGER),
     status (type VARCHAR),
   ),
 );
 ```
 
-Contract enforcement happens at two levels:
+### Validation
 
-**Compile time** - config fields that reference columns (`unique_key`, `cursor`, `updated_at`, `check_columns`) are validated against the declared column names. If a referenced column is not in the contract, compilation fails.
+At compile time, SQLBuild checks inferred output names, types, and nullability. Configuration fields that reference columns, including `unique_key`, `cursor`, `updated_at`, and `check_columns`, are also checked against an enforced contract.
 
-**Runtime** - after materialization into the staging table, SQLBuild inspects the actual output columns and validates them against the contract before promotion:
+At runtime, SQLBuild validates the materialized staging relation before promotion:
 
-- Missing declared columns fail with code `K010`
-- Extra undeclared columns fail with code `K011`
-- Type mismatches (e.g. `VARCHAR` where `INTEGER` was declared) fail with code `K013`
+- Missing declared columns fail.
+- Additional columns fail only for `contract enforced`.
+- Type mismatches fail using adapter-aware type normalization.
 
-If any validation fails, the production table is untouched. Types are compared using adapter-aware normalization, so equivalent types across dialects are handled correctly.
+When pre-promotion validation fails, the existing production relation remains untouched.
 
-Contract values:
+### Type enforcement
 
-| Value | Behavior |
-|-------|----------|
-| `enforced` | Declared columns are the complete, authoritative output schema |
-| `none` | No contract enforcement (default) |
+Declaring a column `type` enables type enforcement automatically. SQLBuild uses declared types for compile-time analysis, materialization casts where required, and schema-change detection. There is no separate `type_enforcement` setting.
 
-Contracts interact with schema change policies. For snapshot models, `snapshot_schema_change append_new_columns` is incompatible with `contract enforced` because appending columns would violate the contract.
+### Reusable schemas
 
-Columns may also use a declared enum as their type:
+Contracts apply to the effective declaration, not only the reusable base:
+
+```sql
+MODEL (
+  model_schema order,
+  columns (
+    ingestion_batch_id (type VARCHAR, nullable false),
+  ),
+  contract enforced,
+);
+```
+
+This requires exactly the resolved `order` columns plus `ingestion_batch_id`. Changing the policy to `none` still requires those columns but permits further output. See [Schemas](/concepts/models/schemas).
+
+### Enum columns
+
+A column may use a declared enum as its type:
 
 ```sql
 MODEL (
@@ -2559,39 +2622,23 @@ MODEL (
 );
 ```
 
-SQLBuild resolves the enum to its physical string or integer type and adds accepted-values validation for its members. See [Enums and Constants](/concepts/enums-and-constants).
+SQLBuild resolves the enum to its physical string or integer type and adds accepted-values validation. See [Enums and Constants](/concepts/enums-and-constants).
 
-#### Audit run scope
+### Related policies
 
-Audits on incremental models can specify `run_scope` to control when they execute:
+The core default is `contract none`. A repository can enable [`SQBKR401`](/concepts/kata#layers-and-model-grammar) to require enforced contracts through Kata architecture policy.
 
-```sql
-MODEL (
-  materialized incremental,
-  incremental_strategy delete_insert,
-  cursor activity_hour,
-  cursor_type timestamp,
-  cursor_grain hour,
-  columns (
-    activity_hour (audits [not_null (run_scope delta_and_final)]),
-  ),
-  audits [
-    expression_is_true (
-      name "orders placed is non-negative",
-      expression "orders_placed >= 0",
-      run_scope delta_and_final,
-    ),
-  ],
-);
-```
+Contracts also constrain schema-change behavior. For example, `snapshot_schema_change append_new_columns` is incompatible with `contract enforced` because an unannounced appended column would violate the exact declaration.
 
-`delta_and_final` runs the audit against each delta batch before DML and again against the target after all batches complete. See [Audits](/concepts/audits) for details.
+## Hooks
 
-### Hooks
+Source: `concepts/models/hooks.mdx`
 
-Pre-hooks and post-hooks run before and after materialization. Each entry is either a `sql("...")` hook that executes SQL, or a `python("hook_name")` hook that calls a Python function from the `hooks/` directory.
+Run validated SQL or Python lifecycle hooks around model materialization.
 
-#### SQL hooks
+Pre-hooks and post-hooks run before and after materialization. Each entry is either `sql("...")` or `python("hook_name")`.
+
+### SQL hooks
 
 ```sql
 MODEL (
@@ -2600,40 +2647,30 @@ MODEL (
 );
 ```
 
-SQL hooks support macro expansion (`@macro()`), project variables (`@@name`), environment variables (`@@ENV:NAME`), and context variables (`@@CTX:`). SQL is validated at compile time when SQL analysis is enabled.
-
-Available context variables in hooks:
+SQL hooks support macros, project variables, environment variables, and context variables. SQL is validated at compile time when SQL analysis is enabled.
 
 | Variable | Value |
 |----------|-------|
-| `@@CTX:destination.qualified` | Fully qualified destination relation name |
+| `@@CTX:destination.qualified` | Fully qualified destination relation |
 | `@@CTX:destination.schema` | Destination schema |
 | `@@CTX:destination.table` | Destination relation name |
 | `@@CTX:model.name` | Model name |
 | `@@CTX:run.target` | Active target name |
 | `@@CTX:run.id` | Current run ID |
 
-#### Python hooks
+### Python hooks
 
-Python hooks call `@hook`-decorated functions discovered from the `hooks/` directory:
+SQLBuild discovers `@hook` functions recursively under `hooks/`:
 
 ```python
-# hooks/permissions.py
 from sqlbuild.hooks import hook
 
 @hook
-def grant_analyst(ctx):
-    ctx.execute_sql(f"GRANT SELECT ON {ctx.destination.qualified} TO analyst_role")
+def grant_analyst(ctx, role="analyst_role"):
+    ctx.execute_sql(f"GRANT SELECT ON {ctx.destination.qualified} TO {role}")
 ```
 
-Reference a Python hook in the MODEL() header by name, with optional keyword arguments:
-
-```sql
-MODEL (
-  materialized table,
-  post_hooks [python("grant_analyst")],
-);
-```
+Reference the hook by name and optionally pass keyword arguments:
 
 ```sql
 MODEL (
@@ -2642,147 +2679,486 @@ MODEL (
 );
 ```
 
-You can mix SQL and Python hooks in the same list:
+SQL and Python hooks can appear in the same list.
 
-```sql
-MODEL (
-  materialized table,
-  pre_hooks [sql('SET search_path TO analytics')],
-  post_hooks [
-    python("grant_analyst"),
-    sql('ANALYZE @@CTX:destination.qualified'),
-  ],
-);
-```
+### Hook context
 
-#### Hook context
-
-Python hooks receive a `HookContext` as their first parameter (named `ctx`, `context`, or `hook_context`):
+Python hooks receive a `HookContext` as their first parameter, conventionally named `ctx`:
 
 | Field | Description |
 |-------|-------------|
-| `ctx.model_name` | Name of the model being built |
+| `ctx.model_name` | Model being built |
 | `ctx.phase` | `pre_hooks` or `post_hooks` |
-| `ctx.hook_name` | Name of the hook being invoked |
+| `ctx.hook_name` | Invoked hook name |
 | `ctx.run_id` | Current run ID |
-| `ctx.target` | Active target name |
-| `ctx.vars` | Project variables |
-| `ctx.destination.qualified` | Fully qualified destination relation name |
-| `ctx.destination.schema` | Destination schema |
-| `ctx.destination.name` | Destination relation name |
-| `ctx.destination.database` | Destination database |
+| `ctx.target` | Active target |
+| `ctx.vars` | Effective project variables |
+| `ctx.destination` | Destination relation metadata |
 | `ctx.adapter` | Adapter instance |
 | `ctx.connection` | Live connection |
-| `ctx.execute_sql(sql)` | Execute SQL on the connection |
+| `ctx.execute_sql(sql)` | Execute SQL |
 | `ctx.query(sql)` | Execute SQL and return rows |
-| `ctx.log(message)` | Log to the run output |
-| `ctx.skip(reason, mode=...)` | Skip the model's materialization. `mode` accepts `"soft"` (default) or `"hard"` (blocks downstream models). |
-| `ctx.providers` | Access discovered [providers](/concepts/python-nodes/providers) by name |
+| `ctx.log(message)` | Write run output |
+| `ctx.skip(reason, mode=...)` | Soft-skip the model or hard-block downstream models |
+| `ctx.providers` | Access discovered [providers](/concepts/python-nodes/providers) |
 
-Pre-hooks can return `ctx.skip(...)` to skip the model's materialization entirely. A soft skip skips only this model; a hard skip also blocks downstream models. Providers can also be injected directly as hook function parameters by name. See [Providers](/concepts/python-nodes/providers).
+Providers may also be injected into hook parameters by name.
 
-#### Hook decorator
+### Discovery and validation
 
-The `@hook` decorator accepts optional metadata:
+- Files beginning with `_`, including `__init__.py`, are skipped.
+- Hook names must be unique across the project.
+- The decorator accepts optional `name` and `description` arguments.
+- Unknown hooks, unknown keyword arguments, and missing required arguments fail compilation.
+- A function without `**kwargs` rejects undeclared hook arguments.
 
-```python
-from sqlbuild.hooks import hook
+## Configuration
 
-@hook
-def grant_analyst(ctx):
-    """Grant analyst role on the destination table."""
-    ctx.execute_sql(f"GRANT SELECT ON {ctx.destination.qualified} TO analyst_role")
+Source: `concepts/models/configuration.mdx`
 
-@hook(name="custom_name", description="Custom hook with explicit name")
-def my_hook(ctx, role="analyst_role"):
-    ctx.execute_sql(f"GRANT SELECT ON {ctx.destination.qualified} TO {role}")
-```
+MODEL() header fields and SQL-validation controls.
 
-| Argument | Description |
-|----------|-------------|
-| `name` | Override the hook name (defaults to the function name) |
-| `description` | Human-readable description (defaults to the function docstring) |
-
-#### Discovery rules
-
-- Hook functions are discovered from `.py` files under `hooks/` recursively
-- Files named `__init__.py` or starting with `_` are skipped
-- Each function decorated with `@hook` is registered by name
-- Hook names must be unique across all hook files
-- Python hook references in MODEL() headers are validated at compile time: unknown names, unknown kwargs, and missing required parameters all raise compile errors
-
-#### Validation
-
-At compile time, SQLBuild validates every `python("hook_name")` reference:
-
-- The hook name must match a discovered `@hook` function
-- Any keyword arguments passed in the MODEL() header must match parameters on the function signature
-- If the function does not accept `**kwargs`, unknown arguments raise a compile error
-
-### Config reference
-
-#### Common config
+### Common fields
 
 | Field | Description |
 |-------|-------------|
-| `materialized` | `view`, `table`, `incremental`, or a custom materialization name |
-| `tags` | List of tags for selector filtering |
-| `description` | Human-readable description of the model |
-| `columns` | Column declarations with optional types, audits, and descriptions |
+| `materialized` | `view`, `table`, `incremental`, `snapshot`, or a custom materialization name |
+| `tags` | Tags used by selectors |
+| `description` | Human-readable model description |
+| `columns` | Model-local column declarations or inherited-column audit augmentation |
+| `model_schema` | Reusable column schema name |
 | `audits` | Model-level audit instances |
-| `schema` | Override target schema |
-| `database` | Override target database |
-| `alias` | Override target relation name |
-| `pre_hooks` | Lifecycle hooks to run before materialization: `sql("...")` and/or `python("hook_name")` entries |
-| `post_hooks` | Lifecycle hooks to run after materialization: `sql("...")` and/or `python("hook_name")` entries |
-| `enabled` | Set to `false` to skip the model |
-| `contract` | `enforced` or `none`. When enforced, declared columns are the authoritative output schema. |
-| `sql_validation` | Per-model boolean override of the project `sql_validation` setting |
+| `schema` | Destination warehouse schema override |
+| `database` | Destination database override |
+| `alias` | Destination relation-name override |
+| `pre_hooks` | SQL or Python hooks before materialization |
+| `post_hooks` | SQL or Python hooks after materialization |
+| `enabled` | Set to `false` to disable the model |
+| `contract` | `none` or `enforced` |
+| `sql_validation` | Per-model SQL-validation override |
 
-Four knobs gate compile-time SQL validation, from broadest to narrowest:
+### SQL validation
 
-1. `settings.sql_analysis` - master switch for all SQL-analysis features
-2. `--no-sql-validation` - per-run CLI kill switch
-3. `settings.sql_validation` - project-level validation setting
-4. `MODEL (sql_validation ...)` - per-model override of the project setting
+Four controls gate compile-time SQL validation, from broadest to narrowest:
 
-Validation runs only when every broader knob allows it: `sql_analysis` must be on and `--no-sql-validation` absent before the project/model `sql_validation` values are consulted.
+1. `settings.sql_analysis`: project-wide master switch for SQL-analysis features.
+2. `--no-sql-validation`: per-run CLI kill switch.
+3. `settings.sql_validation`: project-level validation setting.
+4. `MODEL (sql_validation ...)`: per-model project-setting override.
 
-#### Incremental config
+Validation runs only when every broader control permits it.
+
+### Incremental fields
 
 | Field | Description |
 |-------|-------------|
 | `incremental_strategy` | `append`, `delete_insert`, or `merge` |
 | `cursor` | Output column used to track incremental position |
 | `cursor_type` | `timestamp` or `integer` |
-| `cursor_grain` | Time grain for timestamp cursors: `second`, `minute`, `hour`, `day`, `month`, `year` |
-| `cursor_start` | Lower bound floor for the cursor |
-| `cursor_inputs` | Map of upstream ref/source names to their cursor columns |
-| `unique_key` | Column(s) used for merge and delete_insert matching |
-| `merge_exclude_columns` | Columns omitted from matched-row updates for `merge`; new rows still insert every column |
-| `allow_full_refresh` | Set to `false` to reject `--full-refresh` before model execution |
-| `incremental_mode` | Set to `microbatch` to enable batched execution |
-| `batch_size` | Batch window size (e.g. `1d`, `1h`, or an integer) |
-| `lookback` | Extend the replay window backwards to re-process recent data |
+| `cursor_grain` | Timestamp grain such as `second`, `hour`, or `day` |
+| `cursor_start` | Lower cursor bound |
+| `cursor_inputs` | Upstream names mapped to cursor columns |
+| `unique_key` | Merge or delete/insert matching columns |
+| `incremental_mode` | Set to `microbatch` for batched execution |
+| `batch_size` | Batch window such as `1d`, `1h`, or an integer |
+| `lookback` | Backward replay extension |
 | `on_schema_change` | `append_new_columns`, `sync_all_columns`, `ignore`, or `fail` |
-| `replay_on_change` | `forward` (default), `full`, or `bounded-<duration>` (e.g. `bounded-14d`) |
-| `run_despite_unchanged` | Force periodic rebuilds: `always` or a duration (e.g. `24h`, `30d`). Table materializations only. |
+| `replay_on_change` | `forward`, `full`, or `bounded-<duration>` |
+| `run_despite_unchanged` | `always` or a periodic duration |
 
-See [Incremental](/concepts/incremental) for detailed usage.
+See [Incremental](/concepts/incremental) for full semantics.
 
-#### Custom materialization config
-
-| Field | Description |
-|-------|-------------|
-| `config` | Arbitrary key-value pairs passed to `ctx.config` in the Python function |
-| `placeholders` | Default values for `@@@placeholder` tokens in the SQL |
-
-#### Diff config
+### Custom materialization fields
 
 | Field | Description |
 |-------|-------------|
-| `row_diff_exclude_columns` | Columns to exclude from row-level diff comparisons |
-| `row_diff_tolerances` | Tolerance rules for numeric diff comparisons |
+| `config` | Arbitrary values passed to `ctx.config` |
+| `placeholders` | Defaults for runtime `@@@placeholder` tokens |
+
+### Diff fields
+
+| Field | Description |
+|-------|-------------|
+| `row_diff_exclude_columns` | Columns excluded from row-level comparison |
+| `row_diff_tolerances` | Numeric comparison tolerances |
+
+## Kata SQL Architecture Checks
+
+Source: `concepts/kata.mdx`
+
+Enforce opt-in SQL architecture and model-shape policy over your compiled project.
+
+Kata is SQLBuild's opt-in SQL architecture policy. It compiles the project, then checks model
+structure, naming, dependency boundaries, joins, contracts, and test coverage. Built-in checks run
+offline: they do not execute warehouse SQL or rewrite source files. Findings have stable codes and
+concrete remediations.
+
+Kata is error-only: every retained finding blocks the command. Use it for conventions that a team
+has deliberately adopted, not as a collection of advisory style warnings.
+
+Tests codify behavioral expectations; Kata codifies architectural expectations for SQL models.
+For equivalent boundaries, repository structure, and code-shape checks in Python projects, see
+[Fensu](https://docs.fensu.dev/).
+
+### Where Kata fits
+
+| Command | Responsibility |
+|---------|----------------|
+| `sqb compile` | SQL validity, references, inferred columns, contracts, and lineage |
+| `sqb lint` / `sqb format` | SQL presentation and formatting |
+| `sqb kata` | Repository architecture and model-shape conventions |
+| `sqb test` | Transformation behavior |
+| `sqb audit` | Data quality against materialized data |
+
+Kata is a separate command. It is not run automatically by `compile` or `build`.
+
+### Enable Kata
+
+Commit the shared policy to `sqlbuild_project.toml`:
+
+```toml
+[kata]
+select = ["SQBK"]
+```
+
+This activates the complete standard policy. Start here, then use `ignore` to switch off conventions
+the repository is not ready to enforce.
+
+Kata evaluates no rules when `[kata].select` is empty. Prefixes select matching rules that are
+enabled by default; exact codes also select individually opt-in rules. All current built-ins are
+enabled by default, so `SQBK` selects the complete built-in catalogue.
+
+Rule selectors are case-sensitive prefixes. They do not use `*` wildcards:
+
+- Built-in rules use `SQBK<family><three digits>`, such as `SQBKS101`.
+- Custom rules use `XSQBK<family><three digits>`, such as `XSQBKP001`.
+- `select` activates rules; `ignore` removes matching rules from the active policy.
+- An exact code activates that rule even when it is opt-in.
+- The CLI `--select` and `--exclude` flags scope models, not rules.
+
+Inspect any built-in or configured custom rule without enabling it:
+
+```bash
+sqb kata rule SQBKS101
+```
+
+### Built-in rules
+
+All current built-ins form the standard policy and are enabled by matching prefixes.
+
+#### Structure
+
+| Code | Check |
+|------|-------|
+| `SQBKS000` | Standalone comments belong on the first inner line of a CTE |
+| `SQBKS001` | Transformation logic belongs in top-level CTEs |
+| `SQBKS002` | The terminal SELECT reads plainly from the final top-level CTE |
+| `SQBKS101` | Each `__ref` and `__source` is isolated in one dependency import CTE |
+| `SQBKS201` | `SELECT *` is restricted to dependency import CTEs |
+| `SQBKS202` | Positional set-operation branches enumerate their columns |
+| `SQBKS301` | CTEs are top-level, not nested |
+| `SQBKS302` | Recursive CTEs are not permitted |
+| `SQBKS401` | View materialization agrees with the `stg_v`, `int_v`, or `mart_v` marker |
+| `SQBKS501` | CTE names describe their contents |
+
+#### Layers and model grammar
+
+| Code | Check |
+|------|-------|
+| `SQBKL001` | Dependencies flow forward through the layer order |
+| `SQBKL101` | Qualified table dependencies use `__ref` or `__source` |
+| `SQBKR001` | Model names follow `<domain>__<layer>__<entity>[__<source>]` |
+| `SQBKR002` | Model layer names agree with their folders |
+| `SQBKR201` | Model source suffixes and source dependency names use approved, current tokens |
+| `SQBKR301` | Referenced model identifiers follow Kata model-name grammar |
+| `SQBKR401` | Models declare `contract enforced` |
+
+#### Joins
+
+| Code | Check |
+|------|-------|
+| `SQBKJ001` | Implicit comma joins are not permitted |
+| `SQBKJ002` | Cross joins require an exact, reasoned exception |
+| `SQBKJ101` | Non-cross joins declare `ON` or `USING` keys |
+
+#### Column naming and types
+
+| Code | Check |
+|------|-------|
+| `SQBKN001` | `is_`, `has_`, and `can_` columns are BOOLEAN |
+| `SQBKN002` | `*_at`, `*_ts`, and `*_timestamp` columns use timestamp types |
+| `SQBKN003` | `*_date` columns are DATE |
+
+These checks use declared contract columns, not inferred output columns.
+
+#### Decision hygiene
+
+| Code | Check |
+|------|-------|
+| `SQBKH001` | Enum comparisons use declared members and normalized operands |
+| `SQBKH002` | Non-canonical numeric decisions use named constants |
+| `SQBKH101` | Identical enum domains are consolidated |
+| `SQBKH201` | Public enum and constant files live under domain folders |
+
+`SQBKH001` requires direct comparisons to `@enum("<enum>").<MEMBER>`. Normalize controlled values
+upstream rather than wrapping either comparison operand. A direct source-side value may be
+normalized in the comparison because the project does not control source casing; the enum member
+must still remain unwrapped.
+
+#### Tests and coverage
+
+| Code | Check |
+|------|-------|
+| `SQBKX001` | Non-passthrough models meet the configured audit minimum |
+| `SQBKX002` | Non-passthrough models meet the configured SQL test minimum |
+| `SQBKX201` | Selected custom rules have statically discoverable public-harness test cases |
+
+Selecting a custom rule automatically adds `SQBKX201` unless the policy ignores it. This is a
+static check for conventional `RuleCase` and `evaluate_rule` usage; it does not execute the tests.
+Thresholds default to one and can be set to zero to disable the corresponding minimum:
+
+```toml
+[kata.thresholds]
+min_audits_per_model = 1
+min_tests_per_model = 1
+min_custom_rule_test_cases = 1
+```
+
+### Naming policy
+
+Naming and layer rules can use a closed project vocabulary:
+
+```toml
+[kata]
+domains = ["finance", "market"]
+approved_source_tokens = ["salesforce", "stripe"]
+cte_name_whitelist = ["finalized_rows"]
+cte_name_denylist = ["scratch_result"]
+
+[kata.retired_source_tokens]
+old_crm = "salesforce"
+```
+
+Valid Kata layers are `stg`, `stg_v`, `int_clean`, `int_v`, `int_enriched`, `mart`, and
+`mart_v`. Configuration supplies vocabulary to active rules; it does not activate them. When
+`SQBKR001` or `SQBKH201` is active, a non-empty `domains` list constrains model or declaration
+domains respectively.
+
+### Exceptions and scoped ignores
+
+Choose the narrowest mechanism that represents the policy:
+
+| Mechanism | Scope | Reason required | Stale-checked |
+|-----------|-------|-----------------|---------------|
+| `ignore` | Disable rules globally | No | No |
+| `rule_exceptions` | One exact rule and exact file | Yes | Yes |
+| `rule_ignores` | Rule prefixes or codes across path globs | Yes | No |
+| `select_star_allow` | Path-glob allowance for `SQBKS201` | Yes | No |
+
+```toml
+[[kata.rule_exceptions]]
+rule = "SQBKJ002"
+path = "models/mart/market__mart__matrix.sql"
+reason = "Intentional Cartesian product over a bounded dimension"
+
+[[kata.rule_ignores]]
+rules = ["SQBKS"]
+paths = ["models/legacy/**"]
+reason = "Legacy migration boundary"
+
+[[kata.select_star_allow]]
+paths = ["models/mart/*_export.sql"]
+reason = "Intentional passthrough export"
+```
+
+An exact exception fails when its active rule no longer produces a fault at that file, prompting
+the repository to remove obsolete exceptions. Broad migration boundaries and lone-star allowances
+remain reasoned but are intentionally not stale-checked.
+
+### Cache and CI
+
+Built-in policies use a persistent cache under `target/kata-cache`. Compiled model content, active
+rules, options, thresholds, naming vocabulary, and relevant project files participate in cache
+identity. Disable it when diagnosing cache behavior:
+
+```toml
+[kata.cache]
+enabled = false
+```
+
+Run Kata directly in CI. It exits `1` when faults remain:
+
+```bash
+sqb kata
+sqb kata --json
+```
+
+Generate agent guidance from the same resolved policy and verify that committed guidance remains
+fresh:
+
+```bash
+sqb kata skills
+sqb kata skills --check
+```
+
+Kata manages `.agents/skills/sqlbuild-kata/SKILL.md`,
+`.claude/skills/sqlbuild-kata/SKILL.md`, and `.opencode/skills/sqlbuild-kata/SKILL.md`. It refuses
+to overwrite divergent or unowned files.
+
+See [Custom Kata Rules](/concepts/kata/custom-rules) to encode repository-specific policy and the
+[Kata CLI reference](/cli/kata) for command output and exit behavior.
+
+## Custom Kata Rules
+
+Source: `concepts/kata/custom-rules.mdx`
+
+Define and test repository-owned SQL architecture rules with the public Kata API.
+
+Custom Kata rules extend the built-in policy when a repository has domain conventions that cannot
+be expressed by configuration alone. They use the same selection, suppression, deterministic
+ordering, and remediation output as built-ins.
+
+Custom rule codes use `XSQBK<family><three digits>`. Keep codes stable after adoption because they
+become part of configuration, CI output, and exceptions.
+
+### Define a rule
+
+```python
+from sqlbuild.kata import KataFault, RuleContext, kata
+
+@kata(
+    code="XSQBKP001",
+    family="prices",
+    slug="typed-currency",
+    message="price models must declare a currency column",
+    remediation="Declare currency in the MODEL columns contract.",
+)
+def typed_currency(*, model, ctx: RuleContext) -> list[KataFault]:
+    if any(column.name == "currency" for column in ctx.declared_columns):
+        return []
+    return [ctx.path_fault()]
+```
+
+The function signature is exactly two keyword-only arguments named `model` and `ctx`. Return an
+empty list when the model passes or one or more `KataFault` values when it fails.
+
+`RuleContext` exposes the compiled model, authored SQL, raw Polyglot AST, references, parsed model
+name, materialization, declared columns, audit and test counts, public declarations, active policy,
+and fault constructors. Repository files can be read safely through `project_read_text` and
+`project_glob`.
+
+### Load and select rules
+
+Load repository-owned files or dotted modules from `sqlbuild_project.toml`:
+
+```toml
+[kata]
+select = ["XSQBKP001"]
+rule_paths = ["kata/rules"]
+rule_modules = ["project_kata.rules"]
+```
+
+A directory in `rule_paths` is scanned recursively for Python files containing `@kata`. Dotted
+modules must resolve beneath the project root. Codes must be unique across built-in and custom
+rules.
+
+Custom rules require exact selectors by default. Set `enabled_by_default=True` on the decorator to
+include a rule in matching prefix selections. This does not activate Kata when
+`[kata].select` is empty.
+
+### Typed options
+
+Declare options with `RuleOption.boolean`, `integer`, `string`, `string_list`, or `integer_list`:
+
+```python
+from sqlbuild.kata import KataFault, RuleContext, RuleOption, kata
+
+REQUIRED_DOMAIN = RuleOption.string(
+    name="required_domain",
+    default="market",
+    description="Domain that owns price models",
+)
+
+@kata(
+    code="XSQBKP002",
+    family="prices",
+    slug="required-domain",
+    message="price models must belong to the configured domain",
+    remediation="Move or rename this model for the configured domain.",
+    options=(REQUIRED_DOMAIN,),
+)
+def required_domain(*, model, ctx: RuleContext) -> list[KataFault]:
+    parts = ctx.name_parts
+    if parts is not None and parts.domain == ctx.option(REQUIRED_DOMAIN):
+        return []
+    return [ctx.path_fault()]
+```
+
+Configure options under the exact rule code. Unknown rules, option names, or invalid values fail
+configuration:
+
+```toml
+[kata.rule_options.XSQBKP002]
+required_domain = "finance"
+```
+
+### Test every rule
+
+Use the public harness so tests exercise normal SQLBuild discovery, compilation, rule loading, and
+structured fault evaluation:
+
+```python
+from sqlbuild.kata import RuleCase, evaluate_rule
+
+from kata.rules.prices import typed_currency
+
+def test_missing_currency_faults() -> None:
+    result = evaluate_rule(
+        rule=typed_currency,
+        test_case=RuleCase(
+            description="missing currency faults",
+            source=(
+                "MODEL (materialized table);\n\n"
+                "WITH final AS (SELECT 1 AS price)\n"
+                "SELECT price FROM final\n"
+            ),
+            path="models/mart/market__mart__prices.sql",
+            expected_fault_count=1,
+        ),
+    )
+
+    assert result.fault_count == 1
+```
+
+`RuleCase.files` can add supporting project files and `RuleCase.config` supplies the rule's option
+values. Keep conventional `RuleCase` and `evaluate_rule` calls under `tests/` so `SQBKX201` can
+count statically discoverable harness cases. This coverage check does not execute the tests, so run
+the test suite separately in CI.
+
+### Execution and caching
+
+Selected custom rules execute in a bounded Python subprocess with a 30-second timeout. Exceptions
+are reported with the rule code and model path, and returned faults rejoin normal suppressions and
+deterministic ordering.
+
+Selecting any custom rule disables the model cache by default. To keep the built-in cache available,
+require hermetic custom rules explicitly:
+
+```toml
+[kata.cache]
+enabled = true
+require_cacheable = true
+```
+
+Cacheable rules may import supported pure modules such as `collections`, `dataclasses`, `enum`,
+`math`, `re`, `typing`, and `sqlbuild.kata`. Use `RuleContext` rather than direct filesystem calls.
+SQLBuild validates these constraints before evaluation.
+
+Custom findings are still recomputed on each invocation. `require_cacheable` preserves the native
+model cache around them; it does not cache custom subprocess output.
+
+Return to [Kata SQL Architecture Checks](/concepts/kata) for built-in rules, selectors, and
+exceptions.
 
 ## Enums and Constants
 
@@ -2875,7 +3251,10 @@ Model-local names must start with `_`. They are available only in that model's q
 
 Enums must contain at least one member and use one consistent scalar type. String and integer members cannot be mixed. Integer values use explicit member syntax.
 
-Names must be SQL identifiers. Duplicate declaration names, duplicate member names, invalid visibility prefixes, and malformed references all fail compilation.
+Names must be SQL identifiers. Enum member identifiers must be uppercase, even when an explicit
+member's stored value is lowercase. Member lookup is case-sensitive, so `.WIN` is valid for
+`WIN "win"` and `.win` is not. Duplicate declaration names, duplicate member names, invalid
+visibility prefixes, and malformed references all fail compilation.
 
 ### Enum-typed contracts
 
@@ -2922,7 +3301,7 @@ The rule is simple: if it's any SQL that will be executed, it uses `@`. If it's 
 | `${CTX:...}` | TOML/YAML config values | Config compilation |
 | `${ENV:...}` | TOML/YAML config values | Config compilation |
 
-`@@CTX:` is intentionally SQL-hook-only. Model SQL describes a relation's data and should not reference its own destination identity. SQL hooks are the operational SQL layer where destination context is useful - grants, logging, post-materialization DDL. Python hooks access the same information through `ctx.destination` on the `HookContext` object (see [Hooks](/concepts/models#hooks)).
+`@@CTX:` is intentionally SQL-hook-only. Model SQL describes a relation's data and should not reference its own destination identity. SQL hooks are the operational SQL layer where destination context is useful - grants, logging, post-materialization DDL. Python hooks access the same information through `ctx.destination` on the `HookContext` object (see [Hooks](/concepts/models/hooks)).
 
 See [Enums and Constants](/concepts/enums-and-constants) for declaration syntax, visibility, and contract integration.
 
@@ -3160,7 +3539,7 @@ SELECT 1 AS id
 
 Hook SQL is validated at compile time, so invalid hook SQL is caught before execution. SQL hooks also support `@@CTX:` context variables, `@@name` project variables, and `@@ENV:NAME` environment variables directly without needing a macro wrapper.
 
-For hooks that need more than string interpolation, use `python(...)` hooks instead. See [Hooks](/concepts/models#hooks) for the full Python hook API.
+For hooks that need more than string interpolation, use `python(...)` hooks instead. See [Hooks](/concepts/models/hooks) for the full Python hook API.
 
 ### Macro context
 
@@ -3343,15 +3722,24 @@ WHERE customer_id = p_customer_id
 
 Table functions are designed as an alternative to final-layer views for cases where views don't push predicates efficiently. A view over `fact_orders` with a `WHERE customer_id = ?` filter may scan the entire table if the engine doesn't push the predicate down. A table function accepts the filter as an argument and guarantees the predicate is applied at execution time.
 
-#### Table functions are terminal
+#### Managed table function dependencies
 
-Table functions sit at the edge of the DAG, facing the consumer. They can reference models, seeds, sources, and other functions - but models cannot reference table functions. This is enforced at compile time.
+Models call managed table functions with `__table_fn("name")(arguments...)`:
 
-The semantic reason: table functions are parameterized queries meant to be called by applications or analysts, not intermediate pipeline steps. Interleaving them into the model DAG would break the clean separation between pipeline computation and consumer-facing access patterns.
+```sql
+SELECT customer_id, order_id
+FROM __table_fn("table_fn__customer_orders")(42)
+```
+
+The name must be double quoted and the second argument list is required, including for a zero-argument function. SQLBuild validates that the target exists, is a table function, and receives the declared number of arguments.
+
+The reference creates a typed dependency in the project DAG. Selecting a consuming model also selects the required function, function changes propagate to consumers, and cycles through models and functions are rejected. SQLBuild treats the call as an opaque relation for SQL analysis and uses the function's declared `returns table(...)` columns for star expansion and terminal lineage.
+
+Incremental state still belongs to the consuming model. A table function does not own a cursor interval or retain execution state.
 
 #### Using table functions
 
-Table functions are called directly in SQL contexts that support table-valued functions:
+Applications and analysts can call the deployed warehouse function directly:
 
 ```sql
 SELECT * FROM table_fn__customer_orders(42)
@@ -3367,12 +3755,13 @@ SQL functions can reference the same resources as models:
 | Seed | `__seed("seed_name")` |
 | Source | `__source("source_name")` |
 | Scalar UDF | `__udf("function_name")` |
+| Table function | `__table_fn("function_name")(arguments...)` |
 
 These references are resolved at compile time and create DAG edges. If a referenced model changes, the function is redeployed.
 
 ### Change propagation
 
-Functions participate in fingerprint-based change detection. If a function's SQL body or Python source changes, SQLBuild redeploys the function and marks all dependent models as needing a rebuild.
+Functions participate in fingerprint-based change detection. Their identity includes dependencies and declared return contracts in addition to the function body and runtime metadata. If a function changes, SQLBuild redeploys it and marks dependent models as changed.
 
 ### Project layout
 
@@ -3415,7 +3804,7 @@ Source: `concepts/incremental.mdx`
 
 Cursor-based incremental strategies, microbatch execution, and backfill policies.
 
-Incremental models process only new or changed data instead of rebuilding the entire table. SQLBuild works out where to resume by reading the highest cursor value (timestamp or integer) already in the target table, so there is no state store or checkpoint to maintain. If a model fails for several runs, the next successful build picks up from the last data it actually wrote, with no manual backfilling.
+Incremental models process only new or changed data instead of rebuilding the entire table. SQLBuild works out where to resume from the current target and input relations, so there is no separate checkpoint store. A retry recomputes its interval from current warehouse state rather than reusing the exact interval of a failed attempt.
 
 ### Strategies
 
@@ -3469,8 +3858,6 @@ MODEL (
   materialized incremental,
   incremental_strategy merge,
   unique_key [customer_id],
-  merge_exclude_columns [ingested_at],
-  allow_full_refresh false,
   cursor last_ordered_at,
   cursor_type timestamp,
   cursor_grain second,
@@ -3490,28 +3877,9 @@ GROUP BY customer_id
 
 `merge` always requires `unique_key`. The cursor controls which upstream rows are scanned; the unique key determines how they're matched against the target.
 
-`merge_exclude_columns` removes columns only from the matched-row `UPDATE` set. Every source
-column remains in the unmatched-row `INSERT`, so an immutable creation timestamp can be retained
-for existing keys and populated for new keys. Exclusions are matched case-insensitively, cannot
-duplicate or overlap `unique_key`, and must name declared columns when `contract enforced` is used.
-
-New columns admitted by `on_schema_change append_new_columns` or `sync_all_columns` are updated by
-default. Add a new column to `merge_exclude_columns` only when its target value must remain
-immutable after first insertion. Changing the list changes model version identity and may trigger
-the model's configured `replay_on_change` behavior, but it does not rewrite values already stored
-in the target.
-
-Set `allow_full_refresh false` when the incremental target cannot be reconstructed from its current
-inputs. Both `sqb plan --full-refresh` and `sqb build --full-refresh` fail and name all selected
-protected models before model execution. Omitted or `true` preserves normal full-refresh behavior.
-
-These controls still implement a Type 1 upsert: each unique key has one current row. Preserving an
-immutable column does not create row versions and is not SCD Type 2 history; use a snapshot or an
-immutable archival model when historical states are required.
-
 ### Cursors
 
-Cursors define the incremental replay boundary. SQLBuild queries `MAX(cursor)` from the target table and `MIN/MAX` from upstream inputs to compute the replay window automatically.
+Cursors define the incremental replay boundary. SQLBuild queries `MAX(cursor)` from the target table and `MIN/MAX` from upstream inputs to compute the replay window automatically. Observed maxima are inclusive warehouse values; SQLBuild advances them once to produce an effective exclusive end bound.
 
 | Field | Description |
 |-------|-------------|
@@ -3538,7 +3906,35 @@ MODEL (
 );
 ```
 
-SQLBuild uses these to compute `MIN/MAX` across the listed inputs and determine the replay window.
+SQLBuild uses these to determine the replay window. With multiple listed inputs, the end is the conservative common watermark: the minimum of their maxima. This prevents a faster input from advancing the model beyond data available from a slower input.
+
+On a first build, SQLBuild derives the interval from the declared cursor inputs and cursor policy. If it cannot establish a valid interval, the build fails before mutating the destination.
+
+#### Cursor bounds in model SQL
+
+Cursor-based incremental models can read their effective interval with zero-argument intrinsics:
+
+```sql
+MODEL (
+  materialized incremental,
+  incremental_strategy delete_insert,
+  cursor activity_hour,
+  cursor_type timestamp,
+  cursor_grain hour,
+  cursor_inputs (
+    fact_orders ordered_at,
+  ),
+);
+
+SELECT customer_id, ordered_at AS activity_hour
+FROM __ref("fact_orders")
+WHERE ordered_at >= __cursor_start()
+  AND ordered_at < __cursor_end()
+```
+
+`__cursor_start()` is the effective inclusive start and `__cursor_end()` is the effective exclusive end after cursor floors, lookback, replay policy, and command-line overrides have been applied. The intrinsics accept no arguments and are only valid in built-in cursor incremental model query SQL. They are rejected in functions, hooks, audits, SQL tests and scenarios, source expressions, non-incremental or cursorless models, custom materializations, and non-microbatch full refreshes.
+
+In microbatch mode, the intrinsics resolve to each batch's concrete bounds. A microbatch full refresh discovers its range from current inputs while ignoring the old destination watermark.
 
 ##### Listed inputs bound the window; unlisted inputs do not
 
@@ -9220,6 +9616,21 @@ cd waffle-shop
 # Agent skill files are already installed
 ```
 
+### Kata policy skills
+
+`sqb skills update` installs general SQLBuild framework guidance. `sqb kata skills` generates
+project-specific guidance from the active Kata rules, options, thresholds, naming vocabulary, and
+scoped deviations:
+
+```bash
+sqb kata skills
+sqb kata skills --check
+```
+
+Use `--check` in CI to detect missing or stale policy guidance without rewriting files. Kata uses
+the separate `sqlbuild-kata` skill path and refuses to overwrite divergent or unowned content. See
+[Kata SQL Architecture Checks](/concepts/kata) and the [Kata CLI reference](/cli/kata).
+
 ## compile
 
 Source: `cli/compile.mdx`
@@ -9262,6 +9673,10 @@ When SQL analysis is enabled (default), compile performs static analysis on your
 - **Column inference**: Infers output columns from each model's SQL, including through CTEs, subqueries, and JOINs
 - **Column contract validation**: If a model declares columns in its `MODEL()` header, compile checks that every declared column exists in the query output. If a column declares a type and `type_enforcement` is enabled, compile also verifies the inferred type matches the declared type
 - **Column lineage**: Traces which source columns flow into each output column, including transform classification. See [Column Lineage](/concepts/column-lineage) for details
+
+`sqb compile` checks SQL correctness, contracts, and lineage. [`sqb kata`](/cli/kata) compiles the
+project and then applies its separately configured architecture policy. Kata is not run
+automatically by `compile`.
 
 #### Contract diagnostics
 
@@ -9358,6 +9773,164 @@ sqb compile --manifest
 
 # Skip SQL validation
 sqb compile --no-sql-validation
+```
+
+## kata
+
+Source: `cli/kata.mdx`
+
+Run configured SQL architecture checks, inspect rules, and generate policy guidance.
+
+## sqb kata
+
+Compiles the project and applies its configured [Kata architecture policy](/concepts/kata)
+to compiled models. Built-in checks run offline and never connect to the warehouse or rewrite SQL.
+Kata reports coded, error-only faults with source locations and remediations. Repository-defined
+custom rules run in a bounded Python subprocess.
+
+### Usage
+
+```bash
+sqb --project-dir <path> kata [flags]
+sqb kata rule <rule-code>
+sqb kata skills [--check]
+```
+
+### Evaluation flags
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Emit structured JSON instead of text |
+| `--select`, `-s` | Evaluate selected models using normal SQLBuild selector syntax |
+| `--exclude` | Exclude models from a non-empty `--select` scope |
+
+Rule policy comes from `[kata].select` in `sqlbuild_project.toml`; CLI `--select` and `--exclude`
+scope models within that policy. Model selectors support names, `tag:`, `path:`, graph `+`, and
+path-between syntax.
+
+`--exclude` is applied only when `--select` is also provided. To evaluate all models except one,
+start with an explicit broad selector such as `--select path:models`.
+
+### Text output
+
+A clean policy prints its model and cache counts:
+
+```text
+Kata passed: 42 models evaluated, 0 faults (40 cache hits, 2 misses)
+```
+
+Faults include a source location, rule code, message, and remediation. Model-level checks use
+line 1, column 1:
+
+```text
+models/mart/orders.sql:1:1 [SQBKS001] model SQL must keep transformation logic in top-level CTEs
+  Remediation: Move transformation logic into named top-level CTEs before the terminal SELECT.
+Found 1 kata faults
+```
+
+### JSON output
+
+```bash
+sqb kata --json
+```
+
+```json
+{
+  "cache_hits": 0,
+  "cache_misses": 1,
+  "evaluated_models": 1,
+  "fault_count": 1,
+  "faults": [
+    {
+      "code": "SQBKS001",
+      "column": 1,
+      "line": 1,
+      "message": "model SQL must keep transformation logic in top-level CTEs",
+      "path": "models/mart/orders.sql",
+      "remediation": "Move transformation logic into named top-level CTEs before the terminal SELECT."
+    }
+  ]
+}
+```
+
+Faults are ordered deterministically by path, position, code, and content.
+
+### Inspect a rule
+
+`rule` prints metadata for any exact built-in or configured custom code. The rule does not need to
+be active:
+
+```bash
+sqb kata rule SQBKS101
+```
+
+```text
+SQBKS101: dependency-import-ctes
+Family: structure
+Enabled by default: no
+Kind: built-in
+
+dependencies must be isolated in import CTEs
+
+Remediation: Move each __ref(...) or __source(...) into one named top-level import CTE and reference that CTE from later logic.
+```
+
+Custom rules also show their source and declared option defaults.
+
+### Generate policy skills
+
+Generate agent guidance from the active rules, options, thresholds, naming vocabulary, and scoped
+deviations:
+
+```bash
+sqb kata skills
+```
+
+Kata writes the same policy-specific guidance to:
+
+- `.agents/skills/sqlbuild-kata/SKILL.md`
+- `.claude/skills/sqlbuild-kata/SKILL.md`
+- `.opencode/skills/sqlbuild-kata/SKILL.md`
+
+Check committed guidance in CI without rewriting it:
+
+```bash
+sqb kata skills --check
+```
+
+Install mode refuses to overwrite divergent, malformed, or unowned files. See
+[SQLBuild skills](/cli/skills) for the separate general framework guidance command.
+
+### Exit codes
+
+| Command | Code | Meaning |
+|---------|------|---------|
+| `sqb kata` | `0` | No retained faults |
+| `sqb kata` | `1` | Faults found or Kata could not evaluate the project |
+| `sqb kata rule` | `0` | Exact rule found |
+| `sqb kata rule` | `2` | Unknown rule code |
+| `sqb kata skills` | `0` | Guidance installed |
+| `sqb kata skills --check` | `0` | All guidance is fresh |
+| `sqb kata skills --check` | `1` | Guidance is not fresh: missing, stale, divergent, malformed, or unowned |
+
+### Examples
+
+```bash
+# Evaluate the configured policy
+sqb kata
+
+# Emit machine-readable CI output
+sqb kata --json
+
+# Scope evaluation to marts and their downstream models
+sqb kata --select tag:marts+
+
+# Inspect an opt-in rule before adopting it
+sqb kata rule SQBKJ002
+
+# Keep policy-derived agent guidance current
+sqb kata skills
+sqb kata skills --check
 ```
 
 ## plan
@@ -9507,7 +10080,7 @@ This replaces the former `sqb run` command. The full lifecycle (tests + audits) 
 2. Seeds are loaded (if changed)
 3. Source audits run before their dependent models (unless `--no-audits`)
 4. SQL unit tests run before their target model (unless `--no-tests`)
-5. Models are materialized in DAG topological order (unchanged models are skipped)
+5. Models are materialized in DAG topological order (`--changes-only` skips models already current)
 6. Error-severity audits run against the staging table before promotion to the target (unless `--no-audits`)
 
 ### Output
