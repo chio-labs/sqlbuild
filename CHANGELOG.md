@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.54.2](https://github.com/chio-labs/sqlbuild/compare/v0.54.1...v0.54.2) (2026-08-23)
+
+
+### Bug Fixes
+
+* **kata:** enable standard policy and tighten enums ([#320](https://github.com/chio-labs/sqlbuild/issues/320)) ([076e041](https://github.com/chio-labs/sqlbuild/commit/076e0410da88ae207ead9ba303f5a61d360be098))
+
 ## [0.54.1](https://github.com/chio-labs/sqlbuild/compare/v0.54.0...v0.54.1) (2026-08-23)
 
 

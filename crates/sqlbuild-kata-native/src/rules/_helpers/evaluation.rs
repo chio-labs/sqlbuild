@@ -29,6 +29,21 @@ struct ComparisonFact {
     columns: BTreeSet<String>,
     string_literals: Vec<String>,
     numeric_literals: Vec<String>,
+    modified_columns: BTreeSet<ColumnFact>,
+    modified_string_literal: bool,
+    source_context: SourceContext,
+}
+
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
+struct ColumnFact {
+    name: String,
+    qualifier: Option<String>,
+}
+
+#[derive(Clone, Default)]
+struct SourceContext {
+    relations: BTreeSet<String>,
+    sole_relation: bool,
 }
 
 #[derive(Default)]
@@ -1075,7 +1090,16 @@ fn evaluate_literal_rules(
                 .string_literals
                 .iter()
                 .any(|literal| parsed.model.authored_sql.contains(literal));
-            if enum_column && bare_string {
+            let modified_controlled_column = comparison.modified_columns.iter().any(|column| {
+                parsed.model.enum_columns.contains(&column.name)
+                    && !column.qualifier.as_ref().is_some_and(|qualifier| {
+                        comparison.source_context.relations.contains(qualifier)
+                    })
+                    && !(column.qualifier.is_none() && comparison.source_context.sole_relation)
+            });
+            if enum_column
+                && (bare_string || modified_controlled_column || comparison.modified_string_literal)
+            {
                 faults.push(fault(parsed.model, rule, comparison.position.as_ref()));
             }
         }
@@ -1319,10 +1343,12 @@ fn set_expr_has_star(body: &SetExpr) -> bool {
 }
 
 fn select_facts(query: &Query) -> Vec<SelectFacts> {
+    let source_imports = source_import_names(query);
     all_queries(query)
         .into_iter()
         .filter_map(root_select)
         .map(|select| {
+            let source_context = select_source_context(select, &source_imports);
             let mut result = SelectFacts {
                 position: Some(location_position(select.select_token.0.span.start)),
                 from_count: select.from.len(),
@@ -1332,7 +1358,7 @@ fn select_facts(query: &Query) -> Vec<SelectFacts> {
                 for join in &source.joins {
                     result.joins.push(join_fact(&join.join_operator));
                     if let Some(JoinConstraint::On(expr)) = join_constraint(&join.join_operator) {
-                        comparison_facts(expr, &mut result.comparisons);
+                        comparison_facts(expr, &source_context, &mut result.comparisons);
                     }
                 }
             }
@@ -1344,11 +1370,68 @@ fn select_facts(query: &Query) -> Vec<SelectFacts> {
             .into_iter()
             .flatten()
             {
-                comparison_facts(expression, &mut result.comparisons);
+                comparison_facts(expression, &source_context, &mut result.comparisons);
             }
             result
         })
         .collect()
+}
+
+fn source_import_names(query: &Query) -> BTreeSet<String> {
+    top_ctes(query)
+        .iter()
+        .filter(|cte| {
+            dependency_import(&cte.query)
+                && root_select(&cte.query).is_some_and(|select| {
+                    select.from.len() == 1
+                        && select.from[0].joins.is_empty()
+                        && dependency_name(&select.from[0].relation).as_deref() == Some("__source")
+                })
+        })
+        .map(|cte| cte.alias.name.value.to_ascii_lowercase())
+        .collect()
+}
+
+fn select_source_context(select: &Select, source_imports: &BTreeSet<String>) -> SourceContext {
+    let mut relations: BTreeSet<String> = BTreeSet::new();
+    for source in &select.from {
+        if let Some(name) = source_relation_name(&source.relation, source_imports) {
+            relations.insert(name);
+        }
+        for join in &source.joins {
+            if let Some(name) = source_relation_name(&join.relation, source_imports) {
+                relations.insert(name);
+            }
+        }
+    }
+    let sole_relation = select.from.len() == 1
+        && select.from[0].joins.is_empty()
+        && source_relation_name(&select.from[0].relation, source_imports).is_some();
+    SourceContext {
+        relations,
+        sole_relation,
+    }
+}
+
+fn source_relation_name(factor: &TableFactor, source_imports: &BTreeSet<String>) -> Option<String> {
+    let TableFactor::Table {
+        name, args, alias, ..
+    } = factor
+    else {
+        return None;
+    };
+    let relation_name = name.0.last()?.as_ident()?.value.to_ascii_lowercase();
+    if args.is_none() && !source_imports.contains(&relation_name) {
+        return None;
+    }
+    if args.is_some() && dependency_name(factor).as_deref() != Some("__source") {
+        return None;
+    }
+    Some(
+        alias
+            .as_ref()
+            .map_or(relation_name, |value| value.name.value.to_ascii_lowercase()),
+    )
 }
 
 fn join_constraint(operator: &JoinOperator) -> Option<&JoinConstraint> {
@@ -1409,8 +1492,9 @@ fn numeric_value(expression: &Expr) -> Option<String> {
     }
 }
 
-fn comparison_facts(root: &Expr, output: &mut Vec<ComparisonFact>) {
+fn comparison_facts(root: &Expr, source_context: &SourceContext, output: &mut Vec<ComparisonFact>) {
     struct Comparisons<'a> {
+        source_context: &'a SourceContext,
         output: &'a mut Vec<ComparisonFact>,
     }
     impl Visitor for Comparisons<'_> {
@@ -1426,17 +1510,21 @@ fn comparison_facts(root: &Expr, output: &mut Vec<ComparisonFact>) {
                         | BinaryOperator::Lt
                         | BinaryOperator::LtEq
                 ) {
-                    self.output.push(comparison_fact(expression));
+                    self.output
+                        .push(comparison_fact(expression, self.source_context));
                 }
             }
             ControlFlow::Continue(())
         }
     }
-    let mut visitor = Comparisons { output };
+    let mut visitor = Comparisons {
+        source_context,
+        output,
+    };
     let _ = root.visit(&mut visitor);
 }
 
-fn comparison_fact(root: &Expr) -> ComparisonFact {
+fn comparison_fact(root: &Expr, source_context: &SourceContext) -> ComparisonFact {
     struct Values {
         fact: ComparisonFact,
     }
@@ -1480,9 +1568,100 @@ fn comparison_fact(root: &Expr) -> ComparisonFact {
     let mut visitor = Values {
         fact: ComparisonFact {
             position: Some(position(root)),
+            source_context: source_context.clone(),
             ..ComparisonFact::default()
         },
     };
     let _ = root.visit(&mut visitor);
+    if let Expr::BinaryOp { left, right, .. } = root {
+        for operand in [left.as_ref(), right.as_ref()] {
+            if direct_column(operand).is_none() {
+                visitor.fact.modified_columns.extend(column_facts(operand));
+            }
+            if direct_string_literal(operand).is_none() && contains_string_literal(operand) {
+                visitor.fact.modified_string_literal = true;
+            }
+        }
+    }
     visitor.fact
+}
+
+fn direct_column(expression: &Expr) -> Option<ColumnFact> {
+    match unwrap_nested(expression) {
+        Expr::Identifier(value) => Some(ColumnFact {
+            name: value.value.clone(),
+            qualifier: None,
+        }),
+        Expr::CompoundIdentifier(values) => {
+            let name = values.last()?.value.clone();
+            let qualifier = values
+                .get(values.len().checked_sub(2)?)
+                .map(|value| value.value.to_ascii_lowercase());
+            Some(ColumnFact { name, qualifier })
+        }
+        _ => None,
+    }
+}
+
+fn direct_string_literal(expression: &Expr) -> Option<String> {
+    let Expr::Value(value) = unwrap_nested(expression) else {
+        return None;
+    };
+    matches!(
+        value.value,
+        Value::SingleQuotedString(_)
+            | Value::DoubleQuotedString(_)
+            | Value::TripleSingleQuotedString(_)
+            | Value::TripleDoubleQuotedString(_)
+            | Value::EscapedStringLiteral(_)
+            | Value::UnicodeStringLiteral(_)
+            | Value::NationalStringLiteral(_)
+    )
+    .then(|| expression.to_string())
+}
+
+fn unwrap_nested(mut expression: &Expr) -> &Expr {
+    while let Expr::Nested(value) = expression {
+        expression = value;
+    }
+    expression
+}
+
+fn column_facts(root: &Expr) -> BTreeSet<ColumnFact> {
+    struct Columns {
+        values: BTreeSet<ColumnFact>,
+    }
+    impl Visitor for Columns {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expression: &Expr) -> ControlFlow<Self::Break> {
+            if let Some(column) = direct_column(expression) {
+                self.values.insert(column);
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let mut visitor = Columns {
+        values: BTreeSet::new(),
+    };
+    let _ = root.visit(&mut visitor);
+    visitor.values
+}
+
+fn contains_string_literal(root: &Expr) -> bool {
+    struct Strings {
+        found: bool,
+    }
+    impl Visitor for Strings {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expression: &Expr) -> ControlFlow<Self::Break> {
+            if direct_string_literal(expression).is_some() {
+                self.found = true;
+                return ControlFlow::Break(());
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let mut visitor = Strings { found: false };
+    let _ = root.visit(&mut visitor);
+    visitor.found
 }
