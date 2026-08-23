@@ -26,7 +26,10 @@ from sqlbuild.compiler.compile._helpers.attachment.sql_tests import (
     build_scenario_inputs,
     build_test_inputs,
 )
-from sqlbuild.compiler.compile._helpers.render.declarations import build_public_declaration_indexes
+from sqlbuild.compiler.compile._helpers.render.declarations import (
+    build_public_declaration_indexes,
+    build_public_model_schema_index,
+)
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
     CompileAuditInput,
@@ -261,6 +264,7 @@ def _build_models_with_declarations(
     public_enums, public_constants = build_public_declaration_indexes(
         discovered_inputs=discovered_inputs
     )
+    public_model_schemas = build_public_model_schema_index(discovered_inputs=discovered_inputs)
     declarations: DeclarationResolutionContext = DeclarationResolutionContext(
         enums=public_enums,
         constants=public_constants,
@@ -271,6 +275,7 @@ def _build_models_with_declarations(
             context,
             public_enums=public_enums,
             public_constants=public_constants,
+            public_model_schemas=public_model_schemas,
         ),
         no_sql_validation=no_sql_validation,
         defer_model_sql_validation=defer_model_sql_validation,

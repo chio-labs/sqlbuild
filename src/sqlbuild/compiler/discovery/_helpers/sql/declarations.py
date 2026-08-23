@@ -1,18 +1,28 @@
-"""Parsing helpers for authored enum and constant declaration files."""
+"""Parsing helpers for authored public SQL declaration files."""
 
 from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_header_values
+from sqlbuild.compiler.discovery._helpers.sql.model_files import (
+    header_column_locations,
+    parse_header_values,
+)
+from sqlbuild.compiler.discovery._helpers.sql.schema_columns import parse_schema_columns
 from sqlbuild.compiler.discovery.exceptions import DeclarationParseError, ModelSqlParseError
-from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration, EnumMember
+from sqlbuild.compiler.discovery.models import (
+    ConstantDeclaration,
+    EnumDeclaration,
+    EnumMember,
+    ModelSchemaDeclaration,
+)
 
 _IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-_DECLARATION_START_PATTERN: re.Pattern[str] = re.compile(r"(?P<kind>ENUM|CONSTANT)\s*\(")
+_DECLARATION_START_PATTERN: re.Pattern[str] = re.compile(r"(?P<kind>ENUM|CONSTANT|SCHEMA)\s*\(")
 _VARCHAR_TYPE: str = "VARCHAR"
 _INTEGER_TYPE: str = "INTEGER"
 _STATEMENT_TERMINATOR: str = ";"
@@ -22,6 +32,13 @@ _OPEN_PARENTHESIS: str = "("
 _CLOSE_PARENTHESIS: str = ")"
 
 
+@dataclass(frozen=True)
+class _ParsedDeclarationHeader:
+    values: dict[str, object]
+    header: str
+    header_start: int
+
+
 def parse_enum_declaration_file(
     *, contents: str, file_path: Path, relative_path: Path
 ) -> tuple[EnumDeclaration, ...]:
@@ -29,12 +46,12 @@ def parse_enum_declaration_file(
 
     return tuple(
         _parse_enum_declaration(
-            values=values,
+            values=parsed_header.values,
             file_path=file_path,
             relative_path=relative_path,
             model_name=None,
         )
-        for values in _parse_declaration_headers(
+        for parsed_header in _parse_declaration_headers(
             contents=contents,
             file_path=file_path,
             expected_kind="ENUM",
@@ -49,19 +66,100 @@ def parse_constant_declaration_file(
 
     return tuple(
         _parse_constant_declaration(
-            name=values.get("name"),
-            value=values.get("value"),
+            name=parsed_header.values.get("name"),
+            value=parsed_header.values.get("value"),
             file_path=file_path,
             relative_path=relative_path,
             model_name=None,
-            unknown_keys=set(values) - {"name", "value"},
+            unknown_keys=set(parsed_header.values) - {"name", "value"},
         )
-        for values in _parse_declaration_headers(
+        for parsed_header in _parse_declaration_headers(
             contents=contents,
             file_path=file_path,
             expected_kind="CONSTANT",
         )
     )
+
+
+def parse_model_schema_declaration_file(
+    *, contents: str, file_path: Path, relative_path: Path
+) -> tuple[ModelSchemaDeclaration, ...]:
+    """Parse all public reusable model schemas in one file."""
+
+    declarations: list[ModelSchemaDeclaration] = []
+    parsed_header: _ParsedDeclarationHeader
+    for parsed_header in _parse_declaration_headers(
+        contents=contents,
+        file_path=file_path,
+        expected_kind="SCHEMA",
+    ):
+        values: dict[str, object] = parsed_header.values
+        unknown_keys: set[str] = set(values) - {"name", "description", "extends", "columns"}
+        if unknown_keys:
+            raise DeclarationParseError(
+                f"{file_path} schema has unknown keys: {', '.join(sorted(unknown_keys))}"
+            )
+        name: str = _parse_declaration_name(
+            raw_name=values.get("name"),
+            file_path=file_path,
+            kind="schema",
+            model_name=None,
+        )
+        description: str | None = _parse_optional_declaration_string(
+            raw_value=values.get("description"),
+            file_path=file_path,
+            label=f"schema '{name}' description",
+        )
+        extends: str | None = _parse_optional_declaration_identifier(
+            raw_value=values.get("extends"),
+            file_path=file_path,
+            label=f"schema '{name}' extends",
+        )
+        declarations.append(
+            ModelSchemaDeclaration(
+                name=name,
+                description=description,
+                extends=extends,
+                columns=parse_schema_columns(
+                    raw_columns=values.get("columns"),
+                    file_path=file_path,
+                    label=f"schema '{name}'",
+                    error_class=DeclarationParseError,
+                    column_locations=header_column_locations(
+                        contents=contents,
+                        header=parsed_header.header,
+                        header_start=parsed_header.header_start,
+                        relative_path=relative_path,
+                    ),
+                    require_columns=True,
+                ),
+                relative_path=relative_path,
+            )
+        )
+    return tuple(declarations)
+
+
+def _parse_optional_declaration_string(
+    *, raw_value: object | None, file_path: Path, label: str
+) -> str | None:
+    if raw_value is None:
+        return None
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        raise DeclarationParseError(f"{file_path} {label} must be a non-empty string")
+    return raw_value
+
+
+def _parse_optional_declaration_identifier(
+    *, raw_value: object | None, file_path: Path, label: str
+) -> str | None:
+    value: str | None = _parse_optional_declaration_string(
+        raw_value=raw_value,
+        file_path=file_path,
+        label=label,
+    )
+    if value is not None and not _IDENTIFIER_PATTERN.fullmatch(value):
+        raise DeclarationParseError(f"{file_path} {label} must be an identifier")
+    return value
 
 
 def parse_model_enum_declarations(
@@ -116,8 +214,8 @@ def parse_model_constant_declarations(
 
 def _parse_declaration_headers(
     *, contents: str, file_path: Path, expected_kind: str
-) -> tuple[dict[str, object], ...]:
-    headers: list[dict[str, object]] = []
+) -> tuple[_ParsedDeclarationHeader, ...]:
+    headers: list[_ParsedDeclarationHeader] = []
     cursor: int = 0
     while cursor < len(contents):
         cursor = _skip_whitespace(contents=contents, start=cursor)
@@ -143,11 +241,16 @@ def _parse_declaration_headers(
         if cursor >= len(contents) or contents[cursor] != _STATEMENT_TERMINATOR:
             raise DeclarationParseError(f"{expected_kind}(...) in '{file_path}' must end with ';'")
         try:
+            header: str = contents[open_index + 1 : close_index]
             headers.append(
-                parse_header_values(
-                    header=contents[open_index + 1 : close_index],
-                    file_path=file_path,
-                    statement_name=expected_kind,
+                _ParsedDeclarationHeader(
+                    values=parse_header_values(
+                        header=header,
+                        file_path=file_path,
+                        statement_name=expected_kind,
+                    ),
+                    header=header,
+                    header_start=open_index + 1,
                 )
             )
         except ModelSqlParseError as error:

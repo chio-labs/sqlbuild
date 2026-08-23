@@ -41,6 +41,7 @@ SOURCE_LOADER_CONFIG_KEY: str = "loader"
 SOURCE_AGE_POLICY_CONFIG_KEY: str = "age_policy"
 
 MODELS_DIRECTORY_NAME: str = "models"
+MODEL_SCHEMAS_DIRECTORY_NAME: str = "schemas"
 SEEDS_DIRECTORY_NAME: str = "seeds"
 CURRENT_DIRECTORY_PATH: str = "."
 

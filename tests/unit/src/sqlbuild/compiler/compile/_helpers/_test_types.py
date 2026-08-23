@@ -62,6 +62,13 @@ class DeclarationFingerprintTestCase:
 
 
 @dataclass(frozen=True)
+class ModelSchemaErrorTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class ExtractSqlTestCtesTestCase:
     description: str
     sql: str

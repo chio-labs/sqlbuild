@@ -94,6 +94,6 @@ class ProviderDiscoveryError(DiscoveryError):
 
 
 class DeclarationParseError(DiscoveryError):
-    """Raised when an authored enum or constant declaration is invalid."""
+    """Raised when an authored public SQL declaration is invalid."""
 
     code: str = "D013"
