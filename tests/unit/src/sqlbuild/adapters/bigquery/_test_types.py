@@ -11,6 +11,13 @@ from sqlbuild.compiler.lineage.types import InferredNullability
 
 
 @dataclass(frozen=True)
+class BigQueryMergeExclusionTestCase:
+    description: str
+    expected_update_assignment: str
+    expected_insert_clause: str
+
+
+@dataclass(frozen=True)
 class BigQueryExpressionInferenceProfileTestCase:
     description: str
     expected_sql_analysis_dialect: str

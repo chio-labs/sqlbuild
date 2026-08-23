@@ -49,6 +49,8 @@ class ManifestModelNodeTestCase:
     expected_column_types: dict[str, str | None] = field(default_factory=dict)
     expected_depends_on_nodes: tuple[str, ...] = ()
     expected_tags: tuple[str, ...] = ()
+    expected_merge_exclude_columns: list[str] | None = None
+    expected_full_refresh: bool | None = None
 
 
 @dataclass(frozen=True)

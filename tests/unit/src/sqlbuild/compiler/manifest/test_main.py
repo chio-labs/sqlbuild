@@ -302,6 +302,35 @@ def test_given_project_when_building_manifest_then_produces_correct_structure(
             expected_checksum_name="sha256",
             expected_tags=("core", "nightly"),
         ),
+        ManifestModelNodeTestCase(
+            description="protected selective merge exports safety policies",
+            model=build_test_model(
+                name="protected_merge",
+                config_values={
+                    "materialized": "incremental",
+                    "incremental_strategy": "merge",
+                    "unique_key": ["id"],
+                    "merge_exclude_columns": ["ingested_at"],
+                    "allow_full_refresh": False,
+                },
+            ),
+            plan_entries=(),
+            project_name=_PROJECT,
+            expected_unique_id=f"model.{_PROJECT}.protected_merge",
+            expected_resource_type="model",
+            expected_database=None,
+            expected_schema="public",
+            expected_alias="protected_merge",
+            expected_fqn=[_PROJECT, "models", "test"],
+            expected_raw_code="SELECT 1",
+            expected_compiled_code="SELECT 1",
+            expected_relation_name="public.protected_merge",
+            expected_description="",
+            expected_materialized="incremental",
+            expected_checksum_name="sha256",
+            expected_merge_exclude_columns=["ingested_at"],
+            expected_full_refresh=False,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -349,6 +378,8 @@ def test_given_model_when_building_manifest_then_produces_correct_node(
     tag: str
     for tag in test_case.expected_tags:
         assert tag in node["tags"]
+    assert node["config"]["merge_exclude_columns"] == test_case.expected_merge_exclude_columns
+    assert node["config"]["full_refresh"] is test_case.expected_full_refresh
 
 
 @pytest.mark.parametrize(

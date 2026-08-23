@@ -48,6 +48,8 @@ _INCREMENTAL_ONLY_KEYS: tuple[str, ...] = (
     "on_schema_change",
     "replay_on_change",
     "append_cursor_inclusive",
+    "merge_exclude_columns",
+    "allow_full_refresh",
 )
 _SNAPSHOT_DISALLOWED_KEYS: tuple[str, ...] = (
     "incremental_strategy",
@@ -101,6 +103,8 @@ def validate_incremental_config(
     cursor_inputs: object | None = config.values.get("cursor_inputs")
     cursor_grain: str | None = _str(config=config, key="cursor_grain")
     replay_on_change: object | None = config.values.get("replay_on_change")
+    merge_exclude_columns: object | None = config.values.get("merge_exclude_columns")
+    allow_full_refresh: object | None = config.values.get("allow_full_refresh")
     if replay_on_change is not None and not isinstance(replay_on_change, str):
         raise CompileInputError(f"model '{model_name}': replay_on_change must be a string")
     if strategy is None:
@@ -146,6 +150,33 @@ def validate_incremental_config(
         )
     if strategy == IncrementalStrategy.MERGE and not has_unique_key:
         raise CompileInputError(f"model '{model_name}': merge strategy requires unique_key")
+    if merge_exclude_columns is not None:
+        excluded_columns: tuple[str, ...] = _validated_string_sequence(
+            value=merge_exclude_columns,
+            config_key="merge_exclude_columns",
+            model_name=model_name,
+        )
+        if strategy != IncrementalStrategy.MERGE:
+            raise CompileInputError(
+                f"model '{model_name}': merge_exclude_columns requires incremental_strategy=merge"
+            )
+        if len({column.lower() for column in excluded_columns}) != len(excluded_columns):
+            raise CompileInputError(
+                f"model '{model_name}': merge_exclude_columns contains duplicate columns"
+            )
+        unique_key_columns: frozenset[str] = frozenset(
+            column.lower() for column in _string_sequence(unique_key)
+        )
+        overlap: tuple[str, ...] = tuple(
+            column for column in excluded_columns if column.lower() in unique_key_columns
+        )
+        if overlap:
+            raise CompileInputError(
+                f"model '{model_name}': merge_exclude_columns cannot include unique_key "
+                f"column(s): {', '.join(overlap)}"
+            )
+    if allow_full_refresh is not None and not isinstance(allow_full_refresh, bool):
+        raise CompileInputError(f"model '{model_name}': allow_full_refresh must be a boolean")
 
     declared_column_names: frozenset[str] | None = _contract_declared_column_names(config)
     if declared_column_names is not None:
@@ -159,6 +190,12 @@ def validate_incremental_config(
         _validate_declared_config_columns(
             column_names=_string_sequence(unique_key),
             config_key="unique_key",
+            declared_column_names=declared_column_names,
+            model_name=model_name,
+        )
+        _validate_declared_config_columns(
+            column_names=_string_sequence(merge_exclude_columns),
+            config_key="merge_exclude_columns",
             declared_column_names=declared_column_names,
             model_name=model_name,
         )
@@ -541,9 +578,21 @@ def _contract_declared_column_names(config: CompileModelConfig) -> frozenset[str
 def _string_sequence(value: object | None) -> tuple[str, ...]:
     if isinstance(value, str):
         return (value,)
-    if isinstance(value, list):
+    if isinstance(value, list | tuple):
         return tuple(item for item in value if isinstance(item, str))
     return ()
+
+
+def _validated_string_sequence(
+    *, value: object, config_key: str, model_name: str
+) -> tuple[str, ...]:
+    if not isinstance(value, list | tuple) or not all(
+        isinstance(item, str) and item for item in value
+    ):
+        raise CompileInputError(
+            f"model '{model_name}': {config_key} must be a list of non-empty strings"
+        )
+    return tuple(item for item in value if isinstance(item, str))
 
 
 def _validate_declared_config_columns(

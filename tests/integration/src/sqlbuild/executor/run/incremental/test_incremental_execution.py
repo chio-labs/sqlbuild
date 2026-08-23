@@ -128,6 +128,38 @@ class ZeroCopyDuckDbAdapter(DuckDbAdapter):
             ),
         ),
         IncrementalSuccessTestCase(
+            description="merge exclusions preserve matched values and populate inserted rows",
+            setup_sql=(
+                "CREATE TABLE main.orders ("
+                "region VARCHAR, id INTEGER, name VARCHAR, ingested_at TIMESTAMP)",
+                "INSERT INTO main.orders VALUES "
+                "('uk', 1, 'alice', '2026-01-01 00:00:00'), "
+                "('uk', 2, 'bob', '2026-01-02 00:00:00')",
+            ),
+            model_sql=(
+                "SELECT 'uk' AS region, 1 AS id, 'alice_updated' AS name, "
+                "TIMESTAMP '2026-08-01 00:00:00' AS ingested_at "
+                "UNION ALL SELECT 'uk', 3, 'charlie', TIMESTAMP '2026-08-03 00:00:00'"
+            ),
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="merge",
+            unique_key=("region", "id"),
+            merge_exclude_columns=("INGESTED_AT",),
+            expected_row_count=3,
+            expected_query_results=(
+                (
+                    "SELECT region, id, name, CAST(ingested_at AS VARCHAR) "
+                    "FROM main.orders ORDER BY id",
+                    (
+                        ("uk", 1, "alice_updated", "2026-01-01 00:00:00"),
+                        ("uk", 2, "bob", "2026-01-02 00:00:00"),
+                        ("uk", 3, "charlie", "2026-08-03 00:00:00"),
+                    ),
+                ),
+            ),
+        ),
+        IncrementalSuccessTestCase(
             description="append_new_columns adds column to target and appends rows",
             setup_sql=(
                 "CREATE TABLE main.orders (id INTEGER, name VARCHAR)",

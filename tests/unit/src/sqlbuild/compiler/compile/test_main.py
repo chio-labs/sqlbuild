@@ -658,6 +658,8 @@ database = "analytics"
 schema = "marts"
 incremental_strategy = "merge"
 incremental_mode = "microbatch"
+merge_exclude_columns = ["ingested_at"]
+allow_full_refresh = false
 lookback = "1d"
 batch_size = "1h"
 replay_on_change = "bounded-30d"
@@ -690,6 +692,8 @@ absolute = 0.01
                     "schema": "marts",
                     "incremental_strategy": "merge",
                     "incremental_mode": "microbatch",
+                    "merge_exclude_columns": ("ingested_at",),
+                    "allow_full_refresh": False,
                     "unique_key": ["order_id"],
                     "cursor": "event_time",
                     "cursor_type": "timestamp",

@@ -1,4 +1,4 @@
-"""Snapshot full-refresh safety enforcement for build commands."""
+"""Full-refresh safety enforcement for build commands."""
 
 from __future__ import annotations
 
@@ -28,7 +28,9 @@ def enforce_snapshot_full_refresh_policy(
     input_stream: TextIO,
     output_stream: TextIO,
 ) -> None:
-    """Fail or confirm before executing snapshot full-refresh entries."""
+    """Fail or confirm before executing protected full-refresh entries."""
+
+    enforce_model_full_refresh_policy(plan=plan)
 
     snapshot_entries: tuple[ModelPlanEntry, ...] = tuple(
         entry
@@ -76,6 +78,28 @@ def enforce_snapshot_full_refresh_policy(
         entries=confirmation_required, input_stream=input_stream, output_stream=output_stream
     ):
         raise CliUserError("snapshot full refresh cancelled", code="C240")
+
+
+def enforce_model_full_refresh_policy(*, plan: PlanOutput) -> None:
+    """Reject destructive rebuilds for models that explicitly forbid them."""
+
+    protected_entries: tuple[ModelPlanEntry, ...] = tuple(
+        sorted(
+            (
+                entry
+                for entry in plan.model_entries
+                if entry.reason == PlanReason.FULL_REFRESH and entry.allow_full_refresh is False
+            ),
+            key=lambda entry: entry.name,
+        )
+    )
+    if protected_entries:
+        names: str = _model_names(protected_entries)
+        raise CliUserError(
+            f"full refresh is denied for model {names} by allow_full_refresh=false",
+            code="C265",
+            help="Set allow_full_refresh=true only for models that are safe to fully rebuild.",
+        )
 
 
 def _effective_policy(

@@ -9,6 +9,8 @@ class ExpectedVersionHashesTestCase:
     upstream_query_sql: str
     downstream_query_sql: str
     expected_hashes_differ: bool
+    baseline_extra_config: dict[str, object] | None = None
+    changed_extra_config: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)

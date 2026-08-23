@@ -278,6 +278,7 @@ class FakeJanitorAdapter(BaseAdapter):
         sql: str,
         unique_key: str | tuple[str, ...],
         statement_recorder: StatementRecorder,
+        exclude_columns: tuple[str, ...] = (),
     ) -> None:
         raise NotImplementedError
 

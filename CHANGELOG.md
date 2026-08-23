@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.53.0](https://github.com/chio-labs/sqlbuild/compare/v0.52.0...v0.53.0) (2026-08-22)
+
+
+### Features
+
+* **incremental:** guard selective merge state ([#315](https://github.com/chio-labs/sqlbuild/issues/315)) ([9126551](https://github.com/chio-labs/sqlbuild/commit/9126551293221d88b290c9dfc46f9e46aac573b2))
+
 ## [0.52.0](https://github.com/chio-labs/sqlbuild/compare/v0.51.0...v0.52.0) (2026-08-21)
 
 
