@@ -11,6 +11,15 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.models import EnumDeclaration, EnumMember
+
+_ENUM_DECLARATION: EnumDeclaration = EnumDeclaration(
+    name="status",
+    members=(EnumMember(name="WIN", value="win"),),
+    scalar_type="VARCHAR",
+    relative_path=Path("enums/status.sql"),
+    model_name=None,
+)
 
 
 def build_project(
@@ -20,6 +29,8 @@ def build_project(
     sql: str,
     config_values: dict[str, object],
     references: tuple[CompileSqlReference, ...] = (),
+    authored_sql: str | None = None,
+    enum_columns: tuple[str, ...] = (),
 ) -> CompiledProject:
     model: CompiledModel = CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name),
@@ -27,9 +38,10 @@ def build_project(
         name=name,
         relative_path=Path(relative_path),
         query_sql=sql,
-        authored_sql=sql,
+        authored_sql=authored_sql or sql,
         config=CompileModelConfig(values=config_values),
         references=references,
+        enum_columns={name: _ENUM_DECLARATION for name in enum_columns},
         destination=CompiledRelationLocation(
             database=None,
             schema=None,

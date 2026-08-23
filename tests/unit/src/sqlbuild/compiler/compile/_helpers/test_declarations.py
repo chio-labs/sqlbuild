@@ -329,6 +329,14 @@ def test_given_declaration_change_when_compiling_then_updates_dependent_identity
             expected_error_fragment="Unknown member 'MISSING' for enum 'state'",
         ),
         CompileDeclarationsErrorTestCase(
+            description="lowercase enum member access",
+            repo_files={
+                "enums/state.sql": 'ENUM (name state, members (WIN "win"));',
+                "models/orders.sql": ('MODEL ();\nSELECT @enum("state").win AS state\n'),
+            },
+            expected_error_fragment="Unknown member 'win' for enum 'state'",
+        ),
+        CompileDeclarationsErrorTestCase(
             description="unknown constant",
             repo_files={
                 "models/orders.sql": 'MODEL ();\nSELECT @const("missing") AS value\n',
