@@ -135,6 +135,21 @@ def test_given_constant_declarations_when_parsing_then_returns_typed_values(
             contents="ENUM (name state, members [OPEN, OPEN]);",
             expected_error_fragment="duplicate member 'OPEN'",
         ),
+        ParseDeclarationFileErrorTestCase(
+            description="lowercase shorthand member",
+            contents="ENUM (name state, members [open]);",
+            expected_error_fragment="member identifiers must be uppercase: 'open'",
+        ),
+        ParseDeclarationFileErrorTestCase(
+            description="mixed-case shorthand member",
+            contents="ENUM (name state, members [Open]);",
+            expected_error_fragment="member identifiers must be uppercase: 'Open'",
+        ),
+        ParseDeclarationFileErrorTestCase(
+            description="lowercase explicit member with lowercase value",
+            contents='ENUM (name state, members (open "open"));',
+            expected_error_fragment="member identifiers must be uppercase: 'open'",
+        ),
     ],
     ids=lambda case: case.description,
 )

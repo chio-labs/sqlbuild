@@ -11,7 +11,7 @@ from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_proj
 _MODEL_SQL: str = "WITH final AS (SELECT 1 AS id) SELECT id FROM final"
 
 
-def write_rule(*, root: Path, body: str) -> Path:
+def write_rule(*, root: Path, body: str, enabled_by_default: bool = False) -> Path:
     path: Path = root / "kata" / "rules" / "custom.py"
     path.parent.mkdir(parents=True)
     path.write_text(
@@ -25,6 +25,7 @@ def write_rule(*, root: Path, body: str) -> Path:
                 '    slug="test-rule",',
                 '    message="test rule fault",',
                 '    remediation="Fix this model at its models/<domain>/ path.",',
+                f"    enabled_by_default={enabled_by_default},",
                 ")",
                 "def check(*, model, ctx: RuleContext):",
                 f"    {body}",
@@ -39,7 +40,11 @@ def write_rule(*, root: Path, body: str) -> Path:
 def custom_rule_inputs(
     *, tmp_path: Path, test_case: CustomRuleTestCase
 ) -> tuple[CompiledProject, KataConfig]:
-    rule_path: Path = write_rule(root=tmp_path, body=test_case.body)
+    rule_path: Path = write_rule(
+        root=tmp_path,
+        body=test_case.body,
+        enabled_by_default=test_case.enabled_by_default,
+    )
     project: CompiledProject = build_project(
         name="market__mart__prices",
         relative_path="models/mart/market__mart__prices.sql",
@@ -47,7 +52,7 @@ def custom_rule_inputs(
         config_values={},
     )
     config: KataConfig = KataConfig(
-        select=("XSQBKT001",),
+        select=test_case.select,
         rule_paths=(rule_path.as_posix(),),
         thresholds={MIN_CUSTOM_RULE_TEST_CASES: test_case.minimum_custom_rule_cases},
         cache=KataCacheConfig(require_cacheable=test_case.require_cacheable),
