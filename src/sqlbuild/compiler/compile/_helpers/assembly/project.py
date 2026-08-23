@@ -398,8 +398,7 @@ def _build_column_nullability_by_table(
         if not function_input.return_columns:
             continue
         facts[table_function_analysis_name(function_input.name)] = {
-            column.name: InferredNullability.UNKNOWN
-            for column in function_input.return_columns
+            column.name: InferredNullability.UNKNOWN for column in function_input.return_columns
         }
     return facts
 

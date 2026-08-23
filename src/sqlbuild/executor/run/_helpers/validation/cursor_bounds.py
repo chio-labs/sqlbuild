@@ -50,9 +50,7 @@ def build_runtime_cursor_spec(
         end_cursor_override=entry.end_cursor_override,
         lookback=entry.lookback,
         backfill_duration=(
-            entry.backfill.duration
-            if entry.backfill.action == BackfillAction.BOUNDED
-            else None
+            entry.backfill.duration if entry.backfill.action == BackfillAction.BOUNDED else None
         ),
         read_destination_cursor=read_destination_cursor,
     )
@@ -178,11 +176,7 @@ def substitute_cursor_sentinels(*, sql: str, bounds: CursorBounds) -> str:
     result: str = sql.replace(MICROBATCH_START_SENTINEL, bounds.start)
     result = result.replace(MICROBATCH_END_SENTINEL, bounds.end)
     _, has_intrinsics = resolve_cursor_intrinsics(sql=result)
-    if (
-        has_intrinsics
-        or MICROBATCH_START_SENTINEL in result
-        or MICROBATCH_END_SENTINEL in result
-    ):
+    if has_intrinsics or MICROBATCH_START_SENTINEL in result or MICROBATCH_END_SENTINEL in result:
         raise ExecutorInputError("executable model SQL contains unresolved cursor markers")
     return result
 

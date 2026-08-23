@@ -1886,7 +1886,7 @@ WHERE customer_id = p_customer_id
             expected_effective_connection={},
             expected_effective_vars={},
             expected_effective_sql_validation=False,
-            expected_model_references=((('table_fn', 'customer_orders'),),),
+            expected_model_references=((("table_fn", "customer_orders"),),),
             expected_audit_references=(),
         ),
         BuildCompileInputsTestCase(
@@ -2797,10 +2797,8 @@ SELECT customer_id AS order_id
             description="raises when a model calls a scalar function as a table function",
             repo_files=base_repo_files()
             | {
-                "sqlbuild_project.toml": "name = \"demo\"\nadapter = \"duckdb\"\n",
-                "models/orders.sql": (
-                    'MODEL ();\n\nSELECT * FROM __table_fn("order_total")(1)\n'
-                ),
+                "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
+                "models/orders.sql": ('MODEL ();\n\nSELECT * FROM __table_fn("order_total")(1)\n'),
                 "functions/sql/order_total.sql": """
 FUNCTION (
   arguments (order_id INTEGER),
@@ -2822,9 +2820,7 @@ order_id
                 "sqlbuild_project.toml": (
                     'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
                 ),
-                "models/orders.sql": (
-                    'MODEL ();\n\nSELECT * FROM __table_fn("customer_orders")\n'
-                ),
+                "models/orders.sql": ('MODEL ();\n\nSELECT * FROM __table_fn("customer_orders")\n'),
                 "functions/sql/customer_orders.sql": """
 FUNCTION (
   arguments (customer_id INTEGER),

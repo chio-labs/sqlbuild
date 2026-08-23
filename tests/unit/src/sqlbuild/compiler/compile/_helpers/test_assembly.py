@@ -419,7 +419,7 @@ SELECT p_customer_id AS customer_id, 1 AS order_id
 """.strip()
                 + "\n",
                 "models/customer_order_summary.sql": (
-                    'MODEL ();\n\nSELECT customer_id, order_id '
+                    "MODEL ();\n\nSELECT customer_id, order_id "
                     'FROM __table_fn("customer_orders")(42)\n'
                 ),
                 "tests/unit/test_customer_orders.sql": """

@@ -47,15 +47,11 @@ def test_given_table_function_return_contract_change_when_hashing_then_identity_
         ),
         name="customer_orders",
         returns="TABLE",
-        return_columns=(
-            FunctionReturnColumn(name="order_id", type=test_case.original_type),
-        ),
+        return_columns=(FunctionReturnColumn(name="order_id", type=test_case.original_type),),
     )
     changed_function: CompiledFunction = replace(
         function,
-        return_columns=(
-            FunctionReturnColumn(name="order_id", type=test_case.changed_type),
-        ),
+        return_columns=(FunctionReturnColumn(name="order_id", type=test_case.changed_type),),
     )
 
     original_hash: str = build_function_local_hashes(functions=(function,))[function.name]

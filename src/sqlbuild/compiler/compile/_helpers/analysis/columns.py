@@ -440,9 +440,7 @@ def _analyze_columns_and_lineage_with_compact_polyglot(
         schema_name: str = _analysis_reference_name(references[0])
         declared_order: dict[str, int] = {
             column_name: index
-            for index, column_name in enumerate(
-                column_nullability_by_table.get(schema_name, {})
-            )
+            for index, column_name in enumerate(column_nullability_by_table.get(schema_name, {}))
         }
         fallback_order: int = len(declared_order)
         columns.sort(key=lambda column: declared_order.get(column.name, fallback_order))

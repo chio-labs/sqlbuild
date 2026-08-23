@@ -235,9 +235,7 @@ def resolve_table_function_references(
     return "".join(parts)
 
 
-def _iter_executable_matches(
-    *, sql: str, pattern: re.Pattern[str]
-) -> Iterator[re.Match[str]]:
+def _iter_executable_matches(*, sql: str, pattern: re.Pattern[str]) -> Iterator[re.Match[str]]:
     index: int = 0
     while index < len(sql):
         if sql[index] in _SQL_QUOTE_TOKENS:

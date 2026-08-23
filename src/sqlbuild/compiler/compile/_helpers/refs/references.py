@@ -114,9 +114,7 @@ def _parse_reference_at(*, sql: str, start: int) -> tuple[CompileSqlReference, i
     if ref_kind == SqlReferenceKind.TABLE_FUNCTION:
         call_suffix_start: int = _skip_whitespace(sql=sql, start=closing_paren_index + 1)
         if call_suffix_start >= len(sql) or sql[call_suffix_start] != SQL_OPEN_PAREN_TOKEN:
-            raise CompileInputError(
-                f"{ref_prefix(ref_kind)} must be followed by an argument list"
-            )
+            raise CompileInputError(f"{ref_prefix(ref_kind)} must be followed by an argument list")
         call_suffix_end: int = find_matching_paren(
             sql=sql,
             open_paren_index=call_suffix_start,
