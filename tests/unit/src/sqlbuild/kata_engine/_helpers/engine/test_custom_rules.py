@@ -28,6 +28,20 @@ from tests.unit.src.sqlbuild.kata_engine._helpers.engine.helpers import custom_r
             expected_fault_codes=("SQBKX201",),
             minimum_custom_rule_cases=1,
         ),
+        CustomRuleTestCase(
+            description="default-off custom rule is not activated by prefix",
+            body="del model\n    return [ctx.path_fault()]",
+            require_cacheable=False,
+            select=("XSQBKT",),
+        ),
+        CustomRuleTestCase(
+            description="default-enabled custom rule is activated by prefix",
+            body="del model\n    return [ctx.path_fault()]",
+            require_cacheable=False,
+            expected_fault_codes=("XSQBKT001",),
+            select=("XSQBKT",),
+            enabled_by_default=True,
+        ),
     ],
     ids=lambda case: case.description,
 )

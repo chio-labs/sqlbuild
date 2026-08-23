@@ -1,6 +1,4 @@
-use crate::constants::{
-    API_VERSION, BUILT_IN_RULE_NAMESPACE, CUSTOM_RULE_NAMESPACE, DEFAULT_RULE_CODE,
-};
+use crate::constants::{API_VERSION, BUILT_IN_RULE_NAMESPACE, CUSTOM_RULE_NAMESPACE};
 use crate::models::{CustomRule, ResolveRulesRequest, RuleMetadata};
 use fensu_policy::policy::errors::PolicyError;
 use fensu_policy::policy::main::resolve_policy::resolve_policy;
@@ -23,7 +21,7 @@ macro_rules! rule {
             message: $message.into(),
             remediation: $remediation.into(),
             implementation_fingerprint: env!("CARGO_PKG_VERSION").into(),
-            enabled_by_default: $code == DEFAULT_RULE_CODE,
+            enabled_by_default: true,
             project_wide: matches!($code, "SQBKH101" | "SQBKH201" | "SQBKX201"),
             custom: false,
         }
@@ -197,8 +195,8 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
             "SQBKH001",
             "hygiene",
             "named-enum-decisions",
-            "enum comparisons must use declared enum members",
-            "Replace this bare string with @enum(\"<enum>\").<MEMBER> so the decision uses the declared domain.",
+            "enum comparisons must use declared members and normalized operands",
+            "Compare directly to @enum(\"<enum>\").<MEMBER>. Only a direct source-side value may be normalized in the comparison; move other normalization upstream and never wrap the enum member.",
         ),
         rule!(
             "SQBKH002",

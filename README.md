@@ -113,19 +113,17 @@ project, reports coded faults with remediations, and never rewrites SQL. Its bui
 native: Rust resolves rule policy, parses each model, evaluates built-ins, applies suppressions,
 and owns the persistent cache and deterministic result ordering.
 
-Select the default policy namespace and opt into additional exact rules in
-`sqlbuild_project.toml`. Prefix selectors activate default-enabled rules; exact selectors also
-activate opt-in rules:
+Kata is disabled until the project selects at least one rule. Select the complete built-in policy
+in `sqlbuild_project.toml` with its namespace prefix:
 
 ```toml
 [kata]
-select = ["SQBK", "SQBKS001", "SQBKS201", "SQBKX001", "SQBKX002"]
-ignore = ["SQBKS302"]
-
-[kata.thresholds]
-min_audits_per_model = 1
-min_tests_per_model = 1
+select = ["SQBK"]
 ```
+
+`SQBK` activates every built-in rule. Narrower prefixes such as `SQBKS` activate one family, exact
+codes select individual rules, and `ignore` removes matching rules. Audit, unit-test, and custom-rule
+test-case minimums each default to one and can be overridden under `[kata.thresholds]`.
 
 Run `sqb kata`, inspect metadata with `sqb kata rule SQBKS101`, and generate agent guidance from
 the same active ruleset with `sqb kata skills`. Use `sqb kata skills --check` in CI to detect stale
