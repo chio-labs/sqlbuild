@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.54.0](https://github.com/chio-labs/sqlbuild/compare/v0.53.0...v0.54.0) (2026-08-23)
+
+
+### Features
+
+* add kata SQL architecture checks ([#314](https://github.com/chio-labs/sqlbuild/issues/314)) ([0bdb16e](https://github.com/chio-labs/sqlbuild/commit/0bdb16efade964374adc7d1a9537c00d21544f2b))
+
 ## [0.53.0](https://github.com/chio-labs/sqlbuild/compare/v0.52.0...v0.53.0) (2026-08-22)
 
 
