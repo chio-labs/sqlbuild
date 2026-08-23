@@ -12,6 +12,65 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Classify verification scope
+    runs-on: ubuntu-latest
+    outputs:
+      duckdb: ${{ steps.scope.outputs.duckdb }}
+      postgres: ${{ steps.scope.outputs.postgres }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Select relevant suites
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          write_scope() {
+            {
+              echo "duckdb=$1"
+              echo "postgres=$2"
+            } >> "${GITHUB_OUTPUT}"
+          }
+
+          if [[ "${EVENT_NAME}" != "pull_request" ]]; then
+            write_scope true true
+            exit 0
+          fi
+
+          duckdb=false
+          postgres=false
+          broad=false
+          changed=false
+          while IFS= read -r -d '' path; do
+            changed=true
+            case "${path}" in
+              tests/e2e/src/sqlbuild/cli/commands/main/postgres/*|tests/integration/src/sqlbuild/adapters/postgres/*|tests/integration/src/sqlbuild/virtual/state/classes/postgres/*)
+                postgres=true
+                ;;
+              tests/e2e/*)
+                duckdb=true
+                ;;
+              tests/unit/*|tests/integration/*)
+                ;;
+              .github/*|docs/*|*.md|LICENSE)
+                ;;
+              *)
+                broad=true
+                ;;
+            esac
+          done < <(git diff --name-only -z "${BASE_SHA}" "${HEAD_SHA}")
+
+          if [[ "${changed}" != "true" || "${broad}" == "true" ]]; then
+            write_scope true true
+            exit 0
+          fi
+
+          write_scope "${duckdb}" "${postgres}"
+
   lockfile:
     name: Lockfile consistency
     runs-on: ubuntu-latest
@@ -58,7 +117,8 @@ jobs:
 
   e2e:
     name: DuckDB E2E tests
-    needs: lockfile
+    needs: [changes, lockfile]
+    if: needs.changes.outputs.duckdb == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -82,7 +142,8 @@ jobs:
 
   postgres:
     name: PostgreSQL integration and E2E tests
-    needs: lockfile
+    needs: [changes, lockfile]
+    if: needs.changes.outputs.postgres == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -114,8 +175,28 @@ jobs:
 
   verify:
     name: Verify
-    needs: [lockfile, checks, e2e, postgres]
+    if: always()
+    needs: [changes, lockfile, checks, e2e, postgres]
     runs-on: ubuntu-latest
     steps:
       - name: Confirm all required verification jobs passed
-        run: echo "All required verification jobs passed"
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          LOCKFILE_RESULT: ${{ needs.lockfile.result }}
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+          POSTGRES_RESULT: ${{ needs.postgres.result }}
+        run: |
+          if [[ "${CHANGES_RESULT}" != "success" || \
+                "${LOCKFILE_RESULT}" != "success" || \
+                "${CHECKS_RESULT}" != "success" ]]; then
+            echo "Required classification, lockfile, or static checks did not pass" >&2
+            exit 1
+          fi
+          for result in "${E2E_RESULT}" "${POSTGRES_RESULT}"; do
+            if [[ "${result}" != "success" && "${result}" != "skipped" ]]; then
+              echo "A selected verification suite did not pass: ${result}" >&2
+              exit 1
+            fi
+          done
+          echo "All path-relevant verification jobs passed"
