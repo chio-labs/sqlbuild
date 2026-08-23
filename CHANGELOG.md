@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.54.1](https://github.com/chio-labs/sqlbuild/compare/v0.54.0...v0.54.1) (2026-08-23)
+
+
+### Bug Fixes
+
+* include license in source distributions ([#318](https://github.com/chio-labs/sqlbuild/issues/318)) ([fbf84bb](https://github.com/chio-labs/sqlbuild/commit/fbf84bb695308e721cb11e803dc37cfe1ba1b89c))
+
 ## [0.54.0](https://github.com/chio-labs/sqlbuild/compare/v0.53.0...v0.54.0) (2026-08-23)
 
 
