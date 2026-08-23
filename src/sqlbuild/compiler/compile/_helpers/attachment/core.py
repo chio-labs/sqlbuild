@@ -1106,14 +1106,27 @@ def _merge_model_schema_columns(
             local_column=local_column,
             named_column=named_column,
         )
-        additional_audits: tuple[SchemaAuditInstance, ...] = tuple(
-            audit for audit in local_column.audits if audit not in named_column.audits
-        )
         merged_named_columns[named_index] = replace(
             named_column,
-            audits=(*named_column.audits, *additional_audits),
+            audits=_merge_schema_audits(
+                inherited_audits=named_column.audits,
+                local_audits=local_column.audits,
+            ),
         )
     return (*merged_named_columns, *additional_columns)
+
+
+def _merge_schema_audits(
+    *,
+    inherited_audits: tuple[SchemaAuditInstance, ...],
+    local_audits: tuple[SchemaAuditInstance, ...],
+) -> tuple[SchemaAuditInstance, ...]:
+    merged_audits: list[SchemaAuditInstance] = list(inherited_audits)
+    audit: SchemaAuditInstance
+    for audit in local_audits:
+        if audit not in merged_audits:
+            merged_audits.append(audit)
+    return tuple(merged_audits)
 
 
 def _validate_model_schema_audit_augmentation(

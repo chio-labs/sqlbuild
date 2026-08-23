@@ -31,6 +31,7 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/models`
 - `concepts/models/materializations`
 - `concepts/models/schemas`
+- `concepts/models/type-enforcement`
 - `concepts/models/contracts`
 - `concepts/models/hooks`
 - `concepts/models/configuration`
@@ -1985,7 +1986,7 @@ If a source audit with `error` severity fails, all downstream models that depend
 
 ### Type enforcement
 
-Type enforcement is implicit for sources, the same as for models. If any column declares a `type`, SQLBuild automatically casts that column and uses declared types for schema-change detection:
+Type enforcement is implicit for sources. If any column declares a `type`, SQLBuild activates source type enforcement, casts that column during source resolution, and uses declared types for schema-change detection:
 
 ```yaml
 sources:
@@ -2320,7 +2321,7 @@ The header controls how SQLBuild builds, validates, and documents the model. The
 | Source | `__source("name")` | An external source |
 | Scalar UDF | `__udf("name")` | A user-defined function |
 
-SQLBuild discovers the dependency graph from these calls and executes models in topological order. Upstream models are always built before downstream dependants. Seeds use `__seed()`, not `__ref()`.
+SQLBuild discovers the dependency graph from these calls and orders selected work topologically. Among selected models, upstream models run before downstream dependents. An unselected upstream is read from its existing warehouse relation; use an upstream-expanding selector such as `+fact_orders` when it should also be built. Seeds use `__seed()`, not `__ref()`.
 
 See [Functions](/concepts/functions) for scalar UDF and table-function references.
 
@@ -2328,7 +2329,8 @@ See [Functions](/concepts/functions) for scalar UDF and table-function reference
 
 - [Materializations](/concepts/models/materializations): views, tables, incrementals, snapshots, and custom materializations.
 - [Schemas](/concepts/models/schemas): inline columns, reusable schemas, inheritance, audits, and model-local extensions.
-- [Contracts](/concepts/models/contracts): exact and open output validation, type enforcement, and enum-backed columns.
+- [Type Enforcement](/concepts/models/type-enforcement): static type checks and runtime cast behavior by materialization.
+- [Contracts](/concepts/models/contracts): exact and open output validation, runtime guarantees, nullability, and enum-backed columns.
 - [Hooks](/concepts/models/hooks): SQL and Python lifecycle hooks.
 - [Configuration](/concepts/models/configuration): `MODEL()` field reference and SQL-validation controls.
 
@@ -2344,7 +2346,7 @@ The `materialized` field selects how a model becomes a warehouse relation.
 
 ### View
 
-Creates a database view and replaces it on each build:
+Creates or replaces a database view on each build:
 
 ```sql
 MODEL (materialized view);
@@ -2353,9 +2355,11 @@ SELECT id AS order_id, customer_id, status
 FROM __source("raw__orders")
 ```
 
+View audits run after the view has been replaced. A failing audit marks the build as failed but cannot preserve the previous view. Views use compile-time contract and type analysis; SQLBuild does not rewrite the view with runtime casts or run the staged runtime-contract step.
+
 ### Table
 
-Creates a table through a staging relation. SQLBuild runs blocking audits before promoting the staging table to the destination.
+By default, creates a staging table, applies supported type and contract enforcement, runs blocking audits, and only then promotes it to the destination. A pre-promotion failure leaves the previous destination unchanged.
 
 ```sql
 MODEL (materialized table);
@@ -2365,9 +2369,11 @@ FROM __ref("stg_orders")
 GROUP BY customer_id
 ```
 
+Projects may opt into `settings.table_promotion_mode = "direct"`. Direct mode replaces the destination before audits, so a failed audit does not restore the old table. Direct mode rejects models that require declared-type enforcement or `contract enforced`; use staged promotion for those guarantees.
+
 ### Incremental
 
-Inserts or updates rows using append, delete/insert, or merge behavior. Cursor configuration controls replay bounds and may split work into microbatches.
+On a normal incremental run, applies append, delete/insert, or merge DML from a staged delta. Delete/insert removes matching keys or cursor ranges before inserting replacement rows. Cursor configuration controls replay bounds and may split work into microbatches.
 
 ```sql
 MODEL (
@@ -2379,6 +2385,8 @@ MODEL (
   unique_key [activity_hour],
 );
 ```
+
+For non-microbatch models, the first run, `--full-refresh`, and a full replay-on-change rebuild use the full-table path rather than incremental DML. Microbatch models retain batched execution: a full rebuild drops the existing target, creates its replacement from the first batch, and applies later batches with incremental DML. A failed full-refresh microbatch does not preserve the previous target.
 
 See [Incremental](/concepts/incremental) for cursor semantics, replay, schema changes, and microbatch execution.
 
@@ -2402,7 +2410,7 @@ See [Snapshots](/concepts/snapshots) for timestamp and check strategies, histori
 
 ### Custom
 
-A project-local Python materialization can manage specialized persistence while retaining adapter access, schema-change signals, query-change detection, and audit hooks.
+A project-local Python materialization can manage specialized persistence with adapter access, schema findings, query-change state, declared columns, and `ctx.run_audits`.
 
 ```sql
 MODEL (
@@ -2424,6 +2432,8 @@ WHERE ordered_at >= @@@partition_start
 ```
 
 The `config` block is passed to the Python function through `ctx.config`. Runtime-owned `@@@placeholder` values remain unresolved until materialization execution.
+
+The custom function owns staging, runtime type or contract enforcement, audit timing, promotion, and rollback. Framework final audits run after the function returns unless `MaterializationResult.audit_results` is populated. A custom materialization can call `ctx.run_audits` against a staging relation before applying changes and return those results through `MaterializationResult.audit_results`.
 
 ## Schemas
 
@@ -2533,13 +2543,13 @@ SCHEMA (
 
 Inheritance may be transitive. Parent columns resolve before child columns. An inherited column cannot be redeclared or overridden in a child schema. SQLBuild rejects unknown parents, cycles, case-insensitive duplicates, and multiple parents.
 
-Physical SQL output order is not currently enforced. Contract matching uses names, types, and nullability.
+Physical SQL output order is not currently enforced. Static contract analysis matches names and checks declared types and proven non-nullability. Runtime exact-contract validation matches names and types but does not validate nullability.
 
 ### Contracts and planning
 
-`contract enforced` requires the actual output to equal the complete named-plus-local declaration. `contract none`, the default, requires declared columns but permits further undeclared output columns. See [Contracts](/concepts/models/contracts).
+`contract enforced` treats the complete named-plus-local declaration as the exact output shape. With `contract none`, the default, SQLBuild checks declared columns when static inference is available and permits additional output columns; it does not add a runtime shape requirement. See [Contracts](/concepts/models/contracts).
 
-Schema metadata and model-specific audit augmentation participate in model execution identity. Changing a parent affects models bound through descendants; unrelated reusable schemas do not affect other models.
+For models bound to a reusable schema, effective column names, types, nullability, and enum members participate in model version identity. Changing those fields on a parent therefore affects models bound through descendants. Descriptions do not change model identity. Audits have their own audit-gate identities, so audit changes invalidate reusable audit results without changing the model version itself.
 
 ### Limitations
 
@@ -2551,18 +2561,91 @@ Reusable schemas intentionally support a narrow ownership model:
 - No general column overrides, multiple inheritance, composition, mixins, parameters, or generated projections.
 - No physical output ordinal enforcement.
 
+## Type Enforcement
+
+Source: `concepts/models/type-enforcement.mdx`
+
+Understand declared model types, static checks, and runtime casting.
+
+Type enforcement makes authored column types operational. It is a model feature as well as a related source feature, and it is separate from whether a model uses an exact contract.
+
+### Enabling it
+
+For a SQL model, declaring a type on any inline or reusable-schema column enables type enforcement automatically:
+
+```sql
+MODEL (
+  materialized table,
+  columns (
+    order_id (type INTEGER),
+    ordered_at (type TIMESTAMP),
+    source_system (),
+  ),
+);
+```
+
+There is no `MODEL(type_enforcement ...)` switch. In this example, `order_id` and `ordered_at` are typed; `source_system` remains untyped and passes through unchanged.
+
+Sources have related behavior but different configuration. A source can explicitly set `type_enforcement: false`; see [Sources](/concepts/sources#type-enforcement).
+
+### Compile-time checks
+
+When SQL analysis can infer an output type, SQLBuild compares it with the declared type using adapter-aware normalization. A proven mismatch is a compile error when type enforcement is active. If SQLBuild identifies an output column but cannot prove its expression type, it reports an unproven-type warning rather than guessing. If the entire output shape cannot be inferred, static type checks and warnings cannot run.
+
+Static analysis does not rewrite the authored query. It determines whether the inferred output is compatible before warehouse execution.
+
+### Runtime casting
+
+Runtime enforcement inspects a staged relation. If a typed output column does not already have its declared type, SQLBuild rebuilds the staging or delta relation with an explicit cast:
+
+```sql
+CAST(order_id AS INTEGER) AS order_id
+```
+
+Only columns with declared types are cast. Untyped output columns are preserved. If a cast fails, the model fails during the type-enforcement phase before the staged table is promoted or the incremental delta is applied.
+
+Runtime cast support currently depends on materialization:
+
+| Materialization path | Framework runtime casts |
+|----------------------|-------------------------|
+| Full table with staged promotion | Yes, on the staging table |
+| Non-microbatch incremental | Yes, on the staged delta |
+| Microbatch incremental | Yes, on each staged batch |
+| View | No; the view query defines the warehouse output type |
+| Snapshot | No framework cast reconstruction |
+| Custom materialization | Owned by the custom materialization |
+| Full table with direct promotion | Rejected when type enforcement is required |
+
+Staged promotion is the default table mode. If a project selects direct table promotion, a typed model fails with guidance to use staged promotion because SQLBuild cannot inspect and reconstruct output before mutating the destination.
+
+### Type enforcement versus contracts
+
+These controls answer different questions:
+
+| Feature | Question |
+|---------|----------|
+| Type enforcement | Should typed columns be checked and, on supported paths, cast to their declared physical types? |
+| `contract none` | Which declared columns can SQLBuild verify statically while still allowing additional output columns? |
+| `contract enforced` | Must the output have exactly the complete declared shape? |
+
+Type enforcement can be active with `contract none`. Conversely, an enforced contract may contain untyped columns: exact shape validation still checks their names, but there is no declared physical type to cast or compare.
+
+### Schema changes
+
+Declared types are used in schema-change detection. With type enforcement active, the declared type is authoritative for typed columns when SQLBuild compares a planned model with the warehouse relation.
+
 ## Contracts
 
 Source: `concepts/models/contracts.mdx`
 
 Validate required or exact model output schemas.
 
-A model's declared columns define required output metadata. The `contract` policy determines whether that declaration is open or exact.
+A model's declared columns describe expected output metadata. The `contract` policy determines whether SQLBuild treats that declaration as an open shape or a complete exact shape.
 
 | Value | Behavior |
 |-------|----------|
-| `none` | Every declared column is required, while undeclared output columns are allowed. This is the default. |
-| `enforced` | Declared columns are the complete authoritative output schema; missing and additional columns fail. |
+| `none` | Statically check declared columns when SQLBuild can infer the output; allow undeclared output columns. This is the default. |
+| `enforced` | Treat declared columns as the complete authoritative output shape and enable runtime exact-schema checks on supported materializations. |
 
 ```sql
 MODEL (
@@ -2579,19 +2662,42 @@ MODEL (
 
 ### Validation
 
-At compile time, SQLBuild checks inferred output names, types, and nullability. Configuration fields that reference columns, including `unique_key`, `cursor`, `updated_at`, and `check_columns`, are also checked against an enforced contract.
+#### Compile time
 
-At runtime, SQLBuild validates the materialized staging relation before promotion:
+When SQL analysis can infer the model's output, both contract policies check declared columns against that inference:
 
-- Missing declared columns fail.
-- Additional columns fail only for `contract enforced`.
-- Type mismatches fail using adapter-aware type normalization.
+- A missing declared column fails.
+- A proven type mismatch fails when type enforcement or an exact contract is active.
+- A declared non-null column fails when its expression is proven nullable.
+- Additional inferred columns fail only for `contract enforced`.
 
-When pre-promotion validation fails, the existing production relation remains untouched.
+If SQLBuild cannot infer the output shape, these static shape checks cannot run. `contract none` does not add a later runtime requirement. An enforced contract additionally requires a non-empty column declaration.
+
+Configuration fields that reference output columns, including `unique_key`, `cursor`, `updated_at`, and `check_columns`, are checked against an enforced declaration.
+
+#### Runtime
+
+For supported materialization paths, `contract enforced` inspects the staged relation and rejects:
+
+- Missing declared columns.
+- Additional undeclared columns.
+- Warehouse types that differ from declared types.
+
+Runtime contract validation does not scan data for nulls and does not inspect warehouse nullability metadata. `nullable false` participates in static nullability analysis; add a `not_null` audit when null values must be checked at runtime.
+
+Runtime exact-schema validation currently runs for:
+
+- Staged full-table builds.
+- Non-microbatch incremental deltas.
+- Snapshot deltas.
+
+Views and custom materializations rely on compile-time contract analysis. Microbatch incrementals currently apply type enforcement and audits but do not perform the framework runtime exact-schema validation step.
+
+Staged table validation happens before promotion, so a failure leaves the existing destination untouched. Direct table promotion is incompatible with `contract enforced` because SQLBuild cannot validate output before replacing the destination.
 
 ### Type enforcement
 
-Declaring a column `type` enables type enforcement automatically. SQLBuild uses declared types for compile-time analysis, materialization casts where required, and schema-change detection. There is no separate `type_enforcement` setting.
+Declaring a model column type enables type enforcement automatically, independently of the contract policy. Type enforcement controls static type compatibility and runtime casts on supported table and incremental paths; contracts control output shape. See [Type Enforcement](/concepts/models/type-enforcement) for the materialization matrix.
 
 ### Reusable schemas
 
@@ -2607,11 +2713,11 @@ MODEL (
 );
 ```
 
-This requires exactly the resolved `order` columns plus `ingestion_batch_id`. Changing the policy to `none` still requires those columns but permits further output. See [Schemas](/concepts/models/schemas).
+With `contract enforced`, this requires exactly the resolved `order` columns plus `ingestion_batch_id`. With `contract none`, SQLBuild checks those columns when static inference is available and permits further output. See [Schemas](/concepts/models/schemas).
 
 ### Enum columns
 
-A column may use a declared enum as its type:
+A column may use a declared enum as a portable logical domain type:
 
 ```sql
 MODEL (
@@ -2622,7 +2728,9 @@ MODEL (
 );
 ```
 
-SQLBuild resolves the enum to its physical string or integer type and adds accepted-values validation. See [Enums and Constants](/concepts/enums-and-constants).
+This does not require, create, or reference a warehouse-native enum type. SQLBuild resolves string-valued enums to `VARCHAR` and integer-valued enums to `INTEGER`. Under `contract enforced`, it also generates an `accepted_values` audit for the declared members. Audit severity and timing follow normal audit configuration and materialization behavior. With the default error severity, it gates staged-table promotion and pre-DML delta paths; views and custom materializations may already have changed their relation when the audit runs.
+
+Enum member references such as `@enum("market_type").WIN` are a separate feature that render one validated SQL literal. See [Enums and Constants](/concepts/enums-and-constants#enum-typed-contracts) for the complete distinction and lowering behavior.
 
 ### Related policies
 
@@ -2647,7 +2755,7 @@ MODEL (
 );
 ```
 
-SQL hooks support macros, project variables, environment variables, and context variables. SQL is validated at compile time when SQL analysis is enabled.
+SQL hooks support macros, project variables, environment variables, and context variables. Hook SQL is syntax-validated when the model's effective SQL-validation gate is enabled: SQL analysis must be enabled, `--no-sql-validation` must be absent, and the effective project or model `sql_validation` value must be true.
 
 | Variable | Value |
 |----------|-------|
@@ -2683,7 +2791,7 @@ SQL and Python hooks can appear in the same list.
 
 ### Hook context
 
-Python hooks receive a `HookContext` as their first parameter, conventionally named `ctx`:
+Python hooks declare a `HookContext` parameter named `ctx`, `context`, `_ctx`, or `hook_context`. It need not be the first parameter when providers or configured arguments are also present:
 
 | Field | Description |
 |-------|-------------|
@@ -2699,10 +2807,20 @@ Python hooks receive a `HookContext` as their first parameter, conventionally na
 | `ctx.execute_sql(sql)` | Execute SQL |
 | `ctx.query(sql)` | Execute SQL and return rows |
 | `ctx.log(message)` | Write run output |
-| `ctx.skip(reason, mode=...)` | Soft-skip the model or hard-block downstream models |
+| `ctx.skip(reason="...", mode="soft")` | Return a soft or hard skip result; arguments are keyword-only |
 | `ctx.providers` | Access discovered [providers](/concepts/python-nodes/providers) |
 
 Providers may also be injected into hook parameters by name.
+
+### Skip timing
+
+Returning `ctx.skip(...)` from a pre-hook prevents materialization. Returning it from a post-hook changes the reported execution result, but the relation has already been created, promoted, or incrementally updated and audited.
+
+`mode="hard"` blocks downstream nodes. A soft skip does not automatically block every downstream node; scheduler propagation depends on the other upstream results.
+
+### Failure timing
+
+Post-hooks are not promotion gates. A failed post-hook marks the model run as failed after warehouse mutation has already occurred. Put logic that must prevent materialization in a pre-hook, contract, pre-promotion audit, or the materialization itself.
 
 ### Discovery and validation
 
@@ -2728,25 +2846,34 @@ MODEL() header fields and SQL-validation controls.
 | `columns` | Model-local column declarations or inherited-column audit augmentation |
 | `model_schema` | Reusable column schema name |
 | `audits` | Model-level audit instances |
+| `enums` | Model-local enum declarations; names must begin with `_` |
+| `constants` | Model-local scalar constants; names must begin with `_` |
 | `schema` | Destination warehouse schema override |
 | `database` | Destination database override |
 | `alias` | Destination relation-name override |
 | `pre_hooks` | SQL or Python hooks before materialization |
 | `post_hooks` | SQL or Python hooks after materialization |
 | `enabled` | Set to `false` to disable the model |
-| `contract` | `none` or `enforced` |
+| `contract` | `none` for an open statically checked declaration, or `enforced` for an exact declaration |
 | `sql_validation` | Per-model SQL-validation override |
 
 ### SQL validation
 
-Four controls gate compile-time SQL validation, from broadest to narrowest:
+SQL validation has two hard gates and one effective setting:
 
-1. `settings.sql_analysis`: project-wide master switch for SQL-analysis features.
-2. `--no-sql-validation`: per-run CLI kill switch.
-3. `settings.sql_validation`: project-level validation setting.
-4. `MODEL (sql_validation ...)`: per-model project-setting override.
+1. `settings.sql_analysis` must be enabled.
+2. `--no-sql-validation` must not be present.
+3. `MODEL (sql_validation true|false)` overrides `settings.sql_validation` for that model. If omitted, the project setting is used.
 
-Validation runs only when every broader control permits it.
+The model override can re-enable validation when the project-level `settings.sql_validation` value is false, but it cannot bypass disabled SQL analysis or the CLI kill switch.
+
+### Table fields
+
+| Field | Description |
+|-------|-------------|
+| `run_despite_unchanged` | Table-only change-aware policy. `always` rebuilds whenever selected. A duration such as `30d`, `12h`, or `90m` rebuilds while the newest timestamp-based upstream source observation is within that age; it is not a periodic schedule. |
+
+Table promotion mode is a project setting rather than a `MODEL()` field. Staged promotion is the default. Direct promotion is incompatible with model type enforcement and exact contracts; see [Materializations](/concepts/models/materializations#table).
 
 ### Incremental fields
 
@@ -2760,13 +2887,36 @@ Validation runs only when every broader control permits it.
 | `cursor_inputs` | Upstream names mapped to cursor columns |
 | `unique_key` | Merge or delete/insert matching columns |
 | `incremental_mode` | Set to `microbatch` for batched execution |
-| `batch_size` | Batch window such as `1d`, `1h`, or an integer |
+| `batch_size` | Timestamp duration string such as `1d` or `1h`; use a numeric string such as `"1000"` for an integer cursor |
 | `lookback` | Backward replay extension |
+| `append_cursor_inclusive` | Include (`true`, default) or exclude (`false`) the current append-cursor boundary |
+| `merge_exclude_columns` | Columns left unchanged by matched-row merge updates |
+| `allow_full_refresh` | Allow or deny explicit full refresh for this incremental model |
 | `on_schema_change` | `append_new_columns`, `sync_all_columns`, `ignore`, or `fail` |
 | `replay_on_change` | `forward`, `full`, or `bounded-<duration>` |
-| `run_despite_unchanged` | `always` or a periodic duration |
 
 See [Incremental](/concepts/incremental) for full semantics.
+
+Current compatibility behavior treats an unrecognized `on_schema_change` value as the default `append_new_columns` policy and an unrecognized `replay_on_change` value as `forward`. Use the documented values exactly; future validation may reject unknown values instead of applying these fallbacks.
+
+### Snapshot fields
+
+| Field | Description |
+|-------|-------------|
+| `unique_key` | Columns identifying one logical record |
+| `snapshot_strategy` | `timestamp` or `check` |
+| `updated_at` | Source update timestamp for the timestamp strategy |
+| `check_columns` | Columns compared by the check strategy, or `[*]` |
+| `observed_at` | Observation timestamp for historical inputs |
+| `historical_input` | `snapshot` or `changes` |
+| `initial_valid_from` | Initial validity policy for first-seen rows |
+| `invalidate_hard_deletes` | Close records that disappear from current-state input |
+| `valid_from_column` | Override the generated valid-from column name |
+| `valid_to_column` | Override the generated valid-to column name |
+| `snapshot_full_refresh` | Snapshot full-refresh safety policy |
+| `snapshot_schema_change` | Snapshot schema-change policy |
+
+See [Snapshots](/concepts/snapshots) for strategy combinations, defaults, and safety behavior.
 
 ### Custom materialization fields
 
@@ -3258,7 +3408,12 @@ visibility prefixes, and malformed references all fail compilation.
 
 ### Enum-typed contracts
 
-An enum name can be used as a model column type:
+Enum references and enum-typed columns are separate capabilities:
+
+- `@enum("market_type").WIN` inserts one compiler-validated scalar literal into SQL.
+- `type market_type` uses the complete enum as a portable logical domain type for a model column.
+
+For the second form, use an enum name in a model column declaration:
 
 ```sql
 MODEL (
@@ -3269,7 +3424,26 @@ MODEL (
 );
 ```
 
-SQLBuild resolves the physical type to `VARCHAR` or `INTEGER`. With `contract enforced`, it also adds an `accepted_values` audit for the enum members, so an out-of-domain value blocks promotion.
+`market_type` is not sent to the warehouse as a physical type name. SQLBuild does not create a warehouse-native enum or emit enum DDL. Instead, it lowers the logical domain to portable model metadata:
+
+| Enum member values | Physical column type | Enforced domain check |
+|--------------------|----------------------|-----------------------|
+| Strings such as `WIN` and `PLACE` | `VARCHAR` | `accepted_values` for the declared strings |
+| Integers such as `1` and `3` | `INTEGER` | `accepted_values` for the declared integers |
+
+With `contract enforced`, the generated `accepted_values` audit runs with the model's other audits even though the warehouse column itself is an ordinary `VARCHAR` or `INTEGER`:
+
+```sql
+-- Conceptual physical shape and validation, not generated source syntax:
+market_type VARCHAR
+accepted_values(market_type, ["WIN", "PLACE", "SHOW"])
+```
+
+Its severity and timing follow ordinary audit configuration and materialization behavior. With the default error severity, an out-of-domain value gates staged-table promotion and pre-DML delta paths. Views run audits after replacement, and custom materializations control their own audit timing.
+
+With `contract none`, SQLBuild still resolves the logical enum to its physical scalar type, but it does not generate the domain audit. Use `contract enforced` when SQLBuild should generate member validation, and choose a materialization path whose audit timing provides the gate your workflow requires.
+
+This behavior is intentionally independent of whether a particular warehouse supports native enums. A project has the same model contract and validation semantics across adapters.
 
 Declaration changes participate in change detection. A changed referenced value changes compiled SQL; changed members of an enum-typed contract change the model's contract identity.
 
