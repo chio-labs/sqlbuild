@@ -88,6 +88,7 @@ module-name = "sqlbuild._kata_native"
 python-source = "src"
 features = ["extension-module"]
 include = [
+  { path = "LICENSE", format = ["sdist", "wheel"] },
   { path = "scripts", format = ["sdist", "wheel"] },
 ]
 
