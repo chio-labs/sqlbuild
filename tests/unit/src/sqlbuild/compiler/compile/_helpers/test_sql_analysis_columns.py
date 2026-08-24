@@ -52,6 +52,57 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
             expected_columns=(InferredColumn(name="val", type="INT"),),
         ),
         InferColumnsTestCase(
+            description="extracts Snowflake custom cast target names",
+            query_sql=(
+                "SELECT "
+                "CAST(NULL AS VARIANT) AS variant_value, "
+                "CAST(NULL AS NUMBER) AS number_value, "
+                "CAST(NULL AS NUMBER(10, 2)) AS sized_number_value, "
+                "CAST(NULL AS OBJECT) AS object_value, "
+                "CAST(NULL AS ARRAY) AS array_value, "
+                "CAST(NULL AS ARRAY(VARCHAR)) AS typed_array_value, "
+                "CAST(NULL AS DECIMAL) AS decimal_value, "
+                "CAST(NULL AS DECIMAL(10, 2)) AS sized_decimal_value, "
+                "CAST(NULL AS JSON) AS json_value, "
+                "TRY_CAST(NULL AS VARIANT) AS try_variant_value"
+            ),
+            expected_columns=(
+                InferredColumn(
+                    name="variant_value", type="VARIANT", nullability=InferredNullability.NULLABLE
+                ),
+                InferredColumn(
+                    name="number_value", type="NUMBER", nullability=InferredNullability.NULLABLE
+                ),
+                InferredColumn(
+                    name="sized_number_value",
+                    type="NUMBER(10, 2)",
+                    nullability=InferredNullability.NULLABLE,
+                ),
+                InferredColumn(
+                    name="object_value", type="OBJECT", nullability=InferredNullability.NULLABLE
+                ),
+                InferredColumn(
+                    name="array_value", type="ARRAY", nullability=InferredNullability.NULLABLE
+                ),
+                InferredColumn(
+                    name="typed_array_value", type="ARRAY", nullability=InferredNullability.NULLABLE
+                ),
+                InferredColumn(
+                    name="decimal_value", type="DECIMAL", nullability=InferredNullability.NULLABLE
+                ),
+                InferredColumn(
+                    name="sized_decimal_value",
+                    type="DECIMAL(10, 2)",
+                    nullability=InferredNullability.NULLABLE,
+                ),
+                InferredColumn(
+                    name="json_value", type="JSON", nullability=InferredNullability.NULLABLE
+                ),
+                InferredColumn(name="try_variant_value", type="VARIANT"),
+            ),
+            inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="snowflake"),
+        ),
+        InferColumnsTestCase(
             description="returns empty tuple for select star",
             query_sql='SELECT * FROM __ref("orders")',
             expected_columns=(),
@@ -337,6 +388,26 @@ def test_given_query_sql_when_inferring_columns_then_returns_expected(
             ),
             expected_has_star=False,
         ),
+        PolyglotAnalysisTestCase(
+            description="preserves Snowflake custom cast names through combined analysis",
+            query_sql="SELECT CAST(NULL AS VARIANT) AS value",
+            references=(),
+            expected_columns=(
+                InferredColumn(
+                    name="value", type="VARIANT", nullability=InferredNullability.NULLABLE
+                ),
+            ),
+            expected_lineage_columns=(
+                CompiledLineageColumnFact(
+                    output_column="value",
+                    upstream_columns=(),
+                    transform_kind=ColumnTransformKind.CAST,
+                    confidence=ColumnLineageConfidence.UNKNOWN,
+                ),
+            ),
+            expected_has_star=False,
+            inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="snowflake"),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -346,6 +417,7 @@ def test_given_ref_query_when_analyzing_columns_and_lineage_then_returns_compact
     result: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
         query_sql=test_case.query_sql,
         references=test_case.references,
+        inference_profile=test_case.inference_profile,
         allow_compact_analysis=True,
     )
 
