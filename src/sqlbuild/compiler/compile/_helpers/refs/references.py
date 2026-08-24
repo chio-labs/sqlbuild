@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from sqlbuild.compiler.compile.constants import (
     SQL_ARGUMENT_SEPARATOR_TOKEN,
     SQL_CLOSE_PAREN_TOKEN,
@@ -31,6 +33,7 @@ _REFERENCE_PREFIXES: tuple[tuple[str, SqlReferenceKind], ...] = (
 _REFERENCE_PREFIX_BY_KIND: dict[SqlReferenceKind, str] = {
     ref_kind: prefix[:-1] for prefix, ref_kind in _REFERENCE_PREFIXES
 }
+_REFERENCE_SCAN_PATTERN: re.Pattern[str] = re.compile(r"__|--|/\*|'|\"|`")
 
 
 def extract_sql_references(sql: str) -> tuple[CompileSqlReference, ...]:
@@ -66,13 +69,8 @@ def extract_sql_references(sql: str) -> tuple[CompileSqlReference, ...]:
 
 
 def _next_reference_scan_position(*, sql: str, start: int) -> int:
-    positions: list[int] = []
-    token: str
-    for token in ("__", "--", "/*", "'", '"', "`"):
-        position: int = sql.find(token, start)
-        if position >= 0:
-            positions.append(position)
-    return min(positions, default=len(sql))
+    match: re.Match[str] | None = _REFERENCE_SCAN_PATTERN.search(sql, start)
+    return match.start() if match is not None else len(sql)
 
 
 def _parse_reference_at(*, sql: str, start: int) -> tuple[CompileSqlReference, int] | None:

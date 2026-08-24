@@ -38,6 +38,9 @@ from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_com
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
 
 _CONTEXT: str = "Macro expansion"
+_LINE_COMMENT_TOKEN: str = "--"
+_BLOCK_COMMENT_TOKEN: str = "/*"
+_MACRO_SCAN_PATTERN: re.Pattern[str] = re.compile(r"@|--|/\*|'|\"|`")
 
 
 def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[str, LoadedMacro]:
@@ -444,21 +447,24 @@ def _evaluate_dict_key_ast_node(
 
 def _find_next_macro_start(*, sql: str, start_index: int) -> int | None:
     index: int = start_index
-    while index < len(sql):
-        character: str = sql[index]
-        if character in SQL_QUOTE_TOKENS:
+    while True:
+        match: re.Match[str] | None = _MACRO_SCAN_PATTERN.search(sql, index)
+        if match is None:
+            return None
+        index = match.start()
+        token: str = match.group()
+        if token in SQL_QUOTE_TOKENS:
             index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
             continue
-        if sql.startswith("--", index):
+        if token == _LINE_COMMENT_TOKEN:
             index = skip_line_comment(sql=sql, start=index)
             continue
-        if sql.startswith("/*", index):
+        if token == _BLOCK_COMMENT_TOKEN:
             index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
             continue
-        if character == MACRO_TOKEN and _is_macro_call_start(sql=sql, at_index=index):
+        if _is_macro_call_start(sql=sql, at_index=index):
             return index
         index += 1
-    return None
 
 
 def _is_macro_call_start(*, sql: str, at_index: int) -> bool:
