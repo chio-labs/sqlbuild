@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_SEED
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.planner._helpers.planning.scopes import resolve_planner_scopes
 from sqlbuild.compiler.planner._helpers.pruning.selection_classifier import (
     format_stale_upstream_warning_message,
 )
@@ -17,7 +19,10 @@ from sqlbuild.compiler.planner._helpers.pruning.selection_staleness import (
 from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     PlannerChangeResults,
+    PlannerPolicies,
     PlannerScope,
+    PlannerScopeResolution,
+    PlannerSelection,
     PlanWarning,
     StandardModelVersionIdentities,
     WarehouseFingerprints,
@@ -29,9 +34,13 @@ from sqlbuild.compiler.source_freshness.models import (
     StandardSourceFreshnessPlanningResult,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
+    PlannerStaleWarningScopeTestCase,
     SelectionStalenessGraphWarningTestCase,
     SelectionStalenessWarningTestCase,
     StaleWarningMessageTestCase,
+)
+from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
+    build_run_despite_unchanged_model,
 )
 
 MODEL_KEY: CompiledObjectKey = CompiledObjectKey(
@@ -72,6 +81,90 @@ SOURCE_ROOT_KEY: CompiledObjectKey = CompiledObjectKey(
     resource_type=CompiledResourceType.SOURCE,
     name="root_source",
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        PlannerStaleWarningScopeTestCase(
+            description="selected branch excludes unrelated warehouse inspection",
+            selected_model_name="leaf",
+            expected_inspected_names=frozenset({"root", "middle", "leaf"}),
+            expected_execution_names=("root", "middle", "leaf"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_partial_selection_when_resolving_scopes_then_inspects_only_upstream_closure(
+    test_case: PlannerStaleWarningScopeTestCase,
+) -> None:
+    root_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.MODEL,
+        name="root",
+    )
+    middle_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.MODEL,
+        name="middle",
+    )
+    leaf_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.MODEL,
+        name="leaf",
+    )
+    unrelated_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.MODEL,
+        name="unrelated",
+    )
+    root: CompiledModel = build_run_despite_unchanged_model(
+        key=root_key,
+        name=root_key.name,
+        materialized="table",
+        run_despite_unchanged=None,
+    )
+    middle: CompiledModel = replace(
+        build_run_despite_unchanged_model(
+            key=middle_key,
+            name=middle_key.name,
+            materialized="table",
+            run_despite_unchanged=None,
+        ),
+        deps=(root_key,),
+    )
+    leaf: CompiledModel = replace(
+        build_run_despite_unchanged_model(
+            key=leaf_key,
+            name=leaf_key.name,
+            materialized="table",
+            run_despite_unchanged=None,
+        ),
+        deps=(middle_key,),
+    )
+    unrelated: CompiledModel = build_run_despite_unchanged_model(
+        key=unrelated_key,
+        name=unrelated_key.name,
+        materialized="table",
+        run_despite_unchanged=None,
+    )
+    project: CompiledProject = CompiledProject(
+        run_id="run",
+        effective_target_name=None,
+        effective_connection={},
+        effective_vars={},
+        models=(root, middle, leaf, unrelated),
+    )
+
+    scopes: PlannerScopeResolution = resolve_planner_scopes(
+        project=project,
+        selection=PlannerSelection(select=(test_case.selected_model_name,)),
+        policies=PlannerPolicies(),
+    )
+
+    assert (
+        frozenset(key.name for key in scopes.stale_warning_scope.all_keys.values())
+        == test_case.expected_inspected_names
+    )
+    assert tuple(key.name for key in scopes.stale_warning_scope.execution_order) == (
+        test_case.expected_execution_names
+    )
 
 
 @pytest.mark.parametrize(

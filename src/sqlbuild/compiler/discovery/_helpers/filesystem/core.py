@@ -123,7 +123,10 @@ class _PythonNodeDiscoveryBucket:
 
 
 def discover_model_files(
-    *, project_dir: Path, extract_implicit_alias_columns: bool = True
+    *,
+    project_dir: Path,
+    extract_implicit_alias_columns: bool = True,
+    extract_output_column_locations: bool = True,
 ) -> tuple[DiscoveredSqlModelFile, ...]:
     """Discover SQL model files under models/."""
 
@@ -149,10 +152,14 @@ def discover_model_files(
                     contents=contents,
                     relative_path=relative_path,
                 ),
-                output_column_locations=model_output_column_locations(
-                    contents=contents,
-                    relative_path=relative_path,
-                    extract_implicit_alias_columns=extract_implicit_alias_columns,
+                output_column_locations=(
+                    model_output_column_locations(
+                        contents=contents,
+                        relative_path=relative_path,
+                        extract_implicit_alias_columns=extract_implicit_alias_columns,
+                    )
+                    if extract_output_column_locations
+                    else {}
                 ),
                 query_sql=query_sql,
                 enum_declarations=parse_model_enum_declarations(
@@ -165,6 +172,8 @@ def discover_model_files(
                     model_name=file_path.stem,
                     relative_path=relative_path,
                 ),
+                output_column_locations_extracted=extract_output_column_locations,
+                extract_implicit_alias_columns=extract_implicit_alias_columns,
             )
         )
     return tuple(discovered_model_files)

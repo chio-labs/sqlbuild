@@ -4,19 +4,60 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.compiler.discovery._helpers.filesystem.core import discover_model_files
 from sqlbuild.compiler.discovery._helpers.sql.model_files import (
     model_header_column_locations,
     model_output_column_locations,
     parse_model_sql,
 )
-from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredSqlModelFile,
+    PythonHookEntry,
+    SqlHookEntry,
+)
 from sqlbuild.spec.contracts.models import SourceLocation
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
+    DeferredModelOutputLocationTestCase,
     ModelHeaderColumnLocationTestCase,
     ModelOutputColumnLocationTestCase,
     ParseModelSqlErrorTestCase,
     ParseModelSqlHeaderTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DeferredModelOutputLocationTestCase(
+            description="defers output locations without implicit alias extraction",
+            expected_extract_implicit_alias_columns=False,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_deferred_output_locations_when_discovering_models_then_projection_scan_is_skipped(
+    tmp_path: Path,
+    test_case: DeferredModelOutputLocationTestCase,
+) -> None:
+    models_dir: Path = tmp_path / "models"
+    models_dir.mkdir()
+    (models_dir / "orders.sql").write_text(
+        "MODEL (materialized view);\n\nSELECT 1 AS order_id\n",
+        encoding="utf-8",
+    )
+
+    model_file: DiscoveredSqlModelFile = discover_model_files(
+        project_dir=tmp_path,
+        extract_implicit_alias_columns=(test_case.expected_extract_implicit_alias_columns),
+        extract_output_column_locations=False,
+    )[0]
+
+    assert model_file.output_column_locations == {}
+    assert model_file.output_column_locations_extracted is False
+    assert (
+        model_file.extract_implicit_alias_columns
+        is test_case.expected_extract_implicit_alias_columns
+    )
 
 
 @pytest.mark.parametrize(

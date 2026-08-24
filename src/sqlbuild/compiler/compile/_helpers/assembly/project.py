@@ -5,9 +5,16 @@ from __future__ import annotations
 import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
+from pathlib import Path
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.contract.types import BuiltinAdapter
+from sqlbuild.compiler.compile._helpers.analysis.cache import (
+    build_analysis_cache_context,
+    model_analysis_cache_key,
+    read_model_analyses,
+    write_model_analyses,
+)
 from sqlbuild.compiler.compile._helpers.analysis.columns import (
     analyze_columns_and_lineage_with_polyglot,
     infer_columns_with_sql_analysis,
@@ -32,6 +39,7 @@ from sqlbuild.compiler.compile._helpers.render.templating import expand_template
 from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME, PRESERVE_TARGET_VALUE
 from sqlbuild.compiler.compile.main.function_node_type import function_node_type
 from sqlbuild.compiler.compile.models import (
+    AnalysisCacheContext,
     CompileAuditInput,
     CompiledAudit,
     CompiledDirectLogicSqlTestPayload,
@@ -65,6 +73,9 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     SqlTestMode,
 )
+from sqlbuild.compiler.discovery.main._model_output_column_locations import (
+    extract_model_output_column_locations,
+)
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
@@ -80,6 +91,7 @@ from sqlbuild.spec.contracts.models import (
     SchemaSeedEntry,
     SourceColumnEntry,
     SourceEntry,
+    SourceLocation,
     TargetConfig,
 )
 
@@ -93,12 +105,22 @@ class _ModelSqlAnalysis:
     placeholders: dict[str, str] | None
 
 
+@dataclass(frozen=True)
+class _ModelSqlAnalysisRequest:
+    model_input: CompileModelInput
+    query_sql: str
+    placeholders: dict[str, str] | None
+    cache_key: str | None
+
+
 def assemble_compiled_project(
     *,
     inputs: CompileProjectInputs,
     inference_profile: ExpressionInferenceProfile | None = None,
     skip_column_inference: bool = False,
     column_lineage_mode: ColumnLineageMode = ColumnLineageMode.FAST,
+    analysis_cache_dir: Path | None = None,
+    analysis_model_names: frozenset[str] | None = None,
 ) -> CompiledProject:
     """Convert attached compile inputs into the planner-ready project view."""
 
@@ -113,14 +135,31 @@ def assemble_compiled_project(
     )
     column_types_by_table: dict[str, dict[str, str]] = _build_column_types_by_table(inputs)
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
+    allow_compact_analysis: bool = column_lineage_mode == ColumnLineageMode.RICH
+    analysis_cache: AnalysisCacheContext | None = (
+        build_analysis_cache_context(
+            root=analysis_cache_dir,
+            inference_profile=profile,
+            column_nullability_by_table=column_nullability_by_table,
+            column_types_by_table=column_types_by_table,
+            allow_compact_analysis=allow_compact_analysis,
+        )
+        if sql_analysis_enabled and analysis_model_names != frozenset()
+        else None
+    )
     model_sql_analysis_by_name: dict[str, _ModelSqlAnalysis] = {}
     if sql_analysis_enabled:
         model_sql_analysis_by_name = _analyze_model_sql_in_parallel(
-            model_inputs=inputs.model_inputs,
+            model_inputs=tuple(
+                model_input
+                for model_input in inputs.model_inputs
+                if analysis_model_names is None or _model_name(model_input) in analysis_model_names
+            ),
             column_nullability_by_table=column_nullability_by_table,
             column_types_by_table=column_types_by_table,
             inference_profile=profile,
-            allow_compact_analysis=column_lineage_mode == ColumnLineageMode.RICH,
+            allow_compact_analysis=allow_compact_analysis,
+            analysis_cache=analysis_cache,
         )
     return CompiledProject(
         run_id=inputs.run_id,
@@ -143,13 +182,22 @@ def assemble_compiled_project(
         models=tuple(
             _assemble_compiled_model(
                 model_input=model_input,
-                sql_analysis_enabled=sql_analysis_enabled,
+                sql_analysis_enabled=(
+                    sql_analysis_enabled
+                    and (
+                        analysis_model_names is None
+                        or _model_name(model_input) in analysis_model_names
+                    )
+                ),
+                sql_validation_enabled=(
+                    analysis_model_names is None or _model_name(model_input) in analysis_model_names
+                ),
                 seed_names=seed_names,
                 column_nullability_by_table=column_nullability_by_table,
                 column_types_by_table=column_types_by_table,
                 inference_profile=profile,
                 sql_analysis=model_sql_analysis_by_name.get(model_input.model_file.file_path.stem),
-                allow_compact_analysis=column_lineage_mode == ColumnLineageMode.RICH,
+                allow_compact_analysis=allow_compact_analysis,
             )
             for model_input in inputs.model_inputs
         ),
@@ -213,6 +261,7 @@ def _assemble_compiled_model(
     *,
     model_input: CompileModelInput,
     sql_analysis_enabled: bool,
+    sql_validation_enabled: bool = True,
     seed_names: frozenset[str] = frozenset(),
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
     column_types_by_table: dict[str, dict[str, str]] | None = None,
@@ -265,7 +314,7 @@ def _assemble_compiled_model(
                 column_nullability_by_table=column_nullability_by_table,
                 inference_profile=profile,
             )
-    elif model_input.sql_validation_enabled:
+    elif sql_validation_enabled and model_input.sql_validation_enabled:
         profile = inference_profile or ExpressionInferenceProfile()
         validate_sql_syntax(
             query_sql=analysis_query_sql,
@@ -273,6 +322,20 @@ def _assemble_compiled_model(
             file_path=model_input.model_file.file_path,
             placeholders=placeholders,
             dialect=profile.sql_analysis_dialect,
+        )
+    output_column_locations: dict[str, SourceLocation] = (
+        model_input.model_file.output_column_locations
+    )
+    if (
+        not model_input.model_file.output_column_locations_extracted
+        and inferred_columns is not None
+        and model_input.schema_entry is not None
+        and model_input.schema_entry.columns
+    ):
+        output_column_locations = extract_model_output_column_locations(
+            contents=model_input.model_file.contents,
+            relative_path=model_input.model_file.relative_path,
+            extract_implicit_alias_columns=(model_input.model_file.extract_implicit_alias_columns),
         )
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=model_name),
@@ -288,7 +351,7 @@ def _assemble_compiled_model(
         fast_lineage_columns=fast_lineage_columns,
         fast_lineage_has_star=fast_lineage_has_star,
         authored_sql=model_input.model_file.contents,
-        output_column_locations=model_input.model_file.output_column_locations,
+        output_column_locations=output_column_locations,
         macro_deps=find_macro_call_names(model_input.macro_source_sql),
         enum_declarations=model_input.enum_declarations,
         constant_declarations=model_input.constant_declarations,
@@ -303,33 +366,68 @@ def _analyze_model_sql_in_parallel(
     column_types_by_table: dict[str, dict[str, str]],
     inference_profile: ExpressionInferenceProfile,
     allow_compact_analysis: bool,
+    analysis_cache: AnalysisCacheContext | None,
 ) -> dict[str, _ModelSqlAnalysis]:
     if not model_inputs:
         return {}
+    requests: tuple[_ModelSqlAnalysisRequest, ...] = tuple(
+        _model_sql_analysis_request(model_input=model_input, analysis_cache=analysis_cache)
+        for model_input in model_inputs
+    )
+    cached_analyses: dict[str, PolyglotAnalysisResult] = (
+        read_model_analyses(
+            context=analysis_cache,
+            cache_keys=tuple(
+                request.cache_key for request in requests if request.cache_key is not None
+            ),
+        )
+        if analysis_cache is not None
+        else {}
+    )
     if len(model_inputs) < _POLYGLOT_PARALLEL_ANALYSIS_MIN_MODELS:
-        return {
-            _model_name(model_input): _analyze_model_sql(
-                model_input=model_input,
+        analyses: tuple[_ModelSqlAnalysis, ...] = tuple(
+            _analyze_model_sql(
+                request=request,
+                cached_analysis=(
+                    cached_analyses.get(request.cache_key)
+                    if request.cache_key is not None
+                    else None
+                ),
                 column_nullability_by_table=column_nullability_by_table,
                 column_types_by_table=column_types_by_table,
                 inference_profile=inference_profile,
                 allow_compact_analysis=allow_compact_analysis,
             )
-            for model_input in model_inputs
-        }
-    workers: int = min(_POLYGLOT_ANALYSIS_WORKERS, len(model_inputs))
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        analyses: tuple[_ModelSqlAnalysis, ...] = tuple(
-            executor.map(
-                lambda model_input: _analyze_model_sql(
-                    model_input=model_input,
-                    column_nullability_by_table=column_nullability_by_table,
-                    column_types_by_table=column_types_by_table,
-                    inference_profile=inference_profile,
-                    allow_compact_analysis=allow_compact_analysis,
-                ),
-                model_inputs,
+            for request in requests
+        )
+    else:
+        workers: int = min(_POLYGLOT_ANALYSIS_WORKERS, len(model_inputs))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            analyses = tuple(
+                executor.map(
+                    lambda request: _analyze_model_sql(
+                        request=request,
+                        cached_analysis=(
+                            cached_analyses.get(request.cache_key)
+                            if request.cache_key is not None
+                            else None
+                        ),
+                        column_nullability_by_table=column_nullability_by_table,
+                        column_types_by_table=column_types_by_table,
+                        inference_profile=inference_profile,
+                        allow_compact_analysis=allow_compact_analysis,
+                    ),
+                    requests,
+                )
             )
+    if analysis_cache is not None:
+        write_model_analyses(
+            context=analysis_cache,
+            analyses_by_key={
+                request.cache_key: analysis.polyglot_analysis
+                for request, analysis in zip(requests, analyses, strict=True)
+                if request.cache_key is not None and request.cache_key not in cached_analyses
+            },
         )
     return {
         _model_name(model_input): analysis
@@ -339,27 +437,58 @@ def _analyze_model_sql_in_parallel(
 
 def _analyze_model_sql(
     *,
-    model_input: CompileModelInput,
+    request: _ModelSqlAnalysisRequest,
+    cached_analysis: PolyglotAnalysisResult | None,
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     column_types_by_table: dict[str, dict[str, str]],
     inference_profile: ExpressionInferenceProfile,
     allow_compact_analysis: bool,
 ) -> _ModelSqlAnalysis:
-    placeholders: dict[str, str] | None = _model_placeholders(model_input)
+    if cached_analysis is not None:
+        return _ModelSqlAnalysis(
+            polyglot_analysis=cached_analysis,
+            placeholders=request.placeholders,
+        )
+    polyglot_analysis: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+        query_sql=request.query_sql,
+        references=request.model_input.references,
+        placeholders=request.placeholders,
+        column_nullability_by_table=column_nullability_by_table,
+        column_types_by_table=column_types_by_table,
+        inference_profile=inference_profile,
+        allow_compact_analysis=allow_compact_analysis,
+    )
     return _ModelSqlAnalysis(
-        polyglot_analysis=analyze_columns_and_lineage_with_polyglot(
-            query_sql=cursor_intrinsics_analysis_sql(
-                sql=model_input.query_sql,
-                cursor_type=model_input.config.values.get("cursor_type"),
-            ),
+        polyglot_analysis=polyglot_analysis,
+        placeholders=request.placeholders,
+    )
+
+
+def _model_sql_analysis_request(
+    *,
+    model_input: CompileModelInput,
+    analysis_cache: AnalysisCacheContext | None,
+) -> _ModelSqlAnalysisRequest:
+    placeholders: dict[str, str] | None = _model_placeholders(model_input)
+    query_sql: str = cursor_intrinsics_analysis_sql(
+        sql=model_input.query_sql,
+        cursor_type=model_input.config.values.get("cursor_type"),
+    )
+    cache_key: str | None = (
+        model_analysis_cache_key(
+            context=analysis_cache,
+            query_sql=query_sql,
             references=model_input.references,
             placeholders=placeholders,
-            column_nullability_by_table=column_nullability_by_table,
-            column_types_by_table=column_types_by_table,
-            inference_profile=inference_profile,
-            allow_compact_analysis=allow_compact_analysis,
-        ),
+        )
+        if analysis_cache is not None
+        else None
+    )
+    return _ModelSqlAnalysisRequest(
+        model_input=model_input,
+        query_sql=query_sql,
         placeholders=placeholders,
+        cache_key=cache_key,
     )
 
 

@@ -53,6 +53,8 @@ class DiscoveredSqlModelFile:
     query_sql: str
     enum_declarations: tuple[EnumDeclaration, ...] = field(default_factory=tuple)
     constant_declarations: tuple[ConstantDeclaration, ...] = field(default_factory=tuple)
+    output_column_locations_extracted: bool = True
+    extract_implicit_alias_columns: bool = True
 
 
 @dataclass(frozen=True)
@@ -379,6 +381,7 @@ class DiscoveredProjectInputs:
 
     project_config: ProjectConfig
     local_config: LocalConfig
+    project_dir: Path | None = None
     model_files: tuple[DiscoveredSqlModelFile, ...] = field(default_factory=tuple)
     enum_files: tuple[DiscoveredEnumFile, ...] = field(default_factory=tuple)
     constant_files: tuple[DiscoveredConstantFile, ...] = field(default_factory=tuple)

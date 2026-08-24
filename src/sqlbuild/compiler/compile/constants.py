@@ -104,3 +104,5 @@ RESERVED_SQL_TEST_CTE_NAMES: frozenset[str] = frozenset(
         "__unexpected__",
     }
 )
+COMPILE_CACHE_DISABLE_ENV_VAR: str = "SQLBUILD_DISABLE_COMPILE_CACHE"
+COMPILE_CACHE_DISABLE_VALUE: str = "1"

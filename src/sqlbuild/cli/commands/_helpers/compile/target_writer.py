@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -37,12 +36,14 @@ def write_compile_target(
 ) -> WrittenTarget:
     """Write compiled output files under target_dir."""
 
-    _clean_target(target_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
-    _write_models(target_dir=target_dir, plan_output=plan_output)
-    _write_functions(target_dir=target_dir, adapter=adapter, plan_output=plan_output)
-    _write_audits(target_dir=target_dir, plan_output=plan_output)
-    _write_tests(target_dir=target_dir, adapter=adapter, plan_output=plan_output)
+    managed_paths: set[Path] = set().union(
+        _write_models(target_dir=target_dir, plan_output=plan_output),
+        _write_functions(target_dir=target_dir, adapter=adapter, plan_output=plan_output),
+        _write_audits(target_dir=target_dir, plan_output=plan_output),
+        _write_tests(target_dir=target_dir, adapter=adapter, plan_output=plan_output),
+    )
+    _remove_stale_compiled_files(target_dir=target_dir, managed_paths=managed_paths)
     if manifest is not None:
         _write_manifest(target_dir=target_dir, manifest=manifest)
 
@@ -65,12 +66,14 @@ def write_static_compile_target(
 ) -> WrittenTarget:
     """Write offline compiled output files under target_dir."""
 
-    _clean_target(target_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
-    _write_static_models(target_dir=target_dir, project=project)
-    _write_static_functions(target_dir=target_dir, adapter=adapter, project=project)
-    _write_static_audits(target_dir=target_dir, project=project)
-    _write_static_tests(target_dir=target_dir, adapter=adapter, project=project)
+    managed_paths: set[Path] = set().union(
+        _write_static_models(target_dir=target_dir, project=project),
+        _write_static_functions(target_dir=target_dir, adapter=adapter, project=project),
+        _write_static_audits(target_dir=target_dir, project=project),
+        _write_static_tests(target_dir=target_dir, adapter=adapter, project=project),
+    )
+    _remove_stale_compiled_files(target_dir=target_dir, managed_paths=managed_paths)
     if manifest is not None:
         _write_manifest(target_dir=target_dir, manifest=manifest)
 
@@ -84,33 +87,37 @@ def write_static_compile_target(
     )
 
 
-def _clean_target(target_dir: Path) -> None:
-    """Remove generated compile output directories from target/."""
-
-    compiled_dir: Path = target_dir / _COMPILED_DIR
-    if compiled_dir.exists():
-        shutil.rmtree(compiled_dir)
-
-
-def _write_models(*, target_dir: Path, plan_output: PlanOutput) -> None:
+def _write_models(*, target_dir: Path, plan_output: PlanOutput) -> set[Path]:
     """Write model resolved SQL."""
 
+    managed_paths: set[Path] = set()
     for entry in plan_output.model_entries:
         compiled_path: Path = target_dir / _COMPILED_DIR / _model_output_path(entry.relative_path)
         _write_sql(path=compiled_path, sql=entry.resolved_sql)
+        managed_paths.add(compiled_path)
+    return managed_paths
 
 
-def _write_static_models(*, target_dir: Path, project: CompiledProject) -> None:
+def _write_static_models(*, target_dir: Path, project: CompiledProject) -> set[Path]:
     """Write offline model query SQL."""
 
+    managed_paths: set[Path] = set()
     for model in project.models:
         compiled_path: Path = target_dir / _COMPILED_DIR / _model_output_path(model.relative_path)
         _write_sql(path=compiled_path, sql=model.query_sql)
+        managed_paths.add(compiled_path)
+    return managed_paths
 
 
-def _write_functions(*, target_dir: Path, adapter: BaseAdapter, plan_output: PlanOutput) -> None:
+def _write_functions(
+    *,
+    target_dir: Path,
+    adapter: BaseAdapter,
+    plan_output: PlanOutput,
+) -> set[Path]:
     """Write executable SQL function DDL."""
 
+    managed_paths: set[Path] = set()
     for entry in plan_output.function_entries:
         if entry.destination.qualified_name is None:
             continue
@@ -130,14 +137,23 @@ def _write_functions(*, target_dir: Path, adapter: BaseAdapter, plan_output: Pla
             / _COMPILED_DIR
             / _function_output_path(relative_path=entry.relative_path, language=entry.language)
         )
-        _write_sql(path=function_path, sql=";\n\n".join(statements))
+        _write_sql(
+            path=function_path,
+            sql=";\n\n".join(statements),
+        )
+        managed_paths.add(function_path)
+    return managed_paths
 
 
 def _write_static_functions(
-    *, target_dir: Path, adapter: BaseAdapter, project: CompiledProject
-) -> None:
+    *,
+    target_dir: Path,
+    adapter: BaseAdapter,
+    project: CompiledProject,
+) -> set[Path]:
     """Write offline rendered SQL function DDL."""
 
+    managed_paths: set[Path] = set()
     for function in project.functions:
         if function.destination.qualified_name is None:
             continue
@@ -159,22 +175,31 @@ def _write_static_functions(
                 relative_path=function.relative_path, language=function.language
             )
         )
-        _write_sql(path=function_path, sql=";\n\n".join(statements))
+        _write_sql(
+            path=function_path,
+            sql=";\n\n".join(statements),
+        )
+        managed_paths.add(function_path)
+    return managed_paths
 
 
-def _write_audits(*, target_dir: Path, plan_output: PlanOutput) -> None:
+def _write_audits(*, target_dir: Path, plan_output: PlanOutput) -> set[Path]:
     """Write resolved audit SQL."""
 
+    managed_paths: set[Path] = set()
     for entry in plan_output.audit_entries:
         folder: Path = _audit_folder(entry)
         file_name: str = _audit_file_name(entry)
         audit_path: Path = target_dir / _COMPILED_DIR / _AUDITS_DIR / folder / file_name
         _write_sql(path=audit_path, sql=entry.resolved_sql)
+        managed_paths.add(audit_path)
+    return managed_paths
 
 
-def _write_static_audits(*, target_dir: Path, project: CompiledProject) -> None:
+def _write_static_audits(*, target_dir: Path, project: CompiledProject) -> set[Path]:
     """Write offline resolved audit SQL."""
 
+    managed_paths: set[Path] = set()
     for audit in project.audits:
         folder: Path = _static_audit_folder(attached_target_name=audit.attached_target_name)
         file_name: str = _static_audit_file_name(
@@ -184,11 +209,19 @@ def _write_static_audits(*, target_dir: Path, project: CompiledProject) -> None:
         )
         audit_path: Path = target_dir / _COMPILED_DIR / _AUDITS_DIR / folder / file_name
         _write_sql(path=audit_path, sql=audit.sql_body)
+        managed_paths.add(audit_path)
+    return managed_paths
 
 
-def _write_tests(*, target_dir: Path, adapter: BaseAdapter, plan_output: PlanOutput) -> None:
+def _write_tests(
+    *,
+    target_dir: Path,
+    adapter: BaseAdapter,
+    plan_output: PlanOutput,
+) -> set[Path]:
     """Write resolved SQL-native test SQL."""
 
+    managed_paths: set[Path] = set()
     for entry in plan_output.test_entries:
         test_path: Path = (
             target_dir / _COMPILED_DIR / _TESTS_DIR / _test_folder(entry) / f"{entry.name}.sql"
@@ -201,13 +234,19 @@ def _write_tests(*, target_dir: Path, adapter: BaseAdapter, plan_output: PlanOut
                 sql_analysis_dialect=adapter.sql_analysis_dialect(),
             ),
         )
+        managed_paths.add(test_path)
+    return managed_paths
 
 
 def _write_static_tests(
-    *, target_dir: Path, adapter: BaseAdapter, project: CompiledProject
-) -> None:
+    *,
+    target_dir: Path,
+    adapter: BaseAdapter,
+    project: CompiledProject,
+) -> set[Path]:
     """Write offline SQL-native test SQL."""
 
+    managed_paths: set[Path] = set()
     for test in project.sql_tests:
         entry, _warnings = build_sql_test_plan_entry(
             test=test,
@@ -226,20 +265,47 @@ def _write_static_tests(
                 sql_analysis_dialect=adapter.sql_analysis_dialect(),
             ),
         )
+        managed_paths.add(test_path)
+    return managed_paths
 
 
 def _write_manifest(*, target_dir: Path, manifest: dict[str, object]) -> None:
     """Write manifest.json."""
 
     manifest_path: Path = target_dir / _MANIFEST_FILE
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    _write_text_if_changed(path=manifest_path, contents=json.dumps(manifest, indent=2) + "\n")
 
 
 def _write_sql(*, path: Path, sql: str) -> None:
     """Write one SQL file."""
 
+    _write_text_if_changed(path=path, contents=sql.rstrip() + "\n")
+
+
+def _write_text_if_changed(*, path: Path, contents: str) -> None:
+    if path.is_file() and path.read_text(encoding="utf-8") == contents:
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(sql.rstrip() + "\n", encoding="utf-8")
+    path.write_text(contents, encoding="utf-8")
+
+
+def _remove_stale_compiled_files(*, target_dir: Path, managed_paths: set[Path]) -> None:
+    compiled_dir: Path = target_dir / _COMPILED_DIR
+    if not compiled_dir.is_dir():
+        return
+    for path in compiled_dir.rglob("*"):
+        if path.is_file() and path not in managed_paths:
+            path.unlink()
+    directories: list[Path] = sorted(
+        (path for path in compiled_dir.rglob("*") if path.is_dir()),
+        key=lambda path: len(path.parts),
+        reverse=True,
+    )
+    for directory in (*directories, compiled_dir):
+        try:
+            directory.rmdir()
+        except OSError:
+            pass
 
 
 def _model_output_path(relative_path: Path) -> Path:

@@ -223,6 +223,23 @@ class PolyglotAnalysisResult:
 
 
 @dataclass(frozen=True)
+class AnalysisCacheContext:
+    """Shared project-local analysis cache identity for one compile invocation."""
+
+    root: Path
+    shared_fingerprint: str
+
+
+@dataclass(frozen=True)
+class CompileAnalysisSelection:
+    """Selection inputs used to limit deep model SQL analysis."""
+
+    select: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
+    auto_load_sources: bool = False
+
+
+@dataclass(frozen=True)
 class CompiledObjectKey:
     """Stable logical identity for one compiled resource or external dependency."""
 

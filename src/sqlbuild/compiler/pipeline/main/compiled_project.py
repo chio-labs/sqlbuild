@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.compile.constants import (
+    COMPILE_CACHE_DISABLE_ENV_VAR,
+    COMPILE_CACHE_DISABLE_VALUE,
+)
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
+    CompileAnalysisSelection,
     CompiledProject,
     CompileProjectInputs,
 )
@@ -15,6 +24,14 @@ from sqlbuild.compiler.pipeline._helpers.target_defaults import apply_target_def
 from sqlbuild.compiler.pipeline._helpers.target_validation import (
     validate_managed_loader_target_isolation,
     validate_project_targets,
+)
+from sqlbuild.compiler.planner.main.selection._resolve_planner_scopes import (
+    resolve_planner_scopes,
+)
+from sqlbuild.compiler.planner.models import (
+    PlannerPolicies,
+    PlannerScopeResolution,
+    PlannerSelection,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
@@ -33,6 +50,7 @@ def build_compiled_project(
     cli_vars: dict[str, object] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     resolved_connection: dict[str, object] | None = None,
+    analysis_selection: CompileAnalysisSelection | None = None,
 ) -> CompiledProject:
     """Build one compiled project with adapter defaults and target validation applied."""
 
@@ -52,12 +70,21 @@ def build_compiled_project(
         ),
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
+    inference_profile: ExpressionInferenceProfile = adapter.expression_inference_profile()
+    analysis_cache_dir: Path | None = _analysis_cache_dir(discovered_inputs=discovered_inputs)
+    analysis_model_names: frozenset[str] | None = _resolve_analysis_model_names(
+        compile_inputs=compile_inputs,
+        inference_profile=inference_profile,
+        selection=analysis_selection,
+    )
     project: CompiledProject = apply_target_defaults(
         project=assemble_project(
             inputs=compile_inputs,
-            inference_profile=adapter.expression_inference_profile(),
+            inference_profile=inference_profile,
             skip_column_inference=skip_column_inference,
             column_lineage_mode=column_lineage_mode,
+            analysis_cache_dir=analysis_cache_dir,
+            analysis_model_names=analysis_model_names,
         ),
         default_schema=adapter.default_schema(),
         default_database=adapter.default_database(),
@@ -74,3 +101,32 @@ def build_compiled_project(
         project=project,
     )
     return project
+
+
+def _analysis_cache_dir(*, discovered_inputs: DiscoveredProjectInputs) -> Path | None:
+    if os.environ.get(COMPILE_CACHE_DISABLE_ENV_VAR) == COMPILE_CACHE_DISABLE_VALUE:
+        return None
+    project_dir: Path | None = discovered_inputs.project_dir
+    return project_dir / "target" / "compile-cache" if project_dir is not None else None
+
+
+def _resolve_analysis_model_names(
+    *,
+    compile_inputs: CompileProjectInputs,
+    inference_profile: ExpressionInferenceProfile,
+    selection: CompileAnalysisSelection | None,
+) -> frozenset[str] | None:
+    if selection is None or (not selection.select and not selection.exclude):
+        return None
+    structural_project: CompiledProject = assemble_project(
+        inputs=compile_inputs,
+        inference_profile=inference_profile,
+        skip_column_inference=True,
+        analysis_model_names=frozenset(),
+    )
+    scopes: PlannerScopeResolution = resolve_planner_scopes(
+        project=structural_project,
+        selection=PlannerSelection(select=selection.select, exclude=selection.exclude),
+        policies=PlannerPolicies(auto_load_sources=selection.auto_load_sources),
+    )
+    return frozenset(scopes.stale_warning_scope.models_by_name)
