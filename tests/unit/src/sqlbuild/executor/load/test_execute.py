@@ -11,6 +11,8 @@ import pytest
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
+from sqlbuild.cost.classes.cost_context import CostContext
+from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.executor.load.main._execute import execute_source_load
 from sqlbuild.executor.load.models import (
     LoaderContext,
@@ -59,41 +61,49 @@ def test_given_source_loader_when_executing_then_context_includes_runtime_metada
     test_case: SourceLoadExecutionContextTestCase,
 ) -> None:
     observed_contexts: list[LoaderContext] = []
+    observed_cost_contexts: list[CostResourceContext | None] = []
 
     def raw_orders_loader(ctx: LoaderContext) -> None:
         observed_contexts.append(ctx)
+        observed_cost_contexts.append(CostContext.current())
         return None
 
-    result: LoadExecutionResult = execute_source_load(
-        source_entry=SourceEntry(
-            name=test_case.source_name,
-            database=test_case.database,
-            schema=test_case.schema,
-            table=test_case.target_table,
-            loader=test_case.loader_name,
-            cursor_column="updated_at",
-        ),
-        loader_function=DiscoveredLoaderFunction(
-            file_path=Path("loaders/raw.py"),
-            relative_path=Path("loaders/raw.py"),
-            name=test_case.loader_name,
-            function=raw_orders_loader,
-        ),
-        adapter=LoaderContextTestAdapter(),
-        connection_config={"database": "loader.duckdb"},
-        connection=object(),
-        statement_recorder=StatementRecorder(),
-        runtime=LoadRuntimeParams(
-            run_id=test_case.run_id,
-            target=test_case.target,
-            vars=test_case.vars,
-            is_reload=test_case.is_reload,
-            start_cursor_ts=test_case.start_cursor_ts,
-            end_cursor_ts=test_case.end_cursor_ts,
-            start_cursor_int=test_case.start_cursor_int,
-            end_cursor_int=test_case.end_cursor_int,
-        ),
-    )
+    with CostContext.scope(
+        run_id=test_case.run_id,
+        resource_type="run",
+        resource_name=test_case.target or "default",
+        phase="build",
+    ):
+        result: LoadExecutionResult = execute_source_load(
+            source_entry=SourceEntry(
+                name=test_case.source_name,
+                database=test_case.database,
+                schema=test_case.schema,
+                table=test_case.target_table,
+                loader=test_case.loader_name,
+                cursor_column="updated_at",
+            ),
+            loader_function=DiscoveredLoaderFunction(
+                file_path=Path("loaders/raw.py"),
+                relative_path=Path("loaders/raw.py"),
+                name=test_case.loader_name,
+                function=raw_orders_loader,
+            ),
+            adapter=LoaderContextTestAdapter(),
+            connection_config={"database": "loader.duckdb"},
+            connection=object(),
+            statement_recorder=StatementRecorder(),
+            runtime=LoadRuntimeParams(
+                run_id=test_case.run_id,
+                target=test_case.target,
+                vars=test_case.vars,
+                is_reload=test_case.is_reload,
+                start_cursor_ts=test_case.start_cursor_ts,
+                end_cursor_ts=test_case.end_cursor_ts,
+                start_cursor_int=test_case.start_cursor_int,
+                end_cursor_int=test_case.end_cursor_int,
+            ),
+        )
 
     context: LoaderContext = observed_contexts[0]
     assert result.status == test_case.expected_status
@@ -111,6 +121,12 @@ def test_given_source_loader_when_executing_then_context_includes_runtime_metada
     assert context.start_cursor_int == test_case.start_cursor_int
     assert context.end_cursor_int == test_case.end_cursor_int
     assert context.current_cursor_value == test_case.expected_current_cursor_value
+    cost_context: CostResourceContext | None = observed_cost_contexts[0]
+    assert cost_context is not None
+    assert cost_context.resource_type == "loader"
+    assert cost_context.resource_name == test_case.loader_name
+    assert cost_context.phase == "load"
+    assert cost_context.attempt == 1
 
 
 @pytest.mark.parametrize(

@@ -14,6 +14,7 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonNodeKind,
     PythonNodeStatus,
 )
+from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.node_results.main._standard_store import build_standard_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
@@ -184,9 +185,41 @@ def _execute_ready_node(
     sleep: Callable[[float], None],
     monotonic: Callable[[], float],
 ) -> PythonNodeExecutionResult:
+    node_kind: PythonNodeKind = _node_kind(node)
+    with CostContext.resource_scope(
+        resource_type=node_kind.value,
+        resource_name=node.name,
+        phase="execute",
+    ):
+        return _execute_ready_node_in_cost_scope(
+            node=node,
+            node_kind=node_kind,
+            upstream_results=upstream_results,
+            runtime=runtime,
+            statement_recorder=statement_recorder,
+            logger=logger,
+            run_state=run_state,
+            result_store=result_store,
+            sleep=sleep,
+            monotonic=monotonic,
+        )
+
+
+def _execute_ready_node_in_cost_scope(
+    *,
+    node: ExecutablePythonNode,
+    node_kind: PythonNodeKind,
+    upstream_results: tuple[PythonNodeExecutionResult, ...],
+    runtime: PythonNodeRuntime,
+    statement_recorder: StatementRecorder,
+    logger: logging.Logger | None,
+    run_state: PythonNodeRunState,
+    result_store: Any | None,
+    sleep: Callable[[float], None],
+    monotonic: Callable[[], float],
+) -> PythonNodeExecutionResult:
     run_id: str = runtime.run_id
     providers: ProviderContainer | None = runtime.providers
-    node_kind: PythonNodeKind = _node_kind(node)
     decision: PythonNodeFanInDecision = evaluate_python_node_fan_in(
         upstream_results=upstream_results
     )
@@ -295,20 +328,32 @@ def _call_node_with_retry(
     monotonic: Callable[[], float],
 ) -> object:
     if retry_policy is None:
-        return invoke_with_providers(
-            function=node.function,
-            context=context,
-            providers=providers,
-        )
-    start_time: float = monotonic()
-    attempt: int = 1
-    while True:
-        try:
+        with CostContext.resource_scope(
+            resource_type=_node_kind(node).value,
+            resource_name=node.name,
+            phase="execute",
+            attempt=1,
+        ):
             return invoke_with_providers(
                 function=node.function,
                 context=context,
                 providers=providers,
             )
+    start_time: float = monotonic()
+    attempt: int = 1
+    while True:
+        try:
+            with CostContext.resource_scope(
+                resource_type=_node_kind(node).value,
+                resource_name=node.name,
+                phase="execute",
+                attempt=attempt,
+            ):
+                return invoke_with_providers(
+                    function=node.function,
+                    context=context,
+                    providers=providers,
+                )
         except retry_policy.retry_on:
             if attempt >= retry_policy.max_attempts:
                 raise

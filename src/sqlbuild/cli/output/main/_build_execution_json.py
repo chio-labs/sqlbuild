@@ -20,6 +20,8 @@ def format_build_execution_json(
     python_node_results: tuple[PythonNodeExecutionResult, ...] = (),
     python_check_results: tuple[PythonCheckExecutionResult, ...] = (),
     command: str = "build",
+    run_id: str | None = None,
+    cost: dict[str, object] | None = None,
 ) -> str:
     """Format build command execution results as JSON."""
 
@@ -29,4 +31,6 @@ def format_build_execution_json(
         python_node_results=python_node_results,
         python_check_results=python_check_results,
         command=command,
+        run_id=run_id,
+        cost=cost,
     )

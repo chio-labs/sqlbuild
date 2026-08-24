@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -8,15 +9,117 @@ from sqlbuild.compiler.discovery._helpers.yml.project import (
     load_local_config,
     load_project_config,
 )
+from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
+from sqlbuild.spec.contracts.models import ProjectConfig
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     LoadLocalConfigErrorTestCase,
     LoadLocalConfigTestCase,
     LoadProjectConfigErrorTestCase,
     LoadProjectConfigTestCase,
+    LoadProjectCostConfigErrorTestCase,
+    LoadProjectCostConfigTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
     write_project_config_test_files,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadProjectCostConfigTestCase(
+            description="omitted cost config uses flagged default rate",
+            project_file_contents='name = "demo"\nadapter = "duckdb"\n',
+            expected_usd_per_credit=Decimal("3.00"),
+            expected_is_default=True,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_no_cost_config_when_loading_project_then_default_rate_is_flagged(
+    test_case: LoadProjectCostConfigTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        test_case.project_file_contents, encoding="utf-8"
+    )
+
+    config: ProjectConfig = load_project_config(project_dir=tmp_path)
+
+    assert config.cost.usd_per_credit == test_case.expected_usd_per_credit
+    assert config.cost.usd_per_credit_is_default is test_case.expected_is_default
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadProjectCostConfigTestCase(
+            description="numeric cost config preserves exact configured rate",
+            project_file_contents=(
+                'name = "demo"\nadapter = "snowflake"\n[cost]\nusd_per_credit = 3.25\n'
+            ),
+            expected_usd_per_credit=Decimal("3.25"),
+            expected_is_default=False,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_numeric_cost_config_when_loading_project_then_exact_rate_is_configured(
+    test_case: LoadProjectCostConfigTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        test_case.project_file_contents,
+        encoding="utf-8",
+    )
+
+    config: ProjectConfig = load_project_config(project_dir=tmp_path)
+
+    assert config.cost.usd_per_credit == test_case.expected_usd_per_credit
+    assert config.cost.usd_per_credit_is_default is test_case.expected_is_default
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadProjectCostConfigErrorTestCase(
+            description="boolean cost rate is rejected",
+            value="true",
+            expected_error_fragment="cost.usd_per_credit",
+        ),
+        LoadProjectCostConfigErrorTestCase(
+            description="string cost rate is rejected",
+            value='"3.00"',
+            expected_error_fragment="cost.usd_per_credit",
+        ),
+        LoadProjectCostConfigErrorTestCase(
+            description="zero cost rate is rejected",
+            value="0",
+            expected_error_fragment="cost.usd_per_credit",
+        ),
+        LoadProjectCostConfigErrorTestCase(
+            description="negative cost rate is rejected",
+            value="-1",
+            expected_error_fragment="cost.usd_per_credit",
+        ),
+        LoadProjectCostConfigErrorTestCase(
+            description="infinite cost rate is rejected",
+            value="inf",
+            expected_error_fragment="cost.usd_per_credit",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_cost_rate_when_loading_project_then_config_error_is_raised(
+    test_case: LoadProjectCostConfigErrorTestCase, tmp_path: Path
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "demo"\nadapter = "snowflake"\n[cost]\nusd_per_credit = {test_case.value}\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProjectConfigError, match=test_case.expected_error_fragment):
+        load_project_config(project_dir=tmp_path)
 
 
 @pytest.mark.parametrize(

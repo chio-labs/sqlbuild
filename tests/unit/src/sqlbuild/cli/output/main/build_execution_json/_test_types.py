@@ -27,3 +27,10 @@ class ExecutionJsonSeedReasonTestCase:
     description: str
     expected_asset_name: str
     expected_reason: str
+
+
+@dataclass(frozen=True)
+class ExecutionJsonCostTestCase:
+    description: str
+    expected_run_id: str
+    expected_cost: dict[str, object]

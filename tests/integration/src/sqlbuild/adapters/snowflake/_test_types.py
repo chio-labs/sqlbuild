@@ -9,6 +9,7 @@ from sqlbuild.adapter.contract.models import (
     SchemaDiffResult,
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.cost.types import CostStatus
 
 
 @dataclass(frozen=True)
@@ -102,3 +103,12 @@ class SnowflakeE2ETestCase:
     command: tuple[str, ...]
     expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class SnowflakeCostTestCase:
+    description: str
+    expected_statuses: frozenset[CostStatus]
+    expected_query_count: int
+    expected_resource_name: str
+    expected_minimum_credits: int
