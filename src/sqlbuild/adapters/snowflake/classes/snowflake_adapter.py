@@ -55,6 +55,7 @@ from sqlbuild.adapters.snowflake.constants import (
     EXTERNAL_BROWSER_AUTHENTICATOR,
     MFA_AUTHENTICATOR,
     NUMBER_TYPE_NAME,
+    OAUTH_AUTHORIZATION_CODE_AUTHENTICATOR,
     STATUS_COLUMN_NAME,
     SUCCESS_STATUS_TOKENS,
     TEXT_TYPE_NAMES,
@@ -1432,6 +1433,9 @@ class SnowflakeAdapter(BaseAdapter):
         if authenticator == MFA_AUTHENTICATOR:
             connect_config.setdefault("client_request_mfa_token", True)
             connect_config.setdefault("client_store_temporary_credential", True)
+        elif authenticator == OAUTH_AUTHORIZATION_CODE_AUTHENTICATOR:
+            connect_config.setdefault("client_store_temporary_credential", True)
+            connect_config.setdefault("oauth_enable_refresh_tokens", True)
         elif authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
             connect_config.setdefault("client_store_temporary_credential", True)
         role: object | None = connect_config.get("role")
