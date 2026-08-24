@@ -38,6 +38,13 @@ class ExpandSqlMacrosErrorTestCase:
 
 
 @dataclass(frozen=True)
+class FindMacroCallNamesTestCase:
+    description: str
+    sql: str
+    expected_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class CompileDeclarationsErrorTestCase:
     description: str
     repo_files: dict[str, str]
