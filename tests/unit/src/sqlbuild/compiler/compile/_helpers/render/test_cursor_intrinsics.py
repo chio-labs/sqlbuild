@@ -56,7 +56,15 @@ def test_given_valid_incremental_query_when_validating_then_canonicalizes_intrin
                 "SELECT '__cursor_start()', TIMESTAMP '2026-01-01' AS bound "
                 "-- __cursor_end()\n/* __cursor_start() */"
             ),
-        )
+        ),
+        CursorIntrinsicRenderTestCase(
+            description="ignores intrinsic names embedded in larger identifiers",
+            sql=("SELECT prefix__cursor_start(), __cursor_end_suffix, __cursor_end() AS batch_end"),
+            expected_sql=(
+                "SELECT prefix__cursor_start(), __cursor_end_suffix, "
+                "TIMESTAMP '2026-01-02' AS batch_end"
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )

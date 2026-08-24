@@ -4,7 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.render.macros import expand_sql_macros
+from sqlbuild.compiler.compile._helpers.render.macros import (
+    expand_sql_macros,
+    find_macro_call_names,
+)
 from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
@@ -12,6 +15,7 @@ from sqlbuild.compiler.compile.models import (
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ExpandSqlMacrosErrorTestCase,
     ExpandSqlMacrosTestCase,
+    FindMacroCallNamesTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import build_loaded_macros
 
@@ -272,3 +276,34 @@ def test_given_invalid_sql_macro_usage_when_expanding_then_it_raises_clear_error
             loaded_macros=loaded_macros,
             macro_context=_MACRO_CONTEXT,
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FindMacroCallNamesTestCase(
+            description="returns real macro calls while ignoring declaration references",
+            sql='SELECT @project_columns(), @const("region"), @enum("status").ACTIVE',
+            expected_names=("project_columns",),
+        ),
+        FindMacroCallNamesTestCase(
+            description="ignores at signs in quoted text comments and email addresses",
+            sql="""
+-- @line_comment() and line@example.com
+/* @block_comment() */
+SELECT '@single_quote()', "@double_quote", `@backtick`, @real_macro()
+""".strip(),
+            expected_names=("real_macro",),
+        ),
+        FindMacroCallNamesTestCase(
+            description="returns unique macro names in encounter order",
+            sql="SELECT @second(), @first(), @second()",
+            expected_names=("second", "first"),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_sql_with_at_tokens_when_finding_macro_calls_then_returns_real_unique_names(
+    test_case: FindMacroCallNamesTestCase,
+) -> None:
+    assert find_macro_call_names(test_case.sql) == test_case.expected_names
