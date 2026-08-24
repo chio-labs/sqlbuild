@@ -12,8 +12,8 @@ from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.compiler.compile._helpers.analysis.cache import (
     build_analysis_cache_context,
     model_analysis_cache_key,
-    read_model_analysis,
-    write_model_analysis,
+    read_model_analyses,
+    write_model_analyses,
 )
 from sqlbuild.compiler.compile._helpers.analysis.columns import (
     analyze_columns_and_lineage_with_polyglot,
@@ -103,6 +103,14 @@ _POLYGLOT_PARALLEL_ANALYSIS_MIN_MODELS: int = 32
 class _ModelSqlAnalysis:
     polyglot_analysis: PolyglotAnalysisResult
     placeholders: dict[str, str] | None
+
+
+@dataclass(frozen=True)
+class _ModelSqlAnalysisRequest:
+    model_input: CompileModelInput
+    query_sql: str
+    placeholders: dict[str, str] | None
+    cache_key: str | None
 
 
 def assemble_compiled_project(
@@ -345,32 +353,64 @@ def _analyze_model_sql_in_parallel(
 ) -> dict[str, _ModelSqlAnalysis]:
     if not model_inputs:
         return {}
+    requests: tuple[_ModelSqlAnalysisRequest, ...] = tuple(
+        _model_sql_analysis_request(model_input=model_input, analysis_cache=analysis_cache)
+        for model_input in model_inputs
+    )
+    cached_analyses: dict[str, PolyglotAnalysisResult] = (
+        read_model_analyses(
+            context=analysis_cache,
+            cache_keys=tuple(
+                request.cache_key for request in requests if request.cache_key is not None
+            ),
+        )
+        if analysis_cache is not None
+        else {}
+    )
     if len(model_inputs) < _POLYGLOT_PARALLEL_ANALYSIS_MIN_MODELS:
-        return {
-            _model_name(model_input): _analyze_model_sql(
-                model_input=model_input,
+        analyses: tuple[_ModelSqlAnalysis, ...] = tuple(
+            _analyze_model_sql(
+                request=request,
+                cached_analysis=(
+                    cached_analyses.get(request.cache_key)
+                    if request.cache_key is not None
+                    else None
+                ),
                 column_nullability_by_table=column_nullability_by_table,
                 column_types_by_table=column_types_by_table,
                 inference_profile=inference_profile,
                 allow_compact_analysis=allow_compact_analysis,
-                analysis_cache=analysis_cache,
             )
-            for model_input in model_inputs
-        }
-    workers: int = min(_POLYGLOT_ANALYSIS_WORKERS, len(model_inputs))
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        analyses: tuple[_ModelSqlAnalysis, ...] = tuple(
-            executor.map(
-                lambda model_input: _analyze_model_sql(
-                    model_input=model_input,
-                    column_nullability_by_table=column_nullability_by_table,
-                    column_types_by_table=column_types_by_table,
-                    inference_profile=inference_profile,
-                    allow_compact_analysis=allow_compact_analysis,
-                    analysis_cache=analysis_cache,
-                ),
-                model_inputs,
+            for request in requests
+        )
+    else:
+        workers: int = min(_POLYGLOT_ANALYSIS_WORKERS, len(model_inputs))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            analyses = tuple(
+                executor.map(
+                    lambda request: _analyze_model_sql(
+                        request=request,
+                        cached_analysis=(
+                            cached_analyses.get(request.cache_key)
+                            if request.cache_key is not None
+                            else None
+                        ),
+                        column_nullability_by_table=column_nullability_by_table,
+                        column_types_by_table=column_types_by_table,
+                        inference_profile=inference_profile,
+                        allow_compact_analysis=allow_compact_analysis,
+                    ),
+                    requests,
+                )
             )
+    if analysis_cache is not None:
+        write_model_analyses(
+            context=analysis_cache,
+            analyses_by_key={
+                request.cache_key: analysis.polyglot_analysis
+                for request, analysis in zip(requests, analyses, strict=True)
+                if request.cache_key is not None and request.cache_key not in cached_analyses
+            },
         )
     return {
         _model_name(model_input): analysis
@@ -380,13 +420,38 @@ def _analyze_model_sql_in_parallel(
 
 def _analyze_model_sql(
     *,
-    model_input: CompileModelInput,
+    request: _ModelSqlAnalysisRequest,
+    cached_analysis: PolyglotAnalysisResult | None,
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     column_types_by_table: dict[str, dict[str, str]],
     inference_profile: ExpressionInferenceProfile,
     allow_compact_analysis: bool,
-    analysis_cache: AnalysisCacheContext | None,
 ) -> _ModelSqlAnalysis:
+    if cached_analysis is not None:
+        return _ModelSqlAnalysis(
+            polyglot_analysis=cached_analysis,
+            placeholders=request.placeholders,
+        )
+    polyglot_analysis: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+        query_sql=request.query_sql,
+        references=request.model_input.references,
+        placeholders=request.placeholders,
+        column_nullability_by_table=column_nullability_by_table,
+        column_types_by_table=column_types_by_table,
+        inference_profile=inference_profile,
+        allow_compact_analysis=allow_compact_analysis,
+    )
+    return _ModelSqlAnalysis(
+        polyglot_analysis=polyglot_analysis,
+        placeholders=request.placeholders,
+    )
+
+
+def _model_sql_analysis_request(
+    *,
+    model_input: CompileModelInput,
+    analysis_cache: AnalysisCacheContext | None,
+) -> _ModelSqlAnalysisRequest:
     placeholders: dict[str, str] | None = _model_placeholders(model_input)
     query_sql: str = cursor_intrinsics_analysis_sql(
         sql=model_input.query_sql,
@@ -402,34 +467,11 @@ def _analyze_model_sql(
         if analysis_cache is not None
         else None
     )
-    cached_analysis: PolyglotAnalysisResult | None = (
-        read_model_analysis(context=analysis_cache, cache_key=cache_key)
-        if analysis_cache is not None and cache_key is not None
-        else None
-    )
-    if cached_analysis is not None:
-        return _ModelSqlAnalysis(
-            polyglot_analysis=cached_analysis,
-            placeholders=placeholders,
-        )
-    polyglot_analysis: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+    return _ModelSqlAnalysisRequest(
+        model_input=model_input,
         query_sql=query_sql,
-        references=model_input.references,
         placeholders=placeholders,
-        column_nullability_by_table=column_nullability_by_table,
-        column_types_by_table=column_types_by_table,
-        inference_profile=inference_profile,
-        allow_compact_analysis=allow_compact_analysis,
-    )
-    if analysis_cache is not None and cache_key is not None:
-        write_model_analysis(
-            context=analysis_cache,
-            cache_key=cache_key,
-            analysis=polyglot_analysis,
-        )
-    return _ModelSqlAnalysis(
-        polyglot_analysis=polyglot_analysis,
-        placeholders=placeholders,
+        cache_key=cache_key,
     )
 
 

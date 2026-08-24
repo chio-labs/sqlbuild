@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import Mock
@@ -11,7 +12,7 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.analysis.cache import (
     build_analysis_cache_context,
     model_analysis_cache_key,
-    write_model_analysis,
+    write_model_analyses,
 )
 from sqlbuild.compiler.compile._helpers.assembly import project as assembly_project
 from sqlbuild.compiler.compile.models import (
@@ -73,34 +74,33 @@ def test_given_successful_analysis_when_compiling_again_then_reuses_identical_ca
     assert warm_project.models == cold_project.models
     assert warm_project.diagnostics == cold_project.diagnostics
     analyzer.assert_not_called()
-    assert (
-        len(tuple((tmp_path / "target" / "compile-cache").rglob("*.json")))
-        == test_case.expected_count
+    assert len(tuple((tmp_path / "target" / "compile-cache").rglob("*.sqlite3"))) == (
+        test_case.expected_count
     )
 
 
 @pytest.mark.parametrize(
     "test_case",
-    (AnalysisCacheTestCase(description="changed SQL cache miss", expected_count=2),),
+    (AnalysisCacheTestCase(description="changed SQL cache miss", expected_count=1),),
     ids=lambda case: case.description,
 )
 def test_given_changed_expanded_sql_when_compiling_then_writes_a_new_analysis_object(
     test_case: AnalysisCacheTestCase,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
     changed_sql = 'MODEL ();\n\nSELECT order_id + 1 AS order_id FROM __source("raw_orders")\n'
     (tmp_path / "models" / "orders.sql").write_text(changed_sql, encoding="utf-8")
+    analyzer: Mock = Mock(wraps=assembly_project.analyze_columns_and_lineage_with_polyglot)
+    monkeypatch.setattr(assembly_project, "analyze_columns_and_lineage_with_polyglot", analyzer)
 
     changed_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
 
     assert changed_project.models[0].query_sql != cold_project.models[0].query_sql
-    assert (
-        len(tuple((tmp_path / "target" / "compile-cache").rglob("*.json")))
-        == test_case.expected_count
-    )
+    assert analyzer.call_count == test_case.expected_count
 
 
 @pytest.mark.parametrize(
@@ -111,22 +111,31 @@ def test_given_changed_expanded_sql_when_compiling_then_writes_a_new_analysis_ob
 def test_given_corrupt_analysis_when_compiling_then_reanalyzes_and_repairs_the_entry(
     test_case: AnalysisCacheTestCase,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = next((tmp_path / "target" / "compile-cache").rglob("*.json"))
-    cache_path.write_text('{"analysis_succeeded":true}', encoding="utf-8")
+    cache_path: Path = next((tmp_path / "target" / "compile-cache").rglob("*.sqlite3"))
+    with sqlite3.connect(cache_path) as connection:
+        _ = connection.execute(
+            "UPDATE model_analysis SET payload = ?",
+            ('{"analysis_succeeded":true}',),
+        )
+    analyzer: Mock = Mock(wraps=assembly_project.analyze_columns_and_lineage_with_polyglot)
+    monkeypatch.setattr(assembly_project, "analyze_columns_and_lineage_with_polyglot", analyzer)
 
     repaired_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
 
-    repaired_payload: dict[str, object] = json.loads(cache_path.read_text(encoding="utf-8"))
+    with sqlite3.connect(cache_path) as connection:
+        repaired_contents: str = connection.execute(
+            "SELECT payload FROM model_analysis"
+        ).fetchone()[0]
+    repaired_payload: dict[str, object] = json.loads(repaired_contents)
     assert repaired_project.models == cold_project.models
     assert repaired_payload["analysis_succeeded"] is True
     assert isinstance(repaired_payload["analysis_digest"], str)
-    assert len(tuple((tmp_path / "target" / "compile-cache").rglob("*.json"))) == (
-        test_case.expected_count
-    )
+    assert analyzer.call_count == test_case.expected_count
 
 
 @pytest.mark.parametrize(
@@ -138,13 +147,14 @@ def test_given_unsuccessful_analysis_when_writing_then_does_not_persist_it(
     test_case: AnalysisCacheTestCase,
     tmp_path: Path,
 ) -> None:
-    write_model_analysis(
+    write_model_analyses(
         context=AnalysisCacheContext(root=tmp_path, shared_fingerprint="shared"),
-        cache_key="a" * 64,
-        analysis=PolyglotAnalysisResult(analysis_succeeded=False),
+        analyses_by_key={
+            "a" * 64: PolyglotAnalysisResult(analysis_succeeded=False),
+        },
     )
 
-    assert len(tuple(tmp_path.rglob("*.json"))) == test_case.expected_count
+    assert len(tuple(tmp_path.rglob("*.sqlite3"))) == test_case.expected_count
 
 
 @pytest.mark.parametrize(

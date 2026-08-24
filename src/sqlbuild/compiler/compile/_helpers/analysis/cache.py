@@ -5,12 +5,10 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
-import os
 import platform
-import tempfile
+import sqlite3
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from string import hexdigits
 from typing import Any, cast
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
@@ -32,8 +30,16 @@ from sqlbuild.compiler.lineage.types import (
 _ANALYSIS_CACHE_VERSION: int = 1
 _ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v1"
 _MAX_CACHE_ENTRY_BYTES: int = 10_000_000
-_SHA256_HEX_LENGTH: int = 64
 _LOCAL_QUALNAME_MARKER: str = "<locals>"
+_SQLITE_QUERY_CHUNK_SIZE: int = 500
+_SQLITE_TIMEOUT_SECONDS: float = 0.1
+_CACHE_DATABASE_NAME: str = "model-analysis.sqlite3"
+_CREATE_CACHE_TABLE_SQL: str = """
+CREATE TABLE IF NOT EXISTS model_analysis (
+    cache_key TEXT PRIMARY KEY,
+    payload TEXT NOT NULL
+)
+"""
 
 
 def build_analysis_cache_context(
@@ -98,59 +104,89 @@ def model_analysis_cache_key(
     )
 
 
-def read_model_analysis(
-    *, context: AnalysisCacheContext, cache_key: str
-) -> PolyglotAnalysisResult | None:
-    """Read a successful cached analysis, treating any invalid entry as a miss."""
-
-    try:
-        path: Path = _cache_path(context=context, cache_key=cache_key)
-        with path.open(encoding="utf-8") as cache_file:
-            if os.fstat(cache_file.fileno()).st_size > _MAX_CACHE_ENTRY_BYTES:
-                return None
-            payload: object = json.load(cache_file)
-        return _analysis_from_payload(payload=payload, expected_cache_key=cache_key)
-    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
-        return None
-
-
-def write_model_analysis(
+def read_model_analyses(
     *,
     context: AnalysisCacheContext,
-    cache_key: str,
-    analysis: PolyglotAnalysisResult,
-) -> None:
-    """Atomically persist one successful analysis; cache failures never fail compilation."""
+    cache_keys: tuple[str, ...],
+) -> dict[str, PolyglotAnalysisResult]:
+    """Read cached analyses in batches, treating invalid entries or storage as misses."""
 
-    if not analysis.analysis_succeeded:
+    database_path: Path = _cache_database_path(context=context)
+    if not database_path.is_file() or not cache_keys:
+        return {}
+    analyses: dict[str, PolyglotAnalysisResult] = {}
+    try:
+        connection_uri: str = f"file:{database_path}?mode=ro"
+        with sqlite3.connect(
+            connection_uri,
+            uri=True,
+            timeout=_SQLITE_TIMEOUT_SECONDS,
+        ) as connection:
+            for start in range(0, len(cache_keys), _SQLITE_QUERY_CHUNK_SIZE):
+                chunk: tuple[str, ...] = cache_keys[start : start + _SQLITE_QUERY_CHUNK_SIZE]
+                placeholders: str = ",".join("?" for _ in chunk)
+                rows: list[tuple[str, str]] = connection.execute(
+                    f"SELECT cache_key, payload FROM model_analysis "
+                    f"WHERE cache_key IN ({placeholders})",
+                    chunk,
+                ).fetchall()
+                for cache_key, contents in rows:
+                    analysis: PolyglotAnalysisResult | None = _analysis_from_contents(
+                        contents=contents,
+                        expected_cache_key=cache_key,
+                    )
+                    if analysis is not None:
+                        analyses[cache_key] = analysis
+    except (OSError, sqlite3.DatabaseError):
+        return {}
+    return analyses
+
+
+def write_model_analyses(
+    *,
+    context: AnalysisCacheContext,
+    analyses_by_key: dict[str, PolyglotAnalysisResult],
+) -> None:
+    """Transactionally persist successful analyses; cache failures never fail compilation."""
+
+    rows: list[tuple[str, str]] = [
+        (
+            cache_key,
+            json.dumps(
+                _analysis_payload(cache_key=cache_key, analysis=analysis),
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+        )
+        for cache_key, analysis in analyses_by_key.items()
+        if analysis.analysis_succeeded
+    ]
+    if not rows:
         return
     try:
-        path: Path = _cache_path(context=context, cache_key=cache_key)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        contents: str = json.dumps(
-            _analysis_payload(cache_key=cache_key, analysis=analysis),
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-        temporary_path: Path | None = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
-                dir=path.parent,
-                prefix=f".{path.name}.",
-                suffix=".tmp",
-                delete=False,
-            ) as temporary:
-                temporary.write(contents)
-                temporary_path = Path(temporary.name)
-            os.replace(temporary_path, path)
-        finally:
-            if temporary_path is not None and temporary_path.exists():
-                temporary_path.unlink()
-    except OSError:
+        database_path: Path = _cache_database_path(context=context)
+        database_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(database_path, timeout=_SQLITE_TIMEOUT_SECONDS) as connection:
+            _ = connection.execute(_CREATE_CACHE_TABLE_SQL)
+            _ = connection.executemany(
+                "INSERT OR REPLACE INTO model_analysis (cache_key, payload) VALUES (?, ?)",
+                rows,
+            )
+    except (OSError, sqlite3.DatabaseError):
         return
+
+
+def _analysis_from_contents(
+    *, contents: str, expected_cache_key: str
+) -> PolyglotAnalysisResult | None:
+    if len(contents.encode("utf-8")) > _MAX_CACHE_ENTRY_BYTES:
+        return None
+    try:
+        payload: object = json.loads(contents)
+        return _analysis_from_payload(payload=payload, expected_cache_key=expected_cache_key)
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+        return None
 
 
 def _inference_profile_payload(
@@ -314,13 +350,8 @@ def _lineage_column_from_payload(payload: dict[str, Any]) -> CompiledLineageColu
     )
 
 
-def _cache_path(*, context: AnalysisCacheContext, cache_key: str) -> Path:
-    if len(cache_key) != _SHA256_HEX_LENGTH or any(
-        character not in hexdigits for character in cache_key
-    ):
-        raise AnalysisCacheEntryError("analysis cache key must be a SHA-256 digest")
-    root: Path = context.root / f"v{_ANALYSIS_CACHE_VERSION}" / "objects"
-    return root / cache_key[:2] / f"{cache_key}.json"
+def _cache_database_path(*, context: AnalysisCacheContext) -> Path:
+    return context.root / f"v{_ANALYSIS_CACHE_VERSION}" / _CACHE_DATABASE_NAME
 
 
 def _payload_digest(payload: object) -> str:
