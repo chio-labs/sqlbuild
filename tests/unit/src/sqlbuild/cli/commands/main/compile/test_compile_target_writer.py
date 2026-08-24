@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -68,10 +70,20 @@ def test_given_plan_output_when_writing_target_then_expected_files_are_written(
         plan_output=plan_output,
         manifest=manifest,
     )
+    manifest_path: Path = tmp_path / "target" / "manifest.json"
+    unchanged_mtime_ns: int = 1_000_000_000
+    os.utime(manifest_path, ns=(unchanged_mtime_ns, unchanged_mtime_ns))
+    _ = write_compile_target(
+        target_dir=tmp_path / "target",
+        adapter=DuckDbAdapter(),
+        plan_output=plan_output,
+        manifest=manifest,
+    )
 
     assert written.summary_line() == test_case.expected_summary_line
     assert read_target_files(tmp_path / "target", expected_files) == expected_files
-    assert json.loads((tmp_path / "target" / "manifest.json").read_text()) == manifest
+    assert json.loads(manifest_path.read_text()) == manifest
+    assert manifest_path.stat().st_mtime_ns == unchanged_mtime_ns
     assert not (tmp_path / "target" / "run").exists()
 
 
@@ -98,15 +110,40 @@ def test_given_compiled_project_when_writing_static_target_then_expected_files_a
     tmp_path: Path,
 ) -> None:
     project: CompiledProject = build_static_target_writer_project()
+    target_dir: Path = tmp_path / "target"
+    stale_path: Path = target_dir / "compiled" / "models" / "deleted.sql"
+    stale_path.parent.mkdir(parents=True)
+    stale_path.write_text("SELECT 'stale'\n", encoding="utf-8")
 
     written: WrittenTarget = write_static_compile_target(
-        target_dir=tmp_path / "target",
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+    model_path: Path = target_dir / "compiled" / "models" / "staging" / "orders.sql"
+    unchanged_mtime_ns: int = 1_000_000_000
+    os.utime(model_path, ns=(unchanged_mtime_ns, unchanged_mtime_ns))
+    _ = write_static_compile_target(
+        target_dir=target_dir,
         adapter=DuckDbAdapter(),
         project=project,
     )
 
     assert written.summary_line() == test_case.expected_summary_line
-    assert (
-        read_target_files(tmp_path / "target", test_case.expected_files) == test_case.expected_files
+    assert read_target_files(target_dir, test_case.expected_files) == test_case.expected_files
+    assert model_path.stat().st_mtime_ns == unchanged_mtime_ns
+    assert not stale_path.exists()
+    assert not (target_dir / "manifest.json").exists()
+
+    changed_project: CompiledProject = replace(
+        project,
+        models=(replace(project.models[0], query_sql="SELECT 3 AS order_id"),),
     )
-    assert not (tmp_path / "target" / "manifest.json").exists()
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=changed_project,
+    )
+
+    assert model_path.read_text(encoding="utf-8") == "SELECT 3 AS order_id\n"
+    assert model_path.stat().st_mtime_ns != unchanged_mtime_ns

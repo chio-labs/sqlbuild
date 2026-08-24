@@ -13,3 +13,7 @@ class CompileInputError(ValueError):
         self.message = message
         self.code = code if code is not None else self.code
         self.help = help
+
+
+class AnalysisCacheEntryError(ValueError):
+    """Raised when a persisted model analysis cache entry is invalid."""

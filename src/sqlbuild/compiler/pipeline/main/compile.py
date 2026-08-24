@@ -21,6 +21,9 @@ from sqlbuild.compiler.graph.main._build_lineage_downstream_deps import (
 from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import (
     build_lineage_upstream_deps,
 )
+from sqlbuild.compiler.pipeline._helpers.analysis_selection import (
+    resolve_compile_analysis_selection,
+)
 from sqlbuild.compiler.pipeline._helpers.deferred_locations import (
     build_deferred_locations,
     gather_deferred_relations,
@@ -94,6 +97,10 @@ def run_compile_pipeline(
         cli_vars=resolved_options.cli_vars,
         external_sql_reference_resolver=resolved_options.external_sql_reference_resolver,
         resolved_connection=effective_config,
+        analysis_selection=resolve_compile_analysis_selection(
+            options=resolved_options,
+            discovered_inputs=discovered_inputs,
+        ),
     )
     if on_progress is not None:
         on_progress(f"Compiled project. ({time.monotonic() - compile_start:.2f}s)")

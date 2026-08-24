@@ -18,7 +18,10 @@ from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 
 def discover_project_inputs(
-    *, project_dir: Path, sql_analysis_enabled_override: bool | None = None
+    *,
+    project_dir: Path,
+    sql_analysis_enabled_override: bool | None = None,
+    extract_output_column_locations: bool = True,
 ) -> DiscoveredProjectInputs:
     """Load all raw project inputs from disk before semantic resolution."""
 
@@ -38,6 +41,7 @@ def discover_project_inputs(
         project_config=project_config,
         local_config=local_config,
         sql_analysis_enabled=sql_analysis_enabled,
+        extract_output_column_locations=extract_output_column_locations,
     )
     validate_discovered_inputs(discovered_inputs)
     return discovered_inputs

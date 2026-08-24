@@ -306,6 +306,29 @@ def test_given_python_project_dag_flag_when_running_compile_then_writes_python_d
                 "FROM (SELECT 1) AS source\n"
             ),
         ),
+        CompileCommandTestCase(
+            description="reports output location for undeclared contract columns",
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "error[K005]: column 'customer_id' is not declared in enforced contract",
+                "  --> models/orders.sql:11:3",
+                " 11 |   2 AS customer_id",
+                "    |   ^^^^^^^^^^^^^^^^",
+                "  = help: add the column to MODEL(columns) or remove it from the SELECT list",
+            ),
+            model_sql=(
+                "MODEL (\n"
+                "  materialized view,\n"
+                "  contract enforced,\n"
+                "  columns (\n"
+                "    order_id (type INTEGER),\n"
+                "  ),\n"
+                ");\n\n"
+                "SELECT\n"
+                "  1 AS order_id,\n"
+                "  2 AS customer_id\n"
+            ),
+        ),
     ),
     ids=lambda case: case.description,
 )

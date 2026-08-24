@@ -60,6 +60,7 @@ def analyze_compile_project(
     _ = start_compile_phase(status=status, message="Discovering project...")
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=project_dir,
+        extract_output_column_locations=False,
         sql_analysis_enabled_override=(
             False if profile_flags.skip_discovery_sql_analysis else None
         ),

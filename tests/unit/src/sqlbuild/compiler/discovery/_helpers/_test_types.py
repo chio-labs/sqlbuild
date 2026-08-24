@@ -4,6 +4,12 @@ from pathlib import Path
 
 
 @dataclass(frozen=True)
+class DeferredModelOutputLocationTestCase:
+    description: str
+    expected_extract_implicit_alias_columns: bool
+
+
+@dataclass(frozen=True)
 class ValidatePathDefaultsMatchModelsTestCase:
     description: str
     model_relative_paths: tuple[str, ...]
