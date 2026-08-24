@@ -132,13 +132,13 @@ def write_dbt_shaped_compile_project(*, project_dir: Path, model_count: int) -> 
     models_dir: Path = project_dir / "models"
     models_dir.mkdir(parents=True)
     _write_compile_project_config(project_dir)
-    base_model_sql: str = _with_base_projection_width(
+    base_model_sql: str = _with_base_generated_logic(
         sql=_base_model_sql(),
         target_bytes=_sql_size_target(model_index=0, model_count=model_count),
     )
     (models_dir / "model_00000.sql").write_text(base_model_sql, encoding="utf-8")
     for index in range(1, model_count):
-        model_sql: str = _with_chain_projection_width(
+        model_sql: str = _with_chain_generated_logic(
             sql=_chain_model_sql(index=index),
             target_bytes=_sql_size_target(model_index=index, model_count=model_count),
         )
@@ -190,28 +190,51 @@ def _sql_size_target(*, model_index: int, model_count: int) -> int:
     return target_sizes[bisect_left(upper_quantiles, quantile)]
 
 
-def _projection_padding(*, sql: str, target_bytes: int) -> str:
+def _generated_case_logic(*, sql: str, target_bytes: int) -> str:
     missing_bytes: int = max(0, target_bytes - len(sql.encode("utf-8")))
-    projection_template: str = (
-        ",\n  CASE WHEN id % 2 = 0 THEN amount ELSE avg_amount END AS metric_00000"
+    clause_template: str = "      WHEN id = 00000 THEN 'segment_00000'\n"
+    clause_count: int = (missing_bytes + len(clause_template) - 1) // len(clause_template)
+    clauses: str = "".join(
+        f"      WHEN id = {index:05d} THEN 'segment_{index:05d}'\n" for index in range(clause_count)
     )
-    projection_count: int = (missing_bytes + len(projection_template) - 1) // len(
-        projection_template
+    return f"    CASE\n{clauses}      ELSE 'unmatched'\n    END AS generated_mapping"
+
+
+def _with_base_generated_logic(*, sql: str, target_bytes: int) -> str:
+    header, query = sql.split(";\n", 1)
+    generated_logic: str = _generated_case_logic(sql=sql, target_bytes=target_bytes)
+    return f"""{header};
+WITH base AS (
+{query.rstrip()}
+),
+generated_logic AS (
+  SELECT
+    *,
+{generated_logic}
+  FROM base
+)
+SELECT id, bucket, amount, avg_amount, max_amount, status
+FROM generated_logic
+"""
+
+
+def _with_chain_generated_logic(*, sql: str, target_bytes: int) -> str:
+    generated_logic: str = _generated_case_logic(sql=sql, target_bytes=target_bytes)
+    widened_sql: str = sql.replace(
+        ")\nSELECT\n  id,",
+        f"""),
+generated_logic AS (
+  SELECT
+    *,
+{generated_logic}
+  FROM joined
+)
+SELECT
+  id,""",
+        1,
     )
-    projections: str = "".join(
-        f",\n  CASE WHEN id % 2 = 0 THEN amount ELSE avg_amount END AS metric_{index:05d}"
-        for index in range(projection_count)
-    )
-    return projections
-
-
-def _with_base_projection_width(*, sql: str, target_bytes: int) -> str:
-    return f"{sql.rstrip()}{_projection_padding(sql=sql, target_bytes=target_bytes)}\n"
-
-
-def _with_chain_projection_width(*, sql: str, target_bytes: int) -> str:
-    projections: str = _projection_padding(sql=sql, target_bytes=target_bytes)
-    return sql.replace("\nFROM joined", f"{projections}\nFROM joined", 1)
+    prefix, suffix = widened_sql.rsplit("\nFROM joined", 1)
+    return f"{prefix}\nFROM generated_logic{suffix}"
 
 
 def _base_model_sql() -> str:

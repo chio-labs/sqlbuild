@@ -108,7 +108,7 @@ def test_given_wide_scan_heavy_projects_when_doubling_sql_size_then_compile_scal
             model_count=10_000,
             expected_min_sql_bytes=60_000_000,
             expected_max_sql_bytes=80_000_000,
-            expected_max_seconds=90.0,
+            expected_max_seconds=45.0,
         )
     ],
     ids=lambda case: case.description,
