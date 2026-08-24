@@ -10,6 +10,8 @@ import pytest
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredAssetFunction, DiscoveredTaskFunction
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
+from sqlbuild.cost.classes.cost_context import CostContext
+from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.executor.node_results.classes.standard_store import StandardNodeResultStore
 from sqlbuild.executor.node_results.main._standard_store import build_standard_node_result_store
 from sqlbuild.executor.python_nodes._helpers.execution import (
@@ -770,26 +772,42 @@ def test_given_retry_policy_when_transient_failures_then_retries_and_succeeds(
         ),
     )
 
-    result: PythonNodeExecutorResult = execute_python_nodes(
-        nodes=nodes,
-        statement_recorder=StatementRecorder(),
-        sleep=sleeps.append,
-        runtime=PythonNodeRuntime(
-            adapter=PythonNodeContextTestAdapter(),
-            connection_config={},
-            connection=object(),
-            run_id="test_run",
-            target="dev",
-            vars={},
-            is_reload=False,
-        ),
-    )
+    with CostContext.scope(
+        run_id="test_run",
+        resource_type="run",
+        resource_name="dev",
+        phase="build",
+    ):
+        result: PythonNodeExecutorResult = execute_python_nodes(
+            nodes=nodes,
+            statement_recorder=StatementRecorder(),
+            sleep=sleeps.append,
+            runtime=PythonNodeRuntime(
+                adapter=PythonNodeContextTestAdapter(),
+                connection_config={},
+                connection=object(),
+                run_id="test_run",
+                target="dev",
+                vars={},
+                is_reload=False,
+            ),
+        )
 
     assert result.results[0].status == test_case.expected_status
     assert result.results[0].payload == test_case.expected_payload
     assert result.results[0].error_message == test_case.expected_error_fragment
     assert flaky_task.attempts == test_case.expected_attempts
     assert tuple(sleeps) == test_case.expected_sleeps
+    assert tuple(flaky_task.cost_contexts) == tuple(
+        CostResourceContext(
+            run_id="test_run",
+            resource_type="task",
+            resource_name="flaky_task",
+            phase="execute",
+            attempt=attempt,
+        )
+        for attempt in (1, 2, 3)
+    )
 
 
 @pytest.mark.parametrize(

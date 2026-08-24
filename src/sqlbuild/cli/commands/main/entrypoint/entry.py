@@ -42,6 +42,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from sqlbuild.cli.commands.main.execution._seed import run_seed
     from sqlbuild.cli.commands.main.execution._test import run_test
     from sqlbuild.cli.commands.main.inspection._clone import run_clone
+    from sqlbuild.cli.commands.main.inspection._cost import run_cost
     from sqlbuild.cli.commands.main.inspection._debug import run_debug
     from sqlbuild.cli.commands.main.inspection._diff import run_diff
     from sqlbuild.cli.commands.main.inspection._lineage import run_lineage
@@ -63,6 +64,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     handlers: CliEntrypointHandlers = CliEntrypointHandlers(
         run_compile=run_compile,
+        run_cost=run_cost,
         run_dag=lambda project_dir, no_sql_validation, json_output, cli_vars: run_dag(
             project_dir=project_dir,
             no_sql_validation=no_sql_validation,

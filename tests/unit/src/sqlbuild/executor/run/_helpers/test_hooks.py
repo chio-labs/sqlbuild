@@ -11,6 +11,8 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.planner.models import ModelPlanEntry
+from sqlbuild.cost.classes.cost_context import CostContext
+from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run._helpers.materializations.view import execute_view_entry
@@ -176,40 +178,48 @@ def test_given_python_hook_when_executing_then_invokes_function_with_context_and
     connection: Any = adapter.connect({"database": ":memory:"})
     statement_recorder: StatementRecorder = StatementRecorder()
     captured: list[tuple[HookContext, str, list[tuple[object, ...]]]] = []
+    observed_cost_contexts: list[CostResourceContext | None] = []
 
     def notify(ctx: HookContext, message: str) -> None:
+        observed_cost_contexts.append(CostContext.current())
         ctx.execute_sql("CREATE TABLE hook_log AS SELECT 1 AS value")
         rows: list[tuple[object, ...]] = ctx.query("SELECT value FROM hook_log")
         ctx.log(message)
         captured.append((ctx, message, rows))
 
-    execute_hooks(
-        connection=connection,
-        adapter=adapter,
-        hooks=[PythonHookEntry(name="notify", kwargs={"message": "done"})],
-        phase=HookPhase.POST_HOOKS,
-        hook_functions=(
-            DiscoveredHookFunction(
-                file_path=Path(__file__),
-                relative_path=Path("hooks/notifications.py"),
-                name="notify",
-                function=notify,
+    with CostContext.scope(
+        run_id="run-1",
+        resource_type="model",
+        resource_name="orders",
+        phase="execute",
+    ):
+        execute_hooks(
+            connection=connection,
+            adapter=adapter,
+            hooks=[PythonHookEntry(name="notify", kwargs={"message": "done"})],
+            phase=HookPhase.POST_HOOKS,
+            hook_functions=(
+                DiscoveredHookFunction(
+                    file_path=Path(__file__),
+                    relative_path=Path("hooks/notifications.py"),
+                    name="notify",
+                    function=notify,
+                ),
             ),
-        ),
-        hook_run=HookRunContext(
-            model_name="orders",
-            destination=CompiledRelationLocation(
-                database=None,
-                schema="main",
-                name="orders",
-                qualified_name=None,
+            hook_run=HookRunContext(
+                model_name="orders",
+                destination=CompiledRelationLocation(
+                    database=None,
+                    schema="main",
+                    name="orders",
+                    qualified_name=None,
+                ),
+                run_id="run-1",
+                target="dev",
+                effective_vars={"channel": "alerts"},
+                statement_recorder=statement_recorder,
             ),
-            run_id="run-1",
-            target="dev",
-            effective_vars={"channel": "alerts"},
-            statement_recorder=statement_recorder,
-        ),
-    )
+        )
 
     ctx, message, rows = captured[0]
     assert message == test_case.expected_message
@@ -227,6 +237,12 @@ def test_given_python_hook_when_executing_then_invokes_function_with_context_and
     assert tuple(event.content for event in statement_recorder.snapshot()) == (
         test_case.expected_recorded_events
     )
+    cost_context: CostResourceContext | None = observed_cost_contexts[0]
+    assert cost_context is not None
+    assert cost_context.resource_type == "hook"
+    assert cost_context.resource_name == test_case.expected_hook_name
+    assert cost_context.phase == test_case.expected_phase
+    assert cost_context.attempt == 1
 
 
 @pytest.mark.parametrize(

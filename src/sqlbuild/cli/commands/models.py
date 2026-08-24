@@ -59,6 +59,7 @@ from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
+from sqlbuild.cost.types import CostStatus
 from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
 from sqlbuild.executor.clone.models import CloneExecutionResult
 from sqlbuild.executor.diff.models import DiffExecutionResult
@@ -70,7 +71,7 @@ from sqlbuild.presentation.classes.transient_status_reporter import TransientSta
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.runtime.contracts.types import NodeStartCallback
-from sqlbuild.spec.contracts.models import SourceEntry
+from sqlbuild.spec.contracts.models import CostConfig, SourceEntry
 from sqlbuild.virtual.executor.models import VirtualBuildPipelineResult
 from sqlbuild.virtual.state.models import (
     CheckpointRetentionInspection,
@@ -1218,10 +1219,51 @@ class KataCommandRequest:
 
 
 @dataclass(frozen=True)
+class CostCommandRequest:
+    """Inputs for local run-cost history and drill-down."""
+
+    project_dir: Path | None
+    selector: str
+    no_color: bool
+    limit: int | None
+    no_limit: bool
+    sort: str | None
+    order: str | None
+    since: str | None
+    until: str | None
+    json_output: bool
+    json_output_path: Path | None
+
+
+@dataclass(frozen=True)
+class BuildCostFinalization:
+    """Inputs for nonfatal automatic build-cost finalization."""
+
+    project_dir: Path
+    adapter_name: str
+    adapter: object
+    connection_config: dict[str, object]
+    target_name: str | None
+    run_id: str
+    build_status: str
+    started_at: datetime
+    completed_at: datetime
+    config: CostConfig
+    output_stream: TextIO
+    use_color: bool
+    collect: bool = True
+    render: bool = True
+    cost_status: CostStatus = CostStatus.COMPLETE
+    cost_message: str = "No executable warehouse work was planned for this build."
+    had_executable_work: bool | None = True
+
+
+@dataclass(frozen=True)
 class CliEntrypointHandlers:
     """Injected command handlers for the CLI entrypoint."""
 
     run_compile: Callable[[CompileCommandRequest], int]
+    run_cost: Callable[[CostCommandRequest], int]
     run_dag: DagCommandHandler
     run_plan: Callable[[PlanCommandRequest], int]
     run_dbt_plan: Callable[[Path | None, tuple[str, ...], bool], int]

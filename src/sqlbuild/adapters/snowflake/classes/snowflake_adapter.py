@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -62,6 +63,9 @@ from sqlbuild.adapters.snowflake.constants import (
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.types import InitialValidFrom, SnapshotStrategy
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
+from sqlbuild.cost.main.collection import collect_snowflake_cost
+from sqlbuild.cost.models import RunCostSummary
+from sqlbuild.cost.types import CostCapability, CostStatus
 from sqlbuild.diagnostics.main.log_sql import log_sql
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
@@ -77,6 +81,67 @@ class SnowflakeAdapter(BaseAdapter):
     connection_routing_keys: ClassVar[frozenset[str]] = frozenset(
         {"source", "profile", "target", "project_dir", "profiles_dir"}
     )
+
+    def cost_capability(self) -> CostCapability:
+        return CostCapability.SNOWFLAKE_QUERY_HISTORY
+
+    def collect_run_cost(
+        self,
+        *,
+        connection_config: dict[str, object],
+        run_id: str,
+        started_at: datetime,
+        completed_at: datetime,
+        statement_ledger_path: Path,
+        usd_per_credit: Decimal,
+        rate_source: str,
+    ) -> RunCostSummary:
+        telemetry_connection_config: dict[str, object] = dict(connection_config)
+        telemetry_connection_config["login_timeout"] = 5
+        telemetry_connection_config["network_timeout"] = 5
+        try:
+            connection: Any = self.connect(telemetry_connection_config)
+        except Exception as error:
+            return RunCostSummary(
+                status=CostStatus.COLLECTION_FAILED,
+                usd_per_credit=usd_per_credit,
+                rate_source=rate_source,
+                message=f"Snowflake cost collection failed to connect ({type(error).__name__}).",
+            )
+        try:
+            summary: RunCostSummary = collect_snowflake_cost(
+                connection=connection,
+                run_id=run_id,
+                started_at=started_at,
+                completed_at=completed_at,
+                statement_ledger_path=statement_ledger_path,
+                usd_per_credit=usd_per_credit,
+                rate_source=rate_source,
+            )
+        except Exception as error:
+            summary = RunCostSummary(
+                status=CostStatus.COLLECTION_FAILED,
+                usd_per_credit=usd_per_credit,
+                rate_source=rate_source,
+                message=f"Snowflake cost collection failed ({type(error).__name__}).",
+            )
+        finally:
+            try:
+                self.close(connection)
+            except Exception as error:
+                summary = replace(
+                    summary,
+                    status=(
+                        summary.status
+                        if summary.status == CostStatus.COLLECTION_FAILED
+                        else CostStatus.PARTIAL
+                    ),
+                    limitations=(
+                        *summary.limitations,
+                        f"Snowflake cost history connection close failed ({type(error).__name__}).",
+                    ),
+                )
+        return summary
 
     @staticmethod
     def _information_schema_identifier(value: str) -> str:

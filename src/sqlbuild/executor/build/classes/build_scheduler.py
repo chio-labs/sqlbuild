@@ -11,7 +11,7 @@ from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -28,6 +28,7 @@ from sqlbuild.compiler.planner.models import (
     SeedPlanEntry,
     SqlTestPlanEntry,
 )
+from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
@@ -275,8 +276,9 @@ class BuildScheduler:
                     if not self._pre_dispatch(key):
                         self._mark_complete(key)
                         continue
-                    result: LoadExecutionResult = self._execute_source_node(
-                        key=key, connection=connection
+                    result: LoadExecutionResult = cast(
+                        LoadExecutionResult,
+                        self._execute_node(key=key, connection=connection),
                     )
                     self._handle_completion(key=key, result=result)
                     continue
@@ -387,6 +389,23 @@ class BuildScheduler:
         return True
 
     def _execute_node(
+        self, *, key: CompiledObjectKey, connection: Any
+    ) -> (
+        ModelExecutionResult
+        | SeedExecutionResult
+        | FunctionExecutionResult
+        | SqlTestExecutionResult
+        | LoadExecutionResult
+    ):
+        with CostContext.scope(
+            run_id=self._run_id,
+            resource_type=str(key.resource_type),
+            resource_name=key.name,
+            ledger_path=(self._runtime_dir / "runs" / self._run_id / "statements.jsonl"),
+        ):
+            return self._execute_node_with_cost_context(key=key, connection=connection)
+
+    def _execute_node_with_cost_context(
         self, *, key: CompiledObjectKey, connection: Any
     ) -> (
         ModelExecutionResult

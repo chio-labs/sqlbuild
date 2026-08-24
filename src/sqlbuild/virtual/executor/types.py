@@ -14,8 +14,8 @@ if TYPE_CHECKING:
 class VirtualPlanReadyCallback(Protocol):
     def __call__(
         self,
-        project: CompiledProject,
         *,
+        project: CompiledProject,
         plan_output: PlanOutput,
         python_plan_entries: tuple[PythonPlanEntry, ...],
     ) -> VirtualBuildExecutionHooks: ...

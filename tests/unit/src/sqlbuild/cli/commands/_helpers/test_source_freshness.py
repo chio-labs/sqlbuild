@@ -14,6 +14,8 @@ from sqlbuild.compiler.source_freshness.models import (
     StandardSourceFreshnessPlanningResult,
     StandardSourceFreshnessPropagationResult,
 )
+from sqlbuild.cost.classes.cost_context import CostContext
+from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
@@ -93,32 +95,47 @@ def test_given_eligible_source_freshness_when_appending_then_uses_adapter_render
 ) -> None:
     adapter: RecordingAdapter = RecordingAdapter()
 
-    append_eligible_standard_source_freshness_records(
-        plan=PlanOutput(
-            model_entries=(model_entry("orders"),),
-            source_freshness=StandardSourceFreshnessPlanningResult(
-                observed_records=(source_freshness_record(),),
-                changed_identities=frozenset({source_freshness_identity()}),
-                propagation=StandardSourceFreshnessPropagationResult(
-                    changed_source_model_names={source_freshness_identity(): frozenset({"orders"})},
-                    stale_model_names=frozenset({"orders"}),
+    with CostContext.scope(
+        run_id="run-1",
+        resource_type="run",
+        resource_name="dev",
+        phase="build",
+    ):
+        append_eligible_standard_source_freshness_records(
+            plan=PlanOutput(
+                model_entries=(model_entry("orders"),),
+                source_freshness=StandardSourceFreshnessPlanningResult(
+                    observed_records=(source_freshness_record(),),
+                    changed_identities=frozenset({source_freshness_identity()}),
+                    propagation=StandardSourceFreshnessPropagationResult(
+                        changed_source_model_names={
+                            source_freshness_identity(): frozenset({"orders"})
+                        },
+                        stale_model_names=frozenset({"orders"}),
+                    ),
                 ),
             ),
-        ),
-        result=BuildExecutionResult(
-            status=BuildStatus.SUCCESS,
-            model_results=tuple(
-                ModelExecutionResult(model_name=model_name, status=status)
-                for model_name, status in test_case.model_statuses.items()
+            result=BuildExecutionResult(
+                status=BuildStatus.SUCCESS,
+                model_results=tuple(
+                    ModelExecutionResult(model_name=model_name, status=status)
+                    for model_name, status in test_case.model_statuses.items()
+                ),
             ),
-        ),
-        adapter=cast(BaseAdapter, adapter),
-        connection_config={},
-        run_id="run-1",
-    )
+            adapter=cast(BaseAdapter, adapter),
+            connection_config={},
+            run_id="run-1",
+        )
 
     assert adapter.insert_count == test_case.expected_insert_count
     assert any("main._sqlbuild_source_freshness" in sql for sql in adapter.executed_sql)
+    assert adapter.executed_sql[-1].strip().startswith("INSERT")
+    insert_context: CostResourceContext | None = adapter.cost_contexts[-1]
+    assert insert_context is not None
+    assert insert_context.resource_type == "source"
+    assert insert_context.resource_name == "raw_orders"
+    assert insert_context.phase == "freshness_finalization"
+    assert insert_context.attempt == 1
 
 
 @pytest.mark.parametrize(

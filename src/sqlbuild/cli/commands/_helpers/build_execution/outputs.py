@@ -24,6 +24,9 @@ from sqlbuild.cli.target_artifacts.main._write_python_check_runtime_target impor
 )
 from sqlbuild.cli.target_artifacts.main._write_runtime_target import write_runtime_target
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.cost.classes.run_cost_store import RunCostStore
+from sqlbuild.cost.models import CostRunRecord
+from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult
 
@@ -78,6 +81,7 @@ def write_build_completion_output(
     preparation: BuildExecutionPreparation,
     outcome: BuildRunOutcome,
     check_results: tuple[PythonCheckExecutionResult, ...],
+    cost_record: CostRunRecord | None = None,
 ) -> None:
     """Write the build footer and optional execution JSON output."""
 
@@ -95,6 +99,28 @@ def write_build_completion_output(
             plan=pipeline_result.plan_output,
             python_node_results=outcome.python_results,
             python_check_results=check_results,
+            run_id=(None if cost_record is None else pipeline_result.project.run_id),
+            cost=(None if cost_record is None else RunCostStore.output_payload(record=cost_record)),
+        ),
+        json_output=request.json_output,
+        json_output_path=request.json_output_path,
+    )
+
+
+def write_no_work_build_json(
+    *,
+    request: BuildCommandRequest,
+    pipeline_result: CompilePipelineResult,
+    cost_record: CostRunRecord | None,
+) -> None:
+    """Write a valid empty execution envelope for a no-work build."""
+
+    write_execution_json_output(
+        payload=format_build_execution_json(
+            result=BuildExecutionResult(status=BuildStatus.SUCCESS),
+            plan=pipeline_result.plan_output,
+            run_id=(None if cost_record is None else pipeline_result.project.run_id),
+            cost=(None if cost_record is None else RunCostStore.output_payload(record=cost_record)),
         ),
         json_output=request.json_output,
         json_output_path=request.json_output_path,

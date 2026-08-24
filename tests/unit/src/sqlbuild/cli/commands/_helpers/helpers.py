@@ -16,6 +16,8 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
 )
+from sqlbuild.cost.classes.cost_context import CostContext
+from sqlbuild.cost.models import CostResourceContext
 
 
 class RecordingAdapter:
@@ -24,6 +26,7 @@ class RecordingAdapter:
     def __init__(self) -> None:
         self.insert_count: int = 0
         self.executed_sql: list[str] = []
+        self.cost_contexts: list[CostResourceContext | None] = []
 
     def connect(self, _config: dict[str, object]) -> object:
         return object()
@@ -34,6 +37,7 @@ class RecordingAdapter:
     def execute(self, *, connection: object, sql: str) -> None:
         del connection
         self.executed_sql.append(sql)
+        self.cost_contexts.append(CostContext.current())
         self.insert_count += int(sql.strip().upper().startswith("INSERT"))
 
     def render_qualified_name(

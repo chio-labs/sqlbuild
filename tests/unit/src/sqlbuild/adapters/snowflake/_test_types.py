@@ -3,6 +3,18 @@ from datetime import datetime
 
 from sqlbuild.adapter.contract.models import SchemaDiffResult
 from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.cost.types import CostStatus
+
+
+@dataclass(frozen=True)
+class SnowflakeCostCollectionTestCase:
+    description: str
+    connect_error: bool
+    collection_error: bool
+    close_error: bool
+    expected_status: CostStatus
+    expected_message_fragment: str | None = None
+    expected_limitation_fragment: str | None = None
 
 
 @dataclass(frozen=True)

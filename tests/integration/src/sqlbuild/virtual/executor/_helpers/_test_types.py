@@ -6,3 +6,4 @@ class VirtualPhysicalSchemaPreflightTestCase:
     description: str
     expected_schema: str
     expected_model_names: tuple[str, ...]
+    expected_target: str

@@ -10,9 +10,12 @@ import pytest
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode
+from sqlbuild.cost.classes.cost_context import CostContext
+from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.python_nodes._helpers.python_checks import execute_python_check_nodes
 from sqlbuild.executor.python_nodes.models import (
+    CheckContext,
     PythonCheckExecutionResult,
     PythonNodeExecutionResult,
     PythonNodeRunState,
@@ -309,3 +312,64 @@ def test_given_missing_provider_container_when_executing_python_check_then_failu
     assert result.message == test_case.expected_message
     assert test_case.expected_error_fragment is not None
     assert test_case.expected_error_fragment in (result.error_message or "")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonCheckExecutorTestCase(
+            description="attributes post build check to exact check identity and phase",
+            expected_passed=True,
+            expected_severity=PythonCheckSeverity.ERROR,
+            expected_message=None,
+            upstream_skip_mode=None,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_post_build_check_when_executing_then_cost_context_uses_check_identity(
+    test_case: PythonCheckExecutorTestCase,
+) -> None:
+    observed_cost_contexts: list[CostResourceContext | None] = []
+
+    def attributed_check(_ctx: CheckContext) -> bool:
+        observed_cost_contexts.append(CostContext.current())
+        return True
+
+    check_function: DiscoveredCheckFunction = DiscoveredCheckFunction(
+        file_path=Path(__file__),
+        relative_path=Path(Path(__file__).name),
+        name="orders_are_valid",
+        function=attributed_check,
+        depends_on=(),
+    )
+    with CostContext.scope(
+        run_id="run_1",
+        resource_type="run",
+        resource_name="dev",
+        phase="post_build_checks",
+    ):
+        results: tuple[PythonCheckExecutionResult, ...] = execute_python_check_nodes(
+            check_functions=(check_function,),
+            python_graph=build_python_check_graph(check_function=check_function),
+            upstream_python_results=(),
+            upstream_load_results=(),
+            run_state=PythonNodeRunState(),
+            runtime=PythonNodeRuntime(
+                adapter=PythonNodeContextTestAdapter(),
+                connection_config={},
+                connection=object(),
+                run_id="run_1",
+                target="dev",
+                vars={},
+                is_reload=False,
+            ),
+        )
+
+    cost_context: CostResourceContext | None = observed_cost_contexts[0]
+    assert results[0].passed is test_case.expected_passed
+    assert cost_context is not None
+    assert cost_context.resource_type == "check"
+    assert cost_context.resource_name == "orders_are_valid"
+    assert cost_context.phase == "post_build_checks"
+    assert cost_context.attempt == 1
