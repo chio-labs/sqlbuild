@@ -25,7 +25,7 @@ dbt = [
   "jinja2>=3.1",
 ]
 snowflake = [
-  "snowflake-connector-python>=3.17.3",
+  "snowflake-connector-python>=4.7.1,<5",
 ]
 bigquery = [
   "google-cloud-bigquery>=3.37.0",
