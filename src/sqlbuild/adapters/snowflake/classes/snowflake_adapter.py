@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.microbatch import MicrobatchMixin
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.constants import DIFF_LEFT_SIDE, DIFF_RIGHT_SIDE
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
@@ -55,6 +56,7 @@ from sqlbuild.adapters.snowflake.constants import (
     EXTERNAL_BROWSER_AUTHENTICATOR,
     MFA_AUTHENTICATOR,
     NUMBER_TYPE_NAME,
+    OAUTH_AUTHORIZATION_CODE_AUTHENTICATOR,
     STATUS_COLUMN_NAME,
     SUCCESS_STATUS_TOKENS,
     TEXT_TYPE_NAMES,
@@ -71,7 +73,7 @@ from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
 
 
-class SnowflakeAdapter(BaseAdapter):
+class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
     """Snowflake adapter backed by snowflake-connector-python."""
 
     adapter_name: ClassVar[str] = BuiltinAdapter.SNOWFLAKE.value
@@ -1432,6 +1434,9 @@ class SnowflakeAdapter(BaseAdapter):
         if authenticator == MFA_AUTHENTICATOR:
             connect_config.setdefault("client_request_mfa_token", True)
             connect_config.setdefault("client_store_temporary_credential", True)
+        elif authenticator == OAUTH_AUTHORIZATION_CODE_AUTHENTICATOR:
+            connect_config.setdefault("client_store_temporary_credential", True)
+            connect_config.setdefault("oauth_enable_refresh_tokens", True)
         elif authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
             connect_config.setdefault("client_store_temporary_credential", True)
         role: object | None = connect_config.get("role")

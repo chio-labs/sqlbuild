@@ -197,7 +197,7 @@ def _load_dag_success_completion(
 
 
 def _load_dag_failure_completion(
-    *, source_name: str, source_by_name: dict[str, SourceEntry], error: Exception
+    *, source_name: str, source_by_name: dict[str, SourceEntry], error: BaseException
 ) -> tuple[str, LoadExecutionResult]:
     source: SourceEntry | None = source_by_name.get(source_name)
     loader_name: str = (source.loader or "") if source is not None else ""

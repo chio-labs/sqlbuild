@@ -1195,6 +1195,12 @@ def _format_streaming_batch_summary(*, model_result: ModelExecutionResult) -> st
         parts.append(f"range {start} \u2192 {end}")
     if model_result.rows_affected is not None:
         parts.append(_format_abbreviated_rows(count=model_result.rows_affected))
+    if model_result.microbatch_recovery_batch_count:
+        parts.append(f"{model_result.microbatch_recovery_batch_count} recovery")
+    if model_result.microbatch_synthetic_completion_count:
+        parts.append(f"{model_result.microbatch_synthetic_completion_count} synthetic coverage")
+    if model_result.microbatch_replay_requirement_state is not None:
+        parts.append(f"replay {model_result.microbatch_replay_requirement_state}")
     return f"         {'    '.join(parts)}"
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -12,6 +13,13 @@ from sqlbuild.executor.node_results.models import (
     NodeResultRecord,
 )
 from sqlbuild.executor.node_results.types import NodeResultStatus
+from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
+from sqlbuild.microbatches.types import (
+    MicrobatchCompletionType,
+    MicrobatchFingerprintStatus,
+    MicrobatchRecordType,
+    MicrobatchRunType,
+)
 from sqlbuild.virtual.state.constants import STATE_TABLE_INDEXES, STATE_TABLES
 from sqlbuild.virtual.state.exceptions import StateBackendConfigError
 from sqlbuild.virtual.state.models import (
@@ -67,6 +75,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes._test_types import (
     DuckDbStateBackendTableCreationTestCase,
     DuckDbStateBackendTransactionRollbackTestCase,
     DuckDbStateBackendValidationTestCase,
+    MicrobatchStateRoundTripTestCase,
 )
 from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     fetch_all,
@@ -78,6 +87,79 @@ for state_indexes in STATE_TABLE_INDEXES.values():
     for state_index_name in state_indexes:
         EXPECTED_STATE_INDEX_NAMES.append(state_index_name)
 EXPECTED_STATE_INDEX_NAMES.sort()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MicrobatchStateRoundTripTestCase(
+            description="duckdb events are idempotent and preserve concurrent timestamps",
+            expected_event_count=2,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_virtual_microbatch_event_when_appending_then_scope_history_round_trips(
+    test_case: MicrobatchStateRoundTripTestCase, tmp_path: Path
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    scope: MicrobatchScope = MicrobatchScope(
+        scope_kind="virtual_physical",
+        scope_key="duckdb:state:orders:F2:main.orders__F2",
+        model_name="orders",
+        target_database=None,
+        target_schema="main",
+        target_name="orders__F2",
+        physical_generation_id="F2:main.orders__F2",
+        virtual_environment_name="dev",
+        virtual_model_version_hash="F2",
+    )
+    event: MicrobatchEvent = MicrobatchEvent(
+        event_id="event-1",
+        record_type=MicrobatchRecordType.PARTITION_COMPLETION,
+        scope=scope,
+        origin_run_id="run-1",
+        execution_run_id="run-1",
+        run_type=MicrobatchRunType.NORMAL,
+        completion_type=MicrobatchCompletionType.INITIAL,
+        run_start="0",
+        run_end="1",
+        partition_start="0",
+        partition_end="1",
+        batch_size="1",
+        cursor_column="batch_id",
+        cursor_type="integer",
+        model_version_hash="F2",
+        definition_hash="definition",
+        fingerprint_status=MicrobatchFingerprintStatus.KNOWN,
+        rows_affected=0,
+        created_at=datetime(2026, 1, 1),
+    )
+    try:
+        backend.initialize(connection=connection, schema="sqlbuild_state", sqlbuild_version="test")
+        backend.append_microbatch_event(connection=connection, schema="sqlbuild_state", event=event)
+        second_event: MicrobatchEvent = replace(event, event_id="event-2")
+        backend.append_microbatch_event(
+            connection=connection, schema="sqlbuild_state", event=second_event
+        )
+        backend.append_microbatch_event(connection=connection, schema="sqlbuild_state", event=event)
+
+        history: tuple[MicrobatchEvent, ...] = backend.read_microbatch_scope_history(
+            connection=connection, schema="sqlbuild_state", scope=scope
+        )
+        retention_history: tuple[MicrobatchEvent, ...] = backend.read_microbatch_retention_history(
+            connection=connection, schema="sqlbuild_state"
+        )
+        model_history: tuple[MicrobatchEvent, ...] = backend.read_microbatch_model_history(
+            connection=connection, schema="sqlbuild_state", scope=scope
+        )
+
+        assert len(history) == test_case.expected_event_count
+        assert history == (event, second_event)
+        assert retention_history == history
+        assert model_history == history
+    finally:
+        backend.close(connection)
 
 
 @pytest.mark.parametrize(
@@ -354,7 +436,7 @@ def test_given_duckdb_node_results_when_reading_then_scopes_by_environment_and_s
         DuckDbStateBackendValidationTestCase(
             description="reports invalid manually-created state schema",
             schema="broken_state",
-            expected_issue_count=23,
+            expected_issue_count=24,
         )
     ],
     ids=lambda case: case.description,
@@ -1737,6 +1819,21 @@ def test_given_duckdb_state_backend_when_managing_locks_then_enforces_active_own
             lock_key=test_case.lock_key,
             owner_id=test_case.second_owner,
             expires_at=future_expiry,
+        )
+        renewed_expiry: datetime = future_expiry + timedelta(hours=1)
+        assert backend.renew_lock(
+            connection=connection,
+            schema=test_case.schema,
+            lock_key=test_case.lock_key,
+            owner_id=test_case.first_owner,
+            expires_at=renewed_expiry,
+        )
+        assert not backend.renew_lock(
+            connection=connection,
+            schema=test_case.schema,
+            lock_key=test_case.lock_key,
+            owner_id=test_case.second_owner,
+            expires_at=renewed_expiry,
         )
         active_locks: tuple[StateLockRecord, ...] = backend.list_active_locks(
             connection=connection,

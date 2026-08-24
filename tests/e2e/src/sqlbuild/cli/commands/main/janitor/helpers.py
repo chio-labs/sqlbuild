@@ -71,6 +71,7 @@ def create_janitor_demo_relations(*, db_path: Path) -> None:
         connection.execute("CREATE TABLE janitor_tracked_extra AS SELECT 1 AS id")
         connection.execute("CREATE TABLE janitor_untracked_extra AS SELECT 1 AS id")
         connection.execute("CREATE TABLE partition_state AS SELECT 1 AS id")
+        connection.execute("CREATE TABLE _sqlbuild_microbatches AS SELECT 1 AS id")
         write_fingerprint(
             connection=connection,
             execute=lambda *, connection, sql: connection.execute(sql),
@@ -85,6 +86,26 @@ def create_janitor_demo_relations(*, db_path: Path) -> None:
                 run_id="run_janitor_e2e",
                 definition_hash="definition_hash",
                 schema_fingerprint="schema_hash",
+                definition="SELECT 1 AS id",
+                ts=datetime(2026, 1, 15, 12, 0, 0),
+            ),
+            render_qualified_name=DuckDbAdapter().render_qualified_name,
+            render_framework_type=DuckDbAdapter().render_framework_type,
+        )
+        write_fingerprint(
+            connection=connection,
+            execute=lambda *, connection, sql: connection.execute(sql),
+            database=None,
+            schema="main",
+            fingerprint=Fingerprint(
+                node_type="model",
+                node_name="microbatch_state_probe",
+                target_database=None,
+                target_schema="main",
+                target_name="_sqlbuild_microbatches",
+                run_id="run_janitor_microbatch_e2e",
+                definition_hash="microbatch_definition_hash",
+                schema_fingerprint="microbatch_schema_hash",
                 definition="SELECT 1 AS id",
                 ts=datetime(2026, 1, 15, 12, 0, 0),
             ),

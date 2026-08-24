@@ -7,7 +7,7 @@ build-backend = "maturin"
 
 [project]
 name = "sqlbuild"
-version = "0.54.2"
+version = "0.55.0"
 description = "Typed, test-first SQL pipelines with local E2E testing"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -25,7 +25,7 @@ dbt = [
   "jinja2>=3.1",
 ]
 snowflake = [
-  "snowflake-connector-python>=3.17.3",
+  "snowflake-connector-python>=4.7.1,<5",
 ]
 bigquery = [
   "google-cloud-bigquery>=3.37.0",

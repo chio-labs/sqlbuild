@@ -21,7 +21,7 @@ from sqlbuild.compiler.planner.types import (
     SnapshotSchemaChangePolicy,
     SnapshotStrategy,
 )
-from sqlbuild.spec.contracts.models import SchemaColumn
+from sqlbuild.spec.contracts.models import SchemaColumn, SettingsConfig
 
 _VALID_STRATEGIES: frozenset[str] = frozenset(s.value for s in IncrementalStrategy)
 _VALID_CURSOR_TYPES: frozenset[str] = frozenset(ct.value for ct in CursorType)
@@ -102,6 +102,7 @@ def validate_incremental_config(
     incremental_mode: str | None = _str(config=config, key="incremental_mode")
     batch_size: object | None = config.values.get("batch_size")
     batch_concurrency: object | None = config.values.get("batch_concurrency")
+    unaccounted_partition_policy: object | None = config.values.get("unaccounted_partition_policy")
     cursor_inputs: object | None = config.values.get("cursor_inputs")
     cursor_grain: str | None = _str(config=config, key="cursor_grain")
     replay_on_change: object | None = config.values.get("replay_on_change")
@@ -219,10 +220,74 @@ def validate_incremental_config(
         raise CompileInputError(
             f"model '{model_name}': batch_size is only valid with incremental_mode=microbatch"
         )
+    _validate_microbatch_state_config(
+        model_name=model_name,
+        strategy=strategy,
+        incremental_mode=incremental_mode,
+        batch_concurrency=batch_concurrency,
+        unaccounted_partition_policy=unaccounted_partition_policy,
+    )
+
+
+def _validate_microbatch_state_config(
+    *,
+    model_name: str,
+    strategy: str,
+    incremental_mode: str | None,
+    batch_concurrency: object | None,
+    unaccounted_partition_policy: object | None,
+) -> None:
     if batch_concurrency is not None:
+        if isinstance(batch_concurrency, bool) or not isinstance(batch_concurrency, int):
+            raise CompileInputError(
+                f"model '{model_name}': batch_concurrency must be a positive integer"
+            )
+        if batch_concurrency <= 0:
+            raise CompileInputError(
+                f"model '{model_name}': batch_concurrency must be a positive integer"
+            )
+        if batch_concurrency > 1 and incremental_mode != IncrementalMode.MICROBATCH:
+            raise CompileInputError(
+                f"model '{model_name}': batch_concurrency > 1 requires incremental_mode=microbatch"
+            )
+        if batch_concurrency > 1 and strategy != IncrementalStrategy.DELETE_INSERT:
+            raise CompileInputError(
+                f"model '{model_name}': batch_concurrency > 1 requires "
+                "incremental_strategy=delete_insert"
+            )
+    if unaccounted_partition_policy is None:
+        return
+    valid_policies: frozenset[str] = frozenset({"synthesize", "recover_empty", "recover_all"})
+    if (
+        not isinstance(unaccounted_partition_policy, str)
+        or unaccounted_partition_policy not in valid_policies
+    ):
         raise CompileInputError(
-            f"model '{model_name}': batch_concurrency is not supported; "
-            f"microbatch processes batches serially"
+            f"model '{model_name}': unaccounted_partition_policy must be one of: "
+            + ", ".join(sorted(valid_policies))
+        )
+    if incremental_mode != IncrementalMode.MICROBATCH:
+        raise CompileInputError(
+            f"model '{model_name}': unaccounted_partition_policy requires "
+            "incremental_mode=microbatch"
+        )
+
+
+def validate_microbatch_project_capability(
+    *, config: CompileModelConfig, settings: SettingsConfig, model_name: str
+) -> None:
+    """Require the project capability for a model concurrency ceiling above one."""
+
+    batch_concurrency: object | None = config.values.get("batch_concurrency")
+    if (
+        isinstance(batch_concurrency, int)
+        and not isinstance(batch_concurrency, bool)
+        and batch_concurrency > 1
+        and not settings.microbatch_concurrency
+    ):
+        raise CompileInputError(
+            f"model '{model_name}': batch_concurrency > 1 requires "
+            "settings.microbatch_concurrency = true"
         )
 
 

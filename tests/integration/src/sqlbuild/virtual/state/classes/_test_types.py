@@ -209,3 +209,11 @@ class DuckDbStateBackendOperationEventTestCase:
     sqlbuild_version: str
     expected_operation_id: str
     expected_virtual_environment_name: str
+
+
+@dataclass(frozen=True)
+class MicrobatchStateRoundTripTestCase:
+    """Expected append-only microbatch event persistence behavior."""
+
+    description: str
+    expected_event_count: int

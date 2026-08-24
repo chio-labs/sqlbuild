@@ -3,6 +3,28 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from sqlbuild.executor.run.models import BatchWindow, MicrobatchPhaseOutcome
+
+
+class MicrobatchBatchExecutor(Protocol):
+    """Execute one microbatch window on one supplied connection."""
+
+    def __call__(self, batch: BatchWindow, connection: Any, /) -> MicrobatchPhaseOutcome: ...
+
+
+class MicrobatchBatchRunner(Protocol):
+    """Run microbatch windows within the shared global worker budget."""
+
+    def __call__(
+        self,
+        batches: tuple[BatchWindow, ...],
+        concurrency: int,
+        execute: MicrobatchBatchExecutor,
+        /,
+    ) -> tuple[MicrobatchPhaseOutcome, ...]: ...
 
 
 class ExecutionPhase(StrEnum):
@@ -16,6 +38,7 @@ class ExecutionPhase(StrEnum):
     DML = "dml"
     POST_HOOK = "post_hook"
     FINGERPRINT = "fingerprint"
+    MICROBATCH_STATE = "microbatch_state"
     CUSTOM_MATERIALIZATION = "custom_materialization"
 
 

@@ -20,7 +20,7 @@ from sqlbuild.compiler.planner.models import (
     SeedPlanEntry,
     SourceLoadPlanEntry,
 )
-from sqlbuild.compiler.planner.types import PlanReason
+from sqlbuild.compiler.planner.types import IncrementalMode, PlanReason
 from sqlbuild.compiler.python_nodes.types import PythonIdentityStatus
 
 
@@ -87,6 +87,13 @@ def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
         model["incremental_strategy"] = entry.incremental_strategy
     if entry.incremental_mode is not None:
         model["incremental_mode"] = entry.incremental_mode
+    if entry.incremental_mode == IncrementalMode.MICROBATCH:
+        model["microbatch_state"] = {
+            "completion_tracking": "universal",
+            "batch_concurrency": entry.batch_concurrency,
+            "unaccounted_partition_policy": entry.unaccounted_partition_policy,
+            "reconciliation": "runtime",
+        }
     if entry.cursor_column is not None:
         model["cursor_column"] = entry.cursor_column
     if entry.cursor_type is not None:

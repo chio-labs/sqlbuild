@@ -39,6 +39,7 @@ from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     LoadSeedTestCase,
     MaterializeTestCase,
     MergeTestCase,
+    PhysicalRelationGenerationTestCase,
     QueryTestCase,
     RecorderWriteTestCase,
     RelationExistsTestCase,
@@ -46,6 +47,48 @@ from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     SwapTestCase,
     TransactionalAtomicityTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PhysicalRelationGenerationTestCase(
+            description="generation marker survives reads and changes after recreation",
+            expected_stable=True,
+            expected_recreated_distinct=True,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_duckdb_relation_when_recreated_then_generation_identity_changes(
+    test_case: PhysicalRelationGenerationTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    connection.execute("CREATE TABLE main.generation_target (id INTEGER)")
+    initial: str | None = adapter.physical_relation_generation(
+        connection=connection,
+        database=None,
+        schema="main",
+        name="generation_target",
+    )
+    repeated: str | None = adapter.physical_relation_generation(
+        connection=connection,
+        database=None,
+        schema="main",
+        name="generation_target",
+    )
+    connection.execute("DROP TABLE main.generation_target")
+    connection.execute("CREATE TABLE main.generation_target (id INTEGER)")
+    recreated: str | None = adapter.physical_relation_generation(
+        connection=connection,
+        database=None,
+        schema="main",
+        name="generation_target",
+    )
+
+    assert (initial == repeated) is test_case.expected_stable
+    assert (initial != recreated) is test_case.expected_recreated_distinct
 
 
 @pytest.mark.parametrize(
