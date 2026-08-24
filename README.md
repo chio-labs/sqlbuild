@@ -143,6 +143,10 @@ DuckDB or Postgres state backend and scope them to the immutable physical model 
 builds renew a physical-version lease while mutating shared data; standard-mode orchestrators must
 prevent overlapping invocations for the same model destination.
 
+Janitor may read microbatch history to protect active physical versions, but it never drops or
+prunes `_sqlbuild_microbatches` or virtual `microbatch_events`. Removing virtual event history is an
+explicit `sqb state reset` operator action, not ordinary retention cleanup.
+
 The append-only history distinguishes physical continuity from fingerprint continuity. Known gaps
 are recovered before new normal work. Automatic `replay_on_change` ranges are durable and
 version-specific, while explicit backfills remain one-shot requests. If destination progress is not

@@ -266,6 +266,17 @@ def test_given_failed_first_virtual_microbatch_when_retried_then_provisional_map
             "WHERE artifact_type = 'model' AND artifact_name = 'orders'"
         ),
     ) == [(1,)]
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=("SELECT COUNT(*) FROM sqlbuild_state.locks WHERE lock_key LIKE 'model_version:%'"),
+    ) == [(0,)]
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT COUNT(*) FROM sqlbuild_state.microbatch_events "
+            "WHERE record_type = 'partition_completion' AND rows_affected > 0"
+        ),
+    ) == [(0,)]
 
     execute_duckdb(
         db_path=warehouse_path,
@@ -280,6 +291,8 @@ def test_given_failed_first_virtual_microbatch_when_retried_then_provisional_map
         db_path=warehouse_path,
         sql="SELECT id, value FROM dev__dev.orders",
     ) == [(1, 1)]
+
+
 @pytest.mark.parametrize(
     "test_case",
     [

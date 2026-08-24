@@ -2117,15 +2117,22 @@ def _build_virtual_model_change(
 ) -> ChangeDetectionResult:
     metadata_json: str = semantics.expected_metadata_jsons.get(model.name, "{}")
     previous_metadata_json: str | None = semantics.bound_metadata_jsons.get(model.name)
+    bound_physical_relation: PhysicalRelationRecord | None = bound_physical_relations.get(
+        model.name
+    )
+    previous_version_hash: str | None = (
+        bound_physical_relation.version_hash if bound_physical_relation is not None else None
+    )
     if full_refresh:
         return ChangeDetectionResult(
             model_name=model.name,
             change_kind=ChangeKind.NO_CHANGE,
             fingerprint_metadata_json=metadata_json,
             previous_metadata_json=previous_metadata_json,
+            previous_version_hash=previous_version_hash,
             backfill=BackfillResult(action=BackfillAction.FULL),
         )
-    if model.name not in bound_physical_relations:
+    if bound_physical_relation is None:
         return ChangeDetectionResult(
             model_name=model.name,
             change_kind=ChangeKind.FIRST_RUN,
@@ -2141,6 +2148,7 @@ def _build_virtual_model_change(
             config_changed=True,
             fingerprint_metadata_json=metadata_json,
             previous_metadata_json=previous_metadata_json,
+            previous_version_hash=previous_version_hash,
         )
     if root_reason in (PlanReason.QUERY_CHANGED, PlanReason.FUNCTION_CHANGED):
         raw_replay_policy: object | None = model.config.values.get("replay_on_change")
@@ -2153,6 +2161,7 @@ def _build_virtual_model_change(
             query_changed=True,
             fingerprint_metadata_json=metadata_json,
             previous_metadata_json=previous_metadata_json,
+            previous_version_hash=previous_version_hash,
             backfill=resolve_replay_on_change(replay_on_change=replay_policy),
         )
     return ChangeDetectionResult(
@@ -2160,4 +2169,5 @@ def _build_virtual_model_change(
         change_kind=ChangeKind.NO_CHANGE,
         fingerprint_metadata_json=metadata_json,
         previous_metadata_json=previous_metadata_json,
+        previous_version_hash=previous_version_hash,
     )

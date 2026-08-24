@@ -29,6 +29,15 @@ class JanitorCleanupE2ETestCase:
 
 
 @dataclass(frozen=True)
+class JanitorMicrobatchHistoryProtectionE2ETestCase:
+    """Test case for immutable virtual microbatch history during janitor cleanup."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
 class JanitorCheckpointProtectionE2ETestCase:
     """Test case for virtual checkpoint-protected janitor cleanup behavior."""
 
