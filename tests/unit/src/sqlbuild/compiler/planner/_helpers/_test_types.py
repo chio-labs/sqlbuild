@@ -761,3 +761,10 @@ class ReuseSatisfiedStalenessTestCase:
     description: str
     reuse_satisfied_model_names: frozenset[str]
     expected_warns: bool
+@dataclass(frozen=True)
+class PlannerStaleWarningScopeTestCase:
+    description: str
+    selected_model_name: str
+    expected_inspected_names: frozenset[str]
+    expected_execution_names: tuple[str, ...]
+
