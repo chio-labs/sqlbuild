@@ -12,13 +12,31 @@ permissions:
   pull-requests: write
   statuses: write
 
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
 jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
+      - name: Create delivery token
+        id: delivery-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.CHIO_DELIVERY_APP_ID }}
+          private-key: ${{ secrets.CHIO_DELIVERY_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-actions: write
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+
       - uses: googleapis/release-please-action@v4
         id: release
         with:
+          token: ${{ steps.delivery-token.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
@@ -48,6 +66,7 @@ jobs:
         if: steps.release.outputs.prs_created == 'true'
         with:
           ref: ${{ steps.release_branch.outputs.name }}
+          token: ${{ steps.delivery-token.outputs.token }}
 
       - uses: astral-sh/setup-uv@v5
         if: steps.release.outputs.prs_created == 'true'
@@ -151,17 +170,3 @@ jobs:
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
             -f state=success -f context=Verify \
             -f description="Product changes passed verification before release metadata update" >/dev/null
-
-      - name: Merge release pull request and continue release
-        if: steps.release.outputs.prs_created == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_PRS: ${{ steps.release.outputs.prs }}
-        run: |
-          release_pr="$(jq -r '.[0].number // empty' <<< "${RELEASE_PRS}")"
-          if [[ -z "${release_pr}" ]]; then
-            echo "Release Please reported a created PR without a number" >&2
-            exit 1
-          fi
-          gh pr merge "${release_pr}" --repo "${GITHUB_REPOSITORY}" --squash
-          gh workflow run release-please.yml --repo "${GITHUB_REPOSITORY}" --ref main
