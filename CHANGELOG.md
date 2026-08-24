@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.55.0](https://github.com/chio-labs/sqlbuild/compare/v0.54.2...v0.55.0) (2026-08-24)
+
+
+### Features
+
+* add concurrent microbatch recovery ([#326](https://github.com/chio-labs/sqlbuild/issues/326)) ([6092202](https://github.com/chio-labs/sqlbuild/commit/6092202ad9a3b6b001f7e7a3006d2c22d0c17994))
+* add Snowflake build cost telemetry ([#325](https://github.com/chio-labs/sqlbuild/issues/325)) ([bf7af06](https://github.com/chio-labs/sqlbuild/commit/bf7af06d9836f774c821fbba0cffefd25d923caf))
+* **compiler:** add reusable model schemas ([#323](https://github.com/chio-labs/sqlbuild/issues/323)) ([9e9bd48](https://github.com/chio-labs/sqlbuild/commit/9e9bd4831e4b41aa6f9a6c49ce21d626fdcaf45f))
+* support managed table functions and cursor bounds ([#322](https://github.com/chio-labs/sqlbuild/issues/322)) ([49915f9](https://github.com/chio-labs/sqlbuild/commit/49915f9e593d0cb70c8b3c84967f4340b0600f9a))
+
+
+### Bug Fixes
+
+* **cli:** support interactive connection authentication ([#328](https://github.com/chio-labs/sqlbuild/issues/328)) ([dd30532](https://github.com/chio-labs/sqlbuild/commit/dd3053266468dde063828672b5566ed38fd6bfd3))
+* **compiler:** deduplicate model schema audits ([#324](https://github.com/chio-labs/sqlbuild/issues/324)) ([41414d4](https://github.com/chio-labs/sqlbuild/commit/41414d4ffd4bc503ddaff3938f8a76d06b151fa0))
+* **compiler:** preserve custom cast type names ([#327](https://github.com/chio-labs/sqlbuild/issues/327)) ([bbbe62d](https://github.com/chio-labs/sqlbuild/commit/bbbe62d78cd5e0656dee70907fa86b9147b5d237))
+* **release:** use delivery app for release PRs ([#332](https://github.com/chio-labs/sqlbuild/issues/332)) ([f2d7956](https://github.com/chio-labs/sqlbuild/commit/f2d79562c54d15769c1a86936fbe2273ff54c8be))
+* **virtual:** serialize microbatch state operations ([#330](https://github.com/chio-labs/sqlbuild/issues/330)) ([4f14b39](https://github.com/chio-labs/sqlbuild/commit/4f14b3971b43347ae020ae43b540ee8d65eb8df8))
+
 ## [0.54.2](https://github.com/chio-labs/sqlbuild/compare/v0.54.1...v0.54.2) (2026-08-23)
 
 
