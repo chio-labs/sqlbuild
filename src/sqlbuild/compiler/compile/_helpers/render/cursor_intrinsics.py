@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 
 from sqlbuild.compiler.compile.constants import (
@@ -23,6 +24,9 @@ _CURSOR_START_INTRINSIC: str = "__cursor_start"
 _CURSOR_END_INTRINSIC: str = "__cursor_end"
 _INTRINSIC_NAMES: tuple[str, ...] = (_CURSOR_START_INTRINSIC, _CURSOR_END_INTRINSIC)
 _IDENTIFIER_JOIN_CHARACTER: str = "_"
+_LINE_COMMENT_TOKEN: str = "--"
+_BLOCK_COMMENT_TOKEN: str = "/*"
+_INTRINSIC_SCAN_PATTERN: re.Pattern[str] = re.compile(r"__cursor_start|__cursor_end|--|/\*|'|\"|`")
 
 
 def get_validated_model_cursor_intrinsics(
@@ -109,29 +113,27 @@ def _transform_cursor_intrinsics(
     last_index: int = 0
     index: int = 0
     found: bool = False
-    while index < len(sql):
-        character: str = sql[index]
-        if character in SQL_QUOTE_TOKENS:
+    while True:
+        match: re.Match[str] | None = _INTRINSIC_SCAN_PATTERN.search(sql, index)
+        if match is None:
+            break
+        index = match.start()
+        token: str = match.group()
+        if token in SQL_QUOTE_TOKENS:
             index = skip_quoted_text(sql=sql, start=index, context=context)
             continue
-        if sql.startswith("--", index):
+        if token == _LINE_COMMENT_TOKEN:
             index = skip_line_comment(sql=sql, start=index)
             continue
-        if sql.startswith("/*", index):
+        if token == _BLOCK_COMMENT_TOKEN:
             index = skip_block_comment(sql=sql, start=index, context=context)
             continue
 
-        name: str | None = next(
-            (
-                candidate
-                for candidate in _INTRINSIC_NAMES
-                if sql.startswith(candidate, index)
-                and _is_identifier_boundary(sql=sql, start=index, end=index + len(candidate))
-            ),
-            None,
+        name: str | None = (
+            token if _is_identifier_boundary(sql=sql, start=index, end=index + len(token)) else None
         )
         if name is None:
-            index += 1
+            index = match.end()
             continue
 
         call_start: int = _skip_whitespace(sql=sql, start=index + len(name))
