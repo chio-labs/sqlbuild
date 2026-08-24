@@ -7,6 +7,7 @@ import re
 from functools import lru_cache
 from typing import Any, cast
 
+from sqlbuild.adapter.contract.constants import POLYGLOT_CUSTOM_TYPE_NAME
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule
 from sqlbuild.compiler.compile.constants import (
@@ -1102,6 +1103,10 @@ def _polyglot_cast_type(expression: Any) -> str | None:
     raw_type: object = target.get(_POLYGLOT_PAYLOAD_DATA_TYPE)
     if not isinstance(raw_type, str) or not raw_type:
         return None
+    if raw_type.upper() == POLYGLOT_CUSTOM_TYPE_NAME:
+        custom_name: object = target.get(_POLYGLOT_PAYLOAD_NAME)
+        if isinstance(custom_name, str) and custom_name:
+            return custom_name.upper()
     type_name: str = _polyglot_type_name(raw_type)
     precision: object = target.get(_POLYGLOT_PAYLOAD_PRECISION)
     scale: object = target.get(_POLYGLOT_PAYLOAD_SCALE)

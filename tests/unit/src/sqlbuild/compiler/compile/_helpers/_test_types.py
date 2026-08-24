@@ -265,6 +265,7 @@ class PolyglotAnalysisTestCase:
         default_factory=dict
     )
     column_types_by_table: dict[str, dict[str, str]] = field(default_factory=dict)
+    inference_profile: ExpressionInferenceProfile | None = None
 
 
 @dataclass(frozen=True)
