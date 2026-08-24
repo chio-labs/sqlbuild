@@ -969,7 +969,7 @@ def _append_cursor_detail(
             f"    range: {_format_cursor_range(bounds=details.resolved_bounds, entry=entry)}"
         )
     if entry.incremental_mode == IncrementalMode.MICROBATCH:
-        lines = _append_microbatch_plan_detail(lines=lines, details=details)
+        lines = _append_microbatch_plan_detail(lines=lines, details=details, entry=entry)
     if details.bounds_owner == CursorBoundsOwner.RUNTIME:
         lines.append("    bounds: runtime-owned (model-backed cursor input)")
     elif details.resolution_status == CursorResolutionStatus.RESOLVED:
@@ -977,7 +977,9 @@ def _append_cursor_detail(
     return lines
 
 
-def _append_microbatch_plan_detail(*, lines: list[str], details: CursorPlanDetails) -> list[str]:
+def _append_microbatch_plan_detail(
+    *, lines: list[str], details: CursorPlanDetails, entry: ModelPlanEntry
+) -> list[str]:
     """Append grain, batch size, and known-or-deferred batch count."""
 
     if details.declared_grain is not None:
@@ -997,6 +999,9 @@ def _append_microbatch_plan_detail(*, lines: list[str], details: CursorPlanDetai
         lines.append(f"    batches: {details.planned_batch_count} x {details.effective_batch_size}")
     elif details.resolution_status == CursorResolutionStatus.DEFERRED:
         lines.append("    batches: resolved at runtime after upstream models complete")
+    lines.append(f"    batch concurrency: {entry.batch_concurrency}")
+    if entry.unaccounted_partition_policy is not None:
+        lines.append(f"    unaccounted partition policy: {entry.unaccounted_partition_policy}")
     return lines
 
 

@@ -27,6 +27,8 @@ from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
+from sqlbuild.microbatches.models import MicrobatchScope
+from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback, NodeStartCallback
 from sqlbuild.spec.contracts.models import SnapshotsConfig
@@ -55,6 +57,12 @@ class BuildRuntimeParams:
     effective_vars: dict[str, object] | None = None
     use_color: bool = False
     providers: ProviderContainer | None = None
+    microbatch_concurrency: bool = False
+    microbatch_unaccounted_partition_policy: str = "synthesize"
+    microbatch_state_resolver: (
+        Callable[[ModelPlanEntry, object], tuple[MicrobatchEventStore, MicrobatchScope]] | None
+    ) = None
+    microbatch_lease_check: Callable[[], None] | None = None
 
 
 @dataclass(frozen=True)

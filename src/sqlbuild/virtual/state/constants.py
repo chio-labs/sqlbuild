@@ -20,6 +20,7 @@ FUNCTION_VERSION_TABLE: str = "function_versions"
 SEED_VERSION_TABLE: str = "seed_versions"
 PYTHON_NODE_VERSION_TABLE: str = "python_node_versions"
 NODE_RESULTS_TABLE: str = "node_results"
+MICROBATCH_EVENT_TABLE: str = "microbatch_events"
 PHYSICAL_RELATION_TABLE: str = "physical_relations"
 PHYSICAL_RELATION_ANCESTRY_TABLE: str = "physical_relation_ancestry"
 VIRTUAL_ENVIRONMENT_TABLE: str = "virtual_environments"
@@ -47,6 +48,7 @@ STATE_TABLES: tuple[str, ...] = (
     SEED_VERSION_TABLE,
     PYTHON_NODE_VERSION_TABLE,
     NODE_RESULTS_TABLE,
+    MICROBATCH_EVENT_TABLE,
     PHYSICAL_RELATION_TABLE,
     PHYSICAL_RELATION_ANCESTRY_TABLE,
     VIRTUAL_ENVIRONMENT_TABLE,
@@ -146,6 +148,49 @@ NODE_RESULTS_COLUMNS: dict[str, StateColumnType] = {
     "metadata_json_b64": StateColumnType.TEXT,
     "error_message": StateColumnType.TEXT,
     "materialized": StateColumnType.TEXT,
+    "created_at": StateColumnType.TIMESTAMP,
+}
+
+MICROBATCH_EVENT_COLUMNS: dict[str, StateColumnType] = {
+    "event_id": StateColumnType.TEXT,
+    "record_type": StateColumnType.TEXT,
+    "scope_kind": StateColumnType.TEXT,
+    "scope_key": StateColumnType.TEXT,
+    "model_name": StateColumnType.TEXT,
+    "target_database": StateColumnType.TEXT,
+    "target_schema": StateColumnType.TEXT,
+    "target_name": StateColumnType.TEXT,
+    "physical_generation_id": StateColumnType.TEXT,
+    "virtual_environment_name": StateColumnType.TEXT,
+    "virtual_model_version_hash": StateColumnType.TEXT,
+    "origin_run_id": StateColumnType.TEXT,
+    "origin_run_started_at": StateColumnType.TIMESTAMP,
+    "execution_run_id": StateColumnType.TEXT,
+    "execution_run_started_at": StateColumnType.TIMESTAMP,
+    "run_type": StateColumnType.TEXT,
+    "completion_type": StateColumnType.TEXT,
+    "run_start": StateColumnType.TEXT,
+    "run_end": StateColumnType.TEXT,
+    "partition_start": StateColumnType.TEXT,
+    "partition_end": StateColumnType.TEXT,
+    "batch_size": StateColumnType.TEXT,
+    "cursor_column": StateColumnType.TEXT,
+    "cursor_type": StateColumnType.TEXT,
+    "cursor_grain": StateColumnType.TEXT,
+    "model_version_hash": StateColumnType.TEXT,
+    "definition_hash": StateColumnType.TEXT,
+    "fingerprint_status": StateColumnType.TEXT,
+    "replay_requirement_id": StateColumnType.TEXT,
+    "required_model_version_hash": StateColumnType.TEXT,
+    "previous_model_version_hash": StateColumnType.TEXT,
+    "replay_policy": StateColumnType.TEXT,
+    "rows_affected": StateColumnType.INTEGER,
+    "completed_at": StateColumnType.TIMESTAMP,
+    "coverage_source": StateColumnType.TEXT,
+    "observed_row_count": StateColumnType.INTEGER,
+    "observed_at": StateColumnType.TIMESTAMP,
+    "synthetic_reason": StateColumnType.TEXT,
+    "unaccounted_policy": StateColumnType.TEXT,
     "created_at": StateColumnType.TIMESTAMP,
 }
 
@@ -282,6 +327,7 @@ STATE_TABLE_COLUMNS: dict[str, dict[str, StateColumnType]] = {
     SEED_VERSION_TABLE: SEED_VERSION_COLUMNS,
     PYTHON_NODE_VERSION_TABLE: PYTHON_NODE_VERSION_COLUMNS,
     NODE_RESULTS_TABLE: NODE_RESULTS_COLUMNS,
+    MICROBATCH_EVENT_TABLE: MICROBATCH_EVENT_COLUMNS,
     PHYSICAL_RELATION_TABLE: PHYSICAL_RELATION_COLUMNS,
     PHYSICAL_RELATION_ANCESTRY_TABLE: PHYSICAL_RELATION_ANCESTRY_COLUMNS,
     VIRTUAL_ENVIRONMENT_TABLE: VIRTUAL_ENVIRONMENT_COLUMNS,
@@ -343,6 +389,29 @@ STATE_TABLE_INDEXES: dict[str, dict[str, tuple[str, ...]]] = {
             "target_database",
             "target_schema",
             "target_name",
+        ),
+    },
+    MICROBATCH_EVENT_TABLE: {
+        "idx_sqb_microbatch_events_scope": (
+            "scope_kind",
+            "scope_key",
+            "physical_generation_id",
+            "created_at",
+            "event_id",
+        ),
+        "idx_sqb_microbatch_events_model": ("model_name", "created_at"),
+        "idx_sqb_microbatch_events_run": ("execution_run_id", "created_at"),
+        "idx_sqb_microbatch_events_requirement": (
+            "replay_requirement_id",
+            "record_type",
+            "created_at",
+        ),
+        "idx_sqb_microbatch_events_partition": (
+            "scope_key",
+            "physical_generation_id",
+            "partition_start",
+            "partition_end",
+            "created_at",
         ),
     },
     PHYSICAL_RELATION_TABLE: {
@@ -414,3 +483,12 @@ STATE_TABLE_INDEXES: dict[str, dict[str, tuple[str, ...]]] = {
         "idx_sqb_state_operation_events_identity": ("event_id",),
     },
 }
+
+NON_UNIQUE_STATE_INDEXES: frozenset[str] = frozenset(
+    {
+        "idx_sqb_microbatch_events_model",
+        "idx_sqb_microbatch_events_run",
+        "idx_sqb_microbatch_events_requirement",
+        "idx_sqb_microbatch_events_partition",
+    }
+)

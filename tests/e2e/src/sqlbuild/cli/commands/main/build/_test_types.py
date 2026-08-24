@@ -837,6 +837,35 @@ class MixedTimestampGrainBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class ConcurrentMicrobatchBehaviorE2ETestCase:
+    """One multi-run concurrent microbatch lifecycle expectation."""
+
+    description: str
+    expected_exit_code: int = 0
+
+
+@dataclass(frozen=True)
+class VirtualConcurrentMicrobatchE2ETestCase:
+    """Expected virtual concurrent storage and lock behavior."""
+
+    description: str
+    expected_exit_code: int
+    expected_minimum_event_count: int
+
+
+@dataclass(frozen=True)
+class MicrobatchReconciliationPolicyE2ETestCase:
+    """Expected state facts after rebuilding with missing completion history."""
+
+    description: str
+    policy: str
+    expected_synthetic: int
+    expected_minimum_recovery: int
+    expected_warning_fragment: str
+    expected_fingerprint_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class AuditFailureBuildE2ETestCase:
     """Test case for audit failure CLI behavior."""
 

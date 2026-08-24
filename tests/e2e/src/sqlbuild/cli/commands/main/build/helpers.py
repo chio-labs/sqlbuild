@@ -505,3 +505,33 @@ def _cursor_override_without_snapshot_model_sql(*, amount_expression: str) -> st
         ).strip()
         + "\n"
     )
+
+
+def replay_microbatch_model_sql(*, value_expression: str, replay_policy: str = "bounded-2h") -> str:
+    """Build a replay-on-change microbatch model used by lifecycle E2E tests."""
+
+    return (
+        dedent(
+            f"""
+            MODEL (
+              materialized incremental,
+              incremental_strategy delete_insert,
+              incremental_mode microbatch,
+              cursor event_time,
+              cursor_type timestamp,
+              cursor_grain hour,
+              cursor_inputs (
+                raw_events event_time,
+              ),
+              batch_size 1h,
+              replay_on_change {replay_policy},
+            );
+
+            SELECT id, event_time, {value_expression} AS value
+            FROM __source("raw_events")
+            WHERE event_time >= __cursor_start()
+              AND event_time < __cursor_end()
+            """
+        ).strip()
+        + "\n"
+    )

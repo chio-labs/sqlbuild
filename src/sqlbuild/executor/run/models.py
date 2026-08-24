@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -16,8 +16,15 @@ from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
-from sqlbuild.executor.run.types import AuditGateReuseReason, ExecutionPhase, HookPhase
+from sqlbuild.executor.run.types import (
+    AuditGateReuseReason,
+    ExecutionPhase,
+    HookPhase,
+    MicrobatchBatchRunner,
+)
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.microbatches.models import MicrobatchScope
+from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 from sqlbuild.spec.contracts.models import SourceEntry
 
@@ -119,6 +126,37 @@ class ModelExecutionResult:
     error_code: str | None = None
     error_help: str | None = None
     error_message: str | None = None
+    microbatch_run_type: str | None = None
+    microbatch_recovery_batch_count: int = 0
+    microbatch_known_gap_count: int = 0
+    microbatch_unaccounted_interval_count: int = 0
+    microbatch_synthetic_completion_count: int = 0
+    microbatch_unknown_fingerprint_count: int = 0
+    microbatch_contiguous_frontier: str | None = None
+    microbatch_unaccounted_partition_policy: str | None = None
+    microbatch_replay_requirement_id: str | None = None
+    microbatch_required_model_version_hash: str | None = None
+    microbatch_physical_generation_id: str | None = None
+    microbatch_concurrent_enabled: bool = False
+    microbatch_batch_concurrency: int = 1
+    microbatch_global_concurrency: int = 1
+    microbatch_replay_requirement_state: str | None = None
+    microbatch_accounting_intervals: tuple[MicrobatchAccountingInterval, ...] = field(
+        default_factory=tuple
+    )
+
+
+@dataclass(frozen=True)
+class MicrobatchAccountingInterval:
+    """Runtime interval accounting exposed to JSON/node-result consumers."""
+
+    partition_start: str
+    partition_end: str
+    accounting_status: str
+    fingerprint_status: str
+    model_version_hash: str | None = None
+    completion_type: str | None = None
+    event_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -157,6 +195,14 @@ class ModelMaterializationContext:
     effective_vars: Mapping[str, object] | None = None
     providers: ProviderContainer | None = None
     python_identity_recorder: PythonIdentityRecorder | None = None
+    microbatch_event_store: MicrobatchEventStore | None = None
+    microbatch_event_store_resolver: Callable[[Any], MicrobatchEventStore] | None = None
+    microbatch_scope: MicrobatchScope | None = None
+    microbatch_model_version_hash: str | None = None
+    microbatch_unaccounted_partition_policy: str = "synthesize"
+    microbatch_lease_check: Callable[[], None] | None = None
+    microbatch_global_concurrency: int = 1
+    microbatch_batch_runner: MicrobatchBatchRunner | None = None
 
 
 @dataclass(frozen=True)

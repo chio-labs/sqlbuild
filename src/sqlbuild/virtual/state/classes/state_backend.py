@@ -11,6 +11,8 @@ from sqlbuild.executor.node_results.models import (
     NodeResultQuery,
     NodeResultRecord,
 )
+from sqlbuild.microbatches.exceptions import MicrobatchStateError
+from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,
@@ -163,6 +165,30 @@ class StateBackend(ABC):
     ) -> tuple[NodeResultEnvelope, ...]:
         """Read runtime node result rows for one virtual environment identity."""
         ...
+
+    def append_microbatch_event(
+        self, *, connection: Any, schema: str, event: MicrobatchEvent
+    ) -> None:
+        """Append one logical microbatch event to virtual state."""
+        raise MicrobatchStateError("virtual state backend does not support microbatch events")
+
+    def read_microbatch_scope_history(
+        self, *, connection: Any, schema: str, scope: MicrobatchScope
+    ) -> tuple[MicrobatchEvent, ...]:
+        """Read ordered microbatch history for one physical scope."""
+        raise MicrobatchStateError("virtual state backend does not support microbatch events")
+
+    def read_microbatch_retention_history(
+        self, *, connection: Any, schema: str
+    ) -> tuple[MicrobatchEvent, ...]:
+        """Read virtual microbatch history needed to derive active janitor roots."""
+        raise MicrobatchStateError("virtual state backend does not support microbatch events")
+
+    def read_microbatch_model_history(
+        self, *, connection: Any, schema: str, scope: MicrobatchScope
+    ) -> tuple[MicrobatchEvent, ...]:
+        """Read virtual microbatch history for one model and warehouse realm."""
+        raise MicrobatchStateError("virtual state backend does not support microbatch events")
 
     @abstractmethod
     def upsert_physical_relation(
@@ -514,6 +540,19 @@ class StateBackend(ABC):
     ) -> bool:
         """Acquire or replace an expired lock."""
         ...
+
+    def renew_lock(
+        self,
+        *,
+        connection: Any,
+        schema: str,
+        lock_key: str,
+        owner_id: str,
+        expires_at: datetime,
+    ) -> bool:
+        """Renew a non-expired lock when ownership still matches."""
+
+        return False
 
     @abstractmethod
     def release_lock(self, *, connection: Any, schema: str, lock_key: str, owner_id: str) -> bool:
