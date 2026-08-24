@@ -11,7 +11,7 @@ class WorkerSuccessBuilder[KeyT, ResultT, CompletionT](Protocol):
 
 
 class WorkerFailureBuilder[KeyT, CompletionT](Protocol):
-    def __call__(self, *, key: KeyT, error: Exception) -> CompletionT: ...
+    def __call__(self, *, key: KeyT, error: BaseException) -> CompletionT: ...
 
 
 class ExecutionStatus(StrEnum):

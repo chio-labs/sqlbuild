@@ -55,7 +55,8 @@ def format_state_lifecycle_summary(
             value=(
                 "virtual_environment_checkpoints, virtual_environment_checkpoint_model_refs, "
                 "virtual_environment_checkpoint_function_refs, plan_runs, "
-                "virtual_environment_model_ref_events, reconcile_events, state_migration_events"
+                "virtual_environment_model_ref_events, microbatch_events, reconcile_events, "
+                "state_migration_events"
             ),
             use_color=use_color,
             emphasize_value=False,

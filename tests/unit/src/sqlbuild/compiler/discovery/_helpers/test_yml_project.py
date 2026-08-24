@@ -669,6 +669,32 @@ concurrency = "nope"
             expected_error_fragment="Expected 'concurrency' to be an integer when provided",
         ),
         LoadProjectConfigErrorTestCase(
+            description="raises when microbatch concurrency setting is not a boolean",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+microbatch_concurrency = "yes"
+""".strip(),
+            expected_error_fragment=(
+                "Expected 'microbatch_concurrency' to be a boolean when provided"
+            ),
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when project unaccounted policy is unknown",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+microbatch_unaccounted_partition_policy = "ignore"
+""".strip(),
+            expected_error_fragment=(
+                "settings.microbatch_unaccounted_partition_policy must be one of"
+            ),
+        ),
+        LoadProjectConfigErrorTestCase(
             description="raises when canonical and legacy concurrency settings are both provided",
             project_file_contents="""
 name = "demo"

@@ -337,10 +337,47 @@ def _format_model_assets(
                 "error_help": result.error_help,
                 "error_message": result.error_message,
                 "warnings": result.warning_messages,
+                "microbatch": _format_microbatch_result(result),
             }
         )
         for result in results
     )
+
+
+def _format_microbatch_result(result: ModelExecutionResult) -> dict[str, object] | None:
+    if result.microbatch_run_type is None:
+        return None
+    return {
+        "run_type": result.microbatch_run_type,
+        "batch_count": result.batch_count,
+        "batch_size": result.batch_size,
+        "recovery_batch_count": result.microbatch_recovery_batch_count,
+        "known_gap_count": result.microbatch_known_gap_count,
+        "unaccounted_interval_count": result.microbatch_unaccounted_interval_count,
+        "synthetic_completion_count": result.microbatch_synthetic_completion_count,
+        "unknown_fingerprint_count": result.microbatch_unknown_fingerprint_count,
+        "contiguous_frontier": result.microbatch_contiguous_frontier,
+        "unaccounted_partition_policy": result.microbatch_unaccounted_partition_policy,
+        "replay_requirement_id": result.microbatch_replay_requirement_id,
+        "required_model_version_hash": result.microbatch_required_model_version_hash,
+        "physical_generation_id": result.microbatch_physical_generation_id,
+        "concurrent_enabled": result.microbatch_concurrent_enabled,
+        "batch_concurrency": result.microbatch_batch_concurrency,
+        "global_concurrency": result.microbatch_global_concurrency,
+        "replay_requirement_state": result.microbatch_replay_requirement_state,
+        "intervals": [
+            {
+                "partition_start": interval.partition_start,
+                "partition_end": interval.partition_end,
+                "accounting_status": interval.accounting_status,
+                "fingerprint_status": interval.fingerprint_status,
+                "model_version_hash": interval.model_version_hash,
+                "completion_type": interval.completion_type,
+                "event_id": interval.event_id,
+            }
+            for interval in result.microbatch_accounting_intervals
+        ],
+    }
 
 
 def _format_seed_assets(

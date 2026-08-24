@@ -505,3 +505,187 @@ def _cursor_override_without_snapshot_model_sql(*, amount_expression: str) -> st
         ).strip()
         + "\n"
     )
+
+
+def replay_microbatch_model_sql(*, value_expression: str, replay_policy: str = "bounded-2h") -> str:
+    """Build a replay-on-change microbatch model used by lifecycle E2E tests."""
+
+    return (
+        dedent(
+            f"""
+            MODEL (
+              materialized incremental,
+              incremental_strategy delete_insert,
+              incremental_mode microbatch,
+              cursor event_time,
+              cursor_type timestamp,
+              cursor_grain hour,
+              cursor_inputs (
+                raw_events event_time,
+              ),
+              batch_size 1h,
+              replay_on_change {replay_policy},
+            );
+
+            SELECT id, event_time, {value_expression} AS value
+            FROM __source("raw_events")
+            WHERE event_time >= __cursor_start()
+              AND event_time < __cursor_end()
+            """
+        ).strip()
+        + "\n"
+    )
+
+
+def standard_microbatch_project_toml(
+    *, project_name: str, database_name: str, settings_toml: str
+) -> str:
+    """Build a standard DuckDB project config for microbatch lifecycle E2Es."""
+
+    return (
+        f'name = "{project_name}"\n'
+        'adapter = "duckdb"\n\n'
+        "[connection]\n"
+        f'database = "{database_name}"\n'
+        f"{settings_toml}"
+    )
+
+
+def raw_events_source_yml() -> str:
+    """Return the canonical raw-events source declaration."""
+
+    return "sources:\n  - name: raw_events\n    schema: main\n    table: raw_events\n"
+
+
+def timestamp_microbatch_model_sql(
+    *,
+    value_expression: str,
+    batch_concurrency: int,
+    replay_policy: str,
+    extra_config: str = "",
+) -> str:
+    """Build a timestamp delete/insert microbatch model for lifecycle E2Es."""
+
+    return (
+        dedent(
+            f"""
+            MODEL (
+              materialized incremental,
+              incremental_strategy delete_insert,
+              incremental_mode microbatch,
+              cursor event_time,
+              cursor_type timestamp,
+              cursor_grain hour,
+              cursor_inputs (
+                raw_events event_time,
+              ),
+              batch_size 1h,
+              batch_concurrency {batch_concurrency},
+              replay_on_change {replay_policy},
+              {extra_config}
+            );
+
+            SELECT id, event_time, {value_expression} AS value
+            FROM __source("raw_events")
+            WHERE event_time >= __cursor_start()
+              AND event_time < __cursor_end()
+            """
+        ).strip()
+        + "\n"
+    )
+
+
+def prepare_replay_microbatch_project(
+    *, tmp_path: Path, project_name: str, database_name: str, replay_policy: str
+) -> tuple[Path, Path]:
+    """Prepare a standard concurrent replay lifecycle project."""
+
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files={
+            "sqlbuild_project.toml": standard_microbatch_project_toml(
+                project_name=project_name,
+                database_name=database_name,
+                settings_toml=("\n[settings]\nconcurrency = 3\nmicrobatch_concurrency = true\n"),
+            ),
+            "sources/raw.yml": raw_events_source_yml(),
+            "models/orders.sql": timestamp_microbatch_model_sql(
+                value_expression="CAST(payload AS INTEGER)",
+                batch_concurrency=3,
+                replay_policy=replay_policy,
+            ),
+        },
+    )
+    return project_dir, project_dir / database_name
+
+
+def prepare_virtual_microbatch_lifecycle_project(
+    *,
+    tmp_path: Path,
+    project_name: str,
+    model_sql: str,
+    unaccounted_policy: str = "synthesize",
+    enable_janitor: bool = False,
+) -> tuple[Path, Path, Path]:
+    """Prepare a virtual concurrent microbatch lifecycle project."""
+
+    project_toml: str = build_virtual_plan_project_toml().replace(
+        "virtual_environments = true\n",
+        (
+            "virtual_environments = true\n"
+            "concurrency = 3\n"
+            "microbatch_concurrency = true\n"
+            f'microbatch_unaccounted_partition_policy = "{unaccounted_policy}"\n'
+        ),
+    )
+    project_toml += {
+        False: "",
+        True: ("\n[janitor]\nenabled = true\nretention_days = 0\ndelete_tracked_only = false\n"),
+    }[enable_janitor]
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files={
+            "sqlbuild_project.toml": project_toml,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_events\n    schema: raw\n    table: raw_events\n"
+            ),
+            "models/orders.sql": model_sql,
+        },
+    )
+    warehouse_path: Path = project_dir / "warehouse.duckdb"
+    state_path: Path = project_dir / "state.duckdb"
+    execute_duckdb(
+        db_path=warehouse_path,
+        sql=(
+            "CREATE SCHEMA raw; "
+            "CREATE TABLE raw.raw_events "
+            "(id INTEGER, event_time TIMESTAMP, payload VARCHAR); "
+            "INSERT INTO raw.raw_events VALUES "
+            "(1, '2026-01-01 00:30:00', '1'), "
+            "(2, '2026-01-01 01:30:00', '2'), "
+            "(3, '2026-01-01 02:30:00', '3'), "
+            "(4, '2026-01-01 03:30:00', '4')"
+        ),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
+    return project_dir, warehouse_path, state_path
+
+
+def physical_orders_relation(*, state_path: Path) -> tuple[str, str]:
+    """Return the latest registered physical orders relation."""
+
+    schema_name, relation_name = query_duckdb(
+        db_path=state_path,
+        sql=(
+            "SELECT schema_name, relation_name "
+            "FROM sqlbuild_state.physical_relations "
+            "WHERE artifact_type = 'model' AND artifact_name = 'orders' "
+            "ORDER BY created_at DESC LIMIT 1"
+        ),
+    )[0]
+    return str(schema_name), str(relation_name)

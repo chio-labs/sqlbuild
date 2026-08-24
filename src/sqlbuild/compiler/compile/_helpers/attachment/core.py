@@ -28,6 +28,7 @@ from sqlbuild.compiler.compile._helpers.config.model_validation import (
     validate_contract_config,
     validate_custom_materialization_config,
     validate_incremental_config,
+    validate_microbatch_project_capability,
     validate_non_incremental_config,
     validate_placeholder_config,
     validate_snapshot_config,
@@ -239,6 +240,11 @@ def build_model_inputs(
             ref_count=len(references),
             known_input_names=frozenset(reference.ref_name for reference in references),
             declared_columns=model_schema_columns,
+        )
+        validate_microbatch_project_capability(
+            config=effective_config,
+            settings=effective_settings,
+            model_name=model_file.file_path.stem,
         )
         validate_contract_config(
             config=effective_config,
@@ -1488,6 +1494,10 @@ def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
         values["lookback"] = defaults.lookback
     if defaults.batch_size is not None:
         values["batch_size"] = defaults.batch_size
+    if defaults.batch_concurrency is not None:
+        values["batch_concurrency"] = defaults.batch_concurrency
+    if defaults.unaccounted_partition_policy is not None:
+        values["unaccounted_partition_policy"] = defaults.unaccounted_partition_policy
     if defaults.replay_on_change is not None:
         values["replay_on_change"] = defaults.replay_on_change
     if defaults.run_despite_unchanged is not None:
