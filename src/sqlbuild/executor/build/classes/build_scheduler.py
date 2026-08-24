@@ -5,11 +5,14 @@ from __future__ import annotations
 import dataclasses
 import logging
 import queue
+import threading
 import time
 from collections import deque
 from collections.abc import Callable, Mapping
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, CancelledError, Future, ThreadPoolExecutor, wait
+from contextvars import copy_context
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import Any, cast
 
@@ -27,6 +30,11 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     SeedPlanEntry,
     SqlTestPlanEntry,
+)
+from sqlbuild.compiler.planner.types import (
+    IncrementalMode,
+    IncrementalStrategy,
+    PlanAction,
 )
 from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
@@ -69,7 +77,13 @@ from sqlbuild.executor.load.main._build_execution_indexes import build_load_exec
 from sqlbuild.executor.load.main._skipped_result import skipped_load_result
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
-from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializationContext
+from sqlbuild.executor.run.models import (
+    BatchWindow,
+    MicrobatchPhaseOutcome,
+    ModelExecutionResult,
+    ModelMaterializationContext,
+)
+from sqlbuild.executor.run.types import MicrobatchBatchExecutor
 from sqlbuild.executor.scheduling.main._run_worker import run_worker_with_completion
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.seed.constants import SEED_ENTRY_MISSING_CODE
@@ -78,6 +92,12 @@ from sqlbuild.executor.testing.constants import SQL_TEST_ENTRY_MISSING_CODE
 from sqlbuild.executor.testing.main._execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.microbatches.classes.standard_store import (
+    StandardMicrobatchEventStore,
+    standard_microbatch_scope,
+)
+from sqlbuild.microbatches.models import MicrobatchScope
+from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind, NodeStartCallback
 from sqlbuild.spec.contracts.models import SnapshotsConfig, SourceEntry
@@ -159,6 +179,10 @@ class BuildScheduler:
         self._completed_keys: set[CompiledObjectKey] = set(initial_state.precompleted_keys)
         self._initial_failed_keys: frozenset[CompiledObjectKey] = initial_state.initial_failed_keys
         self._in_flight: set[CompiledObjectKey] = set()
+        self._microbatch_coordinators: set[CompiledObjectKey] = set()
+        self._microbatch_coordinator_demand: int = 0
+        self._microbatch_subworkers: int = 0
+        self._microbatch_coordinator_lock = threading.Lock()
         self._ready: deque[CompiledObjectKey] = deque()
         self._stop: bool = False
 
@@ -194,6 +218,7 @@ class BuildScheduler:
         """Execute the full build schedule and return all results."""
 
         self._init_connection_pool()
+        self._provision_standard_microbatch_state()
         self._block_initial_failed_keys()
         self._compute_in_degrees()
         self._seed_ready_queue()
@@ -225,6 +250,30 @@ class BuildScheduler:
             tuple(self._source_audit_results),
             end_audit_results,
         )
+
+    def _provision_standard_microbatch_state(self) -> None:
+        if self._runtime.microbatch_state_resolver is not None:
+            return
+        locations: set[tuple[str | None, str]] = {
+            (entry.destination.database, entry.destination.schema)
+            for entry in self._plan.model_entries
+            if entry.incremental_mode == IncrementalMode.MICROBATCH
+            and entry.action != PlanAction.SKIP
+            and entry.destination.schema is not None
+        }
+        for database, schema in sorted(
+            locations, key=lambda location: (location[0] or "", location[1])
+        ):
+            self._adapter.execute(
+                connection=self._scheduler_connection,
+                sql=self._adapter.render_create_microbatch_state_table_sql(
+                    database=database, schema=schema
+                ),
+            )
+            for index_sql in self._adapter.render_create_microbatch_state_index_sqls(
+                database=database, schema=schema
+            ):
+                self._adapter.execute(connection=self._scheduler_connection, sql=index_sql)
 
     def _init_connection_pool(self) -> None:
         connection: Any
@@ -306,6 +355,15 @@ class BuildScheduler:
                 if self._stop and not self._in_flight:
                     break
 
+                with self._microbatch_coordinator_lock:
+                    queued_coordinators: int = sum(
+                        1 for key in tuple(self._ready) if self._is_concurrent_microbatch(key)
+                    )
+                    self._microbatch_coordinator_demand = min(
+                        self._max_concurrency,
+                        len(self._microbatch_coordinators) + queued_coordinators,
+                    )
+
                 while self._ready and len(self._in_flight) < self._max_concurrency:
                     if self._stop:
                         break
@@ -321,8 +379,25 @@ class BuildScheduler:
                         self._record_skipped(key)
                         self._mark_complete(key)
                         continue
+                    if self._is_concurrent_microbatch(key) and any(
+                        not self._is_concurrent_microbatch(candidate) for candidate in self._ready
+                    ):
+                        self._ready.append(key)
+                        continue
                     if not self._pre_dispatch(key):
                         self._mark_complete(key)
+                        continue
+                    if self._is_concurrent_microbatch(key):
+                        with self._microbatch_coordinator_lock:
+                            if (
+                                len(self._microbatch_coordinators) + self._microbatch_subworkers
+                                >= self._max_concurrency
+                            ):
+                                self._ready.appendleft(key)
+                                break
+                            self._microbatch_coordinators.add(key)
+                        self._in_flight.add(key)
+                        pool.submit(self._concurrent_microbatch_worker, key=key, pool=pool)
                         continue
                     self._in_flight.add(key)
                     pool.submit(self._worker, key)
@@ -343,6 +418,186 @@ class BuildScheduler:
             build_success=_build_worker_success_completion,
             build_failure=_build_worker_failure_completion,
         )
+
+    def _is_concurrent_microbatch(self, key: CompiledObjectKey) -> bool:
+        if key.resource_type != CompiledResourceType.MODEL:
+            return False
+        entry: ModelPlanEntry | None = self._indexes.model_entries_by_key.get(key)
+        return bool(
+            self._runtime.microbatch_concurrency
+            and entry is not None
+            and entry.incremental_mode == IncrementalMode.MICROBATCH
+            and entry.incremental_strategy == IncrementalStrategy.DELETE_INSERT
+            and entry.batch_concurrency > 1
+            and entry.action != PlanAction.CREATE_TABLE
+        )
+
+    def _concurrent_microbatch_worker(
+        self, *, key: CompiledObjectKey, pool: ThreadPoolExecutor
+    ) -> None:
+        run_worker_with_completion(
+            key=key,
+            connection_pool=self._connection_pool,
+            completion_queue=self._completion_queue,
+            execute=lambda connection: self._execute_concurrent_microbatch_node(
+                key=key, pool=pool, connection=connection
+            ),
+            build_success=_build_worker_success_completion,
+            build_failure=_build_worker_failure_completion,
+        )
+
+    def _execute_concurrent_microbatch_node(
+        self, *, key: CompiledObjectKey, pool: ThreadPoolExecutor, connection: Any
+    ) -> ModelExecutionResult:
+        try:
+            with CostContext.scope(
+                run_id=self._run_id,
+                resource_type=str(key.resource_type),
+                resource_name=key.name,
+                ledger_path=(self._runtime_dir / "runs" / self._run_id / "statements.jsonl"),
+            ):
+                return self._execute_model_node(
+                    key=key,
+                    connection=connection,
+                    microbatch_batch_runner=lambda batches, concurrency, execute: (
+                        self._run_microbatch_subwork(
+                            pool=pool,
+                            coordinator_connection=connection,
+                            batches=batches,
+                            concurrency=concurrency,
+                            execute=execute,
+                        )
+                    ),
+                )
+        finally:
+            with self._microbatch_coordinator_lock:
+                self._microbatch_coordinators.discard(key)
+
+    def _run_microbatch_subwork(
+        self,
+        *,
+        pool: ThreadPoolExecutor,
+        coordinator_connection: Any,
+        batches: tuple[BatchWindow, ...],
+        concurrency: int,
+        execute: MicrobatchBatchExecutor,
+    ) -> tuple[MicrobatchPhaseOutcome, ...]:
+        if not batches:
+            return ()
+        model_subworker_limit: int = max(0, concurrency - 1)
+        if model_subworker_limit == 0:
+            return tuple(execute(batch, coordinator_connection) for batch in batches)
+        results: dict[int, MicrobatchPhaseOutcome] = {}
+        pending_batches: deque[BatchWindow] = deque(batches)
+        in_flight: dict[Future[MicrobatchPhaseOutcome], BatchWindow] = {}
+
+        def submit_one() -> tuple[Future[MicrobatchPhaseOutcome], BatchWindow]:
+            batch: BatchWindow = pending_batches.popleft()
+            try:
+                future: Future[MicrobatchPhaseOutcome] = cast(
+                    Future[MicrobatchPhaseOutcome],
+                    pool.submit(
+                        copy_context().run,
+                        self._run_microbatch_batch_worker,
+                        batch=batch,
+                        execute=execute,
+                    ),
+                )
+            except BaseException:
+                self._release_microbatch_subworker()
+                raise
+            return future, batch
+
+        submitted_future: Future[MicrobatchPhaseOutcome]
+        submitted_batch: BatchWindow
+        while (
+            len(pending_batches) > 1
+            and len(in_flight) < model_subworker_limit
+            and self._reserve_microbatch_subworker()
+        ):
+            submitted_future, submitted_batch = submit_one()
+            in_flight[submitted_future] = submitted_batch
+        coordinator_batch: BatchWindow = pending_batches.popleft()
+        coordinator_result: MicrobatchPhaseOutcome = execute(
+            coordinator_batch, coordinator_connection
+        )
+        results[coordinator_batch.index] = coordinator_result
+        failed: bool = coordinator_result.failure is not None
+        if failed:
+            for future in in_flight:
+                self._cancel_microbatch_subworker(future=future)
+        first_exception: BaseException | None = None
+        while in_flight:
+            completed, _ = wait(tuple(in_flight), return_when=FIRST_COMPLETED)
+            for future in completed:
+                batch: BatchWindow = in_flight.pop(future)
+                try:
+                    outcome: MicrobatchPhaseOutcome = future.result()
+                except CancelledError:
+                    continue
+                except BaseException as exc:
+                    if first_exception is None:
+                        first_exception = exc
+                    failed = True
+                    for sibling in in_flight:
+                        self._cancel_microbatch_subworker(future=sibling)
+                    continue
+                results[batch.index] = outcome
+                if outcome.failure is not None:
+                    failed = True
+                    for sibling in in_flight:
+                        self._cancel_microbatch_subworker(future=sibling)
+            while (
+                not failed
+                and pending_batches
+                and len(in_flight) < model_subworker_limit
+                and self._reserve_microbatch_subworker()
+            ):
+                submitted_future, submitted_batch = submit_one()
+                in_flight[submitted_future] = submitted_batch
+        if first_exception is not None:
+            raise first_exception
+        while not failed and pending_batches:
+            batch = pending_batches.popleft()
+            outcome: MicrobatchPhaseOutcome = execute(batch, coordinator_connection)
+            results[batch.index] = outcome
+            failed = outcome.failure is not None
+        return tuple(results[index] for index in sorted(results))
+
+    def _run_microbatch_batch_worker(
+        self,
+        *,
+        batch: BatchWindow,
+        execute: MicrobatchBatchExecutor,
+    ) -> MicrobatchPhaseOutcome:
+        connection: Any = self._connection_pool.get()
+        try:
+            return execute(batch, connection)
+        finally:
+            self._connection_pool.put(connection)
+            self._release_microbatch_subworker()
+
+    def _reserve_microbatch_subworker(self) -> bool:
+        with self._microbatch_coordinator_lock:
+            if (
+                max(
+                    len(self._microbatch_coordinators),
+                    self._microbatch_coordinator_demand,
+                )
+                + self._microbatch_subworkers
+                >= self._max_concurrency
+            ):
+                return False
+            self._microbatch_subworkers += 1
+            return True
+
+    def _release_microbatch_subworker(self) -> None:
+        with self._microbatch_coordinator_lock:
+            self._microbatch_subworkers -= 1
+
+    def _cancel_microbatch_subworker(self, *, future: Future[MicrobatchPhaseOutcome]) -> None:
+        if not future.cancelled() and future.cancel():
+            self._release_microbatch_subworker()
 
     def _pre_dispatch(self, key: CompiledObjectKey) -> bool:
         """Run pre-dispatch checks. Returns False if the node should be skipped."""
@@ -570,7 +825,19 @@ class BuildScheduler:
         return dataclasses.replace(result, duration_ms=duration)
 
     def _execute_model_node(
-        self, *, key: CompiledObjectKey, connection: Any
+        self,
+        *,
+        key: CompiledObjectKey,
+        connection: Any,
+        microbatch_batch_runner: Callable[
+            [
+                tuple[BatchWindow, ...],
+                int,
+                Callable[[BatchWindow, Any], MicrobatchPhaseOutcome],
+            ],
+            tuple[MicrobatchPhaseOutcome, ...],
+        ]
+        | None = None,
     ) -> ModelExecutionResult:
         model_entry: ModelPlanEntry | None = self._indexes.model_entries_by_key.get(key)
         if model_entry is None:
@@ -593,6 +860,9 @@ class BuildScheduler:
             if self._run_audits
             else ()
         )
+        microbatch_event_store: MicrobatchEventStore | None = None
+        microbatch_event_store_resolver: Callable[[Any], MicrobatchEventStore] | None = None
+        microbatch_scope: MicrobatchScope | None = None
 
         start: float = time.monotonic()
         log_debug_event(
@@ -611,6 +881,26 @@ class BuildScheduler:
             try:
                 if self._before_model_materialize is not None:
                     self._before_model_materialize(entry=model_entry, connection=connection)
+                if model_entry.incremental_mode == IncrementalMode.MICROBATCH:
+                    if self._runtime.microbatch_state_resolver is not None:
+                        microbatch_event_store, microbatch_scope = (
+                            self._runtime.microbatch_state_resolver(model_entry, connection)
+                        )
+                    else:
+                        microbatch_event_store = StandardMicrobatchEventStore(
+                            adapter=self._adapter, connection=connection
+                        )
+                        microbatch_scope = standard_microbatch_scope(
+                            adapter=self._adapter,
+                            connection=connection,
+                            entry=model_entry,
+                        )
+                    microbatch_event_store_resolver = partial(
+                        lambda connection, *, entry: self._microbatch_store_for_connection(
+                            connection=connection, model_entry=entry
+                        ),
+                        entry=model_entry,
+                    )
                 result: ModelExecutionResult = _dispatch_model(
                     context=ModelMaterializationContext(
                         entry=model_entry,
@@ -627,6 +917,21 @@ class BuildScheduler:
                         effective_vars=self._effective_vars,
                         providers=self._providers,
                         python_identity_recorder=self._python_identity_recorder,
+                        microbatch_event_store=microbatch_event_store,
+                        microbatch_event_store_resolver=microbatch_event_store_resolver,
+                        microbatch_scope=microbatch_scope,
+                        microbatch_model_version_hash=(
+                            None
+                            if microbatch_scope is None
+                            else microbatch_scope.virtual_model_version_hash
+                        ),
+                        microbatch_unaccounted_partition_policy=(
+                            model_entry.unaccounted_partition_policy
+                            or self._runtime.microbatch_unaccounted_partition_policy
+                        ),
+                        microbatch_lease_check=self._runtime.microbatch_lease_check,
+                        microbatch_global_concurrency=self._max_concurrency,
+                        microbatch_batch_runner=microbatch_batch_runner,
                     ),
                     promotion_mode=self._promotion_mode,
                     snapshots=self._snapshots,
@@ -656,6 +961,16 @@ class BuildScheduler:
             sqlbuild_duration_ms=duration,
         )
         return completed_result
+
+    def _microbatch_store_for_connection(
+        self, *, connection: Any, model_entry: ModelPlanEntry
+    ) -> MicrobatchEventStore:
+        resolver: (
+            Callable[[ModelPlanEntry, object], tuple[MicrobatchEventStore, MicrobatchScope]] | None
+        ) = self._runtime.microbatch_state_resolver
+        if resolver is not None:
+            return resolver(model_entry, connection)[0]
+        return StandardMicrobatchEventStore(adapter=self._adapter, connection=connection)
 
     def _handle_completion(
         self,

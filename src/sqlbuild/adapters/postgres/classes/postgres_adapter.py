@@ -24,6 +24,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _snapshot_initial_valid_from_expr,
     _snapshot_key_condition,
 )
+from sqlbuild.adapter.contract.classes.microbatch import MicrobatchMixin
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.constants import (
     DIFF_LEFT_SIDE,
@@ -72,7 +73,7 @@ from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
 
 
-class PostgresAdapter(BaseAdapter):
+class PostgresAdapter(MicrobatchMixin, BaseAdapter):
     """PostgreSQL adapter backed by psycopg."""
 
     adapter_name: ClassVar[str] = BuiltinAdapter.POSTGRES.value
@@ -1363,6 +1364,18 @@ class PostgresAdapter(BaseAdapter):
         return (
             "CREATE INDEX IF NOT EXISTS "
             f"{index_name} ON {table_name} (node_type, node_name, ts DESC, run_id DESC)",
+        )
+
+    def render_create_microbatch_state_index_sqls(
+        self, *, database: str | None, schema: str
+    ) -> tuple[str, ...]:
+        from sqlbuild.microbatches.main.create_index_sqls import build_create_index_sqls
+
+        return build_create_index_sqls(
+            database=database,
+            schema=schema,
+            render_identifier=self.render_identifier,
+            render_qualified_name=self.render_qualified_name,
         )
 
     def render_read_latest_fingerprints_sql(

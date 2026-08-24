@@ -59,6 +59,7 @@ _DEFAULT_CURRENT_STATE_SNAPSHOT_FULL_REFRESH: str = "deny"
 _DEFAULT_HISTORICAL_SNAPSHOT_FULL_REFRESH: str = "require_confirmation"
 _DEFAULT_SNAPSHOT_SCHEMA_CHANGE: str = "append_new_columns"
 _DEFAULT_WILDCARD_CHECK_SNAPSHOT_SCHEMA_CHANGE: str = "require_confirmation"
+_BATCH_CONCURRENCY_CONFIG_KEY: str = "batch_concurrency"
 
 
 def load_project_config(*, project_dir: Path) -> ProjectConfig:
@@ -275,6 +276,21 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         default=False,
     )
     changes_only: bool = _optional_bool(mapping=mapping, key="changes_only", default=False)
+    microbatch_concurrency: bool = _optional_bool(
+        mapping=mapping, key="microbatch_concurrency", default=False
+    )
+    microbatch_unaccounted_partition_policy: str = (
+        _optional_str(payload=mapping, key="microbatch_unaccounted_partition_policy")
+        or "synthesize"
+    )
+    valid_unaccounted_policies: frozenset[str] = frozenset(
+        {"synthesize", "recover_empty", "recover_all"}
+    )
+    if microbatch_unaccounted_partition_policy not in valid_unaccounted_policies:
+        raise ProjectConfigError(
+            "settings.microbatch_unaccounted_partition_policy must be one of: "
+            + ", ".join(sorted(valid_unaccounted_policies))
+        )
     concurrency_key: str = (
         LEGACY_CONFIG_CONCURRENCY_KEY
         if LEGACY_CONFIG_CONCURRENCY_KEY in mapping
@@ -296,6 +312,8 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         auto_load_sources=auto_load_sources,
         changes_only=changes_only,
         virtual_environments=virtual_environments,
+        microbatch_concurrency=microbatch_concurrency,
+        microbatch_unaccounted_partition_policy=microbatch_unaccounted_partition_policy,
         table_promotion_mode=table_promotion_mode,
         default_audit_severity=default_audit_severity,
         default_audit_run_scope=default_audit_run_scope,
@@ -433,6 +451,14 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
         cursor_start=_optional_cursor_start(mapping=mapping, key="cursor_start"),
         lookback=_optional_str(payload=mapping, key="lookback"),
         batch_size=_optional_scalar_batch_size(mapping=mapping, key="batch_size"),
+        batch_concurrency=(
+            _optional_int(mapping=mapping, key=_BATCH_CONCURRENCY_CONFIG_KEY, default=1)
+            if _BATCH_CONCURRENCY_CONFIG_KEY in mapping
+            else None
+        ),
+        unaccounted_partition_policy=_optional_str(
+            payload=mapping, key="unaccounted_partition_policy"
+        ),
         replay_on_change=_optional_str(payload=mapping, key="replay_on_change"),
         run_despite_unchanged=_optional_str(payload=mapping, key="run_despite_unchanged"),
         row_diff_exclude_columns=row_diff_exclude_columns,

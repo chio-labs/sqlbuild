@@ -626,6 +626,8 @@ class ModelPlanEntry:
     cursor_bounds: CursorBounds | None = None
     cursor_input_relations: tuple[CursorInputRelation, ...] = field(default_factory=tuple)
     batch_size: str | None = None
+    batch_concurrency: int = 1
+    unaccounted_partition_policy: str | None = None
     microbatch_range: CursorBounds | None = None
     start_cursor_override: str | None = None
     end_cursor_override: str | None = None
