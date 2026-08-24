@@ -15,6 +15,11 @@ from tests.unit.src.sqlbuild.cli.commands.shared._helpers._test_types import (
 )
 
 
+class _InteractiveStringIO(StringIO):
+    def isatty(self) -> bool:
+        return True
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -101,7 +106,7 @@ from tests.unit.src.sqlbuild.cli.commands.shared._helpers._test_types import (
 def test_given_connection_progress_event_when_reporting_then_writes_expected_message(
     test_case: ConnectionProgressTestCase,
 ) -> None:
-    stream: StringIO = StringIO()
+    stream: StringIO = _InteractiveStringIO()
     reporter: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=test_case.adapter_name,
         stream=stream,

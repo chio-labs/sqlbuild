@@ -129,6 +129,36 @@ def test_given_snowflake_adapter_when_getting_inference_profile_then_returns_exp
             },
         ),
         SnowflakeConnectConfigTestCase(
+            description="defaults OAuth authorization code token caching",
+            config={
+                "account": "acct",
+                "user": "analytics",
+                "authenticator": "OAUTH_AUTHORIZATION_CODE",
+            },
+            expected_connect_kwargs={
+                "account": "acct",
+                "user": "analytics",
+                "authenticator": "OAUTH_AUTHORIZATION_CODE",
+                "client_store_temporary_credential": True,
+                "oauth_enable_refresh_tokens": True,
+            },
+        ),
+        SnowflakeConnectConfigTestCase(
+            description="preserves explicit OAuth authorization code cache flags",
+            config={
+                "account": "acct",
+                "authenticator": "OAUTH_AUTHORIZATION_CODE",
+                "client_store_temporary_credential": False,
+                "oauth_enable_refresh_tokens": False,
+            },
+            expected_connect_kwargs={
+                "account": "acct",
+                "authenticator": "OAUTH_AUTHORIZATION_CODE",
+                "client_store_temporary_credential": False,
+                "oauth_enable_refresh_tokens": False,
+            },
+        ),
+        SnowflakeConnectConfigTestCase(
             description="strips SQLBuild routing keys before connector call",
             config={
                 "source": "explicit",
@@ -149,7 +179,7 @@ def test_given_snowflake_adapter_when_getting_inference_profile_then_returns_exp
     ],
     ids=lambda case: case.description,
 )
-def test_given_mfa_authenticator_when_connecting_then_uses_expected_token_cache_kwargs(
+def test_given_authenticator_when_connecting_then_uses_expected_token_cache_kwargs(
     test_case: SnowflakeConnectConfigTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
