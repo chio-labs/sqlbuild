@@ -14,18 +14,29 @@ from typing import Any
 import pytest
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
+from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
+    CompileBenchmarkResult,
+)
 
 
 def run_advanced_compile_benchmark(
-    *, project_dir: Path, model_count: int, expected_max_seconds: float
-) -> float:
+    *,
+    project_dir: Path,
+    model_count: int,
+    expected_max_seconds: float,
+    scan_event_lines_per_model: int = 0,
+) -> CompileBenchmarkResult:
     skip_actions: dict[bool, Callable[[], None]] = {
         False: _continue_compile_benchmark,
         True: _skip_compile_benchmark,
     }
     skip_actions[os.environ.get("SQLBUILD_SKIP_PERFORMANCE_TESTS") == "1"]()
 
-    write_advanced_compile_project(project_dir=project_dir, model_count=model_count)
+    write_advanced_compile_project(
+        project_dir=project_dir,
+        model_count=model_count,
+        scan_event_lines_per_model=scan_event_lines_per_model,
+    )
     with _fail_after_seconds(expected_max_seconds):
         start: float = time.perf_counter()
         exit_code: int = main(
@@ -38,7 +49,11 @@ def run_advanced_compile_benchmark(
         )
         elapsed_seconds: float = time.perf_counter() - start
     assert exit_code == 0
-    return elapsed_seconds
+    return CompileBenchmarkResult(
+        elapsed_seconds=elapsed_seconds,
+        total_sql_bytes=sum(path.stat().st_size for path in (project_dir / "models").glob("*.sql")),
+        generated_scan_events=model_count * scan_event_lines_per_model,
+    )
 
 
 @contextmanager
@@ -57,7 +72,9 @@ def _fail_after_seconds(seconds: float) -> Iterator[None]:
         signal.signal(signal.SIGALRM, previous_handler)
 
 
-def write_advanced_compile_project(*, project_dir: Path, model_count: int) -> None:
+def write_advanced_compile_project(
+    *, project_dir: Path, model_count: int, scan_event_lines_per_model: int = 0
+) -> None:
     models_dir: Path = project_dir / "models"
     models_dir.mkdir(parents=True)
     (project_dir / "sqlbuild_project.toml").write_text(
@@ -77,9 +94,20 @@ def write_advanced_compile_project(*, project_dir: Path, model_count: int) -> No
         ),
         encoding="utf-8",
     )
-    (models_dir / "model_00000.sql").write_text(_base_model_sql(), encoding="utf-8")
+    (models_dir / "model_00000.sql").write_text(
+        _with_reference_scan_workload(
+            sql=_base_model_sql(),
+            model_index=0,
+            scan_event_lines=scan_event_lines_per_model,
+        ),
+        encoding="utf-8",
+    )
     for index in range(1, model_count):
-        model_sql: str = _chain_model_sql(index=index)
+        model_sql: str = _with_reference_scan_workload(
+            sql=_chain_model_sql(index=index),
+            model_index=index,
+            scan_event_lines=scan_event_lines_per_model,
+        )
         (models_dir / f"model_{index:05d}.sql").write_text(model_sql, encoding="utf-8")
 
 
@@ -89,6 +117,16 @@ def _continue_compile_benchmark() -> None:
 
 def _skip_compile_benchmark() -> None:
     pytest.skip("SQLBUILD_SKIP_PERFORMANCE_TESTS=1")
+
+
+def _with_reference_scan_workload(*, sql: str, model_index: int, scan_event_lines: int) -> str:
+    comments: str = "".join(
+        f"-- generated mapping {line:05d}: source='source_{model_index:05d}' "
+        f"expression=__not_a_reference_{line:05d}\n"
+        for line in range(scan_event_lines)
+    )
+    header_end: int = sql.index(";\n") + 2
+    return f"{sql[:header_end]}{comments}{sql[header_end:]}"
 
 
 def _base_model_sql() -> str:

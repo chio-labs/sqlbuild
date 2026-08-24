@@ -10,3 +10,10 @@ class CompilePerformanceGuardTestCase:
     description: str
     model_count: int
     expected_max_seconds: float
+
+
+@dataclass(frozen=True)
+class CompileBenchmarkResult:
+    elapsed_seconds: float
+    total_sql_bytes: int
+    generated_scan_events: int
