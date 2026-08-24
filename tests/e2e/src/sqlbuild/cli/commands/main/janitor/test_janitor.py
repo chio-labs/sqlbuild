@@ -19,6 +19,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.janitor._test_types import (
     JanitorDisabledE2ETestCase,
     JanitorExpiredVirtualEnvironmentE2ETestCase,
     JanitorInvalidConfigE2ETestCase,
+    JanitorMicrobatchHistoryProtectionE2ETestCase,
     JanitorStateCleanupE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.janitor.helpers import (
@@ -28,6 +29,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.janitor.helpers import (
     prepare_janitor_project,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
+    build_virtual_plan_project_toml,
     build_virtual_plan_repo_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
@@ -84,11 +86,12 @@ def test_given_default_config_when_running_janitor_then_it_reports_disabled(
             expected_exit_code=0,
             expected_stdout_fragments=(
                 "eligible for deletion  1",
-                "objects skipped        3",
+                "objects skipped        4",
                 "main.janitor_tracked_extra",
                 "main.janitor_untracked_extra  relation is not tracked by SQLBuild",
                 "main.partition_state  relation matches exclude pattern 'partition_*'",
                 "main._sqlbuild_fingerprints  relation matches exclude pattern",
+                "main._sqlbuild_microbatches  relation matches exclude pattern",
                 "Deleted 1 objects, deleted 0 state items, and pruned 1 direct state tables.",
             ),
             expected_existing_tables=(
@@ -96,6 +99,7 @@ def test_given_default_config_when_running_janitor_then_it_reports_disabled(
                 "janitor_untracked_extra",
                 "partition_state",
                 "_sqlbuild_fingerprints",
+                "_sqlbuild_microbatches",
             ),
             expected_missing_tables=("janitor_tracked_extra",),
         )
@@ -147,6 +151,104 @@ def test_given_stale_relations_when_running_janitor_then_it_deletes_only_tracked
     assert "Eligible expired VDEs" not in janitor_result.stdout
     assert "Eligible state backups" not in janitor_result.stdout
     assert "Eligible expired locks" not in janitor_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorMicrobatchHistoryProtectionE2ETestCase(
+            description="virtual janitor never prunes microbatch event history",
+            janitor_command=("janitor", "--auto-approve"),
+            expected_exit_code=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_virtual_microbatch_history_when_running_janitor_then_events_remain_unchanged(
+    test_case: JanitorMicrobatchHistoryProtectionE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_toml: str = build_virtual_plan_project_toml().replace(
+        "virtual_environments = true\n",
+        "virtual_environments = true\nconcurrency = 2\nmicrobatch_concurrency = true\n",
+    )
+    project_toml += dedent(
+        """
+
+        [janitor]
+        enabled = true
+        retention_days = 0
+        delete_tracked_only = false
+        """
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_janitor_microbatch_history",
+        repo_files={
+            "sqlbuild_project.toml": project_toml,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_events\n    schema: raw\n    table: raw_events\n"
+            ),
+            "models/orders.sql": dedent(
+                """
+                MODEL (
+                  materialized incremental,
+                  incremental_strategy delete_insert,
+                  incremental_mode microbatch,
+                  cursor event_time,
+                  cursor_type timestamp,
+                  cursor_grain hour,
+                  cursor_inputs (raw_events event_time,),
+                  batch_size 1h,
+                  batch_concurrency 2,
+                );
+
+                SELECT id, event_time
+                FROM __source("raw_events")
+                WHERE event_time >= __cursor_start()
+                  AND event_time < __cursor_end()
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=(
+            "CREATE SCHEMA raw; "
+            "CREATE TABLE raw.raw_events (id INTEGER, event_time TIMESTAMP); "
+            "INSERT INTO raw.raw_events VALUES "
+            "(1, '2026-01-01 00:30:00'), (2, '2026-01-01 01:30:00')"
+        ),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    state_db_path: Path = project_dir / "state.duckdb"
+    event_count_before: object = query_duckdb(
+        db_path=state_db_path,
+        sql="SELECT COUNT(*) FROM sqlbuild_state.microbatch_events",
+    )[0][0]
+
+    janitor_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.janitor_command,
+        project_dir=project_dir,
+    )
+
+    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+    assert int(str(event_count_before)) > 0
+    assert janitor_result.returncode == test_case.expected_exit_code, (
+        janitor_result.stdout + janitor_result.stderr
+    )
+    assert "microbatch_events" not in janitor_result.stdout
+    assert query_duckdb(
+        db_path=state_db_path,
+        sql="SELECT COUNT(*) FROM sqlbuild_state.microbatch_events",
+    ) == [(event_count_before,)]
 
 
 @pytest.mark.parametrize(

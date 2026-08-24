@@ -39,3 +39,16 @@ class OrderingInvariantTestCase:
     project_files: dict[str, str]
     max_concurrency: int
     expected_upstream_model_deps: tuple[tuple[str, tuple[str, ...]], ...]
+
+
+@dataclass(frozen=True)
+class MicrobatchSchedulerTestCase:
+    """Expected global-budget behavior for concurrent microbatch models."""
+
+    description: str
+    expected_status: BuildStatus
+    expected_max_active_batches: int
+    expected_max_active_models: int
+    expected_row_count: int
+    expected_completion_count: int
+    expected_unattributed_batches: int

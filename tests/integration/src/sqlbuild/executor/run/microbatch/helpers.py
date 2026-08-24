@@ -123,6 +123,33 @@ def build_microbatch_plan_entry(
     )
 
 
+def build_integer_reconciliation_plan_entry() -> ModelPlanEntry:
+    """Build the integer microbatch entry used by row-count reconciliation tests."""
+
+    return ModelPlanEntry(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
+        name="orders",
+        relative_path=Path("models/orders.sql"),
+        materialization_type=MaterializationType.INCREMENTAL,
+        action=PlanAction.INCREMENTAL_DELETE_INSERT,
+        reason=PlanReason.NORMAL_INCREMENTAL,
+        destination=CompiledRelationLocation(
+            database=None,
+            schema="main",
+            name="orders",
+            qualified_name="main.orders",
+        ),
+        fingerprint_query_sql="SELECT id FROM main.orders",
+        resolved_sql="SELECT id FROM main.orders",
+        logical_ddl="",
+        incremental_strategy="delete_insert",
+        incremental_mode=IncrementalMode.MICROBATCH,
+        cursor_column="id",
+        cursor_type="integer",
+        batch_size="1",
+    )
+
+
 def run_success_test(
     *,
     test_case: MicrobatchSuccessTestCase,
@@ -169,6 +196,16 @@ def verify_success_state(
     assert actual_count == test_case.expected_row_count
     assert len(result.audit_results) == test_case.expected_audit_count
     assert len(result.warning_messages) == test_case.expected_warning_count
+    state_table_count: int = connection.execute(
+        "SELECT COUNT(*) FROM information_schema.tables "
+        "WHERE table_schema = 'main' AND table_name = '_sqlbuild_microbatches'"
+    ).fetchone()[0]
+    assert state_table_count == 1
+    completion_count: int = connection.execute(
+        "SELECT COUNT(*) FROM main._sqlbuild_microbatches "
+        "WHERE record_type = 'partition_completion'"
+    ).fetchone()[0]
+    assert completion_count >= (result.batch_count or 0)
 
     query: str
     expected_rows: tuple[tuple[object, ...], ...]

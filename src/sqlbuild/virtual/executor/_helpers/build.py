@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -25,6 +27,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.main.materializations import load_custom_materializations
@@ -56,6 +59,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
     ChangeKind,
+    IncrementalMode,
     PlanAction,
     PlanReason,
     WorkSelectionPolicy,
@@ -95,6 +99,9 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeRuntime,
 )
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
+from sqlbuild.microbatches.constants import VIRTUAL_MICROBATCH_SCOPE_KIND
+from sqlbuild.microbatches.models import MicrobatchScope
+from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
@@ -113,6 +120,9 @@ from sqlbuild.virtual.executor._helpers.seeding import (
     include_stale_upstream_seed_names,
     resolve_virtual_seed_selection,
     seed_virtual_physical_version,
+)
+from sqlbuild.virtual.executor.classes.microbatch_lease_manager import (
+    VirtualMicrobatchLeaseManager,
 )
 from sqlbuild.virtual.executor.classes.node_result_store import VirtualNodeResultStore
 from sqlbuild.virtual.executor.models import (
@@ -144,6 +154,7 @@ from sqlbuild.virtual.planner.main._targets import (
     build_virtual_destination_from_physical_relation,
 )
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
+from sqlbuild.virtual.state.classes.microbatch_store import VirtualMicrobatchEventStore
 from sqlbuild.virtual.state.main.checkpoints._checkpoints import (
     create_finalized_virtual_environment_checkpoint,
 )
@@ -324,6 +335,113 @@ def run_virtual_build(
         if hooks.on_plan_ready is not None
         else VirtualBuildExecutionHooks()
     )
+    lease_manager: VirtualMicrobatchLeaseManager = VirtualMicrobatchLeaseManager(
+        backend=runtime.backend,
+        connection_config=runtime.config.connection,
+        warehouse_connection_config=runtime.connection_config,
+        schema=runtime.config.schema,
+        run_id=rewritten.project.run_id,
+    )
+    lease_manager.acquire(
+        entries=plan.executor_plan_output.model_entries,
+        expected_version_hashes=reads.semantics.expected_version_hashes,
+    )
+    try:
+        _register_virtual_microbatch_physical_relations(
+            runtime=runtime,
+            plan_output=plan.executor_plan_output,
+            expected_version_hashes=reads.semantics.expected_version_hashes,
+        )
+        result, ingress_python_results, read_side_results = _execute_leased_virtual_build(
+            runtime=runtime,
+            graph=graph,
+            reads=reads,
+            rewritten=rewritten,
+            plan=plan,
+            python_plan=python_plan,
+            exec_hooks=exec_hooks,
+            microbatch_lease_check=lease_manager.assert_active,
+        )
+    finally:
+        lease_manager.close()
+
+    return VirtualBuildPipelineResult(
+        project=rewritten.project,
+        direct_plan_output=plan.plan_output,
+        display_plan_output=plan.plan_output,
+        execution_plan=plan.executor_plan_output,
+        execution_result=result,
+        virtual_environment_name=runtime.names.target_vde_name,
+        python_node_results=(*ingress_python_results, *read_side_results),
+    )
+
+
+def _register_virtual_microbatch_physical_relations(
+    *,
+    runtime: _VirtualBuildRuntime,
+    plan_output: PlanOutput,
+    expected_version_hashes: dict[str, str],
+) -> None:
+    """Register leased microbatch targets before execution so failure-state GC can resolve them."""
+
+    entries: tuple[ModelPlanEntry, ...] = tuple(
+        entry
+        for entry in plan_output.model_entries
+        if entry.incremental_mode == IncrementalMode.MICROBATCH and entry.action != PlanAction.SKIP
+    )
+    if not entries:
+        return
+    connection: Any = runtime.backend.connect(runtime.config.connection)
+    try:
+        for entry in entries:
+            version_hash: str = expected_version_hashes.get(
+                entry.name,
+                entry.fingerprint_version_hash or compute_query_hash(entry.fingerprint_query_sql),
+            )
+            existing_relation: PhysicalRelationRecord | None = (
+                runtime.backend.get_physical_relation(
+                    connection=connection,
+                    schema=runtime.config.schema,
+                    model_name=entry.name,
+                    version_hash=version_hash,
+                )
+            )
+            if existing_relation is not None:
+                continue
+            runtime.backend.upsert_physical_relation(
+                connection=connection,
+                schema=runtime.config.schema,
+                record=PhysicalRelationRecord(
+                    artifact_type=PhysicalArtifactType.MODEL,
+                    artifact_name=entry.name,
+                    version_hash=version_hash,
+                    database_name=entry.destination.database,
+                    schema_name=entry.destination.schema or "",
+                    relation_name=entry.destination.name,
+                    relation_type="table",
+                ),
+            )
+    finally:
+        runtime.backend.close(connection)
+
+
+def _execute_leased_virtual_build(
+    *,
+    runtime: _VirtualBuildRuntime,
+    graph: ProjectGraph,
+    reads: _VirtualBuildStateReads,
+    rewritten: _RewrittenVirtualProject,
+    plan: _VirtualBuildPlan,
+    python_plan: _VirtualPythonPlan,
+    exec_hooks: VirtualBuildExecutionHooks,
+    microbatch_lease_check: Callable[[], None],
+) -> tuple[
+    BuildExecutionResult,
+    tuple[PythonNodeExecutionResult, ...],
+    tuple[PythonNodeExecutionResult, ...],
+]:
+    """Execute and publish a virtual build while physical-version leases are held."""
+
     with CostContext.scope(
         run_id=rewritten.project.run_id,
         resource_type="run",
@@ -362,50 +480,36 @@ def run_virtual_build(
             reads=reads,
             exec_hooks=exec_hooks,
             ingress_load_results=ingress_load_results,
+            microbatch_lease_check=microbatch_lease_check,
         )
-    if result.status == BuildStatus.SUCCESS:
-        with CostContext.scope(
-            run_id=rewritten.project.run_id,
-            resource_type="run",
-            resource_name=rewritten.project.effective_target_name or "virtual",
-            ledger_path=(
-                runtime.project_dir
-                / "target"
-                / "runs"
-                / rewritten.project.run_id
-                / "statements.jsonl"
-            ),
-            phase="virtual_finalize",
-        ):
-            _persist_successful_virtual_build(
-                runtime=runtime,
-                project=graph.project,
-                reads=reads,
-                plan_output=plan.executor_plan_output,
-                result=result,
-            )
-            read_side_results: tuple[PythonNodeExecutionResult, ...] = _run_read_side_python_nodes(
-                runtime=runtime,
-                python_plan=python_plan,
-                project=rewritten.project,
-                result=result,
-            )
-        if any(
-            python_result.status == PythonNodeStatus.FAILED for python_result in read_side_results
-        ):
-            result = replace(result, status=BuildStatus.FAILED)
-    else:
-        read_side_results = ()
-
-    return VirtualBuildPipelineResult(
-        project=rewritten.project,
-        direct_plan_output=plan.plan_output,
-        display_plan_output=plan.plan_output,
-        execution_plan=plan.executor_plan_output,
-        execution_result=result,
-        virtual_environment_name=runtime.names.target_vde_name,
-        python_node_results=(*ingress_python_results, *read_side_results),
-    )
+    if result.status != BuildStatus.SUCCESS:
+        return result, ingress_python_results, ()
+    with CostContext.scope(
+        run_id=rewritten.project.run_id,
+        resource_type="run",
+        resource_name=rewritten.project.effective_target_name or "virtual",
+        ledger_path=(
+            runtime.project_dir / "target" / "runs" / rewritten.project.run_id / "statements.jsonl"
+        ),
+        phase="virtual_finalize",
+    ):
+        microbatch_lease_check()
+        _persist_successful_virtual_build(
+            runtime=runtime,
+            project=graph.project,
+            reads=reads,
+            plan_output=plan.executor_plan_output,
+            result=result,
+        )
+        read_side_results: tuple[PythonNodeExecutionResult, ...] = _run_read_side_python_nodes(
+            runtime=runtime,
+            python_plan=python_plan,
+            project=rewritten.project,
+            result=result,
+        )
+    if any(python_result.status == PythonNodeStatus.FAILED for python_result in read_side_results):
+        result = replace(result, status=BuildStatus.FAILED)
+    return result, ingress_python_results, read_side_results
 
 
 def _resolve_virtual_build(
@@ -973,8 +1077,10 @@ def _execute_virtual_build_plan(
     reads: _VirtualBuildStateReads,
     exec_hooks: VirtualBuildExecutionHooks,
     ingress_load_results: tuple[LoadExecutionResult, ...],
+    microbatch_lease_check: Callable[[], None],
 ) -> BuildExecutionResult:
     options: VirtualBuildOptions = runtime.options
+    microbatch_state_lock: threading.Lock = threading.Lock()
     custom_materializations: dict[
         str, Callable[[MaterializationContext], MaterializationResult]
     ] = load_custom_materializations(runtime.discovered_inputs.materialization_files)
@@ -1019,6 +1125,14 @@ def _execute_virtual_build_plan(
             query_change_tracking=False,
             target=project.effective_target_name or "",
             providers=options.providers,
+            microbatch_state_resolver=lambda entry, connection: _resolve_virtual_microbatch_state(
+                runtime=runtime,
+                entry=entry,
+                connection=connection,
+                model_version_hash=reads.semantics.expected_version_hashes.get(entry.name),
+                operation_lock=microbatch_state_lock,
+            ),
+            microbatch_lease_check=microbatch_lease_check,
         ),
         callbacks=BuildCallbacks(
             on_node_start=exec_hooks.on_node_start,
@@ -1063,6 +1177,66 @@ def _execute_virtual_build_plan(
             ),
         )
     return result
+
+
+def _resolve_virtual_microbatch_state(
+    *,
+    runtime: _VirtualBuildRuntime,
+    entry: ModelPlanEntry,
+    connection: Any,
+    model_version_hash: str | None,
+    operation_lock: threading.Lock,
+) -> tuple[MicrobatchEventStore, MicrobatchScope]:
+    version_hash: str = (
+        model_version_hash
+        or entry.fingerprint_version_hash
+        or compute_query_hash(entry.fingerprint_query_sql)
+    )
+    destination_identity: str = ".".join(
+        part
+        for part in (
+            entry.destination.database,
+            entry.destination.schema,
+            entry.destination.name,
+        )
+        if part is not None
+    )
+    state_realm: str = f"{runtime.config.backend.value}:{runtime.config.schema}"
+    warehouse_realm: str = hashlib.sha256(
+        json.dumps(runtime.connection_config, sort_keys=True, default=str).encode()
+    ).hexdigest()
+    scope_key: str = (
+        f"{state_realm}:{warehouse_realm}:{entry.name}:{version_hash}:{destination_identity}"
+    )
+    relation_generation: str | None = runtime.adapter.physical_relation_generation(
+        connection=connection,
+        database=entry.destination.database,
+        schema=entry.destination.schema,
+        name=entry.destination.name,
+    )
+    physical_generation_id: str = f"{warehouse_realm}:{version_hash}:{destination_identity}"
+    if relation_generation is not None:
+        relation_generation_hash: str = hashlib.sha256(relation_generation.encode()).hexdigest()
+        physical_generation_id += f":{relation_generation_hash}"
+    return (
+        VirtualMicrobatchEventStore(
+            backend=runtime.backend,
+            connection_config=runtime.config.connection,
+            schema=runtime.config.schema,
+            operation_lock=operation_lock,
+        ),
+        MicrobatchScope(
+            scope_kind=VIRTUAL_MICROBATCH_SCOPE_KIND,
+            scope_key=scope_key,
+            model_name=entry.name,
+            target_database=entry.destination.database,
+            target_schema=entry.destination.schema,
+            target_name=entry.destination.name,
+            physical_generation_id=physical_generation_id,
+            virtual_environment_name=runtime.names.target_vde_name,
+            virtual_model_version_hash=version_hash,
+        ),
+    )
 
 
 def _build_before_model_materialize(
@@ -1948,15 +2122,22 @@ def _build_virtual_model_change(
 ) -> ChangeDetectionResult:
     metadata_json: str = semantics.expected_metadata_jsons.get(model.name, "{}")
     previous_metadata_json: str | None = semantics.bound_metadata_jsons.get(model.name)
+    bound_physical_relation: PhysicalRelationRecord | None = bound_physical_relations.get(
+        model.name
+    )
+    previous_version_hash: str | None = (
+        bound_physical_relation.version_hash if bound_physical_relation is not None else None
+    )
     if full_refresh:
         return ChangeDetectionResult(
             model_name=model.name,
             change_kind=ChangeKind.NO_CHANGE,
             fingerprint_metadata_json=metadata_json,
             previous_metadata_json=previous_metadata_json,
+            previous_version_hash=previous_version_hash,
             backfill=BackfillResult(action=BackfillAction.FULL),
         )
-    if model.name not in bound_physical_relations:
+    if bound_physical_relation is None:
         return ChangeDetectionResult(
             model_name=model.name,
             change_kind=ChangeKind.FIRST_RUN,
@@ -1972,6 +2153,7 @@ def _build_virtual_model_change(
             config_changed=True,
             fingerprint_metadata_json=metadata_json,
             previous_metadata_json=previous_metadata_json,
+            previous_version_hash=previous_version_hash,
         )
     if root_reason in (PlanReason.QUERY_CHANGED, PlanReason.FUNCTION_CHANGED):
         raw_replay_policy: object | None = model.config.values.get("replay_on_change")
@@ -1984,6 +2166,7 @@ def _build_virtual_model_change(
             query_changed=True,
             fingerprint_metadata_json=metadata_json,
             previous_metadata_json=previous_metadata_json,
+            previous_version_hash=previous_version_hash,
             backfill=resolve_replay_on_change(replay_on_change=replay_policy),
         )
     return ChangeDetectionResult(
@@ -1991,4 +2174,5 @@ def _build_virtual_model_change(
         change_kind=ChangeKind.NO_CHANGE,
         fingerprint_metadata_json=metadata_json,
         previous_metadata_json=previous_metadata_json,
+        previous_version_hash=previous_version_hash,
     )

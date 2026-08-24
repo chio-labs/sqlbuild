@@ -136,6 +136,9 @@ from tests.unit.src.sqlbuild.cli.output.main.plan_json._test_types import JsonOu
                 '"declared_batch_size": "1mo"',
                 '"effective_batch_size": "1mo"',
                 '"planned_batch_count": null',
+                '"completion_tracking": "universal"',
+                '"batch_concurrency": 1',
+                '"reconciliation": "runtime"',
             ),
         ),
         JsonOutputTestCase(

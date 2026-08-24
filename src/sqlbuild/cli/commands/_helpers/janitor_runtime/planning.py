@@ -25,6 +25,11 @@ from sqlbuild.cli.commands._helpers.janitor_retention.expired_environments impor
     expired_environment_retention,
     expired_environment_scan_relation_keys,
 )
+from sqlbuild.cli.commands._helpers.janitor_retention.microbatch_replays import (
+    active_microbatch_replay_protected_relation_keys,
+    active_microbatch_replay_protected_relation_reasons,
+    active_microbatch_replay_relations,
+)
 from sqlbuild.cli.commands._helpers.janitor_retention.state_cleanup import (
     expired_lock_candidates,
     state_backup_candidates,
@@ -52,6 +57,7 @@ from sqlbuild.virtual.state.models import (
     CheckpointRetentionInspection,
     DetachedVirtualEnvironmentInspection,
     ExpiredVirtualEnvironmentInspection,
+    PhysicalRelationRecord,
     StateJanitorInspection,
 )
 
@@ -91,12 +97,17 @@ def inspect_janitor_retention(
         discovered_inputs=invocation.discovered_inputs,
         retention_days=settings.retention_days,
     )
+    replay_relations: tuple[PhysicalRelationRecord, ...] = active_microbatch_replay_relations(
+        project_dir=invocation.effective_project_dir,
+        discovered_inputs=invocation.discovered_inputs,
+    )
     return JanitorRetentionInspection(
         checkpoint=checkpoint,
         detached_environment=detached_environment,
         expired_environment=expired_environment,
         state=state,
         unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+        active_microbatch_replay_relations=replay_relations,
     )
 
 
@@ -120,6 +131,9 @@ def build_janitor_execution_plan(
         checkpoint_protected_relation_keys(retention=inspection.checkpoint)
         | detached_environment_protected_relation_keys(retention=inspection.detached_environment)
         | expired_environment_protected_relation_keys(retention=inspection.expired_environment)
+        | active_microbatch_replay_protected_relation_keys(
+            relations=inspection.active_microbatch_replay_relations
+        )
     )
     protected_relation_reasons: dict[JanitorRelationKey, str] = (
         detached_environment_protected_relation_reasons(retention=inspection.detached_environment)
@@ -129,6 +143,11 @@ def build_janitor_execution_plan(
     )
     protected_relation_reasons.update(
         checkpoint_protected_relation_reasons(retention=inspection.checkpoint)
+    )
+    protected_relation_reasons.update(
+        active_microbatch_replay_protected_relation_reasons(
+            relations=inspection.active_microbatch_replay_relations
+        )
     )
     plan: JanitorPlan = build_janitor_plan(
         project=compile_context.project,

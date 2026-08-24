@@ -15,6 +15,7 @@ from tests.unit.src.sqlbuild.executor.scheduling._helpers.worker_completion.help
     build_connection_pool,
     build_failure_completion,
     build_success_completion,
+    exceptional_execute,
     failing_execute,
     successful_execute,
 )
@@ -38,6 +39,14 @@ from tests.unit.src.sqlbuild.executor.scheduling._helpers.worker_completion.help
             execute=failing_execute("worker exploded"),
             expected_completion=("node_b", "worker exploded"),
             expected_connection="connection_b",
+        ),
+        WorkerCompletionTestCase(
+            description="publishes completion for exceptional worker exit",
+            key="node_c",
+            connection="connection_c",
+            execute=exceptional_execute("worker interrupted"),
+            expected_completion=("node_c", "worker interrupted"),
+            expected_connection="connection_c",
         ),
     ],
     ids=lambda case: case.description,
