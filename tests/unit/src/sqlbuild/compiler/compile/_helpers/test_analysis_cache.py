@@ -186,9 +186,7 @@ def test_given_analysis_inputs_when_building_keys_then_all_semantic_inputs_affec
     schema_context: AnalysisCacheContext | None = build_analysis_cache_context(
         root=tmp_path,
         inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="duckdb"),
-        column_nullability_by_table={
-            "raw_orders": {"order_id": InferredNullability.NON_NULL}
-        },
+        column_nullability_by_table={"raw_orders": {"order_id": InferredNullability.NON_NULL}},
         column_types_by_table={},
         allow_compact_analysis=False,
     )

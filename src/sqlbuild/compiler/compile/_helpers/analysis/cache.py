@@ -235,9 +235,7 @@ def _nullability_payload(
     return payload
 
 
-def _analysis_payload(
-    *, cache_key: str, analysis: PolyglotAnalysisResult
-) -> dict[str, object]:
+def _analysis_payload(*, cache_key: str, analysis: PolyglotAnalysisResult) -> dict[str, object]:
     analysis_payload: dict[str, object] = {
         "columns": (
             None
@@ -251,9 +249,7 @@ def _analysis_payload(
                 for column in analysis.columns
             ]
         ),
-        "lineage_columns": [
-            _lineage_column_payload(column) for column in analysis.lineage_columns
-        ],
+        "lineage_columns": [_lineage_column_payload(column) for column in analysis.lineage_columns],
         "has_star": analysis.has_star,
     }
     return {
@@ -281,9 +277,7 @@ def _lineage_column_payload(column: CompiledLineageColumnFact) -> dict[str, obje
     }
 
 
-def _analysis_from_payload(
-    *, payload: object, expected_cache_key: str
-) -> PolyglotAnalysisResult:
+def _analysis_from_payload(*, payload: object, expected_cache_key: str) -> PolyglotAnalysisResult:
     if not isinstance(payload, dict):
         raise AnalysisCacheEntryError("analysis cache entry must be an object")
     values: dict[str, Any] = cast(dict[str, Any], payload)

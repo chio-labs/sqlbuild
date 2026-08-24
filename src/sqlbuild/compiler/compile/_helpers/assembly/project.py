@@ -153,8 +153,7 @@ def assemble_compiled_project(
             model_inputs=tuple(
                 model_input
                 for model_input in inputs.model_inputs
-                if analysis_model_names is None
-                or _model_name(model_input) in analysis_model_names
+                if analysis_model_names is None or _model_name(model_input) in analysis_model_names
             ),
             column_nullability_by_table=column_nullability_by_table,
             column_types_by_table=column_types_by_table,
@@ -191,8 +190,7 @@ def assemble_compiled_project(
                     )
                 ),
                 sql_validation_enabled=(
-                    analysis_model_names is None
-                    or _model_name(model_input) in analysis_model_names
+                    analysis_model_names is None or _model_name(model_input) in analysis_model_names
                 ),
                 seed_names=seed_names,
                 column_nullability_by_table=column_nullability_by_table,
@@ -337,9 +335,7 @@ def _assemble_compiled_model(
         output_column_locations = extract_model_output_column_locations(
             contents=model_input.model_file.contents,
             relative_path=model_input.model_file.relative_path,
-            extract_implicit_alias_columns=(
-                model_input.model_file.extract_implicit_alias_columns
-            ),
+            extract_implicit_alias_columns=(model_input.model_file.extract_implicit_alias_columns),
         )
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=model_name),

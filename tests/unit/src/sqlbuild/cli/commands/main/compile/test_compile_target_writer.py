@@ -130,9 +130,7 @@ def test_given_compiled_project_when_writing_static_target_then_expected_files_a
     )
 
     assert written.summary_line() == test_case.expected_summary_line
-    assert (
-        read_target_files(target_dir, test_case.expected_files) == test_case.expected_files
-    )
+    assert read_target_files(target_dir, test_case.expected_files) == test_case.expected_files
     assert model_path.stat().st_mtime_ns == unchanged_mtime_ns
     assert not stale_path.exists()
     assert not (target_dir / "manifest.json").exists()

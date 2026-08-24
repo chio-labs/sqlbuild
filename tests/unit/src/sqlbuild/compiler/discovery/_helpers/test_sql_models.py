@@ -48,9 +48,7 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
 
     model_file: DiscoveredSqlModelFile = discover_model_files(
         project_dir=tmp_path,
-        extract_implicit_alias_columns=(
-            test_case.expected_extract_implicit_alias_columns
-        ),
+        extract_implicit_alias_columns=(test_case.expected_extract_implicit_alias_columns),
         extract_output_column_locations=False,
     )[0]
 

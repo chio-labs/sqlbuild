@@ -158,9 +158,10 @@ def test_given_partial_selection_when_resolving_scopes_then_inspects_only_upstre
         policies=PlannerPolicies(),
     )
 
-    assert frozenset(
-        key.name for key in scopes.stale_warning_scope.all_keys.values()
-    ) == test_case.expected_inspected_names
+    assert (
+        frozenset(key.name for key in scopes.stale_warning_scope.all_keys.values())
+        == test_case.expected_inspected_names
+    )
     assert tuple(key.name for key in scopes.stale_warning_scope.execution_order) == (
         test_case.expected_execution_names
     )
