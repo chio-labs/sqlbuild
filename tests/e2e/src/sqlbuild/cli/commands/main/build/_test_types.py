@@ -845,6 +845,16 @@ class ConcurrentMicrobatchBehaviorE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SerialMicrobatchLedgerE2ETestCase:
+    """Expected serial ledger and warning behavior for one project capability setting."""
+
+    description: str
+    settings_toml: str
+    expected_complexity_warning_count: int
+    expected_minimum_completion_count: int
+
+
+@dataclass(frozen=True)
 class VirtualConcurrentMicrobatchE2ETestCase:
     """Expected virtual concurrent storage and lock behavior."""
 

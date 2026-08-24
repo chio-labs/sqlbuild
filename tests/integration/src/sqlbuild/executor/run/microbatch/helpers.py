@@ -123,6 +123,33 @@ def build_microbatch_plan_entry(
     )
 
 
+def build_integer_reconciliation_plan_entry() -> ModelPlanEntry:
+    """Build the integer microbatch entry used by row-count reconciliation tests."""
+
+    return ModelPlanEntry(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
+        name="orders",
+        relative_path=Path("models/orders.sql"),
+        materialization_type=MaterializationType.INCREMENTAL,
+        action=PlanAction.INCREMENTAL_DELETE_INSERT,
+        reason=PlanReason.NORMAL_INCREMENTAL,
+        destination=CompiledRelationLocation(
+            database=None,
+            schema="main",
+            name="orders",
+            qualified_name="main.orders",
+        ),
+        fingerprint_query_sql="SELECT id FROM main.orders",
+        resolved_sql="SELECT id FROM main.orders",
+        logical_ddl="",
+        incremental_strategy="delete_insert",
+        incremental_mode=IncrementalMode.MICROBATCH,
+        cursor_column="id",
+        cursor_type="integer",
+        batch_size="1",
+    )
+
+
 def run_success_test(
     *,
     test_case: MicrobatchSuccessTestCase,
