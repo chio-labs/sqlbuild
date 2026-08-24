@@ -8,6 +8,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     VirtualBuildE2ETestCase,
+    VirtualConcurrentMicrobatchE2ETestCase,
     VirtualCustomMaterializationE2ETestCase,
     VirtualWaffleShopE2ETestCase,
 )
@@ -31,6 +32,254 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 )
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualConcurrentMicrobatchE2ETestCase(
+            description="virtual concurrency stores state outside warehouse",
+            expected_exit_code=0,
+            expected_minimum_event_count=8,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_virtual_concurrent_microbatch_when_building_then_events_use_state_backend(
+    test_case: VirtualConcurrentMicrobatchE2ETestCase, tmp_path: Path
+) -> None:
+    project_toml: str = build_virtual_plan_project_toml().replace(
+        "virtual_environments = true\n",
+        "virtual_environments = true\nconcurrency = 3\nmicrobatch_concurrency = true\n",
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_concurrent_microbatch",
+        repo_files={
+            "sqlbuild_project.toml": project_toml,
+            "sources/raw.yml": """
+sources:
+  - name: raw_events
+    schema: raw
+    table: raw_events
+""".strip()
+            + "\n",
+            "models/orders.sql": """
+MODEL (
+  materialized incremental,
+  incremental_strategy delete_insert,
+  incremental_mode microbatch,
+  cursor event_time,
+  cursor_type timestamp,
+  cursor_grain hour,
+  cursor_inputs (
+    raw_events event_time,
+  ),
+  batch_size 1h,
+  batch_concurrency 3,
+);
+
+SELECT id, event_time, payload
+FROM __source("raw_events")
+WHERE event_time >= __cursor_start()
+  AND event_time < __cursor_end()
+""".strip()
+            + "\n",
+        },
+    )
+    warehouse_path: Path = project_dir / "warehouse.duckdb"
+    execute_duckdb(
+        db_path=warehouse_path,
+        sql=(
+            "CREATE SCHEMA raw; "
+            "CREATE TABLE raw.raw_events "
+            "(id INTEGER, event_time TIMESTAMP, payload VARCHAR); "
+            "INSERT INTO raw.raw_events VALUES "
+            "(1, '2026-01-01 00:30:00', 'a'), "
+            "(2, '2026-01-01 01:30:00', 'b'), "
+            "(3, '2026-01-01 02:30:00', 'c')"
+        ),
+    )
+    init_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
+    initial_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert initial_result.returncode == 0, initial_result.stdout + initial_result.stderr
+
+    execute_duckdb(
+        db_path=warehouse_path,
+        sql=(
+            "INSERT INTO raw.raw_events VALUES "
+            "(4, '2026-01-01 03:30:00', 'd'), "
+            "(5, '2026-01-01 04:30:00', 'e'), "
+            "(6, '2026-01-01 05:30:00', 'f')"
+        ),
+    )
+    incremental_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert incremental_result.returncode == test_case.expected_exit_code, (
+        incremental_result.stdout + incremental_result.stderr
+    )
+
+    assert query_duckdb(
+        db_path=warehouse_path,
+        sql="SELECT id, payload FROM dev__dev.orders ORDER BY id",
+    ) == [(1, "a"), (2, "b"), (3, "c"), (4, "d"), (5, "e"), (6, "f")]
+    virtual_history: list[tuple[object, ...]] = query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT scope_kind, fingerprint_status, COUNT(*) "
+            "FROM sqlbuild_state.microbatch_events "
+            "GROUP BY scope_kind, fingerprint_status"
+        ),
+    )
+    assert len(virtual_history) == 1
+    assert virtual_history[0][:2] == ("virtual_physical", "known")
+    assert int(str(virtual_history[0][2])) >= test_case.expected_minimum_event_count
+    assert query_duckdb(
+        db_path=warehouse_path,
+        sql=(
+            "SELECT COUNT(*) FROM information_schema.tables "
+            "WHERE table_name = '_sqlbuild_microbatches'"
+        ),
+    ) == [(0,)]
+
+    version_hash: str = str(
+        query_duckdb(
+            db_path=project_dir / "state.duckdb",
+            sql=(
+                "SELECT version_hash FROM sqlbuild_state.virtual_environment_node_refs "
+                "WHERE virtual_environment_name = 'dev' "
+                "AND node_type = 'model' AND node_name = 'orders'"
+            ),
+        )[0][0]
+    )
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=("SELECT DISTINCT virtual_model_version_hash FROM sqlbuild_state.microbatch_events"),
+    ) == [(version_hash,)]
+    scope_key: str = str(
+        query_duckdb(
+            db_path=project_dir / "state.duckdb",
+            sql="SELECT DISTINCT scope_key FROM sqlbuild_state.microbatch_events",
+        )[0][0]
+    )
+    warehouse_realm: str = scope_key.split(":")[2]
+    execute_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "INSERT INTO sqlbuild_state.locks "
+            "(lock_key, owner_id, expires_at, created_at, updated_at) VALUES "
+            f"('model_version:{warehouse_realm}:orders:{version_hash}', 'other-build', "
+            "CURRENT_TIMESTAMP + INTERVAL 1 HOUR, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+        ),
+    )
+    execute_duckdb(
+        db_path=warehouse_path,
+        sql="INSERT INTO raw.raw_events VALUES (7, '2026-01-01 06:30:00', 'g')",
+    )
+
+    conflicted_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+
+    assert conflicted_result.returncode != 0
+    assert "physical version is already being mutated" in (
+        conflicted_result.stdout + conflicted_result.stderr
+    )
+    assert query_duckdb(
+        db_path=warehouse_path,
+        sql="SELECT COUNT(*) FROM dev__dev.orders",
+    ) == [(6,)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualConcurrentMicrobatchE2ETestCase(
+            description="failed first virtual microbatch can retry provisional physical mapping",
+            expected_exit_code=0,
+            expected_minimum_event_count=1,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_failed_first_virtual_microbatch_when_retried_then_provisional_mapping_is_reused(
+    test_case: VirtualConcurrentMicrobatchE2ETestCase, tmp_path: Path
+) -> None:
+    project_toml: str = build_virtual_plan_project_toml().replace(
+        "virtual_environments = true\n",
+        "virtual_environments = true\nconcurrency = 2\nmicrobatch_concurrency = true\n",
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="virtual_failed_first_microbatch",
+        repo_files={
+            "sqlbuild_project.toml": project_toml,
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_events\n    schema: raw\n    table: raw_events\n"
+            ),
+            "models/orders.sql": (
+                "MODEL (\n"
+                "  materialized incremental,\n"
+                "  incremental_strategy delete_insert,\n"
+                "  incremental_mode microbatch,\n"
+                "  cursor event_time,\n"
+                "  cursor_type timestamp,\n"
+                "  cursor_grain hour,\n"
+                "  cursor_inputs (raw_events event_time,),\n"
+                "  batch_size 1h,\n"
+                "  batch_concurrency 2,\n"
+                ");\n"
+                "SELECT id, event_time, CAST(payload AS INTEGER) AS value\n"
+                'FROM __source("raw_events")\n'
+                "WHERE event_time >= __cursor_start() AND event_time < __cursor_end()\n"
+            ),
+        },
+    )
+    warehouse_path: Path = project_dir / "warehouse.duckdb"
+    execute_duckdb(
+        db_path=warehouse_path,
+        sql=(
+            "CREATE SCHEMA raw; "
+            "CREATE TABLE raw.raw_events "
+            "(id INTEGER, event_time TIMESTAMP, payload VARCHAR); "
+            "INSERT INTO raw.raw_events VALUES (1, '2026-01-01 00:30:00', 'bad')"
+        ),
+    )
+    initialized: subprocess.CompletedProcess[str] = run_sqb(
+        command=("state", "init"), project_dir=project_dir
+    )
+    assert initialized.returncode == test_case.expected_exit_code, (
+        initialized.stdout + initialized.stderr
+    )
+    failed: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert failed.returncode != test_case.expected_exit_code
+    assert query_duckdb(
+        db_path=project_dir / "state.duckdb",
+        sql=(
+            "SELECT COUNT(*) FROM sqlbuild_state.physical_relations "
+            "WHERE artifact_type = 'model' AND artifact_name = 'orders'"
+        ),
+    ) == [(1,)]
+
+    execute_duckdb(
+        db_path=warehouse_path,
+        sql="UPDATE raw.raw_events SET payload = '1'",
+    )
+    retried: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+
+    assert retried.returncode == test_case.expected_exit_code, retried.stdout + retried.stderr
+    assert query_duckdb(
+        db_path=warehouse_path,
+        sql="SELECT id, value FROM dev__dev.orders",
+    ) == [(1, 1)]
 @pytest.mark.parametrize(
     "test_case",
     [

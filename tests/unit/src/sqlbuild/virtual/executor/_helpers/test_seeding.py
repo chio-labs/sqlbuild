@@ -165,23 +165,23 @@ def test_given_incremental_seed_context_when_seeding_then_selects_expected_strat
     "test_case",
     [
         SeedingIdempotencyTestCase(
-            description="drops existing target before seeding",
+            description="preserves existing immutable shared target",
             target_exists=True,
-            expected_drop_count=1,
-            expected_ancestry_count=1,
-            expected_first_sql_prefix="DROP ",
+            expected_drop_count=0,
+            expected_ancestry_count=0,
+            expected_sql_count=0,
         ),
         SeedingIdempotencyTestCase(
             description="seeds missing target without drop",
             target_exists=False,
             expected_drop_count=0,
             expected_ancestry_count=1,
-            expected_first_sql_prefix="CREATE OR REPLACE TABLE ",
+            expected_sql_count=1,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_incremental_target_when_seeding_then_existing_target_is_dropped_first(
+def test_given_incremental_target_when_seeding_then_existing_target_is_preserved(
     test_case: SeedingIdempotencyTestCase,
 ) -> None:
     adapter: FakeSeedAdapter = FakeSeedAdapter(
@@ -216,4 +216,4 @@ def test_given_incremental_target_when_seeding_then_existing_target_is_dropped_f
 
     assert adapter.drop_count == test_case.expected_drop_count
     assert len(backend.ancestry_records) == test_case.expected_ancestry_count
-    assert adapter.executed_sql[0].startswith(test_case.expected_first_sql_prefix)
+    assert len(adapter.executed_sql) == test_case.expected_sql_count

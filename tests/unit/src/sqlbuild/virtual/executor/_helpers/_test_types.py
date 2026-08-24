@@ -79,7 +79,7 @@ class SeedingIdempotencyTestCase:
     target_exists: bool
     expected_drop_count: int
     expected_ancestry_count: int
-    expected_first_sql_prefix: str
+    expected_sql_count: int
 
 
 @dataclass(frozen=True)

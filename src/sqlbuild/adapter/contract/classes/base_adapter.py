@@ -81,6 +81,31 @@ class BaseAdapter(StrictAdapter):
     def supports_table_functions(self) -> bool:
         return False
 
+    def supports_concurrent_microbatch_dml(self) -> bool:
+        """Return whether disjoint same-target delete/insert batches may run concurrently."""
+
+        return False
+
+    def physical_relation_generation(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> str | None:
+        """Return a stable token for the current physical relation incarnation when available."""
+
+        relations: tuple[RelationInfo, ...] = self.list_relations(
+            connection=connection,
+            database=database,
+            schemas=None if schema is None else (schema,),
+            names=(name,),
+        )
+        if len(relations) != 1 or relations[0].created_at is None:
+            return None
+        return relations[0].created_at.isoformat()
+
     def recommended_max_sql_length(self) -> int | None:
         """Return the recommended maximum SQL length for lightweight unit-test queries."""
 
@@ -1833,6 +1858,25 @@ class BaseAdapter(StrictAdapter):
             render_framework_type=self.render_framework_type,
             transient=self.state_tables_transient,
         )
+
+    def render_create_microbatch_state_table_sql(self, *, database: str | None, schema: str) -> str:
+        """Render DDL that creates the standard microbatch state table when missing."""
+
+        from sqlbuild.microbatches.main.create_table_sql import build_create_table_sql
+
+        return build_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        )
+
+    def render_create_microbatch_state_index_sqls(
+        self, *, database: str | None, schema: str
+    ) -> tuple[str, ...]:
+        """Render optional standard-state indexes for warehouses that support them."""
+
+        return ()
 
     def render_read_latest_fingerprints_sql(
         self,

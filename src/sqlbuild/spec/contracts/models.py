@@ -95,6 +95,8 @@ class SettingsConfig:
     auto_load_sources: bool = True
     changes_only: bool = False
     virtual_environments: bool = False
+    microbatch_concurrency: bool = False
+    microbatch_unaccounted_partition_policy: str = "synthesize"
     table_promotion_mode: str | None = None
     default_audit_severity: str | None = None
     default_audit_run_scope: str | None = None
@@ -123,6 +125,8 @@ class DefaultsConfig:
     cursor_start: object | None = None
     lookback: str | None = None
     batch_size: str | int | None = None
+    batch_concurrency: int | None = None
+    unaccounted_partition_policy: str | None = None
     replay_on_change: str | None = None
     run_despite_unchanged: str | None = None
     row_diff_exclude_columns: tuple[str, ...] = field(default_factory=tuple)

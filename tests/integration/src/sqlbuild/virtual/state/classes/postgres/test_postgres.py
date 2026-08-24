@@ -12,6 +12,13 @@ from sqlbuild.executor.node_results.models import (
     NodeResultRecord,
 )
 from sqlbuild.executor.node_results.types import NodeResultStatus
+from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
+from sqlbuild.microbatches.types import (
+    MicrobatchCompletionType,
+    MicrobatchFingerprintStatus,
+    MicrobatchRecordType,
+    MicrobatchRunType,
+)
 from sqlbuild.virtual.state.classes.postgres import PostgresStateBackend
 from sqlbuild.virtual.state.constants import STATE_TABLE_INDEXES, STATE_TABLES
 from sqlbuild.virtual.state.exceptions import StateBackendConfigError
@@ -45,6 +52,7 @@ from sqlbuild.virtual.state.types import (
     VirtualEnvironmentStatus,
 )
 from tests.integration.src.sqlbuild.virtual.state.classes.postgres._test_types import (
+    PostgresMicrobatchStateRoundTripTestCase,
     PostgresStateBackendColumnValidationTestCase,
     PostgresStateBackendConcurrentLockTestCase,
     PostgresStateBackendCoreRecordsTestCase,
@@ -73,6 +81,95 @@ for state_indexes in STATE_TABLE_INDEXES.values():
     for state_index_name in state_indexes:
         EXPECTED_STATE_INDEX_NAMES.append(state_index_name)
 EXPECTED_STATE_INDEX_NAMES.sort()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresMicrobatchStateRoundTripTestCase(
+            description="postgres events are idempotent",
+            expected_event_count=1,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_postgres_microbatch_event_when_appending_then_scope_history_round_trips(
+    test_case: PostgresMicrobatchStateRoundTripTestCase,
+    postgres_state_backend: PostgresStateBackend,
+    postgres_state_connection: Any,
+    postgres_state_schema: str,
+) -> None:
+    postgres_state_backend.initialize(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        sqlbuild_version="test",
+    )
+    scope: MicrobatchScope = MicrobatchScope(
+        scope_kind="virtual_physical",
+        scope_key="postgres:state:orders:F2:analytics.orders__F2",
+        model_name="orders",
+        target_database="warehouse",
+        target_schema="analytics",
+        target_name="orders__F2",
+        physical_generation_id="F2:analytics.orders__F2",
+        virtual_environment_name="dev",
+        virtual_model_version_hash="F2",
+    )
+    event: MicrobatchEvent = MicrobatchEvent(
+        event_id="event-1",
+        record_type=MicrobatchRecordType.PARTITION_COMPLETION,
+        scope=scope,
+        origin_run_id="run-1",
+        execution_run_id="run-1",
+        run_type=MicrobatchRunType.NORMAL,
+        completion_type=MicrobatchCompletionType.INITIAL,
+        run_start="0",
+        run_end="1",
+        partition_start="0",
+        partition_end="1",
+        batch_size="1",
+        cursor_column="batch_id",
+        cursor_type="integer",
+        model_version_hash="F2",
+        definition_hash="definition",
+        fingerprint_status=MicrobatchFingerprintStatus.KNOWN,
+        rows_affected=0,
+        created_at=datetime(2026, 1, 1),
+    )
+
+    postgres_state_backend.append_microbatch_event(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        event=event,
+    )
+    postgres_state_backend.append_microbatch_event(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        event=event,
+    )
+
+    history: tuple[MicrobatchEvent, ...] = postgres_state_backend.read_microbatch_scope_history(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        scope=scope,
+    )
+    retention_history: tuple[MicrobatchEvent, ...] = (
+        postgres_state_backend.read_microbatch_retention_history(
+            connection=postgres_state_connection,
+            schema=postgres_state_schema,
+        )
+    )
+    model_history: tuple[MicrobatchEvent, ...] = (
+        postgres_state_backend.read_microbatch_model_history(
+            connection=postgres_state_connection,
+            schema=postgres_state_schema,
+            scope=scope,
+        )
+    )
+    assert len(history) == test_case.expected_event_count
+    assert history == (event,)
+    assert retention_history == history
+    assert model_history == history
 
 
 @pytest.mark.parametrize(

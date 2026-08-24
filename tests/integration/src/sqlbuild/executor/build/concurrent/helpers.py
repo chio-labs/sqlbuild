@@ -97,6 +97,10 @@ def run_concurrent_build(
                 run_audits=test_case.run_audits,
                 fail_fast=test_case.fail_fast,
                 providers=provider_session.providers,
+                microbatch_concurrency=(pipeline_result.project.settings.microbatch_concurrency),
+                microbatch_unaccounted_partition_policy=(
+                    pipeline_result.project.settings.microbatch_unaccounted_partition_policy
+                ),
             ),
             customizations=BuildCustomizations(
                 loader_functions=discovered.loader_functions,

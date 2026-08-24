@@ -159,3 +159,11 @@ class PostgresStateBackendOperationEventTestCase:
     sqlbuild_version: str
     expected_operation_id: str
     expected_virtual_environment_name: str
+
+
+@dataclass(frozen=True)
+class PostgresMicrobatchStateRoundTripTestCase:
+    """Expected append-only Postgres microbatch event behavior."""
+
+    description: str
+    expected_event_count: int

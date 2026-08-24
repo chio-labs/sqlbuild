@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -79,6 +80,7 @@ from sqlbuild.compiler.planner.types import (
     OnSchemaChange,
     PlanAction,
     PlanReason,
+    WarningSeverity,
 )
 from sqlbuild.compiler.references.main._render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
@@ -300,8 +302,55 @@ def build_plan_entries(
             )
             if run_decision is not None:
                 entry = replace(entry, run_despite_unchanged=run_decision)
+        if entry.incremental_mode == IncrementalMode.MICROBATCH:
+            entry = replace(
+                entry,
+                unaccounted_partition_policy=(
+                    entry.unaccounted_partition_policy
+                    or project.settings.microbatch_unaccounted_partition_policy
+                ),
+            )
         entries.append(entry)
         warnings.extend(entry_warnings)
+    configured_concurrent_entries: tuple[ModelPlanEntry, ...] = tuple(
+        entry
+        for entry in entries
+        if entry.batch_concurrency > 1 and entry.action != PlanAction.SKIP
+    )
+    if configured_concurrent_entries and not project.settings.microbatch_concurrency:
+        names: str = ", ".join(entry.name for entry in configured_concurrent_entries)
+        raise CompileInputError(
+            "batch_concurrency > 1 requires settings.microbatch_concurrency = true; "
+            f"selected model(s): {names}"
+        )
+    if configured_concurrent_entries and not adapter.supports_concurrent_microbatch_dml():
+        raise CompileInputError(
+            f"adapter '{adapter.adapter_name}' does not support concurrent microbatch "
+            "delete/insert DML; set batch_concurrency = 1"
+        )
+    concurrent_entries: tuple[ModelPlanEntry, ...] = tuple(
+        entry for entry in configured_concurrent_entries if entry.action != PlanAction.CREATE_TABLE
+    )
+    if concurrent_entries and project.settings.concurrency > 1:
+        count: int = len(concurrent_entries)
+        names = ", ".join(entry.name for entry in concurrent_entries)
+        warnings.append(
+            PlanWarning(
+                model_name=None,
+                severity=WarningSeverity.WARNING,
+                code="MICROBATCH_CONCURRENCY_COMPLEXITY",
+                message=(
+                    f"Concurrent microbatch execution is enabled for {count} selected "
+                    f"model{'s' if count != 1 else ''}: {names}. Concurrent batches may complete "
+                    "out of order and rely on persistent microbatch history for gap "
+                    "recovery and fingerprint provenance. State deletion or corruption "
+                    "can require synthetic reconciliation and weaken version guarantees. "
+                    "Keep batch_concurrency at 1 unless the runtime benefit justifies "
+                    "this complexity; see the microbatch concurrency and recovery "
+                    "documentation."
+                ),
+            )
+        )
     return PlannerModelEntryResults(entries=tuple(entries), warnings=tuple(warnings))
 
 
@@ -505,6 +554,10 @@ def plan_model_from_change(
         cursor_bounds=cursor_bounds,
         cursor_input_relations=cursor_input_relations,
         batch_size=batch_size,
+        batch_concurrency=_get_positive_config_int(model=model, key="batch_concurrency") or 1,
+        unaccounted_partition_policy=_get_config_str(
+            model=model, key="unaccounted_partition_policy"
+        ),
         microbatch_range=microbatch_range,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
@@ -735,6 +788,11 @@ def _get_config_string_tuple(*, model: CompiledModel, key: str) -> tuple[str, ..
 def _get_config_optional_bool(*, model: CompiledModel, key: str) -> bool | None:
     raw: object | None = model.config.values.get(key)
     return raw if isinstance(raw, bool) else None
+
+
+def _get_positive_config_int(*, model: CompiledModel, key: str) -> int | None:
+    raw: object | None = model.config.values.get(key)
+    return raw if isinstance(raw, int) and not isinstance(raw, bool) and raw > 0 else None
 
 
 def _get_check_columns(model: CompiledModel) -> tuple[str, ...]:

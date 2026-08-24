@@ -48,6 +48,10 @@ def resolve_build_inputs(
                 if runtime.query_change_tracking is None
                 else runtime.query_change_tracking
             ),
+            microbatch_concurrency=settings.microbatch_concurrency,
+            microbatch_unaccounted_partition_policy=(
+                settings.microbatch_unaccounted_partition_policy
+            ),
         ),
         callbacks=callbacks if callbacks is not None else BuildCallbacks(),
         customizations=customizations if customizations is not None else BuildCustomizations(),
