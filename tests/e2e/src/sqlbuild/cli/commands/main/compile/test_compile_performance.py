@@ -104,12 +104,19 @@ def test_given_wide_scan_heavy_projects_when_doubling_sql_size_then_compile_scal
     "test_case",
     [
         DbtShapedCompilePerformanceGuardTestCase(
+            description="dbt-shaped 3000 model project stays within compile budget",
+            model_count=3_000,
+            expected_min_sql_bytes=18_000_000,
+            expected_max_sql_bytes=25_000_000,
+            expected_max_seconds=15.0,
+        ),
+        DbtShapedCompilePerformanceGuardTestCase(
             description="dbt-shaped 10000 model project stays within compile budget",
             model_count=10_000,
             expected_min_sql_bytes=60_000_000,
             expected_max_sql_bytes=80_000_000,
             expected_max_seconds=45.0,
-        )
+        ),
     ],
     ids=lambda case: case.description,
 )
