@@ -1,12 +1,20 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.executor.node_results.models import (
     NodeResultEnvelope,
     NodeResultQuery,
     NodeResultRecord,
+)
+from sqlbuild.microbatches.constants import VIRTUAL_MICROBATCH_SCOPE_KIND
+from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
+from sqlbuild.microbatches.types import (
+    MicrobatchCompletionType,
+    MicrobatchFingerprintStatus,
+    MicrobatchRecordType,
+    MicrobatchRunType,
 )
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.models import (
@@ -81,6 +89,85 @@ def physical_relation_for_test(relation_name: str, version_hash: str) -> Physica
         schema_name="dev__sqb_physical",
         relation_name=relation_name,
         relation_type="table",
+    )
+
+
+def virtual_replay_requirement_for_test(
+    *, version_hash: str, event_id: str, created_second: int
+) -> MicrobatchEvent:
+    """Build one virtual replay requirement for retention projection tests."""
+
+    scope: MicrobatchScope = virtual_microbatch_scope_for_test(version_hash=version_hash)
+    return MicrobatchEvent(
+        event_id=event_id,
+        record_type=MicrobatchRecordType.REPLAY_REQUIREMENT,
+        scope=scope,
+        origin_run_id=event_id,
+        execution_run_id=event_id,
+        run_type=MicrobatchRunType.REPLAY_ON_CHANGE,
+        run_start="0",
+        run_end="2",
+        batch_size="1",
+        cursor_column="id",
+        cursor_type="integer",
+        model_version_hash=version_hash,
+        definition_hash=version_hash,
+        fingerprint_status=MicrobatchFingerprintStatus.KNOWN,
+        replay_requirement_id=event_id,
+        required_model_version_hash=version_hash,
+        previous_model_version_hash="previous",
+        replay_policy="full",
+        created_at=datetime(2026, 1, 1, 0, 0, created_second, tzinfo=UTC),
+    )
+
+
+def virtual_replay_completion_for_test(
+    *,
+    version_hash: str,
+    event_id: str,
+    requirement_id: str,
+    start: str,
+    end: str,
+    created_second: int,
+) -> MicrobatchEvent:
+    """Build one virtual completion attributed to a replay requirement."""
+
+    return MicrobatchEvent(
+        event_id=event_id,
+        record_type=MicrobatchRecordType.PARTITION_COMPLETION,
+        scope=virtual_microbatch_scope_for_test(version_hash=version_hash),
+        origin_run_id=requirement_id,
+        execution_run_id=event_id,
+        run_type=MicrobatchRunType.REPLAY_ON_CHANGE,
+        run_start="0",
+        run_end="2",
+        batch_size="1",
+        cursor_column="id",
+        cursor_type="integer",
+        model_version_hash=version_hash,
+        definition_hash=version_hash,
+        fingerprint_status=MicrobatchFingerprintStatus.KNOWN,
+        completion_type=MicrobatchCompletionType.RECOVERY,
+        partition_start=start,
+        partition_end=end,
+        replay_requirement_id=requirement_id,
+        created_at=datetime(2026, 1, 1, 0, 0, created_second, tzinfo=UTC),
+    )
+
+
+def virtual_microbatch_scope_for_test(*, version_hash: str) -> MicrobatchScope:
+    """Build one virtual physical scope in a stable warehouse realm."""
+
+    return MicrobatchScope(
+        scope_kind=VIRTUAL_MICROBATCH_SCOPE_KIND,
+        scope_key=f"duckdb:state:warehouse-realm:orders:{version_hash}:physical.orders",
+        model_name="orders",
+        target_database=None,
+        target_schema="physical",
+        target_name="orders",
+        physical_generation_id=f"warehouse-realm:{version_hash}:physical.orders",
+        virtual_environment_name="dev",
+        virtual_model_version_hash=version_hash,
     )
 
 

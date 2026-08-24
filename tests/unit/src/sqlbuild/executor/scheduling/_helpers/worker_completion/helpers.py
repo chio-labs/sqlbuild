@@ -16,7 +16,7 @@ def build_success_completion(key: str, result: str) -> tuple[str, str]:
     return (key, result)
 
 
-def build_failure_completion(key: str, error: Exception) -> tuple[str, str]:
+def build_failure_completion(key: str, error: BaseException) -> tuple[str, str]:
     return (key, str(error))
 
 
@@ -32,5 +32,13 @@ def failing_execute(message: str) -> Callable[[object], str]:
     def _execute(connection: object) -> str:
         del connection
         raise RuntimeError(message)
+
+    return _execute
+
+
+def exceptional_execute(message: str) -> Callable[[object], str]:
+    def _execute(connection: object) -> str:
+        del connection
+        raise KeyboardInterrupt(message)
 
     return _execute

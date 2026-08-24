@@ -13,6 +13,13 @@ from sqlbuild.spec.contracts.models import SeedCsvSettings
 
 
 @dataclass(frozen=True)
+class PhysicalRelationGenerationTestCase:
+    description: str
+    expected_stable: bool
+    expected_recreated_distinct: bool
+
+
+@dataclass(frozen=True)
 class ExpressionNullabilityRuleTestCase:
     description: str
     function_name: str

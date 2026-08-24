@@ -85,12 +85,7 @@ def seed_virtual_physical_version(
         schema=entry.destination.schema,
         name=entry.destination.name,
     ):
-        adapter.drop(
-            connection=connection,
-            destination=target,
-            if_exists=True,
-            statement_recorder=recorder,
-        )
+        return
     source: str = resolve_qualified_name_parts(
         adapter=adapter,
         database=parent_relation.database_name,

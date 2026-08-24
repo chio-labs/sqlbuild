@@ -77,6 +77,7 @@ from sqlbuild.virtual.state.models import (
     CheckpointRetentionInspection,
     DetachedVirtualEnvironmentInspection,
     ExpiredVirtualEnvironmentInspection,
+    PhysicalRelationRecord,
     StateJanitorInspection,
 )
 
@@ -785,6 +786,7 @@ class JanitorRetentionInspection:
     expired_environment: ExpiredVirtualEnvironmentInspection | None
     state: StateJanitorInspection | None
     unsuffixed_virtual_environment_name: str | None
+    active_microbatch_replay_relations: tuple[PhysicalRelationRecord, ...] = ()
 
 
 @dataclass(frozen=True)

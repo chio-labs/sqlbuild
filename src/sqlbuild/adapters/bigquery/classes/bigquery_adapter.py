@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, ClassVar, cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.microbatch import MicrobatchMixin
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.constants import DIFF_LEFT_SIDE, DIFF_RIGHT_SIDE
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
@@ -75,7 +76,7 @@ from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
 
 
-class BigQueryAdapter(BaseAdapter):
+class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
     """BigQuery adapter backed by google-cloud-bigquery."""
 
     adapter_name: ClassVar[str] = BuiltinAdapter.BIGQUERY.value

@@ -97,6 +97,35 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def supports_concurrent_microbatch_dml(self) -> bool:
+        """Return whether disjoint delete/insert microbatches may execute concurrently."""
+        ...
+
+    @abstractmethod
+    def physical_relation_generation(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str | None,
+        name: str,
+    ) -> str | None:
+        """Return a stable token for the current physical relation incarnation when available."""
+        ...
+
+    @abstractmethod
+    def render_create_microbatch_state_table_sql(self, *, database: str | None, schema: str) -> str:
+        """Render DDL that creates the standard microbatch state table when missing."""
+        ...
+
+    @abstractmethod
+    def render_create_microbatch_state_index_sqls(
+        self, *, database: str | None, schema: str
+    ) -> tuple[str, ...]:
+        """Render optional indexes for standard microbatch state."""
+        ...
+
+    @abstractmethod
     def describe_relation(self, *, connection: Any, relation: str) -> tuple[ColumnInfo, ...]:
         """Return relation column metadata."""
         ...

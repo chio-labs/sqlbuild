@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.microbatches.models import MicrobatchEvent
+from sqlbuild.virtual.state.models import MicrobatchReplayRoot
 from sqlbuild.virtual.state.types import StateSchemaValidationIssueKind
 
 
@@ -53,3 +55,10 @@ class DetachedRetentionHelperTestCase:
     expected_cleanup_target_names: tuple[str, ...]
     expected_cleanup_relation_names: tuple[str, ...]
     expected_retained_relation_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MicrobatchReplayRetentionTestCase:
+    description: str
+    events: tuple[MicrobatchEvent, ...]
+    expected_roots: tuple[MicrobatchReplayRoot, ...]

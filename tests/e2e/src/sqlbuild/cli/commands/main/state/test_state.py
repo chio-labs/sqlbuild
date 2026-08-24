@@ -39,6 +39,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "function_versions",
                 "virtual_environment_node_refs",
                 "virtual_environment_checkpoint_function_refs",
+                "microbatch_events",
             ),
         )
     ],

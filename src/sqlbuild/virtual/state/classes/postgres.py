@@ -13,6 +13,13 @@ from sqlbuild.executor.node_results.models import (
     NodeResultQuery,
     NodeResultRecord,
 )
+from sqlbuild.microbatches.classes.event_codec import MicrobatchEventCodec
+from sqlbuild.microbatches.constants import (
+    MICROBATCH_COLUMNS,
+    MICROBATCH_GENERATION_WILDCARD,
+    VIRTUAL_MICROBATCH_SCOPE_KIND,
+)
+from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
 from sqlbuild.virtual.state._helpers.state_storage.events import backup_id, event_id
 from sqlbuild.virtual.state._helpers.state_storage.validation import build_validation_result
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
@@ -20,8 +27,10 @@ from sqlbuild.virtual.state.constants import (
     CURRENT_STATE_SCHEMA_VERSION,
     FUNCTION_VERSION_TABLE,
     LOCK_TABLE,
+    MICROBATCH_EVENT_TABLE,
     MODEL_VERSION_TABLE,
     NODE_RESULTS_TABLE,
+    NON_UNIQUE_STATE_INDEXES,
     PHYSICAL_RELATION_ANCESTRY_TABLE,
     PHYSICAL_RELATION_TABLE,
     POSTGRES_INTEGER_TYPES,
@@ -651,6 +660,70 @@ class PostgresStateBackend(StateBackend):
             )
             rows: list[tuple[Any, ...]] = cursor.fetchall()
         return tuple(self._node_result_row_to_envelope(row) for row in rows)
+
+    def append_microbatch_event(
+        self, *, connection: Any, schema: str, event: MicrobatchEvent
+    ) -> None:
+        placeholders: str = ", ".join("%s" for _ in MICROBATCH_COLUMNS)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"INSERT INTO {self._qualified_name(schema=schema, table=MICROBATCH_EVENT_TABLE)} "
+                f"({', '.join(MICROBATCH_COLUMNS)}) SELECT {placeholders} "
+                "WHERE NOT EXISTS (SELECT 1 FROM "
+                f"{self._qualified_name(schema=schema, table=MICROBATCH_EVENT_TABLE)} "
+                "WHERE event_id = %s)",
+                [*MicrobatchEventCodec.values(event), event.event_id],
+            )
+
+    def read_microbatch_scope_history(
+        self, *, connection: Any, schema: str, scope: MicrobatchScope
+    ) -> tuple[MicrobatchEvent, ...]:
+        generation_sql: str = (
+            ""
+            if scope.physical_generation_id == MICROBATCH_GENERATION_WILDCARD
+            else "AND physical_generation_id = %s "
+        )
+        params: list[object] = [scope.scope_kind, scope.scope_key]
+        if scope.physical_generation_id != MICROBATCH_GENERATION_WILDCARD:
+            params.append(scope.physical_generation_id)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"SELECT {', '.join(MICROBATCH_COLUMNS)} FROM "
+                f"{self._qualified_name(schema=schema, table=MICROBATCH_EVENT_TABLE)} "
+                "WHERE scope_kind = %s AND scope_key = %s "
+                f"{generation_sql}ORDER BY created_at, event_id",
+                params,
+            )
+            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        return tuple(MicrobatchEventCodec.from_row(tuple(row)) for row in rows)
+
+    def read_microbatch_retention_history(
+        self, *, connection: Any, schema: str
+    ) -> tuple[MicrobatchEvent, ...]:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"SELECT {', '.join(MICROBATCH_COLUMNS)} FROM "
+                f"{self._qualified_name(schema=schema, table=MICROBATCH_EVENT_TABLE)} "
+                "WHERE scope_kind = %s ORDER BY created_at, event_id",
+                [VIRTUAL_MICROBATCH_SCOPE_KIND],
+            )
+            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        return tuple(MicrobatchEventCodec.from_row(tuple(row)) for row in rows)
+
+    def read_microbatch_model_history(
+        self, *, connection: Any, schema: str, scope: MicrobatchScope
+    ) -> tuple[MicrobatchEvent, ...]:
+        warehouse_realm: str = scope.physical_generation_id.partition(":")[0]
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"SELECT {', '.join(MICROBATCH_COLUMNS)} FROM "
+                f"{self._qualified_name(schema=schema, table=MICROBATCH_EVENT_TABLE)} "
+                "WHERE scope_kind = %s AND model_name = %s "
+                "AND physical_generation_id LIKE %s ORDER BY created_at, event_id",
+                [scope.scope_kind, scope.model_name, f"{warehouse_realm}:%"],
+            )
+            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        return tuple(MicrobatchEventCodec.from_row(tuple(row)) for row in rows)
 
     def upsert_physical_relation(
         self, *, connection: Any, schema: str, record: PhysicalRelationRecord
@@ -1675,6 +1748,25 @@ class PostgresStateBackend(StateBackend):
                 cursor.execute("ROLLBACK")
                 raise
 
+    def renew_lock(
+        self,
+        *,
+        connection: Any,
+        schema: str,
+        lock_key: str,
+        owner_id: str,
+        expires_at: datetime,
+    ) -> bool:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"UPDATE {self._qualified_name(schema=schema, table=LOCK_TABLE)} "
+                "SET expires_at = %s, updated_at = CURRENT_TIMESTAMP "
+                "WHERE lock_key = %s AND owner_id = %s AND expires_at > CURRENT_TIMESTAMP "
+                "RETURNING lock_key",
+                [expires_at, lock_key, owner_id],
+            )
+            return cursor.fetchone() is not None
+
     def list_active_locks(self, *, connection: Any, schema: str) -> tuple[StateLockRecord, ...]:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -1810,8 +1902,9 @@ class PostgresStateBackend(StateBackend):
             columns: tuple[str, ...]
             for index_name, columns in indexes.items():
                 column_sql: str = ", ".join(self._quote_identifier(column) for column in columns)
+                unique_sql: str = "" if index_name in NON_UNIQUE_STATE_INDEXES else "UNIQUE "
                 cursor.execute(
-                    f"CREATE UNIQUE INDEX IF NOT EXISTS {self._quote_identifier(index_name)} "
+                    f"CREATE {unique_sql}INDEX IF NOT EXISTS {self._quote_identifier(index_name)} "
                     f"ON {self._qualified_name(schema=schema, table=table_name)} ({column_sql})"
                 )
 

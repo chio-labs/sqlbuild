@@ -20,6 +20,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _snapshot_initial_valid_from_expr,
     _snapshot_key_condition,
 )
+from sqlbuild.adapter.contract.classes.microbatch import MicrobatchMixin
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.constants import DIFF_LEFT_SIDE, DIFF_RIGHT_SIDE
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
@@ -71,7 +72,7 @@ from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
 
 
-class SqlServerAdapter(BaseAdapter):
+class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
     """Microsoft SQL Server adapter backed by pymssql."""
 
     adapter_name: ClassVar[str] = BuiltinAdapter.SQLSERVER.value
@@ -459,6 +460,27 @@ class SqlServerAdapter(BaseAdapter):
         )
         escaped_schema: str = schema.replace("'", "''")
         escaped_table: str = FINGERPRINT_TABLE_NAME.replace("'", "''")
+        exists_sql: str = (
+            "SELECT 1 FROM information_schema.tables "
+            f"WHERE table_schema = '{escaped_schema}' AND table_name = '{escaped_table}'"
+        )
+        if database is not None:
+            escaped_database: str = database.replace("'", "''")
+            exists_sql += f" AND table_catalog = '{escaped_database}'"
+        return f"IF NOT EXISTS ({exists_sql}) {create_sql}"
+
+    def render_create_microbatch_state_table_sql(self, *, database: str | None, schema: str) -> str:
+        from sqlbuild.microbatches.constants import MICROBATCH_TABLE_NAME
+        from sqlbuild.microbatches.main.create_table_sql import build_create_table_sql
+
+        create_sql: str = build_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        ).replace("CREATE TABLE IF NOT EXISTS ", "CREATE TABLE ", 1)
+        escaped_schema: str = schema.replace("'", "''")
+        escaped_table: str = MICROBATCH_TABLE_NAME.replace("'", "''")
         exists_sql: str = (
             "SELECT 1 FROM information_schema.tables "
             f"WHERE table_schema = '{escaped_schema}' AND table_name = '{escaped_table}'"

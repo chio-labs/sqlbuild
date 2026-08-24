@@ -24,7 +24,7 @@ def run_worker_with_completion[KeyT, ResultT, CompletionT](
     try:
         try:
             result: ResultT = execute(connection)
-        except Exception as exc:
+        except BaseException as exc:
             completion_queue.put(build_failure(key=key, error=exc))
         else:
             completion_queue.put(build_success(key=key, result=result))

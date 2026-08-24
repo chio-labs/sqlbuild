@@ -13,7 +13,14 @@ from sqlbuild.executor.node_results.models import (
     NodeResultQuery,
     NodeResultRecord,
 )
+from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
 from sqlbuild.virtual.state._helpers.state_storage.events import backup_id, event_id
+from sqlbuild.virtual.state._helpers.state_storage.microbatch_events import (
+    append_duckdb_microbatch_event,
+    read_duckdb_microbatch_model_history,
+    read_duckdb_microbatch_retention_history,
+    read_duckdb_microbatch_scope_history,
+)
 from sqlbuild.virtual.state._helpers.state_storage.validation import build_validation_result
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.constants import (
@@ -23,8 +30,10 @@ from sqlbuild.virtual.state.constants import (
     DUCKDB_TIMESTAMP_TYPE_TOKEN,
     FUNCTION_VERSION_TABLE,
     LOCK_TABLE,
+    MICROBATCH_EVENT_TABLE,
     MODEL_VERSION_TABLE,
     NODE_RESULTS_TABLE,
+    NON_UNIQUE_STATE_INDEXES,
     PHYSICAL_RELATION_ANCESTRY_TABLE,
     PHYSICAL_RELATION_TABLE,
     PYTHON_NODE_VERSION_TABLE,
@@ -609,6 +618,41 @@ class DuckDbStateBackend(StateBackend):
             params,
         ).fetchall()
         return tuple(self._node_result_row_to_envelope(row) for row in rows)
+
+    def append_microbatch_event(
+        self, *, connection: Any, schema: str, event: MicrobatchEvent
+    ) -> None:
+        append_duckdb_microbatch_event(
+            connection=connection,
+            qualified_table=self._qualified_name(schema=schema, table=MICROBATCH_EVENT_TABLE),
+            event=event,
+        )
+
+    def read_microbatch_scope_history(
+        self, *, connection: Any, schema: str, scope: MicrobatchScope
+    ) -> tuple[MicrobatchEvent, ...]:
+        return read_duckdb_microbatch_scope_history(
+            connection=connection,
+            qualified_table=self._qualified_name(schema=schema, table=MICROBATCH_EVENT_TABLE),
+            scope=scope,
+        )
+
+    def read_microbatch_retention_history(
+        self, *, connection: Any, schema: str
+    ) -> tuple[MicrobatchEvent, ...]:
+        return read_duckdb_microbatch_retention_history(
+            connection=connection,
+            qualified_table=self._qualified_name(schema=schema, table=MICROBATCH_EVENT_TABLE),
+        )
+
+    def read_microbatch_model_history(
+        self, *, connection: Any, schema: str, scope: MicrobatchScope
+    ) -> tuple[MicrobatchEvent, ...]:
+        return read_duckdb_microbatch_model_history(
+            connection=connection,
+            qualified_table=self._qualified_name(schema=schema, table=MICROBATCH_EVENT_TABLE),
+            scope=scope,
+        )
 
     def upsert_physical_relation(
         self, *, connection: Any, schema: str, record: PhysicalRelationRecord
@@ -1586,6 +1630,24 @@ class DuckDbStateBackend(StateBackend):
             connection.execute("ROLLBACK")
             raise
 
+    def renew_lock(
+        self,
+        *,
+        connection: Any,
+        schema: str,
+        lock_key: str,
+        owner_id: str,
+        expires_at: datetime,
+    ) -> bool:
+        row: tuple[Any, ...] | None = connection.execute(
+            f"UPDATE {self._qualified_name(schema=schema, table=LOCK_TABLE)} "
+            "SET expires_at = ?, updated_at = CURRENT_TIMESTAMP "
+            "WHERE lock_key = ? AND owner_id = ? AND expires_at > CURRENT_TIMESTAMP "
+            "RETURNING lock_key",
+            [expires_at, lock_key, owner_id],
+        ).fetchone()
+        return row is not None
+
     def list_active_locks(self, *, connection: Any, schema: str) -> tuple[StateLockRecord, ...]:
         rows: list[tuple[Any, ...]] = connection.execute(
             "SELECT lock_key, owner_id, expires_at FROM "
@@ -1725,8 +1787,9 @@ class DuckDbStateBackend(StateBackend):
             columns: tuple[str, ...]
             for index_name, columns in indexes.items():
                 column_sql: str = ", ".join(self._quote_identifier(column) for column in columns)
+                unique_sql: str = "" if index_name in NON_UNIQUE_STATE_INDEXES else "UNIQUE "
                 connection.execute(
-                    f"CREATE UNIQUE INDEX IF NOT EXISTS {self._quote_identifier(index_name)} "
+                    f"CREATE {unique_sql}INDEX IF NOT EXISTS {self._quote_identifier(index_name)} "
                     f"ON {self._qualified_name(schema=schema, table=table_name)} ({column_sql})"
                 )
 

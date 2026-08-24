@@ -272,6 +272,15 @@ class ExpiredVirtualEnvironmentInspection:
 
 
 @dataclass(frozen=True)
+class MicrobatchReplayRoot:
+    """One physical model version protected by an incomplete replay requirement."""
+
+    model_name: str
+    version_hash: str
+    previous_version_hash: str | None
+
+
+@dataclass(frozen=True)
 class StateJanitorInspection:
     """State-only janitor cleanup candidates."""
 

@@ -8,6 +8,16 @@ from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 @dataclass(frozen=True)
+class MicrobatchReconciliationChunkTestCase:
+    """Expected grouped row-count behavior across reconciliation chunk boundaries."""
+
+    description: str
+    interval_count: int
+    occupied_values: tuple[int, ...]
+    expected_query_count: int
+
+
+@dataclass(frozen=True)
 class MicrobatchSuccessTestCase:
     """Test case where microbatch execution succeeds."""
 
