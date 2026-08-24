@@ -24,3 +24,12 @@ class CompileScalingGuardTestCase:
     expected_large_scan_events: int
     expected_max_seconds: float
     expected_max_scaling_ratio: float
+
+
+@dataclass(frozen=True)
+class DbtShapedCompilePerformanceGuardTestCase:
+    description: str
+    model_count: int
+    expected_min_sql_bytes: int
+    expected_max_sql_bytes: int
+    expected_max_seconds: float

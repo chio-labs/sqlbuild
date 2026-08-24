@@ -9,10 +9,12 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompilePerformanceGuardTestCase,
     CompileScalingGuardTestCase,
+    DbtShapedCompilePerformanceGuardTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     measure_model_sql_bytes,
     run_advanced_compile_benchmark,
+    run_dbt_shaped_compile_benchmark,
 )
 
 
@@ -95,3 +97,34 @@ def test_given_wide_scan_heavy_projects_when_doubling_sql_size_then_compile_scal
         == test_case.expected_large_scan_events
     )
     assert large_elapsed_seconds / small_elapsed_seconds < test_case.expected_max_scaling_ratio
+
+
+@pytest.mark.performance
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DbtShapedCompilePerformanceGuardTestCase(
+            description="dbt-shaped 10000 model project stays within compile budget",
+            model_count=10_000,
+            expected_min_sql_bytes=60_000_000,
+            expected_max_sql_bytes=80_000_000,
+            expected_max_seconds=90.0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_dbt_shaped_project_when_compiling_then_finishes_within_budget(
+    tmp_path: Path,
+    test_case: DbtShapedCompilePerformanceGuardTestCase,
+) -> None:
+    project_dir: Path = tmp_path / f"dbt_shaped_{test_case.model_count}"
+    elapsed_seconds: float = run_dbt_shaped_compile_benchmark(
+        project_dir=project_dir,
+        model_count=test_case.model_count,
+        expected_max_seconds=test_case.expected_max_seconds,
+    )
+
+    total_sql_bytes: int = measure_model_sql_bytes(project_dir)
+    assert test_case.expected_min_sql_bytes <= total_sql_bytes
+    assert total_sql_bytes <= test_case.expected_max_sql_bytes
+    assert elapsed_seconds < test_case.expected_max_seconds

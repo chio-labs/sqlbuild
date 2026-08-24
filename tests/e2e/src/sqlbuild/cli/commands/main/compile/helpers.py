@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import signal
 import time
+from bisect import bisect_left
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -14,6 +15,18 @@ from typing import Any
 import pytest
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
+
+_DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
+    (0.50, 1_800),
+    (0.75, 4_500),
+    (0.90, 8_000),
+    (0.95, 12_500),
+    (0.99, 20_000),
+    (0.992, 50_000),
+    (0.994, 175_000),
+    (0.999, 265_000),
+    (1.0, 522_000),
+)
 
 
 def run_advanced_compile_benchmark(
@@ -34,6 +47,28 @@ def run_advanced_compile_benchmark(
         model_count=model_count,
         scan_event_lines_per_model=scan_event_lines_per_model,
     )
+    return _run_compile_benchmark(
+        project_dir=project_dir,
+        expected_max_seconds=expected_max_seconds,
+    )
+
+
+def run_dbt_shaped_compile_benchmark(
+    *, project_dir: Path, model_count: int, expected_max_seconds: float
+) -> float:
+    skip_actions: dict[bool, Callable[[], None]] = {
+        False: _continue_compile_benchmark,
+        True: _skip_compile_benchmark,
+    }
+    skip_actions[os.environ.get("SQLBUILD_SKIP_PERFORMANCE_TESTS") == "1"]()
+    write_dbt_shaped_compile_project(project_dir=project_dir, model_count=model_count)
+    return _run_compile_benchmark(
+        project_dir=project_dir,
+        expected_max_seconds=expected_max_seconds,
+    )
+
+
+def _run_compile_benchmark(*, project_dir: Path, expected_max_seconds: float) -> float:
     with _fail_after_seconds(expected_max_seconds):
         start: float = time.perf_counter()
         exit_code: int = main(
@@ -70,10 +105,47 @@ def _fail_after_seconds(seconds: float) -> Iterator[None]:
 
 
 def write_advanced_compile_project(
-    *, project_dir: Path, model_count: int, scan_event_lines_per_model: int = 0
+    *,
+    project_dir: Path,
+    model_count: int,
+    scan_event_lines_per_model: int = 0,
 ) -> None:
     models_dir: Path = project_dir / "models"
     models_dir.mkdir(parents=True)
+    _write_compile_project_config(project_dir)
+    base_model_sql: str = _with_reference_scan_workload(
+        sql=_base_model_sql(),
+        model_index=0,
+        scan_event_lines=scan_event_lines_per_model,
+    )
+    (models_dir / "model_00000.sql").write_text(base_model_sql, encoding="utf-8")
+    for index in range(1, model_count):
+        model_sql: str = _with_reference_scan_workload(
+            sql=_chain_model_sql(index=index),
+            model_index=index,
+            scan_event_lines=scan_event_lines_per_model,
+        )
+        (models_dir / f"model_{index:05d}.sql").write_text(model_sql, encoding="utf-8")
+
+
+def write_dbt_shaped_compile_project(*, project_dir: Path, model_count: int) -> None:
+    models_dir: Path = project_dir / "models"
+    models_dir.mkdir(parents=True)
+    _write_compile_project_config(project_dir)
+    base_model_sql: str = _with_base_projection_width(
+        sql=_base_model_sql(),
+        target_bytes=_sql_size_target(model_index=0, model_count=model_count),
+    )
+    (models_dir / "model_00000.sql").write_text(base_model_sql, encoding="utf-8")
+    for index in range(1, model_count):
+        model_sql: str = _with_chain_projection_width(
+            sql=_chain_model_sql(index=index),
+            target_bytes=_sql_size_target(model_index=index, model_count=model_count),
+        )
+        (models_dir / f"model_{index:05d}.sql").write_text(model_sql, encoding="utf-8")
+
+
+def _write_compile_project_config(project_dir: Path) -> None:
     (project_dir / "sqlbuild_project.toml").write_text(
         "\n".join(
             (
@@ -91,21 +163,6 @@ def write_advanced_compile_project(
         ),
         encoding="utf-8",
     )
-    (models_dir / "model_00000.sql").write_text(
-        _with_reference_scan_workload(
-            sql=_base_model_sql(),
-            model_index=0,
-            scan_event_lines=scan_event_lines_per_model,
-        ),
-        encoding="utf-8",
-    )
-    for index in range(1, model_count):
-        model_sql: str = _with_reference_scan_workload(
-            sql=_chain_model_sql(index=index),
-            model_index=index,
-            scan_event_lines=scan_event_lines_per_model,
-        )
-        (models_dir / f"model_{index:05d}.sql").write_text(model_sql, encoding="utf-8")
 
 
 def _continue_compile_benchmark() -> None:
@@ -124,6 +181,37 @@ def _with_reference_scan_workload(*, sql: str, model_index: int, scan_event_line
     )
     header_end: int = sql.index(";\n") + 2
     return f"{sql[:header_end]}{comments}{sql[header_end:]}"
+
+
+def _sql_size_target(*, model_index: int, model_count: int) -> int:
+    quantile: float = (model_index + 1) / model_count
+    upper_quantiles: tuple[float, ...] = tuple(item[0] for item in _DBT_SHAPED_SQL_SIZE_PROFILE)
+    target_sizes: tuple[int, ...] = tuple(item[1] for item in _DBT_SHAPED_SQL_SIZE_PROFILE)
+    return target_sizes[bisect_left(upper_quantiles, quantile)]
+
+
+def _projection_padding(*, sql: str, target_bytes: int) -> str:
+    missing_bytes: int = max(0, target_bytes - len(sql.encode("utf-8")))
+    projection_template: str = (
+        ",\n  CASE WHEN id % 2 = 0 THEN amount ELSE avg_amount END AS metric_00000"
+    )
+    projection_count: int = (missing_bytes + len(projection_template) - 1) // len(
+        projection_template
+    )
+    projections: str = "".join(
+        f",\n  CASE WHEN id % 2 = 0 THEN amount ELSE avg_amount END AS metric_{index:05d}"
+        for index in range(projection_count)
+    )
+    return projections
+
+
+def _with_base_projection_width(*, sql: str, target_bytes: int) -> str:
+    return f"{sql.rstrip()}{_projection_padding(sql=sql, target_bytes=target_bytes)}\n"
+
+
+def _with_chain_projection_width(*, sql: str, target_bytes: int) -> str:
+    projections: str = _projection_padding(sql=sql, target_bytes=target_bytes)
+    return sql.replace("\nFROM joined", f"{projections}\nFROM joined", 1)
 
 
 def _base_model_sql() -> str:
