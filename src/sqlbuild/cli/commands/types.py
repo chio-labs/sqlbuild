@@ -42,6 +42,7 @@ class CliCommand(StrEnum):
     DEBUG = "debug"
     LINEAGE = "lineage"
     QUERY = "query"
+    COST = "cost"
     CLEAN = "clean"
     JANITOR = "janitor"
     STATE = "state"

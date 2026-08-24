@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 from pathlib import Path
 
+from sqlbuild.cost.constants import DEFAULT_USD_PER_CREDIT
 from sqlbuild.spec.contracts.types import (
     SourceFreshnessStrategy,
     SourceFreshnessValueKind,
@@ -96,6 +98,14 @@ class SettingsConfig:
     table_promotion_mode: str | None = None
     default_audit_severity: str | None = None
     default_audit_run_scope: str | None = None
+
+
+@dataclass(frozen=True)
+class CostConfig:
+    """Snowflake compute estimate configuration."""
+
+    usd_per_credit: Decimal = DEFAULT_USD_PER_CREDIT
+    usd_per_credit_is_default: bool = True
 
 
 @dataclass(frozen=True)
@@ -193,6 +203,7 @@ class ProjectConfig:
     default_target: str | None = None
     connection: dict[str, object] = field(default_factory=dict)
     settings: SettingsConfig = field(default_factory=SettingsConfig)
+    cost: CostConfig = field(default_factory=CostConfig)
     defaults: DefaultsConfig = field(default_factory=DefaultsConfig)
     path_defaults: dict[str, dict[str, object]] = field(default_factory=dict)
     vars: dict[str, str] = field(default_factory=dict)

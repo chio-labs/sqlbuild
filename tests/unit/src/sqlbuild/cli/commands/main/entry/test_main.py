@@ -12,6 +12,7 @@ from sqlbuild.cli.commands.models import (
     BuildCommandRequest,
     CloneCommandRequest,
     CompileCommandRequest,
+    CostCommandRequest,
     DbtInitCommandRequest,
     DiffCommandRequest,
     FreshnessCommandRequest,
@@ -38,6 +39,66 @@ from tests.unit.src.sqlbuild.cli.commands.main.entry.helpers import (
     build_handlers,
     build_json_recording_handler,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="dispatches typed cost history request",
+            argv=[
+                "--project-dir",
+                "/tmp/project",
+                "--no-color",
+                "cost",
+                "history",
+                "--limit",
+                "25",
+                "--sort",
+                "cost",
+                "--order",
+                "asc",
+                "--since",
+                "2026-08-01",
+                "--until",
+                "2026-08-23",
+                "--json",
+            ],
+            expected_exit_code=7,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cost_arguments_when_running_then_dispatches_typed_cost_request(
+    test_case: MainTestCase,
+) -> None:
+    received: list[CostCommandRequest] = []
+
+    def run_cost(request: CostCommandRequest) -> int:
+        received.append(request)
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_cost=run_cost),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received == [
+        CostCommandRequest(
+            project_dir=Path("/tmp/project"),
+            selector="history",
+            no_color=True,
+            limit=25,
+            no_limit=False,
+            sort="cost",
+            order="asc",
+            since="2026-08-01",
+            until="2026-08-23",
+            json_output=True,
+            json_output_path=None,
+        )
+    ]
 
 
 @pytest.mark.parametrize(

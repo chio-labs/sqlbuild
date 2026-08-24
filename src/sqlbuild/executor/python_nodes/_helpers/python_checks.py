@@ -11,6 +11,7 @@ from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecord
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonNodeIdentity
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
+from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.node_results.main._standard_store import build_standard_node_result_store
@@ -103,88 +104,96 @@ def execute_python_check_nodes(
             upstream_results=upstream_results,
         )
         if blocked is not None:
-            _persist_check_result(
-                result_store=resolved_result_store,
-                result=blocked,
-                run_id=run_id,
-            )
+            with CostContext.resource_scope(
+                resource_type=PythonNodeKind.CHECK.value,
+                resource_name=check_function.name,
+            ):
+                _persist_check_result(
+                    result_store=resolved_result_store,
+                    result=blocked,
+                    run_id=run_id,
+                )
             results.append(blocked)
             continue
-        context: CheckContext = CheckContext(
-            adapter=adapter,
-            connection_config=runtime.connection_config,
-            connection=connection,
-            run_id=run_id,
-            target=runtime.target,
-            vars=runtime.vars,
-            is_reload=runtime.is_reload,
-            logger=logger or logging.getLogger(f"sqlbuild.check.{check_function.name}"),
-            statement_recorder=StatementRecorder(),
-            run_state=run_state,
-            result_store=resolved_result_store,
-            default_database=default_database,
-            default_schema=default_schema,
-            relation_targets=runtime.resolved_relation_targets,
-            allowed_sql_refs=frozenset(),
-            providers=providers if providers is not None else _empty_provider_container(),
-            start_cursor_ts=runtime.start_cursor_ts,
-            end_cursor_ts=runtime.end_cursor_ts,
-            start_cursor_int=runtime.start_cursor_int,
-            end_cursor_int=runtime.end_cursor_int,
-        )
-        try:
-            returned: object = invoke_with_providers(
-                function=check_function.function,
-                context=context,
-                providers=providers,
+        with CostContext.resource_scope(
+            resource_type=PythonNodeKind.CHECK.value,
+            resource_name=check_function.name,
+        ):
+            context: CheckContext = CheckContext(
+                adapter=adapter,
+                connection_config=runtime.connection_config,
+                connection=connection,
+                run_id=run_id,
+                target=runtime.target,
+                vars=runtime.vars,
+                is_reload=runtime.is_reload,
+                logger=logger or logging.getLogger(f"sqlbuild.check.{check_function.name}"),
+                statement_recorder=StatementRecorder(),
+                run_state=run_state,
+                result_store=resolved_result_store,
+                default_database=default_database,
+                default_schema=default_schema,
+                relation_targets=runtime.resolved_relation_targets,
+                allowed_sql_refs=frozenset(),
+                providers=providers if providers is not None else _empty_provider_container(),
+                start_cursor_ts=runtime.start_cursor_ts,
+                end_cursor_ts=runtime.end_cursor_ts,
+                start_cursor_int=runtime.start_cursor_int,
+                end_cursor_int=runtime.end_cursor_int,
             )
-            check_result: PythonCheckResult = normalize_python_check_return(
-                returned=returned,
-                default_severity=check_function.severity,
-            )
-        except Exception as error:
-            error_result: PythonCheckExecutionResult = PythonCheckExecutionResult(
+            try:
+                returned: object = invoke_with_providers(
+                    function=check_function.function,
+                    context=context,
+                    providers=providers,
+                )
+                check_result: PythonCheckResult = normalize_python_check_return(
+                    returned=returned,
+                    default_severity=check_function.severity,
+                )
+            except Exception as error:
+                error_result: PythonCheckExecutionResult = PythonCheckExecutionResult(
+                    node_name=check_function.name,
+                    passed=False,
+                    severity=PythonCheckSeverity.ERROR,
+                    error_message=str(error),
+                )
+                _persist_check_result(
+                    result_store=resolved_result_store,
+                    result=error_result,
+                    run_id=run_id,
+                )
+                results.append(error_result)
+                continue
+            severity: PythonCheckSeverity = check_result.severity or check_function.severity
+            result: PythonCheckExecutionResult = PythonCheckExecutionResult(
                 node_name=check_function.name,
-                passed=False,
-                severity=PythonCheckSeverity.ERROR,
-                error_message=str(error),
+                passed=check_result.passed,
+                severity=severity,
+                message=check_result.message,
+                metadata=check_result.metadata,
             )
             _persist_check_result(
                 result_store=resolved_result_store,
-                result=error_result,
+                result=result,
                 run_id=run_id,
             )
-            results.append(error_result)
-            continue
-        severity: PythonCheckSeverity = check_result.severity or check_function.severity
-        result: PythonCheckExecutionResult = PythonCheckExecutionResult(
-            node_name=check_function.name,
-            passed=check_result.passed,
-            severity=severity,
-            message=check_result.message,
-            metadata=check_result.metadata,
-        )
-        _persist_check_result(
-            result_store=resolved_result_store,
-            result=result,
-            run_id=run_id,
-        )
-        results.append(result)
-        if not result.failed:
-            identity: PythonNodeIdentity | None = python_graph.nodes_by_name[
-                check_function.name
-            ].identity
-            if identity_recorder is not None:
-                identity_recorder(identity=identity, _target_name=None)
-            else:
-                try_write_python_node_identity_fingerprint(
-                    identity=identity,
-                    adapter=adapter,
-                    connection=connection,
-                    run_id=run_id,
-                    database=default_database,
-                    schema=default_schema,
-                )
+            results.append(result)
+            if not result.failed:
+                identity: PythonNodeIdentity | None = python_graph.nodes_by_name[
+                    check_function.name
+                ].identity
+                if identity_recorder is not None:
+                    identity_recorder(identity=identity, _target_name=None)
+                else:
+                    try_write_python_node_identity_fingerprint(
+                        identity=identity,
+                        adapter=adapter,
+                        connection=connection,
+                        run_id=run_id,
+                        database=default_database,
+                        schema=default_schema,
+                    )
     return tuple(results)
 
 

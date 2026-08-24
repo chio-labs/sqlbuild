@@ -16,6 +16,7 @@ from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.compiler.references.main.assert_no_unresolved_sql_markers import (
     assert_no_unresolved_sql_markers,
 )
+from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.spec.contracts.models import SourceEntry
@@ -51,13 +52,23 @@ def execute_audit(
         context=f"audit '{audit.name}' executable SQL",
     )
 
-    with diagnostics_context(
-        sqlbuild_phase="audit",
-        sqlbuild_audit_name=audit.name,
-        sqlbuild_column_name=audit.attached_column_name,
+    resource_name: str = (
+        audit.name
+        if audit.attached_target_name is None
+        else f"{audit.attached_target_name}.{audit.name}"
+    )
+    with CostContext.resource_scope(
+        resource_type="audit",
+        resource_name=resource_name,
+        phase=f"{audit.attachment_kind.value}_audit_{run_scope_phase.value}",
     ):
-        cursor: Any = adapter.execute(connection=connection, sql=executed_sql)
-        rows: list[Any] = cursor.fetchall()
+        with diagnostics_context(
+            sqlbuild_phase="audit",
+            sqlbuild_audit_name=audit.name,
+            sqlbuild_column_name=audit.attached_column_name,
+        ):
+            cursor: Any = adapter.execute(connection=connection, sql=executed_sql)
+            rows: list[Any] = cursor.fetchall()
     row_count: int = len(rows)
 
     outcome: AuditOutcome

@@ -31,6 +31,8 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlRunSelection,
 )
 from sqlbuild.compiler.python_nodes.types import SkipMode
+from sqlbuild.cost.classes.cost_context import CostContext
+from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
@@ -323,6 +325,7 @@ class FlakyTask:
         self.failures_before_success: int = failures_before_success
         self.exception_type: type[Exception] = exception_type
         self.attempts: int = 0
+        self.cost_contexts: list[CostResourceContext | None] = []
         failures: Iterator[Callable[[TaskContext], object]] = (
             self._raise_transient_failure for _attempt in range(self.failures_before_success)
         )
@@ -330,6 +333,8 @@ class FlakyTask:
 
     def __call__(self, ctx: TaskContext) -> object:
         self.attempts += 1
+        cost_context: CostResourceContext | None = CostContext.current()
+        self.cost_contexts.append(cost_context)
         return next(self._strategies)(ctx)
 
     def _raise_transient_failure(self, ctx: TaskContext) -> object:

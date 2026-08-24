@@ -15,6 +15,7 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
+from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load._helpers.cursors import (
     exclusive_cursor_end,
@@ -80,89 +81,99 @@ def execute_source_load(
     )
     start: float = time.monotonic()
     try:
-        resource_kind: ExecutionResourceKind = load_resource_kind(source_entry)
-        if loader_function.connection_mode == LoaderConnectionMode.EXTERNAL:
-            return execute_external_source_load(
+        with CostContext.resource_scope(
+            resource_type="loader",
+            resource_name=loader_function.name,
+            phase="load",
+        ):
+            resource_kind: ExecutionResourceKind = load_resource_kind(source_entry)
+            if loader_function.connection_mode == LoaderConnectionMode.EXTERNAL:
+                return execute_external_source_load(
+                    source_entry=source_entry,
+                    loader_function=loader_function,
+                    adapter=adapter,
+                    connection_config=connection_config,
+                    destination=destination,
+                    runtime=runtime,
+                    statement_recorder=statement_recorder,
+                    resource_kind=resource_kind,
+                    start=start,
+                    on_progress=on_progress,
+                )
+            validate_source_write_strategy(source_entry)
+            adapter.ensure_schema(
+                connection=connection,
+                database=source_entry.database,
+                schema=source_entry.schema,
+                statement_recorder=statement_recorder,
+            )
+            context: LoaderContext = build_loader_context(
                 source_entry=source_entry,
                 loader_function=loader_function,
                 adapter=adapter,
                 connection_config=connection_config,
+                connection=connection,
                 destination=destination,
                 runtime=runtime,
                 statement_recorder=statement_recorder,
-                resource_kind=resource_kind,
-                start=start,
+                ref_bindings=LoaderRefBindings(
+                    loader_ref_entries=loader_ref_entries,
+                    source_ref_entries=source_ref_entries,
+                ),
                 on_progress=on_progress,
             )
-        validate_source_write_strategy(source_entry)
-        adapter.ensure_schema(
-            connection=connection,
-            database=source_entry.database,
-            schema=source_entry.schema,
-            statement_recorder=statement_recorder,
-        )
-        context: LoaderContext = build_loader_context(
-            source_entry=source_entry,
-            loader_function=loader_function,
-            adapter=adapter,
-            connection_config=connection_config,
-            connection=connection,
-            destination=destination,
-            runtime=runtime,
-            statement_recorder=statement_recorder,
-            ref_bindings=LoaderRefBindings(
-                loader_ref_entries=loader_ref_entries,
-                source_ref_entries=source_ref_entries,
-            ),
-            on_progress=on_progress,
-        )
-        raw_rows: object = invoke_with_providers(
-            function=loader_function.function,
-            context=context,
-            providers=runtime.providers,
-        )
-        early_result: LoadExecutionResult | None = interpret_loader_return(
-            raw_rows=raw_rows,
-            source_entry=source_entry,
-            loader_function=loader_function,
-            destination_relation=destination_relation,
-            resource_kind=resource_kind,
-            statement_recorder=statement_recorder,
-            start=start,
-        )
-        if early_result is not None:
-            return early_result
-        rows_loaded: int = write_loader_rows_to_staging(
-            loader_return_value=raw_rows,
-            source_entry=source_entry,
-            adapter=adapter,
-            connection=connection,
-            staging=staging,
-            statement_recorder=statement_recorder,
-        )
-        adapter = _apply_source_write_strategy(
-            adapter=adapter,
-            connection=connection,
-            source_entry=source_entry,
-            target=destination_relation,
-            target_name=destination_name,
-            staging=staging,
-            statement_recorder=statement_recorder,
-        )
-        adapter.drop(
-            connection=connection,
-            destination=staging,
-            if_exists=True,
-            statement_recorder=statement_recorder,
-        )
-    except Exception as error:
-        try:
+            raw_rows: object = invoke_with_providers(
+                function=loader_function.function,
+                context=context,
+                providers=runtime.providers,
+            )
+            early_result: LoadExecutionResult | None = interpret_loader_return(
+                raw_rows=raw_rows,
+                source_entry=source_entry,
+                loader_function=loader_function,
+                destination_relation=destination_relation,
+                resource_kind=resource_kind,
+                statement_recorder=statement_recorder,
+                start=start,
+            )
+            if early_result is not None:
+                return early_result
+            rows_loaded: int = write_loader_rows_to_staging(
+                loader_return_value=raw_rows,
+                source_entry=source_entry,
+                adapter=adapter,
+                connection=connection,
+                staging=staging,
+                statement_recorder=statement_recorder,
+            )
+            adapter = _apply_source_write_strategy(
+                adapter=adapter,
+                connection=connection,
+                source_entry=source_entry,
+                target=destination_relation,
+                target_name=destination_name,
+                staging=staging,
+                statement_recorder=statement_recorder,
+            )
             adapter.drop(
                 connection=connection,
                 destination=staging,
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )
+    except Exception as error:
+        try:
+            with CostContext.resource_scope(
+                resource_type="loader",
+                resource_name=loader_function.name,
+                phase="cleanup",
+            ):
+                adapter.drop(
+                    connection=connection,
+                    destination=staging,
+                    if_exists=True,
+                    statement_recorder=statement_recorder,
+                )
         except Exception:
             pass
         return LoadExecutionResult(

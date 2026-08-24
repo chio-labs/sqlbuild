@@ -12,6 +12,7 @@ from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecord
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import PlanOutput, SourceLoadPlanEntry
+from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.executor.build.models import BuildCallbacks, BuildRuntimeParams
 from sqlbuild.executor.load.main._execute import execute_source_load
 from sqlbuild.executor.load.models import LoadExecutionResult, LoadRuntimeParams
@@ -85,14 +86,19 @@ def execute_build_source_node(
     )
     duration: int = int((time.monotonic() - start) * 1000)
     timed_result: LoadExecutionResult = dataclasses.replace(result, duration_ms=duration)
-    _persist_loader_result(
-        adapter=adapter,
-        connection=connection,
-        loader_name=loader_name,
-        result=timed_result,
-        run_id=runtime.run_id,
-        result_store=result_store,
-    )
+    with CostContext.resource_scope(
+        resource_type="loader",
+        resource_name=loader_name,
+        phase="finalize",
+    ):
+        _persist_loader_result(
+            adapter=adapter,
+            connection=connection,
+            loader_name=loader_name,
+            result=timed_result,
+            run_id=runtime.run_id,
+            result_store=result_store,
+        )
     return timed_result
 
 

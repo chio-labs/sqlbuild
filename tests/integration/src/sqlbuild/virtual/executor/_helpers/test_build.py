@@ -11,7 +11,7 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.executor.build.models import BuildExecutionResult, BuildRuntimeParams
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.virtual.executor.models import (
@@ -38,11 +38,12 @@ from tests.integration.src.sqlbuild.virtual.executor._helpers._test_types import
             description="physical schema exists before concurrent build pipeline starts",
             expected_schema="dev__sqb_physical",
             expected_model_names=("model_01", "model_02", "model_03", "model_04"),
+            expected_target="dev",
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_virtual_build_when_pipeline_starts_then_physical_schema_is_prepared(
+def test_given_virtual_build_when_pipeline_starts_then_schema_and_runtime_are_project_scoped(
     test_case: VirtualPhysicalSchemaPreflightTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -66,7 +67,11 @@ def test_given_virtual_build_when_pipeline_starts_then_physical_schema_is_prepar
     }
     observed_model_names: list[str] = []
 
-    def fake_run_build_pipeline(*, plan: PlanOutput, **kwargs: Any) -> BuildExecutionResult:
+    def fake_run_build_pipeline(
+        *, plan: PlanOutput, runtime: BuildRuntimeParams, **kwargs: Any
+    ) -> BuildExecutionResult:
+        assert runtime.runtime_dir == project_dir / "target"
+        assert runtime.target == test_case.expected_target
         connection: Any = adapter.connect(connection_config)
         try:
             assert adapter.schema_exists(
