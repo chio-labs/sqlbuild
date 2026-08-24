@@ -120,6 +120,7 @@ def assemble_compiled_project(
     skip_column_inference: bool = False,
     column_lineage_mode: ColumnLineageMode = ColumnLineageMode.FAST,
     analysis_cache_dir: Path | None = None,
+    analysis_model_names: frozenset[str] | None = None,
 ) -> CompiledProject:
     """Convert attached compile inputs into the planner-ready project view."""
 
@@ -135,17 +136,26 @@ def assemble_compiled_project(
     column_types_by_table: dict[str, dict[str, str]] = _build_column_types_by_table(inputs)
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
     allow_compact_analysis: bool = column_lineage_mode == ColumnLineageMode.RICH
-    analysis_cache: AnalysisCacheContext | None = build_analysis_cache_context(
-        root=analysis_cache_dir,
-        inference_profile=profile,
-        column_nullability_by_table=column_nullability_by_table,
-        column_types_by_table=column_types_by_table,
-        allow_compact_analysis=allow_compact_analysis,
+    analysis_cache: AnalysisCacheContext | None = (
+        build_analysis_cache_context(
+            root=analysis_cache_dir,
+            inference_profile=profile,
+            column_nullability_by_table=column_nullability_by_table,
+            column_types_by_table=column_types_by_table,
+            allow_compact_analysis=allow_compact_analysis,
+        )
+        if sql_analysis_enabled and analysis_model_names != frozenset()
+        else None
     )
     model_sql_analysis_by_name: dict[str, _ModelSqlAnalysis] = {}
     if sql_analysis_enabled:
         model_sql_analysis_by_name = _analyze_model_sql_in_parallel(
-            model_inputs=inputs.model_inputs,
+            model_inputs=tuple(
+                model_input
+                for model_input in inputs.model_inputs
+                if analysis_model_names is None
+                or _model_name(model_input) in analysis_model_names
+            ),
             column_nullability_by_table=column_nullability_by_table,
             column_types_by_table=column_types_by_table,
             inference_profile=profile,
@@ -173,7 +183,17 @@ def assemble_compiled_project(
         models=tuple(
             _assemble_compiled_model(
                 model_input=model_input,
-                sql_analysis_enabled=sql_analysis_enabled,
+                sql_analysis_enabled=(
+                    sql_analysis_enabled
+                    and (
+                        analysis_model_names is None
+                        or _model_name(model_input) in analysis_model_names
+                    )
+                ),
+                sql_validation_enabled=(
+                    analysis_model_names is None
+                    or _model_name(model_input) in analysis_model_names
+                ),
                 seed_names=seed_names,
                 column_nullability_by_table=column_nullability_by_table,
                 column_types_by_table=column_types_by_table,
@@ -243,6 +263,7 @@ def _assemble_compiled_model(
     *,
     model_input: CompileModelInput,
     sql_analysis_enabled: bool,
+    sql_validation_enabled: bool = True,
     seed_names: frozenset[str] = frozenset(),
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
     column_types_by_table: dict[str, dict[str, str]] | None = None,
@@ -295,7 +316,7 @@ def _assemble_compiled_model(
                 column_nullability_by_table=column_nullability_by_table,
                 inference_profile=profile,
             )
-    elif model_input.sql_validation_enabled:
+    elif sql_validation_enabled and model_input.sql_validation_enabled:
         profile = inference_profile or ExpressionInferenceProfile()
         validate_sql_syntax(
             query_sql=analysis_query_sql,

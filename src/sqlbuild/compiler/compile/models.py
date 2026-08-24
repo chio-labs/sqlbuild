@@ -231,6 +231,15 @@ class AnalysisCacheContext:
 
 
 @dataclass(frozen=True)
+class CompileAnalysisSelection:
+    """Selection inputs used to limit deep model SQL analysis."""
+
+    select: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
+    auto_load_sources: bool = False
+
+
+@dataclass(frozen=True)
 class CompiledObjectKey:
     """Stable logical identity for one compiled resource or external dependency."""
 

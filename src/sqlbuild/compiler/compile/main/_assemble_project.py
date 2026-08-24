@@ -20,6 +20,7 @@ def assemble_project(
     skip_column_inference: bool = False,
     column_lineage_mode: ColumnLineageMode = ColumnLineageMode.FAST,
     analysis_cache_dir: Path | None = None,
+    analysis_model_names: frozenset[str] | None = None,
 ) -> CompiledProject:
     """Convert compile inputs into the planner-ready project view."""
 
@@ -29,4 +30,5 @@ def assemble_project(
         skip_column_inference=skip_column_inference,
         column_lineage_mode=column_lineage_mode,
         analysis_cache_dir=analysis_cache_dir,
+        analysis_model_names=analysis_model_names,
     )

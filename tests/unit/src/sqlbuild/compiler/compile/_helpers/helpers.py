@@ -8,6 +8,7 @@ from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
+    CompileAnalysisSelection,
     CompiledDirectLogicSqlTestPayload,
     CompiledModel,
     CompiledModelSqlTestPayload,
@@ -52,12 +53,17 @@ def compile_first_model(*, project_dir: Path) -> CompiledModel:
     return compiled_project.models[0]
 
 
-def compile_project_with_cache(*, project_dir: Path) -> CompiledProject:
+def compile_project_with_cache(
+    *,
+    project_dir: Path,
+    analysis_selection: CompileAnalysisSelection | None = None,
+) -> CompiledProject:
     """Compile a discovered DuckDB fixture through the cache-enabled project boundary."""
 
     return build_compiled_project(
         discovered_inputs=discover_project_inputs(project_dir=project_dir),
         adapter=DuckDbAdapter(),
+        analysis_selection=analysis_selection,
     )
 
 

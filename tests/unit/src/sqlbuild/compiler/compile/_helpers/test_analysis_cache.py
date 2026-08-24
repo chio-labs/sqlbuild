@@ -15,8 +15,11 @@ from sqlbuild.compiler.compile._helpers.analysis.cache import (
     write_model_analyses,
 )
 from sqlbuild.compiler.compile._helpers.assembly import project as assembly_project
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
+    CompileAnalysisSelection,
+    CompiledModel,
     CompiledProject,
     CompileSqlReference,
     PolyglotAnalysisResult,
@@ -48,6 +51,13 @@ MODEL ();
 SELECT order_id FROM __source("raw_orders")
 """.strip()
     + "\n",
+}
+_SELECTION_REPO_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": 'name = "selection_demo"\nadapter = "duckdb"\n',
+    "models/root.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+    "models/middle.sql": 'MODEL ();\n\nSELECT id FROM __ref("root")\n',
+    "models/leaf.sql": 'MODEL ();\n\nSELECT id FROM __ref("middle")\n',
+    "models/unrelated.sql": "MODEL ();\n\nSELECT 2 AS id\n",
 }
 
 
@@ -239,3 +249,68 @@ def test_given_analysis_inputs_when_building_keys_then_all_semantic_inputs_affec
 
     assert len(changed_keys) == test_case.expected_count
     assert all(changed_key != base_key for changed_key in changed_keys)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (AnalysisCacheTestCase(description="selected upstream analysis", expected_count=2),),
+    ids=lambda case: case.description,
+)
+def test_given_partial_selection_when_compiling_then_analyzes_only_upstream_closure(
+    test_case: AnalysisCacheTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, _SELECTION_REPO_FILES)
+    analyzer: Mock = Mock(wraps=assembly_project.analyze_columns_and_lineage_with_polyglot)
+    monkeypatch.setattr(assembly_project, "analyze_columns_and_lineage_with_polyglot", analyzer)
+
+    project: CompiledProject = compile_project_with_cache(
+        project_dir=tmp_path,
+        analysis_selection=CompileAnalysisSelection(select=("middle",)),
+    )
+
+    inferred_by_name: dict[str, bool] = {
+        model.name: model.inferred_columns is not None for model in project.models
+    }
+    assert analyzer.call_count == test_case.expected_count
+    assert inferred_by_name == {
+        "leaf": False,
+        "middle": True,
+        "root": True,
+        "unrelated": False,
+    }
+    full_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
+    full_models_by_name: dict[str, CompiledModel] = {
+        model.name: model for model in full_project.models
+    }
+    selected_models_by_name: dict[str, CompiledModel] = {
+        model.name: model for model in project.models
+    }
+    assert selected_models_by_name["root"] == full_models_by_name["root"]
+    assert selected_models_by_name["middle"] == full_models_by_name["middle"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (AnalysisCacheTestCase(description="unselected invalid reference", expected_count=0),),
+    ids=lambda case: case.description,
+)
+def test_given_unselected_invalid_reference_when_compiling_then_live_validation_still_fails(
+    test_case: AnalysisCacheTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    repo_files: dict[str, str] = _SELECTION_REPO_FILES | {
+        "models/unrelated.sql": 'MODEL ();\n\nSELECT id FROM __ref("missing")\n'
+    }
+    write_repo_files(tmp_path, repo_files)
+
+    with pytest.raises(CompileInputError, match="references unknown model"):
+        _ = compile_project_with_cache(
+            project_dir=tmp_path,
+            analysis_selection=CompileAnalysisSelection(select=("middle",)),
+        )
+
+    assert len(tuple((tmp_path / "target").rglob("*.sqlite3"))) == test_case.expected_count
