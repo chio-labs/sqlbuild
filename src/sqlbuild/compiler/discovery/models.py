@@ -53,6 +53,8 @@ class DiscoveredSqlModelFile:
     query_sql: str
     enum_declarations: tuple[EnumDeclaration, ...] = field(default_factory=tuple)
     constant_declarations: tuple[ConstantDeclaration, ...] = field(default_factory=tuple)
+    output_column_locations_extracted: bool = True
+    extract_implicit_alias_columns: bool = True
 
 
 @dataclass(frozen=True)

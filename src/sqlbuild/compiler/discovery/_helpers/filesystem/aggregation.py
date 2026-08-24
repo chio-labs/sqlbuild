@@ -46,6 +46,7 @@ def build_discovered_project_inputs(
     project_config: ProjectConfig,
     local_config: LocalConfig,
     sql_analysis_enabled: bool,
+    extract_output_column_locations: bool = True,
 ) -> DiscoveredProjectInputs:
     """Discover all project files and functions into one inputs bundle."""
 
@@ -67,6 +68,7 @@ def build_discovered_project_inputs(
         model_files=discover_model_files(
             project_dir=project_dir,
             extract_implicit_alias_columns=sql_analysis_enabled,
+            extract_output_column_locations=extract_output_column_locations,
         ),
         enum_files=discover_enum_files(project_dir=project_dir),
         constant_files=discover_constant_files(project_dir=project_dir),

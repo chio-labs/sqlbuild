@@ -65,6 +65,9 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     SqlTestMode,
 )
+from sqlbuild.compiler.discovery.main._model_output_column_locations import (
+    extract_model_output_column_locations,
+)
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
@@ -80,6 +83,7 @@ from sqlbuild.spec.contracts.models import (
     SchemaSeedEntry,
     SourceColumnEntry,
     SourceEntry,
+    SourceLocation,
     TargetConfig,
 )
 
@@ -274,6 +278,22 @@ def _assemble_compiled_model(
             placeholders=placeholders,
             dialect=profile.sql_analysis_dialect,
         )
+    output_column_locations: dict[str, SourceLocation] = (
+        model_input.model_file.output_column_locations
+    )
+    if (
+        not model_input.model_file.output_column_locations_extracted
+        and inferred_columns is not None
+        and model_input.schema_entry is not None
+        and model_input.schema_entry.columns
+    ):
+        output_column_locations = extract_model_output_column_locations(
+            contents=model_input.model_file.contents,
+            relative_path=model_input.model_file.relative_path,
+            extract_implicit_alias_columns=(
+                model_input.model_file.extract_implicit_alias_columns
+            ),
+        )
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=model_name),
         deps=model_build_deps(references=model_input.references, seed_names=seed_names),
@@ -288,7 +308,7 @@ def _assemble_compiled_model(
         fast_lineage_columns=fast_lineage_columns,
         fast_lineage_has_star=fast_lineage_has_star,
         authored_sql=model_input.model_file.contents,
-        output_column_locations=model_input.model_file.output_column_locations,
+        output_column_locations=output_column_locations,
         macro_deps=find_macro_call_names(model_input.macro_source_sql),
         enum_declarations=model_input.enum_declarations,
         constant_declarations=model_input.constant_declarations,
