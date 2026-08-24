@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
@@ -58,6 +60,7 @@ def build_compiled_project(
             inference_profile=adapter.expression_inference_profile(),
             skip_column_inference=skip_column_inference,
             column_lineage_mode=column_lineage_mode,
+            analysis_cache_dir=_analysis_cache_dir(discovered_inputs=discovered_inputs),
         ),
         default_schema=adapter.default_schema(),
         default_database=adapter.default_database(),
@@ -74,3 +77,8 @@ def build_compiled_project(
         project=project,
     )
     return project
+
+
+def _analysis_cache_dir(*, discovered_inputs: DiscoveredProjectInputs) -> Path | None:
+    project_dir: Path | None = discovered_inputs.project_dir
+    return project_dir / "target" / "compile-cache" if project_dir is not None else None

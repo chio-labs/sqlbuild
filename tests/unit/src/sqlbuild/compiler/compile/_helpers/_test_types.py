@@ -13,6 +13,12 @@ from sqlbuild.compiler.lineage.types import InferredNullability
 
 
 @dataclass(frozen=True)
+class AnalysisCacheTestCase:
+    description: str
+    expected_count: int
+
+
+@dataclass(frozen=True)
 class FindMatchingPathDefaultTestCase:
     description: str
     model_relative_path: str

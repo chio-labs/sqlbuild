@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.models import (
@@ -17,6 +19,7 @@ def assemble_project(
     inference_profile: ExpressionInferenceProfile | None = None,
     skip_column_inference: bool = False,
     column_lineage_mode: ColumnLineageMode = ColumnLineageMode.FAST,
+    analysis_cache_dir: Path | None = None,
 ) -> CompiledProject:
     """Convert compile inputs into the planner-ready project view."""
 
@@ -25,4 +28,5 @@ def assemble_project(
         inference_profile=inference_profile,
         skip_column_inference=skip_column_inference,
         column_lineage_mode=column_lineage_mode,
+        analysis_cache_dir=analysis_cache_dir,
     )

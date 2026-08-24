@@ -3,6 +3,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
@@ -17,6 +18,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 
 
 def build_loaded_macros(tmp_path: Path, macro_file_contents: str) -> dict[str, LoadedMacro]:
@@ -48,6 +50,15 @@ def compile_first_model(*, project_dir: Path) -> CompiledModel:
         skip_column_inference=True,
     )
     return compiled_project.models[0]
+
+
+def compile_project_with_cache(*, project_dir: Path) -> CompiledProject:
+    """Compile a discovered DuckDB fixture through the cache-enabled project boundary."""
+
+    return build_compiled_project(
+        discovered_inputs=discover_project_inputs(project_dir=project_dir),
+        adapter=DuckDbAdapter(),
+    )
 
 
 def compiled_sql_test_expected_model_names(test: CompiledSqlTest) -> tuple[str, ...]:

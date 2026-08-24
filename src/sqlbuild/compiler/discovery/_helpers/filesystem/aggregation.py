@@ -65,6 +65,7 @@ def build_discovered_project_inputs(
     return DiscoveredProjectInputs(
         project_config=project_config,
         local_config=local_config,
+        project_dir=project_dir,
         model_files=discover_model_files(
             project_dir=project_dir,
             extract_implicit_alias_columns=sql_analysis_enabled,
