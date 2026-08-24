@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.2](https://github.com/chio-labs/sqlbuild/compare/v0.55.1...v0.55.2) (2026-08-24)
+
+
+### Performance Improvements
+
+* **compiler:** complete large-project roadmap ([#334](https://github.com/chio-labs/sqlbuild/issues/334)) ([b482ee9](https://github.com/chio-labs/sqlbuild/commit/b482ee966f3f1556840aa0a8c589306387486147))
+
 ## [0.55.1](https://github.com/chio-labs/sqlbuild/compare/v0.55.0...v0.55.1) (2026-08-24)
 
 
