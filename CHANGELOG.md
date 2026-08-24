@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.1](https://github.com/chio-labs/sqlbuild/compare/v0.55.0...v0.55.1) (2026-08-24)
+
+
+### Performance Improvements
+
+* **compiler:** scan SQL references linearly ([#329](https://github.com/chio-labs/sqlbuild/issues/329)) ([bd45462](https://github.com/chio-labs/sqlbuild/commit/bd4546227ba100fb3bd6bc5462e175a65889c189))
+
 ## [0.55.0](https://github.com/chio-labs/sqlbuild/compare/v0.54.2...v0.55.0) (2026-08-24)
 
 
