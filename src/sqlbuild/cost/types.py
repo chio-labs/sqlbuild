@@ -1,5 +1,7 @@
 """Cost observability type declarations."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
