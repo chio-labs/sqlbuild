@@ -316,6 +316,53 @@ def _add_inspection_parsers(
     debug_parser.add_argument("--target", default=None)
     debug_parser.add_argument("--no-connection", action="store_true", default=False)
 
+    cost_parser: argparse.ArgumentParser = subparsers.add_parser(
+        CliCommand.COST,
+        help="show persisted Snowflake busy-compute estimates",
+    )
+    cost_parser.add_argument(
+        "cost_selector",
+        nargs="?",
+        default="latest",
+        metavar="latest|history|run_id",
+    )
+    cost_parser.add_argument(
+        "--limit", dest="cost_limit", type=int, default=None, help="limit returned rows"
+    )
+    cost_parser.add_argument(
+        "--no-limit",
+        dest="cost_no_limit",
+        action="store_true",
+        default=False,
+        help="return all matching rows",
+    )
+    cost_parser.add_argument(
+        "--sort", dest="cost_sort", default=None, help="metric used to sort results"
+    )
+    cost_parser.add_argument(
+        "--order",
+        dest="cost_order",
+        choices=("asc", "desc"),
+        default=None,
+        help="sort direction",
+    )
+    cost_parser.add_argument(
+        "--since",
+        dest="cost_since",
+        default=None,
+        help="inclusive ISO date/datetime or relative duration such as 7d",
+    )
+    cost_parser.add_argument(
+        "--until",
+        dest="cost_until",
+        default=None,
+        help="inclusive ISO date or timezone-aware datetime",
+    )
+    cost_parser.add_argument(
+        "--json", action="store_true", default=False, help="write stable JSON to stdout"
+    )
+    _ = add_execution_json_output_arg(cost_parser)
+
     query_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.QUERY)
     query_parser.add_argument("query_sql", nargs="?", metavar="sql")
     query_parser.add_argument("--file", dest="query_file", default=None)

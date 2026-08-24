@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from collections import defaultdict
 from pathlib import Path
 from textwrap import dedent
+from typing import Any
 
 import pytest
 
@@ -804,6 +806,25 @@ def test_given_snowflake_local_config_when_running_query_then_outputs_expected_r
         fragment: str
         for fragment in test_case.expected_stdout_fragments:
             assert fragment in result.stdout
+        assert "Cost" in result.stdout
+        run_artifacts: tuple[Path, ...] = tuple(
+            (project_dir / "target" / "runs").glob("*/run.json")
+        )
+        assert len(run_artifacts) == 1
+        run_payload: dict[str, Any] = json.loads(run_artifacts[0].read_text(encoding="utf-8"))
+        assert run_payload["adapter_name"] == "snowflake"
+        assert run_payload["build_status"] == "success"
+        assert run_payload["cost"]["rate_source"] == "default"
+        assert "estimated_compute_credits" in run_payload["cost"]
+        assert (run_artifacts[0].parent / "statements.jsonl").is_file()
+        cost_result: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "cost", "latest", "--json"),
+            project_dir=project_dir,
+        )
+        assert cost_result.returncode == 0, cost_result.stdout + cost_result.stderr
+        cost_payload: dict[str, Any] = json.loads(cost_result.stdout)
+        assert cost_payload["schema_version"] == 1
+        assert cost_payload["run_id"] == run_payload["run_id"]
         assert test_case.expected_schema_fragment in result.stdout
     finally:
         cleanup_snowflake_schema(schema_name=schema_name)
@@ -1323,6 +1344,11 @@ def test_given_snapshot_project_when_building_on_snowflake_then_scd2_history_is_
         fragment: str
         for fragment in test_case.expected_failure_fragments:
             assert fragment in failure_result.stdout + failure_result.stderr
+        cost_run_payloads: tuple[dict[str, Any], ...] = tuple(
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in (project_dir / "target" / "runs").glob("*/run.json")
+        )
+        assert any(payload["build_status"] == "failed" for payload in cost_run_payloads)
         assert_current_snowflake_snapshot_rows(
             schema_name=schema_name,
             expected_rows=test_case.expected_current_rows_after_initial_build,

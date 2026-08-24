@@ -14,6 +14,7 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRenderers,
     StandardSourceFreshnessPlanningResult,
 )
+from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 
@@ -111,17 +112,29 @@ def _append_records_by_location(
     records: list[SourceFreshnessRecord]
     for location, records in records_by_location.items():
         database, schema = location
-        write_source_freshness_records(
-            connection=connection,
-            execute=adapter.execute,
-            database=database,
-            schema=schema,
-            records=tuple(records),
-            renderers=SourceFreshnessRenderers(
-                render_qualified_name=adapter.render_qualified_name,
-                render_framework_type=adapter.render_framework_type,
-                render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
-                render_create_index_sqls=adapter.render_create_source_freshness_index_sqls,
-            ),
-            transient=adapter.state_tables_transient,
-        )
+        records_by_source_name: dict[str, list[SourceFreshnessRecord]] = {}
+        record: SourceFreshnessRecord
+        for record in records:
+            records_by_source_name.setdefault(record.source_name, []).append(record)
+        source_name: str
+        source_records: list[SourceFreshnessRecord]
+        for source_name, source_records in records_by_source_name.items():
+            with CostContext.resource_scope(
+                resource_type="source",
+                resource_name=source_name,
+                phase="freshness_finalization",
+            ):
+                write_source_freshness_records(
+                    connection=connection,
+                    execute=adapter.execute,
+                    database=database,
+                    schema=schema,
+                    records=tuple(source_records),
+                    renderers=SourceFreshnessRenderers(
+                        render_qualified_name=adapter.render_qualified_name,
+                        render_framework_type=adapter.render_framework_type,
+                        render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
+                        render_create_index_sqls=adapter.render_create_source_freshness_index_sqls,
+                    ),
+                    transient=adapter.state_tables_transient,
+                )

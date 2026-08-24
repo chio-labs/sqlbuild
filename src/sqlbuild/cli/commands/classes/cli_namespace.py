@@ -78,6 +78,13 @@ _DEFAULT_VALUES: dict[str, object] = {
     "query_format": "long",
     "query_limit": 20,
     "query_no_limit": False,
+    "cost_selector": "latest",
+    "cost_limit": None,
+    "cost_no_limit": False,
+    "cost_sort": None,
+    "cost_order": None,
+    "cost_since": None,
+    "cost_until": None,
     "lineage_target": None,
     "lineage_format": "tree",
     "lineage_direction": "upstream",
@@ -196,6 +203,13 @@ class CliNamespace:
     query_format: str
     query_limit: int | None
     query_no_limit: bool
+    cost_selector: str
+    cost_limit: int | None
+    cost_no_limit: bool
+    cost_sort: str | None
+    cost_order: str | None
+    cost_since: str | None
+    cost_until: str | None
     lineage_target: str | None
     lineage_format: str
     lineage_direction: str

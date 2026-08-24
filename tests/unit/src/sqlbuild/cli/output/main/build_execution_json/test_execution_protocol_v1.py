@@ -17,6 +17,7 @@ from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from tests.unit.src.sqlbuild.cli.commands.shared._helpers.helpers import build_audit_result
 from tests.unit.src.sqlbuild.cli.output.main.build_execution_json._test_types import (
+    ExecutionJsonCostTestCase,
     ExecutionJsonRelationReuseTestCase,
     ExecutionJsonSeedReasonTestCase,
     ExecutionJsonTestCase,
@@ -79,6 +80,36 @@ def test_given_build_result_with_python_nodes_when_formatting_json_then_includes
     assert assets[test_case.expected_asset_name]["kind"] == "asset"
     assert assets[test_case.expected_asset_name]["metadata"] == {"uri": "s3://orders"}
     assert assets[test_case.expected_asset_name]["materialized"] is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExecutionJsonCostTestCase(
+            description="build json includes run identity and normalized cost snapshot",
+            expected_run_id="run-123",
+            expected_cost={
+                "schema_version": 1,
+                "status": "complete",
+                "totals": {"attributed_compute_credits": "0.01"},
+            },
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cost_snapshot_when_formatting_build_json_then_same_snapshot_is_embedded(
+    test_case: ExecutionJsonCostTestCase,
+) -> None:
+    result: str = format_build_execution_json(
+        result=BuildExecutionResult(status=BuildStatus.SUCCESS),
+        plan=build_plan_output(),
+        run_id=test_case.expected_run_id,
+        cost=test_case.expected_cost,
+    )
+
+    payload: dict[str, object] = json.loads(result)
+    assert payload["run_id"] == test_case.expected_run_id
+    assert payload["cost"] == test_case.expected_cost
 
 
 @pytest.mark.parametrize(

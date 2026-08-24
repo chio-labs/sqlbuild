@@ -10,6 +10,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.executor.build.main._execute import execute_build_plan
 from sqlbuild.executor.build.main._external_source_loads import (
     run_external_source_loads_before_connections,
@@ -60,6 +61,38 @@ def run_build_pipeline(
     initial_state: BuildInitialState | None = None,
 ) -> BuildExecutionResult:
     """Execute a full build pipeline: resolve settings, open connections, run plan, close."""
+
+    with CostContext.scope(
+        run_id=runtime.run_id,
+        resource_type="run",
+        resource_name=runtime.target,
+        ledger_path=runtime.runtime_dir / "runs" / runtime.run_id / "statements.jsonl",
+        phase="build",
+    ):
+        return _run_build_pipeline(
+            plan=plan,
+            connection_config=connection_config,
+            adapter=adapter,
+            settings=settings,
+            runtime=runtime,
+            callbacks=callbacks,
+            customizations=customizations,
+            initial_state=initial_state,
+        )
+
+
+def _run_build_pipeline(
+    *,
+    plan: PlanOutput,
+    connection_config: dict[str, object],
+    adapter: BaseAdapter,
+    settings: SettingsConfig,
+    runtime: BuildRuntimeParams,
+    callbacks: BuildCallbacks | None = None,
+    customizations: BuildCustomizations | None = None,
+    initial_state: BuildInitialState | None = None,
+) -> BuildExecutionResult:
+    """Run the build while the public wrapper owns telemetry context."""
 
     inputs: ResolvedBuildInputs = resolve_build_inputs(
         settings=settings,

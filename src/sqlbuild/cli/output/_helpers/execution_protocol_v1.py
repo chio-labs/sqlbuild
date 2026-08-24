@@ -60,6 +60,8 @@ def format_build_execution_json(
     python_node_results: tuple[PythonNodeExecutionResult, ...] = (),
     python_check_results: tuple[PythonCheckExecutionResult, ...] = (),
     command: str = "build",
+    run_id: str | None = None,
+    cost: dict[str, object] | None = None,
 ) -> str:
     """Format build command execution results as JSON."""
 
@@ -107,6 +109,8 @@ def format_build_execution_json(
             "python_check_warn_count": python_check_warn_count,
             "python_check_fail_count": python_check_fail_count,
         },
+        run_id=run_id,
+        cost=cost,
     )
 
 
@@ -285,6 +289,8 @@ def _format_execution_json(
     checks: tuple[dict[str, object], ...],
     summary: dict[str, object],
     scenarios: tuple[dict[str, object], ...] = (),
+    run_id: str | None = None,
+    cost: dict[str, object] | None = None,
 ) -> str:
     payload: dict[str, object] = {
         "version": _JSON_VERSION,
@@ -296,6 +302,10 @@ def _format_execution_json(
     }
     if scenarios:
         payload["scenarios"] = scenarios
+    if run_id is not None:
+        payload["run_id"] = run_id
+    if cost is not None:
+        payload["cost"] = cost
     return json.dumps(payload, indent=2) + "\n"
 
 

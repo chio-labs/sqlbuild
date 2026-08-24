@@ -68,6 +68,7 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlRunSelection,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
+from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
@@ -315,17 +316,30 @@ def run_virtual_build(
     output: PlanOutput = plan.plan_output
     entries: tuple[PythonPlanEntry, ...] = python_plan.plan_entries
     exec_hooks: VirtualBuildExecutionHooks = (
-        hooks.on_plan_ready(rewritten.project, plan_output=output, python_plan_entries=entries)
+        hooks.on_plan_ready(
+            project=rewritten.project,
+            plan_output=output,
+            python_plan_entries=entries,
+        )
         if hooks.on_plan_ready is not None
         else VirtualBuildExecutionHooks()
     )
-    ingress_result: PythonIngressLoaderExecutorResult | None = _run_ingress_python_nodes(
-        runtime=runtime,
-        python_plan=python_plan,
-        plan_output=plan.plan_output,
-        project=rewritten.project,
-        exec_hooks=exec_hooks,
-    )
+    with CostContext.scope(
+        run_id=rewritten.project.run_id,
+        resource_type="run",
+        resource_name=rewritten.project.effective_target_name or "virtual",
+        ledger_path=(
+            runtime.project_dir / "target" / "runs" / rewritten.project.run_id / "statements.jsonl"
+        ),
+        phase="virtual_ingress",
+    ):
+        ingress_result: PythonIngressLoaderExecutorResult | None = _run_ingress_python_nodes(
+            runtime=runtime,
+            python_plan=python_plan,
+            plan_output=plan.plan_output,
+            project=rewritten.project,
+            exec_hooks=exec_hooks,
+        )
     ingress_python_results: tuple[PythonNodeExecutionResult, ...] = (
         ingress_result.python_results if ingress_result is not None else ()
     )
@@ -350,19 +364,32 @@ def run_virtual_build(
             ingress_load_results=ingress_load_results,
         )
     if result.status == BuildStatus.SUCCESS:
-        _persist_successful_virtual_build(
-            runtime=runtime,
-            project=graph.project,
-            reads=reads,
-            plan_output=plan.executor_plan_output,
-            result=result,
-        )
-        read_side_results: tuple[PythonNodeExecutionResult, ...] = _run_read_side_python_nodes(
-            runtime=runtime,
-            python_plan=python_plan,
-            project=rewritten.project,
-            result=result,
-        )
+        with CostContext.scope(
+            run_id=rewritten.project.run_id,
+            resource_type="run",
+            resource_name=rewritten.project.effective_target_name or "virtual",
+            ledger_path=(
+                runtime.project_dir
+                / "target"
+                / "runs"
+                / rewritten.project.run_id
+                / "statements.jsonl"
+            ),
+            phase="virtual_finalize",
+        ):
+            _persist_successful_virtual_build(
+                runtime=runtime,
+                project=graph.project,
+                reads=reads,
+                plan_output=plan.executor_plan_output,
+                result=result,
+            )
+            read_side_results: tuple[PythonNodeExecutionResult, ...] = _run_read_side_python_nodes(
+                runtime=runtime,
+                python_plan=python_plan,
+                project=rewritten.project,
+                result=result,
+            )
         if any(
             python_result.status == PythonNodeStatus.FAILED for python_result in read_side_results
         ):
@@ -954,11 +981,18 @@ def _execute_virtual_build_plan(
     prepare_version_functions: dict[str, Callable[[PrepareVersionContext], None]] = (
         load_custom_prepare_version_functions(runtime.discovered_inputs.materialization_files)
     )
-    _prepare_virtual_physical_schemas(
-        adapter=runtime.adapter,
-        connection_config=runtime.connection_config,
-        plan_output=plan.executor_plan_output,
-    )
+    with CostContext.scope(
+        run_id=project.run_id,
+        resource_type="run",
+        resource_name=project.effective_target_name or "virtual",
+        ledger_path=runtime.project_dir / "target" / "runs" / project.run_id / "statements.jsonl",
+        phase="virtual_schema_preparation",
+    ):
+        _prepare_virtual_physical_schemas(
+            adapter=runtime.adapter,
+            connection_config=runtime.connection_config,
+            plan_output=plan.executor_plan_output,
+        )
     result: BuildExecutionResult = run_build_pipeline(
         plan=plan.executor_plan_output,
         connection_config=runtime.connection_config,
@@ -968,6 +1002,7 @@ def _execute_virtual_build_plan(
             snapshots=options.snapshots or SnapshotsConfig(),
             allow_snapshot_schema_change=options.allow_snapshot_schema_change,
             run_id=project.run_id,
+            runtime_dir=runtime.project_dir / "target",
             run_tests=options.run_tests,
             run_audits=options.run_audits,
             fail_fast=options.fail_fast,
@@ -982,6 +1017,7 @@ def _execute_virtual_build_plan(
             start_cursor_int=options.start_cursor_int,
             end_cursor_int=options.end_cursor_int,
             query_change_tracking=False,
+            target=project.effective_target_name or "",
             providers=options.providers,
         ),
         callbacks=BuildCallbacks(

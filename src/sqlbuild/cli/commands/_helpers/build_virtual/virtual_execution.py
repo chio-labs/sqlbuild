@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO
 
@@ -23,10 +24,13 @@ from sqlbuild.cli.progress.classes.connection_progress_reporter import (
 from sqlbuild.cli.progress.classes.planning_progress_reporter import (
     PlanningProgressReporter,
 )
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.planner.models import CursorOverrides
+from sqlbuild.compiler.pipeline.models import PythonPlanEntry
+from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.virtual.executor.main.build import run_virtual_build as run_virtual_build_pipeline
 from sqlbuild.virtual.executor.models import (
+    VirtualBuildExecutionHooks,
     VirtualBuildHooks,
     VirtualBuildOptions,
     VirtualBuildPipelineResult,
@@ -43,6 +47,7 @@ def execute_virtual_build(
     connection_config: dict[str, object],
     request: VirtualBuildCliRequest,
     progress_stream: TextIO | None,
+    on_project_ready: Callable[[CompiledProject], None] | None = None,
 ) -> VirtualBuildExecution:
     """Prepare virtual build reporting and execute the pipeline."""
 
@@ -77,6 +82,21 @@ def execute_virtual_build(
         ),
     )
     cursor_overrides: CursorOverrides = request.cursor_overrides or CursorOverrides()
+
+    def handle_plan_ready(
+        *,
+        project: CompiledProject,
+        plan_output: PlanOutput,
+        python_plan_entries: tuple[PythonPlanEntry, ...],
+    ) -> VirtualBuildExecutionHooks:
+        if on_project_ready is not None:
+            on_project_ready(project)
+        return plan_hook.on_plan_ready(
+            project=project,
+            plan_output=plan_output,
+            python_plan_entries=python_plan_entries,
+        )
+
     result: VirtualBuildPipelineResult = run_virtual_build_pipeline(
         project_dir=project_dir,
         discovered_inputs=discovered_inputs,
@@ -114,11 +134,7 @@ def execute_virtual_build(
             providers=request.providers,
         ),
         hooks=VirtualBuildHooks(
-            on_plan_ready=lambda project, plan_output, python_plan_entries: plan_hook.on_plan_ready(
-                project=project,
-                plan_output=plan_output,
-                python_plan_entries=python_plan_entries,
-            ),
+            on_plan_ready=handle_plan_ready,
             on_progress=planning_progress.on_progress,
             on_connection_start=connection_progress.on_connection_start,
             on_connection_complete=lambda connection_count, elapsed_seconds: (

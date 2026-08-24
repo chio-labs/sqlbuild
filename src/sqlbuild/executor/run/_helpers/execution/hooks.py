@@ -19,6 +19,8 @@ from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_HOOK
 from sqlbuild.compiler.python_nodes.main.identity import build_python_node_identity
 from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
 from sqlbuild.compiler.python_nodes.types import SkipMode
+from sqlbuild.cost.classes.cost_context import CostContext
+from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.python_nodes.main._fingerprinting import (
     try_write_python_node_identity_fingerprint,
@@ -134,6 +136,34 @@ def execute_hooks(
 
 
 def invoke_python_hook(
+    *,
+    connection: Any,
+    adapter: BaseAdapter,
+    hook_entry: PythonHookEntry,
+    hook_functions: tuple[DiscoveredHookFunction, ...],
+    hook_index: int,
+    phase: HookPhase,
+    hook_run: HookRunContext,
+    hook_results: list[HookExecutionResult] | None = None,
+) -> bool:
+    with CostContext.resource_scope(
+        resource_type="hook",
+        resource_name=hook_entry.name,
+        phase=phase.value,
+    ):
+        return _invoke_python_hook(
+            connection=connection,
+            adapter=adapter,
+            hook_entry=hook_entry,
+            hook_functions=hook_functions,
+            hook_index=hook_index,
+            phase=phase,
+            hook_run=hook_run,
+            hook_results=hook_results,
+        )
+
+
+def _invoke_python_hook(
     *,
     connection: Any,
     adapter: BaseAdapter,
@@ -299,7 +329,14 @@ def _execute_sql_hook(
     hook_results: list[HookExecutionResult] | None,
 ) -> None:
     try:
-        adapter.execute(connection=connection, sql=statement)
+        current: CostResourceContext | None = CostContext.current()
+        parent_name: str = "hook" if current is None else current.resource_name
+        with CostContext.resource_scope(
+            resource_type="hook",
+            resource_name=f"{parent_name}.{phase.value}[{hook_index}]",
+            phase=phase.value,
+        ):
+            adapter.execute(connection=connection, sql=statement)
     except Exception as exc:
         _record_hook_result(
             hook_results=hook_results,

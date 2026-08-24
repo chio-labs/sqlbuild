@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from decimal import Decimal
 from pathlib import Path
 
 
@@ -89,6 +90,21 @@ class LoadLocalConfigTestCase:
 class LoadProjectConfigErrorTestCase:
     description: str
     project_file_contents: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class LoadProjectCostConfigTestCase:
+    description: str
+    project_file_contents: str
+    expected_usd_per_credit: Decimal
+    expected_is_default: bool
+
+
+@dataclass(frozen=True)
+class LoadProjectCostConfigErrorTestCase:
+    description: str
+    value: str
     expected_error_fragment: str
 
 

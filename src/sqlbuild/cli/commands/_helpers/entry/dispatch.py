@@ -27,6 +27,7 @@ from sqlbuild.cli.commands.models import (
     CloneCommandRequest,
     CompileCommandRequest,
     CompileProfileFlags,
+    CostCommandRequest,
     DbtInitCommandRequest,
     DiffCommandRequest,
     FreshnessCommandRequest,
@@ -367,6 +368,22 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
             selected_target=args.target,
             output_format=args.query_format,
             limit=query_limit,
+        )
+    if args.command == CliCommand.COST:
+        return handlers.run_cost(
+            CostCommandRequest(
+                project_dir=project_dir,
+                selector=args.cost_selector,
+                no_color=args.no_color,
+                limit=args.cost_limit,
+                no_limit=args.cost_no_limit,
+                sort=args.cost_sort,
+                order=args.cost_order,
+                since=args.cost_since,
+                until=args.cost_until,
+                json_output=args.json,
+                json_output_path=args.json_output,
+            )
         )
     if args.command == CliCommand.DEBUG:
         return handlers.run_debug(

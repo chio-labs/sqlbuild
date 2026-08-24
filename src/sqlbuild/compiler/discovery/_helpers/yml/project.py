@@ -5,6 +5,7 @@ from __future__ import annotations
 import tomllib
 from dataclasses import fields
 from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import cast
 
@@ -27,8 +28,10 @@ from sqlbuild.compiler.discovery.constants import (
 )
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.planner.types import ContractPolicy
+from sqlbuild.cost.constants import USD_PER_CREDIT_CONFIG_KEY
 from sqlbuild.spec.contracts.models import (
     ClonePolicy,
+    CostConfig,
     DbtConfig,
     DefaultsConfig,
     JanitorConfig,
@@ -69,6 +72,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
     default_target: str | None = _optional_str(payload=payload, key="default_target")
     connection: dict[str, object] = _optional_mapping(payload=payload, key="connection")
     settings: SettingsConfig = _load_settings(payload=payload.get("settings"), file_path=file_path)
+    cost: CostConfig = _load_cost(payload=payload.get("cost"), file_path=file_path)
     defaults: DefaultsConfig = _load_defaults(payload=payload.get("defaults"), file_path=file_path)
     path_defaults: dict[str, dict[str, object]] = _load_path_defaults(
         payload=payload.get("path_defaults"),
@@ -99,6 +103,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         default_target=default_target,
         connection=connection,
         settings=settings,
+        cost=cost,
         defaults=defaults,
         path_defaults=path_defaults,
         vars=vars_map,
@@ -295,6 +300,27 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         default_audit_severity=default_audit_severity,
         default_audit_run_scope=default_audit_run_scope,
     )
+
+
+def _load_cost(*, payload: object, file_path: Path) -> CostConfig:
+    mapping: dict[str, object] = _coerce_mapping(payload=payload, label="cost", file_path=file_path)
+    _validate_allowed_keys(
+        mapping=mapping,
+        allowed_keys=frozenset({USD_PER_CREDIT_CONFIG_KEY}),
+        label="cost",
+        file_path=file_path,
+    )
+    if USD_PER_CREDIT_CONFIG_KEY not in mapping:
+        return CostConfig()
+    raw_value: object = mapping[USD_PER_CREDIT_CONFIG_KEY]
+    if isinstance(raw_value, bool) or not isinstance(raw_value, int | float):
+        raise ProjectConfigError(f"{file_path} cost.usd_per_credit must be a number")
+    value: Decimal = Decimal(str(raw_value))
+    if not value.is_finite() or value <= 0:
+        raise ProjectConfigError(
+            f"{file_path} cost.usd_per_credit must be a finite number greater than zero"
+        )
+    return CostConfig(usd_per_credit=value, usd_per_credit_is_default=False)
 
 
 def _load_local_settings(

@@ -176,6 +176,29 @@ stale-checked.
 
 ClickHouse, Redshift, Trino, Spark, and Athena are on the way.
 
+## Snowflake cost estimates
+
+Native Snowflake builds automatically show a compact per-run busy-compute estimate. SQLBuild
+attributes visible overlapping query intervals fairly across active queries, converts attributed
+seconds using the warehouse-size credit rate, and estimates USD from the configured rate:
+
+```toml
+[cost]
+usd_per_credit = 3.00
+```
+
+The default is `3.00` USD per credit and is visibly marked as a default. Configure the value with
+your Snowflake contract rate. Use `sqb cost`, `sqb cost latest`, `sqb cost <run_id>`, or
+`sqb cost history --since 7d` to inspect persisted records. `--json` and `--json-output PATH`
+provide a versioned, decimal-safe output contract. Pending detail records are refreshed from
+Snowflake when inspected again.
+
+These values are attributed compute credits and estimated cost, not Snowflake-billed credits or
+invoice reconciliation. The estimate uses only query history visible to the executing role and
+does not reconstruct invisible concurrent work, warehouse resume or idle tail, the 60-second
+minimum, cloud-services credits, contract adjustments, or multi-cluster billing. Run metadata and
+query IDs are stored under `target/runs/<run_id>/`; raw SQL is not persisted.
+
 ## Documentation
 
 Full documentation is available at [docs.sqlbuild.com](https://docs.sqlbuild.com).
