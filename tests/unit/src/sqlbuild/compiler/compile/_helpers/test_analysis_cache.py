@@ -15,6 +15,7 @@ from sqlbuild.compiler.compile._helpers.analysis.cache import (
     write_model_analyses,
 )
 from sqlbuild.compiler.compile._helpers.assembly import project as assembly_project
+from sqlbuild.compiler.compile.constants import COMPILE_CACHE_DISABLE_ENV_VAR
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
@@ -312,3 +313,26 @@ def test_given_unselected_invalid_reference_when_compiling_then_live_validation_
         )
 
     assert len(tuple((tmp_path / "target").rglob("*.sqlite3"))) == test_case.expected_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (AnalysisCacheTestCase(description="explicit cache bypass", expected_count=2),),
+    ids=lambda case: case.description,
+)
+def test_given_compile_cache_bypass_when_compiling_twice_then_both_runs_analyze_cold(
+    test_case: AnalysisCacheTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, _CACHE_REPO_FILES)
+    monkeypatch.setenv(COMPILE_CACHE_DISABLE_ENV_VAR, "1")
+    analyzer: Mock = Mock(wraps=assembly_project.analyze_columns_and_lineage_with_polyglot)
+    monkeypatch.setattr(assembly_project, "analyze_columns_and_lineage_with_polyglot", analyzer)
+
+    _ = compile_project_with_cache(project_dir=tmp_path)
+    _ = compile_project_with_cache(project_dir=tmp_path)
+
+    assert analyzer.call_count == test_case.expected_count
+    assert not tuple((tmp_path / "target").rglob("*.sqlite3"))

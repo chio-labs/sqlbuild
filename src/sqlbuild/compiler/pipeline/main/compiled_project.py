@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.compile.constants import (
+    COMPILE_CACHE_DISABLE_ENV_VAR,
+    COMPILE_CACHE_DISABLE_VALUE,
+)
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
@@ -99,6 +104,8 @@ def build_compiled_project(
 
 
 def _analysis_cache_dir(*, discovered_inputs: DiscoveredProjectInputs) -> Path | None:
+    if os.environ.get(COMPILE_CACHE_DISABLE_ENV_VAR) == COMPILE_CACHE_DISABLE_VALUE:
+        return None
     project_dir: Path | None = discovered_inputs.project_dir
     return project_dir / "target" / "compile-cache" if project_dir is not None else None
 
