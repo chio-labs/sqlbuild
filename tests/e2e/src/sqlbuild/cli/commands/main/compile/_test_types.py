@@ -13,7 +13,14 @@ class CompilePerformanceGuardTestCase:
 
 
 @dataclass(frozen=True)
-class CompileBenchmarkResult:
-    elapsed_seconds: float
-    total_sql_bytes: int
-    generated_scan_events: int
+class CompileScalingGuardTestCase:
+    description: str
+    model_count: int
+    small_scan_event_lines_per_model: int
+    large_scan_event_lines_per_model: int
+    expected_min_small_sql_bytes: int
+    expected_min_large_sql_bytes: int
+    expected_small_scan_events: int
+    expected_large_scan_events: int
+    expected_max_seconds: float
+    expected_max_scaling_ratio: float

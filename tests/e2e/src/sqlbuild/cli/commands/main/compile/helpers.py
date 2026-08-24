@@ -14,9 +14,6 @@ from typing import Any
 import pytest
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
-from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
-    CompileBenchmarkResult,
-)
 
 
 def run_advanced_compile_benchmark(
@@ -25,7 +22,7 @@ def run_advanced_compile_benchmark(
     model_count: int,
     expected_max_seconds: float,
     scan_event_lines_per_model: int = 0,
-) -> CompileBenchmarkResult:
+) -> float:
     skip_actions: dict[bool, Callable[[], None]] = {
         False: _continue_compile_benchmark,
         True: _skip_compile_benchmark,
@@ -49,11 +46,11 @@ def run_advanced_compile_benchmark(
         )
         elapsed_seconds: float = time.perf_counter() - start
     assert exit_code == 0
-    return CompileBenchmarkResult(
-        elapsed_seconds=elapsed_seconds,
-        total_sql_bytes=sum(path.stat().st_size for path in (project_dir / "models").glob("*.sql")),
-        generated_scan_events=model_count * scan_event_lines_per_model,
-    )
+    return elapsed_seconds
+
+
+def measure_model_sql_bytes(project_dir: Path) -> int:
+    return sum(path.stat().st_size for path in (project_dir / "models").glob("*.sql"))
 
 
 @contextmanager
