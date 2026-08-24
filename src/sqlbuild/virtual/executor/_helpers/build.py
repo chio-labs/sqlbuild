@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -1079,6 +1080,7 @@ def _execute_virtual_build_plan(
     microbatch_lease_check: Callable[[], None],
 ) -> BuildExecutionResult:
     options: VirtualBuildOptions = runtime.options
+    microbatch_state_lock: threading.Lock = threading.Lock()
     custom_materializations: dict[
         str, Callable[[MaterializationContext], MaterializationResult]
     ] = load_custom_materializations(runtime.discovered_inputs.materialization_files)
@@ -1128,6 +1130,7 @@ def _execute_virtual_build_plan(
                 entry=entry,
                 connection=connection,
                 model_version_hash=reads.semantics.expected_version_hashes.get(entry.name),
+                operation_lock=microbatch_state_lock,
             ),
             microbatch_lease_check=microbatch_lease_check,
         ),
@@ -1182,6 +1185,7 @@ def _resolve_virtual_microbatch_state(
     entry: ModelPlanEntry,
     connection: Any,
     model_version_hash: str | None,
+    operation_lock: threading.Lock,
 ) -> tuple[MicrobatchEventStore, MicrobatchScope]:
     version_hash: str = (
         model_version_hash
@@ -1219,6 +1223,7 @@ def _resolve_virtual_microbatch_state(
             backend=runtime.backend,
             connection_config=runtime.config.connection,
             schema=runtime.config.schema,
+            operation_lock=operation_lock,
         ),
         MicrobatchScope(
             scope_kind=VIRTUAL_MICROBATCH_SCOPE_KIND,
