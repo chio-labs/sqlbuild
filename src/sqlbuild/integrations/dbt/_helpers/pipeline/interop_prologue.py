@@ -19,8 +19,8 @@ from sqlbuild.integrations.dbt.classes.dbt_compile_reference_resolver import (
 )
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
-from sqlbuild.integrations.dbt.main.cli._enforce_standard_mode import (
-    enforce_dbt_interop_standard_mode,
+from sqlbuild.integrations.dbt.main.cli._enforce_direct_mode import (
+    enforce_dbt_interop_direct_mode,
 )
 from sqlbuild.integrations.dbt.main.cli._parse_execution_args import parse_dbt_execution_args
 from sqlbuild.integrations.dbt.main.cli._resolve_executable import resolve_dbt_executable
@@ -72,7 +72,7 @@ def resolve_dbt_execution_invocation(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=request.project_dir
     )
-    enforce_dbt_interop_standard_mode(discovered_inputs=discovered_inputs)
+    enforce_dbt_interop_direct_mode(discovered_inputs=discovered_inputs)
     dbt_options: DbtCliOptions = resolve_dbt_plan_options(
         project_dir=request.project_dir,
         discovered_inputs=discovered_inputs,

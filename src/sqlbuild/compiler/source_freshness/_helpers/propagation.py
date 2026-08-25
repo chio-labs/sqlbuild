@@ -1,4 +1,4 @@
-"""Standard source freshness downstream propagation helpers."""
+"""Direct source freshness downstream propagation helpers."""
 
 from __future__ import annotations
 
@@ -9,18 +9,18 @@ from sqlbuild.compiler.planner.main.selection.model_downstream_closure import (
 )
 from sqlbuild.compiler.planner.models import PlannerScope
 from sqlbuild.compiler.source_freshness.models import (
+    DirectSourceFreshnessPlanningResult,
+    DirectSourceFreshnessPropagationResult,
     SourceFreshnessIdentity,
-    StandardSourceFreshnessPlanningResult,
-    StandardSourceFreshnessPropagationResult,
 )
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 
 
-def build_standard_source_freshness_propagation_result(
+def build_direct_source_freshness_propagation_result(
     *,
-    source_freshness: StandardSourceFreshnessPlanningResult,
+    source_freshness: DirectSourceFreshnessPlanningResult,
     scope: PlannerScope,
-) -> StandardSourceFreshnessPropagationResult:
+) -> DirectSourceFreshnessPropagationResult:
     """Map changed/unknown source freshness roots to downstream model names."""
 
     changed_source_model_names: dict[SourceFreshnessIdentity, frozenset[str]] = {}
@@ -51,7 +51,7 @@ def build_standard_source_freshness_propagation_result(
         error_source_model_names[identity] = model_names
         blocked_model_names.update(model_names)
 
-    return StandardSourceFreshnessPropagationResult(
+    return DirectSourceFreshnessPropagationResult(
         changed_source_model_names=changed_source_model_names,
         unknown_source_model_names=unknown_source_model_names,
         error_source_model_names=error_source_model_names,

@@ -1,4 +1,4 @@
-"""Standard source freshness read operations."""
+"""Direct source freshness read operations."""
 
 from __future__ import annotations
 

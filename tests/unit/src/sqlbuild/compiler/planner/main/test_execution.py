@@ -17,9 +17,9 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
+    DirectSourceFreshnessPlanOutputTestCase,
     ExternalBlockedPlanOutputTestCase,
     HookFunctionPlanOutputTestCase,
-    StandardSourceFreshnessPlanOutputTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.main.helpers import (
     build_execution_plan_from_kwargs,
@@ -30,15 +30,15 @@ from tests.unit.src.sqlbuild.integrations.dbt.helpers import build_compiled_proj
 @pytest.mark.parametrize(
     "test_case",
     [
-        StandardSourceFreshnessPlanOutputTestCase(
-            description="standard plan output carries source freshness result",
+        DirectSourceFreshnessPlanOutputTestCase(
+            description="direct plan output carries source freshness result",
             expected_has_source_freshness=True,
         ),
     ],
     ids=lambda case: case.description,
 )
 def test_given_direct_plan_when_building_execution_plan_then_source_freshness_is_available(
-    test_case: StandardSourceFreshnessPlanOutputTestCase,
+    test_case: DirectSourceFreshnessPlanOutputTestCase,
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})

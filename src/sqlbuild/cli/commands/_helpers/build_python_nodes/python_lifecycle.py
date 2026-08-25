@@ -1,4 +1,4 @@
-"""Standard-mode Python lifecycle orchestration for build commands."""
+"""Direct-mode Python lifecycle orchestration for build commands."""
 
 from __future__ import annotations
 
@@ -14,10 +14,10 @@ from sqlbuild.cli.commands._helpers.build_python_nodes.python_lifecycle_selectio
 from sqlbuild.cli.commands._helpers.build_python_nodes.python_node_output import (
     write_python_node_results,
 )
-from sqlbuild.cli.commands.classes.standard_python_lifecycle_state import (
-    StandardPythonLifecycleState,
+from sqlbuild.cli.commands.classes.direct_python_lifecycle_state import (
+    DirectPythonLifecycleState,
 )
-from sqlbuild.cli.commands.models import StandardLifecycleCallbacks
+from sqlbuild.cli.commands.models import DirectLifecycleCallbacks
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -50,7 +50,7 @@ from sqlbuild.runtime.contracts.types import NodeStartCallback
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
-def prepare_standard_python_lifecycle(
+def prepare_direct_python_lifecycle(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     pipeline_result: CompilePipelineResult,
@@ -60,10 +60,10 @@ def prepare_standard_python_lifecycle(
     include_python: bool,
     reload_sources: bool,
     cursor_window: CursorWindow,
-    callbacks: StandardLifecycleCallbacks,
+    callbacks: DirectLifecycleCallbacks,
     providers: ProviderContainer | None = None,
-) -> StandardPythonLifecycleState:
-    """Execute ingress Python and prepare read-side dispatch for standard run/build."""
+) -> DirectPythonLifecycleState:
+    """Execute ingress Python and prepare read-side dispatch for direct run/build."""
 
     start_cursor_ts: datetime | None = cursor_window.start_cursor_ts
     end_cursor_ts: datetime | None = cursor_window.end_cursor_ts
@@ -194,7 +194,7 @@ def prepare_standard_python_lifecycle(
                 results=initial_read_side_results,
                 use_color=use_color,
             )
-    return StandardPythonLifecycleState(
+    return DirectPythonLifecycleState(
         plan_output=plan_output,
         discovered_inputs=discovered_inputs,
         adapter=adapter,

@@ -9,7 +9,7 @@ from sqlbuild.compiler.planner._helpers.pruning.run_despite_unchanged import (
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import PlannerScope, RunDespiteUnchangedPlanningResult
-from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
+from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 from sqlbuild.spec.contracts.types import SourceFreshnessValueKind
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     RunDespiteUnchangedPlanningTestCase,
@@ -62,7 +62,7 @@ def test_given_valid_run_despite_unchanged_config_when_planning_then_returns_exp
         run_despite_unchanged=test_case.run_despite_unchanged,
         materialized=test_case.materialized,
     )
-    source_freshness: StandardSourceFreshnessPlanningResult = (
+    source_freshness: DirectSourceFreshnessPlanningResult = (
         build_run_despite_unchanged_source_freshness(
             data_version=test_case.data_version,
             value_kind=test_case.value_kind,
@@ -124,7 +124,7 @@ def test_given_invalid_run_despite_unchanged_config_when_planning_then_raises_er
         run_despite_unchanged=test_case.run_despite_unchanged,
         materialized=test_case.materialized,
     )
-    source_freshness: StandardSourceFreshnessPlanningResult = (
+    source_freshness: DirectSourceFreshnessPlanningResult = (
         build_run_despite_unchanged_source_freshness(
             data_version=test_case.data_version,
             value_kind=test_case.value_kind,

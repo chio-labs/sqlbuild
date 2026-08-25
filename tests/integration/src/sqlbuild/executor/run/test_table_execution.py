@@ -180,21 +180,21 @@ def test_given_staged_table_when_executing_then_fails(
     "test_case",
     [
         TableSuccessTestCase(
-            description="direct table creates target from query",
+            description="immediate table creates target from query",
             setup_sql=(),
             model_sql="SELECT 1 AS id, 'alice' AS name",
             target_schema="staging",
             target_name="orders",
-            promotion_mode=TablePromotionMode.DIRECT,
+            promotion_mode=TablePromotionMode.IMMEDIATE,
             expected_row_count=1,
         ),
         TableSuccessTestCase(
-            description="direct table with passing audit succeeds end-to-end",
+            description="immediate table with passing audit succeeds end-to-end",
             setup_sql=(),
             model_sql="SELECT 1 AS id, 'alice' AS name",
             target_schema="staging",
             target_name="orders",
-            promotion_mode=TablePromotionMode.DIRECT,
+            promotion_mode=TablePromotionMode.IMMEDIATE,
             audit_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
             audit_severity="error",
             expected_row_count=1,
@@ -203,7 +203,7 @@ def test_given_staged_table_when_executing_then_fails(
     ],
     ids=lambda case: case.description,
 )
-def test_given_direct_table_when_executing_then_succeeds(
+def test_given_immediate_table_when_executing_then_succeeds(
     test_case: TableSuccessTestCase,
     adapter: DuckDbAdapter,
     connection: Any,
@@ -222,36 +222,36 @@ def test_given_direct_table_when_executing_then_succeeds(
     "test_case",
     [
         TableFailureTestCase(
-            description="direct table with type enforcement fails",
+            description="immediate table with type enforcement fails",
             setup_sql=(),
             model_sql="SELECT 1 AS id",
             target_schema="staging",
             target_name="orders",
-            promotion_mode=TablePromotionMode.DIRECT,
+            promotion_mode=TablePromotionMode.IMMEDIATE,
             type_enforcement=True,
             declared_columns=(("id", "BIGINT"),),
             expected_failed_phase=ExecutionPhase.TYPE_ENFORCEMENT,
             expected_error_fragment="requires staged promotion mode",
         ),
         TableFailureTestCase(
-            description="direct failing post_hook marks model failed with promoted relation",
+            description="immediate failing post_hook marks model failed with promoted relation",
             setup_sql=(),
             model_sql="SELECT 1 AS id",
             target_schema="staging",
             target_name="orders",
-            promotion_mode=TablePromotionMode.DIRECT,
+            promotion_mode=TablePromotionMode.IMMEDIATE,
             post_hook=[SqlHookEntry(statement="THIS IS NOT VALID SQL")],
             expected_failed_phase=ExecutionPhase.POST_HOOK,
             expected_promoted_relation="staging.orders",
             expected_row_count=1,
         ),
         TableFailureTestCase(
-            description="direct failing error audit reports target already updated",
+            description="immediate failing error audit reports target already updated",
             setup_sql=(),
             model_sql="SELECT NULL AS id, 'alice' AS name",
             target_schema="staging",
             target_name="orders",
-            promotion_mode=TablePromotionMode.DIRECT,
+            promotion_mode=TablePromotionMode.IMMEDIATE,
             audit_sql='SELECT id FROM __ref("orders") WHERE id IS NULL',
             audit_severity="error",
             expected_failed_phase=ExecutionPhase.AUDIT,
@@ -262,7 +262,7 @@ def test_given_direct_table_when_executing_then_succeeds(
     ],
     ids=lambda case: case.description,
 )
-def test_given_direct_table_when_executing_then_fails(
+def test_given_immediate_table_when_executing_then_fails(
     test_case: TableFailureTestCase,
     adapter: DuckDbAdapter,
     connection: Any,

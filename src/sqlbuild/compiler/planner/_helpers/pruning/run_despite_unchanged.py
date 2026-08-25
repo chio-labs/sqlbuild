@@ -22,8 +22,8 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import MaterializationType, RunDespiteUnchangedMode
 from sqlbuild.compiler.source_freshness.models import (
+    DirectSourceFreshnessPlanningResult,
     SourceFreshnessRecord,
-    StandardSourceFreshnessPlanningResult,
 )
 from sqlbuild.spec.contracts.types import SourceFreshnessValueKind
 
@@ -33,7 +33,7 @@ _DURATION_PATTERN: re.Pattern[str] = re.compile(r"^([1-9][0-9]*)([mhd])$")
 def build_run_despite_unchanged_planning_result(
     *,
     scope: PlannerScope,
-    source_freshness: StandardSourceFreshnessPlanningResult,
+    source_freshness: DirectSourceFreshnessPlanningResult,
     already_stale_model_names: frozenset[str],
     now: datetime,
 ) -> RunDespiteUnchangedPlanningResult:
@@ -106,7 +106,7 @@ def _validate_duration_prerequisites_if_needed(
     *,
     model: CompiledModel,
     scope: PlannerScope,
-    source_freshness: StandardSourceFreshnessPlanningResult,
+    source_freshness: DirectSourceFreshnessPlanningResult,
     now: datetime,
     raw_value: object,
 ) -> None:
@@ -126,7 +126,7 @@ def _decision_for_model(
     *,
     model: CompiledModel,
     scope: PlannerScope,
-    source_freshness: StandardSourceFreshnessPlanningResult,
+    source_freshness: DirectSourceFreshnessPlanningResult,
     now: datetime,
     raw_value: object,
 ) -> RunDespiteUnchangedDecision | None:
@@ -194,7 +194,7 @@ def _upstream_source_records(
     *,
     model: CompiledModel,
     scope: PlannerScope,
-    source_freshness: StandardSourceFreshnessPlanningResult,
+    source_freshness: DirectSourceFreshnessPlanningResult,
 ) -> tuple[SourceFreshnessRecord, ...]:
     upstream_source_names: frozenset[str] = _upstream_source_names(
         start_key=model.key,

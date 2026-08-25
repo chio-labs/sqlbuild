@@ -1,4 +1,4 @@
-"""Mutable standard Python lifecycle state."""
+"""Mutable direct Python lifecycle state."""
 
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 
 
-class StandardPythonLifecycleState:
-    """Mutable state for standard-mode Python lifecycle execution."""
+class DirectPythonLifecycleState:
+    """Mutable state for direct-mode Python lifecycle execution."""
 
     def __init__(self, **kwargs: object) -> None:
         self.plan_output = cast(PlanOutput, kwargs["plan_output"])

@@ -28,7 +28,7 @@ def enforce_virtual_only_flags_in_virtual_mode(
     include_stale_upstreams: bool,
     changes_only: bool = False,
 ) -> None:
-    """Block virtual-environment-only flags on standard-mode projects."""
+    """Block virtual-environment-only flags on direct-mode projects."""
 
     if discovered_inputs.project_config.settings.virtual_environments:
         return

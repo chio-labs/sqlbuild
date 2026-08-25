@@ -37,7 +37,7 @@ class PromotionStrategy(StrEnum):
 
 
 class TablePromotionMode(StrEnum):
-    DIRECT = "direct"
+    IMMEDIATE = "immediate"
     STAGED = "staged"
 
 

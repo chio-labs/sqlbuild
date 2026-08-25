@@ -1,4 +1,4 @@
-"""E2E coverage for difficult standard microbatch backfill and replay transitions."""
+"""E2E coverage for difficult direct microbatch backfill and replay transitions."""
 
 from __future__ import annotations
 

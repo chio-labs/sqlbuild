@@ -1,4 +1,4 @@
-"""Warehouse-backed standard-mode microbatch event store class."""
+"""Warehouse-backed direct-mode microbatch event store class."""
 
 from __future__ import annotations
 
@@ -14,16 +14,16 @@ from sqlbuild.microbatches._helpers.sql import (
 )
 from sqlbuild.microbatches.classes.event_codec import MicrobatchEventCodec
 from sqlbuild.microbatches.constants import (
+    DIRECT_MICROBATCH_SCOPE_KIND,
     MICROBATCH_GENERATION_WILDCARD,
     MICROBATCH_WRITE_ATTEMPTS,
     MICROBATCH_WRITE_RETRY_BASE_SECONDS,
-    STANDARD_MICROBATCH_SCOPE_KIND,
 )
 from sqlbuild.microbatches.exceptions import MicrobatchStateError
 from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
 
 
-class StandardMicrobatchEventStore:
+class DirectMicrobatchEventStore:
     """Append/read microbatch history through a model worker's warehouse connection."""
 
     def __init__(self, *, adapter: BaseAdapter, connection: Any) -> None:
@@ -87,10 +87,10 @@ class StandardMicrobatchEventStore:
         )
 
 
-def standard_microbatch_scope(
+def direct_microbatch_scope(
     *, adapter: BaseAdapter, connection: Any, entry: ModelPlanEntry
 ) -> MicrobatchScope:
-    """Build the standard logical scope for one destination relation."""
+    """Build the direct logical scope for one destination relation."""
 
     qualified: str = (
         entry.destination.qualified_name
@@ -112,7 +112,7 @@ def standard_microbatch_scope(
         or MICROBATCH_GENERATION_WILDCARD
     )
     return MicrobatchScope(
-        scope_kind=STANDARD_MICROBATCH_SCOPE_KIND,
+        scope_kind=DIRECT_MICROBATCH_SCOPE_KIND,
         scope_key=scope_key,
         model_name=entry.name,
         target_database=entry.destination.database,

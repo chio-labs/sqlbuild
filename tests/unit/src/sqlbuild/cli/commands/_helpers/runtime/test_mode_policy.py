@@ -54,7 +54,7 @@ def test_given_virtual_mode_defer_to_when_enforcing_flag_support_then_raises_cli
     "test_case",
     [
         ModeGuardTestCase(
-            description="blocks --virtual-env on standard-mode plan",
+            description="blocks --virtual-env on direct-mode plan",
             virtual_environments=False,
             command_name="plan",
             virtual_env="pr_123",
@@ -63,7 +63,7 @@ def test_given_virtual_mode_defer_to_when_enforcing_flag_support_then_raises_cli
             ),
         ),
         ModeGuardTestCase(
-            description="blocks --include-stale-upstreams on standard-mode build",
+            description="blocks --include-stale-upstreams on direct-mode build",
             virtual_environments=False,
             command_name="build",
             include_stale_upstreams=True,
@@ -75,7 +75,7 @@ def test_given_virtual_mode_defer_to_when_enforcing_flag_support_then_raises_cli
     ],
     ids=lambda case: case.description,
 )
-def test_given_standard_mode_virtual_only_flags_when_enforcing_then_raises_cli_user_error(
+def test_given_direct_mode_virtual_only_flags_when_enforcing_then_raises_cli_user_error(
     test_case: ModeGuardTestCase,
 ) -> None:
     discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
@@ -111,7 +111,7 @@ def test_given_standard_mode_virtual_only_flags_when_enforcing_then_raises_cli_u
             expected_error_fragment=None,
         ),
         ModeGuardTestCase(
-            description="allows standard-mode plan without virtual-only flags",
+            description="allows direct-mode plan without virtual-only flags",
             virtual_environments=False,
             command_name="plan",
             expected_error_fragment=None,

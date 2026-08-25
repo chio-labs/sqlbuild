@@ -6,7 +6,7 @@ from sqlbuild.cli.commands._helpers.diff.output import has_diff_failures, render
 from sqlbuild.cli.commands._helpers.diff.virtual_output import format_virtual_diff_header
 from sqlbuild.cli.commands.models import (
     DiffCommandRequest,
-    StandardDiffPreparation,
+    DirectDiffPreparation,
     VirtualDiffPreparation,
     VirtualDiffRunOutcome,
 )
@@ -14,13 +14,13 @@ from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.presentation.main.supports_color import supports_color
 
 
-def write_standard_diff_output(
+def write_direct_diff_output(
     *,
     request: DiffCommandRequest,
-    preparation: StandardDiffPreparation,
+    preparation: DirectDiffPreparation,
     result: DiffExecutionResult,
 ) -> None:
-    """Write standard diff output."""
+    """Write direct diff output."""
 
     print(
         render_diff_output(

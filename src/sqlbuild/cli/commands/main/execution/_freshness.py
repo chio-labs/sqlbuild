@@ -17,7 +17,7 @@ from sqlbuild.cli.commands._helpers.freshness.output import (
 )
 from sqlbuild.cli.commands._helpers.freshness.selection import resolve_freshness_source_names
 from sqlbuild.cli.commands._helpers.freshness.state import (
-    read_standard_freshness_state_for_command,
+    read_direct_freshness_state_for_command,
     read_virtual_freshness_state_for_command,
 )
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
@@ -100,7 +100,7 @@ def run_freshness(request: FreshnessCommandRequest) -> int:
                     virtual_environment_name=virtual_environment_name,
                 )
             elif compare_state:
-                previous_records = read_standard_freshness_state_for_command(
+                previous_records = read_direct_freshness_state_for_command(
                     adapter=adapter,
                     connection=connection,
                     project=graph.project,

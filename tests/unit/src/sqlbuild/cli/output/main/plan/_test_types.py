@@ -17,7 +17,7 @@ class FormatPlanTestCase:
     plan_output: PlanOutput
     full_refresh: bool = False
     display_options: DisplayOptions | None = None
-    include_standard_freshness_diagnostics: bool = True
+    include_direct_freshness_diagnostics: bool = True
     python_plan_entries: tuple[PythonPlanEntry, ...] = field(default_factory=tuple)
     expected_fragments: tuple[str, ...] = field(default_factory=tuple)
     unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)

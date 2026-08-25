@@ -115,14 +115,14 @@ class StrictAdapter(
 
     @abstractmethod
     def render_create_microbatch_state_table_sql(self, *, database: str | None, schema: str) -> str:
-        """Render DDL that creates the standard microbatch state table when missing."""
+        """Render DDL that creates the direct microbatch state table when missing."""
         ...
 
     @abstractmethod
     def render_create_microbatch_state_index_sqls(
         self, *, database: str | None, schema: str
     ) -> tuple[str, ...]:
-        """Render optional indexes for standard microbatch state."""
+        """Render optional indexes for direct microbatch state."""
         ...
 
     @abstractmethod

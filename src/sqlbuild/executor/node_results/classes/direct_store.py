@@ -1,4 +1,4 @@
-"""Standard-mode runtime node result store."""
+"""Direct-mode runtime node result store."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ from sqlbuild.executor.node_results.models import (
 )
 
 
-class StandardNodeResultStore(NodeResultStore):
-    """Warehouse-backed node result store for standard-mode execution."""
+class DirectNodeResultStore(NodeResultStore):
+    """Warehouse-backed node result store for direct-mode execution."""
 
     def __init__(
         self,

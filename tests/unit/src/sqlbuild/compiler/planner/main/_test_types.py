@@ -18,7 +18,7 @@ class CloneBoundaryTestCase:
 
 
 @dataclass(frozen=True)
-class StandardSourceFreshnessPlanOutputTestCase:
+class DirectSourceFreshnessPlanOutputTestCase:
     description: str
     expected_has_source_freshness: bool
 
@@ -36,7 +36,7 @@ class ExternalBlockedPlanOutputTestCase:
 
 
 @dataclass(frozen=True)
-class StandardDirectInputBaselineTestCase:
+class DirectInputBaselineTestCase:
     description: str
     models_by_name: dict[str, str]
     origin_model_names: tuple[str, ...]

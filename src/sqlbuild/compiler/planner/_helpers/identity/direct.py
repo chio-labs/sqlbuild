@@ -22,22 +22,22 @@ from sqlbuild.compiler.planner.main.identity.version_identity_model_metadata imp
     build_model_version_identity_metadata_json,
 )
 from sqlbuild.compiler.planner.models import (
+    DirectModelVersionIdentities,
     GraphIdentityNode,
     GraphNodeKey,
     PlannerScope,
-    StandardModelVersionIdentities,
 )
 from sqlbuild.compiler.planner.types import GraphResourceKind
 
 
-def build_standard_model_version_identities(
+def build_direct_model_version_identities(
     *,
     functions: tuple[CompiledFunction, ...],
     seeds: tuple[CompiledSeed, ...] = (),
     scope: PlannerScope,
     source_version_hashes: dict[str, str] | None = None,
-) -> StandardModelVersionIdentities:
-    """Compute current standard model identities from code and upstream identities."""
+) -> DirectModelVersionIdentities:
+    """Compute current direct model identities from code and upstream identities."""
 
     function_local_hashes: dict[str, str] = build_function_local_hashes(functions=functions)
     seed_version_hashes: dict[str, str] = {}
@@ -152,7 +152,7 @@ def build_standard_model_version_identities(
         if model_hash is not None:
             model_version_hashes[model_name] = model_hash
 
-    return StandardModelVersionIdentities(
+    return DirectModelVersionIdentities(
         function_local_hashes=function_local_hashes,
         seed_version_hashes=seed_version_hashes,
         seed_metadata_jsons=seed_metadata_jsons,

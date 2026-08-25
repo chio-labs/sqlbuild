@@ -14,7 +14,7 @@ from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatu
 from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.executor.node_results.main._standard_store import build_standard_node_result_store
+from sqlbuild.executor.node_results.main._direct_store import build_direct_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
 from sqlbuild.executor.node_results.types import NodeResultStatus
 from sqlbuild.executor.python_nodes._helpers.fingerprinting import (
@@ -79,7 +79,7 @@ def execute_python_check_nodes(
         runtime.result_store
         if runtime.result_store is not None
         else (
-            build_standard_node_result_store(
+            build_direct_node_result_store(
                 adapter=adapter,
                 connection=connection,
                 database=default_database,

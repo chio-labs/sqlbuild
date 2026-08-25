@@ -167,7 +167,7 @@ def freshness_sources_yml(
     )
 
 
-def persist_standard_source_freshness(*, project_dir: Path) -> None:
+def persist_direct_source_freshness(*, project_dir: Path) -> None:
     initial_build_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "build"),
         project_dir=project_dir,

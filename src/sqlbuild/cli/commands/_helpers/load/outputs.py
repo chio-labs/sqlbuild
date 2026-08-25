@@ -90,7 +90,7 @@ def write_load_plan_output(*, invocation: LoadInvocation) -> None:
 def write_load_execution_header(
     *, invocation: LoadInvocation, preparation: LoadExecutionPreparation
 ) -> None:
-    """Write standard execution header for load."""
+    """Write direct execution header for load."""
 
     write_execution_header(
         stream=invocation.progress_stream,

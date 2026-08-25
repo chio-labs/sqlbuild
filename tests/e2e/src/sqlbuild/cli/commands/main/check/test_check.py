@@ -280,7 +280,7 @@ def test_given_python_checks_when_running_check_then_reports_expected_results(
     "test_case",
     [
         CheckCommandTestCase(
-            description="standard selected Python check persists check identity",
+            description="direct selected Python check persists check identity",
             command=("--no-color", "check", "--select", "check_orders_export"),
             expected_returncode=0,
             expected_stdout_fragments=("check_orders_export",),
@@ -324,7 +324,7 @@ def test_given_successful_python_check_when_running_check_then_persists_check_id
     "test_case",
     [
         CheckCommandTestCase(
-            description="standard Python checks persist warn and fail result rows",
+            description="direct Python checks persist warn and fail result rows",
             command=("--no-color", "check", "--select", "check:warn_orders_export"),
             expected_returncode=0,
             expected_stdout_fragments=("warn_orders_export", "WARN"),

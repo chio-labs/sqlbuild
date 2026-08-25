@@ -53,7 +53,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
         FormatPlanTestCase(
             description="changes-only pruned models are visible as current skips",
             plan_output=build_plan_output(
-                metadata={"standard_pruned_model_names": ("customer_revenue_check",)}
+                metadata={"direct_pruned_model_names": ("customer_revenue_check",)}
             ),
             expected_fragments=(
                 "Plan ready  0 selected",
@@ -64,7 +64,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
         FormatPlanTestCase(
             description="verbose changes-only pruned models show current model names",
             plan_output=build_plan_output(
-                metadata={"standard_pruned_model_names": ("customer_revenue_check",)}
+                metadata={"direct_pruned_model_names": ("customer_revenue_check",)}
             ),
             display_options=DisplayOptions(max_entries_per_section=None),
             expected_fragments=(
@@ -78,7 +78,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             description="source freshness age warnings and errors are visible",
             plan_output=build_plan_output(
                 metadata={
-                    "standard_source_freshness": {
+                    "direct_source_freshness": {
                         "observed_source_names": ("raw.orders", "raw.payments"),
                         "changed_source_names": (),
                         "unchanged_source_names": ("raw.orders",),
@@ -101,7 +101,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             ),
         ),
         FormatPlanTestCase(
-            description="standard non-changes-only output hides freshness diagnostics only",
+            description="direct non-changes-only output hides freshness diagnostics only",
             plan_output=build_plan_output(
                 source_load_entries=(build_source_load_entry(name="raw_orders"),),
                 warnings=(
@@ -118,7 +118,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                     ),
                 ),
                 metadata={
-                    "standard_source_freshness": {
+                    "direct_source_freshness": {
                         "observed_source_names": ("raw_orders",),
                         "changed_source_names": ("raw_orders",),
                         "unchanged_source_names": (),
@@ -127,7 +127,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                     }
                 },
             ),
-            include_standard_freshness_diagnostics=False,
+            include_direct_freshness_diagnostics=False,
             expected_fragments=(
                 "Sources to load (1)",
                 "raw_orders",
@@ -1144,7 +1144,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             description="direct metadata caps remaining stale models after partial selection",
             plan_output=build_plan_output(
                 metadata={
-                    "standard_remaining_stale_model_names": tuple(
+                    "direct_remaining_stale_model_names": tuple(
                         f"model_{index:02d}" for index in range(55)
                     ),
                 },
@@ -1160,7 +1160,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             description="direct metadata shows full remaining stale set in verbose output",
             plan_output=build_plan_output(
                 metadata={
-                    "standard_remaining_stale_model_names": tuple(
+                    "direct_remaining_stale_model_names": tuple(
                         f"model_{index:02d}" for index in range(3)
                     ),
                 },
@@ -1243,7 +1243,7 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
         full_refresh=test_case.full_refresh,
         use_color=False,
         display_options=test_case.display_options,
-        include_standard_freshness_diagnostics=(test_case.include_standard_freshness_diagnostics),
+        include_direct_freshness_diagnostics=(test_case.include_direct_freshness_diagnostics),
         python_plan_entries=test_case.python_plan_entries,
     )
 
@@ -1326,7 +1326,7 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
                     ),
                 ),
                 metadata={
-                    "standard_source_freshness": {
+                    "direct_source_freshness": {
                         "observed_source_names": ("raw_orders",),
                         "changed_source_names": ("raw_orders",),
                         "unchanged_source_names": (),

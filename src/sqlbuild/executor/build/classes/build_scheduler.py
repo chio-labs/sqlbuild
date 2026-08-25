@@ -92,9 +92,9 @@ from sqlbuild.executor.testing.constants import SQL_TEST_ENTRY_MISSING_CODE
 from sqlbuild.executor.testing.main._execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
-from sqlbuild.microbatches.classes.standard_store import (
-    StandardMicrobatchEventStore,
-    standard_microbatch_scope,
+from sqlbuild.microbatches.classes.direct_store import (
+    DirectMicrobatchEventStore,
+    direct_microbatch_scope,
 )
 from sqlbuild.microbatches.models import MicrobatchScope
 from sqlbuild.microbatches.types import MicrobatchEventStore
@@ -218,7 +218,7 @@ class BuildScheduler:
         """Execute the full build schedule and return all results."""
 
         self._init_connection_pool()
-        self._provision_standard_microbatch_state()
+        self._provision_direct_microbatch_state()
         self._block_initial_failed_keys()
         self._compute_in_degrees()
         self._seed_ready_queue()
@@ -251,7 +251,7 @@ class BuildScheduler:
             end_audit_results,
         )
 
-    def _provision_standard_microbatch_state(self) -> None:
+    def _provision_direct_microbatch_state(self) -> None:
         if self._runtime.microbatch_state_resolver is not None:
             return
         locations: set[tuple[str | None, str]] = {
@@ -887,10 +887,10 @@ class BuildScheduler:
                             self._runtime.microbatch_state_resolver(model_entry, connection)
                         )
                     else:
-                        microbatch_event_store = StandardMicrobatchEventStore(
+                        microbatch_event_store = DirectMicrobatchEventStore(
                             adapter=self._adapter, connection=connection
                         )
-                        microbatch_scope = standard_microbatch_scope(
+                        microbatch_scope = direct_microbatch_scope(
                             adapter=self._adapter,
                             connection=connection,
                             entry=model_entry,
@@ -970,7 +970,7 @@ class BuildScheduler:
         ) = self._runtime.microbatch_state_resolver
         if resolver is not None:
             return resolver(model_entry, connection)[0]
-        return StandardMicrobatchEventStore(adapter=self._adapter, connection=connection)
+        return DirectMicrobatchEventStore(adapter=self._adapter, connection=connection)
 
     def _handle_completion(
         self,

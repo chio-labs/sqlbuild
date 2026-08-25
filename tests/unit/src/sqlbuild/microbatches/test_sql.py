@@ -1,4 +1,4 @@
-"""Adapter contract tests for standard microbatch state SQL."""
+"""Adapter contract tests for direct microbatch state SQL."""
 
 from __future__ import annotations
 

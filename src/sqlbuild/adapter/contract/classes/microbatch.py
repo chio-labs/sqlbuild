@@ -37,7 +37,7 @@ class MicrobatchMixin:
         return relations[0].created_at.isoformat()
 
     def render_create_microbatch_state_table_sql(self, *, database: str | None, schema: str) -> str:
-        """Render portable DDL for the standard microbatch state table."""
+        """Render portable DDL for the direct microbatch state table."""
 
         from sqlbuild.microbatches.main.create_table_sql import build_create_table_sql
 

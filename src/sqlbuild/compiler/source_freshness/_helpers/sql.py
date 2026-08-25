@@ -1,4 +1,4 @@
-"""SQL generation helpers for standard source freshness storage."""
+"""SQL generation helpers for direct source freshness storage."""
 
 from __future__ import annotations
 

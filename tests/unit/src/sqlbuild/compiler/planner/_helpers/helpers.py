@@ -69,9 +69,9 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.source_freshness.models import (
+    DirectSourceFreshnessPlanningResult,
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
-    StandardSourceFreshnessPlanningResult,
 )
 from sqlbuild.spec.contracts.models import (
     SchemaColumn,
@@ -251,7 +251,7 @@ def build_run_despite_unchanged_model(
 
 def build_run_despite_unchanged_source_freshness(
     *, data_version: str | None, value_kind: str, observed_at: datetime
-) -> StandardSourceFreshnessPlanningResult:
+) -> DirectSourceFreshnessPlanningResult:
     """Build source freshness state for run_despite_unchanged helper tests."""
 
     record: SourceFreshnessRecord = SourceFreshnessRecord(
@@ -266,7 +266,7 @@ def build_run_despite_unchanged_source_freshness(
         data_version_hash="hash",
         observed_at=observed_at,
     )
-    populated_result: StandardSourceFreshnessPlanningResult = StandardSourceFreshnessPlanningResult(
+    populated_result: DirectSourceFreshnessPlanningResult = DirectSourceFreshnessPlanningResult(
         observed_records=(record,),
         unchanged_identities=frozenset(
             {
@@ -279,7 +279,7 @@ def build_run_despite_unchanged_source_freshness(
             }
         ),
     )
-    return (StandardSourceFreshnessPlanningResult(), populated_result)[data_version is not None]
+    return (DirectSourceFreshnessPlanningResult(), populated_result)[data_version is not None]
 
 
 def source_key(name: str) -> CompiledObjectKey:

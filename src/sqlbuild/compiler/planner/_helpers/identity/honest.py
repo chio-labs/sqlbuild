@@ -1,4 +1,4 @@
-"""Build standard model write hashes from actually available upstream identities."""
+"""Build direct model write hashes from actually available upstream identities."""
 
 from __future__ import annotations
 
@@ -16,13 +16,13 @@ from sqlbuild.compiler.planner.main.identity._graph_write_identity import (
 )
 from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
+    DirectModelVersionIdentities,
     GraphIdentityNode,
     GraphNodeKey,
     PlannerChangeResults,
     PlannerResolvedActions,
     PlannerScope,
     ResolvedModelAction,
-    StandardModelVersionIdentities,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import ChangeKind, GraphResourceKind
@@ -33,7 +33,7 @@ def with_honest_model_write_hashes(
     scope: PlannerScope,
     snapshot: WarehouseSnapshot,
     changes: PlannerChangeResults,
-    version_identities: StandardModelVersionIdentities,
+    version_identities: DirectModelVersionIdentities,
     available_model_hashes: dict[str, str] | None = None,
 ) -> PlannerChangeResults:
     """Replace planned write hashes with hashes based on upstreams available this run."""
@@ -132,7 +132,7 @@ def _merged_recomputed_change(
 
 
 def _graph_identity_nodes(
-    *, scope: PlannerScope, version_identities: StandardModelVersionIdentities
+    *, scope: PlannerScope, version_identities: DirectModelVersionIdentities
 ) -> dict[GraphNodeKey, GraphIdentityNode]:
     nodes: dict[GraphNodeKey, GraphIdentityNode] = {}
     function_name: str
@@ -193,7 +193,7 @@ def _base_write_hashes(
     *,
     scope: PlannerScope,
     snapshot: WarehouseSnapshot,
-    version_identities: StandardModelVersionIdentities,
+    version_identities: DirectModelVersionIdentities,
     available_model_hashes: dict[str, str] | None,
 ) -> dict[GraphNodeKey, str]:
     hashes: dict[GraphNodeKey, str] = {}
@@ -240,7 +240,7 @@ def _seed_write_hashes(
     *,
     scope: PlannerScope,
     snapshot: WarehouseSnapshot,
-    version_identities: StandardModelVersionIdentities,
+    version_identities: DirectModelVersionIdentities,
 ) -> dict[str, str]:
     hashes: dict[str, str] = {}
     seed_name: str

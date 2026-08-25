@@ -45,7 +45,7 @@ def write_build_plan_text(
         full_refresh=request.full_refresh,
         use_color=invocation.use_color,
         python_plan_entries=pipeline_result.python_plan_entries,
-        include_standard_freshness_diagnostics=(
+        include_direct_freshness_diagnostics=(
             invocation.virtual_mode or invocation.effective_changes_only
         ),
     )

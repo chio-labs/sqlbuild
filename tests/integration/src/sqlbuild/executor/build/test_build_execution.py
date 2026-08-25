@@ -42,14 +42,14 @@ _PROJECT_YML_WARN: str = (
     'default_audit_severity = "warn"\n'
 )
 
-_PROJECT_YML_DIRECT: str = (
+_PROJECT_YML_IMMEDIATE: str = (
     'name = "demo"\n'
     'adapter = "duckdb"\n\n'
     "[connection]\n"
     'database = ":memory:"\n\n'
     "[settings]\n"
     'default_audit_severity = "error"\n'
-    'table_promotion_mode = "direct"\n'
+    'table_promotion_mode = "immediate"\n'
 )
 
 _NOT_NULL_AUDIT: str = 'AUDIT ();\n\nSELECT @column FROM __ref("@model") WHERE @column IS NULL'
@@ -436,7 +436,7 @@ _FAILING_TEST_SQL: str = (
             ),
         ),
         BuildExecutionTestCase(
-            description="standard mode warn audit records warning and build succeeds",
+            description="immediate promotion warn audit records warning and build succeeds",
             project_files={
                 "sqlbuild_project.toml": (
                     'name = "demo"\n'
@@ -445,7 +445,7 @@ _FAILING_TEST_SQL: str = (
                     'database = ":memory:"\n\n'
                     "[settings]\n"
                     'default_audit_severity = "warn"\n'
-                    'table_promotion_mode = "direct"\n'
+                    'table_promotion_mode = "immediate"\n'
                 ),
                 "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT NULL AS id",
                 "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
@@ -473,9 +473,9 @@ _FAILING_TEST_SQL: str = (
             ),
         ),
         BuildExecutionTestCase(
-            description="standard mode with passing audit creates table",
+            description="immediate promotion with passing audit creates table",
             project_files={
-                "sqlbuild_project.toml": _PROJECT_YML_DIRECT,
+                "sqlbuild_project.toml": _PROJECT_YML_IMMEDIATE,
                 "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT 5 AS id",
                 "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
             },
@@ -697,9 +697,9 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
             expected_missing_relations=("main.orders",),
         ),
         BuildExecutionTestCase(
-            description="direct table promotion rejects enforced contract before mutation",
+            description="immediate table promotion rejects enforced contract before mutation",
             project_files={
-                "sqlbuild_project.toml": _PROJECT_YML_DIRECT,
+                "sqlbuild_project.toml": _PROJECT_YML_IMMEDIATE,
                 "models/orders.sql": (
                     "MODEL (\n"
                     "  materialized table,\n"
@@ -1003,9 +1003,9 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
             expected_missing_relations=("main.stg_orders", "main.orders"),
         ),
         BuildExecutionTestCase(
-            description="standard mode failing audit leaves target updated but build fails",
+            description="immediate promotion failing audit leaves target updated but build fails",
             project_files={
-                "sqlbuild_project.toml": _PROJECT_YML_DIRECT,
+                "sqlbuild_project.toml": _PROJECT_YML_IMMEDIATE,
                 "models/orders.sql": _TABLE_WITH_ID_NOT_NULL_AUDIT + "SELECT NULL AS id",
                 "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
             },

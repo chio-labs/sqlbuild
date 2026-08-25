@@ -52,7 +52,7 @@ def build_virtual_plan_project_toml() -> str:
     )
 
 
-def standard_model_version_hashes(*, db_path: Path, model_name: str) -> list[tuple[object, ...]]:
+def direct_model_version_hashes(*, db_path: Path, model_name: str) -> list[tuple[object, ...]]:
     return query_duckdb(
         db_path=db_path,
         sql=(

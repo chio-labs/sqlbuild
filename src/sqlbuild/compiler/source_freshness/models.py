@@ -1,4 +1,4 @@
-"""Standard source freshness state models."""
+"""Direct source freshness state models."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ class SourceFreshnessObservation:
 
 @dataclass(frozen=True)
 class SourceFreshnessIdentity:
-    """Stable identity for one source freshness stream in standard state."""
+    """Stable identity for one source freshness stream in direct state."""
 
     source_name: str
     target_database: str | None
@@ -45,7 +45,7 @@ class SourceFreshnessIdentity:
 
 @dataclass(frozen=True)
 class SourceFreshnessRecord:
-    """One append-only standard source freshness observation."""
+    """One append-only direct source freshness observation."""
 
     source_name: str
     target_database: str | None
@@ -70,15 +70,15 @@ class SourceFreshnessRecord:
 
 @dataclass(frozen=True)
 class SourceFreshnessSet:
-    """Latest standard source freshness records for one target schema."""
+    """Latest direct source freshness records for one target schema."""
 
     schema: str
     records: dict[SourceFreshnessIdentity, SourceFreshnessRecord]
 
 
 @dataclass(frozen=True)
-class StandardSourceFreshnessPropagationResult:
-    """Downstream model impact derived from standard source freshness roots."""
+class DirectSourceFreshnessPropagationResult:
+    """Downstream model impact derived from direct source freshness roots."""
 
     changed_source_model_names: dict[SourceFreshnessIdentity, frozenset[str]] = field(
         default_factory=dict
@@ -92,7 +92,7 @@ class StandardSourceFreshnessPropagationResult:
 
 
 @dataclass(frozen=True)
-class StandardSourceFreshnessPlanningResult:
+class DirectSourceFreshnessPlanningResult:
     """Direct planning-time source freshness observations and comparisons."""
 
     observed_records: tuple[SourceFreshnessRecord, ...] = ()
@@ -103,4 +103,4 @@ class StandardSourceFreshnessPlanningResult:
     age_statuses: dict[SourceFreshnessIdentity, SourceFreshnessAgeStatus] = field(
         default_factory=dict
     )
-    propagation: StandardSourceFreshnessPropagationResult | None = None
+    propagation: DirectSourceFreshnessPropagationResult | None = None

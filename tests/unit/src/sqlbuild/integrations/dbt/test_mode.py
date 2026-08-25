@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.integrations.dbt._helpers.cli.mode import enforce_dbt_interop_standard_mode
+from sqlbuild.integrations.dbt._helpers.cli.mode import enforce_dbt_interop_direct_mode
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SettingsConfig
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtModeGuardTestCase
@@ -13,7 +13,7 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtModeGuardTes
     "test_case",
     [
         DbtModeGuardTestCase(
-            description="allows dbt interop in standard mode",
+            description="allows dbt interop in direct mode",
             virtual_environments=False,
             expected_error_fragment=None,
             expected_code=None,
@@ -22,7 +22,7 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtModeGuardTes
     ],
     ids=lambda case: case.description,
 )
-def test_given_standard_project_mode_when_enforcing_dbt_interop_support_then_allows_execution(
+def test_given_direct_project_mode_when_enforcing_dbt_interop_support_then_allows_execution(
     test_case: DbtModeGuardTestCase,
 ) -> None:
     discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
@@ -34,7 +34,7 @@ def test_given_standard_project_mode_when_enforcing_dbt_interop_support_then_all
         local_config=LocalConfig(),
     )
 
-    enforce_dbt_interop_standard_mode(discovered_inputs=discovered_inputs)
+    enforce_dbt_interop_direct_mode(discovered_inputs=discovered_inputs)
 
     assert test_case.expected_code is None
 
@@ -65,7 +65,7 @@ def test_given_virtual_project_mode_when_enforcing_dbt_interop_support_then_rais
     )
 
     with pytest.raises(DbtInteropConfigError) as exc_info:
-        enforce_dbt_interop_standard_mode(discovered_inputs=discovered_inputs)
+        enforce_dbt_interop_direct_mode(discovered_inputs=discovered_inputs)
 
     error: DbtInteropConfigError = exc_info.value
     assert test_case.expected_error_fragment is not None

@@ -6,8 +6,8 @@ from dataclasses import replace
 
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.planner._helpers.changes.detect import detect_changes
-from sqlbuild.compiler.planner._helpers.identity.standard import (
-    build_standard_model_version_identities,
+from sqlbuild.compiler.planner._helpers.identity.direct import (
+    build_direct_model_version_identities,
 )
 from sqlbuild.compiler.planner.models import (
     PlannerChangeResults,
@@ -25,12 +25,12 @@ def build_planner_identity_context(
     """Build expected version identities for the inspection and stale-warning scopes."""
 
     return PlannerIdentityContext(
-        version_identities=build_standard_model_version_identities(
+        version_identities=build_direct_model_version_identities(
             functions=project.functions,
             seeds=project.seeds,
             scope=scopes.inspection_scope,
         ),
-        stale_warning_identities=build_standard_model_version_identities(
+        stale_warning_identities=build_direct_model_version_identities(
             functions=project.functions,
             seeds=project.seeds,
             scope=scopes.stale_warning_scope,

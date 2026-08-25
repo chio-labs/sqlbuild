@@ -9,7 +9,7 @@ from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecord
 from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
 from sqlbuild.cost.classes.cost_context import CostContext
-from sqlbuild.executor.node_results.main._standard_store import build_standard_node_result_store
+from sqlbuild.executor.node_results.main._direct_store import build_direct_node_result_store
 from sqlbuild.executor.python_nodes._helpers.fingerprinting import (
     try_write_python_node_identity_fingerprint,
 )
@@ -46,7 +46,7 @@ class ReadSidePythonExecutionTracker:
             runtime.result_store
             if runtime.result_store is not None
             else (
-                build_standard_node_result_store(
+                build_direct_node_result_store(
                     adapter=runtime.adapter,
                     connection=runtime.connection,
                     database=runtime.default_database,

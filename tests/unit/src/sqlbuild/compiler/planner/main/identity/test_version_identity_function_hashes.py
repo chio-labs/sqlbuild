@@ -13,7 +13,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.main.identity.version_identity_function_hashes import (
     build_function_local_hashes,
 )
-from sqlbuild.compiler.planner.models import StandardModelVersionIdentities
+from sqlbuild.compiler.planner.models import DirectModelVersionIdentities
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import build_compiled_function
 from tests.unit.src.sqlbuild.compiler.planner.main.identity._test_types import (
     FunctionReturnContractIdentityTestCase,
@@ -77,10 +77,10 @@ def test_given_table_function_return_contract_change_when_hashing_then_identity_
 def test_given_function_upstream_change_when_hashing_then_consumer_identity_changes(
     test_case: FunctionUpstreamIdentityTestCase,
 ) -> None:
-    original: StandardModelVersionIdentities = build_table_function_graph_identities(
+    original: DirectModelVersionIdentities = build_table_function_graph_identities(
         base_query=test_case.original_query
     )
-    changed: StandardModelVersionIdentities = build_table_function_graph_identities(
+    changed: DirectModelVersionIdentities = build_table_function_graph_identities(
         base_query=test_case.changed_query
     )
 

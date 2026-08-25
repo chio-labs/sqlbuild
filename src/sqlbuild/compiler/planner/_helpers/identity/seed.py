@@ -1,4 +1,4 @@
-"""Stable seed identity helpers for standard changes-only planning."""
+"""Stable seed identity helpers for direct changes-only planning."""
 
 from __future__ import annotations
 

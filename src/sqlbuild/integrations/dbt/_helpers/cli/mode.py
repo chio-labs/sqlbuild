@@ -6,7 +6,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.exceptions import DbtInteropConfigError
 
 
-def enforce_dbt_interop_standard_mode(*, discovered_inputs: DiscoveredProjectInputs) -> None:
+def enforce_dbt_interop_direct_mode(*, discovered_inputs: DiscoveredProjectInputs) -> None:
     """Block dbt interop commands in virtual environment mode."""
 
     if discovered_inputs.project_config.settings.virtual_environments:

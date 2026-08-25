@@ -151,14 +151,14 @@ def run_build(request: BuildCommandRequest) -> int:
             )
         )
         try:
-            preparation, outcome, check_results = _execute_standard_build(
+            preparation, outcome, check_results = _execute_direct_build(
                 request=request,
                 invocation=invocation,
                 pipeline_result=pipeline_result,
                 providers=provider_session.providers,
             )
         except BaseException as error:
-            _ = _finalize_exceptional_standard_cost(
+            _ = _finalize_exceptional_direct_cost(
                 invocation=invocation,
                 pipeline_result=pipeline_result,
                 build_started_at=build_started_at,
@@ -209,7 +209,7 @@ def run_build(request: BuildCommandRequest) -> int:
         provider_session.close()
 
 
-def _execute_standard_build(
+def _execute_direct_build(
     *,
     request: BuildCommandRequest,
     invocation: BuildInvocation,
@@ -263,7 +263,7 @@ def _execute_standard_build(
     return preparation, outcome, check_results
 
 
-def _finalize_exceptional_standard_cost(
+def _finalize_exceptional_direct_cost(
     *,
     invocation: BuildInvocation,
     pipeline_result: CompilePipelineResult,
