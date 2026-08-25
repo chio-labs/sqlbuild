@@ -572,7 +572,7 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "sqlbuild-kata-native"
-version = "0.55.6"
+version = "0.55.7"
 dependencies = [
  "fensu-policy",
  "globset",

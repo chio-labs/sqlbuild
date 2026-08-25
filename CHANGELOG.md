@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.7](https://github.com/chio-labs/sqlbuild/compare/v0.55.6...v0.55.7) (2026-08-25)
+
+
+### Performance Improvements
+
+* **compiler:** reduce warm compile overhead ([#345](https://github.com/chio-labs/sqlbuild/issues/345)) ([360766e](https://github.com/chio-labs/sqlbuild/commit/360766e64d77c22d522d1b71dcd28c623387a2b6))
+
 ## [0.55.6](https://github.com/chio-labs/sqlbuild/compare/v0.55.5...v0.55.6) (2026-08-25)
 
 
