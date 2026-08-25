@@ -110,11 +110,11 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 
 Source: `index.mdx`
 
-Verify early, test properly, and deploy reversibly. SQL pipelines with the rigor of real software - on your existing dbt project, free and open source.
+Verify early, test properly, and deploy reversibly. SQL pipelines with the rigor of real software - free and open source.
 
 **Valid isn't the same as correct.** Your SQL compiles, runs, and returns rows - none of that means the number is right, and a silently-wrong number a stakeholder already trusted is the bug that actually hurts.
 
-SQLBuild brings software-engineering rigor to SQL pipelines: **verify early, test properly, deploy reversibly.** Catch errors before the warehouse runs them and test your logic locally - with change-aware builds and reversible deploys there when you need them, not forced on you on day one. It works on a standalone SQL project or [points at your existing dbt project](/concepts/dbt-compatibility/overview) with no migration - free and open source.
+SQLBuild brings software-engineering rigor to SQL pipelines: **verify early, test properly, deploy reversibly.** Catch errors before the warehouse runs them and test your logic locally - with change-aware builds and reversible deploys there when you need them, not forced on you on day one. It is a standalone framework for building SQL and Python data pipelines - free and open source.
 
 ### Test properly
 
@@ -177,7 +177,7 @@ When enabled, change detection covers the whole graph:
 - **Cascade propagation:** when a model does change, the signal propagates downstream, with configurable replay windows (`replay_on_change`).
 - **Python nodes:** loaders, tasks, assets, checks, and hooks are fingerprinted by source and dependency hashes; skip/run is user-controlled via `ctx.skip()`.
 
-State is plain append-only rows in your own warehouse (`_sqlbuild_fingerprints`, `_sqlbuild_source_freshness`, `_sqlbuild_node_results`) - no external state database, no manifest files, no state machine that can corrupt. SQLBuild-owned models can also depend on models from an [existing dbt project](/concepts/dbt-compatibility/overview) - nothing metered, no account, nothing to log into.
+State is plain append-only rows in your own warehouse (`_sqlbuild_fingerprints`, `_sqlbuild_source_freshness`, `_sqlbuild_node_results`) - no external state database, no manifest files, no state machine that can corrupt.
 
 ### Deploy reversibly (opt-in)
 
@@ -695,7 +695,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 
 | Feature | SQLBuild | dbt | SQLMesh |
 |---------|----------|-----|---------|
-| dbt compatibility | Run alongside dbt - reads manifest, unified selection, SQLBuild models downstream, no migration | N/A | Jinja compatibility layer plus own macro system |
+| dbt compatibility | Reads dbt manifests, coordinates dbt and SQLBuild selection, and supports SQLBuild models downstream | N/A | Jinja compatibility layer plus own macro system |
 
 #### Sources
 
@@ -732,15 +732,15 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 
 Source: `concepts/dbt-compatibility/overview.mdx`
 
-Run your existing dbt project through SQLBuild. No SQLBuild models and no migration.
+Run dbt and SQLBuild side by side with coordinated selection and SQLBuild models downstream.
 
-Point SQLBuild at your existing dbt project and run your dbt selections through it, layering SQLBuild models, tests, and audits downstream when you want them. No migration, no edits to your dbt files.
+Use the dbt compatibility bridge to coordinate dbt selections with SQLBuild-owned models downstream of their outputs.
 
-SQLBuild reads your dbt manifest and drives the `dbt` CLI as a subprocess. It never edits, patches, or moves files in your dbt project, and it does not reimplement Jinja, profiles, or dbt's selection language. Your dbt project runs exactly as it does today.
+SQLBuild reads the dbt manifest and drives the `dbt` CLI as a subprocess. dbt remains responsible for compiling and executing dbt-owned models; SQLBuild statically analyzes and executes only SQLBuild-owned models downstream. `sqb dbt` runs in standard mode, so change-aware execution and virtual environments are not supported by the bridge.
 
 ### Start with your existing dbt project
 
-From inside your dbt project, run a `sqb dbt` command. Selection works exactly like dbt: scope to whatever you would normally build with `--select`, or omit it to plan the whole project.
+From inside your dbt project, run a `sqb dbt` command. Scope dbt work with familiar `--select` values, or omit selection to plan the whole project.
 
 ```bash
 sqb dbt plan --select path:models/marts
@@ -790,7 +790,7 @@ target = "dev"
 1. SQLBuild runs `dbt compile` to produce a `manifest.json` with model metadata
 2. SQLBuild reads the manifest to understand dbt model names and their qualified warehouse tables
 3. SQLBuild resolves your `--select`/`--exclude` against dbt by running `dbt ls`, so dbt-native selectors like `state:modified` and `package:` are evaluated by dbt itself, not reimplemented
-4. `sqb dbt plan/run/build` orchestrates the run: dbt builds the full selection, exactly like dbt
+4. `sqb dbt plan/run/build` orchestrates the run: dbt executes the selected dbt work
 5. (Optional) any SQLBuild models you have added run last, against the dbt outputs
 
 Each step calls the `dbt` CLI directly: `dbt compile` for the manifest, `dbt ls` for selection, and `dbt build`/`dbt run` for execution.
@@ -944,7 +944,7 @@ Source: `concepts/dbt-compatibility/adding-sqlbuild-models.mdx`
 
 Grow into SQLBuild's own models, tests, audits, and scenarios downstream of your dbt project.
 
-Running your dbt project through SQLBuild needs no SQLBuild models. This page is the optional next step: you can write SQLBuild models, tests, audits, and scenarios downstream of your dbt project without leaving it.
+The dbt compatibility bridge does not require SQLBuild models. You can optionally add SQLBuild models, tests, audits, and scenarios downstream of dbt outputs.
 
 This is purely additive. Your dbt models stay in dbt, and the layout gains a `models/` directory in the SQLBuild project.
 
@@ -11673,11 +11673,11 @@ No flags. This command has no confirmation prompt since it only removes local bu
 
 Source: `cli/dbt.mdx`
 
-Run SQLBuild alongside an existing dbt project.
+Coordinate dbt and SQLBuild projects.
 
 ## sqb dbt
 
-Orchestrate dbt and SQLBuild together. Each subcommand runs dbt first, then SQLBuild, with selection logic that works across both project graphs. `sqb dbt build`, `sqb dbt run`, and `sqb dbt plan` run the full selection, exactly like dbt. See [Using SQLBuild with dbt](/concepts/dbt-compatibility/overview) for concepts and selection behavior.
+Orchestrate dbt and SQLBuild together. Each subcommand runs dbt first, then SQLBuild, with selection logic across both project graphs. dbt remains responsible for dbt-owned models; SQLBuild validates and executes SQLBuild-owned models downstream. See [Using SQLBuild with dbt](/concepts/dbt-compatibility/overview) for scope and selection behavior.
 
 ### sqb dbt plan
 
