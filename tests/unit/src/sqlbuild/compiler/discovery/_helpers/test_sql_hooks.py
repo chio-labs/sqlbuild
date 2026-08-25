@@ -27,7 +27,153 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
             expected_name="grant_access",
             expected_description="Grant access",
             expected_sql_body="GRANT SELECT ON @relation TO @'role'",
-        )
+        ),
+        ParseSqlHookTestCase(
+            description="allows header-like text inside strings and comments",
+            contents=("HOOK ();\n\nSELECT 'first\nHOOK ();\nlast' AS text /*\nHOOK ();\n*/;\n"),
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body=("SELECT 'first\nHOOK ();\nlast' AS text /*\nHOOK ();\n*/;"),
+        ),
+        ParseSqlHookTestCase(
+            description="allows header terminator text inside quoted descriptions",
+            contents='HOOK (description: "Run cleanup(); safely");\n\nSELECT 1\n',
+            expected_name="grant_access",
+            expected_description="Run cleanup(); safely",
+            expected_sql_body="SELECT 1",
+        ),
+        ParseSqlHookTestCase(
+            description="allows semicolons inside dollar quotes and bracketed identifiers",
+            contents=(
+                "HOOK ();\n\n"
+                "DO $$ BEGIN RAISE NOTICE 'value;still-string'; "
+                "PERFORM [procedure;name]; END $$;\n"
+            ),
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body=(
+                "DO $$ BEGIN RAISE NOTICE 'value;still-string'; PERFORM [procedure;name]; END $$;"
+            ),
+        ),
+        ParseSqlHookTestCase(
+            description="allows semicolons inside a procedural begin end block",
+            contents="HOOK ();\n\nBEGIN SELECT 1; SELECT 2; END;\n",
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body="BEGIN SELECT 1; SELECT 2; END;",
+        ),
+        ParseSqlHookTestCase(
+            description="allows create procedure statements with an internal block",
+            contents=("HOOK ();\n\nCREATE PROCEDURE p AS\nBEGIN\n  SELECT 1;\n  SELECT 2;\nEND;\n"),
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body=("CREATE PROCEDURE p AS\nBEGIN\n  SELECT 1;\n  SELECT 2;\nEND;"),
+        ),
+        ParseSqlHookTestCase(
+            description="allows SQL Server conditional blocks",
+            contents="HOOK ();\n\nIF 1 = 1 BEGIN SELECT 1; SELECT 2; END;\n",
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body="IF 1 = 1 BEGIN SELECT 1; SELECT 2; END;",
+        ),
+        ParseSqlHookTestCase(
+            description="allows SQL Server if else blocks",
+            contents=("HOOK ();\n\nIF 1 = 1 BEGIN SELECT 1; END ELSE BEGIN SELECT 2; END;\n"),
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body=("IF 1 = 1 BEGIN SELECT 1; END ELSE BEGIN SELECT 2; END;"),
+        ),
+        ParseSqlHookTestCase(
+            description="allows SQL Server if else branches without blocks",
+            contents="HOOK ();\n\nIF 1 = 1 SELECT 1 ELSE SELECT 2\n",
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body="IF 1 = 1 SELECT 1 ELSE SELECT 2",
+        ),
+        ParseSqlHookTestCase(
+            description="allows SQL Server try catch blocks",
+            contents=("HOOK ();\n\nBEGIN TRY SELECT 1; END TRY BEGIN CATCH SELECT 2; END CATCH;\n"),
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body=("BEGIN TRY SELECT 1; END TRY BEGIN CATCH SELECT 2; END CATCH;"),
+        ),
+        ParseSqlHookTestCase(
+            description="allows comments before unresolved hook arguments",
+            contents="HOOK ();\n\n-- supplied by the model\n@statement\n",
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body="-- supplied by the model\n@statement",
+        ),
+        ParseSqlHookTestCase(
+            description="allows standalone values statements",
+            contents="HOOK ();\n\nVALUES (1)\n",
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body="VALUES (1)",
+        ),
+        ParseSqlHookTestCase(
+            description="allows go as a query identifier",
+            contents="HOOK ();\n\nSELECT go FROM audit_log\n",
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body="SELECT go FROM audit_log",
+        ),
+        ParseSqlHookTestCase(
+            description="allows go as a query identifier on its own line",
+            contents="HOOK ();\n\nSELECT\n  go\nFROM audit_log\n",
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body="SELECT\n  go\nFROM audit_log",
+        ),
+        ParseSqlHookTestCase(
+            description="allows insert select composite statements",
+            contents="HOOK ();\n\nINSERT INTO target SELECT * FROM source\n",
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body="INSERT INTO target SELECT * FROM source",
+        ),
+        ParseSqlHookTestCase(
+            description="allows grant privileges named like statement roots",
+            contents=("HOOK ();\n\nGRANT CREATE ON SCHEMA public TO analyst;\n"),
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body="GRANT CREATE ON SCHEMA public TO analyst;",
+        ),
+        ParseSqlHookTestCase(
+            description="allows SQL Server deny statements",
+            contents=("HOOK ();\n\nDENY CONTROL ON DATABASE::analytics TO analyst\n"),
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body=("DENY CONTROL ON DATABASE::analytics TO analyst"),
+        ),
+        ParseSqlHookTestCase(
+            description="allows SQL Server deny select statements",
+            contents=("HOOK ();\n\nDENY SELECT ON OBJECT::orders TO analyst\n"),
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body="DENY SELECT ON OBJECT::orders TO analyst",
+        ),
+        ParseSqlHookTestCase(
+            description="allows privilege recipients named like statement roots",
+            contents=("HOOK ();\n\nDENY SELECT ON OBJECT::orders TO analyze\n"),
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body="DENY SELECT ON OBJECT::orders TO analyze",
+        ),
+        ParseSqlHookTestCase(
+            description="allows explain with queries",
+            contents=("HOOK ();\n\nEXPLAIN WITH orders AS (SELECT 1 AS id) SELECT * FROM orders\n"),
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body=("EXPLAIN WITH orders AS (SELECT 1 AS id) SELECT * FROM orders"),
+        ),
+        ParseSqlHookTestCase(
+            description="allows SQL Server if insert select branches",
+            contents=("HOOK ();\n\nIF 1 = 1 INSERT INTO target SELECT * FROM source\n"),
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body=("IF 1 = 1 INSERT INTO target SELECT * FROM source"),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -81,12 +227,85 @@ def test_given_nested_sql_hook_files_when_discovering_then_names_come_from_stems
         ParseSqlHookErrorTestCase(
             description="rejects multiple hook blocks",
             contents="HOOK ();\nSELECT 1\n\nHOOK ();\nSELECT 2\n",
-            expected_error_fragment="exactly one HOOK",
+            expected_error_fragment="one executable SQL statement",
         ),
         ParseSqlHookErrorTestCase(
             description="rejects unsupported hook header key",
             contents='HOOK (name: "override");\nSELECT 1\n',
             expected_error_fragment="unsupported keys: name",
+        ),
+        ParseSqlHookErrorTestCase(
+            description="rejects multiple executable statements",
+            contents="HOOK ();\nSELECT 1; SELECT 2\n",
+            expected_error_fragment="one executable SQL statement",
+        ),
+        ParseSqlHookErrorTestCase(
+            description="rejects non-statement expressions",
+            contents="HOOK ();\n1 + 1\n",
+            expected_error_fragment="one executable SQL statement",
+        ),
+        ParseSqlHookErrorTestCase(
+            description="rejects identifier expressions",
+            contents="HOOK ();\ncurrent_date\n",
+            expected_error_fragment="one executable SQL statement",
+        ),
+        ParseSqlHookErrorTestCase(
+            description="rejects multiple procedural blocks",
+            contents="HOOK ();\nBEGIN SELECT 1; END\nBEGIN SELECT 2; END;\n",
+            expected_error_fragment="one executable SQL statement",
+        ),
+        ParseSqlHookErrorTestCase(
+            description="rejects SQL Server batch separators",
+            contents="HOOK ();\nCALL first()\ngo\nCALL second()\n",
+            expected_error_fragment="one executable SQL statement",
+        ),
+        ParseSqlHookErrorTestCase(
+            description="rejects adjacent select statements without semicolons",
+            contents="HOOK ();\nSELECT 1\nSELECT 2\n",
+            expected_error_fragment="one executable SQL statement",
+        ),
+        ParseSqlHookErrorTestCase(
+            description="rejects heterogeneous adjacent query statements",
+            contents="HOOK ();\nSELECT 1\nDELETE FROM target\n",
+            expected_error_fragment="one executable SQL statement",
+        ),
+        ParseSqlHookErrorTestCase(
+            description="rejects adjacent ddl and dml statements",
+            contents=("HOOK ();\nCREATE TABLE target (id INT)\nINSERT INTO target VALUES (1)\n"),
+            expected_error_fragment="one executable SQL statement",
+        ),
+        ParseSqlHookErrorTestCase(
+            description="rejects a query followed by a procedural block",
+            contents="HOOK ();\nSELECT 1\nBEGIN SELECT 2; END;\n",
+            expected_error_fragment="one executable SQL statement",
+        ),
+        ParseSqlHookErrorTestCase(
+            description="rejects adjacent insert and select batches",
+            contents=("HOOK ();\nINSERT INTO target VALUES (1)\nSELECT 2\n"),
+            expected_error_fragment="one executable SQL statement",
+        ),
+        ParseSqlHookErrorTestCase(
+            description="rejects adjacent set and select batches",
+            contents="HOOK ();\nSET search_path = public\nSELECT 2\n",
+            expected_error_fragment="one executable SQL statement",
+        ),
+        ParseSqlHookErrorTestCase(
+            description="rejects adjacent values batches",
+            contents="HOOK ();\nVALUES (1)\nVALUES (2)\n",
+            expected_error_fragment="one executable SQL statement",
+        ),
+        ParseSqlHookErrorTestCase(
+            description="rejects adjacent SQL Server backup and restore batches",
+            contents=(
+                "HOOK ();\nBACKUP DATABASE analytics TO DISK = 'a.bak' "
+                "RESTORE DATABASE analytics FROM DISK = 'a.bak'\n"
+            ),
+            expected_error_fragment="one executable SQL statement",
+        ),
+        ParseSqlHookErrorTestCase(
+            description="rejects statements after grant recipients",
+            contents=("HOOK ();\nGRANT SELECT ON orders TO analyst TRUNCATE TABLE orders\n"),
+            expected_error_fragment="one executable SQL statement",
         ),
     ],
     ids=lambda case: case.description,

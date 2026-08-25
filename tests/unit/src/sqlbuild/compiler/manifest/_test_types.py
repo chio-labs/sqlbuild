@@ -51,6 +51,8 @@ class ManifestModelNodeTestCase:
     expected_tags: tuple[str, ...] = ()
     expected_merge_exclude_columns: list[str] | None = None
     expected_full_refresh: bool | None = None
+    expected_meta: dict[str, object] = field(default_factory=dict)
+    expected_pre_hooks: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

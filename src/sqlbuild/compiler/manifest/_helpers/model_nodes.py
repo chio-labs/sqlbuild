@@ -110,7 +110,18 @@ def _extract_meta(
         if serialized:
             lifecycle_hooks[hook_key] = serialized
     if lifecycle_hooks:
-        meta["sqlbuild"] = {"lifecycle_hooks": lifecycle_hooks}
+        authored_sqlbuild_meta: object | None = meta.get("sqlbuild")
+        sqlbuild_meta: dict[str, object] = {}
+        if isinstance(authored_sqlbuild_meta, dict):
+            authored_key: object
+            authored_value: object
+            for authored_key, authored_value in authored_sqlbuild_meta.items():
+                if isinstance(authored_key, str):
+                    sqlbuild_meta[authored_key] = authored_value
+        elif authored_sqlbuild_meta is not None:
+            sqlbuild_meta["authored_value"] = authored_sqlbuild_meta
+        sqlbuild_meta["lifecycle_hooks"] = lifecycle_hooks
+        meta["sqlbuild"] = sqlbuild_meta
     return meta
 
 
@@ -131,6 +142,12 @@ def _serialize_hooks(
                 hook["name"] = entry.name
             if entry.relative_path is not None:
                 hook["relative_path"] = entry.relative_path.as_posix()
+            if entry.definition_sql is not None:
+                hook["definition_sql"] = entry.definition_sql
+            if entry.kwargs is not None:
+                hook["kwargs"] = entry.kwargs
+            if entry.description is not None:
+                hook["description"] = entry.description
             hooks.append(hook)
         elif isinstance(entry, PythonHookEntry):
             python_hook: dict[str, object] = {

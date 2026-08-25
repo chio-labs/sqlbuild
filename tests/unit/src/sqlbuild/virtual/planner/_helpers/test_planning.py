@@ -1082,7 +1082,7 @@ def test_given_custom_placeholder_change_when_building_expected_hashes_then_hash
     "test_case",
     [
         ExpectedVersionHashesTestCase(
-            description="pre and post hooks change model version hash",
+            description="named hook definition and arguments change model version hash",
             upstream_query_sql="SELECT 1 AS id",
             downstream_query_sql="SELECT 1 AS order_id",
             expected_hashes_differ=True,
@@ -1099,9 +1099,11 @@ def test_given_hook_change_when_building_expected_hashes_then_hashes_differ(
         upstream_extra_config={
             "pre_hooks": [
                 SqlHookEntry(
-                    statement="SELECT 1",
+                    statement="SELECT 'reader'",
                     name="record_access",
                     relative_path=Path("hooks/sql/record_access.sql"),
+                    definition_sql="SELECT @role",
+                    kwargs={"role": "'reader'"},
                 )
             ],
             "post_hooks": [SqlHookEntry(statement="SELECT 2")],
@@ -1113,12 +1115,14 @@ def test_given_hook_change_when_building_expected_hashes_then_hashes_differ(
         upstream_extra_config={
             "pre_hooks": [
                 SqlHookEntry(
-                    statement="SELECT 3",
+                    statement="SELECT 'reader'",
                     name="record_access",
                     relative_path=Path("hooks/sql/record_access.sql"),
+                    definition_sql="SELECT @'role'",
+                    kwargs={"role": "reader"},
                 )
             ],
-            "post_hooks": [SqlHookEntry(statement="SELECT 4")],
+            "post_hooks": [SqlHookEntry(statement="SELECT 2")],
         },
     )
 

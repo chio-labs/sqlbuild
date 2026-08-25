@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from sqlbuild.compiler.compile.constants import (
     SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN,
     SQL_ARGUMENT_RAW_PARAMETER_PATTERN,
@@ -19,12 +21,16 @@ def render_parameterized_sql(
 ) -> str:
     """Render raw and quoted arguments into reusable SQL text."""
 
-    referenced_argument_names: set[str] = set()
-    for pattern in (
-        SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN,
-        SQL_ARGUMENT_RAW_PARAMETER_PATTERN,
-    ):
-        referenced_argument_names.update(match.group("name") for match in pattern.finditer(sql))
+    matches: list[tuple[re.Match[str], bool]] = []
+    match: re.Match[str]
+    for match in SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN.finditer(sql):
+        matches.append((match, True))
+    for match in SQL_ARGUMENT_RAW_PARAMETER_PATTERN.finditer(sql):
+        matches.append((match, False))
+    matches.sort(key=lambda item: item[0].start())
+    referenced_argument_names: set[str] = {
+        argument_match.group("name") for argument_match, _quoted in matches
+    }
     referenced_arguments: frozenset[str] = frozenset(referenced_argument_names)
     if reject_unused:
         unused_arguments: tuple[str, ...] = tuple(sorted(arguments.keys() - referenced_arguments))
@@ -34,26 +40,23 @@ def render_parameterized_sql(
                 f"{', '.join(unused_arguments)}"
             )
 
-    rendered_sql: str = SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN.sub(
-        lambda match: _render_argument(
-            argument_name=match.group("name"),
-            arguments=arguments,
-            owner_label=owner_label,
-            definition_label=definition_label,
-            quoted=True,
-        ),
-        sql,
-    )
-    return SQL_ARGUMENT_RAW_PARAMETER_PATTERN.sub(
-        lambda match: _render_argument(
-            argument_name=match.group("name"),
-            arguments=arguments,
-            owner_label=owner_label,
-            definition_label=definition_label,
-            quoted=False,
-        ),
-        rendered_sql,
-    )
+    rendered_parts: list[str] = []
+    previous_end: int = 0
+    quoted: bool
+    for match, quoted in matches:
+        rendered_parts.append(sql[previous_end : match.start()])
+        rendered_parts.append(
+            _render_argument(
+                argument_name=match.group("name"),
+                arguments=arguments,
+                owner_label=owner_label,
+                definition_label=definition_label,
+                quoted=quoted,
+            )
+        )
+        previous_end = match.end()
+    rendered_parts.append(sql[previous_end:])
+    return "".join(rendered_parts)
 
 
 def _render_argument(

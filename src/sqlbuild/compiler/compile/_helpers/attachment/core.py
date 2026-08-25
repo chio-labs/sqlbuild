@@ -76,6 +76,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import (
     CompileContextKey,
 )
+from sqlbuild.compiler.discovery.exceptions import SqlHookParseError
 from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_columns
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
@@ -92,6 +93,7 @@ from sqlbuild.compiler.discovery.models import (
     SqlHookEntry,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
+from sqlbuild.compiler.sql_hooks.main._validate_statement import validate_sql_hook_statement
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     LocalConfig,
@@ -846,6 +848,9 @@ def expand_sql_macros_in_value(
             statement=str(expanded_statement),
             name=value.name,
             relative_path=value.relative_path,
+            definition_sql=value.definition_sql,
+            kwargs=value.kwargs,
+            description=value.description,
         )
     if isinstance(value, NamedSqlHookEntry):
         hook_definition: DiscoveredSqlHookFile | None = context.sql_hook_definitions.get(value.name)
@@ -883,10 +888,28 @@ def expand_sql_macros_in_value(
             hook_key=hook_key,
             hook_index=hook_index,
         )
+        expanded_statement_text: str = str(expanded_statement)
+        try:
+            validate_sql_hook_statement(
+                sql=expanded_statement_text,
+                file_path=hook_definition.file_path,
+            )
+        except SqlHookParseError as error:
+            hook_label = _format_named_sql_hook_label(
+                hook_name=value.name,
+                hook_key=hook_key,
+                hook_index=hook_index,
+            )
+            raise CompileInputError(
+                f"{hook_label} in '{context.file_path}' is invalid after rendering: {error}"
+            ) from error
         return SqlHookEntry(
-            statement=str(expanded_statement),
+            statement=expanded_statement_text,
             name=value.name,
             relative_path=hook_definition.relative_path,
+            definition_sql=hook_definition.sql_body,
+            kwargs=dict(value.kwargs),
+            description=hook_definition.description,
         )
     if isinstance(value, PythonHookEntry):
         return value

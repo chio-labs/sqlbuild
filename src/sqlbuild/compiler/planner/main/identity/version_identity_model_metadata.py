@@ -91,6 +91,12 @@ def _hook_execution_signature(
                 hook["name"] = entry.name
             if entry.relative_path is not None:
                 hook["relative_path"] = entry.relative_path.as_posix()
+            if entry.definition_sql is not None:
+                hook["definition_sql"] = entry.definition_sql
+            if entry.kwargs is not None:
+                hook["kwargs"] = entry.kwargs
+            if entry.description is not None:
+                hook["description"] = entry.description
             hooks.append(hook)
         elif isinstance(entry, PythonHookEntry):
             python_hook: dict[str, object] = {

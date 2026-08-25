@@ -32,6 +32,12 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.render._test_types import
             arguments={},
             expected_sql='SELECT @grant_select(), @enum("role").ADMIN, @const("limit")',
         ),
+        ParameterizedSqlRenderTestCase(
+            description="does not rescan rendered quoted values as raw arguments",
+            sql="SELECT @'email'",
+            arguments={"email": "O'Brien@example.com"},
+            expected_sql="SELECT 'O''Brien@example.com'",
+        ),
     ],
     ids=lambda case: case.description,
 )

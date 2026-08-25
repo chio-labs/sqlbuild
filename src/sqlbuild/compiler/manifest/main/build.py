@@ -16,7 +16,9 @@ from sqlbuild.compiler.manifest._helpers.graph_maps import (
     build_child_map,
     build_parent_map,
 )
-from sqlbuild.compiler.manifest._helpers.macros import build_macro_node
+from sqlbuild.compiler.manifest._helpers.macros import (
+    build_manifest_macro_nodes,
+)
 from sqlbuild.compiler.manifest._helpers.model_nodes import build_model_node
 from sqlbuild.compiler.manifest._helpers.seeds import build_seed_node
 from sqlbuild.compiler.manifest._helpers.sources import build_source_node
@@ -55,7 +57,11 @@ def build_manifest(
 
     nodes: dict[str, dict[str, object]] = {}
     sources: dict[str, dict[str, object]] = {}
-    macros: dict[str, dict[str, object]] = {}
+    macros: dict[str, dict[str, object]] = build_manifest_macro_nodes(
+        loaded_macros=loaded_macros,
+        sql_hook_files=project.sql_hook_files,
+        project_name=project_name,
+    )
     python_hook_metadata: dict[str, dict[str, object]] = _build_python_hook_metadata(project)
 
     model: CompiledModel
@@ -102,15 +108,6 @@ def build_manifest(
                 project_name=project_name,
             )
             nodes.update(test_nodes)
-
-    macro_name: str
-    loaded_macro: LoadedMacro
-    for macro_name, loaded_macro in loaded_macros.items():
-        unique_id = f"macro.{project_name}.{macro_name}"
-        macros[unique_id] = build_macro_node(
-            loaded_macro=loaded_macro,
-            project_name=project_name,
-        )
 
     parent_map: dict[str, list[str]] = build_parent_map(
         upstream_deps=upstream_deps,

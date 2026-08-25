@@ -1673,6 +1673,12 @@ SELECT @'role' AS role, '@@CTX:destination.qualified' AS relation_name
                             ),
                             name="record_access",
                             relative_path=Path("hooks/sql/record_access.sql"),
+                            definition_sql=(
+                                "SELECT @'role' AS role, "
+                                "'@@CTX:destination.qualified' AS relation_name"
+                            ),
+                            kwargs={"role": "O'Brien"},
+                            description="Record model access",
                         )
                     ],
                 },
@@ -3849,6 +3855,46 @@ path = "${CTX:schema}"
             expected_error_fragment=(
                 r"post_hooks\[0\] inline_sql\(\"\.\.\.\"\) .* uses unsupported \$\{\.\.\.\} "
                 r"template syntax"
+            ),
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when named hook arguments render multiple statements",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
+                ),
+                "models/staging/broken.sql": (
+                    'MODEL (post_hooks [sql("dynamic", statement: "SELECT 1; SELECT 2")]);'
+                    "\n\nSELECT 1 AS id\n"
+                ),
+                "hooks/sql/dynamic.sql": "HOOK ();\n\n@statement\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                r"post_hooks\[0\] sql\(\"dynamic\"\).*invalid after rendering.*"
+                r"exactly one executable SQL statement"
+            ),
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when named hook arguments render an identifier expression",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
+                ),
+                "models/staging/broken.sql": (
+                    'MODEL (post_hooks [sql("dynamic", statement: "current_date")]);'
+                    "\n\nSELECT 1 AS id\n"
+                ),
+                "hooks/sql/dynamic.sql": "HOOK ();\n\n@statement\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                r"post_hooks\[0\] sql\(\"dynamic\"\).*invalid after rendering.*"
+                r"one executable SQL statement"
             ),
         ),
         BuildCompileInputsErrorTestCase(

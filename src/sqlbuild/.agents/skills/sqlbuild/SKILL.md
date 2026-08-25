@@ -2856,7 +2856,9 @@ For named SQL hooks, SQLBuild first substitutes `@name` and `@'name'` arguments 
 
 `${...}` config-template syntax is not valid in SQL hooks. Python hook arguments are ordinary configuration values and are not SQL-expanded: a Python argument containing `@@CTX:...` or `@macro()` reaches the function unchanged.
 
-SQL hooks are syntax-validated after expansion when the model's effective SQL-validation gate is enabled: SQL analysis must be enabled, `--no-sql-validation` must be absent, and the effective project or model `sql_validation` value must be true. Validation requires one executable statement rather than a standalone expression such as `1 + 1`.
+Every named SQL hook is required to render to exactly one executable statement. This statement-shape check is unconditional, so `sql_validation: false` and `--no-sql-validation` do not permit multiple statements or standalone expressions such as `1 + 1`.
+
+Full dialect syntax validation runs separately after expansion when the model's effective SQL-validation gate is enabled: SQL analysis must be enabled, `--no-sql-validation` must be absent, and the effective project or model `sql_validation` value must be true.
 
 | Variable | Value |
 |----------|-------|
@@ -3617,7 +3619,7 @@ The rule is simple: if it's any SQL that will be executed, it uses `@`. If it's 
 | `@@CTX:name` | SQL hooks only | Compile time - destination relation, target, run ID |
 | `@@@name` | Model SQL | Preserved for runtime (custom materializations) |
 | `@name` / `@'name'` | Named SQL hook bodies | Raw / SQL-literal invocation argument, resolved at compile time |
-| `@name` | Generic audit SQL | Audit engine parameter |
+| `@name` / `@'name'` | Generic audit SQL | Raw / SQL-literal audit argument |
 | `${CTX:...}` | TOML/YAML config values | Config compilation |
 | `${ENV:...}` | TOML/YAML config values | Config compilation |
 
@@ -3735,12 +3737,18 @@ WHERE CAST(ordered_at AS DATE) >= CAST(@@@partition_start AS DATE)
 
 ### Audit parameters
 
-Generic audit SQL uses `@name` (single `@`, no parentheses) for audit-engine placeholders. These are resolved by the audit engine, not the compiler:
+Generic audit SQL uses `@name` (single `@`, no parentheses) for raw SQL placeholders and `@'name'` for escaped SQL-literal placeholders. These are resolved when the audit is attached:
 
 ```sql
 SELECT @column
 FROM @relation
 WHERE @column IS NULL
+```
+
+Use the quoted form for values rather than SQL identifiers or expressions:
+
+```sql
+WHERE status = @'expected_status'
 ```
 
 This is distinct from `@@name` (project variables) and `@macro()` (macro calls), so there is no ambiguity. See [Audits](/concepts/audits) for details on generic audit parameters.

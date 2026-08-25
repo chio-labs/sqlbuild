@@ -223,6 +223,12 @@ def _hook_resources(*, hooks: object) -> list[dict[str, object]]:
                 resource["name"] = hook.name
             if hook.relative_path is not None:
                 resource["relative_path"] = hook.relative_path.as_posix()
+            if hook.definition_sql is not None:
+                resource["definition_sql"] = hook.definition_sql
+            if hook.kwargs is not None:
+                resource["kwargs"] = hook.kwargs
+            if hook.description is not None:
+                resource["description"] = hook.description
             resources.append(resource)
         elif isinstance(hook, PythonHookEntry):
             resources.append({"type": "python", "name": hook.name, "kwargs": hook.kwargs})

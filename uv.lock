@@ -4159,6 +4159,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pyyaml" },
     { name = "rich" },
+    { name = "sqlparse" },
     { name = "sqruff" },
 ]
 
@@ -4237,6 +4238,7 @@ requires-dist = [
     { name = "rich", specifier = ">=15.0.0" },
     { name = "rivers", marker = "extra == 'rivers'", specifier = ">=0.1.4" },
     { name = "snowflake-connector-python", marker = "extra == 'snowflake'", specifier = ">=4.7.1,<5" },
+    { name = "sqlparse", specifier = ">=0.5.4" },
     { name = "sqruff", specifier = ">=0.40.0" },
 ]
 provides-extras = ["dbt", "snowflake", "bigquery", "databricks", "dagster", "postgres", "sqlserver", "ingestr", "dlt", "rivers"]

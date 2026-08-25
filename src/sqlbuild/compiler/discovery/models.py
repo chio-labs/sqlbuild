@@ -32,6 +32,9 @@ class SqlHookEntry:
     statement: str
     name: str | None = None
     relative_path: Path | None = None
+    definition_sql: str | None = None
+    kwargs: dict[str, object] | None = None
+    description: str | None = None
 
 
 @dataclass(frozen=True)

@@ -115,6 +115,8 @@ def test_given_waffle_shop_when_running_compile_json_then_it_reports_offline_que
                     "statement": "SELECT 1",
                     "name": "select_value",
                     "relative_path": "hooks/sql/select_value.sql",
+                    "definition_sql": "SELECT @value",
+                    "kwargs": {"value": 1},
                 },
                 {"type": "python", "name": "notify", "kwargs": {"message": "starting"}},
             ),

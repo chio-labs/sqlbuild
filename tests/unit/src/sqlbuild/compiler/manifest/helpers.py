@@ -24,6 +24,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
+    DiscoveredSqlHookFile,
 )
 from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.planner.models import (
@@ -98,6 +99,7 @@ def build_test_model(
     config_values: dict[str, object] | None = None,
     description: str | None = None,
     columns: tuple[SchemaColumn, ...] = (),
+    meta: dict[str, object] | None = None,
 ) -> CompiledModel:
     """Build a minimal CompiledModel for manifest tests."""
 
@@ -113,8 +115,9 @@ def build_test_model(
             name=name,
             description=description,
             columns=columns,
+            meta=meta or {},
         ),
-    )[description is not None or bool(columns)]
+    )[description is not None or bool(columns) or meta is not None]
 
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name),
@@ -228,6 +231,7 @@ def build_test_project(
     models: tuple[CompiledModel, ...] = (),
     sources: tuple[CompiledSource, ...] = (),
     seeds: tuple[CompiledSeed, ...] = (),
+    sql_hook_files: tuple[DiscoveredSqlHookFile, ...] = (),
 ) -> CompiledProject:
     """Build a minimal CompiledProject for manifest tests."""
 
@@ -239,6 +243,7 @@ def build_test_project(
         models=models,
         sources=sources,
         seeds=seeds,
+        sql_hook_files=sql_hook_files,
     )
 
 
