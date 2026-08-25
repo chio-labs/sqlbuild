@@ -256,8 +256,8 @@ def test_given_concurrent_batches_when_audit_and_hooks_wrap_model_then_aggregate
         batch_concurrency=3,
         replay_policy="forward_only",
         extra_config=(
-            "pre_hooks [sql(\"INSERT INTO main.hook_log VALUES ('pre')\")], "
-            "post_hooks [sql(\"INSERT INTO main.hook_log VALUES ('post')\")],"
+            "pre_hooks [inline_sql(\"INSERT INTO main.hook_log VALUES ('pre')\")], "
+            "post_hooks [inline_sql(\"INSERT INTO main.hook_log VALUES ('post')\")],"
             "audits [expression_is_true ("
             'name "value present", expression "value IS NOT NULL", severity error, '
             "run_scope final,)],"

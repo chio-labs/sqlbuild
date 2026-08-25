@@ -35,6 +35,7 @@ from sqlbuild.compiler.compile._helpers.config.model_validation import (
     validate_snapshot_config,
 )
 from sqlbuild.compiler.compile._helpers.refs.cache import cached_sql_reference_extractor
+from sqlbuild.compiler.compile._helpers.render.arguments import render_parameterized_sql
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
     get_validated_model_cursor_intrinsics,
@@ -82,9 +83,11 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
+    DiscoveredSqlHookFile,
     DiscoveredSqlModelFile,
     EnumDeclaration,
     ModelSchemaDeclaration,
+    NamedSqlHookEntry,
     PythonHookEntry,
     SqlHookEntry,
 )
@@ -116,6 +119,18 @@ class _VisibleModelDeclarations:
     local_constants: dict[str, ConstantDeclaration]
     enums: dict[str, EnumDeclaration]
     constants: dict[str, ConstantDeclaration]
+
+
+@dataclass(frozen=True)
+class _HookExpansionContext:
+    file_path: Path
+    effective_vars: dict[str, object]
+    context_values: dict[str, str | None]
+    loaded_macros: dict[str, LoadedMacro]
+    macro_context: MacroContext
+    enums: dict[str, EnumDeclaration]
+    constants: dict[str, ConstantDeclaration]
+    sql_hook_definitions: dict[str, DiscoveredSqlHookFile]
 
 
 def build_model_inputs(
@@ -166,6 +181,9 @@ def _build_model_inputs(
         external_sql_reference_resolver.validate_model_names(known_model_names=known_model_names)
     custom_materialization_names: frozenset[str] = frozenset(
         mf.name for mf in discovered_inputs.materialization_files
+    )
+    sql_hook_definitions: dict[str, DiscoveredSqlHookFile] = _index_sql_hook_definitions(
+        discovered_inputs.sql_hook_files
     )
     model_inputs: list[CompileModelInput] = []
     model_file: DiscoveredSqlModelFile
@@ -309,6 +327,7 @@ def _build_model_inputs(
                 macro_context=macro_context,
                 enums=declarations.enums,
                 constants=declarations.constants,
+                sql_hook_definitions=sql_hook_definitions,
             ),
             matched_path_default=effective_config.matched_path_default,
             logical_schema=effective_config.logical_schema,
@@ -317,7 +336,7 @@ def _build_model_inputs(
         hook_name: str
         for hook_name in ("pre_hooks", "post_hooks"):
             hook_value: object | None = expanded_config.values.get(hook_name)
-            if isinstance(hook_value, tuple):
+            if isinstance(hook_value, list | tuple):
                 hook_entry: object
                 for hook_entry in hook_value:
                     if isinstance(hook_entry, SqlHookEntry):
@@ -594,6 +613,7 @@ def expand_model_hook_macros(
     macro_context: MacroContext,
     enums: dict[str, EnumDeclaration],
     constants: dict[str, ConstantDeclaration],
+    sql_hook_definitions: dict[str, DiscoveredSqlHookFile] | None = None,
 ) -> dict[str, object]:
     """Expand SQL interpolation and macros within executable hook SQL strings."""
 
@@ -605,13 +625,16 @@ def expand_model_hook_macros(
             continue
         expanded_values[hook_key] = expand_sql_macros_in_value(
             value=raw_hook_value,
-            file_path=file_path,
-            effective_vars=effective_vars,
-            context_values=context_values,
-            loaded_macros=loaded_macros,
-            macro_context=macro_context,
-            enums=enums,
-            constants=constants,
+            context=_HookExpansionContext(
+                file_path=file_path,
+                effective_vars=effective_vars,
+                context_values=context_values,
+                loaded_macros=loaded_macros,
+                macro_context=macro_context,
+                enums=enums,
+                constants=constants,
+                sql_hook_definitions=sql_hook_definitions or {},
+            ),
             hook_key=hook_key,
         )
     return expanded_values
@@ -624,7 +647,8 @@ def validate_model_hook_config(*, values: dict[str, object], model_name: str) ->
             plural_key: str = f"{legacy_key}s"
             raise CompileInputError(
                 f"model '{model_name}' uses legacy '{legacy_key}'; use typed '{plural_key}' "
-                'entries like sql("...") or python("hook_name")'
+                'entries like inline_sql("..."), sql("hook_name"), or '
+                'python("hook_name")'
             )
 
     hook_key: str
@@ -638,11 +662,11 @@ def validate_model_hook_config(*, values: dict[str, object], model_name: str) ->
             )
         hook_entry: object
         for hook_entry in raw_value:
-            if isinstance(hook_entry, SqlHookEntry | PythonHookEntry):
+            if isinstance(hook_entry, SqlHookEntry | NamedSqlHookEntry | PythonHookEntry):
                 continue
             raise CompileInputError(
-                f"model '{model_name}' {hook_key} entries must use typed sql(...) or "
-                "python(...) hook syntax"
+                f"model '{model_name}' {hook_key} entries must use typed inline_sql(...), "
+                "sql(...), or python(...) hook syntax"
             )
 
 
@@ -788,13 +812,7 @@ def _format_hook_parameter_names(parameter_names: frozenset[str]) -> str:
 def expand_sql_macros_in_value(
     *,
     value: object,
-    file_path: Path,
-    effective_vars: dict[str, object],
-    context_values: dict[str, str | None],
-    loaded_macros: dict[str, LoadedMacro],
-    macro_context: MacroContext,
-    enums: dict[str, EnumDeclaration],
-    constants: dict[str, ConstantDeclaration],
+    context: _HookExpansionContext,
     hook_key: str | None = None,
     hook_index: int | None = None,
 ) -> object:
@@ -804,46 +822,79 @@ def expand_sql_macros_in_value(
         if _HOOK_TEMPLATE_PATTERN.search(value) is not None:
             hook_label: str = _format_sql_hook_label(hook_key=hook_key, hook_index=hook_index)
             raise CompileInputError(
-                f"{hook_label} in '{file_path}' uses unsupported ${{...}} template syntax. "
-                "Use @@CTX:..., @@ENV:..., or @@project_var inside sql(...) hooks."
+                f"{hook_label} in '{context.file_path}' uses unsupported ${{...}} template syntax. "
+                "Use @@CTX:..., @@ENV:..., or @@project_var inside SQL hooks."
             )
         return expand_authored_sql(
             sql=value,
-            file_path=file_path,
-            effective_vars=effective_vars,
-            context_values=context_values,
-            loaded_macros=loaded_macros,
-            macro_context=macro_context,
-            enums=enums,
-            constants=constants,
+            file_path=context.file_path,
+            effective_vars=context.effective_vars,
+            context_values=context.context_values,
+            loaded_macros=context.loaded_macros,
+            macro_context=context.macro_context,
+            enums=context.enums,
+            constants=context.constants,
         )
     if isinstance(value, SqlHookEntry):
         expanded_statement: object = expand_sql_macros_in_value(
             value=value.statement,
-            file_path=file_path,
-            effective_vars=effective_vars,
-            context_values=context_values,
-            loaded_macros=loaded_macros,
-            macro_context=macro_context,
-            enums=enums,
-            constants=constants,
+            context=context,
             hook_key=hook_key,
             hook_index=hook_index,
         )
-        return SqlHookEntry(statement=str(expanded_statement))
+        return SqlHookEntry(
+            statement=str(expanded_statement),
+            name=value.name,
+            relative_path=value.relative_path,
+        )
+    if isinstance(value, NamedSqlHookEntry):
+        hook_definition: DiscoveredSqlHookFile | None = context.sql_hook_definitions.get(value.name)
+        if hook_definition is None:
+            known_hook_names: str = (
+                ", ".join(sorted(context.sql_hook_definitions)) or "none discovered"
+            )
+            hook_label = _format_named_sql_hook_label(
+                hook_name=value.name,
+                hook_key=hook_key,
+                hook_index=hook_index,
+            )
+            raise CompileInputError(
+                f"{hook_label} in '{context.file_path}' references an unknown SQL hook. "
+                f"Discovered SQL hooks: {known_hook_names}. If this is an inline SQL "
+                'statement, use inline_sql("...").'
+            )
+        rendered_statement: str = render_parameterized_sql(
+            sql=hook_definition.sql_body,
+            arguments=value.kwargs,
+            owner_label=(
+                f"{context.file_path} "
+                + _format_named_sql_hook_label(
+                    hook_name=value.name,
+                    hook_key=hook_key,
+                    hook_index=hook_index,
+                )
+            ),
+            definition_label=(f"SQL hook '{value.name}' in {hook_definition.relative_path}"),
+            reject_unused=True,
+        )
+        expanded_statement = expand_sql_macros_in_value(
+            value=rendered_statement,
+            context=replace(context, file_path=hook_definition.file_path),
+            hook_key=hook_key,
+            hook_index=hook_index,
+        )
+        return SqlHookEntry(
+            statement=str(expanded_statement),
+            name=value.name,
+            relative_path=hook_definition.relative_path,
+        )
     if isinstance(value, PythonHookEntry):
         return value
     if isinstance(value, list):
         return [
             expand_sql_macros_in_value(
                 value=item,
-                file_path=file_path,
-                effective_vars=effective_vars,
-                context_values=context_values,
-                loaded_macros=loaded_macros,
-                macro_context=macro_context,
-                enums=enums,
-                constants=constants,
+                context=context,
                 hook_key=hook_key,
                 hook_index=index,
             )
@@ -853,13 +904,7 @@ def expand_sql_macros_in_value(
         return tuple(
             expand_sql_macros_in_value(
                 value=item,
-                file_path=file_path,
-                effective_vars=effective_vars,
-                context_values=context_values,
-                loaded_macros=loaded_macros,
-                macro_context=macro_context,
-                enums=enums,
-                constants=constants,
+                context=context,
                 hook_key=hook_key,
                 hook_index=index,
             )
@@ -870,10 +915,36 @@ def expand_sql_macros_in_value(
 
 def _format_sql_hook_label(*, hook_key: str | None, hook_index: int | None) -> str:
     if hook_key is None:
-        return 'sql("...") hook'
+        return 'inline_sql("...") hook'
     if hook_index is None:
-        return f'{hook_key} sql("...")'
-    return f'{hook_key}[{hook_index}] sql("...")'
+        return f'{hook_key} inline_sql("...")'
+    return f'{hook_key}[{hook_index}] inline_sql("...")'
+
+
+def _format_named_sql_hook_label(
+    *, hook_name: str, hook_key: str | None, hook_index: int | None
+) -> str:
+    if hook_key is None:
+        return f'sql("{hook_name}") hook'
+    if hook_index is None:
+        return f'{hook_key} sql("{hook_name}")'
+    return f'{hook_key}[{hook_index}] sql("{hook_name}")'
+
+
+def _index_sql_hook_definitions(
+    hook_files: tuple[DiscoveredSqlHookFile, ...],
+) -> dict[str, DiscoveredSqlHookFile]:
+    definitions: dict[str, DiscoveredSqlHookFile] = {}
+    hook_file: DiscoveredSqlHookFile
+    for hook_file in hook_files:
+        existing: DiscoveredSqlHookFile | None = definitions.get(hook_file.name)
+        if existing is not None:
+            raise CompileInputError(
+                f"Duplicate SQL hook name '{hook_file.name}' found in "
+                f"{existing.relative_path} and {hook_file.relative_path}"
+            )
+        definitions[hook_file.name] = hook_file
+    return definitions
 
 
 def validate_model_config_has_no_macros(*, values: dict[str, object]) -> None:

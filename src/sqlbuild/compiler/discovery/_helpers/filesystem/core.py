@@ -24,6 +24,7 @@ from sqlbuild.compiler.discovery._helpers.sql.declarations import (
     parse_model_schema_declaration_file,
 )
 from sqlbuild.compiler.discovery._helpers.sql.functions import parse_function_sql
+from sqlbuild.compiler.discovery._helpers.sql.hooks import parse_sql_hook_file
 from sqlbuild.compiler.discovery._helpers.sql.model_files import (
     model_header_column_locations,
     model_output_column_locations,
@@ -69,6 +70,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSeedFile,
     DiscoveredSourceFile,
     DiscoveredSqlFunctionFile,
+    DiscoveredSqlHookFile,
     DiscoveredSqlModelFile,
     DiscoveredSqlScenarioFile,
     DiscoveredSqlTestFile,
@@ -574,9 +576,9 @@ def discover_python_node_functions(
 def discover_hook_functions(
     *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] = ()
 ) -> tuple[DiscoveredHookFunction, ...]:
-    """Discover decorated model lifecycle hook functions under hooks/."""
+    """Discover decorated model lifecycle hook functions under hooks/python/."""
 
-    hooks_root: Path = project_dir / "hooks"
+    hooks_root: Path = project_dir / "hooks" / "python"
     if not hooks_root.is_dir():
         return ()
 
@@ -590,7 +592,7 @@ def discover_hook_functions(
         module: ModuleType = _load_python_node_module(
             file_path=file_path,
             project_dir=project_dir,
-            node_folder="hooks",
+            node_folder="hooks/python",
         )
         for _, value in inspect.getmembers(module, inspect.isfunction):
             if value.__module__ != module.__name__:
@@ -619,6 +621,30 @@ def discover_hook_functions(
                     ),
                 )
             )
+    return tuple(discovered_hooks)
+
+
+def discover_sql_hook_files(*, project_dir: Path) -> tuple[DiscoveredSqlHookFile, ...]:
+    """Discover named SQL lifecycle hook resources under hooks/sql/."""
+
+    hooks_root: Path = project_dir / "hooks" / "sql"
+    if not hooks_root.is_dir():
+        return ()
+
+    discovered_hooks: list[DiscoveredSqlHookFile] = []
+    file_path: Path
+    for file_path in sorted(hooks_root.rglob("*.sql")):
+        if file_path.name.startswith("_"):
+            continue
+        relative_path: Path = file_path.relative_to(project_dir)
+        contents: str = file_path.read_text(encoding="utf-8")
+        discovered_hooks.append(
+            parse_sql_hook_file(
+                contents=contents,
+                file_path=file_path,
+                relative_path=relative_path,
+            )
+        )
     return tuple(discovered_hooks)
 
 

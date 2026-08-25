@@ -239,6 +239,7 @@ def assemble_compiled_project(
         ),
         loader_functions=inputs.discovered_inputs.loader_functions,
         hook_functions=inputs.discovered_inputs.hook_functions,
+        sql_hook_files=inputs.discovered_inputs.sql_hook_files,
         materialization_files=inputs.discovered_inputs.materialization_files,
         public_enums=inputs.public_enums,
         public_constants=inputs.public_constants,

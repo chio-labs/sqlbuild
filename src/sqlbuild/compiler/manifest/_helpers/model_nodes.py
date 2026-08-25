@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.manifest._helpers.shared import (
     build_columns_dict,
@@ -21,6 +22,7 @@ def build_model_node(
     model: CompiledModel,
     plan_entry: ModelPlanEntry | None,
     project_name: str,
+    python_hook_metadata: dict[str, dict[str, object]] | None = None,
 ) -> dict[str, object]:
     """Build one dbt-compatible model node dict."""
 
@@ -49,7 +51,10 @@ def build_model_node(
         "tags": _extract_tags(model),
         "description": _extract_description(model),
         "columns": build_columns_dict(model.schema_entry),
-        "meta": _extract_meta(model),
+        "meta": _extract_meta(
+            model=model,
+            python_hook_metadata=python_hook_metadata or {},
+        ),
         "group": None,
         "docs": {"show": True, "node_color": None},
         "patch_path": None,
@@ -87,9 +92,52 @@ def _extract_description(model: CompiledModel) -> str:
     return ""
 
 
-def _extract_meta(model: CompiledModel) -> dict[str, object]:
+def _extract_meta(
+    *, model: CompiledModel, python_hook_metadata: dict[str, dict[str, object]]
+) -> dict[str, object]:
     """Extract meta from schema entry."""
 
+    meta: dict[str, object] = {}
     if model.schema_entry is not None and model.schema_entry.meta is not None:
-        return dict(model.schema_entry.meta)
-    return {}
+        meta.update(model.schema_entry.meta)
+    lifecycle_hooks: dict[str, list[dict[str, object]]] = {}
+    hook_key: str
+    for hook_key in ("pre_hooks", "post_hooks"):
+        serialized: list[dict[str, object]] = _serialize_hooks(
+            value=model.config.values.get(hook_key),
+            python_hook_metadata=python_hook_metadata,
+        )
+        if serialized:
+            lifecycle_hooks[hook_key] = serialized
+    if lifecycle_hooks:
+        meta["sqlbuild"] = {"lifecycle_hooks": lifecycle_hooks}
+    return meta
+
+
+def _serialize_hooks(
+    *, value: object, python_hook_metadata: dict[str, dict[str, object]]
+) -> list[dict[str, object]]:
+    if not isinstance(value, list | tuple):
+        return []
+    hooks: list[dict[str, object]] = []
+    entry: object
+    for entry in value:
+        if isinstance(entry, SqlHookEntry):
+            hook: dict[str, object] = {
+                "type": "sql",
+                "statement": entry.statement,
+            }
+            if entry.name is not None:
+                hook["name"] = entry.name
+            if entry.relative_path is not None:
+                hook["relative_path"] = entry.relative_path.as_posix()
+            hooks.append(hook)
+        elif isinstance(entry, PythonHookEntry):
+            python_hook: dict[str, object] = {
+                "type": "python",
+                "name": entry.name,
+                "kwargs": entry.kwargs,
+            }
+            python_hook.update(python_hook_metadata.get(entry.name, {}))
+            hooks.append(python_hook)
+    return hooks

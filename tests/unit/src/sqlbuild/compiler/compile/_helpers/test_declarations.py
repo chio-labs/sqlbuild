@@ -74,7 +74,7 @@ CONSTANT (name source_name, value "O'Brien");
             "models/orders.sql": """
 MODEL (
   contract enforced,
-  pre_hooks [sql('SELECT @const("min_runners") + @const("_offset")')],
+  pre_hooks [inline_sql('SELECT @const("min_runners") + @const("_offset")')],
   enums (
     _state [OPEN, CLOSED],
   ),
@@ -209,7 +209,7 @@ SELECT * FROM __ref("orders") WHERE threshold < @const("min_runners")
         build_model_version_identity_metadata_json(model=compiled_model)
     )
     assert identity_metadata["execution_signature"] == {
-        "pre_hooks": ["SqlHookEntry(statement='SELECT 7 + 2')"],
+        "pre_hooks": [{"type": "sql", "statement": "SELECT 7 + 2"}],
         "contract": {
             "enforced": True,
             "columns": [

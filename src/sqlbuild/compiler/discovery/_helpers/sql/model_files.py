@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sqlbuild.compiler.discovery.exceptions import ModelHeaderSyntaxError, ModelSqlParseError
-from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
+from sqlbuild.compiler.discovery.models import NamedSqlHookEntry, PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SourceLocation
 
@@ -33,8 +33,16 @@ _MODEL_HEADER_RELATION_CALL_NAMES: frozenset[str] = frozenset(
         SqlReferenceKind.SOURCE.function_name,
     }
 )
-_MODEL_HEADER_SQL_HOOK_CALL: str = "sql"
-_MODEL_HEADER_HOOK_CALL_NAMES: frozenset[str] = frozenset({_MODEL_HEADER_SQL_HOOK_CALL, "python"})
+_MODEL_HEADER_INLINE_SQL_HOOK_CALL: str = "inline_sql"
+_MODEL_HEADER_NAMED_SQL_HOOK_CALL: str = "sql"
+_MODEL_HEADER_PYTHON_HOOK_CALL: str = "python"
+_MODEL_HEADER_HOOK_CALL_NAMES: frozenset[str] = frozenset(
+    {
+        _MODEL_HEADER_INLINE_SQL_HOOK_CALL,
+        _MODEL_HEADER_NAMED_SQL_HOOK_CALL,
+        _MODEL_HEADER_PYTHON_HOOK_CALL,
+    }
+)
 _MODEL_HEADER_HOOK_FIELD_NAMES: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
 _MODEL_HEADER_TRUE_VALUE: str = "true"
 _MODEL_HEADER_FALSE_VALUE: str = "false"
@@ -544,7 +552,8 @@ class _ModelHeaderParser:
         if not self._match_symbol(_MODEL_HEADER_OPEN_BRACKET):
             token: _ModelHeaderToken = self._peek()
             raise ModelHeaderSyntaxError(
-                f"{field_name} must be a list of typed sql(...) or python(...) hook entries "
+                f"{field_name} must be a list of typed inline_sql(...), sql(...), or "
+                "python(...) hook entries "
                 f"at position {token.position}"
             )
         values: list[object] = []
@@ -563,7 +572,8 @@ class _ModelHeaderParser:
             return token.value
         if token.kind != _MODEL_HEADER_WORD_TOKEN:
             raise ModelHeaderSyntaxError(
-                f"{field_name} entries must use typed sql(...) or python(...) hook syntax"
+                f"{field_name} entries must use typed inline_sql(...), sql(...), or "
+                "python(...) hook syntax"
             )
         self._advance()
         if (
@@ -571,12 +581,14 @@ class _ModelHeaderParser:
             or self._peek().value != _MODEL_HEADER_OPEN_PAREN
         ):
             raise ModelHeaderSyntaxError(
-                f"{field_name} entries must use typed sql(...) or python(...) hook syntax"
+                f"{field_name} entries must use typed inline_sql(...), sql(...), or "
+                "python(...) hook syntax"
             )
         self._advance()
         if token.value not in _MODEL_HEADER_HOOK_CALL_NAMES:
             raise ModelHeaderSyntaxError(
-                f"{field_name} entries must use typed sql(...) or python(...) hook syntax"
+                f"{field_name} entries must use typed inline_sql(...), sql(...), or "
+                "python(...) hook syntax"
             )
         return self._parse_hook_call(token.value)
 
@@ -589,30 +601,40 @@ class _ModelHeaderParser:
         self._consume_symbol(_MODEL_HEADER_CLOSE_PAREN)
         return f'{name}("{relation_name}")'
 
-    def _parse_hook_call(self, name: str) -> SqlHookEntry | PythonHookEntry:
-        if name == _MODEL_HEADER_SQL_HOOK_CALL:
+    def _parse_hook_call(self, name: str) -> SqlHookEntry | NamedSqlHookEntry | PythonHookEntry:
+        if name == _MODEL_HEADER_INLINE_SQL_HOOK_CALL:
             statement_token: _ModelHeaderToken = self._peek()
             if statement_token.kind != _MODEL_HEADER_STRING_TOKEN:
-                raise ModelHeaderSyntaxError("sql(...) requires a quoted SQL string")
+                raise ModelHeaderSyntaxError("inline_sql(...) requires a quoted SQL string")
             self._advance()
             if self._match_symbol(_MODEL_HEADER_COMMA):
-                raise ModelHeaderSyntaxError("sql(...) does not accept additional arguments")
+                raise ModelHeaderSyntaxError("inline_sql(...) does not accept additional arguments")
             self._consume_symbol(_MODEL_HEADER_CLOSE_PAREN)
             return SqlHookEntry(statement=statement_token.value)
 
         hook_name_token: _ModelHeaderToken = self._peek()
         if hook_name_token.kind != _MODEL_HEADER_STRING_TOKEN:
-            raise ModelHeaderSyntaxError("python(...) requires a quoted hook name")
+            raise ModelHeaderSyntaxError(f"{name}(...) requires a quoted hook name")
         self._advance()
+        if not hook_name_token.value.strip():
+            raise ModelHeaderSyntaxError(f"{name}(...) requires a non-empty hook name")
+        kwargs: dict[str, object] = self._parse_hook_kwargs()
+        if name == _MODEL_HEADER_NAMED_SQL_HOOK_CALL:
+            return NamedSqlHookEntry(name=hook_name_token.value, kwargs=kwargs)
+        return PythonHookEntry(name=hook_name_token.value, kwargs=kwargs)
+
+    def _parse_hook_kwargs(self) -> dict[str, object]:
         kwargs: dict[str, object] = {}
         while self._match_symbol(_MODEL_HEADER_COMMA):
             if self._is_at_end_symbol(_MODEL_HEADER_CLOSE_PAREN):
                 break
             key: str = self._consume_key()
+            if key in kwargs:
+                raise ModelHeaderSyntaxError(f"duplicate hook argument '{key}'")
             self._consume_symbol(_MODEL_HEADER_KEY_VALUE_SEPARATOR)
             kwargs[key] = self._parse_value()
         self._consume_symbol(_MODEL_HEADER_CLOSE_PAREN)
-        return PythonHookEntry(name=hook_name_token.value, kwargs=kwargs)
+        return kwargs
 
     def _consume_key(self) -> str:
         token: _ModelHeaderToken = self._peek()

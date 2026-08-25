@@ -43,7 +43,10 @@ def run_init(project_dir: Path | None) -> int:
     doc.line("  1. Add sources to sources/")
     doc.line("  2. Add seeds to seeds/ or loaders to loaders/")
     doc.line("  3. Add tasks to tasks/, assets to assets/, or checks to checks/")
-    doc.line("  4. Add hooks to hooks/, functions to functions/, or macros to macros/")
+    doc.line(
+        "  4. Add SQL hooks to hooks/sql/, Python hooks to hooks/python/, "
+        "functions to functions/, or macros to macros/"
+    )
     doc.line("  5. Add models to models/staging/ and models/marts/")
     doc.line("  6. Add tests to tests/unit/ or tests/scenarios/")
     doc.command_line(prefix="  7. ", command="sqb compile")

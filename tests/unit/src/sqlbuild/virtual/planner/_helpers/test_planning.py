@@ -1097,7 +1097,13 @@ def test_given_hook_change_when_building_expected_hashes_then_hashes_differ(
         upstream_query_sql=test_case.upstream_query_sql,
         downstream_query_sql=test_case.downstream_query_sql,
         upstream_extra_config={
-            "pre_hooks": [SqlHookEntry(statement="SELECT 1")],
+            "pre_hooks": [
+                SqlHookEntry(
+                    statement="SELECT 1",
+                    name="record_access",
+                    relative_path=Path("hooks/sql/record_access.sql"),
+                )
+            ],
             "post_hooks": [SqlHookEntry(statement="SELECT 2")],
         },
     )
@@ -1105,7 +1111,13 @@ def test_given_hook_change_when_building_expected_hashes_then_hashes_differ(
         upstream_query_sql=test_case.upstream_query_sql,
         downstream_query_sql=test_case.downstream_query_sql,
         upstream_extra_config={
-            "pre_hooks": [SqlHookEntry(statement="SELECT 3")],
+            "pre_hooks": [
+                SqlHookEntry(
+                    statement="SELECT 3",
+                    name="record_access",
+                    relative_path=Path("hooks/sql/record_access.sql"),
+                )
+            ],
             "post_hooks": [SqlHookEntry(statement="SELECT 4")],
         },
     )

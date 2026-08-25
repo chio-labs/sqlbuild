@@ -31,6 +31,8 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     SqlTestPlanEntry,
 )
+from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
+from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
 
 
 def build_manifest(
@@ -54,6 +56,7 @@ def build_manifest(
     nodes: dict[str, dict[str, object]] = {}
     sources: dict[str, dict[str, object]] = {}
     macros: dict[str, dict[str, object]] = {}
+    python_hook_metadata: dict[str, dict[str, object]] = _build_python_hook_metadata(project)
 
     model: CompiledModel
     for model in project.models:
@@ -63,6 +66,7 @@ def build_manifest(
             model=model,
             plan_entry=plan_entry,
             project_name=project_name,
+            python_hook_metadata=python_hook_metadata,
         )
 
     source: CompiledSource
@@ -140,6 +144,18 @@ def build_manifest(
         "saved_queries": {},
         "semantic_models": {},
         "unit_tests": {},
+    }
+
+
+def _build_python_hook_metadata(project: CompiledProject) -> dict[str, dict[str, object]]:
+    hook_identities: dict[str, PythonNodeIdentity] = build_hook_identities(project.hook_functions)
+    return {
+        hook.name: {
+            "relative_path": hook.relative_path.as_posix(),
+            "definition_hash": hook_identities[hook.name].definition_hash,
+            "version_hash": hook_identities[hook.name].version_hash,
+        }
+        for hook in project.hook_functions
     }
 
 

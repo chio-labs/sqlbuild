@@ -110,7 +110,12 @@ def test_given_waffle_shop_when_running_compile_json_then_it_reports_offline_que
             expected_model_names=("orders",),
             expected_sql_fragments=("SELECT 1 AS id",),
             expected_pre_hooks=(
-                {"type": "sql", "statement": "SELECT 1"},
+                {
+                    "type": "sql",
+                    "statement": "SELECT 1",
+                    "name": "select_value",
+                    "relative_path": "hooks/sql/select_value.sql",
+                },
                 {"type": "python", "name": "notify", "kwargs": {"message": "starting"}},
             ),
             expected_post_hooks=(
@@ -134,16 +139,18 @@ def test_given_model_with_hooks_when_running_compile_json_then_it_reports_hook_m
                 "[connection]\n"
                 'database = "compile_json_hooks_project.duckdb"\n'
             ),
-            "hooks/notify.py": (
+            "hooks/python/notify.py": (
                 "from sqlbuild.hooks import hook\n\n"
                 "@hook\n"
                 "def notify(ctx, message):\n"
                 "    ctx.log(message)\n"
             ),
+            "hooks/sql/select_value.sql": "HOOK ();\n\nSELECT @value\n",
             "models/orders.sql": (
                 "MODEL (\n"
                 "  materialized table,\n"
-                '  pre_hooks [sql("SELECT 1"), python("notify", message: "starting")],\n'
+                '  pre_hooks [sql("select_value", value: 1), '
+                'python("notify", message: "starting")],\n'
                 '  post_hooks [python("notify", message: "done")]\n'
                 ");\n\n"
                 "SELECT 1 AS id\n"
@@ -170,3 +177,15 @@ def test_given_model_with_hooks_when_running_compile_json_then_it_reports_hook_m
         assert fragment in str(orders["query_sql"])
     assert orders["pre_hooks"] == list(test_case.expected_pre_hooks)
     assert orders["post_hooks"] == list(test_case.expected_post_hooks)
+    hooks: list[dict[str, object]] = resources["hooks"]
+    hooks_by_name: dict[str, dict[str, object]] = {str(hook["name"]): hook for hook in hooks}
+    assert hooks_by_name["select_value"] == {
+        "type": "sql",
+        "name": "select_value",
+        "relative_path": "hooks/sql/select_value.sql",
+        "description": None,
+        "sql": "SELECT @value",
+    }
+    assert hooks_by_name["notify"]["relative_path"] == "hooks/python/notify.py"
+    assert hooks_by_name["notify"]["definition_hash"]
+    assert hooks_by_name["notify"]["version_hash"]

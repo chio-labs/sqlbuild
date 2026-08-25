@@ -15,12 +15,18 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
     "test_case",
     [
         InitE2ETestCase(
-            description="init scaffolds hooks directory",
+            description="init scaffolds language-specific hook directories",
             expected_exit_code=0,
-            expected_paths=("sqlbuild_project.toml", "hooks", "hooks/.gitkeep"),
+            expected_paths=(
+                "sqlbuild_project.toml",
+                "hooks/sql",
+                "hooks/sql/.gitkeep",
+                "hooks/python",
+                "hooks/python/.gitkeep",
+            ),
             expected_output_fragments=(
                 "SQLBuild project created",
-                "Add hooks to hooks/",
+                "Add SQL hooks to hooks/sql/, Python hooks to hooks/python/",
             ),
         )
     ],
