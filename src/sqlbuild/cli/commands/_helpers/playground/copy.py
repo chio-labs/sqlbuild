@@ -659,6 +659,10 @@ def _write_python_nodes_template_files(*, target_dir: Path) -> None:
     checks_dir: Path = target_dir / "checks"
     checks_dir.mkdir()
     (checks_dir / "orders_export.py").write_text(_PYTHON_NODES_CHECKS_PY, encoding="utf-8")
+    for hook_language in ("sql", "python"):
+        hook_dir: Path = target_dir / "hooks" / hook_language
+        hook_dir.mkdir(parents=True)
+        (hook_dir / ".gitkeep").touch()
 
 
 def _write_virtual_template_files(*, target_dir: Path) -> None:

@@ -81,7 +81,7 @@ def build_scenario_python_hooks_project_files() -> dict[str, str]:
     """Build an inline scenario project with a Python lifecycle hook."""
 
     repo_files: dict[str, str] = build_scenario_project_files()
-    repo_files["hooks/scenario_hooks.py"] = (
+    repo_files["hooks/python/scenario_hooks.py"] = (
         "from sqlbuild.hooks import hook\n\n"
         "@hook\n"
         "def log_scenario_model(ctx):\n"

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,6 +12,10 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
     validate_audit_references,
 )
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
+from sqlbuild.compiler.compile._helpers.render.arguments import (
+    render_parameterized_sql,
+    render_sql_argument_value,
+)
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
     expand_authored_sql,
@@ -20,8 +23,6 @@ from sqlbuild.compiler.compile._helpers.render.sql_vars import (
 from sqlbuild.compiler.compile.constants import (
     AUDIT_DIRECTORY_NAME,
     GENERIC_AUDIT_DIRECTORY_NAME,
-    GENERIC_AUDIT_QUOTED_PARAMETER_PATTERN,
-    GENERIC_AUDIT_RAW_PARAMETER_PATTERN,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
@@ -68,7 +69,6 @@ class _AuditAttachmentContext:
     public_constants: dict[str, ConstantDeclaration]
 
 
-_HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
 _LEGACY_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hook", "post_hook"})
 _MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
 _HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
@@ -459,27 +459,12 @@ def render_generic_audit_sql(
 ) -> str:
     """Render generic attached-audit parameters into executable SQL text."""
 
-    rendered_sql: str = GENERIC_AUDIT_QUOTED_PARAMETER_PATTERN.sub(
-        lambda match: render_generic_audit_argument(
-            argument_name=match.group("name"),
-            arguments=arguments,
-            owner_file=owner_file,
-            definition_name=definition_name,
-            quoted=True,
-        ),
-        sql,
+    return render_parameterized_sql(
+        sql=sql,
+        arguments=arguments,
+        owner_label=str(owner_file),
+        definition_label=f"generic audit '{definition_name}'",
     )
-    rendered_sql = GENERIC_AUDIT_RAW_PARAMETER_PATTERN.sub(
-        lambda match: render_generic_audit_argument(
-            argument_name=match.group("name"),
-            arguments=arguments,
-            owner_file=owner_file,
-            definition_name=definition_name,
-            quoted=False,
-        ),
-        rendered_sql,
-    )
-    return rendered_sql
 
 
 def render_generic_audit_argument(
@@ -492,17 +477,11 @@ def render_generic_audit_argument(
 ) -> str:
     """Render one generic attached-audit parameter value into SQL text."""
 
-    if argument_name not in arguments:
-        raise CompileInputError(
-            f"{owner_file} is missing argument '{argument_name}' for generic audit "
-            f"'{definition_name}'"
-        )
-    return render_generic_audit_argument_value(
-        argument_value=arguments[argument_name],
-        owner_file=owner_file,
-        definition_name=definition_name,
-        argument_name=argument_name,
-        quoted=quoted,
+    return render_parameterized_sql(
+        sql=f"@'{argument_name}'" if quoted else f"@{argument_name}",
+        arguments=arguments,
+        owner_label=str(owner_file),
+        definition_label=f"generic audit '{definition_name}'",
     )
 
 
@@ -516,31 +495,12 @@ def render_generic_audit_argument_value(
 ) -> str:
     """Render one generic attached-audit argument value using raw or literal SQL rules."""
 
-    if isinstance(argument_value, list | tuple):
-        return ", ".join(
-            render_generic_audit_argument_value(
-                argument_value=item,
-                owner_file=owner_file,
-                definition_name=definition_name,
-                argument_name=argument_name,
-                quoted=quoted,
-            )
-            for item in argument_value
-        )
-    if isinstance(argument_value, bool):
-        return "TRUE" if argument_value else "FALSE"
-    if argument_value is None:
-        return "NULL"
-    if isinstance(argument_value, int | float):
-        return str(argument_value)
-    if isinstance(argument_value, str):
-        if quoted:
-            escaped_value: str = argument_value.replace("'", "''")
-            return f"'{escaped_value}'"
-        return argument_value
-    raise CompileInputError(
-        f"{owner_file} audit '{definition_name}' argument '{argument_name}' uses an "
-        "unsupported value"
+    return render_sql_argument_value(
+        argument_value=argument_value,
+        owner_label=str(owner_file),
+        definition_label=f"audit '{definition_name}'",
+        argument_name=argument_name,
+        quoted=quoted,
     )
 
 

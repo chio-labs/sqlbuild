@@ -18,6 +18,7 @@ dependencies = [
   "PyYAML>=6.0.2",
   "rich>=15.0.0",
   "sqruff>=0.40.0",
+  "sqlparse>=0.5.4",
 ]
 
 [project.optional-dependencies]

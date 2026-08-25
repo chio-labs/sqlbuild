@@ -30,6 +30,19 @@ class SqlHookEntry:
     """A model lifecycle hook that executes SQL."""
 
     statement: str
+    name: str | None = None
+    relative_path: Path | None = None
+    definition_sql: str | None = None
+    kwargs: dict[str, object] | None = None
+    description: str | None = None
+
+
+@dataclass(frozen=True)
+class NamedSqlHookEntry:
+    """An unresolved invocation of a discovered SQL hook resource."""
+
+    name: str
+    kwargs: dict[str, object]
 
 
 @dataclass(frozen=True)
@@ -66,6 +79,19 @@ class DiscoveredSqlFunctionFile:
     contents: str
     header_values: dict[str, object]
     body_sql: str
+
+
+@dataclass(frozen=True)
+class DiscoveredSqlHookFile:
+    """A discovered named SQL lifecycle hook resource."""
+
+    file_path: Path
+    relative_path: Path
+    contents: str
+    header_values: dict[str, object]
+    sql_body: str
+    name: str
+    description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -387,6 +413,7 @@ class DiscoveredProjectInputs:
     constant_files: tuple[DiscoveredConstantFile, ...] = field(default_factory=tuple)
     model_schema_files: tuple[DiscoveredModelSchemaFile, ...] = field(default_factory=tuple)
     sql_function_files: tuple[DiscoveredSqlFunctionFile, ...] = field(default_factory=tuple)
+    sql_hook_files: tuple[DiscoveredSqlHookFile, ...] = field(default_factory=tuple)
     python_function_files: tuple[DiscoveredPythonFunctionFile, ...] = field(default_factory=tuple)
     schema_files: tuple[DiscoveredSchemaFile, ...] = field(default_factory=tuple)
     source_files: tuple[DiscoveredSourceFile, ...] = field(default_factory=tuple)

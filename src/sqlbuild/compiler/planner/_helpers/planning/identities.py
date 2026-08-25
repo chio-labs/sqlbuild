@@ -29,11 +29,13 @@ def build_planner_identity_context(
             functions=project.functions,
             seeds=project.seeds,
             scope=scopes.inspection_scope,
+            hook_functions=project.hook_functions,
         ),
         stale_warning_identities=build_direct_model_version_identities(
             functions=project.functions,
             seeds=project.seeds,
             scope=scopes.stale_warning_scope,
+            hook_functions=project.hook_functions,
         ),
     )
 

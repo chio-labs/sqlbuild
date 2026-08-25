@@ -140,6 +140,30 @@ class DiscoverHookFunctionsErrorTestCase:
 
 
 @dataclass(frozen=True)
+class ParseSqlHookTestCase:
+    description: str
+    contents: str
+    expected_name: str
+    expected_description: str | None
+    expected_sql_body: str
+
+
+@dataclass(frozen=True)
+class ParseSqlHookErrorTestCase:
+    description: str
+    contents: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DiscoverSqlHooksTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_names: tuple[str, ...]
+    expected_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DiscoverProviderClassesTestCase:
     description: str
     repo_files: dict[str, str]

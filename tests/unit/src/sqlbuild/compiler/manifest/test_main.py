@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledSource,
     LoadedMacro,
 )
+from sqlbuild.compiler.discovery.models import DiscoveredSqlHookFile, SqlHookEntry
 from sqlbuild.compiler.manifest._helpers.shared import build_fqn
 from sqlbuild.compiler.manifest.constants import DBT_MANIFEST_SCHEMA_VERSION
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ChainStep, PlanOutput, SqlTestPlanEntry
@@ -331,6 +332,58 @@ def test_given_project_when_building_manifest_then_produces_correct_structure(
             expected_merge_exclude_columns=["ingested_at"],
             expected_full_refresh=False,
         ),
+        ManifestModelNodeTestCase(
+            description="named SQL hook exposes definition and preserves authored SQLBuild meta",
+            model=build_test_model(
+                name="hooked_orders",
+                config_values={
+                    "pre_hooks": [
+                        SqlHookEntry(
+                            statement="SELECT 'reader'",
+                            name="record_access",
+                            relative_path=Path("hooks/sql/record_access.sql"),
+                            definition_sql="SELECT @'role'",
+                            kwargs={"role": "reader"},
+                            description="Record access",
+                        )
+                    ]
+                },
+                meta={"sqlbuild": {"owner": "data-platform"}},
+            ),
+            plan_entries=(),
+            project_name=_PROJECT,
+            expected_unique_id=f"model.{_PROJECT}.hooked_orders",
+            expected_resource_type="model",
+            expected_database=None,
+            expected_schema="public",
+            expected_alias="hooked_orders",
+            expected_fqn=[_PROJECT, "models", "test"],
+            expected_raw_code="SELECT 1",
+            expected_compiled_code="SELECT 1",
+            expected_relation_name="public.hooked_orders",
+            expected_description="",
+            expected_materialized="view",
+            expected_checksum_name="sha256",
+            expected_meta={
+                "sqlbuild": {
+                    "owner": "data-platform",
+                    "lifecycle_hooks": {
+                        "pre_hooks": [
+                            {
+                                "type": "sql",
+                                "statement": "SELECT 'reader'",
+                                "name": "record_access",
+                                "relative_path": "hooks/sql/record_access.sql",
+                                "definition_sql": "SELECT @'role'",
+                                "kwargs": {"role": "reader"},
+                                "description": "Record access",
+                            }
+                        ]
+                    },
+                }
+            },
+            expected_pre_hooks=[{"sql": "SELECT 'reader'", "transaction": True, "index": 0}],
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -380,6 +433,8 @@ def test_given_model_when_building_manifest_then_produces_correct_node(
         assert tag in node["tags"]
     assert node["config"]["merge_exclude_columns"] == test_case.expected_merge_exclude_columns
     assert node["config"]["full_refresh"] is test_case.expected_full_refresh
+    assert node["meta"] == test_case.expected_meta
+    assert node["config"]["pre-hook"] == test_case.expected_pre_hooks
 
 
 @pytest.mark.parametrize(
@@ -793,6 +848,17 @@ def test_given_full_project_when_building_manifest_then_validates_against_dbt_sc
         models=(model,),
         sources=(source,),
         seeds=(seed,),
+        sql_hook_files=(
+            DiscoveredSqlHookFile(
+                file_path=Path("/project/hooks/sql/record_access.sql"),
+                relative_path=Path("hooks/sql/record_access.sql"),
+                contents="HOOK ();\n\nSELECT @'role'\n",
+                header_values={"description": "Record access"},
+                sql_body="SELECT @'role'",
+                name="record_access",
+                description="Record access",
+            ),
+        ),
     )
     plan_output: PlanOutput = build_test_plan_output(
         model_entries=(
@@ -855,3 +921,11 @@ def test_given_full_project_when_building_manifest_then_validates_against_dbt_sc
     assert len(errors) == test_case.expected_validation_error_count, (
         "Schema validation errors:\n" + "\n".join(error_messages)
     )
+    sql_hook_macro: dict[str, Any] = result["macros"][
+        f"macro.{_PROJECT}__sqlbuild_hooks.record_access"
+    ]
+    assert sql_hook_macro["original_file_path"] == "hooks/sql/record_access.sql"
+    assert sql_hook_macro["meta"] == {
+        "sqlbuild_resource_type": "sql_hook",
+        "sqlbuild_hook_name": "record_access",
+    }

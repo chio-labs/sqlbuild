@@ -33,6 +33,7 @@ from sqlbuild.compiler.planner.main.selection.model_upstream_closure import (
 )
 from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.compiler.planner.types import PlanReason, WorkSelectionPolicy
+from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
     SourceFreshnessRecord,
@@ -105,6 +106,10 @@ def build_model_fingerprint_metadata_jsons(
         graph=graph
     )
     result: dict[str, str] = {}
+    hook_version_hashes: dict[str, str] = {
+        name: identity.version_hash
+        for name, identity in build_hook_identities(graph.project.hook_functions).items()
+    }
     models_by_name: dict[str, Any] = {model.name: model for model in graph.project.models}
     key: Any
     for key in _topologically_order_keys(graph):
@@ -116,6 +121,7 @@ def build_model_fingerprint_metadata_jsons(
         result[model.name] = build_model_version_identity_metadata_json(
             model=model,
             function_local_hashes=function_hashes,
+            hook_version_hashes=hook_version_hashes,
         )
     return result
 

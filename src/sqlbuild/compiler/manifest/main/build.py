@@ -16,7 +16,9 @@ from sqlbuild.compiler.manifest._helpers.graph_maps import (
     build_child_map,
     build_parent_map,
 )
-from sqlbuild.compiler.manifest._helpers.macros import build_macro_node
+from sqlbuild.compiler.manifest._helpers.macros import (
+    build_manifest_macro_nodes,
+)
 from sqlbuild.compiler.manifest._helpers.model_nodes import build_model_node
 from sqlbuild.compiler.manifest._helpers.seeds import build_seed_node
 from sqlbuild.compiler.manifest._helpers.sources import build_source_node
@@ -31,6 +33,8 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     SqlTestPlanEntry,
 )
+from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
+from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
 
 
 def build_manifest(
@@ -53,7 +57,12 @@ def build_manifest(
 
     nodes: dict[str, dict[str, object]] = {}
     sources: dict[str, dict[str, object]] = {}
-    macros: dict[str, dict[str, object]] = {}
+    macros: dict[str, dict[str, object]] = build_manifest_macro_nodes(
+        loaded_macros=loaded_macros,
+        sql_hook_files=project.sql_hook_files,
+        project_name=project_name,
+    )
+    python_hook_metadata: dict[str, dict[str, object]] = _build_python_hook_metadata(project)
 
     model: CompiledModel
     for model in project.models:
@@ -63,6 +72,7 @@ def build_manifest(
             model=model,
             plan_entry=plan_entry,
             project_name=project_name,
+            python_hook_metadata=python_hook_metadata,
         )
 
     source: CompiledSource
@@ -99,15 +109,6 @@ def build_manifest(
             )
             nodes.update(test_nodes)
 
-    macro_name: str
-    loaded_macro: LoadedMacro
-    for macro_name, loaded_macro in loaded_macros.items():
-        unique_id = f"macro.{project_name}.{macro_name}"
-        macros[unique_id] = build_macro_node(
-            loaded_macro=loaded_macro,
-            project_name=project_name,
-        )
-
     parent_map: dict[str, list[str]] = build_parent_map(
         upstream_deps=upstream_deps,
         project_name=project_name,
@@ -140,6 +141,18 @@ def build_manifest(
         "saved_queries": {},
         "semantic_models": {},
         "unit_tests": {},
+    }
+
+
+def _build_python_hook_metadata(project: CompiledProject) -> dict[str, dict[str, object]]:
+    hook_identities: dict[str, PythonNodeIdentity] = build_hook_identities(project.hook_functions)
+    return {
+        hook.name: {
+            "relative_path": hook.relative_path.as_posix(),
+            "definition_hash": hook_identities[hook.name].definition_hash,
+            "version_hash": hook_identities[hook.name].version_hash,
+        }
+        for hook in project.hook_functions
     }
 
 

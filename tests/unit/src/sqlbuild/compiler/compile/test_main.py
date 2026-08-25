@@ -1225,7 +1225,7 @@ database = "analytics"
                 "models/staging/orders.sql": """
 MODEL (
   alias orders_dev,
-  post_hooks [sql('@grant_select("@@CTX:destination.qualified")')],
+  post_hooks [inline_sql('@grant_select("@@CTX:destination.qualified")')],
 );
 
 select @project_columns() from __source("raw_orders")
@@ -1426,7 +1426,7 @@ min_amount = "100"
                 + "\n",
                 "models/orders.sql": """
 MODEL (
-  pre_hooks [sql("insert into @@audit_schema.load_log select '@@ENV:USER_NAME'")],
+  pre_hooks [inline_sql("insert into @@audit_schema.load_log select '@@ENV:USER_NAME'")],
   columns (order_id (audits [source_filter])),
 );
 
@@ -1587,7 +1587,7 @@ database = "analytics"
 MODEL (
   alias orders_dev,
   post_hooks [
-    sql("select '@@CTX:destination.qualified' as target"),
+    inline_sql("select '@@CTX:destination.qualified' as target"),
     python("notify", message: "@@CTX:destination.qualified"),
   ],
 );
@@ -1595,7 +1595,7 @@ MODEL (
 SELECT 1 AS id
 """.strip()
                 + "\n",
-                "hooks/notifications.py": """
+                "hooks/python/notifications.py": """
 from sqlbuild.hooks import hook
 
 
@@ -1633,6 +1633,66 @@ def notify(ctx, message):
             expected_model_references=((),),
         ),
         BuildCompileInputsTestCase(
+            description="resolves named SQL hooks with arguments and model context",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+
+[defaults]
+schema = "marts"
+""".strip()
+                + "\n",
+                "models/orders.sql": """
+MODEL (
+  post_hooks [sql("record_access", role: "O'Brien")],
+);
+
+SELECT 1 AS id
+""".strip()
+                + "\n",
+                "hooks/sql/record_access.sql": """
+HOOK (description: "Record model access");
+
+SELECT @'role' AS role, '@@CTX:destination.qualified' AS relation_name
+""".strip()
+                + "\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=(
+                {
+                    "schema": "marts",
+                    "post_hooks": [
+                        SqlHookEntry(
+                            statement=(
+                                "SELECT 'O''Brien' AS role, 'marts.orders' AS relation_name"
+                            ),
+                            name="record_access",
+                            relative_path=Path("hooks/sql/record_access.sql"),
+                            definition_sql=(
+                                "SELECT @'role' AS role, "
+                                "'@@CTX:destination.qualified' AS relation_name"
+                            ),
+                            kwargs={"role": "O'Brien"},
+                            description="Record model access",
+                        )
+                    ],
+                },
+            ),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_query_sqls=("SELECT 1 AS id",),
+            expected_model_references=((),),
+        ),
+        BuildCompileInputsTestCase(
             description="validates Python hook kwargs while allowing defaults and variadic kwargs",
             repo_files=base_repo_files()
             | {
@@ -1649,7 +1709,7 @@ MODEL (
 SELECT 1 AS id
 """.strip()
                 + "\n",
-                "hooks/notifications.py": """
+                "hooks/python/notifications.py": """
 from sqlbuild.hooks import hook
 
 
@@ -1711,7 +1771,7 @@ MODEL (
 SELECT 1 AS id
 """.strip()
                 + "\n",
-                "hooks/notifications.py": """
+                "hooks/python/notifications.py": """
 from sqlbuild.hooks import hook
 
 
@@ -3738,44 +3798,44 @@ path = "${CTX:schema}"
             },
             selected_target=None,
             run_id=None,
-            expected_error_fragment="post_hooks entries must use typed sql",
+            expected_error_fragment="post_hooks entries must use typed inline_sql",
         ),
         BuildCompileInputsErrorTestCase(
             description="raises when pre_hook sql has invalid syntax",
             repo_files=base_repo_files()
             | {
                 "models/staging/broken.sql": (
-                    "MODEL (pre_hooks [sql('THIS IS NOT VALID SQL')]);\n\nSELECT 1 AS id\n"
+                    "MODEL (pre_hooks [inline_sql('THIS IS NOT VALID SQL')]);\n\nSELECT 1 AS id\n"
                 ),
             },
             selected_target=None,
             run_id=None,
-            expected_error_fragment=r"model 'broken' pre_hooks\[0\] sql\(\"\.\.\.\"\) has invalid SQL",
+            expected_error_fragment=r"model 'broken' pre_hooks\[0\] inline_sql\(\"\.\.\.\"\) has invalid SQL",
         ),
         BuildCompileInputsErrorTestCase(
             description="raises when post_hook sql has invalid syntax",
             repo_files=base_repo_files()
             | {
                 "models/staging/broken.sql": (
-                    "MODEL (post_hooks [sql('THIS IS NOT VALID SQL')]);\n\nSELECT 1 AS id\n"
+                    "MODEL (post_hooks [inline_sql('THIS IS NOT VALID SQL')]);\n\nSELECT 1 AS id\n"
                 ),
             },
             selected_target=None,
             run_id=None,
-            expected_error_fragment=r"model 'broken' post_hooks\[0\] sql\(\"\.\.\.\"\) has invalid SQL",
+            expected_error_fragment=r"model 'broken' post_hooks\[0\] inline_sql\(\"\.\.\.\"\) has invalid SQL",
         ),
         BuildCompileInputsErrorTestCase(
             description="raises when hook sql is not an executable statement",
             repo_files=base_repo_files()
             | {
                 "models/staging/broken.sql": (
-                    "MODEL (post_hooks [sql('1 + 1')]);\n\nSELECT 1 AS id\n"
+                    "MODEL (post_hooks [inline_sql('1 + 1')]);\n\nSELECT 1 AS id\n"
                 ),
             },
             selected_target=None,
             run_id=None,
             expected_error_fragment=(
-                r"model 'broken' post_hooks\[0\] sql\(\"\.\.\.\"\) has invalid SQL .* "
+                r"model 'broken' post_hooks\[0\] inline_sql\(\"\.\.\.\"\) has invalid SQL .* "
                 r"must be a valid executable SQL statement"
             ),
         ),
@@ -3785,7 +3845,7 @@ path = "${CTX:schema}"
             | {
                 "models/staging/broken.sql": (
                     "MODEL (post_hooks ["
-                    "sql('GRANT SELECT ON ${CTX:destination.qualified} TO analyst')"
+                    "inline_sql('GRANT SELECT ON ${CTX:destination.qualified} TO analyst')"
                     "]);\n\n"
                     "SELECT 1 AS id\n"
                 ),
@@ -3793,8 +3853,48 @@ path = "${CTX:schema}"
             selected_target=None,
             run_id=None,
             expected_error_fragment=(
-                r"post_hooks\[0\] sql\(\"\.\.\.\"\) .* uses unsupported \$\{\.\.\.\} "
+                r"post_hooks\[0\] inline_sql\(\"\.\.\.\"\) .* uses unsupported \$\{\.\.\.\} "
                 r"template syntax"
+            ),
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when named hook arguments render multiple statements",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
+                ),
+                "models/staging/broken.sql": (
+                    'MODEL (post_hooks [sql("dynamic", statement: "SELECT 1; SELECT 2")]);'
+                    "\n\nSELECT 1 AS id\n"
+                ),
+                "hooks/sql/dynamic.sql": "HOOK ();\n\n@statement\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                r"post_hooks\[0\] sql\(\"dynamic\"\).*invalid after rendering.*"
+                r"exactly one executable SQL statement"
+            ),
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when named hook arguments render an identifier expression",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
+                ),
+                "models/staging/broken.sql": (
+                    'MODEL (post_hooks [sql("dynamic", statement: "current_date")]);'
+                    "\n\nSELECT 1 AS id\n"
+                ),
+                "hooks/sql/dynamic.sql": "HOOK ();\n\n@statement\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                r"post_hooks\[0\] sql\(\"dynamic\"\).*invalid after rendering.*"
+                r"one executable SQL statement"
             ),
         ),
         BuildCompileInputsErrorTestCase(
@@ -3818,7 +3918,7 @@ path = "${CTX:schema}"
                 "models/staging/broken.sql": (
                     'MODEL (post_hooks [python("known"), python("missing")]);\n\nSELECT 1 AS id\n'
                 ),
-                "hooks/notifications.py": """
+                "hooks/python/notifications.py": """
 from sqlbuild.hooks import hook
 
 
@@ -3841,7 +3941,7 @@ def known(ctx):
                 "models/staging/broken.sql": (
                     'MODEL (pre_hooks [python("notify")]);\n\nSELECT 1 AS id\n'
                 ),
-                "hooks/notifications.py": """
+                "hooks/python/notifications.py": """
 from sqlbuild.hooks import hook
 
 
@@ -3864,7 +3964,7 @@ def notify(ctx, channel):
                 "models/staging/broken.sql": (
                     'MODEL (post_hooks [python("notify", unknown: "value")]);\n\nSELECT 1 AS id\n'
                 ),
-                "hooks/notifications.py": """
+                "hooks/python/notifications.py": """
 from sqlbuild.hooks import hook
 
 
@@ -3887,7 +3987,7 @@ def notify(ctx):
                 "models/staging/broken.sql": (
                     'MODEL (post_hooks [python("notify")]);\n\nSELECT 1 AS id\n'
                 ),
-                "hooks/notifications.py": """
+                "hooks/python/notifications.py": """
 from sqlbuild.hooks import hook
 
 
@@ -4018,7 +4118,7 @@ def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_
                 "models/staging/orders.sql": (
                     'MODEL (post_hooks [python("notify", channel: "alerts")]);\n\nSELECT 1 AS id\n'
                 ),
-                "hooks/notifications.py": """
+                "hooks/python/notifications.py": """
 from pathlib import Path
 from sqlbuild.hooks import hook
 

@@ -87,7 +87,7 @@ from assets.exports import export_customers
 def export_customers_exists(ctx):
     return True
 """,
-                "hooks/notifications.py": """
+                "hooks/python/notifications.py": """
 from sqlbuild.hooks import hook
 
 @hook(name="notify success")
@@ -880,7 +880,7 @@ def export_customers(ctx):
 """,
             },
             expected_error_fragment=(
-                "Selectable resource name 'export_customers' is declared as both model"
+                "Project resource name 'export_customers' is declared as both model"
             ),
         ),
         DiscoverProjectInputsErrorTestCase(
@@ -905,7 +905,7 @@ def export_customers(ctx):
 """,
             },
             expected_error_fragment=(
-                "Selectable resource name 'export_customers' is declared as both seed"
+                "Project resource name 'export_customers' is declared as both seed"
             ),
         ),
         DiscoverProjectInputsErrorTestCase(
@@ -935,7 +935,7 @@ def export_customers_exists(ctx):
 """,
             },
             expected_error_fragment=(
-                "Selectable resource name 'export_customers_exists' is declared as both source"
+                "Project resource name 'export_customers_exists' is declared as both source"
             ),
         ),
         DiscoverProjectInputsErrorTestCase(
@@ -961,7 +961,7 @@ def main(amount):
                 + "\n",
             },
             expected_error_fragment=(
-                "Selectable resource name 'is_large_order' is declared as both function"
+                "Project resource name 'is_large_order' is declared as both function"
             ),
         ),
         DiscoverProjectInputsErrorTestCase(
@@ -986,7 +986,59 @@ def fetch_orders(ctx):
 """,
             },
             expected_error_fragment=(
-                "Selectable resource name 'fetch_orders' is declared as both function"
+                "Project resource name 'fetch_orders' is declared as both function"
+            ),
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when SQL hook name collides with model name",
+            repo_files=base_repo_files()
+            | {
+                "models/notify.sql": "MODEL ();\n\nSELECT 1\n",
+                "hooks/sql/notify.sql": "HOOK ();\n\nSELECT 1\n",
+            },
+            expected_error_fragment=(
+                "Project resource name 'notify' is declared as both model in models/notify.sql "
+                "and sql hook in hooks/sql/notify.sql"
+            ),
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when Python hook name collides with provider name",
+            repo_files=base_repo_files()
+            | {
+                "providers/marker.py": """
+from sqlbuild.providers import Provider
+
+class MarkerProvider(Provider):
+    pass
+""",
+                "hooks/python/marker.py": """
+from sqlbuild.hooks import hook
+
+@hook(name="marker_provider")
+def marker(ctx):
+    return None
+""",
+            },
+            expected_error_fragment=(
+                "Project resource name 'marker_provider' is declared as both provider"
+            ),
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when SQL and Python hook names collide",
+            repo_files=base_repo_files()
+            | {
+                "hooks/sql/notify.sql": "HOOK ();\n\nSELECT 1\n",
+                "hooks/python/notify.py": """
+from sqlbuild.hooks import hook
+
+@hook
+def notify(ctx):
+    return None
+""",
+            },
+            expected_error_fragment=(
+                "Project resource name 'notify' is declared as both sql hook in "
+                "hooks/sql/notify.sql and python hook in hooks/python/notify.py"
             ),
         ),
         DiscoverProjectInputsErrorTestCase(

@@ -11,13 +11,16 @@ from sqlbuild.compiler.discovery.exceptions import DiscoveryConflictError, SeedD
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
     DiscoveredCheckFunction,
+    DiscoveredHookFunction,
     DiscoveredLoaderFunction,
     DiscoveredProjectInputs,
+    DiscoveredProvider,
     DiscoveredPythonFunctionFile,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSourceFile,
     DiscoveredSqlFunctionFile,
+    DiscoveredSqlHookFile,
     DiscoveredSqlModelFile,
     DiscoveredSqlScenarioFile,
     DiscoveredTaskFunction,
@@ -84,17 +87,7 @@ def validate_discovered_inputs(discovered_inputs: DiscoveredProjectInputs) -> No
         schema_files=discovered_inputs.schema_files,
         seed_files=discovered_inputs.seed_files,
     )
-    _validate_unique_selectable_resource_names(
-        model_files=discovered_inputs.model_files,
-        source_files=discovered_inputs.source_files,
-        schema_files=discovered_inputs.schema_files,
-        sql_function_files=discovered_inputs.sql_function_files,
-        python_function_files=discovered_inputs.python_function_files,
-        loader_functions=discovered_inputs.loader_functions,
-        task_functions=discovered_inputs.task_functions,
-        asset_functions=discovered_inputs.asset_functions,
-        check_functions=discovered_inputs.check_functions,
-    )
+    _validate_unique_project_resource_names(discovered_inputs)
     _validate_path_defaults_match_models(
         path_defaults=discovered_inputs.project_config.path_defaults,
         model_files=discovered_inputs.model_files,
@@ -542,23 +535,14 @@ def _validated_logical_relation_entry(
     return (kind, path)
 
 
-def _validate_unique_selectable_resource_names(
-    *,
-    model_files: tuple[DiscoveredSqlModelFile, ...],
-    source_files: tuple[DiscoveredSourceFile, ...],
-    schema_files: tuple[DiscoveredSchemaFile, ...],
-    sql_function_files: tuple[DiscoveredSqlFunctionFile, ...],
-    python_function_files: tuple[DiscoveredPythonFunctionFile, ...],
-    loader_functions: tuple[DiscoveredLoaderFunction, ...],
-    task_functions: tuple[DiscoveredTaskFunction, ...],
-    asset_functions: tuple[DiscoveredAssetFunction, ...],
-    check_functions: tuple[DiscoveredCheckFunction, ...],
+def _validate_unique_project_resource_names(
+    discovered_inputs: DiscoveredProjectInputs,
 ) -> None:
     seen_names: dict[str, tuple[str, str]] = {}
 
     model_file: DiscoveredSqlModelFile
-    for model_file in model_files:
-        seen_names[model_file.file_path.stem] = _validated_selectable_resource_entry(
+    for model_file in discovered_inputs.model_files:
+        seen_names[model_file.file_path.stem] = _validated_project_resource_entry(
             seen_names=seen_names,
             name=model_file.file_path.stem,
             kind="model",
@@ -567,12 +551,12 @@ def _validate_unique_selectable_resource_names(
 
     source_file: DiscoveredSourceFile
     managed_source_names: set[str] = set()
-    for source_file in source_files:
+    for source_file in discovered_inputs.source_files:
         source_entry: SourceEntry
         for source_entry in source_file.source_entries:
             if source_entry.managed:
                 managed_source_names.add(source_entry.name)
-            seen_names[source_entry.name] = _validated_selectable_resource_entry(
+            seen_names[source_entry.name] = _validated_project_resource_entry(
                 seen_names=seen_names,
                 name=source_entry.name,
                 kind="source",
@@ -580,10 +564,10 @@ def _validate_unique_selectable_resource_names(
             )
 
     schema_file: DiscoveredSchemaFile
-    for schema_file in schema_files:
+    for schema_file in discovered_inputs.schema_files:
         seed_entry: SchemaSeedEntry
         for seed_entry in schema_file.seed_entries:
-            seen_names[seed_entry.name] = _validated_selectable_resource_entry(
+            seen_names[seed_entry.name] = _validated_project_resource_entry(
                 seen_names=seen_names,
                 name=seed_entry.name,
                 kind="seed",
@@ -591,8 +575,8 @@ def _validate_unique_selectable_resource_names(
             )
 
     sql_function_file: DiscoveredSqlFunctionFile
-    for sql_function_file in sql_function_files:
-        seen_names[sql_function_file.file_path.stem] = _validated_selectable_resource_entry(
+    for sql_function_file in discovered_inputs.sql_function_files:
+        seen_names[sql_function_file.file_path.stem] = _validated_project_resource_entry(
             seen_names=seen_names,
             name=sql_function_file.file_path.stem,
             kind="function",
@@ -600,8 +584,8 @@ def _validate_unique_selectable_resource_names(
         )
 
     python_function_file: DiscoveredPythonFunctionFile
-    for python_function_file in python_function_files:
-        seen_names[python_function_file.file_path.stem] = _validated_selectable_resource_entry(
+    for python_function_file in discovered_inputs.python_function_files:
+        seen_names[python_function_file.file_path.stem] = _validated_project_resource_entry(
             seen_names=seen_names,
             name=python_function_file.file_path.stem,
             kind="function",
@@ -614,10 +598,15 @@ def _validate_unique_selectable_resource_names(
         | DiscoveredAssetFunction
         | DiscoveredCheckFunction
     )
-    for node in (*loader_functions, *task_functions, *asset_functions, *check_functions):
+    for node in (
+        *discovered_inputs.loader_functions,
+        *discovered_inputs.task_functions,
+        *discovered_inputs.asset_functions,
+        *discovered_inputs.check_functions,
+    ):
         if isinstance(node, DiscoveredLoaderFunction) and node.name in managed_source_names:
             continue
-        seen_names[node.name] = _validated_selectable_resource_entry(
+        seen_names[node.name] = _validated_project_resource_entry(
             seen_names=seen_names,
             name=node.name,
             kind=node.__class__.__name__.removeprefix("Discovered")
@@ -626,16 +615,43 @@ def _validate_unique_selectable_resource_names(
             path=str(node.relative_path),
         )
 
+    provider: DiscoveredProvider
+    for provider in discovered_inputs.providers:
+        seen_names[provider.name] = _validated_project_resource_entry(
+            seen_names=seen_names,
+            name=provider.name,
+            kind="provider",
+            path=str(provider.relative_path),
+        )
 
-def _validated_selectable_resource_entry(
+    sql_hook_file: DiscoveredSqlHookFile
+    for sql_hook_file in discovered_inputs.sql_hook_files:
+        seen_names[sql_hook_file.name] = _validated_project_resource_entry(
+            seen_names=seen_names,
+            name=sql_hook_file.name,
+            kind="sql hook",
+            path=str(sql_hook_file.relative_path),
+        )
+
+    hook_function: DiscoveredHookFunction
+    for hook_function in discovered_inputs.hook_functions:
+        seen_names[hook_function.name] = _validated_project_resource_entry(
+            seen_names=seen_names,
+            name=hook_function.name,
+            kind="python hook",
+            path=str(hook_function.relative_path),
+        )
+
+
+def _validated_project_resource_entry(
     *, seen_names: dict[str, tuple[str, str]], name: str, kind: str, path: str
 ) -> tuple[str, str]:
     existing_entry: tuple[str, str] | None = seen_names.get(name)
     if existing_entry is not None:
         raise DiscoveryConflictError(
-            f"Selectable resource name '{name}' is declared as both {existing_entry[0]} "
+            f"Project resource name '{name}' is declared as both {existing_entry[0]} "
             f"in {existing_entry[1]} and {kind} in {path}; model, source, seed, function, "
-            "loader, task, asset, and check names must be globally unique"
+            "loader, task, asset, check, provider, and hook names must be globally unique"
         )
     return (kind, path)
 

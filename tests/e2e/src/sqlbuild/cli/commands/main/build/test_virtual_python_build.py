@@ -47,7 +47,7 @@ def test_given_virtual_build_with_python_hooks_when_building_then_hooks_execute(
         project_name="virtual_python_hooks_build",
         repo_files={
             "sqlbuild_project.toml": build_virtual_plan_project_toml(),
-            "hooks/lifecycle.py": dedent(
+            "hooks/python/lifecycle.py": dedent(
                 """
                 from sqlbuild.hooks import hook
 

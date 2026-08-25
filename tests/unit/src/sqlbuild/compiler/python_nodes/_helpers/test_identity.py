@@ -313,7 +313,7 @@ def build_orders(ctx):
         PythonNodeIdentityTestCase(
             description="includes Python hook helper dependencies",
             repo_files={
-                "hooks/orders.py": """
+                "hooks/python/orders.py": """
 from sqlbuild.hooks import hook
 
 
@@ -327,10 +327,10 @@ def before_orders(ctx):
 """.strip()
                 + "\n",
             },
-            entry_module_path="hooks/orders.py",
+            entry_module_path="hooks/python/orders.py",
             function_name="before_orders",
             node_type="hook",
-            expected_source_path="hooks/orders.py",
+            expected_source_path="hooks/python/orders.py",
             expected_dependency_qualnames=("audit_message",),
             expected_definition_fragments=("def before_orders(ctx):", "source_text"),
             expected_metadata_fragments=("def audit_message():", "source_text"),

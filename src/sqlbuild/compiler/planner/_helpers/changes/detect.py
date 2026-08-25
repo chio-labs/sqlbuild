@@ -44,6 +44,7 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
+from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.diagnostics.main.log_sql import log_sql
 
@@ -63,6 +64,10 @@ def detect_changes(
     function_local_hashes: dict[str, str] = build_function_local_hashes(
         functions=project.functions,
     )
+    hook_version_hashes: dict[str, str] = {
+        name: identity.version_hash
+        for name, identity in build_hook_identities(project.hook_functions).items()
+    }
     key: CompiledObjectKey
     for key in scope.execution_order:
         if key not in scope.selected_keys or key.resource_type != CompiledResourceType.MODEL:
@@ -77,6 +82,7 @@ def detect_changes(
             query_change_tracking=project.settings.query_change_tracking,
             full_refresh=full_refresh,
             function_local_hashes=function_local_hashes,
+            hook_version_hashes=hook_version_hashes,
             expected_version_hash=(expected_version_hashes or {}).get(model.name),
             expected_metadata_json=(expected_metadata_jsons or {}).get(model.name),
         )
@@ -116,6 +122,7 @@ def detect_model_changes(
     query_change_tracking: bool,
     full_refresh: bool,
     function_local_hashes: dict[str, str] | None = None,
+    hook_version_hashes: dict[str, str] | None = None,
     expected_version_hash: str | None = None,
     expected_metadata_json: str | None = None,
 ) -> ChangeDetectionResult:
@@ -125,6 +132,7 @@ def detect_model_changes(
     metadata_json: str = expected_metadata_json or build_model_version_identity_metadata_json(
         model=model,
         function_local_hashes=function_local_hashes,
+        hook_version_hashes=hook_version_hashes,
     )
 
     if full_refresh:

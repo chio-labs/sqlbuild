@@ -64,6 +64,7 @@ def execute_hooks(
             hook_index=0,
             phase=phase,
             hook_results=hook_results,
+            label=_sql_hook_preview(hooks),
         )
         return False
     if isinstance(hooks, SqlHookEntry):
@@ -74,6 +75,7 @@ def execute_hooks(
             hook_index=0,
             phase=phase,
             hook_results=hook_results,
+            label=hooks.name or _sql_hook_preview(hooks.statement),
         )
         return False
     if isinstance(hooks, PythonHookEntry):
@@ -100,6 +102,7 @@ def execute_hooks(
                     hook_index=hook_index,
                     phase=phase,
                     hook_results=hook_results,
+                    label=_sql_hook_preview(hook),
                 )
             elif isinstance(hook, SqlHookEntry):
                 _execute_sql_hook(
@@ -109,6 +112,7 @@ def execute_hooks(
                     hook_index=hook_index,
                     phase=phase,
                     hook_results=hook_results,
+                    label=hook.name or _sql_hook_preview(hook.statement),
                 )
             elif isinstance(hook, PythonHookEntry):
                 skipped = invoke_python_hook(
@@ -125,12 +129,12 @@ def execute_hooks(
                     return True
             else:
                 raise ExecutorInputError(
-                    f'{phase.value}[{hook_index}] must be sql("...") or python("..."), '
+                    f"{phase.value}[{hook_index}] must be a SQL or Python hook entry, "
                     f"got {type(hook).__name__}"
                 )
         return skipped
     raise ExecutorInputError(
-        f'{phase.value} must be a sql("...")/python("...") hook entry or list of hook entries, '
+        f"{phase.value} must be a SQL/Python hook entry or list of hook entries, "
         f"got {type(hooks).__name__}"
     )
 
@@ -302,7 +306,7 @@ def _record_python_hook_identity(
         node_type=NODE_TYPE_HOOK,
         node_name=hook_function.name,
         function=hook_function.function,
-        project_dir=hook_function.file_path.parent,
+        project_dir=hook_function.file_path.parents[len(hook_function.relative_path.parts) - 1],
         decorator_config={"description": hook_function.description},
     )
     if python_identity_recorder is not None:
@@ -327,6 +331,7 @@ def _execute_sql_hook(
     hook_index: int,
     phase: HookPhase,
     hook_results: list[HookExecutionResult] | None,
+    label: str,
 ) -> None:
     try:
         current: CostResourceContext | None = CostContext.current()
@@ -343,7 +348,7 @@ def _execute_sql_hook(
             phase=phase,
             hook_index=hook_index,
             hook_type="sql",
-            label=_sql_hook_preview(statement),
+            label=label,
             status=ExecutionStatus.FAILED,
             error_message=str(exc),
         )
@@ -353,7 +358,7 @@ def _execute_sql_hook(
         phase=phase,
         hook_index=hook_index,
         hook_type="sql",
-        label=_sql_hook_preview(statement),
+        label=label,
         status=ExecutionStatus.SUCCESS,
     )
 
@@ -465,11 +470,11 @@ def render_hooks(*, hooks: object, phase: HookPhase) -> tuple[str, ...]:
                 continue
             else:
                 raise ExecutorInputError(
-                    f'{phase.value}[{hook_index}] must be sql("...") or python("..."), '
+                    f"{phase.value}[{hook_index}] must be a SQL or Python hook entry, "
                     f"got {type(hook).__name__}"
                 )
         return tuple(statements)
     raise ExecutorInputError(
-        f'{phase.value} must be a sql("...")/python("...") hook entry or list of hook entries, '
+        f"{phase.value} must be a SQL/Python hook entry or list of hook entries, "
         f"got {type(hooks).__name__}"
     )

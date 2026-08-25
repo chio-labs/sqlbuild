@@ -27,3 +27,19 @@ class CursorIntrinsicAnalysisTestCase:
     description: str
     cursor_type: str
     expected_type: str
+
+
+@dataclass(frozen=True)
+class ParameterizedSqlRenderTestCase:
+    description: str
+    sql: str
+    arguments: dict[str, object]
+    expected_sql: str
+
+
+@dataclass(frozen=True)
+class ParameterizedSqlRenderErrorTestCase:
+    description: str
+    sql: str
+    arguments: dict[str, object]
+    expected_error_fragment: str

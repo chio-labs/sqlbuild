@@ -15,6 +15,7 @@ HEADER_KIND_AUDIT: str = "AUDIT"
 HEADER_KIND_FUNCTION: str = "FUNCTION"
 HEADER_KIND_ENUM: str = "ENUM"
 HEADER_KIND_CONSTANT: str = "CONSTANT"
+HEADER_KIND_HOOK: str = "HOOK"
 
 DSL_HEADER_KINDS: frozenset[str] = frozenset(
     {
@@ -25,6 +26,7 @@ DSL_HEADER_KINDS: frozenset[str] = frozenset(
         HEADER_KIND_FUNCTION,
         HEADER_KIND_ENUM,
         HEADER_KIND_CONSTANT,
+        HEADER_KIND_HOOK,
     }
 )
 
@@ -43,6 +45,7 @@ LINT_DIRECTORY_NAMES: tuple[str, ...] = (
     "functions",
     "enums",
     "constants",
+    "hooks",
 )
 
 DEFAULT_SQRUFF_CONFIG_CONTENT: str = """\

@@ -293,7 +293,7 @@ def test_given_source_freshness_changes_during_build_when_appending_then_persist
     (project_dir / "models" / "orders.sql").write_text(
         (
             "MODEL (materialized table, "
-            'post_hooks [sql("UPDATE freshness_control SET data_version = 2")]);\n\n'
+            'post_hooks [inline_sql("UPDATE freshness_control SET data_version = 2")]);\n\n'
             'SELECT * FROM __source("raw_orders")\n'
         ),
         encoding="utf-8",

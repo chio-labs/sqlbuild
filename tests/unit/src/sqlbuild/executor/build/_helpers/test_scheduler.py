@@ -264,7 +264,7 @@ def test_given_model_pre_hook_skips_when_build_runs_then_downstream_model_is_ski
         hook_functions=(
             DiscoveredHookFunction(
                 file_path=Path(__file__),
-                relative_path=Path("hooks/maybe_skip.py"),
+                relative_path=Path("hooks/python/maybe_skip.py"),
                 name="maybe_skip",
                 function=maybe_skip,
             ),

@@ -60,7 +60,7 @@ def test_given_python_pre_hook_returns_skip_when_building_then_model_and_downstr
                 """
             ).strip()
             + "\n",
-            "hooks/skips.py": dedent(
+            "hooks/python/skips.py": dedent(
                 """
                 from sqlbuild.hooks import hook
 
@@ -144,7 +144,7 @@ def test_given_python_post_hook_skip_when_building_then_keeps_relation_and_skips
                 """
             ).strip()
             + "\n",
-            "hooks/skips.py": dedent(
+            "hooks/python/skips.py": dedent(
                 """
                 from sqlbuild.hooks import hook
 
@@ -204,7 +204,7 @@ def test_given_python_post_hook_skip_when_building_then_keeps_relation_and_skips
             expected_orders_rows=((42, "created by hook"),),
             expected_hook_log_rows=(("orders", "orders", "post"),),
             expected_output_fragments=(
-                "pre_hook  sql     SELECT 1",
+                "pre_hook  sql     select_one",
                 "pre_hook  python  create_hook_data",
                 "post_hook python  record_hook_completion",
                 "post_hook sql     SELECT 1",
@@ -231,7 +231,7 @@ def test_given_project_with_python_hooks_when_building_then_hooks_execute(
                 """
             ).strip()
             + "\n",
-            "hooks/lifecycle.py": dedent(
+            "hooks/python/lifecycle.py": dedent(
                 """
                 from sqlbuild.hooks import hook
 
@@ -254,12 +254,20 @@ def test_given_project_with_python_hooks_when_building_then_hooks_execute(
                 """
             ).strip()
             + "\n",
+            "hooks/sql/select_one.sql": dedent(
+                """
+                HOOK (description: "Execute a parameterized select");
+
+                SELECT @value
+                """
+            ).strip()
+            + "\n",
             "models/orders.sql": dedent(
                 """
                 MODEL (
                   materialized table,
-                  pre_hooks [sql("SELECT 1"), python("create_hook_data", value: 42)],
-                  post_hooks [python("record_hook_completion", phase: "post"), sql("SELECT 1")]
+                  pre_hooks [sql("select_one", value: 1), python("create_hook_data", value: 42)],
+                  post_hooks [python("record_hook_completion", phase: "post"), inline_sql("SELECT 1")]
                 );
 
                 SELECT id, label FROM main.hook_data
@@ -418,7 +426,7 @@ def test_given_python_hooks_lifecycle_matrix_when_building_then_all_materializat
                 """
             ).strip()
             + "\n",
-            "hooks/lifecycle.py": dedent(
+            "hooks/python/lifecycle.py": dedent(
                 """
                 from sqlbuild.hooks import hook
 
@@ -627,7 +635,7 @@ def test_given_python_post_hook_failure_when_building_graph_then_downstream_is_b
                 """
             ).strip()
             + "\n",
-            "hooks/lifecycle.py": dedent(
+            "hooks/python/lifecycle.py": dedent(
                 """
                 from sqlbuild.hooks import hook
 
@@ -705,7 +713,7 @@ def test_given_python_post_hook_failure_when_building_graph_then_downstream_is_b
                 """
             MODEL (
               materialized table,
-              pre_hooks [sql("SELECT * FROM missing_hook_table")]
+              pre_hooks [inline_sql("SELECT * FROM missing_hook_table")]
             );
 
             SELECT 1 AS id
@@ -742,7 +750,7 @@ def test_given_pre_hook_failure_when_building_then_cli_shows_failing_hook_row(
                 """
             ).strip()
             + "\n",
-            "hooks/lifecycle.py": dedent(
+            "hooks/python/lifecycle.py": dedent(
                 """
                 from sqlbuild.hooks import hook
 
@@ -806,7 +814,7 @@ def test_given_long_python_hook_name_when_building_then_cli_truncates_label_at_c
                 """
             ).strip()
             + "\n",
-            "hooks/lifecycle.py": (
+            "hooks/python/lifecycle.py": (
                 "from sqlbuild.hooks import hook\n\n\n"
                 "@hook\n"
                 "def publish_customer_metadata_to_external_catalog_after_successful_"
@@ -866,7 +874,7 @@ def test_given_snapshot_with_python_hooks_when_building_then_hooks_execute(
                 """
             ).strip()
             + "\n",
-            "hooks/snapshot_hooks.py": dedent(
+            "hooks/python/snapshot_hooks.py": dedent(
                 """
                 from sqlbuild.hooks import hook
 

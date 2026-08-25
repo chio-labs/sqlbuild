@@ -38,7 +38,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                     """
                 MODEL (
                   materialized table,
-                  pre_hooks [sql('THIS IS NOT VALID SQL')]
+                  pre_hooks [inline_sql('THIS IS NOT VALID SQL')]
                 );
 
                 SELECT 1 AS id
@@ -49,7 +49,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             command=("--no-color", "build"),
             expected_exit_code=1,
             expected_stderr_fragments=(
-                "model 'orders' pre_hooks[0] sql(\"...\") has invalid SQL",
+                "model 'orders' pre_hooks[0] inline_sql(\"...\") has invalid SQL",
                 "hook SQL must be a valid executable SQL statement",
                 "settings.sql_validation: false",
             ),

@@ -155,7 +155,7 @@ def test_given_provider_usages_when_planning_then_text_and_json_include_selected
                 """
             ).strip()
             + "\n",
-            "hooks/mark_pre.py": dedent(
+            "hooks/python/mark_pre.py": dedent(
                 """
                 from providers.marker import MarkerProvider
                 from sqlbuild.hooks import hook
@@ -933,7 +933,7 @@ def test_given_python_hooks_with_provider_when_building_then_hooks_use_provider_
         repo_files={
             "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
             "providers/marker.py": PROVIDER_MARKER_FILE,
-            "hooks/marker_hooks.py": dedent(
+            "hooks/python/marker_hooks.py": dedent(
                 """
                 from providers.marker import MarkerProvider
                 from sqlbuild.hooks import hook
@@ -1001,7 +1001,7 @@ def test_given_view_model_python_hooks_with_provider_when_building_then_hooks_us
         repo_files={
             "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
             "providers/marker.py": PROVIDER_MARKER_FILE,
-            "hooks/marker_hooks.py": dedent(
+            "hooks/python/marker_hooks.py": dedent(
                 """
                 from providers.marker import MarkerProvider
                 from sqlbuild.hooks import hook
@@ -1200,7 +1200,7 @@ def test_given_materialization_hooks_with_provider_when_building_then_hooks_use_
     repo_files: dict[str, str] = {
         "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
         "providers/marker.py": PROVIDER_MARKER_FILE,
-        "hooks/marker_hooks.py": dedent(
+        "hooks/python/marker_hooks.py": dedent(
             """
             from providers.marker import MarkerProvider
             from sqlbuild.hooks import hook
@@ -1255,7 +1255,7 @@ def test_given_untyped_python_hook_provider_parameter_when_building_then_provide
         repo_files={
             "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
             "providers/marker.py": PROVIDER_MARKER_FILE,
-            "hooks/marker_hooks.py": dedent(
+            "hooks/python/marker_hooks.py": dedent(
                 """
                 from sqlbuild.hooks import hook
 
@@ -1314,7 +1314,7 @@ def test_given_python_hook_with_provider_when_hook_fails_then_provider_tears_dow
         repo_files={
             "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
             "providers/marker.py": PROVIDER_MARKER_FILE,
-            "hooks/marker_hooks.py": dedent(
+            "hooks/python/marker_hooks.py": dedent(
                 """
                 from providers.marker import MarkerProvider
                 from sqlbuild.hooks import hook
@@ -1375,7 +1375,7 @@ def test_given_python_post_hook_with_provider_when_hook_fails_then_provider_tear
         repo_files={
             "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
             "providers/marker.py": PROVIDER_MARKER_FILE,
-            "hooks/marker_hooks.py": dedent(
+            "hooks/python/marker_hooks.py": dedent(
                 """
                 from providers.marker import MarkerProvider
                 from sqlbuild.hooks import hook
@@ -1435,7 +1435,7 @@ def test_given_alias_imported_provider_annotation_on_hook_when_building_then_cli
         repo_files={
             "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
             "providers/marker.py": PROVIDER_MARKER_FILE,
-            "hooks/alias_hooks.py": dedent(
+            "hooks/python/alias_hooks.py": dedent(
                 """
                 import importlib.util
                 import sys
@@ -1443,7 +1443,7 @@ def test_given_alias_imported_provider_annotation_on_hook_when_building_then_cli
 
                 from sqlbuild.hooks import hook
 
-                provider_path = Path(__file__).parents[1] / "providers" / "marker.py"
+                provider_path = Path(__file__).parents[2] / "providers" / "marker.py"
                 spec = importlib.util.spec_from_file_location("alias_marker", provider_path)
                 alias_marker = importlib.util.module_from_spec(spec)
                 sys.modules["alias_marker"] = alias_marker
@@ -1514,7 +1514,7 @@ def test_given_provider_annotation_mismatch_on_hook_when_building_then_cli_print
                 """
             ).strip()
             + "\n",
-            "hooks/marker_hooks.py": dedent(
+            "hooks/python/marker_hooks.py": dedent(
                 """
                 from providers.other import OtherProvider
                 from sqlbuild.hooks import hook
@@ -1575,7 +1575,7 @@ def test_given_python_hook_kwarg_matches_provider_when_building_then_cli_prints_
         repo_files={
             "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
             "providers/marker.py": PROVIDER_MARKER_FILE,
-            "hooks/marker_hooks.py": dedent(
+            "hooks/python/marker_hooks.py": dedent(
                 """
                 from providers.marker import MarkerProvider
                 from sqlbuild.hooks import hook
@@ -1660,7 +1660,7 @@ def test_given_python_hook_kwarg_matches_context_when_building_then_cli_prints_c
         repo_files={
             "sqlbuild_project.toml": PROVIDER_FAILURE_PROJECT_TOML,
             "providers/marker.py": PROVIDER_MARKER_FILE,
-            "hooks/marker_hooks.py": dedent(
+            "hooks/python/marker_hooks.py": dedent(
                 """
                 from providers.marker import MarkerProvider
                 from sqlbuild.hooks import hook
