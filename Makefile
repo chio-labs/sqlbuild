@@ -66,7 +66,7 @@ test-e2e-duckdb:
 			fi; \
 		}; \
 		run_step "duckdb e2e" env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/e2e -m "not real_warehouse and not dbt and not performance" -vv --color=yes -n auto --dist loadfile; \
-		run_step "duckdb performance" env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv --color=yes; \
+		run_step "duckdb performance" env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv --log-cli-level=INFO --color=yes; \
 		exit $$status; \
 	} 2>&1 | tee "$$log"; \
 	status=$${PIPESTATUS[0]}; \

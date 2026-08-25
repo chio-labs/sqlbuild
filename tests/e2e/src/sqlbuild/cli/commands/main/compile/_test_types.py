@@ -33,3 +33,4 @@ class DbtShapedCompilePerformanceGuardTestCase:
     expected_min_sql_bytes: int
     expected_max_sql_bytes: int
     expected_max_seconds: float
+    expected_warm_max_seconds: float
