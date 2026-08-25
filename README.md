@@ -106,61 +106,6 @@ SELECT 1
 
 See the [documentation](https://docs.sqlbuild.com) for incremental models, scenarios, loaders, and more.
 
-## Concurrent microbatches
-
-Native `delete_insert` microbatch models can opt into parallel batch execution. Serial execution is
-the default and remains recommended unless parallel batches provide a meaningful runtime benefit.
-Enable the project capability and set a per-model ceiling:
-
-```toml
-[settings]
-microbatch_concurrency = true
-microbatch_unaccounted_partition_policy = "synthesize"
-```
-
-```sql
-MODEL (
-  materialized incremental,
-  incremental_mode microbatch,
-  incremental_strategy delete_insert,
-  cursor event_time,
-  cursor_type timestamp,
-  cursor_grain hour,
-  batch_size 1h,
-  batch_concurrency 4,
-);
-```
-
-`batch_concurrency` is a model ceiling, not a separate worker pool. Batches share the build's global
-`concurrency` limit and connection pool with every other DAG node. First-run and full-refresh target
-bootstrap remain serialized. Concurrent batches are rejected for adapters that have not explicitly
-declared same-target concurrent delete/insert support.
-
-Every native microbatch, including serial models and projects where the capability is disabled,
-records successful half-open partitions and their model fingerprints. Standard builds use the
-warehouse `_sqlbuild_microbatches` table. Virtual builds store equivalent events in the configured
-DuckDB or Postgres state backend and scope them to the immutable physical model version. Virtual
-builds renew a physical-version lease while mutating shared data; standard-mode orchestrators must
-prevent overlapping invocations for the same model destination.
-
-Janitor may read microbatch history to protect active physical versions, but it never drops or
-prunes `_sqlbuild_microbatches` or virtual `microbatch_events`. Removing virtual event history is an
-explicit `sqb state reset` operator action, not ordinary retention cleanup.
-
-The append-only history distinguishes physical continuity from fingerprint continuity. Known gaps
-are recovered before new normal work. Automatic `replay_on_change` ranges are durable and
-version-specific, while explicit backfills remain one-shot requests. If destination progress is not
-explained by retained history, `microbatch_unaccounted_partition_policy` controls reconciliation:
-
-- `synthesize` accepts inferred physical coverage and records an unknown fingerprint.
-- `recover_empty` counts candidates in bounded chunks, reruns empty intervals, and synthesizes
-  non-empty intervals.
-- `recover_all` reruns every unaccounted interval without a preliminary count.
-
-Synthetic coverage preserves forward progress but weakens version guarantees and remains visible in
-warnings and JSON output. Target DML and event insertion do not require a cross-system transaction;
-idempotent `delete_insert` recovery handles failures between those operations.
-
 ## Kata SQL architecture checks
 
 Kata is SQLBuild's opt-in, error-only SQL model shape checker. It runs offline over the compiled
