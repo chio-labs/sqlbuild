@@ -526,6 +526,7 @@ def _resolve_virtual_build(
         adapter=adapter,
         selected_target=options.planning.selected_target,
         no_sql_validation=options.planning.no_sql_validation,
+        no_cache=options.planning.no_cache,
         cli_vars=options.planning.cli_vars,
         external_sql_reference_resolver=options.planning.external_sql_reference_resolver,
         on_progress=hooks.on_progress,

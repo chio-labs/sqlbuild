@@ -228,6 +228,7 @@ class AnalysisCacheContext:
 
     root: Path
     shared_fingerprint: str
+    signature_namespace: str = "default"
 
 
 @dataclass(frozen=True)
@@ -237,6 +238,7 @@ class CompileAnalysisSelection:
     select: tuple[str, ...] = ()
     exclude: tuple[str, ...] = ()
     auto_load_sources: bool = False
+    no_cache: bool = False
 
 
 @dataclass(frozen=True)

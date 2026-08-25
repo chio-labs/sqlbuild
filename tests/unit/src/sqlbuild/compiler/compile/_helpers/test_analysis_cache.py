@@ -180,74 +180,253 @@ def test_given_analysis_inputs_when_building_keys_then_all_semantic_inputs_affec
     base_context: AnalysisCacheContext | None = build_analysis_cache_context(
         root=tmp_path,
         inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="duckdb"),
-        column_nullability_by_table={},
-        column_types_by_table={},
-        allow_compact_analysis=False,
-    )
-    schema_context: AnalysisCacheContext | None = build_analysis_cache_context(
-        root=tmp_path,
-        inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="duckdb"),
-        column_nullability_by_table={"raw_orders": {"order_id": InferredNullability.NON_NULL}},
-        column_types_by_table={},
         allow_compact_analysis=False,
     )
     profile_context: AnalysisCacheContext | None = build_analysis_cache_context(
         root=tmp_path,
         inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="snowflake"),
-        column_nullability_by_table={},
-        column_types_by_table={},
         allow_compact_analysis=True,
     )
     assert base_context is not None
-    assert schema_context is not None
     assert profile_context is not None
     reference: CompileSqlReference = CompileSqlReference(
         ref_kind=SqlReferenceKind.SOURCE,
         ref_name="raw_orders",
         call_argument_count=1,
     )
+    changed_reference: CompileSqlReference = CompileSqlReference(
+        ref_kind=SqlReferenceKind.SOURCE,
+        ref_name="raw_customers",
+        call_argument_count=1,
+    )
     base_key: str = model_analysis_cache_key(
         context=base_context,
         query_sql="SELECT 1",
-        references=(),
+        references=(reference,),
         placeholders=None,
+        column_nullability_by_table={},
+        column_types_by_table={},
     )
 
     changed_keys: tuple[str, ...] = (
         model_analysis_cache_key(
             context=base_context,
             query_sql="SELECT 2",
-            references=(),
+            references=(reference,),
             placeholders=None,
+            column_nullability_by_table={},
+            column_types_by_table={},
+        ),
+        model_analysis_cache_key(
+            context=base_context,
+            query_sql="SELECT 1",
+            references=(changed_reference,),
+            placeholders=None,
+            column_nullability_by_table={},
+            column_types_by_table={},
+        ),
+        model_analysis_cache_key(
+            context=base_context,
+            query_sql="SELECT 1",
+            references=(reference,),
+            placeholders={"value": "1"},
+            column_nullability_by_table={},
+            column_types_by_table={},
         ),
         model_analysis_cache_key(
             context=base_context,
             query_sql="SELECT 1",
             references=(reference,),
             placeholders=None,
-        ),
-        model_analysis_cache_key(
-            context=base_context,
-            query_sql="SELECT 1",
-            references=(),
-            placeholders={"value": "1"},
-        ),
-        model_analysis_cache_key(
-            context=schema_context,
-            query_sql="SELECT 1",
-            references=(),
-            placeholders=None,
+            column_nullability_by_table={"raw_orders": {"order_id": InferredNullability.NON_NULL}},
+            column_types_by_table={},
         ),
         model_analysis_cache_key(
             context=profile_context,
             query_sql="SELECT 1",
-            references=(),
+            references=(reference,),
             placeholders=None,
+            column_nullability_by_table={},
+            column_types_by_table={},
         ),
+    )
+    unrelated_schema_key: str = model_analysis_cache_key(
+        context=base_context,
+        query_sql="SELECT 1",
+        references=(reference,),
+        placeholders=None,
+        column_nullability_by_table={"unrelated": {"order_id": InferredNullability.NON_NULL}},
+        column_types_by_table={},
     )
 
     assert len(changed_keys) == test_case.expected_count
     assert all(changed_key != base_key for changed_key in changed_keys)
+    assert unrelated_schema_key == base_key
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (AnalysisCacheTestCase(description="scoped schema invalidation", expected_count=1),),
+    ids=lambda case: case.description,
+)
+def test_given_schema_change_when_compiling_then_only_direct_consumers_miss_cache(
+    test_case: AnalysisCacheTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {
+            **_SELECTION_REPO_FILES,
+            "models/root.sql": "MODEL ();\n\nSELECT CAST(NULL AS INTEGER) AS id\n",
+        },
+    )
+    _ = compile_project_with_cache(project_dir=tmp_path)
+    analyzer: Mock = Mock(wraps=assembly_project.analyze_columns_and_lineage_with_polyglot)
+    monkeypatch.setattr(assembly_project, "analyze_columns_and_lineage_with_polyglot", analyzer)
+    unrelated_path: Path = tmp_path / "models" / "unrelated.sql"
+    unrelated_path.write_text(
+        unrelated_path.read_text(encoding="utf-8").replace(
+            "MODEL ();",
+            "MODEL (columns (id (nullable false)));",
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    _ = compile_project_with_cache(project_dir=tmp_path)
+
+    analyzer.assert_not_called()
+    root_path: Path = tmp_path / "models" / "root.sql"
+    root_path.write_text(
+        root_path.read_text(encoding="utf-8").replace(
+            "MODEL ();",
+            "MODEL (columns (id (nullable false)));",
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    _ = compile_project_with_cache(project_dir=tmp_path)
+
+    assert analyzer.call_count == test_case.expected_count
+    _ = compile_project_with_cache(project_dir=tmp_path)
+    assert analyzer.call_count == test_case.expected_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (AnalysisCacheTestCase(description="stable exported signature", expected_count=1),),
+    ids=lambda case: case.description,
+)
+def test_given_model_sql_change_with_stable_signature_when_compiling_then_downstream_hits_cache(
+    test_case: AnalysisCacheTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, _SELECTION_REPO_FILES)
+    _ = compile_project_with_cache(project_dir=tmp_path)
+    analyzer: Mock = Mock(wraps=assembly_project.analyze_columns_and_lineage_with_polyglot)
+    monkeypatch.setattr(assembly_project, "analyze_columns_and_lineage_with_polyglot", analyzer)
+    (tmp_path / "models" / "root.sql").write_text(
+        "MODEL ();\n\nSELECT 3 AS id\n",
+        encoding="utf-8",
+    )
+
+    _ = compile_project_with_cache(project_dir=tmp_path)
+
+    assert analyzer.call_count == test_case.expected_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (AnalysisCacheTestCase(description="changed exported signature", expected_count=3),),
+    ids=lambda case: case.description,
+)
+def test_given_model_output_change_when_compiling_then_downstream_closure_misses_cache(
+    test_case: AnalysisCacheTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, _SELECTION_REPO_FILES)
+    _ = compile_project_with_cache(project_dir=tmp_path)
+    analyzer: Mock = Mock(wraps=assembly_project.analyze_columns_and_lineage_with_polyglot)
+    monkeypatch.setattr(assembly_project, "analyze_columns_and_lineage_with_polyglot", analyzer)
+    (tmp_path / "models" / "root.sql").write_text(
+        "MODEL ();\n\nSELECT 1 AS id, 2 AS extra\n",
+        encoding="utf-8",
+    )
+
+    _ = compile_project_with_cache(project_dir=tmp_path)
+
+    assert analyzer.call_count == test_case.expected_count
+    _ = compile_project_with_cache(project_dir=tmp_path)
+    assert analyzer.call_count == test_case.expected_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (AnalysisCacheTestCase(description="restored exported signature", expected_count=2),),
+    ids=lambda case: case.description,
+)
+def test_given_cached_model_signature_is_restored_when_compiling_then_downstream_reanalyzes(
+    test_case: AnalysisCacheTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, _SELECTION_REPO_FILES)
+    _ = compile_project_with_cache(project_dir=tmp_path)
+    root_path: Path = tmp_path / "models" / "root.sql"
+    original_sql: str = root_path.read_text(encoding="utf-8")
+    root_path.write_text("MODEL ();\n\nSELECT 1 AS id, 2 AS extra\n", encoding="utf-8")
+    _ = compile_project_with_cache(project_dir=tmp_path)
+    analyzer: Mock = Mock(wraps=assembly_project.analyze_columns_and_lineage_with_polyglot)
+    monkeypatch.setattr(assembly_project, "analyze_columns_and_lineage_with_polyglot", analyzer)
+    root_path.write_text(original_sql, encoding="utf-8")
+
+    _ = compile_project_with_cache(project_dir=tmp_path)
+
+    assert analyzer.call_count == test_case.expected_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (AnalysisCacheTestCase(description="selected upstream change", expected_count=1),),
+    ids=lambda case: case.description,
+)
+def test_given_selected_upstream_change_when_compiling_full_project_then_stale_consumer_misses(
+    test_case: AnalysisCacheTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {
+            **_SELECTION_REPO_FILES,
+            "models/middle.sql": 'MODEL ();\n\nSELECT * FROM __ref("root")\n',
+            "models/leaf.sql": 'MODEL ();\n\nSELECT * FROM __ref("middle")\n',
+        },
+    )
+    _ = compile_project_with_cache(project_dir=tmp_path)
+    (tmp_path / "models" / "root.sql").write_text(
+        "MODEL ();\n\nSELECT 1 AS id, 2 AS extra\n",
+        encoding="utf-8",
+    )
+    _ = compile_project_with_cache(
+        project_dir=tmp_path,
+        analysis_selection=CompileAnalysisSelection(select=("root",)),
+    )
+    analyzer: Mock = Mock(wraps=assembly_project.analyze_columns_and_lineage_with_polyglot)
+    monkeypatch.setattr(assembly_project, "analyze_columns_and_lineage_with_polyglot", analyzer)
+
+    _ = compile_project_with_cache(project_dir=tmp_path)
+
+    assert analyzer.call_count == test_case.expected_count
 
 
 @pytest.mark.parametrize(
@@ -328,6 +507,63 @@ def test_given_compile_cache_bypass_when_compiling_twice_then_both_runs_analyze_
 ) -> None:
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     monkeypatch.setenv(COMPILE_CACHE_DISABLE_ENV_VAR, "1")
+    analyzer: Mock = Mock(wraps=assembly_project.analyze_columns_and_lineage_with_polyglot)
+    monkeypatch.setattr(assembly_project, "analyze_columns_and_lineage_with_polyglot", analyzer)
+
+    _ = compile_project_with_cache(project_dir=tmp_path)
+    _ = compile_project_with_cache(project_dir=tmp_path)
+
+    assert analyzer.call_count == test_case.expected_count
+    assert not tuple((tmp_path / "target").rglob("*.sqlite3"))
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (AnalysisCacheTestCase(description="command cache bypass", expected_count=2),),
+    ids=lambda case: case.description,
+)
+def test_given_command_cache_bypass_when_compiling_twice_then_both_runs_analyze_cold(
+    test_case: AnalysisCacheTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, _CACHE_REPO_FILES)
+    analyzer: Mock = Mock(wraps=assembly_project.analyze_columns_and_lineage_with_polyglot)
+    monkeypatch.setattr(assembly_project, "analyze_columns_and_lineage_with_polyglot", analyzer)
+    _ = compile_project_with_cache(project_dir=tmp_path, no_cache=True)
+    _ = compile_project_with_cache(project_dir=tmp_path, no_cache=True)
+
+    assert analyzer.call_count == test_case.expected_count
+    assert not tuple((tmp_path / "target").rglob("*.sqlite3"))
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (AnalysisCacheTestCase(description="target cache bypass", expected_count=2),),
+    ids=lambda case: case.description,
+)
+def test_given_target_cache_disabled_when_compiling_twice_then_both_runs_analyze_cold(
+    test_case: AnalysisCacheTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {
+            **_CACHE_REPO_FILES,
+            "sqlbuild_project.toml": """
+name = "cache_demo"
+adapter = "duckdb"
+default_target = "prod"
+
+[targets.prod]
+compile_cache = false
+""".strip()
+            + "\n",
+        },
+    )
     analyzer: Mock = Mock(wraps=assembly_project.analyze_columns_and_lineage_with_polyglot)
     monkeypatch.setattr(assembly_project, "analyze_columns_and_lineage_with_polyglot", analyzer)
 

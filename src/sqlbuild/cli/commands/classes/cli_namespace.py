@@ -20,6 +20,7 @@ _DEFAULT_VALUES: dict[str, object] = {
     "overwrite": False,
     "skip_dbt_debug": False,
     "no_sql_validation": False,
+    "no_cache": False,
     "defer_to": None,
     "defer_clone_from": None,
     "defer_sources_to": None,
@@ -145,6 +146,7 @@ class CliNamespace:
     overwrite: bool
     skip_dbt_debug: bool
     no_sql_validation: bool
+    no_cache: bool
     defer_to: str | None
     defer_clone_from: str | None
     defer_sources_to: str | None

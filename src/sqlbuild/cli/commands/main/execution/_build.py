@@ -69,6 +69,7 @@ def run_build(request: BuildCommandRequest) -> int:
                 request=VirtualBuildCliRequest(
                     selected_target=request.selected_target,
                     no_sql_validation=request.no_sql_validation,
+                    no_cache=request.no_cache,
                     defer_sources_to=request.defer_sources_to,
                     cursor_overrides=request.cursor_overrides,
                     full_refresh=request.full_refresh,

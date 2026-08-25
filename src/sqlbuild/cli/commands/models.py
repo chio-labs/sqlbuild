@@ -182,6 +182,7 @@ class BuildCommandRequest:
     manifest: bool = False
     json_output: bool = False
     json_output_path: Path | None = None
+    no_cache: bool = False
 
 
 @dataclass(frozen=True)
@@ -236,6 +237,7 @@ class DeferClonePrephaseInputs:
     cli_vars: dict[str, object] | None
     connection_config: dict[str, object]
     project_dir: Path
+    no_cache: bool = False
 
 
 @dataclass(frozen=True)
@@ -316,6 +318,7 @@ class VirtualBuildCliRequest:
     use_color: bool = False
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
     providers: ProviderContainer | None = None
+    no_cache: bool = False
 
 
 @dataclass(frozen=True)
@@ -450,6 +453,7 @@ class CompileCommandRequest:
     lineage_mode: CompileLineageMode = CompileLineageMode.FAST
     cli_vars: dict[str, object] | None = None
     profile_flags: CompileProfileFlags = CompileProfileFlags()
+    no_cache: bool = False
 
 
 @dataclass(frozen=True)
@@ -951,6 +955,7 @@ class PlanCommandRequest:
     cli_vars: dict[str, object] | None = None
     include_stale_upstreams: bool = False
     changes_only: bool = False
+    no_cache: bool = False
 
 
 @dataclass(frozen=True)
