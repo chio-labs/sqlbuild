@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.8](https://github.com/chio-labs/sqlbuild/compare/v0.55.7...v0.55.8) (2026-08-25)
+
+
+### Performance Improvements
+
+* **cli:** lazy-load command handlers ([#347](https://github.com/chio-labs/sqlbuild/issues/347)) ([77b1b1d](https://github.com/chio-labs/sqlbuild/commit/77b1b1d6744eda784e6cbd58fc857d009c7a1894))
+
 ## [0.55.7](https://github.com/chio-labs/sqlbuild/compare/v0.55.6...v0.55.7) (2026-08-25)
 
 
