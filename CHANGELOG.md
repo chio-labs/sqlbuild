@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.5](https://github.com/chio-labs/sqlbuild/compare/v0.55.4...v0.55.5) (2026-08-25)
+
+
+### Documentation
+
+* simplify README positioning and CI scope ([#341](https://github.com/chio-labs/sqlbuild/issues/341)) ([7a9b39d](https://github.com/chio-labs/sqlbuild/commit/7a9b39d72a1c4393bb711e603fc6ef9d76670d82))
+
 ## [0.55.4](https://github.com/chio-labs/sqlbuild/compare/v0.55.3...v0.55.4) (2026-08-25)
 
 
