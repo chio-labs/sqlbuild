@@ -1,4 +1,4 @@
-"""Public standard microbatch-state DDL rendering entrypoint."""
+"""Public direct microbatch-state DDL rendering entrypoint."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ def build_create_table_sql(
     render_qualified_name: Callable[..., str | None],
     render_framework_type: Callable[[FrameworkType], str],
 ) -> str:
-    """Build standard microbatch-state DDL through the public entrypoint."""
+    """Build direct microbatch-state DDL through the public entrypoint."""
 
     return _build_create_table_sql(
         database=database,

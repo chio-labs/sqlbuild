@@ -10,11 +10,11 @@ from sqlbuild.compiler.planner.main.changes.run_despite_unchanged import (
 )
 from sqlbuild.compiler.planner.models import PlannerScope, RunDespiteUnchangedPlanningResult
 from sqlbuild.compiler.source_freshness.models import (
+    DirectSourceFreshnessPlanningResult,
     SourceFreshnessIdentity,
-    StandardSourceFreshnessPlanningResult,
 )
 from sqlbuild.compiler.source_freshness.models import (
-    SourceFreshnessRecord as StandardSourceFreshnessRecord,
+    SourceFreshnessRecord as DirectSourceFreshnessRecord,
 )
 from sqlbuild.virtual.state.models import SourceFreshnessRecord
 
@@ -27,7 +27,7 @@ def build_virtual_run_despite_unchanged_planning_result(
 ) -> RunDespiteUnchangedPlanningResult:
     """Return VDE models selected by run_despite_unchanged semantics."""
 
-    source_freshness: StandardSourceFreshnessPlanningResult = _standard_source_freshness_result(
+    source_freshness: DirectSourceFreshnessPlanningResult = _direct_source_freshness_result(
         source_freshness_records
     )
     return build_run_despite_unchanged_planning_result(
@@ -53,11 +53,11 @@ def _planner_scope_from_graph(graph: ProjectGraph) -> PlannerScope:
     )
 
 
-def _standard_source_freshness_result(
+def _direct_source_freshness_result(
     records: tuple[SourceFreshnessRecord, ...],
-) -> StandardSourceFreshnessPlanningResult:
-    observed_records: tuple[StandardSourceFreshnessRecord, ...] = tuple(
-        StandardSourceFreshnessRecord(
+) -> DirectSourceFreshnessPlanningResult:
+    observed_records: tuple[DirectSourceFreshnessRecord, ...] = tuple(
+        DirectSourceFreshnessRecord(
             source_name=record.source_name,
             target_database=None,
             target_schema=None,
@@ -71,7 +71,7 @@ def _standard_source_freshness_result(
         )
         for record in records
     )
-    return StandardSourceFreshnessPlanningResult(
+    return DirectSourceFreshnessPlanningResult(
         observed_records=observed_records,
         unchanged_identities=frozenset(
             SourceFreshnessIdentity(

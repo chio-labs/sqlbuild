@@ -3,21 +3,21 @@
 from __future__ import annotations
 
 from sqlbuild.cli.commands._helpers.diff.execution import (
-    execute_standard_diff,
+    execute_direct_diff,
     execute_virtual_diff,
-    prepare_standard_diff,
+    prepare_direct_diff,
     prepare_virtual_diff,
 )
 from sqlbuild.cli.commands._helpers.diff.invocation import resolve_diff_invocation
 from sqlbuild.cli.commands._helpers.diff.outputs import (
     resolve_diff_exit_code,
-    write_standard_diff_output,
+    write_direct_diff_output,
     write_virtual_diff_output,
 )
 from sqlbuild.cli.commands.models import (
     DiffCommandRequest,
     DiffInvocation,
-    StandardDiffPreparation,
+    DirectDiffPreparation,
     VirtualDiffPreparation,
     VirtualDiffRunOutcome,
 )
@@ -45,17 +45,17 @@ def run_diff(request: DiffCommandRequest) -> int:
         )
         return resolve_diff_exit_code(virtual_outcome.result)
 
-    standard_preparation: StandardDiffPreparation = prepare_standard_diff(
+    direct_preparation: DirectDiffPreparation = prepare_direct_diff(
         request=request,
         invocation=invocation,
     )
-    result: DiffExecutionResult = execute_standard_diff(
+    result: DiffExecutionResult = execute_direct_diff(
         request=request,
-        preparation=standard_preparation,
+        preparation=direct_preparation,
     )
-    write_standard_diff_output(
+    write_direct_diff_output(
         request=request,
-        preparation=standard_preparation,
+        preparation=direct_preparation,
         result=result,
     )
     return resolve_diff_exit_code(result)

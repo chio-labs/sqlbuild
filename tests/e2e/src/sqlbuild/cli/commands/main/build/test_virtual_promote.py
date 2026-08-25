@@ -614,7 +614,7 @@ def test_given_partial_virtual_promotion_when_target_stays_working_then_it_requi
     "test_case",
     [
         VirtualPromoteE2ETestCase(
-            description="standard mode promotion fails with mode error",
+            description="direct mode promotion fails with mode error",
             promote_command=("promote", "--from", "pr", "--to", "dev"),
             expected_promote_fragments=("promote requires virtual_environments = true",),
             expected_query_results=(),

@@ -27,7 +27,7 @@ def compile_plan_pipeline(
     request: PlanCommandRequest,
     invocation: PlanInvocation,
 ) -> CompilePipelineResult:
-    """Compile the plan pipeline in virtual or standard mode."""
+    """Compile the plan pipeline in virtual or direct mode."""
 
     external_sql_reference_resolver: object | None = resolve_external_sql_reference_resolver(
         project_dir=invocation.effective_project_dir,

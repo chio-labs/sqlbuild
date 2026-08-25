@@ -37,12 +37,12 @@ def preview_scenes() -> tuple[PreviewScene, ...]:
         ),
         PreviewScene(
             name="plan",
-            description="standard first-run plan",
+            description="direct first-run plan",
             command=("plan",),
         ),
         PreviewScene(
             name="plan-changed",
-            description="standard query-change plan with a SQL diff",
+            description="direct query-change plan with a SQL diff",
             setup_commands=(("build",),),
             mutate_payments=True,
             command=("plan",),

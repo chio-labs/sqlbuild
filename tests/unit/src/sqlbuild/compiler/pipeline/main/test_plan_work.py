@@ -25,7 +25,7 @@ from tests.unit.src.sqlbuild.compiler.pipeline.main.helpers import build_plan_ou
         ),
         PlanWorkTestCase(
             description="pruned metadata alone has no executable work",
-            plan_output=PlanOutput(metadata={"standard_pruned_model_names": ("orders",)}),
+            plan_output=PlanOutput(metadata={"direct_pruned_model_names": ("orders",)}),
             python_plan_entries=(),
             expected_has_work=False,
         ),

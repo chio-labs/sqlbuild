@@ -26,7 +26,7 @@ def prepare_clone_execution(
     invocation: CloneInvocation,
     connection_context: CloneConnectionContext,
 ) -> CloneExecutionPreparation:
-    """Prepare the standard clone plan."""
+    """Prepare the direct clone plan."""
 
     progress: PlanningProgressReporter = PlanningProgressReporter(
         stream=invocation.progress_stream,

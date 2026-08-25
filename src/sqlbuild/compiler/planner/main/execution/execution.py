@@ -48,7 +48,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerWarehouseState,
     PlanOutput,
 )
-from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
+from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 
@@ -113,7 +113,7 @@ def build_execution_plan(
         scope=scopes.inspection_scope,
         changes=changes,
     )
-    source_freshness: StandardSourceFreshnessPlanningResult = build_planner_source_freshness_result(
+    source_freshness: DirectSourceFreshnessPlanningResult = build_planner_source_freshness_result(
         project=project,
         adapter=adapter,
         connection=connection,

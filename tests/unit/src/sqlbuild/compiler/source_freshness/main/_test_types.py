@@ -68,7 +68,7 @@ class SharedSourceFreshnessHashTestCase:
 
 
 @dataclass(frozen=True)
-class StandardSourceFreshnessPlanningTestCase:
+class DirectSourceFreshnessPlanningTestCase:
     description: str
     previous_data_version: str | None
     current_query: str
@@ -77,7 +77,7 @@ class StandardSourceFreshnessPlanningTestCase:
 
 
 @dataclass(frozen=True)
-class StandardSourceFreshnessLagToleranceTestCase:
+class DirectSourceFreshnessLagToleranceTestCase:
     description: str
     current_query: str
     expected_changed_count: int
@@ -85,7 +85,7 @@ class StandardSourceFreshnessLagToleranceTestCase:
 
 
 @dataclass(frozen=True)
-class StandardSourceFreshnessAgePolicyTestCase:
+class DirectSourceFreshnessAgePolicyTestCase:
     description: str
     current_query: str
     warn_after: str | None
@@ -96,13 +96,13 @@ class StandardSourceFreshnessAgePolicyTestCase:
 
 
 @dataclass(frozen=True)
-class StandardSourceFreshnessUnknownTestCase:
+class DirectSourceFreshnessUnknownTestCase:
     description: str
     expected_unknown_source_names: tuple[str, ...]
 
 
 @dataclass(frozen=True)
-class StandardSourceFreshnessAdapterDefaultTestCase:
+class DirectSourceFreshnessAdapterDefaultTestCase:
     description: str
     expected_changed_count: int
     expected_observed_count: int
@@ -110,28 +110,28 @@ class StandardSourceFreshnessAdapterDefaultTestCase:
 
 
 @dataclass(frozen=True)
-class StandardSourceFreshnessManagedSkipTestCase:
+class DirectSourceFreshnessManagedSkipTestCase:
     description: str
     expected_observed_count: int
     expected_unknown_source_names: tuple[str, ...]
 
 
 @dataclass(frozen=True)
-class StandardSourceFreshnessMultiSchemaTestCase:
+class DirectSourceFreshnessMultiSchemaTestCase:
     description: str
     expected_previous_count: int
     expected_unchanged_count: int
 
 
 @dataclass(frozen=True)
-class StandardSourceFreshnessDuplicateSchemaTestCase:
+class DirectSourceFreshnessDuplicateSchemaTestCase:
     description: str
     expected_previous_data_version: str
     expected_changed_count: int
 
 
 @dataclass(frozen=True)
-class StandardSourceFreshnessPropagationTestCase:
+class DirectSourceFreshnessPropagationTestCase:
     description: str
     changed_source_names: tuple[str, ...]
     unknown_source_names: tuple[str, ...]
@@ -153,7 +153,7 @@ class SharedSourceFreshnessExpressionSubqueryTestCase:
 
 
 @dataclass(frozen=True)
-class StandardSourceFreshnessExpressionTestCase:
+class DirectSourceFreshnessExpressionTestCase:
     description: str
     expression: str
     column: str

@@ -161,7 +161,7 @@ class PythonTargetIsolationBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
-class StandardPythonBuildHardeningE2ETestCase:
+class DirectPythonBuildHardeningE2ETestCase:
     """Test case for direct build Python lifecycle hardening behavior."""
 
     description: str

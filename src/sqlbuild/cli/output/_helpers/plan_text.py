@@ -92,7 +92,7 @@ def format_plan(
     display_options: DisplayOptions | None = None,
     section_header_style: Callable[[str], str] | None = None,
     python_plan_entries: tuple[PythonPlanEntry, ...] = (),
-    include_standard_freshness_diagnostics: bool = True,
+    include_direct_freshness_diagnostics: bool = True,
 ) -> str:
     """Format plan output grouped by reason with inline detail."""
 
@@ -114,7 +114,7 @@ def format_plan(
         lines = _format_warnings(
             lines=lines,
             plan=plan,
-            include_standard_freshness_diagnostics=(include_standard_freshness_diagnostics),
+            include_direct_freshness_diagnostics=(include_direct_freshness_diagnostics),
         )
         result: str = "\n".join(lines)
         return result if use_color else _strip_ansi(result)
@@ -140,14 +140,14 @@ def format_plan(
         section_header_style=resolved_section_header_style,
         display_options=resolved_display_options,
     )
-    if include_standard_freshness_diagnostics:
-        lines = _format_standard_source_freshness_metadata(
+    if include_direct_freshness_diagnostics:
+        lines = _format_direct_source_freshness_metadata(
             lines=lines,
             plan=plan,
             section_header_style=resolved_section_header_style,
             display_options=resolved_display_options,
         )
-    lines = _format_standard_remaining_stale_metadata(
+    lines = _format_direct_remaining_stale_metadata(
         lines=lines,
         plan=plan,
         section_header_style=resolved_section_header_style,
@@ -160,7 +160,7 @@ def format_plan(
         display_options=resolved_display_options,
         section_header_style=resolved_section_header_style,
     )
-    lines = _format_standard_pruned_metadata(
+    lines = _format_direct_pruned_metadata(
         lines=lines,
         plan=plan,
         display_options=resolved_display_options,
@@ -282,7 +282,7 @@ def format_plan(
     lines = _format_warnings(
         lines=lines,
         plan=plan,
-        include_standard_freshness_diagnostics=include_standard_freshness_diagnostics,
+        include_direct_freshness_diagnostics=include_direct_freshness_diagnostics,
     )
 
     output: str = "\n".join(lines)
@@ -509,14 +509,14 @@ def _all_provider_usages(
     return tuple(usages)
 
 
-def _format_standard_pruned_metadata(
+def _format_direct_pruned_metadata(
     *,
     lines: list[str],
     plan: PlanOutput,
     display_options: DisplayOptions,
     skipped_header_style: Callable[[str], str],
 ) -> list[str]:
-    raw_names: object = plan.metadata.get("standard_pruned_model_names")
+    raw_names: object = plan.metadata.get("direct_pruned_model_names")
     if not isinstance(raw_names, tuple):
         return lines
     names: tuple[str, ...] = tuple(name for name in raw_names if isinstance(name, str))
@@ -1401,7 +1401,7 @@ def _format_warnings(
     *,
     lines: list[str],
     plan: PlanOutput,
-    include_standard_freshness_diagnostics: bool,
+    include_direct_freshness_diagnostics: bool,
 ) -> list[str]:
     """Append the warnings section."""
 
@@ -1410,7 +1410,7 @@ def _format_warnings(
         for warning in plan.warnings
         if warning.severity != WarningSeverity.INFO
         and (
-            include_standard_freshness_diagnostics
+            include_direct_freshness_diagnostics
             or not warning.message.startswith(_STALE_INPUT_WARNING_TITLE)
         )
     ]
@@ -1586,14 +1586,14 @@ def _format_virtual_metadata(
     return lines
 
 
-def _format_standard_source_freshness_metadata(
+def _format_direct_source_freshness_metadata(
     *,
     lines: list[str],
     plan: PlanOutput,
     section_header_style: Callable[[str], str],
     display_options: DisplayOptions,
 ) -> list[str]:
-    raw_metadata: object | None = plan.metadata.get("standard_source_freshness")
+    raw_metadata: object | None = plan.metadata.get("direct_source_freshness")
     if not isinstance(raw_metadata, dict):
         return lines
     source_freshness_metadata: dict[str, object] = cast(dict[str, object], raw_metadata)
@@ -1723,7 +1723,7 @@ def _format_standard_source_freshness_metadata(
     return lines
 
 
-def _format_standard_remaining_stale_metadata(
+def _format_direct_remaining_stale_metadata(
     *,
     lines: list[str],
     plan: PlanOutput,
@@ -1731,7 +1731,7 @@ def _format_standard_remaining_stale_metadata(
     display_options: DisplayOptions,
 ) -> list[str]:
     remaining_stale_model_names: tuple[str, ...] = _metadata_string_tuple(
-        plan.metadata.get("standard_remaining_stale_model_names")
+        plan.metadata.get("direct_remaining_stale_model_names")
     )
     if not remaining_stale_model_names:
         return lines

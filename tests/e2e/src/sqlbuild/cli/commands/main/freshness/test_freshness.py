@@ -12,7 +12,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.freshness._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.freshness.helpers import (
     freshness_sources_yml,
-    persist_standard_source_freshness,
+    persist_direct_source_freshness,
     persist_virtual_source_freshness,
     prepare_freshness_project,
     prepare_multi_schema_freshness_project,
@@ -334,7 +334,7 @@ def test_given_existing_source_freshness_state_when_running_then_does_not_write_
     [
         FreshnessE2ETestCase(
             description=(
-                "standard state comparison fails on timestamp movement beyond lag tolerance"
+                "direct state comparison fails on timestamp movement beyond lag tolerance"
             ),
             expected_fragments=(
                 "Changed (1)",
@@ -361,7 +361,7 @@ def test_given_timestamp_freshness_beyond_tolerance_when_state_then_returns_nonz
             "      lag_tolerance: 10m\n"
         ),
     )
-    persist_standard_source_freshness(project_dir=project_dir)
+    persist_direct_source_freshness(project_dir=project_dir)
     (project_dir / "sources" / "raw.yml").write_text(
         freshness_sources_yml(
             raw_orders_freshness=(
@@ -398,7 +398,7 @@ def test_given_timestamp_freshness_beyond_tolerance_when_state_then_returns_nonz
     "test_case",
     [
         FreshnessE2ETestCase(
-            description="standard state comparison fails on backwards timestamp movement",
+            description="direct state comparison fails on backwards timestamp movement",
             expected_fragments=(
                 "Changed (1)",
                 "raw_orders  previous 2026-01-01T00:10:00  current 2026-01-01T00:05:00",
@@ -424,7 +424,7 @@ def test_given_timestamp_freshness_moves_backwards_when_state_then_returns_nonze
             "      lag_tolerance: 10m\n"
         ),
     )
-    persist_standard_source_freshness(project_dir=project_dir)
+    persist_direct_source_freshness(project_dir=project_dir)
     (project_dir / "sources" / "raw.yml").write_text(
         freshness_sources_yml(
             raw_orders_freshness=(
@@ -461,7 +461,7 @@ def test_given_timestamp_freshness_moves_backwards_when_state_then_returns_nonze
     "test_case",
     [
         FreshnessE2ETestCase(
-            description="standard state comparison reads state from multiple target schemas",
+            description="direct state comparison reads state from multiple target schemas",
             expected_fragments=(
                 "Unchanged (1)",
                 "raw_orders  previous 1  current 1",
@@ -476,7 +476,7 @@ def test_given_source_freshness_state_in_secondary_schema_when_running_state_the
     tmp_path: Path,
 ) -> None:
     project_dir: Path = prepare_multi_schema_freshness_project(tmp_path=tmp_path)
-    persist_standard_source_freshness(project_dir=project_dir)
+    persist_direct_source_freshness(project_dir=project_dir)
     execute_duckdb(
         db_path=project_dir / "warehouse.duckdb",
         sql="DELETE FROM dev._sqlbuild_source_freshness",
@@ -497,7 +497,7 @@ def test_given_source_freshness_state_in_secondary_schema_when_running_state_the
     "test_case",
     [
         FreshnessE2ETestCase(
-            description="standard state comparison reports unchanged source freshness",
+            description="direct state comparison reports unchanged source freshness",
             expected_fragments=(
                 "Unchanged (1)",
                 "raw_orders  previous 1  current 1",
@@ -512,7 +512,7 @@ def test_given_persisted_source_freshness_when_running_state_then_reports_unchan
     tmp_path: Path,
 ) -> None:
     project_dir: Path = prepare_freshness_project(tmp_path=tmp_path, include_error_source=False)
-    persist_standard_source_freshness(project_dir=project_dir)
+    persist_direct_source_freshness(project_dir=project_dir)
 
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "freshness", "--select", "raw_orders", "--state"),
@@ -540,7 +540,7 @@ def test_given_persisted_source_freshness_when_running_state_then_reports_unchan
     "test_case",
     [
         FreshnessE2ETestCase(
-            description="standard state comparison fails on changed source freshness",
+            description="direct state comparison fails on changed source freshness",
             expected_fragments=(
                 "Changed (1)",
                 "raw_orders  previous 1  current 2",
@@ -555,7 +555,7 @@ def test_given_changed_source_freshness_when_running_state_fail_on_stale_then_re
     tmp_path: Path,
 ) -> None:
     project_dir: Path = prepare_freshness_project(tmp_path=tmp_path, include_error_source=False)
-    persist_standard_source_freshness(project_dir=project_dir)
+    persist_direct_source_freshness(project_dir=project_dir)
     (project_dir / "sources" / "raw.yml").write_text(
         freshness_sources_yml(
             raw_orders_query="SELECT 2 AS data_version",
@@ -605,7 +605,7 @@ def test_given_changed_source_freshness_when_running_state_fail_on_stale_then_re
     [
         FreshnessE2ETestCase(
             description=(
-                "standard state comparison tolerates timestamp movement within lag tolerance"
+                "direct state comparison tolerates timestamp movement within lag tolerance"
             ),
             expected_fragments=(
                 "Tolerated (1)",
@@ -632,7 +632,7 @@ def test_given_timestamp_freshness_within_tolerance_when_running_state_then_repo
             "      lag_tolerance: 10m\n"
         ),
     )
-    persist_standard_source_freshness(project_dir=project_dir)
+    persist_direct_source_freshness(project_dir=project_dir)
     (project_dir / "sources" / "raw.yml").write_text(
         freshness_sources_yml(
             raw_orders_freshness=(
@@ -687,7 +687,7 @@ def test_given_timestamp_freshness_within_tolerance_when_running_state_then_repo
     "test_case",
     [
         FreshnessE2ETestCase(
-            description="standard state comparison fails when previous state is missing",
+            description="direct state comparison fails when previous state is missing",
             expected_fragments=(
                 "Unknown (1)",
                 "raw_orders  previous source freshness state missing",

@@ -1,4 +1,4 @@
-"""Public standard source freshness latest-read SQL rendering entrypoint."""
+"""Public direct source freshness latest-read SQL rendering entrypoint."""
 
 from __future__ import annotations
 

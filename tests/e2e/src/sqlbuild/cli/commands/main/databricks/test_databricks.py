@@ -146,7 +146,7 @@ def test_given_databricks_dbt_profile_when_running_dbt_init_then_builds_profile_
     "test_case",
     [
         DatabricksNodeResultE2ETestCase(
-            description="standard node results persist and read on databricks",
+            description="direct node results persist and read on databricks",
             expected_rows=(
                 ("check", "check_produce_result", "success"),
                 ("task", "produce_result", "success"),

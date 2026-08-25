@@ -24,7 +24,7 @@ from sqlbuild.executor.load.main._execute import execute_source_load
 from sqlbuild.executor.load.main._resource_kind import load_resource_kind
 from sqlbuild.executor.load.main._skipped_result import skipped_load_result
 from sqlbuild.executor.load.models import LoadExecutionResult, LoadRuntimeParams
-from sqlbuild.executor.node_results.main._standard_store import build_standard_node_result_store
+from sqlbuild.executor.node_results.main._direct_store import build_direct_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
 from sqlbuild.executor.python_nodes._helpers.fingerprinting import (
     try_write_python_node_identity_fingerprint,
@@ -87,7 +87,7 @@ def execute_ingress_python_loader_nodes(
         runtime.result_store
         if runtime.result_store is not None
         else (
-            build_standard_node_result_store(
+            build_direct_node_result_store(
                 adapter=runtime.adapter,
                 connection=runtime.connection,
                 database=runtime.default_database,

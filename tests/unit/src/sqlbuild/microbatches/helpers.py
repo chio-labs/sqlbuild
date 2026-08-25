@@ -14,7 +14,7 @@ from sqlbuild.microbatches.types import (
 
 CREATED_AT: datetime = datetime(2026, 1, 1, tzinfo=UTC)
 SCOPE: MicrobatchScope = MicrobatchScope(
-    scope_kind="standard_logical",
+    scope_kind="direct_logical",
     scope_key="duckdb:main.orders",
     model_name="orders",
     target_database=None,
@@ -117,7 +117,7 @@ def timestamp_completion(
     """Build one timestamp completion for overlap projection tests."""
 
     scope: MicrobatchScope = MicrobatchScope(
-        scope_kind="standard_logical",
+        scope_kind="direct_logical",
         scope_key="duckdb:main.events",
         model_name="events",
         target_database=None,
@@ -154,7 +154,7 @@ def completion_for_sql() -> MicrobatchEvent:
         event_id="event-1",
         record_type=MicrobatchRecordType.PARTITION_COMPLETION,
         scope=MicrobatchScope(
-            scope_kind="standard_logical",
+            scope_kind="direct_logical",
             scope_key="duckdb:analytics.orders",
             model_name="orders",
             target_database=None,

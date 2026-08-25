@@ -21,7 +21,7 @@ def write_clone_execution_header(
     invocation: CloneInvocation,
     preparation: CloneExecutionPreparation,
 ) -> None:
-    """Write the standard clone execution header."""
+    """Write the direct clone execution header."""
 
     clone_total: int = (
         len(preparation.pipeline_result.destination_source_entries)
@@ -41,7 +41,7 @@ def write_clone_execution_header(
 
 
 def write_clone_completion_output(*, invocation: CloneInvocation, outcome: CloneRunOutcome) -> None:
-    """Render final standard clone command output."""
+    """Render final direct clone command output."""
 
     render_clone_output(
         result=outcome.result,
@@ -51,6 +51,6 @@ def write_clone_completion_output(*, invocation: CloneInvocation, outcome: Clone
 
 
 def resolve_clone_exit_code(outcome: CloneRunOutcome) -> int:
-    """Return the shell exit code for a standard clone outcome."""
+    """Return the shell exit code for a direct clone outcome."""
 
     return 0 if is_clone_success(outcome.result) else 1

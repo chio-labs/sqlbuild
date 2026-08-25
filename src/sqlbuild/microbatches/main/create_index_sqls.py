@@ -1,11 +1,11 @@
-"""Public standard microbatch-state index DDL rendering entrypoint."""
+"""Public direct microbatch-state index DDL rendering entrypoint."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
 from sqlbuild.microbatches.constants import (
-    MICROBATCH_STANDARD_INDEXES,
+    MICROBATCH_DIRECT_INDEXES,
     MICROBATCH_TABLE_NAME,
 )
 
@@ -24,7 +24,7 @@ def build_create_index_sqls(
         or f"{schema}.{MICROBATCH_TABLE_NAME}"
     )
     statements: list[str] = []
-    for index_name, columns in MICROBATCH_STANDARD_INDEXES.items():
+    for index_name, columns in MICROBATCH_DIRECT_INDEXES.items():
         rendered_columns: tuple[str, ...] = tuple(render_identifier(column) for column in columns)
         statements.append(
             f"CREATE INDEX IF NOT EXISTS {render_identifier(index_name)} ON {table} "

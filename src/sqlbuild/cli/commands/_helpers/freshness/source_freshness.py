@@ -9,17 +9,17 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.source_freshness.main.write import write_source_freshness_records
 from sqlbuild.compiler.source_freshness.models import (
+    DirectSourceFreshnessPlanningResult,
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
     SourceFreshnessRenderers,
-    StandardSourceFreshnessPlanningResult,
 )
 from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
-def append_eligible_standard_source_freshness_records(
+def append_eligible_direct_source_freshness_records(
     *,
     plan: PlanOutput,
     result: BuildExecutionResult,
@@ -29,7 +29,7 @@ def append_eligible_standard_source_freshness_records(
 ) -> None:
     """Append observed source freshness only after affected selected models succeed."""
 
-    source_freshness: StandardSourceFreshnessPlanningResult | None = plan.source_freshness
+    source_freshness: DirectSourceFreshnessPlanningResult | None = plan.source_freshness
     if source_freshness is None or source_freshness.propagation is None:
         return
 

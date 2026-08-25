@@ -285,7 +285,7 @@ def prepare_check_project_by_kind(*, tmp_path: Path, project_kind: str) -> Path:
     """Create the project fixture for a check command test case."""
 
     project_factories: dict[str, Callable[..., Path]] = {
-        "standard": prepare_python_check_project,
+        "direct": prepare_python_check_project,
         "terminal_loader": prepare_terminal_loader_check_project,
         "virtual": prepare_virtual_python_check_project,
         "virtual_failure": prepare_virtual_failing_python_check_project,

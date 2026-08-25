@@ -537,10 +537,10 @@ def replay_microbatch_model_sql(*, value_expression: str, replay_policy: str = "
     )
 
 
-def standard_microbatch_project_toml(
+def direct_microbatch_project_toml(
     *, project_name: str, database_name: str, settings_toml: str
 ) -> str:
-    """Build a standard DuckDB project config for microbatch lifecycle E2Es."""
+    """Build a direct DuckDB project config for microbatch lifecycle E2Es."""
 
     return (
         f'name = "{project_name}"\n'
@@ -598,13 +598,13 @@ def timestamp_microbatch_model_sql(
 def prepare_replay_microbatch_project(
     *, tmp_path: Path, project_name: str, database_name: str, replay_policy: str
 ) -> tuple[Path, Path]:
-    """Prepare a standard concurrent replay lifecycle project."""
+    """Prepare a direct concurrent replay lifecycle project."""
 
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
         project_name=project_name,
         repo_files={
-            "sqlbuild_project.toml": standard_microbatch_project_toml(
+            "sqlbuild_project.toml": direct_microbatch_project_toml(
                 project_name=project_name,
                 database_name=database_name,
                 settings_toml=("\n[settings]\nconcurrency = 3\nmicrobatch_concurrency = true\n"),

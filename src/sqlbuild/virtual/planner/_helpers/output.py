@@ -29,7 +29,7 @@ def rewrite_virtual_plan_entries(
     run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = None,
     seed_plan_reasons: dict[str, PlanReason] | None = None,
 ) -> PlanOutput:
-    """Rewrite standard planner entries with virtual-specific reasons and causes."""
+    """Rewrite direct planner entries with virtual-specific reasons and causes."""
 
     rewritten_entries: list[ModelPlanEntry] = []
     cause_reasons: dict[str, PlanReason] = stale_root_cause_reasons or stale_root_reasons

@@ -24,7 +24,7 @@ from sqlbuild.compiler.planner.models import (
     PlanWarning,
     RunDespiteUnchangedPlanningResult,
 )
-from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
+from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 
 
@@ -37,7 +37,7 @@ def assemble_base_plan_output(
     pruning: PlannerScopePruningResult,
     reconciliation: PlannerChangeReconciliation,
     entries: PlannerEntryResults,
-    source_freshness: StandardSourceFreshnessPlanningResult,
+    source_freshness: DirectSourceFreshnessPlanningResult,
 ) -> PlanOutput:
     """Assemble the base plan output with freshness and pruning metadata attached."""
 
@@ -56,12 +56,12 @@ def assemble_base_plan_output(
         ),
     )
     plan_output = replace(plan_output, source_freshness=source_freshness)
-    if pruning.pruned_standard_model_names:
+    if pruning.pruned_direct_model_names:
         plan_output = replace(
             plan_output,
             metadata={
                 **plan_output.metadata,
-                "standard_pruned_model_names": pruning.pruned_standard_model_names,
+                "direct_pruned_model_names": pruning.pruned_direct_model_names,
             },
         )
     return plan_output
@@ -75,7 +75,7 @@ def with_plan_warnings(
     identities: PlannerIdentityContext,
     stale_warning_changes: PlannerChangeResults,
     pruning: PlannerScopePruningResult,
-    source_freshness: StandardSourceFreshnessPlanningResult,
+    source_freshness: DirectSourceFreshnessPlanningResult,
     plan_output: PlanOutput,
 ) -> PlanOutput:
     """Append stale-out-of-selection warnings to the plan."""
@@ -103,14 +103,14 @@ def with_plan_metadata(
     *,
     plan_output: PlanOutput,
     pruning: PlannerScopePruningResult,
-    source_freshness: StandardSourceFreshnessPlanningResult,
+    source_freshness: DirectSourceFreshnessPlanningResult,
 ) -> PlanOutput:
-    """Attach standard source-freshness metadata to the plan output."""
+    """Attach direct source-freshness metadata to the plan output."""
 
-    standard_remaining_stale_model_names: tuple[str, ...] = tuple(
+    direct_remaining_stale_model_names: tuple[str, ...] = tuple(
         sorted(
             (
-                pruning.standard_identity_stale_model_names
+                pruning.direct_identity_stale_model_names
                 | pruning.run_despite_unchanged.stale_model_names
             )
             - frozenset(
@@ -124,11 +124,11 @@ def with_plan_metadata(
         plan_output,
         metadata={
             **plan_output.metadata,
-            "standard_source_freshness": _serialize_standard_source_freshness_metadata(
+            "direct_source_freshness": _serialize_direct_source_freshness_metadata(
                 source_freshness
             ),
-            "standard_remaining_stale_model_names": standard_remaining_stale_model_names,
-            "standard_run_despite_unchanged": _serialize_run_despite_unchanged_metadata(
+            "direct_remaining_stale_model_names": direct_remaining_stale_model_names,
+            "direct_run_despite_unchanged": _serialize_run_despite_unchanged_metadata(
                 pruning.run_despite_unchanged
             ),
         },
@@ -136,8 +136,8 @@ def with_plan_metadata(
     return plan_output
 
 
-def _serialize_standard_source_freshness_metadata(
-    source_freshness: StandardSourceFreshnessPlanningResult,
+def _serialize_direct_source_freshness_metadata(
+    source_freshness: DirectSourceFreshnessPlanningResult,
 ) -> dict[str, object]:
     changed_source_names: tuple[str, ...] = tuple(
         sorted(identity.source_name for identity in source_freshness.changed_identities)

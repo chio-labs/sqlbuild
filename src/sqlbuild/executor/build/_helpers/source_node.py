@@ -16,8 +16,8 @@ from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.executor.build.models import BuildCallbacks, BuildRuntimeParams
 from sqlbuild.executor.load.main._execute import execute_source_load
 from sqlbuild.executor.load.models import LoadExecutionResult, LoadRuntimeParams
-from sqlbuild.executor.node_results.classes.standard_store import StandardNodeResultStore
-from sqlbuild.executor.node_results.main._standard_store import build_standard_node_result_store
+from sqlbuild.executor.node_results.classes.direct_store import DirectNodeResultStore
+from sqlbuild.executor.node_results.main._direct_store import build_direct_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.models import SourceEntry
@@ -53,7 +53,7 @@ def execute_build_source_node(
     if callbacks.on_node_start is not None:
         callbacks.on_node_start(name=source_entry.name, resource_kind=resource_kind)
     start: float = time.monotonic()
-    result_store: StandardNodeResultStore = build_standard_node_result_store(
+    result_store: DirectNodeResultStore = build_direct_node_result_store(
         adapter=adapter,
         connection=connection,
         database=adapter.default_database(),
@@ -109,18 +109,15 @@ def _persist_loader_result(
     loader_name: str,
     result: LoadExecutionResult,
     run_id: str,
-    result_store: StandardNodeResultStore | None = None,
+    result_store: DirectNodeResultStore | None = None,
 ) -> None:
     if connection is None and (result_store is None or result_store.connection is None):
         return
-    resolved_result_store: StandardNodeResultStore = (
-        result_store
-        or build_standard_node_result_store(
-            adapter=adapter,
-            connection=connection,
-            database=adapter.default_database(),
-            schema=adapter.default_schema(),
-        )
+    resolved_result_store: DirectNodeResultStore = result_store or build_direct_node_result_store(
+        adapter=adapter,
+        connection=connection,
+        database=adapter.default_database(),
+        schema=adapter.default_schema(),
     )
     resolved_result_store.write(
         NodeResultRecord(

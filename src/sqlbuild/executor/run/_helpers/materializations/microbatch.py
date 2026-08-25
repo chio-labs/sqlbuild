@@ -83,14 +83,14 @@ from sqlbuild.executor.run.models import (
 )
 from sqlbuild.executor.run.types import ExecutionPhase, MicrobatchBatchRunner
 from sqlbuild.executor.scheduling.types import ExecutionStatus
-from sqlbuild.microbatches.classes.standard_store import (
-    StandardMicrobatchEventStore,
-    standard_microbatch_scope,
+from sqlbuild.microbatches.classes.direct_store import (
+    DirectMicrobatchEventStore,
+    direct_microbatch_scope,
 )
 from sqlbuild.microbatches.constants import (
+    DIRECT_MICROBATCH_SCOPE_KIND,
     MICROBATCH_GENERATION_WILDCARD,
     MICROBATCH_REPLAY_GENERATION_PREFIX,
-    STANDARD_MICROBATCH_SCOPE_KIND,
 )
 from sqlbuild.microbatches.main.latest_replay_requirement import (
     latest_active_replay_requirement,
@@ -828,10 +828,10 @@ def _read_microbatch_history(
     ]
     | ModelExecutionResult
 ):
-    store: MicrobatchEventStore = context.microbatch_event_store or StandardMicrobatchEventStore(
+    store: MicrobatchEventStore = context.microbatch_event_store or DirectMicrobatchEventStore(
         adapter=context.adapter, connection=context.connection
     )
-    scope: MicrobatchScope = context.microbatch_scope or standard_microbatch_scope(
+    scope: MicrobatchScope = context.microbatch_scope or direct_microbatch_scope(
         adapter=context.adapter, connection=context.connection, entry=context.entry
     )
     try:
@@ -845,7 +845,7 @@ def _read_microbatch_history(
             audit_results=state.audit_results,
             statement_recorder=state.statement_recorder,
         )
-    if is_full_refresh and scope.scope_kind == STANDARD_MICROBATCH_SCOPE_KIND:
+    if is_full_refresh and scope.scope_kind == DIRECT_MICROBATCH_SCOPE_KIND:
         if _microbatch_run_type(context=context) == MicrobatchRunType.REPLAY_ON_CHANGE:
             replay_generation: str = (
                 MICROBATCH_REPLAY_GENERATION_PREFIX + _expected_model_version_hash(context=context)
@@ -1156,7 +1156,7 @@ def _current_completion_scope(
     )
     if generation is None:
         return scope
-    if scope.scope_kind == STANDARD_MICROBATCH_SCOPE_KIND:
+    if scope.scope_kind == DIRECT_MICROBATCH_SCOPE_KIND:
         return replace(scope, physical_generation_id=generation)
     generation_hash: str = hashlib.sha256(generation.encode()).hexdigest()
     if scope.physical_generation_id.rpartition(":")[2] == generation_hash:

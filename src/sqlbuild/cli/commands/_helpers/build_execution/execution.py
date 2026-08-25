@@ -5,10 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.cli.commands._helpers.build_python_nodes.python_lifecycle import (
-    prepare_standard_python_lifecycle,
+    prepare_direct_python_lifecycle,
 )
 from sqlbuild.cli.commands._helpers.freshness.source_freshness import (
-    append_eligible_standard_source_freshness_records,
+    append_eligible_direct_source_freshness_records,
 )
 from sqlbuild.cli.commands._helpers.input.parsing import (
     parse_cursor_integer,
@@ -20,7 +20,7 @@ from sqlbuild.cli.commands.models import (
     BuildExecutionPreparation,
     BuildInvocation,
     BuildRunOutcome,
-    StandardLifecycleCallbacks,
+    DirectLifecycleCallbacks,
 )
 from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
@@ -79,7 +79,7 @@ def prepare_build_execution(
         callbacks=callbacks,
         effective_concurrency=effective_concurrency,
         execution_connection_progress=execution_connection_progress,
-        python_lifecycle=prepare_standard_python_lifecycle(
+        python_lifecycle=prepare_direct_python_lifecycle(
             discovered_inputs=invocation.discovered_inputs,
             pipeline_result=pipeline_result,
             plan_output=pipeline_result.plan_output,
@@ -93,7 +93,7 @@ def prepare_build_execution(
                 start_cursor_int=parse_cursor_integer(cursor_overrides.start_int),
                 end_cursor_int=parse_cursor_integer(cursor_overrides.end_int),
             ),
-            callbacks=StandardLifecycleCallbacks(
+            callbacks=DirectLifecycleCallbacks(
                 use_color=invocation.use_color,
                 progress_stream=invocation.progress_stream,
                 on_node_start=lambda name, resource_kind: callbacks.on_node_start(
@@ -171,7 +171,7 @@ def execute_build_plan(
             initial_failed_keys=preparation.python_lifecycle.blocked_keys,
         ),
     )
-    append_eligible_standard_source_freshness_records(
+    append_eligible_direct_source_freshness_records(
         plan=pipeline_result.plan_output,
         result=result,
         adapter=invocation.adapter,
