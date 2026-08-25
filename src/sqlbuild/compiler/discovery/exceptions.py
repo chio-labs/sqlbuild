@@ -97,3 +97,9 @@ class DeclarationParseError(DiscoveryError):
     """Raised when an authored public SQL declaration is invalid."""
 
     code: str = "D013"
+
+
+class SqlHookParseError(DiscoveryError):
+    """Raised when an authored SQL hook resource has an invalid shape."""
+
+    code: str = "D014"

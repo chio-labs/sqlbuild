@@ -6,6 +6,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.spec.contracts.models import (
     SchemaColumn,
     SchemaModelEntry,
@@ -94,8 +95,8 @@ def build_config_dict(values: dict[str, object]) -> dict[str, object]:
         "incremental_strategy": values.get("incremental_strategy"),
         "merge_exclude_columns": values.get("merge_exclude_columns"),
         "persist_docs": {},
-        "post-hook": [],
-        "pre-hook": [],
+        "post-hook": _dbt_sql_hooks(values.get("post_hooks")),
+        "pre-hook": _dbt_sql_hooks(values.get("pre_hooks")),
         "quoting": {},
         "column_types": {},
         "full_refresh": values.get("allow_full_refresh"),
@@ -108,6 +109,24 @@ def build_config_dict(values: dict[str, object]) -> dict[str, object]:
         "contract": {"enforced": False, "alias_types": True},
     }
     return result
+
+
+def _dbt_sql_hooks(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list | tuple):
+        return []
+    hooks: list[dict[str, object]] = []
+    entry: object
+    for entry in value:
+        if not isinstance(entry, SqlHookEntry):
+            continue
+        hooks.append(
+            {
+                "sql": entry.statement,
+                "transaction": True,
+                "index": len(hooks),
+            }
+        )
+    return hooks
 
 
 def build_depends_on(

@@ -66,7 +66,7 @@ def test_given_project_with_python_hooks_when_running_run_then_hooks_execute(
                 """
             ).strip()
             + "\n",
-            "hooks/lifecycle.py": dedent(
+            "hooks/python/lifecycle.py": dedent(
                 """
                 from sqlbuild.hooks import HookContext, hook
 

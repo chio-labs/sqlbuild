@@ -26,6 +26,8 @@ from sqlbuild.compiler.compile.types import CompiledResourceType, DiagnosticSeve
 from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.lineage.models import ModelColumnLineage, ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
+from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.phase_line import format_phase_line
 from sqlbuild.presentation.main.status_cell import format_status_cell
@@ -163,6 +165,7 @@ def _summary(*, graph: ProjectGraph, diagnostics: tuple[CompilerDiagnostic, ...]
         "functions": len(project.functions),
         "audits": len(project.audits),
         "tests": len(project.sql_tests),
+        "hooks": len(project.sql_hook_files) + len(project.hook_functions),
         "execution_layers": _execution_layer_count(graph),
         "errors": _diagnostic_count(diagnostics=diagnostics, severity=DiagnosticSeverity.ERROR),
         "warnings": _diagnostic_count(diagnostics=diagnostics, severity=DiagnosticSeverity.WARNING),
@@ -180,6 +183,7 @@ def _resources(*, graph: ProjectGraph, lineage: ProjectColumnLineage | None) -> 
         "functions": [_function_resource(function) for function in project.functions],
         "audits": [_audit_resource(audit) for audit in project.audits],
         "tests": [_test_resource(test) for test in project.sql_tests],
+        "hooks": _hook_definitions(project),
     }
 
 
@@ -214,10 +218,46 @@ def _hook_resources(*, hooks: object) -> list[dict[str, object]]:
     hook: object
     for hook in hooks:
         if isinstance(hook, SqlHookEntry):
-            resources.append({"type": "sql", "statement": hook.statement})
+            resource: dict[str, object] = {"type": "sql", "statement": hook.statement}
+            if hook.name is not None:
+                resource["name"] = hook.name
+            if hook.relative_path is not None:
+                resource["relative_path"] = hook.relative_path.as_posix()
+            if hook.definition_sql is not None:
+                resource["definition_sql"] = hook.definition_sql
+            if hook.kwargs is not None:
+                resource["kwargs"] = hook.kwargs
+            if hook.description is not None:
+                resource["description"] = hook.description
+            resources.append(resource)
         elif isinstance(hook, PythonHookEntry):
             resources.append({"type": "python", "name": hook.name, "kwargs": hook.kwargs})
     return resources
+
+
+def _hook_definitions(project: CompiledProject) -> list[dict[str, object]]:
+    definitions: list[dict[str, object]] = [
+        {
+            "type": "sql",
+            "name": hook.name,
+            "relative_path": hook.relative_path.as_posix(),
+            "description": hook.description,
+            "sql": hook.sql_body,
+        }
+        for hook in project.sql_hook_files
+    ]
+    python_identities: dict[str, PythonNodeIdentity] = build_hook_identities(project.hook_functions)
+    for hook in project.hook_functions:
+        python_definition: dict[str, object] = {
+            "type": "python",
+            "name": hook.name,
+            "relative_path": hook.relative_path.as_posix(),
+            "description": hook.description,
+            "definition_hash": python_identities[hook.name].definition_hash,
+            "version_hash": python_identities[hook.name].version_hash,
+        }
+        definitions.append(python_definition)
+    return definitions
 
 
 def _source_resource(source: CompiledSource) -> dict[str, object]:

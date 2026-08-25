@@ -268,7 +268,7 @@ _INT_MODEL_SQL: str = (
             hook_functions=(
                 DiscoveredHookFunction(
                     file_path=Path(__file__),
-                    relative_path=Path("hooks/microbatch.py"),
+                    relative_path=Path("hooks/python/microbatch.py"),
                     name="insert_hook_log",
                     function=insert_microbatch_hook_log,
                 ),
@@ -479,7 +479,7 @@ def test_given_microbatch_model_when_executing_then_succeeds(
             hook_functions=(
                 DiscoveredHookFunction(
                     file_path=Path(__file__),
-                    relative_path=Path("hooks/microbatch.py"),
+                    relative_path=Path("hooks/python/microbatch.py"),
                     name="fail_hook",
                     function=fail_microbatch_hook,
                 ),
@@ -587,7 +587,7 @@ def test_given_microbatch_model_when_executing_then_succeeds(
             hook_functions=(
                 DiscoveredHookFunction(
                     file_path=Path(__file__),
-                    relative_path=Path("hooks/microbatch.py"),
+                    relative_path=Path("hooks/python/microbatch.py"),
                     name="fail_hook",
                     function=fail_microbatch_hook,
                 ),

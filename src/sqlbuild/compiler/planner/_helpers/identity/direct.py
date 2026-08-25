@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.models import CompiledFunction, CompiledModel, CompiledSeed
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner._helpers.identity.hashing import (
     compose_native_graph_identity,
     graph_key_for_compiled_resource,
@@ -28,6 +29,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerScope,
 )
 from sqlbuild.compiler.planner.types import GraphResourceKind
+from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
 
 
 def build_direct_model_version_identities(
@@ -36,10 +38,15 @@ def build_direct_model_version_identities(
     seeds: tuple[CompiledSeed, ...] = (),
     scope: PlannerScope,
     source_version_hashes: dict[str, str] | None = None,
+    hook_functions: tuple[DiscoveredHookFunction, ...] = (),
 ) -> DirectModelVersionIdentities:
     """Compute current direct model identities from code and upstream identities."""
 
     function_local_hashes: dict[str, str] = build_function_local_hashes(functions=functions)
+    hook_version_hashes: dict[str, str] = {
+        name: identity.version_hash
+        for name, identity in build_hook_identities(hook_functions).items()
+    }
     seed_version_hashes: dict[str, str] = {}
     seed_metadata_jsons: dict[str, str] = {}
     seed: CompiledSeed
@@ -110,6 +117,7 @@ def build_direct_model_version_identities(
         metadata_json: str = build_model_version_identity_metadata_json(
             model=model,
             function_local_hashes=function_local_hashes,
+            hook_version_hashes=hook_version_hashes,
         )
         model_metadata_jsons[model.name] = metadata_json
         local_hash: str = build_model_local_identity_hash(

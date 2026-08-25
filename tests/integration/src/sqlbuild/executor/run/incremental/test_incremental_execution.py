@@ -309,7 +309,7 @@ class ZeroCopyDuckDbAdapter(DuckDbAdapter):
             hook_functions=(
                 DiscoveredHookFunction(
                     file_path=Path(__file__),
-                    relative_path=Path("hooks/incremental.py"),
+                    relative_path=Path("hooks/python/incremental.py"),
                     name="insert_hook_log",
                     function=insert_incremental_hook_log,
                 ),
@@ -576,7 +576,7 @@ def test_given_existing_table_when_running_incremental_then_succeeds(
             hook_functions=(
                 DiscoveredHookFunction(
                     file_path=Path(__file__),
-                    relative_path=Path("hooks/incremental.py"),
+                    relative_path=Path("hooks/python/incremental.py"),
                     name="fail_hook",
                     function=fail_incremental_hook,
                 ),
@@ -615,7 +615,7 @@ def test_given_existing_table_when_running_incremental_then_succeeds(
             hook_functions=(
                 DiscoveredHookFunction(
                     file_path=Path(__file__),
-                    relative_path=Path("hooks/incremental.py"),
+                    relative_path=Path("hooks/python/incremental.py"),
                     name="fail_hook",
                     function=fail_incremental_hook,
                 ),

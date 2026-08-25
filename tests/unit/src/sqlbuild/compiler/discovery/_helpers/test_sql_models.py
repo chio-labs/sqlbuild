@@ -12,6 +12,7 @@ from sqlbuild.compiler.discovery._helpers.sql.model_files import (
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlModelFile,
+    NamedSqlHookEntry,
     PythonHookEntry,
     SqlHookEntry,
 )
@@ -167,7 +168,7 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
         MODEL (
           schema "analytics mart",
           description "Bob said \\"hello\\"",
-          post_hooks [sql("grant select on @@CTX:destination.qualified to role analytics")],
+          post_hooks [inline_sql("grant select on @@CTX:destination.qualified to role analytics")],
         );
 
         SELECT 1
@@ -309,12 +310,13 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
             contents="""
         MODEL (
           pre_hooks [
-            sql("insert into audit_log select 'starting'"),
+            inline_sql("insert into audit_log select 'starting'"),
+            sql("record_start", table: "audit_log"),
             python("notify", channel: "#data", attempts: 2, urgent: true),
           ],
           post_hooks [
             python("notify success", message: "@@CTX:destination.qualified"),
-            sql("grant select on @@CTX:destination.qualified to role analytics"),
+            inline_sql("grant select on @@CTX:destination.qualified to role analytics"),
           ],
         );
 
@@ -323,6 +325,7 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
             expected_header_values={
                 "pre_hooks": [
                     SqlHookEntry(statement="insert into audit_log select 'starting'"),
+                    NamedSqlHookEntry(name="record_start", kwargs={"table": "audit_log"}),
                     PythonHookEntry(
                         name="notify",
                         kwargs={"channel": "#data", "attempts": 2, "urgent": True},
@@ -453,7 +456,7 @@ def test_given_sql_model_header_variants_when_parsing_then_it_returns_expected_h
             description="raises when sql hook receives extra arguments",
             contents="""
         MODEL (
-          pre_hooks [sql("select 1", label: "extra")]
+          pre_hooks [inline_sql("select 1", label: "extra")]
         );
 
         SELECT 1
@@ -491,7 +494,7 @@ def test_given_sql_model_header_variants_when_parsing_then_it_returns_expected_h
 
         SELECT 1
         """,
-            expected_error_fragment="post_hooks entries must use typed sql",
+            expected_error_fragment="post_hooks entries must use typed inline_sql",
         ),
         ParseModelSqlErrorTestCase(
             description="raises when hook list uses uppercase constructor",
@@ -502,7 +505,7 @@ def test_given_sql_model_header_variants_when_parsing_then_it_returns_expected_h
 
         SELECT 1
         """,
-            expected_error_fragment="pre_hooks entries must use typed sql",
+            expected_error_fragment="pre_hooks entries must use typed inline_sql",
         ),
     ],
     ids=lambda case: case.description,

@@ -237,7 +237,9 @@ def test_given_model_and_snapshot_when_detecting_changes_then_returns_expected(
                 },
             ),
             expected_change_kind=ChangeKind.CONFIG_CHANGED,
-            expected_metadata_fragments=('"post_hooks":["SqlHookEntry',),
+            expected_metadata_fragments=(
+                '"post_hooks":[{"statement":"INSERT INTO audit_log SELECT \'new\'","type":"sql"}]',
+            ),
         ),
         DetectModelMetadataTestCase(
             description="ignores runtime audit gate proof when version identity matches",

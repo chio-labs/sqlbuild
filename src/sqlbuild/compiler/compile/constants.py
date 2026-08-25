@@ -74,11 +74,11 @@ MISSING_TEMPLATE_CONTEXT_VALUE_MESSAGE_PART: str = "no value is available"
 
 TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{([^{}]+)\}")
 MACRO_CALL_PATTERN: re.Pattern[str] = re.compile(r"@[A-Za-z_][A-Za-z0-9_]*\s*\(")
-GENERIC_AUDIT_QUOTED_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
+SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
     r"(?<!@)@'(?P<name>[A-Za-z_][A-Za-z0-9_]*)'"
 )
-GENERIC_AUDIT_RAW_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
-    r"(?<!@)@(?!')(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?!\s*\()"
+SQL_ARGUMENT_RAW_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
+    r"(?<!@)@(?!')(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_])(?!\s*\()"
 )
 EXPECTED_TEST_CTE_PREFIX: str = "__expected__"
 ASSERT_TEST_CTE_PREFIX: str = "__assert__"

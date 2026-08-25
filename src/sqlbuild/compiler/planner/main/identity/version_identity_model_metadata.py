@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlbuild.compiler.compile.models import CompiledModel
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.planner._helpers.identity.model_metadata import contract_output_signature
 from sqlbuild.compiler.planner.constants import (
     MODEL_CUSTOM_CONFIG_KEY,
@@ -22,6 +23,7 @@ def build_model_version_identity_metadata_json(
     *,
     model: CompiledModel,
     function_local_hashes: dict[str, str] | None = None,
+    hook_version_hashes: dict[str, str] | None = None,
 ) -> str:
     """Build deterministic non-query model fingerprint metadata JSON."""
 
@@ -41,11 +43,16 @@ def build_model_version_identity_metadata_json(
         model_name=model.name,
         config_values=model.config.values,
         local_function_hashes=local_function_hashes,
-        execution_signature=_model_execution_signature(model),
+        execution_signature=_model_execution_signature(
+            model=model,
+            hook_version_hashes=hook_version_hashes or {},
+        ),
     )
 
 
-def _model_execution_signature(model: CompiledModel) -> dict[str, object]:
+def _model_execution_signature(
+    *, model: CompiledModel, hook_version_hashes: dict[str, str]
+) -> dict[str, object]:
     signature: dict[str, object] = {}
     contract_signature: dict[str, object] | None = contract_output_signature(model=model)
     if contract_signature is not None:
@@ -55,7 +62,50 @@ def _model_execution_signature(model: CompiledModel) -> dict[str, object]:
     if MODEL_PLACEHOLDERS_CONFIG_KEY in model.config.values:
         signature["custom_placeholders"] = model.config.values[MODEL_PLACEHOLDERS_CONFIG_KEY]
     if MODEL_PRE_HOOKS_CONFIG_KEY in model.config.values:
-        signature["pre_hooks"] = model.config.values[MODEL_PRE_HOOKS_CONFIG_KEY]
+        signature["pre_hooks"] = _hook_execution_signature(
+            value=model.config.values[MODEL_PRE_HOOKS_CONFIG_KEY],
+            hook_version_hashes=hook_version_hashes,
+        )
     if MODEL_POST_HOOKS_CONFIG_KEY in model.config.values:
-        signature["post_hooks"] = model.config.values[MODEL_POST_HOOKS_CONFIG_KEY]
+        signature["post_hooks"] = _hook_execution_signature(
+            value=model.config.values[MODEL_POST_HOOKS_CONFIG_KEY],
+            hook_version_hashes=hook_version_hashes,
+        )
     return signature
+
+
+def _hook_execution_signature(
+    *, value: object, hook_version_hashes: dict[str, str]
+) -> list[dict[str, object]]:
+    if not isinstance(value, list | tuple):
+        return []
+    hooks: list[dict[str, object]] = []
+    entry: object
+    for entry in value:
+        if isinstance(entry, SqlHookEntry):
+            hook: dict[str, object] = {
+                "type": "sql",
+                "statement": entry.statement,
+            }
+            if entry.name is not None:
+                hook["name"] = entry.name
+            if entry.relative_path is not None:
+                hook["relative_path"] = entry.relative_path.as_posix()
+            if entry.definition_sql is not None:
+                hook["definition_sql"] = entry.definition_sql
+            if entry.kwargs is not None:
+                hook["kwargs"] = entry.kwargs
+            if entry.description is not None:
+                hook["description"] = entry.description
+            hooks.append(hook)
+        elif isinstance(entry, PythonHookEntry):
+            python_hook: dict[str, object] = {
+                "type": "python",
+                "name": entry.name,
+                "kwargs": entry.kwargs,
+            }
+            version_hash: str | None = hook_version_hashes.get(entry.name)
+            if version_hash is not None:
+                python_hook["version_hash"] = version_hash
+            hooks.append(python_hook)
+    return hooks

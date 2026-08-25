@@ -22,6 +22,7 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
     discover_seed_files,
     discover_source_files,
     discover_sql_function_files,
+    discover_sql_hook_files,
     discover_test_files,
 )
 from sqlbuild.compiler.discovery._helpers.integrations.loaders import (
@@ -75,6 +76,7 @@ def build_discovered_project_inputs(
         constant_files=discover_constant_files(project_dir=project_dir),
         model_schema_files=discover_model_schema_files(project_dir=project_dir),
         sql_function_files=discover_sql_function_files(project_dir=project_dir),
+        sql_hook_files=discover_sql_hook_files(project_dir=project_dir),
         python_function_files=discover_python_function_files(project_dir=project_dir),
         schema_files=discover_schema_files(project_dir=project_dir),
         source_files=source_files,
