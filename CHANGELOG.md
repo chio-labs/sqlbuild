@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.6](https://github.com/chio-labs/sqlbuild/compare/v0.55.5...v0.55.6) (2026-08-25)
+
+
+### Performance Improvements
+
+* upgrade Polyglot and increase E2E workers ([#343](https://github.com/chio-labs/sqlbuild/issues/343)) ([30832e9](https://github.com/chio-labs/sqlbuild/commit/30832e9e4eada2f6baf25ea9b903d12f2d707076))
+
 ## [0.55.5](https://github.com/chio-labs/sqlbuild/compare/v0.55.4...v0.55.5) (2026-08-25)
 
 
