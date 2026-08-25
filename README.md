@@ -8,9 +8,9 @@
 
 **Valid isn't the same as correct.** Your SQL compiles, runs, and returns rows; none of that means the number is right, and a silently-wrong number a stakeholder already trusted is the bug that actually hurts.
 
-SQLBuild brings software-engineering rigor to SQL pipelines: catch errors before the warehouse runs them, test your logic locally, and opt into change-aware execution when you need it. It works as a standalone framework or points at your existing dbt project with no migration and no edits to your dbt files.
+SQLBuild brings software-engineering rigor to SQL pipelines: catch errors before the warehouse runs them, test your logic locally, and opt into change-aware execution when you need it. It is a standalone, open-source framework for building SQL and Python data pipelines.
 
-All state is persisted as append-only tables in the warehouse alongside your data: no external state database, no manifest files, no paid add-on. It keeps a low, dbt-like floor for SQL models and adds ingestion, Python nodes, and opt-in virtual environments as your project grows.
+All state is persisted as append-only tables in the warehouse alongside your data: no external state database, no manifest files, no paid add-on. Start with straightforward SQL models, then add ingestion, Python nodes, and opt-in virtual environments as your project grows.
 
 ## Key features
 
@@ -20,28 +20,11 @@ All state is persisted as append-only tables in the warehouse alongside your dat
 - **Audits that block bad data.** Audits run before data reaches the target table. Full table builds materialize into a staging table and only promote if audits pass; incremental models validate each batch before DML.
 - **Deploy reversibly (opt-in).** Virtual environments add instant low-copy branching, partial promotion, rollback, checkpoints, and reconciliation. Opt-in, not a tax you pay upfront.
 - **Opt-in change-aware execution.** Models, seeds, UDFs, and Python nodes are fingerprinted, and source freshness is tracked. In virtual environments, pass `--changes-only` or set `changes_only = true` to skip work that is already current; commands otherwise run the full selected scope.
-- **Works with your existing dbt project.** Point SQLBuild at a dbt project and run ordinary dbt selections alongside SQLBuild models. It reads the manifest and drives the `dbt` CLI as a subprocess; it never edits your dbt files. dbt-native `--state` and `--defer` remain available for production-shaped, state-aware selections. See [dbt compatibility](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
 - **Warehouse-native state.** All change-tracking state lives in append-only tables (`_sqlbuild_fingerprints`, `_sqlbuild_source_freshness`, `_sqlbuild_node_results`) in your warehouse schemas. No external state machine, no corruption risk.
 - **Cursor-based incremental processing.** Automatic gap detection and resume, with microbatch mode for large ranges. No external checkpoint to maintain.
 - **Ingestion and Python nodes.** Load external data with Python `@loader` functions, and run `@task`, `@asset`, and `@check` nodes as first-class members of the same DAG as your SQL models.
 
-See the [documentation](https://docs.sqlbuild.com) for the full feature set, including providers, lifecycle hooks, Python macros, UDFs, custom materializations, data diffs, zero-copy cloning, and virtual environments.
-
-## Works with your existing dbt project
-
-Point SQLBuild at a dbt project and run a `sqb dbt` command. The first time, it bootstraps a minimal twin project from your `dbt_project.yml` and profile (reusing your dbt connection), then runs your selection through dbt:
-
-```bash
-sqb dbt build --select path:models/marts
-```
-
-SQLBuild preserves dbt-native state and defer arguments when you need dbt's own state-aware selection:
-
-```bash
-sqb dbt build --state path/to/state --defer --select state:modified+
-```
-
-Ordinary `sqb dbt plan`, `run`, and `build` commands do not fingerprint dbt models or inspect production state automatically. Use dbt-native `--state`/`--defer` for production-shaped comparisons. See [dbt compatibility](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
+See the [documentation](https://docs.sqlbuild.com) for the full feature set, including providers, lifecycle hooks, Python macros, UDFs, custom materializations, data diffs, zero-copy cloning, and virtual environments. If you are evaluating a migration from dbt, see the [dbt compatibility guide](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
 
 ## Quick start
 
