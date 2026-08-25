@@ -48,6 +48,7 @@ def analyze_compile_project(
     *,
     project_dir: Path,
     no_sql_validation: bool,
+    no_cache: bool,
     selected_target: str | None,
     lineage_mode: CompileLineageMode,
     cli_vars: dict[str, object] | None,
@@ -86,6 +87,7 @@ def analyze_compile_project(
         skip_column_inference=profile_flags.skip_column_inference,
         column_lineage_mode=compile_analysis_lineage_mode(lineage_mode),
         cli_vars=cli_vars,
+        no_cache=no_cache,
     )
     graph_ms: int = elapsed_ms(graph_start)
     _ = complete_compile_phase(

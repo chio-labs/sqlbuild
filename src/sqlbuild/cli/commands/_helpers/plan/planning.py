@@ -42,6 +42,7 @@ def compile_plan_pipeline(
             options=VirtualPlanOptions(
                 selected_target=request.selected_target,
                 no_sql_validation=request.no_sql_validation,
+                no_cache=request.no_cache,
                 defer_sources_to=request.defer_sources_to,
                 cursor_overrides=request.cursor_overrides,
                 full_refresh=request.full_refresh,
@@ -84,6 +85,7 @@ def compile_plan_pipeline(
         options=CompilePipelineOptions(
             selected_target=request.selected_target,
             no_sql_validation=request.no_sql_validation,
+            no_cache=request.no_cache,
             defer_to=request.defer_to,
             defer_sources_to=request.defer_sources_to,
             cursor_overrides=request.cursor_overrides,

@@ -75,6 +75,11 @@ def resolve_target_config(
             if local_target.changes_only is not None
             else project_target.changes_only
         ),
+        compile_cache=(
+            local_target.compile_cache
+            if local_target.compile_cache is not None
+            else project_target.compile_cache
+        ),
         clone=_merge_clone_policy(
             project_clone=project_target.clone,
             local_clone=local_target.clone,

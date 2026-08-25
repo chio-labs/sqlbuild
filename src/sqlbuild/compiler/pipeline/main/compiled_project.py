@@ -37,6 +37,7 @@ from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
+from sqlbuild.spec.contracts.models import TargetConfig
 
 
 def build_compiled_project(
@@ -71,7 +72,11 @@ def build_compiled_project(
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     inference_profile: ExpressionInferenceProfile = adapter.expression_inference_profile()
-    analysis_cache_dir: Path | None = _analysis_cache_dir(discovered_inputs=discovered_inputs)
+    analysis_cache_dir: Path | None = _analysis_cache_dir(
+        discovered_inputs=discovered_inputs,
+        target_config=compile_inputs.effective_target,
+        no_cache=analysis_selection is not None and analysis_selection.no_cache,
+    )
     analysis_model_names: frozenset[str] | None = _resolve_analysis_model_names(
         compile_inputs=compile_inputs,
         inference_profile=inference_profile,
@@ -103,8 +108,17 @@ def build_compiled_project(
     return project
 
 
-def _analysis_cache_dir(*, discovered_inputs: DiscoveredProjectInputs) -> Path | None:
-    if os.environ.get(COMPILE_CACHE_DISABLE_ENV_VAR) == COMPILE_CACHE_DISABLE_VALUE:
+def _analysis_cache_dir(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    target_config: TargetConfig | None,
+    no_cache: bool,
+) -> Path | None:
+    if (
+        no_cache
+        or (target_config is not None and target_config.compile_cache is False)
+        or os.environ.get(COMPILE_CACHE_DISABLE_ENV_VAR) == COMPILE_CACHE_DISABLE_VALUE
+    ):
         return None
     project_dir: Path | None = discovered_inputs.project_dir
     return project_dir / "target" / "compile-cache" if project_dir is not None else None

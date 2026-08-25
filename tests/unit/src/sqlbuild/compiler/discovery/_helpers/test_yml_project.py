@@ -157,6 +157,7 @@ schema = "dev"
                     "defer_sources_to": None,
                     "defer_clone_from": None,
                     "changes_only": None,
+                    "compile_cache": None,
                     "allow_as_clone_origin": False,
                     "allow_as_clone_destination": False,
                 }
@@ -209,6 +210,7 @@ loader_schema = "raw_${user}"
 defer_sources_to = "prod"
 defer_clone_from = "prod"
 changes_only = true
+compile_cache = false
 
 [targets.dev.connection]
 warehouse = "dev_wh"
@@ -290,6 +292,7 @@ enabled = true
                     "defer_sources_to": "prod",
                     "defer_clone_from": "prod",
                     "changes_only": True,
+                    "compile_cache": False,
                     "allow_as_clone_origin": True,
                     "allow_as_clone_destination": True,
                 }
@@ -359,6 +362,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
             "defer_sources_to": target_config.defer_sources_to,
             "defer_clone_from": target_config.defer_clone_from,
             "changes_only": target_config.changes_only,
+            "compile_cache": target_config.compile_cache,
             "allow_as_clone_origin": target_config.clone.allow_as_clone_origin,
             "allow_as_clone_destination": target_config.clone.allow_as_clone_destination,
         }
@@ -542,6 +546,7 @@ loader_schema = "local_raw"
 defer_sources_to = "prod"
 defer_clone_from = "prod"
 changes_only = false
+compile_cache = false
 
 [targets.dev.connection]
 warehouse = "local_wh"
@@ -572,6 +577,7 @@ allow_as_clone_destination = false
                     "defer_sources_to": "prod",
                     "defer_clone_from": "prod",
                     "changes_only": False,
+                    "compile_cache": False,
                     "allow_as_clone_origin": True,
                     "allow_as_clone_destination": False,
                 }
@@ -622,6 +628,7 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
             "defer_sources_to": target_config.defer_sources_to,
             "defer_clone_from": target_config.defer_clone_from,
             "changes_only": target_config.changes_only,
+            "compile_cache": target_config.compile_cache,
             "allow_as_clone_origin": target_config.clone.allow_as_clone_origin,
             "allow_as_clone_destination": target_config.clone.allow_as_clone_destination,
         }

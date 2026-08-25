@@ -22,15 +22,16 @@ from sqlbuild.cli.commands.models import (
     DeferClonePrephaseOutputContext,
 )
 from sqlbuild.compiler.compile.models import (
+    CompileAnalysisSelection,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
+from sqlbuild.compiler.pipeline.main.clone_with_options import run_clone_pipeline_with_options
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
-from sqlbuild.compiler.pipeline.models import ClonePipelineResult
+from sqlbuild.compiler.pipeline.models import ClonePipelineOptions, ClonePipelineResult
 from sqlbuild.compiler.planner.main.clone.resolve_clone_boundary import (
     resolve_clone_boundary,
 )
@@ -53,6 +54,7 @@ def build_defer_clone_boundary_selectors(
     adapter: BaseAdapter,
     selected_target: str | None,
     no_sql_validation: bool,
+    no_cache: bool,
     select: tuple[str, ...],
     exclude: tuple[str, ...],
     cli_vars: dict[str, object] | None,
@@ -66,6 +68,7 @@ def build_defer_clone_boundary_selectors(
         adapter=adapter,
         selected_target=selected_target,
         no_sql_validation=no_sql_validation,
+        analysis_selection=CompileAnalysisSelection(no_cache=no_cache),
         cli_vars=cli_vars,
         external_sql_reference_resolver=resolve_external_sql_reference_resolver(
             project_dir=project_dir,
@@ -139,6 +142,7 @@ def run_defer_clone_boundary_prephase(
         adapter=invocation.adapter,
         selected_target=request.selected_target,
         no_sql_validation=request.no_sql_validation,
+        no_cache=request.no_cache,
         select=request.select,
         exclude=request.exclude,
         cli_vars=request.cli_vars,
@@ -152,6 +156,7 @@ def run_defer_clone_boundary_prephase(
             origin_target_name=origin_target_name,
             destination_target_name=cloned_project.effective_target_name,
             no_sql_validation=request.no_sql_validation,
+            no_cache=request.no_cache,
             select=(*boundary_selectors, *view_chain_selectors),
             caused_by_names=request.select,
             cli_vars=request.cli_vars,
@@ -210,16 +215,18 @@ def run_defer_clone_prephase(
     )
     destination_connection: Any = adapter.connect(inputs.connection_config)
     try:
-        clone_pipeline: ClonePipelineResult = run_clone_pipeline(
+        clone_pipeline: ClonePipelineResult = run_clone_pipeline_with_options(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
             origin_target_name=origin_target_name,
             destination_target_name=destination_target_name,
-            no_sql_validation=inputs.no_sql_validation,
-            select=inputs.select,
-            exclude=(),
-            cli_vars=cli_vars,
             destination_connection=destination_connection,
+            options=ClonePipelineOptions(
+                no_sql_validation=inputs.no_sql_validation,
+                no_cache=inputs.no_cache,
+                select=inputs.select,
+                cli_vars=cli_vars,
+            ),
             external_sql_reference_resolver=resolve_external_sql_reference_resolver(
                 project_dir=project_dir,
                 discovered_inputs=discovered_inputs,

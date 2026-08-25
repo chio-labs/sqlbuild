@@ -45,6 +45,7 @@ class CompilePipelineOptions:
     cli_vars: dict[str, object] | None = None
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
     resolve_python_run_selectors: bool = False
+    no_cache: bool = False
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,17 @@ class CompilePipelineResult:
     custom_materializations: dict[str, Callable[..., Any]] = field(default_factory=dict)
     python_node_names: frozenset[str] = field(default_factory=frozenset)
     python_plan_entries: tuple[PythonPlanEntry, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ClonePipelineOptions:
+    """Compilation and selection options for one clone pipeline."""
+
+    no_sql_validation: bool = False
+    select: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
+    cli_vars: dict[str, object] | None = None
+    no_cache: bool = False
 
 
 @dataclass(frozen=True)

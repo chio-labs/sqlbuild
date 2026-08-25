@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.compile._helpers.analysis.columns import table_function_analysis_name
 from sqlbuild.compiler.compile.exceptions import AnalysisCacheEntryError
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
@@ -26,9 +27,10 @@ from sqlbuild.compiler.lineage.types import (
     ColumnTransformKind,
     InferredNullability,
 )
+from sqlbuild.compiler.references.types import SqlReferenceKind
 
-_ANALYSIS_CACHE_VERSION: int = 1
-_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v1"
+_ANALYSIS_CACHE_VERSION: int = 2
+_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v2"
 _MAX_CACHE_ENTRY_BYTES: int = 10_000_000
 _LOCAL_QUALNAME_MARKER: str = "<locals>"
 _SQLITE_QUERY_CHUNK_SIZE: int = 500
@@ -40,15 +42,32 @@ CREATE TABLE IF NOT EXISTS model_analysis (
     payload TEXT NOT NULL
 )
 """
+_CREATE_SIGNATURE_TABLE_SQL: str = """
+CREATE TABLE IF NOT EXISTS model_analysis_signature (
+    shared_fingerprint TEXT NOT NULL,
+    signature_namespace TEXT NOT NULL,
+    model_name TEXT NOT NULL,
+    output_signature TEXT NOT NULL,
+    PRIMARY KEY (shared_fingerprint, signature_namespace, model_name)
+)
+"""
+_CREATE_DEPENDENCY_TABLE_SQL: str = """
+CREATE TABLE IF NOT EXISTS model_analysis_dependency (
+    signature_namespace TEXT NOT NULL,
+    cache_key TEXT NOT NULL,
+    upstream_model_name TEXT NOT NULL,
+    output_signature TEXT NOT NULL,
+    PRIMARY KEY (signature_namespace, cache_key, upstream_model_name)
+)
+"""
 
 
 def build_analysis_cache_context(
     *,
     root: Path | None,
     inference_profile: ExpressionInferenceProfile,
-    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
-    column_types_by_table: dict[str, dict[str, str]],
     allow_compact_analysis: bool,
+    signature_namespace: object = None,
 ) -> AnalysisCacheContext | None:
     """Build a reusable cache context, or bypass when profile identity is unstable."""
 
@@ -65,16 +84,15 @@ def build_analysis_cache_context(
         "python_version": platform.python_version_tuple()[:2],
         "allow_compact_analysis": allow_compact_analysis,
         "inference_profile": profile_payload,
-        "column_nullability_by_table": _nullability_payload(column_nullability_by_table),
-        "column_types_by_table": {
-            table: dict(sorted(columns.items()))
-            for table, columns in sorted(column_types_by_table.items())
-        },
     }
-    return AnalysisCacheContext(
-        root=root,
-        shared_fingerprint=_payload_digest(shared_payload),
-    )
+    try:
+        return AnalysisCacheContext(
+            root=root,
+            shared_fingerprint=_payload_digest(shared_payload),
+            signature_namespace=_payload_digest(signature_namespace),
+        )
+    except (TypeError, ValueError):
+        return None
 
 
 def model_analysis_cache_key(
@@ -83,6 +101,8 @@ def model_analysis_cache_key(
     query_sql: str,
     references: tuple[CompileSqlReference, ...],
     placeholders: dict[str, str] | None,
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+    column_types_by_table: dict[str, dict[str, str]],
 ) -> str:
     """Return the exact analysis identity for one expanded model query."""
 
@@ -100,6 +120,14 @@ def model_analysis_cache_key(
                 for reference in references
             ],
             "placeholders": dict(sorted((placeholders or {}).items())),
+            "referenced_column_nullability": _referenced_nullability_payload(
+                references=references,
+                column_nullability_by_table=column_nullability_by_table,
+            ),
+            "referenced_column_types": _referenced_types_payload(
+                references=references,
+                column_types_by_table=column_types_by_table,
+            ),
         }
     )
 
@@ -108,13 +136,16 @@ def read_model_analyses(
     *,
     context: AnalysisCacheContext,
     cache_keys: tuple[str, ...],
-) -> dict[str, PolyglotAnalysisResult]:
-    """Read cached analyses in batches, treating invalid entries or storage as misses."""
+    model_names: tuple[str, ...],
+    upstream_model_names_by_key: dict[str, tuple[str, ...]],
+) -> tuple[dict[str, PolyglotAnalysisResult], dict[str, str]]:
+    """Read one consistent snapshot of analyses, dependencies, and output signatures."""
 
     database_path: Path = _cache_database_path(context=context)
     if not database_path.is_file() or not cache_keys:
-        return {}
+        return {}, {}
     analyses: dict[str, PolyglotAnalysisResult] = {}
+    signatures: dict[str, str] = {}
     try:
         connection_uri: str = f"file:{database_path}?mode=ro"
         with sqlite3.connect(
@@ -122,6 +153,28 @@ def read_model_analyses(
             uri=True,
             timeout=_SQLITE_TIMEOUT_SECONDS,
         ) as connection:
+            _ = connection.execute("BEGIN")
+            signature_model_name_set: set[str] = set(model_names)
+            upstream_names: tuple[str, ...]
+            for upstream_names in upstream_model_names_by_key.values():
+                signature_model_name_set.update(upstream_names)
+            signature_model_names: tuple[str, ...] = tuple(sorted(signature_model_name_set))
+            for start in range(0, len(signature_model_names), _SQLITE_QUERY_CHUNK_SIZE):
+                model_chunk: tuple[str, ...] = signature_model_names[
+                    start : start + _SQLITE_QUERY_CHUNK_SIZE
+                ]
+                model_placeholders: str = ",".join("?" for _ in model_chunk)
+                signature_rows: list[tuple[str, str]] = connection.execute(
+                    f"SELECT model_name, output_signature FROM model_analysis_signature "
+                    f"WHERE shared_fingerprint = ? AND signature_namespace = ? "
+                    f"AND model_name IN ({model_placeholders})",
+                    (
+                        context.shared_fingerprint,
+                        context.signature_namespace,
+                        *model_chunk,
+                    ),
+                ).fetchall()
+                signatures.update(signature_rows)
             for start in range(0, len(cache_keys), _SQLITE_QUERY_CHUNK_SIZE):
                 chunk: tuple[str, ...] = cache_keys[start : start + _SQLITE_QUERY_CHUNK_SIZE]
                 placeholders: str = ",".join("?" for _ in chunk)
@@ -130,7 +183,25 @@ def read_model_analyses(
                     f"WHERE cache_key IN ({placeholders})",
                     chunk,
                 ).fetchall()
+                dependency_rows: list[tuple[str, str, str]] = connection.execute(
+                    f"SELECT cache_key, upstream_model_name, output_signature "
+                    f"FROM model_analysis_dependency WHERE signature_namespace = ? "
+                    f"AND cache_key IN ({placeholders})",
+                    (context.signature_namespace, *chunk),
+                ).fetchall()
+                dependencies_by_key: dict[str, dict[str, str]] = {}
+                for cache_key, upstream_name, output_signature in dependency_rows:
+                    dependencies_by_key.setdefault(cache_key, {})[upstream_name] = output_signature
                 for cache_key, contents in rows:
+                    expected_dependencies: dict[str, str] | None = _expected_dependencies(
+                        upstream_model_names=upstream_model_names_by_key.get(cache_key, ()),
+                        signatures=signatures,
+                    )
+                    if (
+                        expected_dependencies is None
+                        or dependencies_by_key.get(cache_key, {}) != expected_dependencies
+                    ):
+                        continue
                     analysis: PolyglotAnalysisResult | None = _analysis_from_contents(
                         contents=contents,
                         expected_cache_key=cache_key,
@@ -138,14 +209,16 @@ def read_model_analyses(
                     if analysis is not None:
                         analyses[cache_key] = analysis
     except (OSError, sqlite3.DatabaseError):
-        return {}
-    return analyses
+        return {}, {}
+    return analyses, signatures
 
 
 def write_model_analyses(
     *,
     context: AnalysisCacheContext,
     analyses_by_key: dict[str, PolyglotAnalysisResult],
+    latest_analyses_by_model: dict[str, PolyglotAnalysisResult] | None = None,
+    dependency_signatures_by_key: dict[str, dict[str, str]] | None = None,
 ) -> None:
     """Transactionally persist successful analyses; cache failures never fail compilation."""
 
@@ -162,19 +235,95 @@ def write_model_analyses(
         for cache_key, analysis in analyses_by_key.items()
         if analysis.analysis_succeeded
     ]
-    if not rows:
+    signature_rows: list[tuple[str, str, str, str]] = [
+        (
+            context.shared_fingerprint,
+            context.signature_namespace,
+            model_name,
+            model_analysis_output_signature(analysis),
+        )
+        for model_name, analysis in (latest_analyses_by_model or {}).items()
+        if analysis.analysis_succeeded
+    ]
+    dependency_rows: list[tuple[str, str, str, str]] = []
+    for cache_key, dependencies in (dependency_signatures_by_key or {}).items():
+        analysis: PolyglotAnalysisResult | None = analyses_by_key.get(cache_key)
+        if analysis is None or not analysis.analysis_succeeded:
+            continue
+        dependency_rows.extend(
+            (context.signature_namespace, cache_key, upstream_name, output_signature)
+            for upstream_name, output_signature in dependencies.items()
+        )
+    if not rows and not signature_rows:
         return
     try:
         database_path: Path = _cache_database_path(context=context)
         database_path.parent.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(database_path, timeout=_SQLITE_TIMEOUT_SECONDS) as connection:
             _ = connection.execute(_CREATE_CACHE_TABLE_SQL)
+            _ = connection.execute(_CREATE_SIGNATURE_TABLE_SQL)
+            _ = connection.execute(_CREATE_DEPENDENCY_TABLE_SQL)
             _ = connection.executemany(
                 "INSERT OR REPLACE INTO model_analysis (cache_key, payload) VALUES (?, ?)",
                 rows,
             )
+            written_cache_keys: tuple[str, ...] = tuple(cache_key for cache_key, _ in rows)
+            for start in range(0, len(written_cache_keys), _SQLITE_QUERY_CHUNK_SIZE):
+                chunk: tuple[str, ...] = written_cache_keys[
+                    start : start + _SQLITE_QUERY_CHUNK_SIZE
+                ]
+                placeholders: str = ",".join("?" for _ in chunk)
+                _ = connection.execute(
+                    f"DELETE FROM model_analysis_dependency "
+                    f"WHERE signature_namespace = ? AND cache_key IN ({placeholders})",
+                    (context.signature_namespace, *chunk),
+                )
+            _ = connection.executemany(
+                "INSERT INTO model_analysis_dependency "
+                "(signature_namespace, cache_key, upstream_model_name, output_signature) "
+                "VALUES (?, ?, ?, ?)",
+                dependency_rows,
+            )
+            _ = connection.executemany(
+                "INSERT OR REPLACE INTO model_analysis_signature "
+                "(shared_fingerprint, signature_namespace, model_name, output_signature) "
+                "VALUES (?, ?, ?, ?)",
+                signature_rows,
+            )
     except (OSError, sqlite3.DatabaseError):
         return
+
+
+def _expected_dependencies(
+    *,
+    upstream_model_names: tuple[str, ...],
+    signatures: dict[str, str],
+) -> dict[str, str] | None:
+    if any(name not in signatures for name in upstream_model_names):
+        return None
+    return {name: signatures[name] for name in upstream_model_names}
+
+
+def model_analysis_output_signature(analysis: PolyglotAnalysisResult) -> str:
+    """Return the exported column signature relevant to downstream analysis."""
+
+    return _payload_digest(
+        {
+            "columns": (
+                None
+                if analysis.columns is None
+                else [
+                    {
+                        "name": column.name,
+                        "type": column.type,
+                        "nullability": column.nullability.value,
+                    }
+                    for column in analysis.columns
+                ]
+            ),
+            "has_star": analysis.has_star,
+        }
+    )
 
 
 def _analysis_from_contents(
@@ -224,15 +373,48 @@ def _inference_profile_payload(
     }
 
 
-def _nullability_payload(
+def _referenced_nullability_payload(
+    *,
+    references: tuple[CompileSqlReference, ...],
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
 ) -> dict[str, dict[str, str]]:
     payload: dict[str, dict[str, str]] = {}
-    for table, columns in sorted(column_nullability_by_table.items()):
+    table: str
+    for table in _referenced_analysis_tables(references):
+        columns: dict[str, InferredNullability] | None = column_nullability_by_table.get(table)
+        if columns is None:
+            continue
         payload[table] = {
             column: nullability.value for column, nullability in sorted(columns.items())
         }
     return payload
+
+
+def _referenced_types_payload(
+    *,
+    references: tuple[CompileSqlReference, ...],
+    column_types_by_table: dict[str, dict[str, str]],
+) -> dict[str, dict[str, str]]:
+    payload: dict[str, dict[str, str]] = {}
+    table: str
+    for table in _referenced_analysis_tables(references):
+        columns: dict[str, str] | None = column_types_by_table.get(table)
+        if columns is not None:
+            payload[table] = dict(sorted(columns.items()))
+    return payload
+
+
+def _referenced_analysis_tables(
+    references: tuple[CompileSqlReference, ...],
+) -> tuple[str, ...]:
+    names: set[str] = set()
+    for reference in references:
+        names.add(
+            table_function_analysis_name(reference.ref_name)
+            if reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION
+            else reference.ref_name
+        )
+    return tuple(sorted(names))
 
 
 def _analysis_payload(*, cache_key: str, analysis: PolyglotAnalysisResult) -> dict[str, object]:

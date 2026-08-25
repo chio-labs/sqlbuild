@@ -57,6 +57,12 @@ def _add_compile_and_dag_parsers(
 ) -> None:
     compile_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.COMPILE)
     compile_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    compile_parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        default=False,
+        help="Bypass the compile analysis cache for this invocation",
+    )
     compile_parser.add_argument("--defer-to", default=None)
     compile_parser.add_argument("--target", default=None)
     compile_parser.add_argument("--json", action="store_true", default=False)
@@ -108,6 +114,12 @@ def _add_plan_and_build_parsers(
 ) -> None:
     plan_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAN)
     plan_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    plan_parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        default=False,
+        help="Bypass the compile analysis cache for this invocation",
+    )
     plan_parser.add_argument("--defer-to", default=None)
     plan_parser.add_argument("--defer-sources-to", default=None)
     plan_parser.add_argument("--target", default=None)
@@ -135,6 +147,12 @@ def _add_plan_and_build_parsers(
 
     build_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.BUILD)
     build_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    build_parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        default=False,
+        help="Bypass the compile analysis cache for this invocation",
+    )
     build_parser.add_argument("--defer-to", default=None)
     build_parser.add_argument("--defer-clone-from", default=None)
     build_parser.add_argument("--defer-sources-to", default=None)

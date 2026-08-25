@@ -66,6 +66,7 @@ class TargetConfig:
     changes_only: bool | None = None
     clone: ClonePolicy = field(default_factory=ClonePolicy)
     state: StateConfig = field(default_factory=StateConfig)
+    compile_cache: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,7 @@ class LocalTargetConfig:
     changes_only: bool | None = None
     clone: LocalClonePolicy = field(default_factory=LocalClonePolicy)
     state: LocalStateConfig = field(default_factory=LocalStateConfig)
+    compile_cache: bool | None = None
 
 
 @dataclass(frozen=True)

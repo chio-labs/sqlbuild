@@ -21,9 +21,10 @@ def resolve_compile_analysis_selection(
         or discovered_inputs.check_functions
     )
     if options.resolve_python_run_selectors and has_python_nodes:
-        return None
+        return CompileAnalysisSelection(no_cache=options.no_cache)
     return CompileAnalysisSelection(
         select=options.select,
         exclude=options.exclude,
         auto_load_sources=options.auto_load_sources,
+        no_cache=options.no_cache,
     )

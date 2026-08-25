@@ -65,6 +65,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
             CompileCommandRequest(
                 project_dir=project_dir,
                 no_sql_validation=args.no_sql_validation,
+                no_cache=args.no_cache,
                 defer_to=args.defer_to,
                 selected_target=args.target,
                 json_output=args.json,
@@ -93,6 +94,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
             PlanCommandRequest(
                 project_dir=project_dir,
                 no_sql_validation=args.no_sql_validation,
+                no_cache=args.no_cache,
                 defer_to=args.defer_to,
                 defer_sources_to=args.defer_sources_to,
                 selected_target=args.target,
@@ -128,6 +130,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
             BuildCommandRequest(
                 project_dir=project_dir,
                 no_sql_validation=args.no_sql_validation,
+                no_cache=args.no_cache,
                 defer_to=args.defer_to,
                 defer_clone_from=args.defer_clone_from,
                 defer_sources_to=args.defer_sources_to,

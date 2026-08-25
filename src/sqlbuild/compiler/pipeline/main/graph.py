@@ -7,6 +7,7 @@ from collections.abc import Callable
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
+    CompileAnalysisSelection,
     CompiledObjectKey,
     CompiledProject,
 )
@@ -41,6 +42,7 @@ def build_project_graph(
     cli_vars: dict[str, object] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     on_progress: Callable[[str], None] | None = None,
+    no_cache: bool = False,
 ) -> ProjectGraph:
     """Build the static dependency graph for a compiled project."""
 
@@ -56,6 +58,7 @@ def build_project_graph(
         column_lineage_mode=column_lineage_mode,
         cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
+        analysis_selection=CompileAnalysisSelection(no_cache=no_cache),
     )
     if on_progress is not None:
         on_progress(f"Compiled project. ({time.monotonic() - compile_start:.2f}s)")

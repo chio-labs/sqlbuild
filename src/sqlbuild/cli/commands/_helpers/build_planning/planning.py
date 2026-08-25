@@ -31,6 +31,7 @@ def compile_build_plan(
         adapter=invocation.adapter,
         options=CompilePipelineOptions(
             no_sql_validation=request.no_sql_validation,
+            no_cache=request.no_cache,
             selected_target=request.selected_target,
             defer_to=request.defer_to,
             defer_sources_to=request.defer_sources_to,

@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import cast
@@ -57,13 +58,18 @@ def compile_project_with_cache(
     *,
     project_dir: Path,
     analysis_selection: CompileAnalysisSelection | None = None,
+    no_cache: bool = False,
 ) -> CompiledProject:
     """Compile a discovered DuckDB fixture through the cache-enabled project boundary."""
 
+    effective_selection: CompileAnalysisSelection = replace(
+        analysis_selection or CompileAnalysisSelection(),
+        no_cache=no_cache,
+    )
     return build_compiled_project(
         discovered_inputs=discover_project_inputs(project_dir=project_dir),
         adapter=DuckDbAdapter(),
-        analysis_selection=analysis_selection,
+        analysis_selection=effective_selection,
     )
 
 
