@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.3](https://github.com/chio-labs/sqlbuild/compare/v0.55.2...v0.55.3) (2026-08-25)
+
+
+### Performance Improvements
+
+* **compiler:** scope schema cache invalidation ([#336](https://github.com/chio-labs/sqlbuild/issues/336)) ([ac797bf](https://github.com/chio-labs/sqlbuild/commit/ac797bfd9be0ee89e7139d7884b332e9bdfb240f))
+
 ## [0.55.2](https://github.com/chio-labs/sqlbuild/compare/v0.55.1...v0.55.2) (2026-08-24)
 
 
