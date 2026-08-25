@@ -96,6 +96,7 @@ def test_given_changes_only_config_when_resolving_then_precedence_is_applied(
                 targets={
                     "dev": TargetConfig(
                         changes_only=True,
+                        compile_cache=True,
                         loader_schema="raw_shared",
                         state=StateConfig(
                             backend="postgres",
@@ -117,6 +118,7 @@ def test_given_changes_only_config_when_resolving_then_precedence_is_applied(
                             allow_reset=True,
                         ),
                         changes_only=False,
+                        compile_cache=False,
                         loader_schema="raw_local",
                         defer_clone_from="staging",
                     )
@@ -154,3 +156,4 @@ def test_given_project_and_local_state_config_when_resolving_then_local_override
     assert target_config.loader_schema == test_case.expected_loader_schema
     assert target_config.defer_clone_from == test_case.expected_defer_clone_from
     assert target_config.changes_only is test_case.expected_changes_only
+    assert target_config.compile_cache is False

@@ -12,6 +12,7 @@ from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.compiler.compile._helpers.analysis.cache import (
     build_analysis_cache_context,
     model_analysis_cache_key,
+    model_analysis_output_signature,
     read_model_analyses,
     write_model_analyses,
 )
@@ -140,9 +141,11 @@ def assemble_compiled_project(
         build_analysis_cache_context(
             root=analysis_cache_dir,
             inference_profile=profile,
-            column_nullability_by_table=column_nullability_by_table,
-            column_types_by_table=column_types_by_table,
             allow_compact_analysis=allow_compact_analysis,
+            signature_namespace={
+                "target": inputs.effective_target_name,
+                "vars": inputs.effective_vars,
+            },
         )
         if sql_analysis_enabled and analysis_model_names != frozenset()
         else None
@@ -371,18 +374,31 @@ def _analyze_model_sql_in_parallel(
     if not model_inputs:
         return {}
     requests: tuple[_ModelSqlAnalysisRequest, ...] = tuple(
-        _model_sql_analysis_request(model_input=model_input, analysis_cache=analysis_cache)
+        _model_sql_analysis_request(
+            model_input=model_input,
+            analysis_cache=analysis_cache,
+            column_nullability_by_table=column_nullability_by_table,
+            column_types_by_table=column_types_by_table,
+        )
         for model_input in model_inputs
     )
-    cached_analyses: dict[str, PolyglotAnalysisResult] = (
+    cached_analyses: dict[str, PolyglotAnalysisResult]
+    previous_signatures: dict[str, str]
+    cached_analyses, previous_signatures = (
         read_model_analyses(
             context=analysis_cache,
             cache_keys=tuple(
                 request.cache_key for request in requests if request.cache_key is not None
             ),
+            model_names=tuple(_model_name(request.model_input) for request in requests),
+            upstream_model_names_by_key={
+                request.cache_key: _referenced_model_names(request.model_input)
+                for request in requests
+                if request.cache_key is not None
+            },
         )
         if analysis_cache is not None
-        else {}
+        else ({}, {})
     )
     if len(model_inputs) < _POLYGLOT_PARALLEL_ANALYSIS_MIN_MODELS:
         analyses: tuple[_ModelSqlAnalysis, ...] = tuple(
@@ -420,19 +436,146 @@ def _analyze_model_sql_in_parallel(
                     requests,
                 )
             )
+    current_analyses_by_name: dict[str, PolyglotAnalysisResult] = {
+        _model_name(request.model_input): analysis.polyglot_analysis
+        for request, analysis in zip(requests, analyses, strict=True)
+    }
+    current_signatures_by_name: dict[str, str] = {
+        model_name: model_analysis_output_signature(analysis)
+        for model_name, analysis in current_analyses_by_name.items()
+    }
+    analyses_to_record_by_name: dict[str, PolyglotAnalysisResult] = {
+        _model_name(request.model_input): analysis.polyglot_analysis
+        for request, analysis in zip(requests, analyses, strict=True)
+        if request.cache_key is None or request.cache_key not in cached_analyses
+    }
+    changed_signature_names: set[str] = {
+        model_name
+        for model_name, output_signature in current_signatures_by_name.items()
+        if previous_signatures.get(model_name) != output_signature
+    }
+    analyses_to_record_by_name.update(
+        {model_name: current_analyses_by_name[model_name] for model_name in changed_signature_names}
+    )
+    invalidated_names: set[str] = _downstream_model_names(
+        model_inputs=model_inputs,
+        changed_names=changed_signature_names,
+    )
+    if invalidated_names:
+        analyses = tuple(
+            (
+                _analyze_model_sql(
+                    request=request,
+                    cached_analysis=None,
+                    column_nullability_by_table=column_nullability_by_table,
+                    column_types_by_table=column_types_by_table,
+                    inference_profile=inference_profile,
+                    allow_compact_analysis=allow_compact_analysis,
+                )
+                if (
+                    _model_name(request.model_input) in invalidated_names
+                    and request.cache_key is not None
+                    and request.cache_key in cached_analyses
+                )
+                else analysis
+            )
+            for request, analysis in zip(requests, analyses, strict=True)
+        )
+        analyses_to_record_by_name.update(
+            {
+                _model_name(request.model_input): analysis.polyglot_analysis
+                for request, analysis in zip(requests, analyses, strict=True)
+                if _model_name(request.model_input) in invalidated_names
+            }
+        )
+        current_analyses_by_name = {
+            _model_name(request.model_input): analysis.polyglot_analysis
+            for request, analysis in zip(requests, analyses, strict=True)
+        }
+        current_signatures_by_name = {
+            model_name: model_analysis_output_signature(analysis)
+            for model_name, analysis in current_analyses_by_name.items()
+        }
     if analysis_cache is not None:
         write_model_analyses(
             context=analysis_cache,
             analyses_by_key={
                 request.cache_key: analysis.polyglot_analysis
                 for request, analysis in zip(requests, analyses, strict=True)
-                if request.cache_key is not None and request.cache_key not in cached_analyses
+                if request.cache_key is not None
+                and (
+                    request.cache_key not in cached_analyses
+                    or _model_name(request.model_input) in invalidated_names
+                )
             },
+            latest_analyses_by_model=analyses_to_record_by_name,
+            dependency_signatures_by_key=_dependency_signatures_by_key(
+                requests=requests,
+                cached_analyses=cached_analyses,
+                invalidated_names=invalidated_names,
+                current_signatures_by_name=current_signatures_by_name,
+            ),
         )
     return {
         _model_name(model_input): analysis
         for model_input, analysis in zip(model_inputs, analyses, strict=True)
     }
+
+
+def _downstream_model_names(
+    *,
+    model_inputs: tuple[CompileModelInput, ...],
+    changed_names: set[str],
+) -> set[str]:
+    downstream_by_name: dict[str, set[str]] = {}
+    for model_input in model_inputs:
+        model_name: str = _model_name(model_input)
+        for reference in model_input.references:
+            if reference.ref_kind == SqlReferenceKind.REF:
+                downstream_by_name.setdefault(reference.ref_name, set()).add(model_name)
+    downstream_names: set[str] = set()
+    pending: list[str] = list(changed_names)
+    while pending:
+        for downstream_name in downstream_by_name.get(pending.pop(), set()):
+            if downstream_name not in downstream_names and downstream_name not in changed_names:
+                downstream_names.add(downstream_name)
+                pending.append(downstream_name)
+    return downstream_names
+
+
+def _referenced_model_names(model_input: CompileModelInput) -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            {
+                reference.ref_name
+                for reference in model_input.references
+                if reference.ref_kind == SqlReferenceKind.REF
+            }
+        )
+    )
+
+
+def _dependency_signatures_by_key(
+    *,
+    requests: tuple[_ModelSqlAnalysisRequest, ...],
+    cached_analyses: dict[str, PolyglotAnalysisResult],
+    invalidated_names: set[str],
+    current_signatures_by_name: dict[str, str],
+) -> dict[str, dict[str, str]]:
+    dependencies_by_key: dict[str, dict[str, str]] = {}
+    for request in requests:
+        cache_key: str | None = request.cache_key
+        if cache_key is None or (
+            cache_key in cached_analyses
+            and _model_name(request.model_input) not in invalidated_names
+        ):
+            continue
+        dependencies_by_key[cache_key] = {
+            upstream_name: current_signatures_by_name[upstream_name]
+            for upstream_name in _referenced_model_names(request.model_input)
+            if upstream_name in current_signatures_by_name
+        }
+    return dependencies_by_key
 
 
 def _analyze_model_sql(
@@ -468,6 +611,8 @@ def _model_sql_analysis_request(
     *,
     model_input: CompileModelInput,
     analysis_cache: AnalysisCacheContext | None,
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+    column_types_by_table: dict[str, dict[str, str]],
 ) -> _ModelSqlAnalysisRequest:
     placeholders: dict[str, str] | None = _model_placeholders(model_input)
     query_sql: str = cursor_intrinsics_analysis_sql(
@@ -480,6 +625,8 @@ def _model_sql_analysis_request(
             query_sql=query_sql,
             references=model_input.references,
             placeholders=placeholders,
+            column_nullability_by_table=column_nullability_by_table,
+            column_types_by_table=column_types_by_table,
         )
         if analysis_cache is not None
         else None

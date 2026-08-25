@@ -5,10 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models import CompileAnalysisSelection, CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
-from sqlbuild.compiler.pipeline.models import ClonePipelineResult
+from sqlbuild.compiler.pipeline.models import ClonePipelineOptions, ClonePipelineResult
 from sqlbuild.compiler.planner.main.clone._clone import run_clone_planning
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
@@ -21,27 +21,26 @@ def prepare_clone_pipeline(
     adapter: BaseAdapter,
     origin_target_name: str,
     destination_target_name: str,
-    no_sql_validation: bool,
-    select: tuple[str, ...],
-    exclude: tuple[str, ...],
-    cli_vars: dict[str, object] | None,
     destination_connection: Any,
+    options: ClonePipelineOptions,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> ClonePipelineResult:
     origin_project: CompiledProject = _compile_project_for_environment(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         target_name=origin_target_name,
-        no_sql_validation=no_sql_validation,
-        cli_vars=cli_vars,
+        no_sql_validation=options.no_sql_validation,
+        no_cache=options.no_cache,
+        cli_vars=options.cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     destination_project: CompiledProject = _compile_project_for_environment(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         target_name=destination_target_name,
-        no_sql_validation=no_sql_validation,
-        cli_vars=cli_vars,
+        no_sql_validation=options.no_sql_validation,
+        no_cache=options.no_cache,
+        cli_vars=options.cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     origin_read_target_name: str = _read_target_name(
@@ -59,8 +58,9 @@ def prepare_clone_pipeline(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
             target_name=origin_read_target_name,
-            no_sql_validation=no_sql_validation,
-            cli_vars=cli_vars,
+            no_sql_validation=options.no_sql_validation,
+            no_cache=options.no_cache,
+            cli_vars=options.cli_vars,
             external_sql_reference_resolver=external_sql_reference_resolver,
         )
     )
@@ -71,8 +71,9 @@ def prepare_clone_pipeline(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
             target_name=destination_read_target_name,
-            no_sql_validation=no_sql_validation,
-            cli_vars=cli_vars,
+            no_sql_validation=options.no_sql_validation,
+            no_cache=options.no_cache,
+            cli_vars=options.cli_vars,
             external_sql_reference_resolver=external_sql_reference_resolver,
         )
     )
@@ -86,8 +87,8 @@ def prepare_clone_pipeline(
         origin_source_entries,
     ) = run_clone_planning(
         project=destination_project,
-        select=select,
-        exclude=exclude,
+        select=options.select,
+        exclude=options.exclude,
         adapter=adapter,
         connection=destination_connection,
         origin_project=origin_project,
@@ -113,6 +114,7 @@ def _compile_project_for_environment(
     adapter: BaseAdapter,
     target_name: str,
     no_sql_validation: bool,
+    no_cache: bool,
     cli_vars: dict[str, object] | None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
 ) -> CompiledProject:
@@ -121,6 +123,7 @@ def _compile_project_for_environment(
         adapter=adapter,
         selected_target=target_name,
         no_sql_validation=no_sql_validation,
+        analysis_selection=CompileAnalysisSelection(no_cache=no_cache),
         cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )

@@ -29,6 +29,7 @@ class VirtualPlanOptions:
     include_python: bool = True
     cli_vars: dict[str, object] | None = None
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
+    no_cache: bool = False
 
 
 @dataclass(frozen=True)

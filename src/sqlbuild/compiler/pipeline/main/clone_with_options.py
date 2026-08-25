@@ -1,4 +1,4 @@
-"""Public clone pipeline entrypoint."""
+"""Clone pipeline entrypoint with typed compilation options."""
 
 from __future__ import annotations
 
@@ -11,30 +11,24 @@ from sqlbuild.compiler.pipeline.models import ClonePipelineOptions, ClonePipelin
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 
 
-def run_clone_pipeline(
+def run_clone_pipeline_with_options(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
     origin_target_name: str,
     destination_target_name: str,
-    no_sql_validation: bool = False,
-    select: tuple[str, ...] = (),
-    exclude: tuple[str, ...] = (),
-    cli_vars: dict[str, object] | None = None,
     destination_connection: Any,
+    options: ClonePipelineOptions,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> ClonePipelineResult:
+    """Run a clone pipeline with explicit compilation controls."""
+
     return prepare_clone_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         origin_target_name=origin_target_name,
         destination_target_name=destination_target_name,
         destination_connection=destination_connection,
+        options=options,
         external_sql_reference_resolver=external_sql_reference_resolver,
-        options=ClonePipelineOptions(
-            no_sql_validation=no_sql_validation,
-            select=select,
-            exclude=exclude,
-            cli_vars=cli_vars,
-        ),
     )

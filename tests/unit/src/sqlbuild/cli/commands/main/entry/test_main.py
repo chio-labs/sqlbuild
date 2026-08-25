@@ -1832,6 +1832,12 @@ def test_given_skills_update_command_when_running_then_it_dispatches_handler(
             expected_no_sql_validation=True,
         ),
         MainTestCase(
+            description="passes no cache flag to compile handler",
+            argv=["compile", "--no-cache"],
+            expected_exit_code=3,
+            expected_no_cache=True,
+        ),
+        MainTestCase(
             description="passes manifest flag to compile handler",
             argv=["compile", "--manifest"],
             expected_exit_code=3,
@@ -1900,6 +1906,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
         tuple[
             Path | None,
             bool,
+            bool,
             str | None,
             bool,
             bool,
@@ -1919,6 +1926,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
             (
                 request.project_dir,
                 request.no_sql_validation,
+                request.no_cache,
                 request.defer_to,
                 request.json_output,
                 request.manifest,
@@ -1944,6 +1952,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
         (
             test_case.expected_project_dir,
             test_case.expected_no_sql_validation,
+            test_case.expected_no_cache,
             None,
             False,
             test_case.expected_manifest,
@@ -2071,6 +2080,12 @@ def test_given_dag_command_arguments_when_running_then_dispatches_expected_handl
             expected_exit_code=5,
             expected_changes_only=True,
         ),
+        MainTestCase(
+            description="passes no cache to build handler",
+            argv=["build", "--no-cache"],
+            expected_exit_code=5,
+            expected_no_cache=True,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -2078,7 +2093,21 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
     test_case: MainTestCase,
 ) -> None:
     received_args: list[
-        tuple[bool, bool, bool, str | None, bool | None, bool, bool, bool, bool, bool, bool, bool]
+        tuple[
+            bool,
+            bool,
+            bool,
+            str | None,
+            bool | None,
+            bool,
+            bool,
+            bool,
+            bool,
+            bool,
+            bool,
+            bool,
+            bool,
+        ]
     ] = []
 
     def run_build(request: BuildCommandRequest) -> int:
@@ -2096,6 +2125,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
                 request.run_audits,
                 request.debug,
                 request.changes_only,
+                request.no_cache,
             )
         )
         return test_case.expected_exit_code
@@ -2120,6 +2150,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
             test_case.expected_run_audits,
             test_case.expected_debug,
             test_case.expected_changes_only,
+            test_case.expected_no_cache,
         )
     ]
 
@@ -2140,6 +2171,12 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
             argv=["plan", "--changes-only"],
             expected_exit_code=4,
             expected_changes_only=True,
+        ),
+        MainTestCase(
+            description="passes no cache to plan handler",
+            argv=["plan", "--no-cache"],
+            expected_exit_code=4,
+            expected_no_cache=True,
         ),
     ],
     ids=lambda case: case.description,
@@ -2164,6 +2201,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
             bool,
             dict[str, object] | None,
             bool,
+            bool,
         ]
     ] = []
 
@@ -2185,6 +2223,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
                 request.verbose,
                 request.cli_vars,
                 request.changes_only,
+                request.no_cache,
             )
         )
         return test_case.expected_exit_code
@@ -2207,6 +2246,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         False,
         {},
         test_case.expected_changes_only,
+        test_case.expected_no_cache,
     )
 
 

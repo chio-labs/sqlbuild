@@ -65,6 +65,7 @@ def _run_compile_with_status(
     analysis: CompileAnalysis = analyze_compile_project(
         project_dir=project_dir,
         no_sql_validation=request.no_sql_validation,
+        no_cache=request.no_cache,
         selected_target=request.selected_target,
         lineage_mode=lineage_mode,
         cli_vars=request.cli_vars,
