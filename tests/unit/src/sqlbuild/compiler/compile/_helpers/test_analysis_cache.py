@@ -169,6 +169,33 @@ def test_given_corrupt_analysis_when_compiling_then_reanalyzes_and_repairs_the_e
 
 @pytest.mark.parametrize(
     "test_case",
+    (AnalysisCacheTestCase(description="non-text analysis cache fallback", expected_count=1),),
+    ids=lambda case: case.description,
+)
+def test_given_non_text_analysis_cache_when_compiling_then_reanalyzes_safely(
+    test_case: AnalysisCacheTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, _CACHE_REPO_FILES)
+    _ = compile_project_with_cache(project_dir=tmp_path)
+    cache_path: Path = tmp_path / "target" / "compile-cache" / "v4" / "model-analysis.sqlite3"
+    with sqlite3.connect(cache_path) as connection:
+        _ = connection.execute(
+            "UPDATE model_analysis SET payload = ?",
+            (sqlite3.Binary(b"broken"),),
+        )
+    analyzer: Mock = Mock(wraps=assembly_project.analyze_columns_and_lineage_with_polyglot)
+    monkeypatch.setattr(assembly_project, "analyze_columns_and_lineage_with_polyglot", analyzer)
+
+    _ = compile_project_with_cache(project_dir=tmp_path)
+
+    assert analyzer.call_count == test_case.expected_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
     (AnalysisCacheTestCase(description="corrupt reference cache fallback", expected_count=1),),
     ids=lambda case: case.description,
 )
@@ -204,6 +231,35 @@ def test_given_corrupt_reference_cache_when_compiling_then_rescans_and_repairs_t
         ]
     assert repaired_project.models == cold_project.models
     assert "raw_orders" in repaired_contents
+    assert scanner.call_count == test_case.expected_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (AnalysisCacheTestCase(description="non-text reference cache fallback", expected_count=1),),
+    ids=lambda case: case.description,
+)
+def test_given_non_text_reference_cache_when_compiling_then_rescans_safely(
+    test_case: AnalysisCacheTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, _CACHE_REPO_FILES)
+    _ = compile_project_with_cache(project_dir=tmp_path)
+    cache_path: Path = next(
+        (tmp_path / "target" / "compile-cache" / "references-v2").glob("*.sqlite3")
+    )
+    with sqlite3.connect(cache_path) as connection:
+        _ = connection.execute(
+            "UPDATE sql_reference SET payload = ?",
+            (sqlite3.Binary(b"broken"),),
+        )
+    scanner: Mock = Mock(wraps=reference_cache.extract_sql_references)
+    monkeypatch.setattr(reference_cache, "extract_sql_references", scanner)
+
+    _ = compile_project_with_cache(project_dir=tmp_path)
+
     assert scanner.call_count == test_case.expected_count
 
 

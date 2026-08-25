@@ -112,10 +112,12 @@ class _SqlReferenceCache:
         references: tuple[CompileSqlReference, ...] = extract_sql_references(sql)
         if self._database_path is not None:
             try:
-                self._pending_contents_by_key[cache_key] = _reference_contents(
+                contents: str = _reference_contents(
                     cache_key=cache_key,
                     references=references,
                 )
+                if len(contents.encode()) <= _MAX_CACHE_ENTRY_BYTES:
+                    self._pending_contents_by_key[cache_key] = contents
             except (TypeError, ValueError):
                 pass
         return references
@@ -180,12 +182,13 @@ def _reference_contents(*, cache_key: str, references: tuple[CompileSqlReference
 
 
 def _references_from_contents(
-    *, contents: str, expected_cache_key: str
+    *, contents: object, expected_cache_key: str
 ) -> tuple[CompileSqlReference, ...] | None:
-    encoded_contents: bytes = contents.encode()
-    if len(encoded_contents) > _MAX_CACHE_ENTRY_BYTES:
+    if not isinstance(contents, str):
         return None
     try:
+        if len(contents.encode()) > _MAX_CACHE_ENTRY_BYTES:
+            return None
         stored_digest, separator, serialized_payload = contents.partition(_CACHE_ENTRY_SEPARATOR)
         if not separator or not hmac.compare_digest(
             stored_digest,
@@ -212,7 +215,7 @@ def _references_from_contents(
             _reference_from_payload(cast(list[object], reference))
             for reference in references_payload
         )
-    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+    except (ValueError, TypeError, KeyError, RecursionError, json.JSONDecodeError):
         return None
 
 

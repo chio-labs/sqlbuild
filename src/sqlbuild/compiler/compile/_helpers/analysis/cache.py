@@ -231,14 +231,13 @@ def write_model_analyses(
 ) -> None:
     """Transactionally persist successful analyses; cache failures never fail compilation."""
 
-    rows: list[tuple[str, str]] = [
-        (
-            cache_key,
-            _analysis_contents(cache_key=cache_key, analysis=analysis),
-        )
-        for cache_key, analysis in analyses_by_key.items()
-        if analysis.analysis_succeeded
-    ]
+    rows: list[tuple[str, str]] = []
+    for cache_key, analysis in analyses_by_key.items():
+        if not analysis.analysis_succeeded:
+            continue
+        contents: str = _analysis_contents(cache_key=cache_key, analysis=analysis)
+        if len(contents.encode()) <= _MAX_CACHE_ENTRY_BYTES:
+            rows.append((cache_key, contents))
     signature_rows: list[tuple[str, str, str, str]] = [
         (
             context.shared_fingerprint,
@@ -331,12 +330,13 @@ def model_analysis_output_signature(analysis: PolyglotAnalysisResult) -> str:
 
 
 def _analysis_from_contents(
-    *, contents: str, expected_cache_key: str
+    *, contents: object, expected_cache_key: str
 ) -> tuple[PolyglotAnalysisResult, str] | None:
-    encoded_contents: bytes = contents.encode("utf-8")
-    if len(encoded_contents) > _MAX_CACHE_ENTRY_BYTES:
+    if not isinstance(contents, str):
         return None
     try:
+        if len(contents.encode()) > _MAX_CACHE_ENTRY_BYTES:
+            return None
         stored_digest, separator, serialized_payload = contents.partition(_CACHE_ENTRY_SEPARATOR)
         if not separator or not hmac.compare_digest(
             stored_digest,
@@ -348,7 +348,7 @@ def _analysis_from_contents(
             return None
         payload: object = json.loads(serialized_payload)
         return _analysis_from_payload(payload=payload, expected_cache_key=expected_cache_key)
-    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+    except (ValueError, TypeError, KeyError, RecursionError, json.JSONDecodeError):
         return None
 
 

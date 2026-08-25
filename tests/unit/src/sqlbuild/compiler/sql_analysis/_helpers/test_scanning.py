@@ -23,6 +23,21 @@ from tests.unit.src.sqlbuild.compiler.sql_analysis._helpers._test_types import (
             quoted_sql="`order status`",
             expected_end=len("`order status`"),
         ),
+        SkipQuotedTextSuccessTestCase(
+            description="doubled double quote escape",
+            quoted_sql='"customer""name"',
+            expected_end=len('"customer""name"'),
+        ),
+        SkipQuotedTextSuccessTestCase(
+            description="empty quoted value",
+            quoted_sql="''",
+            expected_end=2,
+        ),
+        SkipQuotedTextSuccessTestCase(
+            description="multiple adjacent escapes",
+            quoted_sql="'a''''b'",
+            expected_end=len("'a''''b'"),
+        ),
     ),
     ids=lambda case: case.description,
 )
