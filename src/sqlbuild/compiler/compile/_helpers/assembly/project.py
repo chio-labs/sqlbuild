@@ -98,6 +98,7 @@ from sqlbuild.spec.contracts.models import (
 
 _POLYGLOT_ANALYSIS_WORKERS: int = 2
 _POLYGLOT_PARALLEL_ANALYSIS_MIN_MODELS: int = 32
+_POLYGLOT_PARALLEL_REANALYSIS_MIN_MODELS: int = 2
 
 
 @dataclass(frozen=True)
@@ -400,42 +401,14 @@ def _analyze_model_sql_in_parallel(
         if analysis_cache is not None
         else ({}, {})
     )
-    if len(model_inputs) < _POLYGLOT_PARALLEL_ANALYSIS_MIN_MODELS:
-        analyses: tuple[_ModelSqlAnalysis, ...] = tuple(
-            _analyze_model_sql(
-                request=request,
-                cached_analysis=(
-                    cached_analyses.get(request.cache_key)
-                    if request.cache_key is not None
-                    else None
-                ),
-                column_nullability_by_table=column_nullability_by_table,
-                column_types_by_table=column_types_by_table,
-                inference_profile=inference_profile,
-                allow_compact_analysis=allow_compact_analysis,
-            )
-            for request in requests
-        )
-    else:
-        workers: int = min(_POLYGLOT_ANALYSIS_WORKERS, len(model_inputs))
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            analyses = tuple(
-                executor.map(
-                    lambda request: _analyze_model_sql(
-                        request=request,
-                        cached_analysis=(
-                            cached_analyses.get(request.cache_key)
-                            if request.cache_key is not None
-                            else None
-                        ),
-                        column_nullability_by_table=column_nullability_by_table,
-                        column_types_by_table=column_types_by_table,
-                        inference_profile=inference_profile,
-                        allow_compact_analysis=allow_compact_analysis,
-                    ),
-                    requests,
-                )
-            )
+    analyses: tuple[_ModelSqlAnalysis, ...] = _analyze_model_sql_requests(
+        requests=requests,
+        cached_analyses=cached_analyses,
+        column_nullability_by_table=column_nullability_by_table,
+        column_types_by_table=column_types_by_table,
+        inference_profile=inference_profile,
+        allow_compact_analysis=allow_compact_analysis,
+    )
     current_analyses_by_name: dict[str, PolyglotAnalysisResult] = {
         _model_name(request.model_input): analysis.polyglot_analysis
         for request, analysis in zip(requests, analyses, strict=True)
@@ -462,23 +435,33 @@ def _analyze_model_sql_in_parallel(
         changed_names=changed_signature_names,
     )
     if invalidated_names:
-        analyses = tuple(
-            (
-                _analyze_model_sql(
-                    request=request,
-                    cached_analysis=None,
+        invalidated_requests: tuple[_ModelSqlAnalysisRequest, ...] = tuple(
+            request
+            for request in requests
+            if (
+                _model_name(request.model_input) in invalidated_names
+                and request.cache_key is not None
+                and request.cache_key in cached_analyses
+            )
+        )
+        invalidated_analyses_by_name: dict[str, _ModelSqlAnalysis] = {
+            _model_name(request.model_input): analysis
+            for request, analysis in zip(
+                invalidated_requests,
+                _analyze_model_sql_requests(
+                    requests=invalidated_requests,
+                    cached_analyses={},
                     column_nullability_by_table=column_nullability_by_table,
                     column_types_by_table=column_types_by_table,
                     inference_profile=inference_profile,
                     allow_compact_analysis=allow_compact_analysis,
-                )
-                if (
-                    _model_name(request.model_input) in invalidated_names
-                    and request.cache_key is not None
-                    and request.cache_key in cached_analyses
-                )
-                else analysis
+                    parallel_min_models=_POLYGLOT_PARALLEL_REANALYSIS_MIN_MODELS,
+                ),
+                strict=True,
             )
+        }
+        analyses = tuple(
+            invalidated_analyses_by_name.get(_model_name(request.model_input), analysis)
             for request, analysis in zip(requests, analyses, strict=True)
         )
         analyses_to_record_by_name.update(
@@ -520,6 +503,35 @@ def _analyze_model_sql_in_parallel(
         _model_name(model_input): analysis
         for model_input, analysis in zip(model_inputs, analyses, strict=True)
     }
+
+
+def _analyze_model_sql_requests(
+    *,
+    requests: tuple[_ModelSqlAnalysisRequest, ...],
+    cached_analyses: dict[str, PolyglotAnalysisResult],
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+    column_types_by_table: dict[str, dict[str, str]],
+    inference_profile: ExpressionInferenceProfile,
+    allow_compact_analysis: bool,
+    parallel_min_models: int = _POLYGLOT_PARALLEL_ANALYSIS_MIN_MODELS,
+) -> tuple[_ModelSqlAnalysis, ...]:
+    def analyze(request: _ModelSqlAnalysisRequest) -> _ModelSqlAnalysis:
+        return _analyze_model_sql(
+            request=request,
+            cached_analysis=(
+                cached_analyses.get(request.cache_key) if request.cache_key is not None else None
+            ),
+            column_nullability_by_table=column_nullability_by_table,
+            column_types_by_table=column_types_by_table,
+            inference_profile=inference_profile,
+            allow_compact_analysis=allow_compact_analysis,
+        )
+
+    if len(requests) < parallel_min_models:
+        return tuple(analyze(request) for request in requests)
+    workers: int = min(_POLYGLOT_ANALYSIS_WORKERS, len(requests))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        return tuple(executor.map(analyze, requests))
 
 
 def _downstream_model_names(
