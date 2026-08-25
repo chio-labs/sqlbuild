@@ -68,6 +68,9 @@ sqlbuild_local.toml
 # Claude Code
 .claude/
 
+# Local agent instructions
+AGENTS.md
+
 # Fensu
 .fensu/cache/
 .fensu/memory/

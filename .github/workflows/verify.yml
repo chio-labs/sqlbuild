@@ -56,10 +56,7 @@ jobs:
                 ;;
               tests/unit/*|tests/integration/*)
                 ;;
-              .github/workflows/verify.yml)
-                duckdb=true
-                ;;
-              .github/*|docs/*|*.md|LICENSE)
+              .github/*|docs/*|*.md|.gitignore|LICENSE)
                 ;;
               *)
                 broad=true
