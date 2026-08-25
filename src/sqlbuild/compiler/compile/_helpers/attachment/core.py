@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, fields, replace
 from datetime import UTC, datetime
 from inspect import Parameter, Signature
@@ -33,7 +34,7 @@ from sqlbuild.compiler.compile._helpers.config.model_validation import (
     validate_placeholder_config,
     validate_snapshot_config,
 )
-from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
+from sqlbuild.compiler.compile._helpers.refs.cache import cached_sql_reference_extractor
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
     get_validated_model_cursor_intrinsics,
@@ -124,8 +125,30 @@ def build_model_inputs(
     no_sql_validation: bool = False,
     defer_model_sql_validation: bool = False,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    reference_cache_dir: Path | None = None,
 ) -> tuple[CompileModelInput, ...]:
     """Attach schema metadata to discovered model files."""
+
+    with cached_sql_reference_extractor(root=reference_cache_dir) as extract_references:
+        return _build_model_inputs(
+            discovered_inputs=discovered_inputs,
+            context=context,
+            no_sql_validation=no_sql_validation,
+            defer_model_sql_validation=defer_model_sql_validation,
+            external_sql_reference_resolver=external_sql_reference_resolver,
+            extract_references=extract_references,
+        )
+
+
+def _build_model_inputs(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    context: ModelInputBuildContext,
+    no_sql_validation: bool,
+    defer_model_sql_validation: bool,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
+    extract_references: Callable[[str], tuple[CompileSqlReference, ...]],
+) -> tuple[CompileModelInput, ...]:
 
     effective_vars: dict[str, object] = context.effective_vars
     effective_settings: SettingsConfig = context.effective_settings
@@ -223,7 +246,7 @@ def build_model_inputs(
                 file_path=model_file.file_path,
                 placeholders=sql_validation_placeholders,
             )
-        references: tuple[CompileSqlReference, ...] = extract_sql_references(expanded_query_sql)
+        references: tuple[CompileSqlReference, ...] = extract_references(expanded_query_sql)
         validate_model_references(
             references=references,
             model_file=model_file,

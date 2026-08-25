@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 from sqlbuild.compiler.auditing.main._builtins import build_builtin_audit_resolution
 from sqlbuild.compiler.compile._helpers.attachment.audits import (
@@ -26,6 +27,7 @@ from sqlbuild.compiler.compile._helpers.attachment.sql_tests import (
     build_scenario_inputs,
     build_test_inputs,
 )
+from sqlbuild.compiler.compile._helpers.attachment.target import build_compile_target_context
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_public_declaration_indexes,
     build_public_model_schema_index,
@@ -58,8 +60,6 @@ from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
-from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
-from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
 from sqlbuild.spec.contracts.models import SettingsConfig, TargetConfig
 
 
@@ -74,21 +74,18 @@ def build_compile_inputs(
     python_functions_inherit_default_namespace: bool = True,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     resolved_connection: dict[str, object] | None = None,
+    no_cache: bool = False,
 ) -> CompileProjectInputs:
     """Attach discovered metadata into the first compile input snapshot."""
 
-    effective_target_name: str | None = resolve_target_name(
-        project_config=discovered_inputs.project_config,
-        local_config=discovered_inputs.local_config,
+    effective_target_name: str | None
+    effective_target: TargetConfig | None
+    compile_cache_dir: Path | None
+    effective_target_name, effective_target, compile_cache_dir = build_compile_target_context(
+        discovered_inputs=discovered_inputs,
         selected_target=selected_target,
+        no_cache=no_cache,
     )
-    effective_target: TargetConfig | None = None
-    if effective_target_name is not None:
-        effective_target = resolve_target_config(
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-            target_name=effective_target_name,
-        )
 
     effective_vars: dict[str, object] = build_effective_vars(
         project_config=discovered_inputs.project_config,
@@ -128,6 +125,7 @@ def build_compile_inputs(
         no_sql_validation=no_sql_validation,
         defer_model_sql_validation=defer_model_sql_validation,
         external_sql_reference_resolver=external_sql_reference_resolver,
+        reference_cache_dir=compile_cache_dir,
     )
     seed_inputs: tuple[CompileSeedInput, ...] = build_seed_inputs(discovered_inputs)
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = _build_sql_functions(
@@ -194,6 +192,7 @@ def build_compile_inputs(
         run_id=resolved_run_id,
         effective_target_name=effective_target_name,
         effective_target=effective_target,
+        compile_cache_dir=compile_cache_dir,
         effective_connection=(
             resolved_connection
             if resolved_connection is not None
@@ -256,6 +255,7 @@ def _build_models_with_declarations(
     no_sql_validation: bool,
     defer_model_sql_validation: bool,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
+    reference_cache_dir: Path | None,
 ) -> tuple[
     tuple[CompileModelInput, ...],
     DeclarationResolutionContext,
@@ -283,5 +283,6 @@ def _build_models_with_declarations(
         no_sql_validation=no_sql_validation,
         defer_model_sql_validation=defer_model_sql_validation,
         external_sql_reference_resolver=external_sql_reference_resolver,
+        reference_cache_dir=reference_cache_dir,
     )
     return model_inputs, declarations

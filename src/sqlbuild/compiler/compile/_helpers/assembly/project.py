@@ -385,7 +385,8 @@ def _analyze_model_sql_in_parallel(
     )
     cached_analyses: dict[str, PolyglotAnalysisResult]
     previous_signatures: dict[str, str]
-    cached_analyses, previous_signatures = (
+    cached_output_signatures_by_key: dict[str, str]
+    cached_analyses, previous_signatures, cached_output_signatures_by_key = (
         read_model_analyses(
             context=analysis_cache,
             cache_keys=tuple(
@@ -399,7 +400,7 @@ def _analyze_model_sql_in_parallel(
             },
         )
         if analysis_cache is not None
-        else ({}, {})
+        else ({}, {}, {})
     )
     analyses: tuple[_ModelSqlAnalysis, ...] = _analyze_model_sql_requests(
         requests=requests,
@@ -414,8 +415,12 @@ def _analyze_model_sql_in_parallel(
         for request, analysis in zip(requests, analyses, strict=True)
     }
     current_signatures_by_name: dict[str, str] = {
-        model_name: model_analysis_output_signature(analysis)
-        for model_name, analysis in current_analyses_by_name.items()
+        _model_name(request.model_input): (
+            cached_output_signatures_by_key[request.cache_key]
+            if request.cache_key is not None and request.cache_key in cached_analyses
+            else model_analysis_output_signature(analysis.polyglot_analysis)
+        )
+        for request, analysis in zip(requests, analyses, strict=True)
     }
     analyses_to_record_by_name: dict[str, PolyglotAnalysisResult] = {
         _model_name(request.model_input): analysis.polyglot_analysis
@@ -475,10 +480,12 @@ def _analyze_model_sql_in_parallel(
             _model_name(request.model_input): analysis.polyglot_analysis
             for request, analysis in zip(requests, analyses, strict=True)
         }
-        current_signatures_by_name = {
-            model_name: model_analysis_output_signature(analysis)
-            for model_name, analysis in current_analyses_by_name.items()
-        }
+        current_signatures_by_name.update(
+            {
+                model_name: model_analysis_output_signature(invalidated_analysis.polyglot_analysis)
+                for model_name, invalidated_analysis in invalidated_analyses_by_name.items()
+            }
+        )
     if analysis_cache is not None:
         write_model_analyses(
             context=analysis_cache,
