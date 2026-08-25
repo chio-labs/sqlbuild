@@ -20,6 +20,9 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 
+_POLYGLOT_VALUES_EXPRESSION_NAME: str = "Values"
+_POLYGLOT_VALUES_SET_ALIAS: str = "_values"
+
 
 def extract_expected_branch_column_names_with_sql_analysis(
     *, sql: str, file_label: str
@@ -56,11 +59,29 @@ def _extract_branch_names(*, expression: Any, file_label: str) -> tuple[tuple[st
             *_extract_branch_names(expression=right_expression, file_label=file_label),
         )
     if expression.__class__.__name__ == POLYGLOT_SELECT_EXPRESSION_NAME:
+        if _is_synthetic_values_set_branch(expression):
+            raise CompileInputError(
+                f"SQL test '{file_label}' must define each __expected__<model> set-operation "
+                "branch as a SELECT query"
+            )
         return (_extract_select_names(expression=expression, file_label=file_label),)
     raise CompileInputError(
         f"SQL test '{file_label}' must define each __expected__<model> set-operation "
         "branch as a SELECT query"
     )
+
+
+def _is_synthetic_values_set_branch(expression: Any) -> bool:
+    """Recognize Polyglot's SELECT wrapper around a VALUES set operand."""
+
+    projections: tuple[Any, ...] = tuple(expression.expressions)
+    if len(projections) != 1 or not projections[0].is_star:
+        return False
+    values_expression: Any | None = expression.find(_POLYGLOT_VALUES_EXPRESSION_NAME)
+    if values_expression is None:
+        return False
+    alias: object = values_expression.args.get("alias")
+    return isinstance(alias, dict) and alias.get("name") == _POLYGLOT_VALUES_SET_ALIAS
 
 
 def _unwrap_expression(*, expression: Any) -> Any:
