@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.9](https://github.com/chio-labs/sqlbuild/compare/v0.55.8...v0.55.9) (2026-08-25)
+
+
+### Documentation
+
+* clarify standalone and dbt positioning ([#351](https://github.com/chio-labs/sqlbuild/issues/351)) ([68e3d68](https://github.com/chio-labs/sqlbuild/commit/68e3d68cbeed6048ba23d4e6cb4458e1ebe2dacb))
+
 ## [0.55.8](https://github.com/chio-labs/sqlbuild/compare/v0.55.7...v0.55.8) (2026-08-25)
 
 
