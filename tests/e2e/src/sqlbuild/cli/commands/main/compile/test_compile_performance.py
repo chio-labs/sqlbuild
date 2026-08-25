@@ -26,14 +26,14 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
     "test_case",
     [
         CompilePerformanceGuardTestCase(
-            description="advanced 3000 model compile stays under six seconds",
+            description="advanced 3000 model compile stays under three seconds",
             model_count=3000,
-            expected_max_seconds=6.0,
+            expected_max_seconds=3.0,
         ),
         CompilePerformanceGuardTestCase(
-            description="advanced 10000 model compile stays under fifteen seconds",
+            description="advanced 10000 model compile stays under nine seconds",
             model_count=10000,
-            expected_max_seconds=15.0,
+            expected_max_seconds=9.0,
         ),
     ],
     ids=lambda case: case.description,
@@ -49,7 +49,7 @@ def test_given_generated_advanced_project_when_compiling_then_finishes_within_bu
     )
     _LOGGER.info(
         f"advanced compile models={test_case.model_count} "
-        f"cold={elapsed_seconds:.3f}s budget={test_case.expected_max_seconds:.1f}s"
+        f"cold={elapsed_seconds:.3f}s budget={test_case.expected_max_seconds:g}s"
     )
 
     assert elapsed_seconds < test_case.expected_max_seconds
@@ -120,16 +120,16 @@ def test_given_wide_scan_heavy_projects_when_doubling_sql_size_then_compile_scal
             model_count=3_000,
             expected_min_sql_bytes=18_000_000,
             expected_max_sql_bytes=25_000_000,
-            expected_max_seconds=6.0,
-            expected_warm_max_seconds=3.0,
+            expected_max_seconds=4.0,
+            expected_warm_max_seconds=2.25,
         ),
         DbtShapedCompilePerformanceGuardTestCase(
             description="dbt-shaped 10000 model cold and warm compiles stay within budget",
             model_count=10_000,
             expected_min_sql_bytes=60_000_000,
             expected_max_sql_bytes=80_000_000,
-            expected_max_seconds=16.0,
-            expected_warm_max_seconds=8.0,
+            expected_max_seconds=13.0,
+            expected_warm_max_seconds=7.0,
         ),
     ],
     ids=lambda case: case.description,
@@ -147,8 +147,8 @@ def test_given_dbt_shaped_project_when_compiling_cold_and_warm_then_finishes_wit
     )
     _LOGGER.info(
         f"dbt-shaped compile models={test_case.model_count} cold={cold_seconds:.3f}s "
-        f"warm={warm_seconds:.3f}s budgets={test_case.expected_max_seconds:.1f}s/"
-        f"{test_case.expected_warm_max_seconds:.1f}s"
+        f"warm={warm_seconds:.3f}s budgets={test_case.expected_max_seconds:g}s/"
+        f"{test_case.expected_warm_max_seconds:g}s"
     )
 
     total_sql_bytes: int = measure_model_sql_bytes(project_dir)
