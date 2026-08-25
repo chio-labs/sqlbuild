@@ -115,7 +115,7 @@ def test_given_managed_source_node_when_build_runs_then_records_loader_and_block
             connections=(connection,),
             scheduler_connection=connection,
             runtime=BuildRuntimeParams(
-                promotion_mode=TablePromotionMode.DIRECT,
+                promotion_mode=TablePromotionMode.IMMEDIATE,
                 run_id="run-1",
                 run_audits=False,
                 run_tests=False,
@@ -196,7 +196,7 @@ def test_given_model_materialize_hook_when_build_runs_then_it_prepares_or_fails_
             connections=(connection,),
             scheduler_connection=connection,
             runtime=BuildRuntimeParams(
-                promotion_mode=TablePromotionMode.DIRECT,
+                promotion_mode=TablePromotionMode.IMMEDIATE,
                 run_id="run-1",
                 run_audits=False,
                 run_tests=False,
@@ -289,7 +289,7 @@ def test_given_model_pre_hook_skips_when_build_runs_then_downstream_model_is_ski
             connections=(connection,),
             scheduler_connection=connection,
             runtime=BuildRuntimeParams(
-                promotion_mode=TablePromotionMode.DIRECT,
+                promotion_mode=TablePromotionMode.IMMEDIATE,
                 run_id="run-1",
                 run_audits=False,
                 run_tests=False,
@@ -363,7 +363,7 @@ def test_given_model_plan_action_skip_when_build_runs_then_downstream_model_is_s
             connections=(connection,),
             scheduler_connection=connection,
             runtime=BuildRuntimeParams(
-                promotion_mode=TablePromotionMode.DIRECT,
+                promotion_mode=TablePromotionMode.IMMEDIATE,
                 run_id="run-1",
                 run_audits=False,
                 run_tests=False,

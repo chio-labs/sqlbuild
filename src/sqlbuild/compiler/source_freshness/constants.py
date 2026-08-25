@@ -1,4 +1,4 @@
-"""Stable constants for standard source freshness storage."""
+"""Stable constants for direct source freshness storage."""
 
 from __future__ import annotations
 

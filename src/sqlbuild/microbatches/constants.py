@@ -1,7 +1,7 @@
 """Stable constants for microbatch state storage and retries."""
 
 MICROBATCH_TABLE_NAME: str = "_sqlbuild_microbatches"
-STANDARD_MICROBATCH_SCOPE_KIND: str = "standard_logical"
+DIRECT_MICROBATCH_SCOPE_KIND: str = "direct_logical"
 VIRTUAL_MICROBATCH_SCOPE_KIND: str = "virtual_physical"
 MICROBATCH_GENERATION_COMMENT_PREFIX: str = "sqlbuild-generation:"
 MICROBATCH_REPLAY_GENERATION_PREFIX: str = "replay:"
@@ -53,7 +53,7 @@ MICROBATCH_COLUMNS: tuple[str, ...] = (
     "created_at",
 )
 
-MICROBATCH_STANDARD_INDEXES: dict[str, tuple[str, ...]] = {
+MICROBATCH_DIRECT_INDEXES: dict[str, tuple[str, ...]] = {
     "_sqlbuild_microbatches_scope_idx": (
         "scope_kind",
         "scope_key",

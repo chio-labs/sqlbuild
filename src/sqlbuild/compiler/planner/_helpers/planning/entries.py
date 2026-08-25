@@ -20,7 +20,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerScopePruningResult,
     PlannerWarehouseState,
 )
-from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
+from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 
 
 def build_planner_entry_results(
@@ -33,7 +33,7 @@ def build_planner_entry_results(
     deferral: DeferralInputs,
     pruning: PlannerScopePruningResult,
     reconciliation: PlannerChangeReconciliation,
-    source_freshness: StandardSourceFreshnessPlanningResult,
+    source_freshness: DirectSourceFreshnessPlanningResult,
 ) -> PlannerEntryResults:
     """Build execution model entries for one plan build."""
 

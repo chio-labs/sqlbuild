@@ -181,13 +181,13 @@ State is plain append-only rows in your own warehouse (`_sqlbuild_fingerprints`,
 
 ### Deploy reversibly (opt-in)
 
-By default, SQLBuild runs in standard mode with state as append-only rows in your warehouse. When you want more, [virtual environments](/concepts/virtual-environments) add a reversibility layer on top:
+By default, SQLBuild runs in direct mode with state as append-only rows in your warehouse. When you want more, [virtual environments](/concepts/virtual-environments) add a reversibility layer on top:
 
 - **Instant branching, promotion, and rollback** as low-copy pointer operations.
 - **Partial promotion.** Promote the models that are ready without re-running everything downstream of them - you don't have to rebuild the whole closure to ship one fix.
 - **Checkpoints and reconciliation** so a bad change is something you undo, not an incident.
 
-Virtual environments are opt-in, not a tax you pay upfront - standard mode stays the default, so the floor stays low and you reach for them only when a workflow needs them.
+Virtual environments are opt-in, not a tax you pay upfront - direct mode stays the default, so the floor stays low and you reach for them only when a workflow needs them.
 
 ### Supported adapters
 
@@ -736,7 +736,7 @@ Run dbt and SQLBuild side by side with coordinated selection and SQLBuild models
 
 Use the dbt compatibility bridge to coordinate dbt selections with SQLBuild-owned models downstream of their outputs.
 
-SQLBuild reads the dbt manifest and drives the `dbt` CLI as a subprocess. dbt remains responsible for compiling and executing dbt-owned models; SQLBuild statically analyzes and executes only SQLBuild-owned models downstream. `sqb dbt` runs in standard mode, so change-aware execution and virtual environments are not supported by the bridge.
+SQLBuild reads the dbt manifest and drives the `dbt` CLI as a subprocess. dbt remains responsible for compiling and executing dbt-owned models; SQLBuild statically analyzes and executes only SQLBuild-owned models downstream. `sqb dbt` runs in direct mode, so change-aware execution and virtual environments are not supported by the bridge.
 
 ### Start with your existing dbt project
 
@@ -1239,20 +1239,20 @@ default_audit_run_scope = "final"
 | Field | Default | Description |
 |-------|---------|-------------|
 | `sql_analysis` | `true` | Enable SQL validation and static analysis at compile time |
-| `changes_only` | `false` | Enable [change-aware pruning](/concepts/planning#changes-only-mode) for `plan` and `build` without passing `--changes-only` each run. Requires `virtual_environments = true`; rejected in standard mode. Can also be set per target under `[targets.<name>]`. The CLI flag takes precedence, then the selected target, then local settings, then this project setting. |
-| `virtual_environments` | `false` | Enable [virtual environments](/concepts/virtual-environments) (versioned model outputs, promotion, rollback, state management). When `false`, the project runs in standard mode. |
+| `changes_only` | `false` | Enable [change-aware pruning](/concepts/planning#changes-only-mode) for `plan` and `build` without passing `--changes-only` each run. Requires `virtual_environments = true`; rejected in direct mode. Can also be set per target under `[targets.<name>]`. The CLI flag takes precedence, then the selected target, then local settings, then this project setting. |
+| `virtual_environments` | `false` | Enable [virtual environments](/concepts/virtual-environments) (versioned model outputs, promotion, rollback, state management). When `false`, the project runs in direct mode. |
 | `query_change_tracking` | `true` | Track query fingerprints for change detection |
 | `sql_validation` | `true` | Validate SQL syntax during compilation |
 | `concurrency` | `1` | Maximum parallel model execution (currently serial only) |
 | `auto_load_sources` | `true` | Automatically run source loaders before building dependent models during `sqb build`. See [Loaders](/concepts/python-nodes/loaders). |
-| `table_promotion_mode` | adapter default | `staged` (CTAS to staging, audit, then promote) or `direct` (CTAS directly to target) |
+| `table_promotion_mode` | adapter default | `staged` (CTAS to staging, audit, then promote) or `immediate` (CTAS directly to target, then audit) |
 | `default_audit_severity` | `warn` | Default severity for audits: `warn` or `error` |
 | `default_audit_run_scope` | `final` | Default run scope for audits: `final` or `delta_and_final` |
 
 #### Table promotion mode
 
 - **`staged`** (default for most adapters): Materializes into a staging table, runs audits, then swaps into the target. If audits fail, the production table is untouched.
-- **`direct`**: Creates the table directly at the target location. Audits run after materialization. Simpler but no pre-promotion safety net.
+- **`immediate`**: Creates the table directly at the target location. Audits run after materialization. Simpler but no pre-promotion safety net.
 
 ### Kata
 
@@ -2369,7 +2369,7 @@ FROM __ref("stg_orders")
 GROUP BY customer_id
 ```
 
-Projects may opt into `settings.table_promotion_mode = "direct"`. Direct mode replaces the destination before audits, so a failed audit does not restore the old table. Direct mode rejects models that require declared-type enforcement or `contract enforced`; use staged promotion for those guarantees.
+Projects may opt into `settings.table_promotion_mode = "immediate"`. Immediate promotion replaces the destination before audits, so a failed audit does not restore the old table. Immediate promotion rejects models that require declared-type enforcement or `contract enforced`; use staged promotion for those guarantees.
 
 ### Incremental
 
@@ -2614,9 +2614,9 @@ Runtime cast support currently depends on materialization:
 | View | No; the view query defines the warehouse output type |
 | Snapshot | No framework cast reconstruction |
 | Custom materialization | Owned by the custom materialization |
-| Full table with direct promotion | Rejected when type enforcement is required |
+| Full table with immediate promotion | Rejected when type enforcement is required |
 
-Staged promotion is the default table mode. If a project selects direct table promotion, a typed model fails with guidance to use staged promotion because SQLBuild cannot inspect and reconstruct output before mutating the destination.
+Staged promotion is the default table mode. If a project selects immediate table promotion, a typed model fails with guidance to use staged promotion because SQLBuild cannot inspect and reconstruct output before mutating the destination.
 
 ### Type enforcement versus contracts
 
@@ -2693,7 +2693,7 @@ Runtime exact-schema validation currently runs for:
 
 Views and custom materializations rely on compile-time contract analysis. Microbatch incrementals currently apply type enforcement and audits but do not perform the framework runtime exact-schema validation step.
 
-Staged table validation happens before promotion, so a failure leaves the existing destination untouched. Direct table promotion is incompatible with `contract enforced` because SQLBuild cannot validate output before replacing the destination.
+Staged table validation happens before promotion, so a failure leaves the existing destination untouched. Immediate table promotion is incompatible with `contract enforced` because SQLBuild cannot validate output before replacing the destination.
 
 ### Type enforcement
 
@@ -2873,7 +2873,7 @@ The model override can re-enable validation when the project-level `settings.sql
 |-------|-------------|
 | `run_despite_unchanged` | Table-only change-aware policy. `always` rebuilds whenever selected. A duration such as `30d`, `12h`, or `90m` rebuilds while the newest timestamp-based upstream source observation is within that age; it is not a periodic schedule. |
 
-Table promotion mode is a project setting rather than a `MODEL()` field. Staged promotion is the default. Direct promotion is incompatible with model type enforcement and exact contracts; see [Materializations](/concepts/models/materializations#table).
+Table promotion mode is a project setting rather than a `MODEL()` field. Staged promotion is the default. Immediate promotion is incompatible with model type enforcement and exact contracts; see [Materializations](/concepts/models/materializations#table).
 
 ### Incremental fields
 
@@ -4288,7 +4288,7 @@ By default, every selected node runs regardless of its reason. Under `--changes-
 
 ### Changes-only mode
 
-Change-aware pruning requires virtual environments (`virtual_environments = true`); it is rejected in standard mode. Within a virtual environment, `--changes-only` narrows the scope to only models that are actually stale:
+Change-aware pruning requires virtual environments (`virtual_environments = true`); it is rejected in direct mode. Within a virtual environment, `--changes-only` narrows the scope to only models that are actually stale:
 
 ```bash
 sqb build --virtual-env pr_123 --changes-only
@@ -4337,9 +4337,9 @@ When unchanged SQL models are skipped, read-side Python nodes (tasks, assets, ch
 
 Python nodes also have their own identity fingerprints: if a node's source code or dependencies change, it runs even if its SQL dependencies haven't.
 
-### Warehouse-native state (standard mode)
+### Warehouse-native state (direct mode)
 
-In standard mode, all change-tracking state lives in the warehouse as append-only tables in the same schemas as your data:
+In direct mode, all change-tracking state lives in the warehouse as append-only tables in the same schemas as your data:
 
 - **`_sqlbuild_fingerprints`** - version identities for models, functions, seeds, and Python nodes. One row per successful build per identity.
 - **`_sqlbuild_source_freshness`** - source freshness observations. One row per successful build per source identity.
@@ -6074,7 +6074,7 @@ SQLBuild can compare schemas and row-level data between two build contexts. This
 
 `sqb diff FROM:TO` compares:
 
-- **two targets** (e.g. `prod:dev`) in standard mode, or
+- **two targets** (e.g. `prod:dev`) in direct mode, or
 - **two virtual environments** (VDEs) when [virtual environments](/concepts/virtual-environments) are enabled.
 
 The mechanics below are identical for both; only what `FROM` and `TO` refer to changes.
@@ -6315,7 +6315,7 @@ Downstream nodes run only if at least one upstream succeeded. If all upstreams a
 
 ### Result persistence
 
-Node results (payload, metadata, status, errors) are persisted after each execution. In standard mode, results are stored in `_sqlbuild_node_results` in the warehouse alongside your data. In virtual mode, results are stored in the VDE state backend scoped per environment. Results persist across runs, so they are available for observability, debugging, and downstream consumption.
+Node results (payload, metadata, status, errors) are persisted after each execution. In direct mode, results are stored in `_sqlbuild_node_results` in the warehouse alongside your data. In virtual mode, results are stored in the VDE state backend scoped per environment. Results persist across runs, so they are available for observability, debugging, and downstream consumption.
 
 ### Selection
 
@@ -7492,7 +7492,7 @@ Virtual environments (VDEs) let you build, preview, and promote SQL pipeline cha
 - **Multi-developer isolation** - each developer works in their own VDE without conflicting with others, sharing physical versions when code is identical
 - **Instant rollback** - revert production to a prior finalized state by restoring a checkpoint's pointer set
 
-Virtual environments are opt-in via `virtual_environments = true` (under `[settings]`) and require a state store. Projects that don't need environment isolation or promotion workflows should use the default standard mode.
+Virtual environments are opt-in via `virtual_environments = true` (under `[settings]`) and require a state store. Projects that don't need environment isolation or promotion workflows should use the default direct mode.
 
 ### How it works
 
@@ -7615,7 +7615,7 @@ schema = "sqlbuild_state"
 database = "state.duckdb"
 ```
 
-The `virtual_environments` setting switches the project from standard mode (default) to virtual mode. All state, plan, build, promote, rollback, and reconcile commands route through the virtual path when this is enabled.
+The `virtual_environments` setting switches the project from direct mode (default) to virtual mode. All state, plan, build, promote, rollback, and reconcile commands route through the virtual path when this is enabled.
 
 ### State configuration
 
@@ -7764,9 +7764,9 @@ Source: `concepts/virtual-environments/building.mdx`
 
 Virtual builds, VDE creation, partial builds, and seeded incrementals.
 
-Virtual builds create versioned physical relations and update VDE pointer sets. The build lifecycle is the same as standard mode (seeds, tests, models, audits), but model outputs are written to versioned physical tables and exposed through logical VDE views.
+Virtual builds create versioned physical relations and update VDE pointer sets. The build lifecycle is the same as direct mode (seeds, tests, models, audits), but model outputs are written to versioned physical tables and exposed through logical VDE views.
 
-Virtual builds run ingress (loaders and Python nodes that feed sources) as a separate phase before SQL model execution. This means independent SQL models that do not depend on loaders will wait for all ingress to complete before starting. Standard mode does not have this limitation. This keeps VDE state persistence simpler and safer but may add wall time when ingress is slow and independent SQL work is available. A future optimization may allow overlapping ingress with independent SQL execution.
+Virtual builds run ingress (loaders and Python nodes that feed sources) as a separate phase before SQL model execution. This means independent SQL models that do not depend on loaders will wait for all ingress to complete before starting. Direct mode does not have this limitation. This keeps VDE state persistence simpler and safer but may add wall time when ingress is slow and independent SQL work is available. A future optimization may allow overlapping ingress with independent SQL execution.
 
 ### Default VDE
 
@@ -7849,7 +7849,7 @@ sqb build --virtual-env pr_123 --select fact_orders --include-stale-upstreams
 
 #### Stale-driven selection
 
-Virtual environment builds run the full selection by default, like standard mode. Add `--changes-only` to intersect the selection with the stale-driven set, so only models that are both selected and stale are built:
+Virtual environment builds run the full selection by default, like direct mode. Add `--changes-only` to intersect the selection with the stale-driven set, so only models that are both selected and stale are built:
 
 ```bash
 sqb build --virtual-env pr_123 --select path:models/marts --changes-only
@@ -7857,7 +7857,7 @@ sqb build --virtual-env pr_123 --select path:models/marts --changes-only
 
 This is useful when the stale cascade is large and you want to build a coherent subgraph without running unchanged models. Without `--changes-only`, every selected model is built regardless of state.
 
-Change-aware pruning is opt-in in both standard mode and virtual environments. See [Planning and Change Detection](/concepts/planning) for how fingerprints, source freshness, and identity tracking determine what gets built.
+Change-aware pruning is opt-in within virtual environments and unavailable in direct mode. See [Planning and Change Detection](/concepts/planning) for how fingerprints, source freshness, and identity tracking determine what gets built.
 
 ### Stale detection
 
@@ -7888,7 +7888,7 @@ For append models with bounded replay (`replay_on_change bounded-7d`), the seed 
 
 ### Custom materializations
 
-Custom materializations are supported in virtual mode. By default, SQLBuild seeds new physical versions using the standard clone/copy strategy before calling the custom `materialize` function.
+Custom materializations are supported in virtual mode. By default, SQLBuild seeds new physical versions using the direct clone/copy strategy before calling the custom `materialize` function.
 
 For custom materializations that need different seeding behavior, define a `prepare_version` function alongside `materialize`:
 
@@ -8205,7 +8205,7 @@ A detached VDE is blocked from further virtual operations:
 - `sqb promote --from <detached>` or `--to <detached>` blocks
 - `sqb rollback` on a detached VDE blocks
 
-The project can continue operating in standard mode, or you can re-adopt to return to virtual mode.
+The project can continue operating in direct mode, or you can re-adopt to return to virtual mode.
 
 #### Detached VDE cleanup
 
@@ -8293,9 +8293,9 @@ sqb clone --from prod --to dev --skip-locked
 
 Clone is a physical-layer operation. VDE pointer management is handled by [build](/concepts/virtual-environments/building) and [promote](/concepts/virtual-environments/promotion).
 
-### Comparison with standard-mode clone
+### Comparison with direct-mode clone
 
-In standard mode, `sqb clone` copies model relations between targets using zero-copy cloning where supported. In virtual mode, clone hydrates versioned physical relations instead. The source and target are still physical targets, but the copied objects are physical version relations rather than normal model targets.
+In direct mode, `sqb clone` copies model relations between targets using zero-copy cloning where supported. In virtual mode, clone hydrates versioned physical relations instead. The source and target are still physical targets, but the copied objects are physical version relations rather than normal model targets.
 
 ## Diff
 
@@ -8351,9 +8351,9 @@ sqb diff dev:pr_123 --allow-partial-diff
 
 This guard prevents misleading diff output when one VDE has pending changes that haven't been materialized yet.
 
-### Comparison with standard-mode diff
+### Comparison with direct-mode diff
 
-In standard mode, `sqb diff prod:dev` compares physical target schemas and data directly in the warehouse. In virtual mode, `sqb diff dev:pr_123` compares VDE pointer sets within a single physical target, then inspects the physical versions those pointers reference.
+In direct mode, `sqb diff prod:dev` compares physical target schemas and data directly in the warehouse. In virtual mode, `sqb diff dev:pr_123` compares VDE pointer sets within a single physical target, then inspects the physical versions those pointers reference.
 
 The output format is the same - schema diffs, row counts, changed columns, and example rows. The difference is what is being compared: physical targets vs virtual pointer sets.
 
@@ -8650,7 +8650,7 @@ After `sqb state detach`, the VDE is marked `detached` and blocked from further 
 | `sqb promote --to <detached>` | Blocks |
 | `sqb rollback` | Blocks |
 
-The project can continue in standard mode or re-adopt to return to virtual mode.
+The project can continue in direct mode or re-adopt to return to virtual mode.
 
 ### Adopt guards
 
@@ -10764,7 +10764,7 @@ Summary: observed=0 changed=1 unchanged=1 tolerated=1 unknown=0 errors=0
 
 #### Virtual environment state
 
-To compare against state stored in a virtual environment instead of standard mode state:
+To compare against state stored in a virtual environment instead of direct mode state:
 
 ```bash
 sqb freshness --state --virtual-env pr_123
@@ -10968,7 +10968,7 @@ Source: `cli/diff.mdx`
 
 Compare schemas and data between targets or virtual environments.
 
-Compares schemas and optionally row-level data between two build contexts: two targets (e.g. `prod:dev`) in standard mode, or two virtual environments when virtual mode is enabled. See [Data Diffs](/concepts/diff) for detailed usage.
+Compares schemas and optionally row-level data between two build contexts: two targets (e.g. `prod:dev`) in direct mode, or two virtual environments when virtual mode is enabled. See [Data Diffs](/concepts/diff) for detailed usage.
 
 ### Usage
 

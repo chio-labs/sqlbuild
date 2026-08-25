@@ -1,4 +1,4 @@
-"""Public standard source freshness table DDL rendering entrypoint."""
+"""Public direct source freshness table DDL rendering entrypoint."""
 
 from __future__ import annotations
 

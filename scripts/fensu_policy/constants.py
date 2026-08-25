@@ -90,7 +90,7 @@ REUSE_FORBIDDEN_TERMS: tuple[str, ...] = (
     "target_cursor",
 )
 REUSE_PATH_MARKERS: tuple[str, ...] = (
-    "standard_reuse",
+    "direct_reuse",
     "reuse_candidates.py",
     "reuse_execute.py",
     "reuse_plan.py",

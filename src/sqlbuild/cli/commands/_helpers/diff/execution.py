@@ -18,7 +18,7 @@ from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import (
     DiffCommandRequest,
     DiffInvocation,
-    StandardDiffPreparation,
+    DirectDiffPreparation,
     VirtualDiffPreparation,
     VirtualDiffRunOutcome,
 )
@@ -36,10 +36,10 @@ from sqlbuild.virtual.diff.main.diff import run_virtual_diff
 from sqlbuild.virtual.diff.models import VirtualDiffOptions
 
 
-def prepare_standard_diff(
+def prepare_direct_diff(
     *, request: DiffCommandRequest, invocation: DiffInvocation
-) -> StandardDiffPreparation:
-    """Resolve standard target diff adapter, compiled projects, and limits."""
+) -> DirectDiffPreparation:
+    """Resolve direct target diff adapter, compiled projects, and limits."""
 
     from_target: str = request.from_name
     to_target: str = request.to_name
@@ -73,7 +73,7 @@ def prepare_standard_diff(
     )
     if not selected_names:
         raise CliUserError("no diffable models found in the selected scope", code="C207")
-    return StandardDiffPreparation(
+    return DirectDiffPreparation(
         from_target=from_target,
         to_target=to_target,
         adapter=adapter,
@@ -95,10 +95,10 @@ def prepare_standard_diff(
     )
 
 
-def execute_standard_diff(
-    *, request: DiffCommandRequest, preparation: StandardDiffPreparation
+def execute_direct_diff(
+    *, request: DiffCommandRequest, preparation: DirectDiffPreparation
 ) -> DiffExecutionResult:
-    """Execute a standard target-to-target diff."""
+    """Execute a direct target-to-target diff."""
 
     connection: Any = preparation.adapter.connect(preparation.connection_config)
     try:

@@ -195,7 +195,7 @@ def execute_table_entry(
             phase=ExecutionPhase.CONTRACT,
             error=ExecutorInputError(
                 f"model '{entry.name}': contract enforced requires staged table promotion; "
-                "direct table promotion cannot validate runtime output before target mutation",
+                "immediate table promotion cannot validate runtime output before target mutation",
                 code="K011",
             ),
             warnings=warnings,
@@ -204,7 +204,7 @@ def execute_table_entry(
             hook_results=hook_results,
         )
 
-    return _direct_lifecycle(
+    return _immediate_lifecycle(
         context=context,
         targets=targets,
         state=state,
@@ -395,14 +395,14 @@ def _staged_lifecycle(
     )
 
 
-def _direct_lifecycle(
+def _immediate_lifecycle(
     *,
     context: ModelMaterializationContext,
     targets: TableTargets,
     state: TableLifecycleState,
     declared_columns: tuple[ColumnInfo, ...],
 ) -> ModelExecutionResult:
-    """Direct table lifecycle: CTAS target, audit after, no staging."""
+    """Immediate table lifecycle: CTAS target, audit after, no staging."""
 
     entry: ModelPlanEntry = context.entry
     adapter: BaseAdapter = context.adapter
@@ -447,7 +447,7 @@ def _direct_lifecycle(
             hook_results=hook_results,
         )
 
-    direct_audit_run: FinalAuditRun = run_final_model_audits(
+    immediate_audit_run: FinalAuditRun = run_final_model_audits(
         relation_overrides=None,
         model_audits=context.model_audits,
         reuse_origin_fingerprint=reuse_origin_fingerprint,
@@ -457,9 +457,9 @@ def _direct_lifecycle(
         seed_locations=context.seed_locations,
         source_map=context.source_map,
     )
-    audit_results.extend(direct_audit_run.results)
+    audit_results.extend(immediate_audit_run.results)
 
-    if direct_audit_run.has_error:
+    if immediate_audit_run.has_error:
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.AUDIT,

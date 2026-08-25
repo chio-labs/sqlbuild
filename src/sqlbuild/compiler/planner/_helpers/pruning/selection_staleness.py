@@ -1,4 +1,4 @@
-"""Selection-aware stale warning helpers for standard planning."""
+"""Selection-aware stale warning helpers for direct planning."""
 
 from __future__ import annotations
 
@@ -12,17 +12,17 @@ from sqlbuild.compiler.planner._helpers.pruning.selection_classifier import (
 from sqlbuild.compiler.planner.main.changes._model_changes import detect_model_changes
 from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
+    DirectModelVersionIdentities,
     PlannerChangeResults,
     PlannerScope,
     PlanWarning,
     SelectionStalenessGraph,
     SelectionStalenessNodeKey,
     SelectionStalenessWarning,
-    StandardModelVersionIdentities,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import ChangeKind, WarningSeverity
-from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
+from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 
 
 def build_stale_out_of_selection_warnings(
@@ -31,8 +31,8 @@ def build_stale_out_of_selection_warnings(
     execution_scope: PlannerScope,
     changes: PlannerChangeResults,
     snapshot: WarehouseSnapshot,
-    version_identities: StandardModelVersionIdentities,
-    source_freshness: StandardSourceFreshnessPlanningResult | None,
+    version_identities: DirectModelVersionIdentities,
+    source_freshness: DirectSourceFreshnessPlanningResult | None,
     include_sources: bool = True,
 ) -> tuple[PlanWarning, ...]:
     """Warn for selected models stale through changed upstreams outside the run set."""
@@ -128,7 +128,7 @@ def _changed_model_names(
     original_scope: PlannerScope,
     changes: PlannerChangeResults,
     snapshot: WarehouseSnapshot,
-    version_identities: StandardModelVersionIdentities,
+    version_identities: DirectModelVersionIdentities,
 ) -> frozenset[str]:
     changed: set[str] = {
         model_name
@@ -158,7 +158,7 @@ def _changed_model_names(
 def _changed_seed_names(
     *,
     snapshot: WarehouseSnapshot,
-    version_identities: StandardModelVersionIdentities,
+    version_identities: DirectModelVersionIdentities,
 ) -> frozenset[str]:
     return frozenset(
         seed_name
@@ -172,7 +172,7 @@ def _changed_seed_names(
 
 
 def _changed_source_names(
-    source_freshness: StandardSourceFreshnessPlanningResult | None,
+    source_freshness: DirectSourceFreshnessPlanningResult | None,
 ) -> frozenset[str]:
     if source_freshness is None:
         return frozenset()
@@ -185,7 +185,7 @@ def _model_own_identity_changed(
     original_scope: PlannerScope,
     changes: PlannerChangeResults,
     snapshot: WarehouseSnapshot,
-    version_identities: StandardModelVersionIdentities,
+    version_identities: DirectModelVersionIdentities,
 ) -> bool:
     selected_change: ChangeDetectionResult | None = changes.models.get(model_name)
     if selected_change is not None:
@@ -220,7 +220,7 @@ def _seed_identity_changed(
     *,
     seed_name: str,
     snapshot: WarehouseSnapshot,
-    version_identities: StandardModelVersionIdentities,
+    version_identities: DirectModelVersionIdentities,
 ) -> bool:
     expected_hash: str | None = version_identities.seed_version_hashes.get(seed_name)
     if expected_hash is None:

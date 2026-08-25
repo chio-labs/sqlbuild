@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.classes.standard_python_lifecycle_state import (
-    StandardPythonLifecycleState,
+from sqlbuild.cli.commands.classes.direct_python_lifecycle_state import (
+    DirectPythonLifecycleState,
 )
 from sqlbuild.cli.commands.types import (
     CompileLineageMode,
@@ -186,8 +186,8 @@ class BuildCommandRequest:
 
 
 @dataclass(frozen=True)
-class StandardLifecycleCallbacks:
-    """Node progress callbacks and output settings for standard Python lifecycle."""
+class DirectLifecycleCallbacks:
+    """Node progress callbacks and output settings for direct Python lifecycle."""
 
     on_node_complete: Callable[[object], None]
     progress_stream: TextIO
@@ -256,7 +256,7 @@ class BuildExecutionPreparation:
     callbacks: BuildProgressCallbacks
     effective_concurrency: int
     execution_connection_progress: ConnectionProgressReporter
-    python_lifecycle: StandardPythonLifecycleState
+    python_lifecycle: DirectPythonLifecycleState
     start_cursor_ts: datetime | None
     end_cursor_ts: datetime | None
     start_cursor_int: int | None
@@ -415,14 +415,14 @@ class CloneConnectionContext:
 
 @dataclass(frozen=True)
 class CloneExecutionPreparation:
-    """Prepared standard clone pipeline and selected destination entries."""
+    """Prepared direct clone pipeline and selected destination entries."""
 
     pipeline_result: ClonePipelineResult
 
 
 @dataclass(frozen=True)
 class CloneRunOutcome:
-    """Standard clone execution result and elapsed time."""
+    """Direct clone execution result and elapsed time."""
 
     result: CloneExecutionResult
     elapsed: float
@@ -604,8 +604,8 @@ class DiffInvocation:
 
 
 @dataclass(frozen=True)
-class StandardDiffPreparation:
-    """Resolved standard diff adapter and compiled target projects."""
+class DirectDiffPreparation:
+    """Resolved direct diff adapter and compiled target projects."""
 
     from_target: str
     to_target: str

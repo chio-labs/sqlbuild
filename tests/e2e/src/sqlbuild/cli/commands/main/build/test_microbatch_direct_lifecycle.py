@@ -1,4 +1,4 @@
-"""E2E coverage for universal standard microbatch ledger lifecycle invariants."""
+"""E2E coverage for universal direct microbatch ledger lifecycle invariants."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     SerialMicrobatchLedgerE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
+    direct_microbatch_project_toml,
     raw_events_source_yml,
-    standard_microbatch_project_toml,
     timestamp_microbatch_model_sql,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
@@ -50,7 +50,7 @@ def test_given_serial_microbatch_when_building_then_universal_ledger_records_kno
         tmp_path=tmp_path,
         project_name=project_name,
         repo_files={
-            "sqlbuild_project.toml": standard_microbatch_project_toml(
+            "sqlbuild_project.toml": direct_microbatch_project_toml(
                 project_name=project_name,
                 database_name="serial.duckdb",
                 settings_toml=test_case.settings_toml,
@@ -145,7 +145,7 @@ def test_given_integer_cursor_maximum_when_building_then_half_open_batches_inclu
         tmp_path=tmp_path,
         project_name=project_name,
         repo_files={
-            "sqlbuild_project.toml": standard_microbatch_project_toml(
+            "sqlbuild_project.toml": direct_microbatch_project_toml(
                 project_name=project_name,
                 database_name="integer_maximum.duckdb",
                 settings_toml=("\n[settings]\nconcurrency = 3\nmicrobatch_concurrency = true\n"),
@@ -226,7 +226,7 @@ def test_given_concurrent_ceiling_when_first_run_and_full_refresh_then_target_bo
         tmp_path=tmp_path,
         project_name=project_name,
         repo_files={
-            "sqlbuild_project.toml": standard_microbatch_project_toml(
+            "sqlbuild_project.toml": direct_microbatch_project_toml(
                 project_name=project_name,
                 database_name="bootstrap.duckdb",
                 settings_toml=("\n[settings]\nconcurrency = 3\nmicrobatch_concurrency = true\n"),
@@ -312,7 +312,7 @@ def test_given_recreated_target_when_building_then_old_completion_generation_is_
         tmp_path=tmp_path,
         project_name=project_name,
         repo_files={
-            "sqlbuild_project.toml": standard_microbatch_project_toml(
+            "sqlbuild_project.toml": direct_microbatch_project_toml(
                 project_name=project_name,
                 database_name="recreated.duckdb",
                 settings_toml="",

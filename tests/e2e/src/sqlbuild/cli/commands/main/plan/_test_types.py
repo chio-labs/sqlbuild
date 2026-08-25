@@ -84,7 +84,7 @@ class DirectFunctionSelectorE2ETestCase:
 
 
 @dataclass(frozen=True)
-class StandardModeVirtualFlagGuardE2ETestCase:
+class DirectModeVirtualFlagGuardE2ETestCase:
     description: str
     command: tuple[str, ...]
     expected_error_fragment: str

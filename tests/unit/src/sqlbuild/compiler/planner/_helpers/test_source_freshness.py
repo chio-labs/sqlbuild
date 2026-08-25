@@ -10,7 +10,7 @@ from sqlbuild.compiler.planner._helpers.warehouse.source_freshness import (
     build_planner_source_freshness_result,
 )
 from sqlbuild.compiler.planner.models import PlannerRelationsContext, PlannerScope
-from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
+from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
@@ -34,7 +34,7 @@ def test_given_source_deferral_context_when_building_source_freshness_then_uses_
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
     try:
-        result: StandardSourceFreshnessPlanningResult = build_planner_source_freshness_result(
+        result: DirectSourceFreshnessPlanningResult = build_planner_source_freshness_result(
             project=CompiledProject(
                 run_id="test_run",
                 effective_target_name=None,

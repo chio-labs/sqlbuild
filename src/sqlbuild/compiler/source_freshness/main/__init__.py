@@ -1,1 +1,1 @@
-"""Standard source freshness state operations."""
+"""Direct source freshness state operations."""

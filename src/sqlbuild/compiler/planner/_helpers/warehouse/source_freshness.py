@@ -1,4 +1,4 @@
-"""Standard planner source freshness orchestration helpers."""
+"""Direct planner source freshness orchestration helpers."""
 
 from __future__ import annotations
 
@@ -18,12 +18,12 @@ from sqlbuild.compiler.planner.models import (
     PlannerScope,
 )
 from sqlbuild.compiler.source_freshness.main._planning import (
-    build_standard_source_freshness_planning_result,
+    build_direct_source_freshness_planning_result,
 )
 from sqlbuild.compiler.source_freshness.main._propagation import (
-    build_standard_source_freshness_propagation_result,
+    build_direct_source_freshness_propagation_result,
 )
-from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
+from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 
 
 def build_planner_source_freshness_result(
@@ -34,12 +34,12 @@ def build_planner_source_freshness_result(
     scope: PlannerScope,
     relations: PlannerRelationsContext,
     freshness_state_schemas: frozenset[str] = frozenset(),
-) -> StandardSourceFreshnessPlanningResult:
-    """Build standard source freshness comparison data for planner output."""
+) -> DirectSourceFreshnessPlanningResult:
+    """Build direct source freshness comparison data for planner output."""
 
     state_schemas: tuple[str, ...] = _collect_state_schemas(project=project, scope=scope)
-    source_freshness: StandardSourceFreshnessPlanningResult = (
-        build_standard_source_freshness_planning_result(
+    source_freshness: DirectSourceFreshnessPlanningResult = (
+        build_direct_source_freshness_planning_result(
             adapter=adapter,
             connection=connection,
             sources=tuple(relations.source_read_map.values()),
@@ -56,7 +56,7 @@ def build_planner_source_freshness_result(
     )
     return replace(
         source_freshness,
-        propagation=build_standard_source_freshness_propagation_result(
+        propagation=build_direct_source_freshness_propagation_result(
             source_freshness=source_freshness,
             scope=scope,
         ),

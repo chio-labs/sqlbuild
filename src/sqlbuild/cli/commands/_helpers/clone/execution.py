@@ -30,7 +30,7 @@ def execute_clone_plan(
     connection_context: CloneConnectionContext,
     preparation: CloneExecutionPreparation,
 ) -> CloneRunOutcome:
-    """Execute the standard clone plan and copy fingerprints."""
+    """Execute the direct clone plan and copy fingerprints."""
 
     clone_start: float = time.monotonic()
     on_item: CloneItemCallback = _build_on_clone_item(

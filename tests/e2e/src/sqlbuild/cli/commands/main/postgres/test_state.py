@@ -3287,7 +3287,7 @@ def test_given_postgres_function_change_when_promoting_then_publishes_function_d
     "test_case",
     [
         PostgresVirtualParityE2ETestCase(
-            description="postgres standard mode promotion guard",
+            description="postgres direct mode promotion guard",
             expected_stdout_fragments=("promote requires virtual_environments = true",),
             expected_exit_code=1,
         )

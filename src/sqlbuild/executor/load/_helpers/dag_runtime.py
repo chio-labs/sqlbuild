@@ -25,7 +25,7 @@ from sqlbuild.executor.load.models import (
     LoadRuntimeParams,
 )
 from sqlbuild.executor.load.types import LoadProgressCallback
-from sqlbuild.executor.node_results.main._standard_store import build_standard_node_result_store
+from sqlbuild.executor.node_results.main._direct_store import build_direct_node_result_store
 from sqlbuild.executor.scheduling.main._build_in_degree import build_python_node_in_degree
 from sqlbuild.executor.scheduling.main._build_ready_queue import build_python_node_ready_queue
 from sqlbuild.executor.scheduling.main._run_worker import run_worker_with_completion
@@ -124,7 +124,7 @@ def execute_ready_dag_source(
         )
     resolved_result_store: Any | None = runtime.result_store
     if resolved_result_store is None and connection is not None:
-        resolved_result_store = build_standard_node_result_store(
+        resolved_result_store = build_direct_node_result_store(
             adapter=adapter,
             connection=connection,
             database=adapter.default_database(),

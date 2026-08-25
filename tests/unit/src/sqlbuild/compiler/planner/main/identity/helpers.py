@@ -11,14 +11,14 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.graph.core import build_downstream_deps
-from sqlbuild.compiler.planner._helpers.identity.standard import (
-    build_standard_model_version_identities,
+from sqlbuild.compiler.planner._helpers.identity.direct import (
+    build_direct_model_version_identities,
 )
-from sqlbuild.compiler.planner.models import PlannerScope, StandardModelVersionIdentities
+from sqlbuild.compiler.planner.models import DirectModelVersionIdentities, PlannerScope
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import build_compiled_function
 
 
-def build_table_function_graph_identities(*, base_query: str) -> StandardModelVersionIdentities:
+def build_table_function_graph_identities(*, base_query: str) -> DirectModelVersionIdentities:
     base_key: CompiledObjectKey = CompiledObjectKey(
         resource_type=CompiledResourceType.MODEL,
         name="orders",
@@ -65,7 +65,7 @@ def build_table_function_graph_identities(*, base_query: str) -> StandardModelVe
         selected_keys=frozenset(upstream),
         execution_order=(base_key, function_key, consumer_key),
     )
-    return build_standard_model_version_identities(functions=(function,), scope=scope)
+    return build_direct_model_version_identities(functions=(function,), scope=scope)
 
 
 def _build_model(

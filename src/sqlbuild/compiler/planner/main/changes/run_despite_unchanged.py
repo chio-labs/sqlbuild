@@ -8,13 +8,13 @@ from sqlbuild.compiler.planner._helpers.pruning.run_despite_unchanged import (
     build_run_despite_unchanged_planning_result as _build_result,
 )
 from sqlbuild.compiler.planner.models import PlannerScope, RunDespiteUnchangedPlanningResult
-from sqlbuild.compiler.source_freshness.models import StandardSourceFreshnessPlanningResult
+from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 
 
 def build_run_despite_unchanged_planning_result(
     *,
     scope: PlannerScope,
-    source_freshness: StandardSourceFreshnessPlanningResult,
+    source_freshness: DirectSourceFreshnessPlanningResult,
     already_stale_model_names: frozenset[str],
     now: datetime,
 ) -> RunDespiteUnchangedPlanningResult:

@@ -1,4 +1,4 @@
-"""Fingerprint writes for standard seed loads."""
+"""Fingerprint writes for direct seed loads."""
 
 from __future__ import annotations
 

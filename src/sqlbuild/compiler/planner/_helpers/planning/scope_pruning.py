@@ -1,4 +1,4 @@
-"""Standard unchanged-scope pruning phase for execution planning."""
+"""Direct unchanged-scope pruning phase for execution planning."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def prune_planner_execution_scope(
         inspection_scope=inspection_scope,
         execution_scope=execution_scope,
         resolved_actions=resolved_actions,
-        pruned_standard_model_names=(),
-        standard_identity_stale_model_names=frozenset(),
+        pruned_direct_model_names=(),
+        direct_identity_stale_model_names=frozenset(),
         run_despite_unchanged=RunDespiteUnchangedPlanningResult(),
     )

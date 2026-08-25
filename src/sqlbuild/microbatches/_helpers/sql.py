@@ -1,4 +1,4 @@
-"""Internal portable SQL for standard-mode microbatch history."""
+"""Internal portable SQL for direct-mode microbatch history."""
 
 from __future__ import annotations
 

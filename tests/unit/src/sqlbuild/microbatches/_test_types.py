@@ -37,7 +37,7 @@ class MicrobatchReplayProjectionTestCase:
 
 @dataclass(frozen=True)
 class MicrobatchDdlAdapterTestCase:
-    """One adapter expected to render the complete standard state table."""
+    """One adapter expected to render the complete direct state table."""
 
     description: str
     adapter: BaseAdapter
@@ -46,7 +46,7 @@ class MicrobatchDdlAdapterTestCase:
 
 @dataclass(frozen=True)
 class MicrobatchSqlBehaviorTestCase:
-    """Expected SQL shape for one standard-state behavior test."""
+    """Expected SQL shape for one direct-state behavior test."""
 
     description: str
     expected_statement_count: int

@@ -1860,7 +1860,7 @@ class BaseAdapter(StrictAdapter):
         )
 
     def render_create_microbatch_state_table_sql(self, *, database: str | None, schema: str) -> str:
-        """Render DDL that creates the standard microbatch state table when missing."""
+        """Render DDL that creates the direct microbatch state table when missing."""
 
         from sqlbuild.microbatches.main.create_table_sql import build_create_table_sql
 
@@ -1874,7 +1874,7 @@ class BaseAdapter(StrictAdapter):
     def render_create_microbatch_state_index_sqls(
         self, *, database: str | None, schema: str
     ) -> tuple[str, ...]:
-        """Render optional standard-state indexes for warehouses that support them."""
+        """Render optional direct-state indexes for warehouses that support them."""
 
         return ()
 

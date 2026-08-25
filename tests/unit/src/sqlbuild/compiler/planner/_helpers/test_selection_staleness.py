@@ -18,20 +18,20 @@ from sqlbuild.compiler.planner._helpers.pruning.selection_staleness import (
 )
 from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
+    DirectModelVersionIdentities,
     PlannerChangeResults,
     PlannerPolicies,
     PlannerScope,
     PlannerScopeResolution,
     PlannerSelection,
     PlanWarning,
-    StandardModelVersionIdentities,
     WarehouseFingerprints,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import ChangeKind
 from sqlbuild.compiler.source_freshness.models import (
+    DirectSourceFreshnessPlanningResult,
     SourceFreshnessIdentity,
-    StandardSourceFreshnessPlanningResult,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     PlannerStaleWarningScopeTestCase,
@@ -240,7 +240,7 @@ def test_given_seed_or_source_change_when_classifying_then_warns_only_if_unselec
                 }
             )
         ),
-        version_identities=StandardModelVersionIdentities(
+        version_identities=DirectModelVersionIdentities(
             function_local_hashes={},
             seed_version_hashes={"orders_seed": "new_seed_hash"},
             seed_metadata_jsons={},
@@ -248,7 +248,7 @@ def test_given_seed_or_source_change_when_classifying_then_warns_only_if_unselec
             model_local_hashes={},
             model_version_hashes={},
         ),
-        source_freshness=StandardSourceFreshnessPlanningResult(
+        source_freshness=DirectSourceFreshnessPlanningResult(
             changed_identities=frozenset({SOURCE_IDENTITY})
         ),
     )
@@ -468,7 +468,7 @@ def test_given_stale_upstream_graph_when_classifying_then_reports_expected_trigg
             functions={},
         ),
         snapshot=WarehouseSnapshot(fingerprints=WarehouseFingerprints(seeds=seed_fingerprints)),
-        version_identities=StandardModelVersionIdentities(
+        version_identities=DirectModelVersionIdentities(
             function_local_hashes={},
             seed_version_hashes={
                 seed_name: "new_seed_hash" for seed_name in test_case.changed_seed_names
@@ -478,9 +478,7 @@ def test_given_stale_upstream_graph_when_classifying_then_reports_expected_trigg
             model_local_hashes={},
             model_version_hashes={},
         ),
-        source_freshness=StandardSourceFreshnessPlanningResult(
-            changed_identities=source_identities
-        ),
+        source_freshness=DirectSourceFreshnessPlanningResult(changed_identities=source_identities),
     )
     warning_text: str = "\n".join(warning.message for warning in warnings)
 

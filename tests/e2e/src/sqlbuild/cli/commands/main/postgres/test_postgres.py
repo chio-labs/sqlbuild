@@ -234,7 +234,7 @@ def test_given_postgres_dbt_profile_when_running_dbt_init_then_plain_build_uses_
     "test_case",
     [
         PostgresNodeResultE2ETestCase(
-            description="standard node results persist and read on postgres",
+            description="direct node results persist and read on postgres",
             expected_rows=(
                 ("check", "check_produce_result", "success"),
                 ("task", "produce_result", "success"),

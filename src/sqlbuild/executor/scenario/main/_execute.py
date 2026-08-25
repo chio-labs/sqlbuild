@@ -80,7 +80,7 @@ def execute_scenario_model(
                 hook_functions=scenario_plan.hook_functions,
             ),
             declared_columns=entry.declared_columns,
-            promotion_mode=TablePromotionMode.DIRECT,
+            promotion_mode=TablePromotionMode.IMMEDIATE,
         )
     )
 

@@ -11,8 +11,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     ConcurrentMicrobatchBehaviorE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
+    direct_microbatch_project_toml,
     raw_events_source_yml,
-    standard_microbatch_project_toml,
     timestamp_microbatch_model_sql,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
@@ -42,7 +42,7 @@ def test_given_completion_write_failure_after_dml_when_retried_then_unaccounted_
         tmp_path=tmp_path,
         project_name=project_name,
         repo_files={
-            "sqlbuild_project.toml": standard_microbatch_project_toml(
+            "sqlbuild_project.toml": direct_microbatch_project_toml(
                 project_name=project_name,
                 database_name="state_write_failure.duckdb",
                 settings_toml=(
@@ -156,7 +156,7 @@ def test_given_concurrent_delta_audit_failure_when_fixed_then_rejected_partition
         tmp_path=tmp_path,
         project_name=project_name,
         repo_files={
-            "sqlbuild_project.toml": standard_microbatch_project_toml(
+            "sqlbuild_project.toml": direct_microbatch_project_toml(
                 project_name=project_name,
                 database_name="delta_audit_failure.duckdb",
                 settings_toml=("\n[settings]\nconcurrency = 3\nmicrobatch_concurrency = true\n"),
@@ -267,7 +267,7 @@ def test_given_concurrent_batches_when_audit_and_hooks_wrap_model_then_aggregate
         tmp_path=tmp_path,
         project_name=project_name,
         repo_files={
-            "sqlbuild_project.toml": standard_microbatch_project_toml(
+            "sqlbuild_project.toml": direct_microbatch_project_toml(
                 project_name=project_name,
                 database_name="aggregate_hooks.duckdb",
                 settings_toml=("\n[settings]\nconcurrency = 3\nmicrobatch_concurrency = true\n"),

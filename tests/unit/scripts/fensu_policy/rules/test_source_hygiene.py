@@ -18,7 +18,7 @@ from tests.unit.scripts.fensu_policy.rules._test_types import CustomRuleTestCase
         ),
         CustomRuleTestCase(
             description="target reuse source relation faults per line",
-            path="src/sqlbuild/compiler/planner/_helpers/standard_reuse_example.py",
+            path="src/sqlbuild/compiler/planner/_helpers/direct_reuse_example.py",
             source=(
                 "def build_origin() -> str:\n"
                 "    source_relation = 'prod.orders'\n"

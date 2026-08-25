@@ -2,11 +2,11 @@
 
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt._helpers.cli.mode import (
-    enforce_dbt_interop_standard_mode as _enforce,
+    enforce_dbt_interop_direct_mode as _enforce,
 )
 
 
-def enforce_dbt_interop_standard_mode(*, discovered_inputs: DiscoveredProjectInputs) -> None:
+def enforce_dbt_interop_direct_mode(*, discovered_inputs: DiscoveredProjectInputs) -> None:
     """Reject dbt interop in virtual environment mode."""
 
     _ = _enforce(discovered_inputs=discovered_inputs)

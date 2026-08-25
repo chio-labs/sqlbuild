@@ -49,7 +49,7 @@ from sqlbuild.compiler.planner.types import (
     WarningSeverity,
 )
 from sqlbuild.compiler.source_freshness.models import (
-    StandardSourceFreshnessPlanningResult,
+    DirectSourceFreshnessPlanningResult,
 )
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SeedCsvSettings, SourceEntry
@@ -307,7 +307,7 @@ class CursorInputRelation:
 
 @dataclass(frozen=True)
 class WarehouseFingerprints:
-    """Latest standard fingerprints grouped by node type."""
+    """Latest direct fingerprints grouped by node type."""
 
     models: dict[str, Fingerprint] = field(default_factory=dict)
     functions: dict[str, Fingerprint] = field(default_factory=dict)
@@ -555,8 +555,8 @@ class PlannerResolvedActions:
 
 
 @dataclass(frozen=True)
-class StandardModelVersionIdentities:
-    """Current standard model version identity values by model name."""
+class DirectModelVersionIdentities:
+    """Current direct model version identity values by model name."""
 
     function_local_hashes: dict[str, str]
     seed_version_hashes: dict[str, str]
@@ -944,7 +944,7 @@ class PlanOutput:
     source_read_map: dict[str, SourceEntry] = field(default_factory=dict)
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
     provider_usages: tuple[PlanProviderUsage, ...] = field(default_factory=tuple)
-    source_freshness: StandardSourceFreshnessPlanningResult | None = None
+    source_freshness: DirectSourceFreshnessPlanningResult | None = None
     python_identity_fingerprints: dict[tuple[str, str], Fingerprint] = field(default_factory=dict)
     metadata: dict[str, object] = field(default_factory=dict)
 
@@ -1019,8 +1019,8 @@ class PlannerWarehouseState:
 class PlannerIdentityContext:
     """Expected version identities for inspection and stale-warning scopes."""
 
-    version_identities: StandardModelVersionIdentities
-    stale_warning_identities: StandardModelVersionIdentities
+    version_identities: DirectModelVersionIdentities
+    stale_warning_identities: DirectModelVersionIdentities
 
 
 @dataclass(frozen=True)
@@ -1030,8 +1030,8 @@ class PlannerScopePruningResult:
     inspection_scope: PlannerScope
     execution_scope: PlannerScope
     resolved_actions: PlannerResolvedActions
-    pruned_standard_model_names: tuple[str, ...]
-    standard_identity_stale_model_names: frozenset[str]
+    pruned_direct_model_names: tuple[str, ...]
+    direct_identity_stale_model_names: frozenset[str]
     run_despite_unchanged: RunDespiteUnchangedPlanningResult
 
 
