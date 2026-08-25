@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import inspect
 import json
 import platform
 import sqlite3
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from string import hexdigits
 from typing import Any, cast
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
@@ -29,9 +31,11 @@ from sqlbuild.compiler.lineage.types import (
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 
-_ANALYSIS_CACHE_VERSION: int = 2
-_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v2"
+_ANALYSIS_CACHE_VERSION: int = 4
+_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v4"
 _MAX_CACHE_ENTRY_BYTES: int = 10_000_000
+_SHA256_HEX_LENGTH: int = 64
+_CACHE_ENTRY_SEPARATOR: str = "\n"
 _LOCAL_QUALNAME_MARKER: str = "<locals>"
 _SQLITE_QUERY_CHUNK_SIZE: int = 500
 _SQLITE_TIMEOUT_SECONDS: float = 0.1
@@ -138,14 +142,15 @@ def read_model_analyses(
     cache_keys: tuple[str, ...],
     model_names: tuple[str, ...],
     upstream_model_names_by_key: dict[str, tuple[str, ...]],
-) -> tuple[dict[str, PolyglotAnalysisResult], dict[str, str]]:
+) -> tuple[dict[str, PolyglotAnalysisResult], dict[str, str], dict[str, str]]:
     """Read one consistent snapshot of analyses, dependencies, and output signatures."""
 
     database_path: Path = _cache_database_path(context=context)
     if not database_path.is_file() or not cache_keys:
-        return {}, {}
+        return {}, {}, {}
     analyses: dict[str, PolyglotAnalysisResult] = {}
     signatures: dict[str, str] = {}
+    output_signatures_by_key: dict[str, str] = {}
     try:
         connection_uri: str = f"file:{database_path}?mode=ro"
         with sqlite3.connect(
@@ -202,15 +207,19 @@ def read_model_analyses(
                         or dependencies_by_key.get(cache_key, {}) != expected_dependencies
                     ):
                         continue
-                    analysis: PolyglotAnalysisResult | None = _analysis_from_contents(
-                        contents=contents,
-                        expected_cache_key=cache_key,
+                    cached_result: tuple[PolyglotAnalysisResult, str] | None = (
+                        _analysis_from_contents(
+                            contents=contents,
+                            expected_cache_key=cache_key,
+                        )
                     )
-                    if analysis is not None:
+                    if cached_result is not None:
+                        analysis, output_signature = cached_result
                         analyses[cache_key] = analysis
+                        output_signatures_by_key[cache_key] = output_signature
     except (OSError, sqlite3.DatabaseError):
-        return {}, {}
-    return analyses, signatures
+        return {}, {}, {}
+    return analyses, signatures, output_signatures_by_key
 
 
 def write_model_analyses(
@@ -225,12 +234,7 @@ def write_model_analyses(
     rows: list[tuple[str, str]] = [
         (
             cache_key,
-            json.dumps(
-                _analysis_payload(cache_key=cache_key, analysis=analysis),
-                ensure_ascii=False,
-                separators=(",", ":"),
-                sort_keys=True,
-            ),
+            _analysis_contents(cache_key=cache_key, analysis=analysis),
         )
         for cache_key, analysis in analyses_by_key.items()
         if analysis.analysis_succeeded
@@ -328,11 +332,21 @@ def model_analysis_output_signature(analysis: PolyglotAnalysisResult) -> str:
 
 def _analysis_from_contents(
     *, contents: str, expected_cache_key: str
-) -> PolyglotAnalysisResult | None:
-    if len(contents.encode("utf-8")) > _MAX_CACHE_ENTRY_BYTES:
+) -> tuple[PolyglotAnalysisResult, str] | None:
+    encoded_contents: bytes = contents.encode("utf-8")
+    if len(encoded_contents) > _MAX_CACHE_ENTRY_BYTES:
         return None
     try:
-        payload: object = json.loads(contents)
+        stored_digest, separator, serialized_payload = contents.partition(_CACHE_ENTRY_SEPARATOR)
+        if not separator or not hmac.compare_digest(
+            stored_digest,
+            _cache_entry_digest(
+                cache_key=expected_cache_key,
+                serialized_payload=serialized_payload,
+            ),
+        ):
+            return None
+        payload: object = json.loads(serialized_payload)
         return _analysis_from_payload(payload=payload, expected_cache_key=expected_cache_key)
     except (ValueError, TypeError, KeyError, json.JSONDecodeError):
         return None
@@ -418,116 +432,152 @@ def _referenced_analysis_tables(
 
 
 def _analysis_payload(*, cache_key: str, analysis: PolyglotAnalysisResult) -> dict[str, object]:
-    analysis_payload: dict[str, object] = {
-        "columns": (
+    return {
+        "v": _ANALYSIS_CACHE_VERSION,
+        "k": cache_key,
+        "s": model_analysis_output_signature(analysis),
+        "c": (
             None
             if analysis.columns is None
             else [
-                {
-                    "name": column.name,
-                    "type": column.type,
-                    "nullability": column.nullability.value,
-                }
-                for column in analysis.columns
+                [column.name, column.type, column.nullability.value] for column in analysis.columns
             ]
         ),
-        "lineage_columns": [_lineage_column_payload(column) for column in analysis.lineage_columns],
-        "has_star": analysis.has_star,
-    }
-    return {
-        "version": _ANALYSIS_CACHE_VERSION,
-        "cache_key": cache_key,
-        "analysis_succeeded": True,
-        "analysis_digest": _payload_digest(analysis_payload),
-        "analysis": analysis_payload,
+        "l": [_lineage_column_payload(column) for column in analysis.lineage_columns],
+        "h": analysis.has_star,
     }
 
 
-def _lineage_column_payload(column: CompiledLineageColumnFact) -> dict[str, object]:
-    return {
-        "output_column": column.output_column,
-        "transform_kind": column.transform_kind.value,
-        "confidence": column.confidence.value,
-        "upstream_columns": [
-            {
-                "resource_type": str(source.resource_type),
-                "resource_name": source.resource_name,
-                "column_name": source.column_name,
-            }
+def _lineage_column_payload(column: CompiledLineageColumnFact) -> list[object]:
+    return [
+        column.output_column,
+        column.transform_kind.value,
+        column.confidence.value,
+        [
+            [
+                str(source.resource_type),
+                source.resource_name,
+                source.column_name,
+            ]
             for source in column.upstream_columns
         ],
-    }
+    ]
 
 
-def _analysis_from_payload(*, payload: object, expected_cache_key: str) -> PolyglotAnalysisResult:
+def _analysis_from_payload(
+    *, payload: object, expected_cache_key: str
+) -> tuple[PolyglotAnalysisResult, str]:
     if not isinstance(payload, dict):
         raise AnalysisCacheEntryError("analysis cache entry must be an object")
     values: dict[str, Any] = cast(dict[str, Any], payload)
-    version_value: object = values["version"]
+    version_value: object = values["v"]
     if type(version_value) is not int or version_value != _ANALYSIS_CACHE_VERSION:
         raise AnalysisCacheEntryError("analysis cache version mismatch")
-    if values["cache_key"] != expected_cache_key:
+    if values["k"] != expected_cache_key:
         raise AnalysisCacheEntryError("analysis cache key mismatch")
-    if values["analysis_succeeded"] is not True:
-        raise AnalysisCacheEntryError("analysis cache contains an unsuccessful result")
-    analysis_payload: object = values["analysis"]
-    if not isinstance(analysis_payload, dict):
-        raise AnalysisCacheEntryError("analysis cache facts must be an object")
-    if values["analysis_digest"] != _payload_digest(analysis_payload):
-        raise AnalysisCacheEntryError("analysis cache facts checksum mismatch")
-    analysis_values: dict[str, Any] = cast(dict[str, Any], analysis_payload)
-    columns_payload: object = analysis_values["columns"]
+    output_signature: object = values["s"]
+    if not (
+        isinstance(output_signature, str)
+        and len(output_signature) == _SHA256_HEX_LENGTH
+        and all(character in hexdigits for character in output_signature)
+    ):
+        raise AnalysisCacheEntryError("analysis cache output signature is invalid")
+    columns_payload: object = values["c"]
     columns: tuple[InferredColumn, ...] | None = (
         None
         if columns_payload is None
-        else tuple(
-            InferredColumn(
-                name=str(column["name"]),
-                type=None if column.get("type") is None else str(column["type"]),
-                nullability=InferredNullability(str(column["nullability"])),
-            )
-            for column in _object_list(columns_payload)
-        )
+        else tuple(_column_from_payload(column) for column in _value_lists(columns_payload))
     )
     lineage_columns: tuple[CompiledLineageColumnFact, ...] = tuple(
-        _lineage_column_from_payload(column)
-        for column in _object_list(analysis_values["lineage_columns"])
+        _lineage_column_from_payload(column) for column in _value_lists(values["l"])
     )
-    has_star: object = analysis_values["has_star"]
+    has_star: object = values["h"]
     if not isinstance(has_star, bool):
         raise AnalysisCacheEntryError("analysis cache has_star must be a boolean")
-    return PolyglotAnalysisResult(
-        analysis_succeeded=True,
-        columns=columns,
-        lineage_columns=lineage_columns,
-        has_star=has_star,
+    return (
+        PolyglotAnalysisResult(
+            analysis_succeeded=True,
+            columns=columns,
+            lineage_columns=lineage_columns,
+            has_star=has_star,
+        ),
+        output_signature,
     )
 
 
-def _object_list(payload: object) -> list[dict[str, Any]]:
-    if not isinstance(payload, list) or not all(isinstance(item, dict) for item in payload):
-        raise AnalysisCacheEntryError("analysis cache collection must contain objects")
-    return cast(list[dict[str, Any]], payload)
+def _value_lists(payload: object) -> list[list[object]]:
+    if not isinstance(payload, list) or not all(isinstance(item, list) for item in payload):
+        raise AnalysisCacheEntryError("analysis cache collection must contain arrays")
+    return cast(list[list[object]], payload)
 
 
-def _lineage_column_from_payload(payload: dict[str, Any]) -> CompiledLineageColumnFact:
+def _column_from_payload(payload: list[object]) -> InferredColumn:
+    column_value_count: int = 3
+    if len(payload) != column_value_count:
+        raise AnalysisCacheEntryError("analysis cache column must contain three values")
+    name, column_type, nullability = payload
+    if not isinstance(name, str) or not isinstance(nullability, str):
+        raise AnalysisCacheEntryError("analysis cache column name and nullability must be strings")
+    if column_type is not None and not isinstance(column_type, str):
+        raise AnalysisCacheEntryError("analysis cache column type must be a string or null")
+    return InferredColumn(
+        name=name,
+        type=column_type,
+        nullability=InferredNullability(nullability),
+    )
+
+
+def _lineage_column_from_payload(payload: list[object]) -> CompiledLineageColumnFact:
+    lineage_value_count: int = 4
+    if len(payload) != lineage_value_count:
+        raise AnalysisCacheEntryError("analysis cache lineage column must contain four values")
+    output_column, transform_kind, confidence, upstream_columns = payload
+    if not all(isinstance(value, str) for value in (output_column, transform_kind, confidence)):
+        raise AnalysisCacheEntryError("analysis cache lineage attributes must be strings")
     return CompiledLineageColumnFact(
-        output_column=str(payload["output_column"]),
-        transform_kind=ColumnTransformKind(str(payload["transform_kind"])),
-        confidence=ColumnLineageConfidence(str(payload["confidence"])),
+        output_column=cast(str, output_column),
+        transform_kind=ColumnTransformKind(cast(str, transform_kind)),
+        confidence=ColumnLineageConfidence(cast(str, confidence)),
         upstream_columns=tuple(
-            CompiledLineageSourceFact(
-                resource_type=str(source["resource_type"]),
-                resource_name=str(source["resource_name"]),
-                column_name=str(source["column_name"]),
-            )
-            for source in _object_list(payload["upstream_columns"])
+            _lineage_source_from_payload(source) for source in _value_lists(upstream_columns)
         ),
+    )
+
+
+def _lineage_source_from_payload(payload: list[object]) -> CompiledLineageSourceFact:
+    source_value_count: int = 3
+    if len(payload) != source_value_count or not all(isinstance(value, str) for value in payload):
+        raise AnalysisCacheEntryError("analysis cache lineage source must contain three strings")
+    resource_type, resource_name, column_name = cast(list[str], payload)
+    return CompiledLineageSourceFact(
+        resource_type=resource_type,
+        resource_name=resource_name,
+        column_name=column_name,
     )
 
 
 def _cache_database_path(*, context: AnalysisCacheContext) -> Path:
     return context.root / f"v{_ANALYSIS_CACHE_VERSION}" / _CACHE_DATABASE_NAME
+
+
+def _analysis_contents(*, cache_key: str, analysis: PolyglotAnalysisResult) -> str:
+    serialized_payload: str = json.dumps(
+        _analysis_payload(cache_key=cache_key, analysis=analysis),
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return _CACHE_ENTRY_SEPARATOR.join(
+        (
+            _cache_entry_digest(cache_key=cache_key, serialized_payload=serialized_payload),
+            serialized_payload,
+        )
+    )
+
+
+def _cache_entry_digest(*, cache_key: str, serialized_payload: str) -> str:
+    encoded: bytes = f"{cache_key}\0{serialized_payload}".encode()
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _payload_digest(payload: object) -> str:
