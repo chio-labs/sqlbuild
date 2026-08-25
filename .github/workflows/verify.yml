@@ -56,6 +56,9 @@ jobs:
                 ;;
               tests/unit/*|tests/integration/*)
                 ;;
+              .github/workflows/verify.yml)
+                duckdb=true
+                ;;
               .github/*|docs/*|*.md|LICENSE)
                 ;;
               *)
@@ -137,6 +140,21 @@ jobs:
         run: uv python install 3.12
       - name: Install dependencies
         run: uv sync --locked --all-groups --all-extras
+      - name: Report runner CPU topology
+        run: |
+          echo "nproc=$(nproc)"
+          echo "online_processors=$(getconf _NPROCESSORS_ONLN)"
+          lscpu
+          uv run python - <<'PY'
+          import os
+
+          print(f"os.cpu_count={os.cpu_count()}")
+          print(f"sched_getaffinity={sorted(os.sched_getaffinity(0))}")
+          print(
+              "PYTEST_XDIST_AUTO_NUM_WORKERS="
+              f"{os.environ.get('PYTEST_XDIST_AUTO_NUM_WORKERS', '<unset>')}"
+          )
+          PY
       - name: Run DuckDB E2E tests
         run: make test-e2e-duckdb
 
