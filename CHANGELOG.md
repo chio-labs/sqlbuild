@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.56.1](https://github.com/chio-labs/sqlbuild/compare/v0.56.0...v0.56.1) (2026-08-25)
+
+
+### Documentation
+
+* support navigation root pages ([#356](https://github.com/chio-labs/sqlbuild/issues/356)) ([021fa1f](https://github.com/chio-labs/sqlbuild/commit/021fa1ffccd6c17ce2b9eddd9a6fc8cefe83b322))
+
 ## [0.56.0](https://github.com/chio-labs/sqlbuild/compare/v0.55.9...v0.56.0) (2026-08-25)
 
 
