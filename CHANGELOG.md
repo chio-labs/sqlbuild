@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.4](https://github.com/chio-labs/sqlbuild/compare/v0.55.3...v0.55.4) (2026-08-25)
+
+
+### Performance Improvements
+
+* **compiler:** parallelize cache closure analysis ([#338](https://github.com/chio-labs/sqlbuild/issues/338)) ([64f15f3](https://github.com/chio-labs/sqlbuild/commit/64f15f361e169597f17cd5f4663531b5ece31206))
+
 ## [0.55.3](https://github.com/chio-labs/sqlbuild/compare/v0.55.2...v0.55.3) (2026-08-25)
 
 
