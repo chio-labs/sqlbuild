@@ -43,7 +43,7 @@ def _collect_navigation_pages(node: Any) -> list[str]:
             pages.extend(_collect_navigation_pages(item))
         return pages
     if isinstance(node, dict):
-        for key in ("groups", "pages"):
+        for key in ("root", "groups", "pages"):
             pages.extend(_collect_navigation_pages(node.get(key, [])))
 
     return pages
