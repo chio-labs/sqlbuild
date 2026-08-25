@@ -398,6 +398,7 @@ class CompileProjectInputs:
     run_id: str = ""
     effective_target_name: str | None = None
     effective_target: TargetConfig | None = None
+    compile_cache_dir: Path | None = None
     effective_connection: dict[str, object] = field(default_factory=dict)
     effective_settings: SettingsConfig = field(default_factory=SettingsConfig)
     effective_vars: dict[str, object] = field(default_factory=dict)

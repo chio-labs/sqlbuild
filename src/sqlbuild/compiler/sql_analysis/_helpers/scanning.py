@@ -17,18 +17,18 @@ def skip_quoted_text_impl(*, sql: str, start: int, context: str = "SQL") -> int:
 
     quote_character: str = sql[start]
     index: int = start + 1
-    while index < len(sql):
-        if sql[index] == quote_character:
-            if (
-                quote_character in SQL_ESCAPABLE_QUOTE_CHARACTERS
-                and index + 1 < len(sql)
-                and sql[index + 1] == quote_character
-            ):
-                index += 2
-                continue
-            return index + 1
-        index += 1
-    raise CompileInputError(f"{context} contains an unclosed quoted string")
+    while True:
+        index = sql.find(quote_character, index)
+        if index == -1:
+            raise CompileInputError(f"{context} contains an unclosed quoted string")
+        if (
+            quote_character in SQL_ESCAPABLE_QUOTE_CHARACTERS
+            and index + 1 < len(sql)
+            and sql[index + 1] == quote_character
+        ):
+            index += 2
+            continue
+        return index + 1
 
 
 def skip_line_comment_impl(*, sql: str, start: int) -> int:

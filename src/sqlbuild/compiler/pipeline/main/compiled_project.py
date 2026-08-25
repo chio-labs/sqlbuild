@@ -2,15 +2,8 @@
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile.constants import (
-    COMPILE_CACHE_DISABLE_ENV_VAR,
-    COMPILE_CACHE_DISABLE_VALUE,
-)
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
@@ -37,7 +30,6 @@ from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
-from sqlbuild.spec.contracts.models import TargetConfig
 
 
 def build_compiled_project(
@@ -59,6 +51,7 @@ def build_compiled_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
     )
+    no_cache: bool = analysis_selection is not None and analysis_selection.no_cache
     compile_inputs: CompileProjectInputs = build_compile_inputs(
         discovered_inputs=discovered_inputs,
         selected_target=selected_target,
@@ -70,13 +63,9 @@ def build_compiled_project(
             adapter.python_functions_inherit_default_namespace()
         ),
         external_sql_reference_resolver=external_sql_reference_resolver,
+        no_cache=no_cache,
     )
     inference_profile: ExpressionInferenceProfile = adapter.expression_inference_profile()
-    analysis_cache_dir: Path | None = _analysis_cache_dir(
-        discovered_inputs=discovered_inputs,
-        target_config=compile_inputs.effective_target,
-        no_cache=analysis_selection is not None and analysis_selection.no_cache,
-    )
     analysis_model_names: frozenset[str] | None = _resolve_analysis_model_names(
         compile_inputs=compile_inputs,
         inference_profile=inference_profile,
@@ -88,7 +77,7 @@ def build_compiled_project(
             inference_profile=inference_profile,
             skip_column_inference=skip_column_inference,
             column_lineage_mode=column_lineage_mode,
-            analysis_cache_dir=analysis_cache_dir,
+            analysis_cache_dir=compile_inputs.compile_cache_dir,
             analysis_model_names=analysis_model_names,
         ),
         default_schema=adapter.default_schema(),
@@ -106,22 +95,6 @@ def build_compiled_project(
         project=project,
     )
     return project
-
-
-def _analysis_cache_dir(
-    *,
-    discovered_inputs: DiscoveredProjectInputs,
-    target_config: TargetConfig | None,
-    no_cache: bool,
-) -> Path | None:
-    if (
-        no_cache
-        or (target_config is not None and target_config.compile_cache is False)
-        or os.environ.get(COMPILE_CACHE_DISABLE_ENV_VAR) == COMPILE_CACHE_DISABLE_VALUE
-    ):
-        return None
-    project_dir: Path | None = discovered_inputs.project_dir
-    return project_dir / "target" / "compile-cache" if project_dir is not None else None
 
 
 def _resolve_analysis_model_names(
