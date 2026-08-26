@@ -15,6 +15,7 @@ from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
     InaccessibleRecord,
+    OwnershipRoot,
     ResourceIdentity,
     ResourceRecord,
     ScopeLookup,
@@ -22,7 +23,13 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityRecord,
     VisibilityResolution,
 )
-from sqlbuild.compiler.scopes.types import InaccessibleReason, ScopeKind, VisibilityReason
+from sqlbuild.compiler.scopes.types import (
+    InaccessibleReason,
+    OwnershipRootKind,
+    ResourceKind,
+    ScopeKind,
+    VisibilityReason,
+)
 
 
 def query_target(
@@ -73,6 +80,33 @@ def resolve_visibility(
                     )
                 )
     return VisibilityResolution(query, tuple(visible), tuple(inaccessible))
+
+
+def resolve_path_visibility(
+    *, lookup: ScopeLookup, path: str | PurePath
+) -> tuple[tuple[DeclarationRecord, ...], tuple[DeclarationRecord, ...]]:
+    """Classify declarations for an authored path, including declaration definition files."""
+
+    normalized_path: str = normalize_path(path=path)
+    resource: ResourceRecord = ResourceRecord(
+        identity=ResourceIdentity(ResourceKind.MODEL, f"<path:{normalized_path}>"),
+        path=normalized_path,
+        ownership_root=OwnershipRoot(
+            path=CURRENT_PATH_COMPONENT,
+            kind=OwnershipRootKind.RESOURCE,
+            resource_kind=ResourceKind.MODEL,
+        ),
+    )
+    visible: list[DeclarationRecord] = []
+    inaccessible: list[DeclarationRecord] = []
+    for declaration in lookup.index.declarations:
+        target: list[DeclarationRecord] = (
+            visible
+            if _visibility_reason(resource=resource, declaration=declaration) is not None
+            else inaccessible
+        )
+        target.append(declaration)
+    return tuple(visible), tuple(inaccessible)
 
 
 def _visibility_reason(

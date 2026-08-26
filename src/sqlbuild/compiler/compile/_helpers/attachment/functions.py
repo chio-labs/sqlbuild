@@ -160,6 +160,7 @@ def build_sql_function_inputs(
             loaded_macros=loaded_macros,
             macro_context=macro_context,
             declarations=scoped_declarations.declarations,
+            declaration_resolver=scoped_declarations.resolver,
             value_renderer=scoped_declarations.value_renderer,
             collection_rendering=scoped_declarations.collection_rendering,
         )

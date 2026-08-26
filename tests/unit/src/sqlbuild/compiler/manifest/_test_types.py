@@ -86,6 +86,9 @@ class ManifestMacroNodeTestCase:
     expected_resource_type: str
     expected_macro_sql: str
     expected_path: str
+    expected_visibility: str = "global"
+    expected_scope_path: str | None = None
+    expected_dependencies: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

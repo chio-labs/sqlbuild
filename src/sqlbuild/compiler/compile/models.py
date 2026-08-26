@@ -48,6 +48,7 @@ from sqlbuild.compiler.scopes.models import (
     DeclarationRecord,
     ScopeIndex,
     ScopeLookup,
+    UsageRecord,
 )
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
@@ -190,6 +191,16 @@ class MacroContext:
 
 
 @dataclass(frozen=True)
+class MacroExpansionResult:
+    """Expanded SQL and resolved macro usage facts from one authored string."""
+
+    sql: str
+    spans: tuple[ExpansionSpan, ...] = field(default_factory=tuple)
+    dependencies: tuple[DeclarationIdentity, ...] = field(default_factory=tuple)
+    usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class DeclarationResolutionContext:
     """Declarations visible during one authored SQL expansion."""
 
@@ -197,6 +208,9 @@ class DeclarationResolutionContext:
     constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
     inaccessible_enums: dict[str, DeclarationRecord] = field(default_factory=dict)
     inaccessible_constants: dict[str, DeclarationRecord] = field(default_factory=dict)
+    macros: dict[str, LoadedMacro] = field(default_factory=dict)
+    macro_records: dict[str, DeclarationRecord] = field(default_factory=dict)
+    inaccessible_macros: dict[str, DeclarationRecord] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -411,6 +425,8 @@ class CompileModelInput:
     enum_declarations: tuple[EnumDeclaration, ...] = field(default_factory=tuple)
     constant_declarations: tuple[ConstantDeclaration, ...] = field(default_factory=tuple)
     enum_columns: dict[str, EnumDeclaration] = field(default_factory=dict)
+    macro_deps: tuple[str, ...] = field(default_factory=tuple)
+    macro_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

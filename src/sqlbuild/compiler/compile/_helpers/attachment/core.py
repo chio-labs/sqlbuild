@@ -45,7 +45,7 @@ from sqlbuild.compiler.compile._helpers.render.declarations import (
     resolve_enum_contract_columns,
 )
 from sqlbuild.compiler.compile._helpers.render.macros import (
-    expand_sql_macros,
+    expand_sql_macros_result,
 )
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
     expand_authored_sql,
@@ -71,6 +71,7 @@ from sqlbuild.compiler.compile.models import (
     DeclarationResolutionContext,
     LoadedMacro,
     MacroContext,
+    MacroExpansionResult,
     ModelInputBuildContext,
 )
 from sqlbuild.compiler.compile.types import (
@@ -238,12 +239,14 @@ def _build_model_inputs(
             inaccessible_enums=declarations.inaccessible_enums,
             inaccessible_constants=declarations.inaccessible_constants,
         )
-        expanded_query_sql: str = expand_sql_macros(
+        macro_expansion: MacroExpansionResult = expand_sql_macros_result(
             sql=declaration_expanded_sql,
             file_path=model_file.file_path,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
+            declaration_resolver=context.declaration_resolver,
         )
+        expanded_query_sql: str = macro_expansion.sql
         expanded_query_sql = get_validated_model_cursor_intrinsics(
             sql=expanded_query_sql,
             config_values=effective_config.values,
@@ -400,6 +403,8 @@ def _build_model_inputs(
                     enum_declarations=tuple(declarations.local_enums.values()),
                     constant_declarations=tuple(declarations.local_constants.values()),
                     enum_columns=enum_columns,
+                    macro_deps=tuple(item.name for item in macro_expansion.dependencies),
+                    macro_usages=macro_expansion.usages,
                 )
             )
             continue
@@ -416,6 +421,8 @@ def _build_model_inputs(
                 enum_declarations=tuple(declarations.local_enums.values()),
                 constant_declarations=tuple(declarations.local_constants.values()),
                 enum_columns=enum_columns,
+                macro_deps=tuple(item.name for item in macro_expansion.dependencies),
+                macro_usages=macro_expansion.usages,
             )
         )
 
@@ -855,6 +862,7 @@ def expand_sql_macros_in_value(
             loaded_macros=context.loaded_macros,
             macro_context=context.macro_context,
             declarations=declaration_context,
+            declaration_resolver=context.declaration_expansion.resolver,
             value_renderer=context.declaration_expansion.value_renderer,
             collection_rendering=context.declaration_expansion.collection_rendering,
         )

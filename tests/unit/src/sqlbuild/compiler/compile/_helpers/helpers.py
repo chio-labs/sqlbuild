@@ -19,11 +19,24 @@ from sqlbuild.compiler.compile.models import (
     CompileProjectInputs,
     DeclarationExpansionContext,
     DeclarationResolutionContext,
+    DeclarationRuntimeProjection,
+    DeclarationScopeResolver,
     LoadedMacro,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
+from sqlbuild.compiler.scopes.main._build_scope_lookup import build_scope_lookup
+from sqlbuild.compiler.scopes.models import (
+    DeclarationIdentity,
+    DeclarationRecord,
+    MacroMetadata,
+    OwnershipRoot,
+    ResourceIdentity,
+    ResourceRecord,
+    ScopeIndex,
+)
+from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind
 from sqlbuild.sql_values.types import CollectionRendering
 
 DUCKDB_COMPILE_ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
@@ -41,6 +54,54 @@ DUCKDB_DECLARATION_EXPANSION_CONTEXT: DeclarationExpansionContext = DeclarationE
     value_renderer=DUCKDB_COMPILE_ADAPTER_CONTEXT.value_renderer,
     collection_rendering=DUCKDB_COMPILE_ADAPTER_CONTEXT.collection_rendering,
 )
+
+
+def build_scoped_macro_resolver(
+    *, tmp_path: Path, definitions: dict[str, tuple[str, ScopeKind, str | None, str]]
+) -> tuple[dict[str, LoadedMacro], DeclarationScopeResolver]:
+    """Build loaded macros and canonical scope projection for expansion tests."""
+
+    loaded: dict[str, LoadedMacro] = {}
+    records: list[DeclarationRecord] = []
+    projection: dict[DeclarationIdentity, LoadedMacro] = {}
+    for name, (output, scope, owner, authored_path) in definitions.items():
+        relative_path: Path = Path(authored_path)
+
+        def macro(*, _output: str = output) -> str:
+            return _output
+
+        item: LoadedMacro = LoadedMacro(name, tmp_path / relative_path, relative_path, "", macro)
+        identity: DeclarationIdentity = DeclarationIdentity(DeclarationKind.MACRO, name)
+        loaded[name] = item
+        projection[identity] = item
+        records.append(
+            DeclarationRecord(
+                identity=identity,
+                path=relative_path.as_posix(),
+                line=1,
+                column=1,
+                scope=scope,
+                ownership_root=OwnershipRoot(relative_path.parts[0]),
+                owning_path=owner,
+                macro=MacroMetadata(),
+            )
+        )
+    model_identity: ResourceIdentity = ResourceIdentity(ResourceKind.MODEL, "orders")
+    index: ScopeIndex = ScopeIndex(
+        resources=(
+            ResourceRecord(
+                model_identity,
+                "models/marts/finance/orders.sql",
+                OwnershipRoot("models", resource_kind=ResourceKind.MODEL),
+            ),
+        ),
+        declarations=tuple(records),
+    )
+    return loaded, DeclarationScopeResolver(
+        project_dir=tmp_path,
+        lookup=build_scope_lookup(index=index),
+        projection=DeclarationRuntimeProjection(MappingProxyType(projection)),
+    )
 
 
 def build_loaded_macros(tmp_path: Path, macro_file_contents: str) -> dict[str, LoadedMacro]:

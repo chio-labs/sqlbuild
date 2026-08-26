@@ -24,6 +24,7 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.models import (
     DeclarationResolutionContext,
+    DeclarationScopeResolver,
     ExpansionSpan,
     LoadedMacro,
     MacroContext,
@@ -70,6 +71,7 @@ def expand_authored_sql(
     collection_rendering: CollectionRendering,
     context_values: Mapping[str, str | None] | None = None,
     declarations: DeclarationResolutionContext | None = None,
+    declaration_resolver: DeclarationScopeResolver | None = None,
 ) -> str:
     """Apply SQL interpolation and macro expansion to authored SQL text."""
 
@@ -96,6 +98,7 @@ def expand_authored_sql(
         file_path=file_path,
         loaded_macros=loaded_macros,
         macro_context=macro_context,
+        declaration_resolver=declaration_resolver,
     )
 
 
@@ -110,6 +113,7 @@ def expand_authored_sql_with_spans(
     collection_rendering: CollectionRendering,
     context_values: Mapping[str, str | None] | None = None,
     declarations: DeclarationResolutionContext | None = None,
+    declaration_resolver: DeclarationScopeResolver | None = None,
 ) -> tuple[str, tuple[tuple[ExpansionSpan, ...], ...]]:
     """Expand authored SQL, returning each pass's substitution spans in order."""
 
@@ -142,6 +146,7 @@ def expand_authored_sql_with_spans(
         file_path=file_path,
         loaded_macros=loaded_macros,
         macro_context=macro_context,
+        declaration_resolver=declaration_resolver,
     )
     return macro_expanded_sql, (interpolation_spans, declaration_spans, macro_spans)
 

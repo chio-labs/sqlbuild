@@ -43,6 +43,7 @@ def expand_sql_with_spans(
         loaded_macros=context.loaded_macros,
         macro_context=context.macro_context,
         declarations=declarations,
+        declaration_resolver=context.declaration_resolver,
         value_renderer=context.value_renderer,
         collection_rendering=context.collection_rendering,
     )

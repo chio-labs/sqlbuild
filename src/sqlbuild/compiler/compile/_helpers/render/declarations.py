@@ -32,6 +32,9 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.scopes.main._build_scope_lookup import build_scope_lookup
+from sqlbuild.compiler.scopes.main._resolve_scope_path_visibility import (
+    resolve_scope_path_visibility,
+)
 from sqlbuild.compiler.scopes.main._resolve_scope_visibility import resolve_scope_visibility
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
@@ -156,30 +159,58 @@ def resolve_declaration_context(
     constants: dict[str, ConstantDeclaration] = {}
     inaccessible_enums: dict[str, DeclarationRecord] = {}
     inaccessible_constants: dict[str, DeclarationRecord] = {}
-    for visible in resolution.visible:
+    macros: dict[str, LoadedMacro] = {}
+    macro_records: dict[str, DeclarationRecord] = {}
+    inaccessible_macros: dict[str, DeclarationRecord] = {}
+    if resolution.target.unknown:
+        lexical_target_path: Path = target_path
+        definition_record: DeclarationRecord | None = next(
+            (
+                record
+                for record in resolver.lookup.index.declarations
+                if record.path == target_path.as_posix()
+                and record.identity.kind is DeclarationKind.MACRO
+            ),
+            None,
+        )
+        if definition_record is not None:
+            lexical_target_path = Path(definition_record.owning_path or ".") / "__macro__.sql"
+        visible_records, inaccessible_records = resolve_scope_path_visibility(
+            lookup=resolver.lookup, path=lexical_target_path
+        )
+    else:
+        visible_records: tuple[DeclarationRecord, ...] = tuple(
+            resolver.lookup.declarations[item.declaration][0] for item in resolution.visible
+        )
+        inaccessible_records: tuple[DeclarationRecord, ...] = tuple(
+            resolver.lookup.declarations[item.declaration][0] for item in resolution.inaccessible
+        )
+    for visible in visible_records:
         value: EnumDeclaration | ConstantDeclaration | LoadedMacro | None = (
-            resolver.projection.declarations.get(visible.declaration)
+            resolver.projection.declarations.get(visible.identity)
         )
         if isinstance(value, EnumDeclaration):
-            enums[visible.declaration.name] = value
+            enums[visible.identity.name] = value
         elif isinstance(value, ConstantDeclaration):
-            constants[visible.declaration.name] = value
-    for inaccessible in resolution.inaccessible:
-        records: tuple[DeclarationRecord, ...] = resolver.lookup.declarations.get(
-            inaccessible.declaration, ()
-        )
-        if not records:
-            continue
-        record: DeclarationRecord = records[0]
-        if inaccessible.declaration.kind is DeclarationKind.ENUM:
-            inaccessible_enums[inaccessible.declaration.name] = record
-        elif inaccessible.declaration.kind is DeclarationKind.CONSTANT:
-            inaccessible_constants[inaccessible.declaration.name] = record
+            constants[visible.identity.name] = value
+        elif isinstance(value, LoadedMacro):
+            macros[visible.identity.name] = value
+            macro_records[visible.identity.name] = visible
+    for record in inaccessible_records:
+        if record.identity.kind is DeclarationKind.ENUM:
+            inaccessible_enums[record.identity.name] = record
+        elif record.identity.kind is DeclarationKind.CONSTANT:
+            inaccessible_constants[record.identity.name] = record
+        elif record.identity.kind is DeclarationKind.MACRO:
+            inaccessible_macros[record.identity.name] = record
     return DeclarationResolutionContext(
         enums=enums,
         constants=constants,
         inaccessible_enums=inaccessible_enums,
         inaccessible_constants=inaccessible_constants,
+        macros=macros,
+        macro_records=macro_records,
+        inaccessible_macros=inaccessible_macros,
     )
 
 

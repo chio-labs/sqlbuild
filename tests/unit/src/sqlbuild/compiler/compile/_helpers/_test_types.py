@@ -12,6 +12,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, SqlTestMode
 from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.compiler.scopes.types import ScopeKind
 
 
 @dataclass(frozen=True)
@@ -56,6 +57,23 @@ class ExpandSqlMacrosTestCase:
 class ExpandSqlMacrosErrorTestCase:
     description: str
     macro_file_contents: str
+    sql: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ScopedMacroExpansionTestCase:
+    description: str
+    definitions: dict[str, tuple[str, ScopeKind, str | None, str]]
+    expected_sql: str
+    expected_dependencies: tuple[str, ...]
+    expected_usages: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class ScopedMacroExpansionErrorTestCase:
+    description: str
+    definitions: dict[str, tuple[str, ScopeKind, str | None, str]]
     sql: str
     expected_error_fragment: str
 

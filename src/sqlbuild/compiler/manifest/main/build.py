@@ -59,6 +59,7 @@ def build_manifest(
         loaded_macros=project.loaded_macros,
         sql_hook_files=project.sql_hook_files,
         project_name=project_name,
+        scope_index=project.scope_index,
     )
     python_hook_metadata: dict[str, dict[str, object]] = _build_python_hook_metadata(project)
 

@@ -18,6 +18,14 @@ from sqlbuild.compiler.discovery.models import DiscoveredSqlHookFile, SqlHookEnt
 from sqlbuild.compiler.manifest._helpers.shared import build_fqn
 from sqlbuild.compiler.manifest.constants import DBT_MANIFEST_SCHEMA_VERSION
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ChainStep, PlanOutput, SqlTestPlanEntry
+from sqlbuild.compiler.scopes.models import (
+    DeclarationIdentity,
+    DeclarationRecord,
+    MacroMetadata,
+    OwnershipRoot,
+    ScopeIndex,
+)
+from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind
 from sqlbuild.spec.contracts.models import SchemaColumn, SourceColumnEntry
 from tests.unit.src.sqlbuild.compiler.manifest._test_types import (
     FqnTestCase,
@@ -648,6 +656,18 @@ def test_given_deps_when_building_manifest_then_parent_map_correct(
             expected_macro_sql="def my_macro(): return 'SELECT 1'",
             expected_path="macros/helpers.py",
         ),
+        ManifestMacroNodeTestCase(
+            description="scoped macro exposes visibility metadata",
+            project_name=_PROJECT,
+            expected_unique_id=f"macro.{_PROJECT}.my_macro",
+            expected_name="my_macro",
+            expected_resource_type="macro",
+            expected_macro_sql="def my_macro(): return 'SELECT 1'",
+            expected_path="models/sales/_macros/helpers.py",
+            expected_visibility="inherited",
+            expected_scope_path="models/sales",
+            expected_dependencies=("base_macro",),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -661,7 +681,47 @@ def test_given_macro_when_building_manifest_then_macro_node_present(
         raw_source=test_case.expected_macro_sql,
         function=lambda: "SELECT 1",
     )
-    project: CompiledProject = build_test_project(loaded_macros={test_case.expected_name: macro})
+    dependency_identities: tuple[DeclarationIdentity, ...] = tuple(
+        DeclarationIdentity(DeclarationKind.MACRO, name) for name in test_case.expected_dependencies
+    )
+    declaration: DeclarationRecord = DeclarationRecord(
+        identity=DeclarationIdentity(DeclarationKind.MACRO, test_case.expected_name),
+        path=test_case.expected_path,
+        line=1,
+        column=1,
+        scope=ScopeKind(test_case.expected_visibility),
+        ownership_root=OwnershipRoot("models", resource_kind=ResourceKind.MODEL),
+        owning_path=test_case.expected_scope_path,
+        macro=MacroMetadata(dependencies=dependency_identities),
+    )
+    dependency_records: tuple[DeclarationRecord, ...] = tuple(
+        DeclarationRecord(
+            identity=identity,
+            path=f"macros/{identity.name}.py",
+            line=1,
+            column=1,
+            scope=ScopeKind.GLOBAL,
+            ownership_root=OwnershipRoot("macros"),
+            macro=MacroMetadata(),
+        )
+        for identity in dependency_identities
+    )
+    loaded_macros: dict[str, LoadedMacro] = {test_case.expected_name: macro}
+    for dependency_name in test_case.expected_dependencies:
+        loaded_macros[dependency_name] = LoadedMacro(
+            name=dependency_name,
+            file_path=Path(f"/project/macros/{dependency_name}.py"),
+            relative_path=Path(f"macros/{dependency_name}.py"),
+            raw_source=f"def {dependency_name}(): return 'SELECT 1'",
+            function=lambda: "SELECT 1",
+        )
+    project: CompiledProject = build_test_project(
+        loaded_macros=loaded_macros,
+    )
+    project = replace(
+        project,
+        scope_index=ScopeIndex(declarations=(declaration, *dependency_records)),
+    )
     plan_output: PlanOutput = build_test_plan_output()
 
     result: dict[str, Any] = run_manifest(
@@ -679,6 +739,13 @@ def test_given_macro_when_building_manifest_then_macro_node_present(
     assert macro_node["resource_type"] == test_case.expected_resource_type
     assert macro_node["macro_sql"] == test_case.expected_macro_sql
     assert macro_node["path"] == test_case.expected_path
+    assert macro_node["meta"] == {
+        "sqlbuild_visibility": test_case.expected_visibility,
+        "sqlbuild_scope_path": test_case.expected_scope_path,
+    }
+    assert macro_node["depends_on"]["macros"] == [
+        f"macro.{test_case.project_name}.{name}" for name in test_case.expected_dependencies
+    ]
 
 
 @pytest.mark.parametrize(
