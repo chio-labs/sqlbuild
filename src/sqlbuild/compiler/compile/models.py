@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -43,6 +43,16 @@ from sqlbuild.compiler.lineage.types import (
     InferredNullability,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
+from sqlbuild.compiler.scopes.models import (
+    DeclarationIdentity,
+    DeclarationRecord,
+    GrantRecord,
+    ResourceIdentity,
+    ScopeIndex,
+    ScopeLookup,
+    UsageRecord,
+    VisibilityRecord,
+)
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,
@@ -147,6 +157,76 @@ class LoadedMacro:
 
 
 @dataclass(frozen=True)
+class StaticMacroExport:
+    """Value-free AST inventory for one project-owned macro export."""
+
+    name: str
+    relative_path: Path
+    parameters: tuple[str, ...]
+    line: int
+    source_digest: str
+
+
+@dataclass(frozen=True)
+class StaticMacroFault:
+    """One value-free static macro inventory fault."""
+
+    relative_path: Path
+    message: str
+
+
+@dataclass(frozen=True)
+class StaticMacroInventory:
+    """AST macro exports and faults collected without module execution."""
+
+    exports: tuple[StaticMacroExport, ...] = field(default_factory=tuple)
+    faults: tuple[StaticMacroFault, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ScopeRelationshipFault:
+    """One test or scenario relationship extraction fault."""
+
+    relative_path: Path
+    message: str
+
+
+@dataclass(frozen=True)
+class ScopeRelationshipBuild:
+    """Expected-model grants and independently retained relationship faults."""
+
+    grants: tuple[GrantRecord, ...] = field(default_factory=tuple)
+    faults: tuple[ScopeRelationshipFault, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DeclarationRuntimeProjection:
+    """Process-only declaration values keyed by canonical static identity."""
+
+    declarations: Mapping[
+        DeclarationIdentity, EnumDeclaration | ConstantDeclaration | LoadedMacro
+    ] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class DeclarationScopeResolver:
+    """Process-only lookup state used to project visible runtime declarations."""
+
+    project_dir: Path | None
+    lookup: ScopeLookup
+    projection: DeclarationRuntimeProjection
+
+
+@dataclass(frozen=True)
+class DeclarationScopeBuild:
+    """Static artifact and process-local values shared by compile attachment phases."""
+
+    loaded_macros: dict[str, LoadedMacro]
+    index: ScopeIndex
+    resolver: DeclarationScopeResolver
+
+
+@dataclass(frozen=True)
 class MacroContext:
     """Compile-time context passed to adapter-aware SQL macros."""
 
@@ -157,11 +237,54 @@ class MacroContext:
 
 
 @dataclass(frozen=True)
+class MacroExpansionResult:
+    """Expanded SQL and resolved macro usage facts from one authored string."""
+
+    sql: str
+    spans: tuple[ExpansionSpan, ...] = field(default_factory=tuple)
+    dependencies: tuple[DeclarationIdentity, ...] = field(default_factory=tuple)
+    usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class DeclarationExpansionResult:
+    """Expanded SQL and resolved declaration usage facts from one authored string."""
+
+    sql: str
+    spans: tuple[ExpansionSpan, ...] = field(default_factory=tuple)
+    usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class AuthoredSqlExpansionResult:
+    """Fully expanded authored SQL with all resolved declaration usages."""
+
+    sql: str
+    usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class HookExpansionResult:
+    """Expanded model hook values and declaration usage facts."""
+
+    values: dict[str, object]
+    usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class DeclarationResolutionContext:
-    """Project-global declarations available during authored SQL expansion."""
+    """Declarations visible during one authored SQL expansion."""
 
     enums: dict[str, EnumDeclaration] = field(default_factory=dict)
     constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
+    inaccessible_enums: dict[str, DeclarationRecord] = field(default_factory=dict)
+    inaccessible_constants: dict[str, DeclarationRecord] = field(default_factory=dict)
+    enum_visibility: dict[str, tuple[VisibilityRecord, ...]] = field(default_factory=dict)
+    constant_visibility: dict[str, tuple[VisibilityRecord, ...]] = field(default_factory=dict)
+    macros: dict[str, LoadedMacro] = field(default_factory=dict)
+    macro_records: dict[str, DeclarationRecord] = field(default_factory=dict)
+    inaccessible_macros: dict[str, DeclarationRecord] = field(default_factory=dict)
+    consumer: ResourceIdentity | DeclarationIdentity | None = None
 
 
 @dataclass(frozen=True)
@@ -171,6 +294,7 @@ class DeclarationExpansionContext:
     declarations: DeclarationResolutionContext
     value_renderer: TypedSqlValueRenderer
     collection_rendering: CollectionRendering
+    resolver: DeclarationScopeResolver | None = None
 
 
 @dataclass(frozen=True)
@@ -198,6 +322,7 @@ class ModelInputBuildContext:
     public_enums: dict[str, EnumDeclaration] = field(default_factory=dict)
     public_constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
     public_model_schemas: dict[str, ModelSchemaDeclaration] = field(default_factory=dict)
+    declaration_resolver: DeclarationScopeResolver | None = None
 
     @property
     def declaration_expansion(self) -> DeclarationExpansionContext:
@@ -210,7 +335,17 @@ class ModelInputBuildContext:
             ),
             value_renderer=self.value_renderer,
             collection_rendering=self.collection_rendering,
+            resolver=self.declaration_resolver,
         )
+
+
+@dataclass(frozen=True)
+class ModelInputScopeBuild:
+    """Model inputs paired with public declaration artifacts and updated context."""
+
+    inputs: tuple[CompileModelInput, ...]
+    declarations: DeclarationResolutionContext
+    context: ModelInputBuildContext
 
 
 @dataclass(frozen=True)
@@ -347,6 +482,7 @@ class CompileSqlFunctionInput:
     entry_point: str | None = None
     packages: tuple[str, ...] = field(default_factory=tuple)
     replay_on_change: str | None = None
+    declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -364,6 +500,9 @@ class CompileModelInput:
     enum_declarations: tuple[EnumDeclaration, ...] = field(default_factory=tuple)
     constant_declarations: tuple[ConstantDeclaration, ...] = field(default_factory=tuple)
     enum_columns: dict[str, EnumDeclaration] = field(default_factory=dict)
+    macro_deps: tuple[str, ...] = field(default_factory=tuple)
+    macro_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+    declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -381,6 +520,7 @@ class CompileSourceInput:
 
     source_entry: SourceEntry
     source_file: DiscoveredSourceFile
+    declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -398,6 +538,7 @@ class CompileSqlScenarioInput:
     dbt_ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
+    declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -414,6 +555,7 @@ class CompileAuditInput:
     severity: str | None = None
     run_scope: str | None = None
     always_run: bool = False
+    declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         if self.attached_target_kind is not None:
@@ -450,6 +592,7 @@ class CompileProjectInputs:
     audit_inputs: tuple[CompileAuditInput, ...] = field(default_factory=tuple)
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
+    scope_index: ScopeIndex = field(default_factory=ScopeIndex)
 
 
 @dataclass(frozen=True)
@@ -599,8 +742,10 @@ class CompiledProject:
     materialization_files: tuple[DiscoveredMaterializationFile, ...] = field(default_factory=tuple)
     public_enums: dict[str, EnumDeclaration] = field(default_factory=dict)
     public_constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
+    loaded_macros: dict[str, LoadedMacro] = field(default_factory=dict)
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
+    scope_index: ScopeIndex = field(default_factory=ScopeIndex)
 
 
 @dataclass(frozen=True)
@@ -681,6 +826,7 @@ class CompileSqlTestInput:
     payload: CompileModelSqlTestInputPayload | CompileDirectLogicSqlTestInputPayload = field(
         default_factory=CompileModelSqlTestInputPayload
     )
+    declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -711,6 +857,7 @@ class SqlExpansionContext:
     value_renderer: TypedSqlValueRenderer
     collection_rendering: CollectionRendering
     local_declarations: dict[Path, DeclarationResolutionContext] = field(default_factory=dict)
+    declaration_resolver: DeclarationScopeResolver | None = None
 
 
 @dataclass(frozen=True)

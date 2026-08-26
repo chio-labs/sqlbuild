@@ -39,7 +39,33 @@ HEADER: str = 'MODEL (\n  materialized table,\n  description "ok"\n);\n'
             model_path="models/demo.sql",
             authored_sql='SELECT @const("countries") AS countries',
             expected_sql="SELECT ['GB', 'FR'] AS countries",
-        )
+        ),
+        ExpandedTypedConstantTestCase(
+            description="lint expansion uses inherited declaration visibility",
+            project_files={
+                "sqlbuild_project.toml": PROJECT_TOML,
+                "models/domain/_constants/value.sql": "CONSTANT (name value, value 9);\n",
+                "models/domain/child/demo.sql": f'{HEADER}SELECT @const("value") AS value\n',
+            },
+            model_path="models/domain/child/demo.sql",
+            authored_sql='SELECT @const("value") AS value',
+            expected_sql="SELECT 9 AS value",
+        ),
+        ExpandedTypedConstantTestCase(
+            description="lint expansion uses expected model declaration grants",
+            project_files={
+                "sqlbuild_project.toml": PROJECT_TOML,
+                "models/domain/_constants/value.sql": "CONSTANT (name value, value 12);\n",
+                "models/domain/orders.sql": f"{HEADER}SELECT 1 AS value\n",
+                "tests/unit/other/orders.sql": (
+                    "TEST ();\nWITH __expected__orders AS "
+                    '(SELECT @const("value") AS value) SELECT 1\n'
+                ),
+            },
+            model_path="tests/unit/other/orders.sql",
+            authored_sql=('WITH __expected__orders AS (SELECT @const("value") AS value) SELECT 1'),
+            expected_sql="WITH __expected__orders AS (SELECT 12 AS value) SELECT 1",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -149,6 +175,25 @@ def test_given_project_when_linting_expanded_sql_then_positions_are_authored(
                 "models/demo.sql": f"{HEADER}SELECT 1 AS x FROM @@ENV:SQLBUILD_ABSENT_VAR\n",
             },
             expected_message_fragment="SQLBUILD_ABSENT_VAR",
+        ),
+        LintCompileFailureTestCase(
+            description="project macro imports fail before lint expansion",
+            project_files={
+                "sqlbuild_project.toml": PROJECT_TOML,
+                "macros/orders.py": "from macros.shared import shared_macro\n",
+                "macros/shared.py": "def shared_macro() -> str:\n    return 'order_id'\n",
+                "models/demo.sql": f"{HEADER}SELECT 1 AS x\n",
+            },
+            expected_message_fragment="must not import project macro module 'macros.shared'",
+        ),
+        LintCompileFailureTestCase(
+            description="inaccessible declaration fails lint with compile visibility diagnostic",
+            project_files={
+                "sqlbuild_project.toml": PROJECT_TOML,
+                "models/one/_constants/value.sql": "CONSTANT (name value, value 1);\n",
+                "models/two/demo.sql": f'{HEADER}SELECT @const("value") AS value\n',
+            },
+            expected_message_fragment="known but inaccessible",
         ),
     ],
     ids=lambda case: case.description,

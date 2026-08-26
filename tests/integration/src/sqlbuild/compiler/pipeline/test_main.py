@@ -194,7 +194,6 @@ def test_given_project_files_when_running_compile_pipeline_then_produces_valid_o
     assert len(result.plan_output.model_entries) == test_case.expected_model_count
     assert len(result.plan_output.seed_entries) == test_case.expected_seed_count
     manifest: dict[str, object] = build_manifest_for_pipeline_result(
-        project_dir=tmp_path,
         result=result,
         project_name="demo",
         adapter_type="duckdb",

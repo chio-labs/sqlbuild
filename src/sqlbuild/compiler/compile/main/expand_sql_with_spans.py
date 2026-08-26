@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_context
 from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_with_spans
 from sqlbuild.compiler.compile.models import (
-    ConstantDeclaration,
     DeclarationResolutionContext,
-    EnumDeclaration,
     ExpansionSpan,
     SqlExpansionContext,
 )
@@ -22,19 +21,29 @@ def expand_sql_with_spans(
     local_declarations: DeclarationResolutionContext | None = context.local_declarations.get(
         file_path
     )
-    enums: dict[str, EnumDeclaration] = context.enums
-    constants: dict[str, ConstantDeclaration] = context.constants
+    declarations: DeclarationResolutionContext = DeclarationResolutionContext(
+        enums=context.enums,
+        constants=context.constants,
+    )
+    if context.declaration_resolver is not None:
+        declarations = resolve_declaration_context(
+            resolver=context.declaration_resolver, file_path=file_path
+        )
     if local_declarations is not None:
-        enums = enums | local_declarations.enums
-        constants = constants | local_declarations.constants
+        declarations = DeclarationResolutionContext(
+            enums=declarations.enums | local_declarations.enums,
+            constants=declarations.constants | local_declarations.constants,
+            inaccessible_enums=declarations.inaccessible_enums,
+            inaccessible_constants=declarations.inaccessible_constants,
+        )
     return expand_authored_sql_with_spans(
         sql=sql,
         file_path=file_path,
         effective_vars=context.effective_vars,
         loaded_macros=context.loaded_macros,
         macro_context=context.macro_context,
-        enums=enums,
-        constants=constants,
+        declarations=declarations,
+        declaration_resolver=context.declaration_resolver,
         value_renderer=context.value_renderer,
         collection_rendering=context.collection_rendering,
     )

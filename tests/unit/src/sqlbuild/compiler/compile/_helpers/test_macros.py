@@ -6,18 +6,30 @@ import pytest
 
 from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros,
+    expand_sql_macros_result,
     find_macro_call_names,
+    load_project_macros,
 )
 from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
+    MacroExpansionResult,
 )
+from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
+from sqlbuild.compiler.scopes.types import ScopeKind
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ExpandSqlMacrosErrorTestCase,
     ExpandSqlMacrosTestCase,
     FindMacroCallNamesTestCase,
+    LoadProjectMacrosErrorTestCase,
+    LoadProjectMacrosTestCase,
+    ScopedMacroExpansionErrorTestCase,
+    ScopedMacroExpansionTestCase,
 )
-from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import build_loaded_macros
+from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
+    build_loaded_macros,
+    build_scoped_macro_resolver,
+)
 
 _MACRO_CONTEXT: MacroContext = MacroContext(
     adapter_name="bigquery",
@@ -30,6 +42,143 @@ _MACRO_CONTEXT: MacroContext = MacroContext(
 @pytest.mark.parametrize(
     "test_case",
     [
+        LoadProjectMacrosTestCase(
+            description="exports only public ordinary functions owned by each macro module",
+            macro_files={
+                "macros/orders.py": """
+from pathlib import Path
+from urllib.parse import quote
+
+_DEFAULT_LIMIT = 10
+
+
+class _Formatter:
+    pass
+
+
+def _helper() -> str:
+    return "order_id"
+
+
+def order_columns() -> str:
+    return _helper()
+""".strip()
+                + "\n",
+            },
+            expected_macro_names=("order_columns",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_macro_modules_when_loading_then_exports_only_owned_public_functions(
+    test_case: LoadProjectMacrosTestCase,
+    tmp_path: Path,
+) -> None:
+    macro_files: list[DiscoveredMacroFile] = []
+    relative_path: str
+    contents: str
+    for relative_path, contents in test_case.macro_files.items():
+        file_path: Path = tmp_path / relative_path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(contents, encoding="utf-8")
+        macro_files.append(
+            DiscoveredMacroFile(
+                file_path=file_path,
+                relative_path=Path(relative_path),
+                contents=contents,
+            )
+        )
+
+    loaded_macros: dict[str, LoadedMacro] = load_project_macros(tuple(macro_files))
+
+    assert tuple(loaded_macros) == test_case.expected_macro_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadProjectMacrosErrorTestCase(
+            description="rejects an absolute import of another project macro before execution",
+            macro_files={
+                "macros/a_consumer.py": (
+                    "from pathlib import Path\n"
+                    "Path(__file__).parent.parent.joinpath('executed').touch()\n"
+                    "from macros.shared import shared_macro\n"
+                ),
+                "macros/shared.py": "def shared_macro() -> str:\n    return 'shared'\n",
+            },
+            expected_error_fragment="must not import project macro module 'macros.shared'",
+        ),
+        LoadProjectMacrosErrorTestCase(
+            description="rejects a relative import of another project macro before execution",
+            macro_files={
+                "macros/a_consumer.py": "from . import shared\n",
+                "macros/shared.py": "def shared_macro() -> str:\n    return 'shared'\n",
+            },
+            expected_error_fragment="must not import project macro module 'macros.shared'",
+        ),
+        LoadProjectMacrosErrorTestCase(
+            description="rejects an import of a package containing project macros",
+            macro_files={
+                "macros/a_consumer.py": "import macros\n",
+                "macros/shared.py": "def shared_macro() -> str:\n    return 'shared'\n",
+            },
+            expected_error_fragment="must not import project macro module 'macros'",
+        ),
+        LoadProjectMacrosErrorTestCase(
+            description="rejects public module owned constants",
+            macro_files={"macros/orders.py": "DEFAULT_LIMIT = 10\n"},
+            expected_error_fragment="declaration 'DEFAULT_LIMIT' must be underscore-private",
+        ),
+        LoadProjectMacrosErrorTestCase(
+            description="rejects public module owned classes",
+            macro_files={"macros/orders.py": "class Formatter:\n    pass\n"},
+            expected_error_fragment="declaration 'Formatter' must be underscore-private",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_macro_module_when_loading_then_rejects_before_execution(
+    test_case: LoadProjectMacrosErrorTestCase,
+    tmp_path: Path,
+) -> None:
+    macro_files: list[DiscoveredMacroFile] = []
+    relative_path: str
+    contents: str
+    for relative_path, contents in test_case.macro_files.items():
+        file_path: Path = tmp_path / relative_path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(contents, encoding="utf-8")
+        macro_files.append(
+            DiscoveredMacroFile(
+                file_path=file_path,
+                relative_path=Path(relative_path),
+                contents=contents,
+            )
+        )
+
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+        load_project_macros(tuple(macro_files))
+
+    assert (tmp_path / "executed").exists() is test_case.expected_marker_exists
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpandSqlMacrosTestCase(
+            description="recursively expands macro calls emitted by macro output",
+            macro_file_contents="""
+def outer_macro() -> str:
+    return "@inner_macro()"
+
+def inner_macro() -> str:
+    return "order_id"
+""".strip()
+            + "\n",
+            sql="SELECT @outer_macro() FROM raw_orders",
+            expected_sql="SELECT order_id FROM raw_orders",
+        ),
         ExpandSqlMacrosTestCase(
             description="uses macro override text instead of loaded macro function",
             macro_file_contents="""
@@ -243,21 +392,6 @@ def bad_macro() -> list[str]:
             sql="SELECT @bad_macro() FROM raw_orders",
             expected_error_fragment="must return a SQL string when used directly in SQL",
         ),
-        ExpandSqlMacrosErrorTestCase(
-            description="raises when macro output contains an unexpanded macro call",
-            macro_file_contents="""
-def outer_macro() -> str:
-    return "@inner_macro()"
-
-def inner_macro() -> str:
-    return "order_id"
-""".strip()
-            + "\n",
-            sql="SELECT @outer_macro() FROM raw_orders",
-            expected_error_fragment=(
-                r"produced output containing unexpanded macro call '@inner_macro\('"
-            ),
-        ),
     ],
     ids=lambda case: case.description,
 )
@@ -307,3 +441,121 @@ def test_given_sql_with_at_tokens_when_finding_macro_calls_then_returns_real_uni
     test_case: FindMacroCallNamesTestCase,
 ) -> None:
     assert find_macro_call_names(test_case.sql) == test_case.expected_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScopedMacroExpansionTestCase(
+            description="callee sees same-owner inherited local and global macros",
+            definitions={
+                "global_value": ("global", ScopeKind.GLOBAL, None, "macros/global_value.py"),
+                "same_scope": (
+                    "same",
+                    ScopeKind.INHERITED,
+                    "models/marts",
+                    "models/marts/_macros/same_scope.py",
+                ),
+                "same_local": (
+                    "local",
+                    ScopeKind.LOCAL,
+                    "models/marts",
+                    "models/marts/_local_macros/same_local.py",
+                ),
+                "outer": (
+                    "@same_scope() || @same_local() || @global_value()",
+                    ScopeKind.INHERITED,
+                    "models/marts",
+                    "models/marts/_macros/outer.py",
+                ),
+            },
+            expected_sql="SELECT same || local || global",
+            expected_dependencies=("outer", "same_scope", "same_local", "global_value"),
+            expected_usages=(
+                ("outer", "same_scope"),
+                ("outer", "same_local"),
+                ("outer", "global_value"),
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_scoped_composition_when_expanding_then_uses_callee_lexical_scope(
+    test_case: ScopedMacroExpansionTestCase,
+    tmp_path: Path,
+) -> None:
+    loaded, resolver = build_scoped_macro_resolver(
+        tmp_path=tmp_path, definitions=test_case.definitions
+    )
+
+    result: MacroExpansionResult = expand_sql_macros_result(
+        sql="SELECT @outer()",
+        file_path=tmp_path / "models/marts/finance/orders.sql",
+        loaded_macros=loaded,
+        macro_context=_MACRO_CONTEXT,
+        declaration_resolver=resolver,
+    )
+
+    assert result.sql == test_case.expected_sql
+    assert tuple(item.name for item in result.dependencies) == test_case.expected_dependencies
+    assert (
+        tuple((item.consumer.name, item.declaration.name) for item in result.usages)
+        == test_case.expected_usages
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScopedMacroExpansionErrorTestCase(
+            description="global macro cannot emit scoped call",
+            definitions={
+                "scoped_value": (
+                    "scoped",
+                    ScopeKind.INHERITED,
+                    "models/marts",
+                    "models/marts/_macros/scoped_value.py",
+                ),
+                "global_outer": (
+                    "@scoped_value()",
+                    ScopeKind.GLOBAL,
+                    None,
+                    "macros/global_outer.py",
+                ),
+            },
+            sql="SELECT @global_outer()",
+            expected_error_fragment=(
+                r"scoped_value.*inaccessible.*models/marts/_macros/scoped_value.py.*"
+                r"scope owner 'models/marts'"
+            ),
+        ),
+        ScopedMacroExpansionErrorTestCase(
+            description="recursive output reports complete cycle",
+            definitions={
+                "first": ("@second()", ScopeKind.GLOBAL, None, "macros/first.py"),
+                "second": ("@first()", ScopeKind.GLOBAL, None, "macros/second.py"),
+            },
+            sql="SELECT @first()",
+            expected_error_fragment=(
+                r"first -> second -> first.*macros/first.py -> macros/second.py -> macros/first.py"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_global_macro_emits_scoped_call_when_expanding_then_reports_inaccessible(
+    test_case: ScopedMacroExpansionErrorTestCase,
+    tmp_path: Path,
+) -> None:
+    loaded, resolver = build_scoped_macro_resolver(
+        tmp_path=tmp_path, definitions=test_case.definitions
+    )
+
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+        expand_sql_macros(
+            sql=test_case.sql,
+            file_path=tmp_path / "models/marts/finance/orders.sql",
+            loaded_macros=loaded,
+            macro_context=_MACRO_CONTEXT,
+            declaration_resolver=resolver,
+        )

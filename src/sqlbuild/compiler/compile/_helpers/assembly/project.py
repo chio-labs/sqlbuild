@@ -35,12 +35,19 @@ from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
     get_validated_model_cursor_intrinsics,
 )
+from sqlbuild.compiler.compile._helpers.render.declarations import (
+    build_declaration_scope_resolver,
+)
 from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros,
     find_macro_call_names,
 )
 from sqlbuild.compiler.compile._helpers.render.templating import expand_template_data
 from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME, PRESERVE_TARGET_VALUE
+from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
+    scope_index_with_compile_usages,
+)
 from sqlbuild.compiler.compile.main.function_node_type import function_node_type
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
@@ -82,6 +89,9 @@ from sqlbuild.compiler.discovery.main._model_output_column_locations import (
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
+from sqlbuild.compiler.scopes.main._validate_scope_index import validate_scope_index
+from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
@@ -168,6 +178,11 @@ def assemble_compiled_project(
             allow_compact_analysis=allow_compact_analysis,
             analysis_cache=analysis_cache,
         )
+    scope_index: ScopeIndex = scope_index_with_compile_usages(inputs=inputs)
+    try:
+        validate_scope_index(index=scope_index)
+    except ScopeValidationError as error:
+        raise CompileInputError(str(error)) from error
     return CompiledProject(
         run_id=inputs.run_id,
         effective_target_name=inputs.effective_target_name,
@@ -246,8 +261,10 @@ def assemble_compiled_project(
         materialization_files=inputs.discovered_inputs.materialization_files,
         public_enums=inputs.public_enums,
         public_constants=inputs.public_constants,
+        loaded_macros=inputs.loaded_macros,
         diagnostics=inputs.diagnostics,
         external_sql_reference_resolver=inputs.external_sql_reference_resolver,
+        scope_index=scope_index,
     )
 
 
@@ -369,7 +386,7 @@ def _assemble_compiled_model(
         fast_lineage_has_star=fast_lineage_has_star,
         authored_sql=model_input.model_file.contents,
         output_column_locations=output_column_locations,
-        macro_deps=find_macro_call_names(model_input.macro_source_sql),
+        macro_deps=model_input.macro_deps or find_macro_call_names(model_input.macro_source_sql),
         enum_declarations=model_input.enum_declarations,
         constant_declarations=model_input.constant_declarations,
         enum_columns=model_input.enum_columns,
@@ -987,7 +1004,7 @@ def _macro_sql_test_scope_deps(
     model_input: CompileModelInput
     for model_input in model_inputs:
         model_macro_deps: frozenset[str] = frozenset(
-            find_macro_call_names(model_input.macro_source_sql)
+            model_input.macro_deps or find_macro_call_names(model_input.macro_source_sql)
         )
         if not tested_names.intersection(model_macro_deps):
             continue
@@ -1077,6 +1094,13 @@ def _build_test_model_query_overrides(
                 loaded_macros=inputs.loaded_macros,
                 macro_overrides=test_input.payload.macro_mocks,
                 macro_context=macro_context,
+                declaration_resolver=(
+                    build_declaration_scope_resolver(
+                        discovered_inputs=inputs.discovered_inputs,
+                        scope_index=inputs.scope_index,
+                        loaded_macros=inputs.loaded_macros,
+                    )
+                ),
             ),
             config_values=model_input.config.values,
             model_name=model_name,

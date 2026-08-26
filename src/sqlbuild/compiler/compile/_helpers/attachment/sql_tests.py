@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 
 from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_function_names,
@@ -14,16 +15,21 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
 )
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
+from sqlbuild.compiler.compile._helpers.render.declarations import (
+    declaration_usage_records,
+    resolve_declaration_expansion,
+)
 from sqlbuild.compiler.compile._helpers.render.macros import (
     find_macro_call_names,
 )
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
-    expand_authored_sql,
+    expand_authored_sql_result,
 )
 from sqlbuild.compiler.compile._helpers.scenarios.core import extract_sql_scenario_ctes
 from sqlbuild.compiler.compile._helpers.sql_tests.core import extract_sql_test_ctes
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
+    AuthoredSqlExpansionResult,
     CompileDirectLogicSqlTestCtes,
     CompileDirectLogicSqlTestInputPayload,
     CompileModelSqlTestCtes,
@@ -52,6 +58,8 @@ from sqlbuild.compiler.discovery.models import (
     EnumDeclaration,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
+from sqlbuild.compiler.scopes.models import ResourceIdentity
+from sqlbuild.compiler.scopes.types import ResourceKind
 
 _HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
 _LEGACY_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hook", "post_hook"})
@@ -106,6 +114,14 @@ def build_test_inputs(
     for test_file in discovered_inputs.test_files:
         test_block: DiscoveredSqlTestBlock
         for test_block in test_file.blocks:
+            resource: ResourceIdentity = ResourceIdentity(
+                ResourceKind.TEST, test_block.name or test_file.relative_path.stem
+            )
+            scoped_declarations: DeclarationExpansionContext = resolve_declaration_expansion(
+                context=declaration_expansion,
+                file_path=test_file.file_path,
+                resource=resource,
+            )
             test_mode: SqlTestMode = test_block.mode
             tested_resource_names: tuple[str, ...] = ()
             if test_mode in {SqlTestMode.MACRO, SqlTestMode.UDF, SqlTestMode.TABLE_FN}:
@@ -122,17 +138,22 @@ def build_test_inputs(
                     known_table_function_names=known_table_function_names,
                     table_function_argument_counts=table_function_argument_counts,
                 )
-            expanded_sql_body: str = expand_authored_sql(
+            expansion: AuthoredSqlExpansionResult = expand_authored_sql_result(
                 sql=test_block.sql_body,
                 file_path=test_file.file_path,
                 effective_vars=vars_for_substitution,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
-                enums=declaration_expansion.declarations.enums,
-                constants=declaration_expansion.declarations.constants,
-                value_renderer=declaration_expansion.value_renderer,
-                collection_rendering=declaration_expansion.collection_rendering,
+                declarations=(
+                    replace(scoped_declarations.declarations, consumer=None)
+                    if test_mode is SqlTestMode.MACRO
+                    else scoped_declarations.declarations
+                ),
+                declaration_resolver=scoped_declarations.resolver,
+                value_renderer=scoped_declarations.value_renderer,
+                collection_rendering=scoped_declarations.collection_rendering,
             )
+            expanded_sql_body: str = expansion.sql
             reject_cursor_intrinsics(
                 sql=expanded_sql_body,
                 context=f"SQL test '{test_block.name or test_file.file_path.stem}'",
@@ -163,6 +184,15 @@ def build_test_inputs(
                     sql_body=expanded_sql_body,
                     mode=test_mode,
                     payload=test_payload,
+                    declaration_usages=(
+                        declaration_usage_records(
+                            sql=test_block.sql_body,
+                            resource=resource,
+                            declarations=scoped_declarations.declarations,
+                        )
+                        if test_mode is SqlTestMode.MACRO
+                        else expansion.usages
+                    ),
                 )
             )
     return tuple(test_inputs)
@@ -371,17 +401,24 @@ def build_scenario_inputs(
     scenario_inputs: list[CompileSqlScenarioInput] = []
     scenario_file: DiscoveredSqlScenarioFile
     for scenario_file in discovered_inputs.scenario_files:
-        expanded_sql_body: str = expand_authored_sql(
+        resource: ResourceIdentity = ResourceIdentity(ResourceKind.SCENARIO, scenario_file.name)
+        scoped_declarations: DeclarationExpansionContext = resolve_declaration_expansion(
+            context=declaration_expansion,
+            file_path=scenario_file.file_path,
+            resource=resource,
+        )
+        expansion: AuthoredSqlExpansionResult = expand_authored_sql_result(
             sql=scenario_file.sql_body,
             file_path=scenario_file.file_path,
             effective_vars=vars_for_substitution,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
-            enums=declaration_expansion.declarations.enums,
-            constants=declaration_expansion.declarations.constants,
-            value_renderer=declaration_expansion.value_renderer,
-            collection_rendering=declaration_expansion.collection_rendering,
+            declarations=scoped_declarations.declarations,
+            declaration_resolver=scoped_declarations.resolver,
+            value_renderer=scoped_declarations.value_renderer,
+            collection_rendering=scoped_declarations.collection_rendering,
         )
+        expanded_sql_body: str = expansion.sql
         reject_cursor_intrinsics(
             sql=expanded_sql_body,
             context=f"SQL scenario '{scenario_file.file_path.stem}'",
@@ -408,6 +445,7 @@ def build_scenario_inputs(
                 dbt_ref_fixture_names=scenario_ctes.dbt_ref_fixture_names,
                 expected_model_names=scenario_ctes.expected_model_names,
                 assertion_names=scenario_ctes.assertion_names,
+                declaration_usages=expansion.usages,
             )
         )
     return tuple(scenario_inputs)

@@ -25,8 +25,6 @@ from sqlbuild.cli.commands.models import (
     WrittenTarget,
 )
 from sqlbuild.cli.commands.types import CompileLineageMode
-from sqlbuild.compiler.compile.main.load_macros import load_macros
-from sqlbuild.compiler.compile.models import LoadedMacro
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.dag.main.build import build_dag_json
@@ -144,10 +142,8 @@ def build_compile_manifest_payload(
         return None
     manifest_start: float = time.monotonic()
     _ = start_compile_phase(status=status, message="Building manifest...")
-    loaded_macros: dict[str, LoadedMacro] = load_macros(analysis.discovered_inputs.macro_files)
     manifest_payload: dict[str, object] = build_manifest(
         project=analysis.graph.project,
-        loaded_macros=loaded_macros,
         project_name=analysis.discovered_inputs.project_config.name,
         adapter_type=resolve_effective_adapter_name(
             project_config=analysis.discovered_inputs.project_config,

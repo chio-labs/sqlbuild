@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,14 @@ from sqlbuild.compiler.discovery.models import DiscoveredSqlHookFile, SqlHookEnt
 from sqlbuild.compiler.manifest._helpers.shared import build_fqn
 from sqlbuild.compiler.manifest.constants import DBT_MANIFEST_SCHEMA_VERSION
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ChainStep, PlanOutput, SqlTestPlanEntry
+from sqlbuild.compiler.scopes.models import (
+    DeclarationIdentity,
+    DeclarationRecord,
+    MacroMetadata,
+    OwnershipRoot,
+    ScopeIndex,
+)
+from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind
 from sqlbuild.spec.contracts.models import SchemaColumn, SourceColumnEntry
 from tests.unit.src.sqlbuild.compiler.manifest._test_types import (
     FqnTestCase,
@@ -137,7 +146,6 @@ _SOURCE_FIXTURES: dict[str, Any] = {
             plan_output=build_test_plan_output(
                 model_entries=(build_test_plan_entry(name="orders"),),
             ),
-            loaded_macros={},
             project_name=_PROJECT,
             adapter_type=_ADAPTER,
             upstream_deps={},
@@ -159,7 +167,6 @@ _SOURCE_FIXTURES: dict[str, Any] = {
             plan_output=build_test_plan_output(
                 model_entries=(build_test_plan_entry(name="orders"),),
             ),
-            loaded_macros={},
             project_name=_PROJECT,
             adapter_type=_ADAPTER,
             upstream_deps={},
@@ -180,7 +187,6 @@ def test_given_project_when_building_manifest_then_produces_correct_structure(
     result: dict[str, Any] = run_manifest(
         project=test_case.project,
         plan_output=test_case.plan_output,
-        loaded_macros=test_case.loaded_macros,
         project_name=test_case.project_name,
         adapter_type=test_case.adapter_type,
         upstream_deps=test_case.upstream_deps,
@@ -396,7 +402,6 @@ def test_given_model_when_building_manifest_then_produces_correct_node(
     result: dict[str, Any] = run_manifest(
         project=project,
         plan_output=plan_output,
-        loaded_macros={},
         project_name=test_case.project_name,
         adapter_type=_ADAPTER,
         upstream_deps={},
@@ -488,7 +493,6 @@ def test_given_source_when_building_manifest_then_produces_correct_node(
     result: dict[str, Any] = run_manifest(
         project=project,
         plan_output=plan_output,
-        loaded_macros={},
         project_name=test_case.project_name,
         adapter_type=_ADAPTER,
         upstream_deps={},
@@ -535,7 +539,6 @@ def test_given_seed_when_building_manifest_then_produces_correct_node(
     result: dict[str, Any] = run_manifest(
         project=project,
         plan_output=plan_output,
-        loaded_macros={},
         project_name=test_case.project_name,
         adapter_type=_ADAPTER,
         upstream_deps={},
@@ -626,7 +629,6 @@ def test_given_deps_when_building_manifest_then_parent_map_correct(
     result: dict[str, Any] = run_manifest(
         project=project,
         plan_output=plan_output,
-        loaded_macros={},
         project_name=test_case.project_name,
         adapter_type=_ADAPTER,
         upstream_deps=upstream,
@@ -654,6 +656,18 @@ def test_given_deps_when_building_manifest_then_parent_map_correct(
             expected_macro_sql="def my_macro(): return 'SELECT 1'",
             expected_path="macros/helpers.py",
         ),
+        ManifestMacroNodeTestCase(
+            description="scoped macro exposes visibility metadata",
+            project_name=_PROJECT,
+            expected_unique_id=f"macro.{_PROJECT}.my_macro",
+            expected_name="my_macro",
+            expected_resource_type="macro",
+            expected_macro_sql="def my_macro(): return 'SELECT 1'",
+            expected_path="models/sales/_macros/helpers.py",
+            expected_visibility="inherited",
+            expected_scope_path="models/sales",
+            expected_dependencies=("base_macro",),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -667,13 +681,52 @@ def test_given_macro_when_building_manifest_then_macro_node_present(
         raw_source=test_case.expected_macro_sql,
         function=lambda: "SELECT 1",
     )
-    project: CompiledProject = build_test_project()
+    dependency_identities: tuple[DeclarationIdentity, ...] = tuple(
+        DeclarationIdentity(DeclarationKind.MACRO, name) for name in test_case.expected_dependencies
+    )
+    declaration: DeclarationRecord = DeclarationRecord(
+        identity=DeclarationIdentity(DeclarationKind.MACRO, test_case.expected_name),
+        path=test_case.expected_path,
+        line=1,
+        column=1,
+        scope=ScopeKind(test_case.expected_visibility),
+        ownership_root=OwnershipRoot("models", resource_kind=ResourceKind.MODEL),
+        owning_path=test_case.expected_scope_path,
+        macro=MacroMetadata(dependencies=dependency_identities),
+    )
+    dependency_records: tuple[DeclarationRecord, ...] = tuple(
+        DeclarationRecord(
+            identity=identity,
+            path=f"macros/{identity.name}.py",
+            line=1,
+            column=1,
+            scope=ScopeKind.GLOBAL,
+            ownership_root=OwnershipRoot("macros"),
+            macro=MacroMetadata(),
+        )
+        for identity in dependency_identities
+    )
+    loaded_macros: dict[str, LoadedMacro] = {test_case.expected_name: macro}
+    for dependency_name in test_case.expected_dependencies:
+        loaded_macros[dependency_name] = LoadedMacro(
+            name=dependency_name,
+            file_path=Path(f"/project/macros/{dependency_name}.py"),
+            relative_path=Path(f"macros/{dependency_name}.py"),
+            raw_source=f"def {dependency_name}(): return 'SELECT 1'",
+            function=lambda: "SELECT 1",
+        )
+    project: CompiledProject = build_test_project(
+        loaded_macros=loaded_macros,
+    )
+    project = replace(
+        project,
+        scope_index=ScopeIndex(declarations=(declaration, *dependency_records)),
+    )
     plan_output: PlanOutput = build_test_plan_output()
 
     result: dict[str, Any] = run_manifest(
         project=project,
         plan_output=plan_output,
-        loaded_macros={test_case.expected_name: macro},
         project_name=test_case.project_name,
         adapter_type=_ADAPTER,
         upstream_deps={},
@@ -686,6 +739,13 @@ def test_given_macro_when_building_manifest_then_macro_node_present(
     assert macro_node["resource_type"] == test_case.expected_resource_type
     assert macro_node["macro_sql"] == test_case.expected_macro_sql
     assert macro_node["path"] == test_case.expected_path
+    assert macro_node["meta"] == {
+        "sqlbuild_visibility": test_case.expected_visibility,
+        "sqlbuild_scope_path": test_case.expected_scope_path,
+    }
+    assert macro_node["depends_on"]["macros"] == [
+        f"macro.{test_case.project_name}.{name}" for name in test_case.expected_dependencies
+    ]
 
 
 @pytest.mark.parametrize(
@@ -724,7 +784,6 @@ def test_given_audit_when_building_manifest_then_produces_test_node(
     result: dict[str, Any] = run_manifest(
         project=project,
         plan_output=plan_output,
-        loaded_macros={},
         project_name=test_case.project_name,
         adapter_type=_ADAPTER,
         upstream_deps={},
@@ -784,7 +843,6 @@ def test_given_sql_test_when_building_manifest_then_produces_test_node(
     result: dict[str, Any] = run_manifest(
         project=project,
         plan_output=plan_output,
-        loaded_macros={},
         project_name=test_case.project_name,
         adapter_type=_ADAPTER,
         upstream_deps={},
@@ -904,10 +962,10 @@ def test_given_full_project_when_building_manifest_then_validates_against_dbt_sc
         function=lambda: "SELECT 1",
     )
 
+    project = replace(project, loaded_macros={"my_macro": macro})
     result: dict[str, Any] = run_manifest(
         project=project,
         plan_output=plan_output,
-        loaded_macros={"my_macro": macro},
         project_name=test_case.project_name,
         adapter_type=test_case.adapter_type,
         upstream_deps=upstream,

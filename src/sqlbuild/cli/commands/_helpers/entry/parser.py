@@ -329,6 +329,40 @@ def _add_virtual_parsers(
 def _add_inspection_parsers(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    scope_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.SCOPE)
+    scope_parser.add_argument("scope_target", nargs="?", metavar="TARGET")
+    scope_parser.add_argument("--at", dest="scope_at", default=None, metavar="PATH")
+    scope_parser.add_argument("--as-path", dest="scope_as_path", default=None, metavar="PATH")
+    browse_group: argparse._MutuallyExclusiveGroup = scope_parser.add_mutually_exclusive_group()
+    browse_group.add_argument("--browse", dest="scope_browse", default=None, metavar="PATH")
+    browse_group.add_argument("--list", dest="scope_list", default=None, metavar="PATH")
+    scope_parser.add_argument("--defined-under", dest="scope_defined_under", default=None)
+    scope_parser.add_argument(
+        "--kind",
+        dest="scope_kind",
+        action="append",
+        choices=("macro", "enum", "constant"),
+        default=[],
+    )
+    scope_parser.add_argument("--match", dest="scope_match", default=None, metavar="GLOB")
+    scope_parser.add_argument("--used-only", dest="scope_used_only", action="store_true")
+    scope_parser.add_argument("--include-nearby", dest="scope_include_nearby", action="store_true")
+    scope_parser.add_argument("--nearby-depth", dest="scope_nearby_depth", type=int, default=1)
+    scope_parser.add_argument(
+        "--dependency-depth", dest="scope_dependency_depth", type=int, default=0
+    )
+    scope_parser.add_argument("--explain", dest="scope_explain", default=None)
+    scope_parser.add_argument(
+        "--globals", dest="scope_globals", choices=("summary", "used", "all"), default="summary"
+    )
+    scope_parser.add_argument("--page-size", dest="scope_page_size", type=int, default=100)
+    scope_parser.add_argument("--after", dest="scope_after", default=None, metavar="CURSOR")
+    scope_parser.add_argument(
+        "--paths", dest="scope_paths", choices=("relative", "compact", "none"), default="relative"
+    )
+    scope_parser.add_argument("--json", action="store_true", default=False)
+    scope_parser.add_argument("--no-cache", action="store_true", default=False)
+
     debug_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DEBUG)
     debug_parser.add_argument("--json", action="store_true", default=False)
     debug_parser.add_argument("--target", default=None)

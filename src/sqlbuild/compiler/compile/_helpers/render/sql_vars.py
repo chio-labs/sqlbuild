@@ -7,11 +7,11 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from sqlbuild.compiler.compile._helpers.render.declarations import (
-    expand_declaration_references,
+    expand_declaration_references_result,
     expand_declaration_references_with_spans,
 )
 from sqlbuild.compiler.compile._helpers.render.macros import (
-    expand_sql_macros,
+    expand_sql_macros_result,
     expand_sql_macros_with_spans,
 )
 from sqlbuild.compiler.compile.constants import (
@@ -23,12 +23,16 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.models import (
+    AuthoredSqlExpansionResult,
+    DeclarationExpansionResult,
+    DeclarationResolutionContext,
+    DeclarationScopeResolver,
     ExpansionSpan,
     LoadedMacro,
     MacroContext,
+    MacroExpansionResult,
 )
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
-from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
 from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
     is_identifier_character as _is_identifier_continue,
 )
@@ -59,7 +63,7 @@ def validate_var_macro_collision(
         )
 
 
-def expand_authored_sql(
+def expand_authored_sql(  # noqa: PLR0913
     *,
     sql: str,
     file_path: Path,
@@ -69,10 +73,39 @@ def expand_authored_sql(
     value_renderer: TypedSqlValueRenderer,
     collection_rendering: CollectionRendering,
     context_values: Mapping[str, str | None] | None = None,
-    enums: dict[str, EnumDeclaration] | None = None,
-    constants: dict[str, ConstantDeclaration] | None = None,
+    declarations: DeclarationResolutionContext | None = None,
+    declaration_resolver: DeclarationScopeResolver | None = None,
 ) -> str:
     """Apply SQL interpolation and macro expansion to authored SQL text."""
+
+    return expand_authored_sql_result(
+        sql=sql,
+        file_path=file_path,
+        effective_vars=effective_vars,
+        loaded_macros=loaded_macros,
+        macro_context=macro_context,
+        value_renderer=value_renderer,
+        collection_rendering=collection_rendering,
+        context_values=context_values,
+        declarations=declarations,
+        declaration_resolver=declaration_resolver,
+    ).sql
+
+
+def expand_authored_sql_result(  # noqa: PLR0913
+    *,
+    sql: str,
+    file_path: Path,
+    effective_vars: dict[str, object],
+    loaded_macros: dict[str, LoadedMacro],
+    macro_context: MacroContext,
+    value_renderer: TypedSqlValueRenderer,
+    collection_rendering: CollectionRendering,
+    context_values: Mapping[str, str | None] | None = None,
+    declarations: DeclarationResolutionContext | None = None,
+    declaration_resolver: DeclarationScopeResolver | None = None,
+) -> AuthoredSqlExpansionResult:
+    """Apply all expansion passes and retain facts emitted by those passes."""
 
     interpolated_sql: str = substitute_sql_vars(
         sql=sql,
@@ -80,19 +113,27 @@ def expand_authored_sql(
         effective_vars=effective_vars,
         context_values=context_values,
     )
-    declaration_expanded_sql: str = expand_declaration_references(
+    declaration_context: DeclarationResolutionContext = (
+        declarations or DeclarationResolutionContext()
+    )
+    declaration_result: DeclarationExpansionResult = expand_declaration_references_result(
         sql=interpolated_sql,
         file_path=file_path,
-        enums=enums or {},
-        constants=constants or {},
+        declarations=declaration_context,
         value_renderer=value_renderer,
         collection_rendering=collection_rendering,
     )
-    return expand_sql_macros(
-        sql=declaration_expanded_sql,
+    macro_result: MacroExpansionResult = expand_sql_macros_result(
+        sql=declaration_result.sql,
         file_path=file_path,
         loaded_macros=loaded_macros,
         macro_context=macro_context,
+        declaration_resolver=declaration_resolver,
+        consumer=declaration_context.consumer,
+    )
+    return AuthoredSqlExpansionResult(
+        sql=macro_result.sql,
+        usages=tuple(dict.fromkeys((*declaration_result.usages, *macro_result.usages))),
     )
 
 
@@ -106,8 +147,8 @@ def expand_authored_sql_with_spans(
     value_renderer: TypedSqlValueRenderer,
     collection_rendering: CollectionRendering,
     context_values: Mapping[str, str | None] | None = None,
-    enums: dict[str, EnumDeclaration] | None = None,
-    constants: dict[str, ConstantDeclaration] | None = None,
+    declarations: DeclarationResolutionContext | None = None,
+    declaration_resolver: DeclarationScopeResolver | None = None,
 ) -> tuple[str, tuple[tuple[ExpansionSpan, ...], ...]]:
     """Expand authored SQL, returning each pass's substitution spans in order."""
 
@@ -124,10 +165,14 @@ def expand_authored_sql_with_spans(
     declaration_expanded_sql, declaration_spans = expand_declaration_references_with_spans(
         sql=interpolated_sql,
         file_path=file_path,
-        enums=enums or {},
-        constants=constants or {},
+        enums=declarations.enums if declarations is not None else {},
+        constants=declarations.constants if declarations is not None else {},
         value_renderer=value_renderer,
         collection_rendering=collection_rendering,
+        inaccessible_enums=(declarations.inaccessible_enums if declarations is not None else None),
+        inaccessible_constants=(
+            declarations.inaccessible_constants if declarations is not None else None
+        ),
     )
     macro_expanded_sql: str
     macro_spans: tuple[ExpansionSpan, ...]
@@ -136,6 +181,7 @@ def expand_authored_sql_with_spans(
         file_path=file_path,
         loaded_macros=loaded_macros,
         macro_context=macro_context,
+        declaration_resolver=declaration_resolver,
     )
     return macro_expanded_sql, (interpolation_spans, declaration_spans, macro_spans)
 

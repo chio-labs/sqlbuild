@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
-use crate::constants::API_VERSION;
+use crate::constants::{API_VERSION, SCOPE_METADATA_SCHEMA_VERSION};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
@@ -131,6 +131,279 @@ pub(crate) struct Declaration {
     pub render_as: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ResourceKind {
+    Model,
+    Test,
+    Scenario,
+    Hook,
+    Function,
+    Audit,
+    Source,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum DeclarationKind {
+    Macro,
+    Enum,
+    Constant,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ScopeKind {
+    Global,
+    Inherited,
+    Local,
+    Private,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum UsageKind {
+    Runtime,
+    Generated,
+    DeclarationDependency,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum GrantKind {
+    ExpectedModel,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum VisibilityReason {
+    Global,
+    InheritedAncestor,
+    LocalOwner,
+    PrivateOwner,
+    ExpectedModel,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum InaccessibleReason {
+    LocalBoundary,
+    SiblingScope,
+    DescendantScope,
+    UnrelatedScope,
+    PrivateOwner,
+    UnsupportedResourceKind,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum DiagnosticSeverity {
+    Error,
+    Warning,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub(crate) enum ScopeDiagnosticCode {
+    S001,
+    S002,
+    S003,
+    S004,
+    S005,
+    S006,
+    S007,
+    S008,
+    S009,
+    S010,
+    S011,
+    S012,
+    S013,
+    S014,
+    S015,
+    S016,
+    S017,
+    S018,
+    S019,
+    S020,
+    S021,
+    S022,
+    S023,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ScopeOwnershipRoot {
+    pub path: String,
+    pub resource_kind: Option<ResourceKind>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ScopeResource {
+    pub identity: String,
+    pub kind: ResourceKind,
+    pub name: String,
+    pub path: String,
+    pub ownership_root: String,
+    pub ownership_root_kind: Option<ResourceKind>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ScopeMacroMetadata {
+    pub parameters: Vec<String>,
+    pub dependencies: Vec<String>,
+    pub source_digest: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ScopeEnumMember {
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ScopeEnumMetadata {
+    pub members: Vec<ScopeEnumMember>,
+    pub scalar_type: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ScopeConstantMetadata {
+    pub logical_type: String,
+    pub collection_kind: Option<String>,
+    pub item_count: Option<u64>,
+    pub nullable: bool,
+    pub render_as: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct ScopeDeclarationMetadata {
+    pub r#macro: Option<ScopeMacroMetadata>,
+    pub r#enum: Option<ScopeEnumMetadata>,
+    pub constant: Option<ScopeConstantMetadata>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ScopeDeclaration {
+    pub identity: String,
+    pub kind: DeclarationKind,
+    pub name: String,
+    pub owner: Option<String>,
+    pub path: String,
+    pub line: u64,
+    pub column: u64,
+    pub scope: ScopeKind,
+    pub ownership_root: String,
+    pub owning_path: Option<String>,
+    pub metadata: ScopeDeclarationMetadata,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ScopeUsage {
+    pub consumer: String,
+    pub declaration: String,
+    pub kind: UsageKind,
+    pub through: Option<String>,
+    pub enum_member: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ScopeGrant {
+    pub resource: String,
+    pub declaration: String,
+    pub through: String,
+    pub kind: GrantKind,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ScopeVisibility {
+    pub resource: String,
+    pub declaration: String,
+    pub reason: VisibilityReason,
+    pub through: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ScopeInaccessible {
+    pub resource: String,
+    pub declaration: String,
+    pub reason: InaccessibleReason,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ScopeDiagnostic {
+    pub code: ScopeDiagnosticCode,
+    pub message: String,
+    pub severity: DiagnosticSeverity,
+    pub path: Option<String>,
+    pub line: Option<u64>,
+    pub column: Option<u64>,
+    pub declaration: Option<String>,
+    pub resource: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ScopeCompleteness {
+    pub discovery: bool,
+    pub static_visibility: bool,
+    pub runtime_usage: bool,
+    pub relationships: bool,
+    pub placement: bool,
+    pub promotion_impact: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ScopeIndexFacts {
+    #[serde(deserialize_with = "crate::scope_metadata::deserialize_scope_schema_version")]
+    pub schema_version: u32,
+    pub ownership_roots: Vec<ScopeOwnershipRoot>,
+    pub resources: Vec<ScopeResource>,
+    pub declarations: Vec<ScopeDeclaration>,
+    pub usages: Vec<ScopeUsage>,
+    pub grants: Vec<ScopeGrant>,
+    pub visibility: Vec<ScopeVisibility>,
+    pub inaccessible: Vec<ScopeInaccessible>,
+    pub diagnostics: Vec<ScopeDiagnostic>,
+    pub complete: bool,
+    pub completeness: ScopeCompleteness,
+}
+
+impl Default for ScopeIndexFacts {
+    fn default() -> Self {
+        Self {
+            schema_version: SCOPE_METADATA_SCHEMA_VERSION,
+            ownership_roots: vec![],
+            resources: vec![],
+            declarations: vec![],
+            usages: vec![],
+            grants: vec![],
+            visibility: vec![],
+            inaccessible: vec![],
+            diagnostics: vec![],
+            complete: false,
+            completeness: ScopeCompleteness {
+                discovery: false,
+                static_visibility: false,
+                runtime_usage: false,
+                relationships: false,
+                placement: false,
+                promotion_impact: false,
+            },
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct Model {
@@ -195,6 +468,7 @@ pub(crate) struct EvaluateRequest {
     pub models: Vec<Model>,
     pub public_enums: Vec<Declaration>,
     pub public_constants: Vec<Declaration>,
+    pub scope_index: ScopeIndexFacts,
     pub custom_rules: Vec<CustomRule>,
     pub custom_host: Option<CustomHostSpec>,
     pub project_fingerprint: Option<String>,
@@ -227,6 +501,7 @@ impl Default for EvaluateRequest {
             models: vec![],
             public_enums: vec![],
             public_constants: vec![],
+            scope_index: ScopeIndexFacts::default(),
             custom_rules: vec![],
             custom_host: None,
             project_fingerprint: None,

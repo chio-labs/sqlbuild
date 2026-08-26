@@ -21,9 +21,8 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
 )
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
-from sqlbuild.compiler.compile._helpers.render.sql_vars import (
-    expand_authored_sql,
-)
+from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_expansion
+from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_result
 from sqlbuild.compiler.compile._helpers.render.templating import (
     expand_template_data,
 )
@@ -33,6 +32,7 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
+    AuthoredSqlExpansionResult,
     CompileSqlFunctionInput,
     CompileSqlReference,
     DeclarationExpansionContext,
@@ -50,6 +50,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredPythonFunctionFile,
     DiscoveredSqlFunctionFile,
 )
+from sqlbuild.compiler.scopes.models import ResourceIdentity
+from sqlbuild.compiler.scopes.types import ResourceKind
 from sqlbuild.compiler.sql_analysis.main.import_polyglot import import_polyglot
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
@@ -149,17 +151,23 @@ def build_sql_function_inputs(
             if isinstance(raw_schema, str)
             else schema
         )
-        expanded_body_sql: str = expand_authored_sql(
+        scoped_declarations: DeclarationExpansionContext = resolve_declaration_expansion(
+            context=declaration_expansion,
+            file_path=function_file.file_path,
+            resource=ResourceIdentity(ResourceKind.FUNCTION, function_name),
+        )
+        expansion: AuthoredSqlExpansionResult = expand_authored_sql_result(
             sql=function_file.body_sql,
             file_path=function_file.file_path,
             effective_vars=effective_vars,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
-            enums=declaration_expansion.declarations.enums,
-            constants=declaration_expansion.declarations.constants,
-            value_renderer=declaration_expansion.value_renderer,
-            collection_rendering=declaration_expansion.collection_rendering,
+            declarations=scoped_declarations.declarations,
+            declaration_resolver=scoped_declarations.resolver,
+            value_renderer=scoped_declarations.value_renderer,
+            collection_rendering=scoped_declarations.collection_rendering,
         )
+        expanded_body_sql: str = expansion.sql
         reject_cursor_intrinsics(
             sql=expanded_body_sql,
             context=f"SQL function '{function_name}'",
@@ -236,6 +244,7 @@ def build_sql_function_inputs(
                     relative_path=function_file.relative_path,
                     language="SQL",
                 ),
+                declaration_usages=expansion.usages,
             )
         )
     python_context: _PythonFunctionBuildContext = _PythonFunctionBuildContext(

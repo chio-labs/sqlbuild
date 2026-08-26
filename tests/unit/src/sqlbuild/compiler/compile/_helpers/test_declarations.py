@@ -470,13 +470,16 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
             expected_metadata_changed=False,
         ),
         DeclarationFingerprintTestCase(
-            description="unused constant changes do not alter model identity",
+            description="declaration used by another model does not alter model identity",
             declaration_path="constants/countries.sql",
             initial_declaration='CONSTANT (name countries, value ["GB", "FR"]);\n',
             changed_declaration='CONSTANT (name countries, value ["GB", "HK"]);\n',
             model_sql="MODEL ();\nSELECT 1 AS value\n",
             expected_query_hash_changed=False,
             expected_metadata_changed=False,
+            additional_files={
+                "models/z_consumer.sql": ('MODEL ();\nSELECT @const("countries") AS countries\n')
+            },
         ),
         DeclarationFingerprintTestCase(
             description="enum members change enforced contract identity",
@@ -507,7 +510,8 @@ def test_given_declaration_change_when_compiling_then_updates_dependent_identity
             "sqlbuild_project.toml": _PROJECT_FILE,
             test_case.declaration_path: test_case.initial_declaration,
             "models/orders.sql": test_case.model_sql,
-        },
+        }
+        | test_case.additional_files,
     )
     initial_model: CompiledModel = compile_first_model(project_dir=tmp_path)
 
@@ -559,7 +563,7 @@ def test_given_declaration_change_when_compiling_then_updates_dependent_identity
                 "models/a.sql": "MODEL (constants (_limit 7));\nSELECT 1 AS value\n",
                 "models/b.sql": 'MODEL ();\nSELECT @const("_limit") AS value\n',
             },
-            expected_error_fragment="Unknown constant '_limit' in this model",
+            expected_error_fragment="Constant '_limit' is known but inaccessible",
         ),
         CompileDeclarationsErrorTestCase(
             description="non-private model constant name",
@@ -575,7 +579,7 @@ def test_given_declaration_change_when_compiling_then_updates_dependent_identity
                 "enums/nested/two.sql": "ENUM (name state, members [CLOSED]);",
                 "models/orders.sql": "MODEL ();\nSELECT 1 AS value\n",
             },
-            expected_error_fragment="Duplicate public enum 'state'",
+            expected_error_fragment="Duplicate declaration 'enum:state'",
         ),
         CompileDeclarationsErrorTestCase(
             description="nested collection cannot render as a portable value list",
