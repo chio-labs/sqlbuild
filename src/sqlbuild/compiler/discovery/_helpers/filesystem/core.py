@@ -153,9 +153,14 @@ _SCOPED_DECLARATION_DIRECTORIES: frozenset[str] = (
 )
 
 
-def _discover_declaration_file_facts(*, project_dir: Path) -> tuple[_DeclarationFileFacts, ...]:
+def _discover_declaration_file_facts(
+    *, project_dir: Path, declaration_kind: DeclarationKind | None = None
+) -> tuple[_DeclarationFileFacts, ...]:
     for directory_name in sorted(_SCOPED_DECLARATION_DIRECTORIES):
-        if (project_dir / directory_name).is_dir():
+        directory_kind, _scope_kind = DECLARATION_DIRECTORY_FACTS[directory_name]
+        if (declaration_kind is None or directory_kind is declaration_kind) and (
+            project_dir / directory_name
+        ).is_dir():
             raise DeclarationParseError(
                 f"Scoped declaration root {directory_name}/ must be below a canonical authored root"
             )
@@ -163,6 +168,9 @@ def _discover_declaration_file_facts(*, project_dir: Path) -> tuple[_Declaration
     facts: list[_DeclarationFileFacts] = []
     global_directory: str
     for global_directory in sorted(GLOBAL_DECLARATION_DIRECTORIES):
+        directory_kind, _scope_kind = DECLARATION_DIRECTORY_FACTS[global_directory]
+        if declaration_kind is not None and directory_kind is not declaration_kind:
+            continue
         declaration_root: Path = project_dir / global_directory
         if declaration_root.is_dir():
             facts.extend(
@@ -182,6 +190,9 @@ def _discover_declaration_file_facts(*, project_dir: Path) -> tuple[_Declaration
         directory: Path
         for directory in sorted(path for path in authored_root.rglob("*") if path.is_dir()):
             if directory.name not in _SCOPED_DECLARATION_DIRECTORIES:
+                continue
+            directory_kind, _scope_kind = DECLARATION_DIRECTORY_FACTS[directory.name]
+            if declaration_kind is not None and directory_kind is not declaration_kind:
                 continue
             relative_directory: Path = directory.relative_to(project_dir)
             descendants: tuple[str, ...] = relative_directory.parts[len(root_components) :]
@@ -331,13 +342,19 @@ def _discover_model_file(
 
 
 def discover_enum_files(
-    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+    *,
+    project_dir: Path,
+    on_fault: Callable[[DiscoveryFileFault], None] | None = None,
+    isolate_declaration_kind: bool = False,
 ) -> tuple[DiscoveredEnumFile, ...]:
     """Discover global and scoped enum declaration files."""
 
     discovered_files: list[DiscoveredEnumFile] = []
     facts: _DeclarationFileFacts
-    for facts in _discover_declaration_file_facts(project_dir=project_dir):
+    for facts in _discover_declaration_file_facts(
+        project_dir=project_dir,
+        declaration_kind=DeclarationKind.ENUM if isolate_declaration_kind else None,
+    ):
         if facts.declaration_kind is not DeclarationKind.ENUM:
             continue
         try:
@@ -368,13 +385,19 @@ def discover_enum_files(
 
 
 def discover_constant_files(
-    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+    *,
+    project_dir: Path,
+    on_fault: Callable[[DiscoveryFileFault], None] | None = None,
+    isolate_declaration_kind: bool = False,
 ) -> tuple[DiscoveredConstantFile, ...]:
     """Discover global and scoped constant declaration files."""
 
     discovered_files: list[DiscoveredConstantFile] = []
     facts: _DeclarationFileFacts
-    for facts in _discover_declaration_file_facts(project_dir=project_dir):
+    for facts in _discover_declaration_file_facts(
+        project_dir=project_dir,
+        declaration_kind=DeclarationKind.CONSTANT if isolate_declaration_kind else None,
+    ):
         if facts.declaration_kind is not DeclarationKind.CONSTANT:
             continue
         try:
@@ -690,7 +713,9 @@ def discover_audit_files(
     return tuple(discovered_audit_files)
 
 
-def discover_macro_files(*, project_dir: Path) -> tuple[DiscoveredMacroFile, ...]:
+def discover_macro_files(
+    *, project_dir: Path, isolate_declaration_kind: bool = False
+) -> tuple[DiscoveredMacroFile, ...]:
     """Discover global and scoped project macro Python files."""
 
     return tuple(
@@ -703,7 +728,10 @@ def discover_macro_files(*, project_dir: Path) -> tuple[DiscoveredMacroFile, ...
             owning_path=facts.owning_path,
             declaration_root=facts.declaration_root,
         )
-        for facts in _discover_declaration_file_facts(project_dir=project_dir)
+        for facts in _discover_declaration_file_facts(
+            project_dir=project_dir,
+            declaration_kind=DeclarationKind.MACRO if isolate_declaration_kind else None,
+        )
         if facts.declaration_kind is DeclarationKind.MACRO
     )
 

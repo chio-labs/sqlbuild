@@ -24,12 +24,15 @@ from sqlbuild.compiler.scopes.constants import (
     SCOPE_CACHE_FILENAME,
     SCOPE_CACHE_MAX_BYTES,
     SCOPE_CACHE_SCHEMA_VERSION,
+    SCOPE_ENUM_MEMBER_FIELDS,
     SCOPE_FINGERPRINT_ALGORITHM_VERSION,
     SCOPE_LOCAL_CONFIG_KEYS,
     SCOPE_MACRO_SUFFIX,
     SCOPE_PROJECT_CONFIG_KEYS,
     SCOPE_RELATIONSHIP_ROOTS,
     SCOPE_SOURCE_SUFFIXES,
+    SCOPE_TARGET_VARS_KEY,
+    SCOPE_TARGETS_KEY,
 )
 from sqlbuild.compiler.scopes.exceptions import ScopeCacheDecodeError
 from sqlbuild.compiler.scopes.models import (
@@ -212,7 +215,7 @@ def _declaration_payload(item: DeclarationRecord) -> JsonObject:
     enum: object = None
     if item.enum is not None:
         enum = {
-            "members": [{"name": value.name, "value": value.value} for value in item.enum.members],
+            "members": [{"name": value.name} for value in item.enum.members],
             "scalar_type": item.enum.scalar_type,
         }
     constant: object = None
@@ -267,10 +270,9 @@ def _declaration(payload: object) -> DeclarationRecord:
         members: list[EnumMemberMetadata] = []
         for raw in _list(value=value, key="members"):
             member: JsonObject = _object(raw)
-            scalar: object = member.get("value")
-            if not isinstance(scalar, str | int) or isinstance(scalar, bool):
-                raise ScopeCacheDecodeError("Invalid cached enum value")
-            members.append(EnumMemberMetadata(_string(value=member, key="name"), scalar))
+            if set(member) != SCOPE_ENUM_MEMBER_FIELDS:
+                raise ScopeCacheDecodeError("Invalid cached enum member metadata")
+            members.append(EnumMemberMetadata(_string(value=member, key="name")))
         enum = EnumMetadata(tuple(members), _string(value=value, key="scalar_type"))
     constant_payload: object = item.get("constant")
     constant: ConstantMetadata | None = None
@@ -661,7 +663,23 @@ def _scope_config_bytes(*, name: str, raw: bytes) -> bytes:
         relevant = {
             key: value for key, value in payload.items() if key in SCOPE_PROJECT_CONFIG_KEYS
         }
+    if SCOPE_TARGETS_KEY in relevant:
+        relevant[SCOPE_TARGETS_KEY] = _scope_target_configs(value=relevant[SCOPE_TARGETS_KEY])
     return _canonical_json(relevant)
+
+
+def _scope_target_configs(*, value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return {}
+    targets: dict[str, object] = {}
+    for raw_name, raw_config in value.items():
+        if not isinstance(raw_name, str) or not isinstance(raw_config, dict):
+            continue
+        config: dict[str, object] = cast(dict[str, object], raw_config)
+        targets[raw_name] = {
+            SCOPE_TARGET_VARS_KEY: config.get(SCOPE_TARGET_VARS_KEY, {}),
+        }
+    return targets
 
 
 def _sqlbuild_version() -> str:

@@ -1,4 +1,5 @@
 pub(crate) const API_VERSION: u32 = 1;
+pub(crate) const SCOPE_METADATA_SCHEMA_VERSION: u32 = 1;
 pub(crate) const BUILT_IN_RULE_NAMESPACE: &str = "SQBK";
 pub(crate) const CUSTOM_RULE_NAMESPACE: &str = "XSQBK";
 pub(crate) const TARGET_DIRECTORY: &str = "target";

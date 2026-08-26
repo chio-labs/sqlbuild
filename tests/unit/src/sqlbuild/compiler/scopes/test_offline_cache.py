@@ -129,10 +129,17 @@ def test_given_no_cache_when_loading_twice_then_cache_is_bypassed(
             False,
         ),
         FingerprintMutationCase(
-            "local target secret",
+            "local target selection",
             "sqlbuild_local.toml",
             'target = "dev"\n[connection]\npassword = "first"\n',
             'target = "prod"\n[connection]\npassword = "second"\n',
+            True,
+        ),
+        FingerprintMutationCase(
+            "local connection secret",
+            "sqlbuild_local.toml",
+            'target = "dev"\n[connection]\npassword = "first"\n',
+            'target = "dev"\n[connection]\npassword = "second"\n',
             False,
         ),
         FingerprintMutationCase(
@@ -226,6 +233,7 @@ def test_given_authored_values_and_secrets_when_caching_then_payload_is_value_fr
             "sqlbuild_project.toml": _PROJECT + f'\n[connection]\npassword = "{secret}"\n',
             "models/orders.sql": _MODEL,
             "constants/private.sql": f'CONSTANT (name token, value "{secret}");',
+            "enums/private.sql": f'ENUM (name status, members (SECRET "{secret}"));',
         },
     )
 
@@ -233,6 +241,78 @@ def test_given_authored_values_and_secrets_when_caching_then_payload_is_value_fr
     raw: str = (tmp_path / SCOPE_CACHE_DIRECTORY / SCOPE_CACHE_FILENAME).read_text(encoding="ascii")
 
     assert (secret not in raw and str(tmp_path) not in raw) is test_case.expected_result
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (OfflineScopeCase("target switch invalidates target-aware macro usage"),),
+    ids=lambda case: case.description,
+)
+def test_given_target_aware_macro_when_switching_target_then_cache_rebuilds_usage(
+    test_case: OfflineScopeCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": (
+                _PROJECT + '\ndefault_target = "dev"\n[targets.dev]\n[targets.prod]\n'
+            ),
+            "sqlbuild_local.toml": 'target = "dev"\n',
+            "models/orders.sql": "MODEL();\nSELECT @choose() AS value\n",
+            "macros/choose.py": (
+                'def choose(ctx):\n    return "@dev_macro()" '
+                'if ctx.target_name == "dev" else "@prod_macro()"\n\n'
+                'def dev_macro():\n    return "1"\n\n'
+                'def prod_macro():\n    return "2"\n'
+            ),
+        },
+    )
+
+    dev: ScopeIndex = load_or_build_scope_index(project_dir=tmp_path)
+    (tmp_path / "sqlbuild_local.toml").write_text('target = "prod"\n', encoding="utf-8")
+    prod: ScopeIndex = load_or_build_scope_index(project_dir=tmp_path)
+    dev_names: set[str] = {usage.declaration.name for usage in dev.usages}
+    prod_names: set[str] = {usage.declaration.name for usage in prod.usages}
+
+    assert (
+        "dev_macro" in dev_names
+        and "prod_macro" not in dev_names
+        and "prod_macro" in prod_names
+        and "dev_macro" not in prod_names
+    ) is test_case.expected_result
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (OfflineScopeCase("broken enum tree retains constant and macro facts"),),
+    ids=lambda case: case.description,
+)
+def test_given_broken_declaration_category_when_loading_then_other_categories_remain_visible(
+    test_case: OfflineScopeCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": _PROJECT,
+            "models/orders.sql": _MODEL,
+            "models/domain/_enums/_local_enums/broken.sql": (
+                "ENUM (name broken, members [BROKEN]);"
+            ),
+            "constants/limit.sql": "CONSTANT (name limit, value 1);",
+            "macros/identity.py": 'def identity():\n    return "1"\n',
+        },
+    )
+
+    index: ScopeIndex = load_or_build_scope_index(project_dir=tmp_path, no_cache=True)
+    identities: set[str] = {record.identity.name for record in index.declarations}
+
+    assert ({"limit", "identity"} <= identities and not index.completeness.discovery) is (
+        test_case.expected_result
+    )
 
 
 @pytest.mark.parametrize(

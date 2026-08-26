@@ -67,15 +67,14 @@ class MacroMetadata:
 
 @dataclass(frozen=True)
 class EnumMemberMetadata:
-    """One authored enum member and its normalized scalar value."""
+    """One value-free authored enum member identity."""
 
     name: str
-    value: str | int
 
 
 @dataclass(frozen=True)
 class EnumMetadata:
-    """Safe enum metadata; members are names and normalized scalar values."""
+    """Safe enum metadata containing member names and their shared scalar type."""
 
     members: tuple[EnumMemberMetadata, ...]
     scalar_type: str

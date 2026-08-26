@@ -412,9 +412,7 @@ def _enum_record(
         ownership_root=ownership_root,
         owning_path=normalize_path(path=owning_path) if owning_path is not None else None,
         enum=EnumMetadata(
-            members=tuple(
-                EnumMemberMetadata(item.name, item.value) for item in declaration.members
-            ),
+            members=tuple(EnumMemberMetadata(item.name) for item in declaration.members),
             scalar_type=declaration.scalar_type,
         ),
     )

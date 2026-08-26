@@ -321,7 +321,9 @@ def build_move_preview(
     except InvalidScopePathError:
         return None, (_invalid_destination(destination=destination),)
     roots: tuple[OwnershipRoot, ...] = _destination_roots(lookup=lookup, source=source, path=path)
-    if len(roots) != 1:
+    occupants: tuple[ResourceRecord, ...] = lookup.resources_by_path.get(path, ())
+    occupied: bool = bool(occupants) and path != source.path
+    if len(roots) != 1 or occupied:
         return None, (_invalid_destination(destination=destination),)
     moved: ResourceRecord = replace(source, path=path, ownership_root=roots[0])
     old_direct, old_relationships, _old_unavailable = _classify(lookup=lookup, resource=source)
@@ -434,7 +436,8 @@ def _private_reports(
 def _invalid_destination(*, destination: str | PurePath) -> ScopeDiagnostic:
     return ScopeDiagnostic(
         ScopeDiagnosticCode.INVALID_PROSPECTIVE_PATH,
-        f"Move destination {destination!s} is outside a valid authored resource root",
+        f"Move destination {destination!s} is invalid, outside its authored resource root, "
+        "or already occupied",
     )
 
 

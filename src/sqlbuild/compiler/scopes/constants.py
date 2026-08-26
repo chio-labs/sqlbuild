@@ -17,10 +17,24 @@ SCOPE_MACRO_SUFFIX: str = ".py"
 SCOPE_RELATIONSHIP_ROOTS: frozenset[tuple[str, str]] = frozenset(
     {("tests", "unit"), ("tests", "scenarios")}
 )
-SCOPE_LOCAL_CONFIG_KEYS: frozenset[str] = frozenset({"adapter", "settings", "vars"})
-SCOPE_PROJECT_CONFIG_KEYS: frozenset[str] = frozenset(
-    {"adapter", "constants", "defaults", "path_defaults", "settings", "vars"}
+SCOPE_LOCAL_CONFIG_KEYS: frozenset[str] = frozenset(
+    {"adapter", "settings", "target", "targets", "vars"}
 )
+SCOPE_PROJECT_CONFIG_KEYS: frozenset[str] = frozenset(
+    {
+        "adapter",
+        "constants",
+        "default_target",
+        "defaults",
+        "path_defaults",
+        "settings",
+        "targets",
+        "vars",
+    }
+)
+SCOPE_TARGET_VARS_KEY: str = "vars"
+SCOPE_TARGETS_KEY: str = "targets"
+SCOPE_ENUM_MEMBER_FIELDS: frozenset[str] = frozenset({"name"})
 DEFAULT_ENUM_MEMBER_PREVIEW: int = 20
 QUALIFIED_IDENTITY_SEPARATOR: str = ":"
 PRIVATE_IDENTITY_SEPARATOR: str = "."

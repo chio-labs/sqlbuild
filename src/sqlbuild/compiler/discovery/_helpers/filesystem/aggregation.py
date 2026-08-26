@@ -207,23 +207,40 @@ def _discover_declarations(
     tuple[DiscoveryFileFault, ...],
 ]:
     faults: list[DiscoveryFileFault] = []
+    enums: tuple[DiscoveredEnumFile, ...] = ()
+    constants: tuple[DiscoveredConstantFile, ...] = ()
+    macros: tuple[DiscoveredMacroFile, ...] = ()
     try:
-        enums: tuple[DiscoveredEnumFile, ...] = discover_enum_files(
-            project_dir=project_dir, on_fault=faults.append
+        enums = discover_enum_files(
+            project_dir=project_dir,
+            on_fault=faults.append,
+            isolate_declaration_kind=True,
         )
-        constants: tuple[DiscoveredConstantFile, ...] = discover_constant_files(
-            project_dir=project_dir, on_fault=faults.append
-        )
-        macros: tuple[DiscoveredMacroFile, ...] = discover_macro_files(project_dir=project_dir)
     except (OSError, UnicodeError, ValueError, SyntaxError) as error:
-        faults.append(
-            DiscoveryFileFault(
-                path=None,
-                message=str(error).replace(str(project_dir), "."),
-            )
+        faults.append(_category_fault(project_dir=project_dir, error=error))
+    try:
+        constants = discover_constant_files(
+            project_dir=project_dir,
+            on_fault=faults.append,
+            isolate_declaration_kind=True,
         )
-        enums, constants, macros = (), (), ()
+    except (OSError, UnicodeError, ValueError, SyntaxError) as error:
+        faults.append(_category_fault(project_dir=project_dir, error=error))
+    try:
+        macros = discover_macro_files(
+            project_dir=project_dir,
+            isolate_declaration_kind=True,
+        )
+    except (OSError, UnicodeError, ValueError, SyntaxError) as error:
+        faults.append(_category_fault(project_dir=project_dir, error=error))
     return enums, constants, macros, tuple(faults)
+
+
+def _category_fault(*, project_dir: Path, error: Exception) -> DiscoveryFileFault:
+    return DiscoveryFileFault(
+        path=None,
+        message=str(error).replace(str(project_dir), "."),
+    )
 
 
 def _discover_relationships(

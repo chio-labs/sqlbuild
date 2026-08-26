@@ -8,11 +8,8 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild.compiler.scopes.main._scope_metadata_json import (
-    scope_metadata_json,
-    scope_metadata_projection,
-)
 from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
+from sqlbuild.compiler.scopes.main.scope_metadata import scope_metadata_projection
 from sqlbuild.compiler.scopes.models import (
     DeclarationRecord,
     ResourceIdentity,
@@ -102,7 +99,7 @@ def test_given_equivalent_indexes_when_serializing_then_json_is_byte_determinist
     )
 
     assert (
-        scope_metadata_json(index=index) == scope_metadata_json(index=reversed_index)
+        scope_metadata_projection(index=index) == scope_metadata_projection(index=reversed_index)
     ) is test_case.expected_result
 
 

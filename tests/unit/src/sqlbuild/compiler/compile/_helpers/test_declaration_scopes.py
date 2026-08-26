@@ -21,7 +21,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
     SqlHookEntry,
 )
-from sqlbuild.compiler.scopes.main._scope_metadata_json import scope_metadata_json
+from sqlbuild.compiler.scopes.main.scope_metadata import scope_metadata_projection
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     ResourceIdentity,
@@ -433,7 +433,7 @@ def test_given_expected_models_when_compiling_then_public_declarations_are_grant
     assert grants == test_case.expected_grants
     assert first.scope_index.completeness.relationships
     assert first.scope_index == second.scope_index
-    assert scope_metadata_json(index=first.scope_index) == scope_metadata_json(
+    assert scope_metadata_projection(index=first.scope_index) == scope_metadata_projection(
         index=second.scope_index
     )
     assert compiled.scope_index.grants == first.scope_index.grants

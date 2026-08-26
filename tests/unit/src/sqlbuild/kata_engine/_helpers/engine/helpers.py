@@ -1,9 +1,16 @@
-"""Test helpers for custom kata rules."""
+"""Test helpers for native kata engine boundaries."""
 
+import json
+from dataclasses import replace
 from operator import attrgetter
 from pathlib import Path
+from typing import Any, cast
+
+import pytest
 
 from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.scopes.models import ScopeIndex
+from sqlbuild.kata_engine._helpers.engine import native
 from sqlbuild.kata_engine._helpers.engine.catalogue import build_catalogue
 from sqlbuild.kata_engine.constants import MIN_CUSTOM_RULE_TEST_CASES
 from sqlbuild.kata_engine.models import KataCacheConfig, KataConfig, KataRule
@@ -11,6 +18,47 @@ from tests.unit.src.sqlbuild.kata_engine._helpers.engine._test_types import Cust
 from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_project
 
 _MODEL_SQL: str = "WITH final AS (SELECT 1 AS id) SELECT id FROM final"
+
+
+def project_with_scope(*, index: ScopeIndex) -> CompiledProject:
+    """Return a minimal compiled project carrying canonical scope facts."""
+
+    project: CompiledProject = build_project(
+        name="orders",
+        relative_path="models/orders.sql",
+        sql="SELECT 1 AS id",
+        config_values={},
+    )
+    return replace(project, scope_index=index)
+
+
+def captured_native_request(
+    *, monkeypatch: pytest.MonkeyPatch, project: CompiledProject, project_dir: Path
+) -> dict[str, Any]:
+    """Evaluate through the Python boundary and capture the serialized request."""
+
+    captured: dict[str, Any] = {}
+
+    def evaluate_json(request_json: str) -> str:
+        captured.update(cast(dict[str, Any], json.loads(request_json)))
+        return json.dumps(
+            {
+                "version": 1,
+                "faults": [],
+                "evaluated_models": 0,
+                "cache_hits": 0,
+                "cache_misses": 0,
+            }
+        )
+
+    monkeypatch.setattr(native._kata_native, "evaluate_json", evaluate_json)
+    native.evaluate_native(
+        project=project,
+        config=KataConfig(),
+        project_dir=project_dir,
+        catalogue=(),
+    )
+    return captured
 
 
 def write_rule(

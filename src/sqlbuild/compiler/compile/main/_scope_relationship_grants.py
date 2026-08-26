@@ -15,6 +15,4 @@ def build_scope_relationship_grants(
 ) -> ScopeRelationshipBuild:
     """Return expected-model grants while retaining independent extraction faults."""
 
-    return _build_scope_relationship_grants(
-        discovered_inputs=discovered_inputs, index=index
-    )
+    return _build_scope_relationship_grants(discovered_inputs=discovered_inputs, index=index)

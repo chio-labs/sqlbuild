@@ -108,8 +108,6 @@ def _validate_scope_args(*, args: CliNamespace, parser: argparse.ArgumentParser)
         parser.error("scope requires exactly one of TARGET or --at PATH")
     if args.scope_as_path is not None and not has_target:
         parser.error("scope --as-path requires TARGET")
-    if args.scope_after is not None and args.scope_list is None:
-        parser.error("scope --after requires --list")
     folder_mode: bool = args.scope_browse is not None or args.scope_list is not None
     if folder_mode and (
         args.scope_as_path is not None

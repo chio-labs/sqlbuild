@@ -17,6 +17,7 @@ from sqlbuild.compiler.scopes.models import (
     DeclarationRecord,
     DeclarationReport,
     GrantRecord,
+    InaccessibleRecord,
     ResourceIdentity,
     ResourceRecord,
     ScopeDiagnostic,
@@ -25,6 +26,7 @@ from sqlbuild.compiler.scopes.models import (
     SourceLocation,
     UsageRecord,
     VisibilityProvenance,
+    VisibilityRecord,
 )
 from sqlbuild.compiler.scopes.types import JsonValue, ScopeKind
 
@@ -64,11 +66,28 @@ def build_projection(*, index: ScopeIndex) -> dict[str, JsonValue]:
             item.enum_member or "",
         ),
     )
+    visibility: list[VisibilityRecord] = sorted(
+        index.visibility,
+        key=lambda item: (
+            format_identity(identity=item.resource),
+            format_identity(identity=item.declaration),
+            item.reason.value,
+            format_identity(identity=item.through) if item.through is not None else "",
+        ),
+    )
+    inaccessible: list[InaccessibleRecord] = sorted(
+        index.inaccessible,
+        key=lambda item: (
+            format_identity(identity=item.resource),
+            format_identity(identity=item.declaration),
+            item.reason.value,
+        ),
+    )
     return {
         "schema_version": SCOPE_METADATA_SCHEMA_VERSION,
         "ownership_roots": [
             {
-                "path": root.path,
+                "path": safe_scope_path(path=root.path),
                 "resource_kind": (
                     root.resource_kind.value if root.resource_kind is not None else None
                 ),
@@ -86,8 +105,8 @@ def build_projection(*, index: ScopeIndex) -> dict[str, JsonValue]:
                 "identity": format_identity(identity=record.identity),
                 "kind": record.identity.kind.value,
                 "name": record.identity.name,
-                "path": record.path,
-                "ownership_root": record.ownership_root.path,
+                "path": safe_scope_path(path=record.path),
+                "ownership_root": safe_scope_path(path=record.ownership_root.path),
                 "ownership_root_kind": (
                     record.ownership_root.resource_kind.value
                     if record.ownership_root.resource_kind is not None
@@ -118,6 +137,25 @@ def build_projection(*, index: ScopeIndex) -> dict[str, JsonValue]:
             }
             for record in usages
         ],
+        "visibility": [
+            {
+                "resource": format_identity(identity=record.resource),
+                "declaration": format_identity(identity=record.declaration),
+                "reason": record.reason.value,
+                "through": (
+                    format_identity(identity=record.through) if record.through is not None else None
+                ),
+            }
+            for record in visibility
+        ],
+        "inaccessible": [
+            {
+                "resource": format_identity(identity=record.resource),
+                "declaration": format_identity(identity=record.declaration),
+                "reason": record.reason.value,
+            }
+            for record in inaccessible
+        ],
         "complete": index.completeness.complete,
         "completeness": {
             section.value: complete for section, complete in index.completeness.as_mapping().items()
@@ -125,9 +163,11 @@ def build_projection(*, index: ScopeIndex) -> dict[str, JsonValue]:
         "diagnostics": [
             {
                 "code": diagnostic.code.value,
-                "message": diagnostic.message,
+                "message": diagnostic.message.replace("\x1b", ""),
                 "severity": diagnostic.severity.value,
-                "path": diagnostic.path,
+                "path": (
+                    safe_scope_path(path=diagnostic.path) if diagnostic.path is not None else None
+                ),
                 "line": diagnostic.line,
                 "column": diagnostic.column,
                 "declaration": (
@@ -166,9 +206,7 @@ def _declaration_projection(*, record: DeclarationRecord) -> dict[str, JsonValue
         }
     if record.enum is not None:
         metadata["enum"] = {
-            "members": [
-                {"name": member.name, "value": member.value} for member in record.enum.members
-            ],
+            "members": [{"name": member.name} for member in record.enum.members],
             "scalar_type": record.enum.scalar_type,
         }
     if record.constant is not None:
@@ -188,12 +226,14 @@ def _declaration_projection(*, record: DeclarationRecord) -> dict[str, JsonValue
             if record.identity.owner is not None
             else None
         ),
-        "path": record.path,
+        "path": safe_scope_path(path=record.path),
         "line": record.line,
         "column": record.column,
         "scope": record.scope.value,
-        "ownership_root": record.ownership_root.path,
-        "owning_path": record.owning_path,
+        "ownership_root": safe_scope_path(path=record.ownership_root.path),
+        "owning_path": (
+            safe_scope_path(path=record.owning_path) if record.owning_path is not None else None
+        ),
         "metadata": metadata,
     }
 

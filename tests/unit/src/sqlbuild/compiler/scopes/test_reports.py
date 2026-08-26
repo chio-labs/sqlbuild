@@ -18,6 +18,7 @@ from sqlbuild.compiler.scopes.main.query_scope_report import query_scope_report
 from sqlbuild.compiler.scopes.main.serialize_scope_report import serialize_scope_report
 from sqlbuild.compiler.scopes.models import (
     OwnershipRoot,
+    ResourceRecord,
     ScopeBrowseResult,
     ScopeIndex,
     ScopeListResult,
@@ -322,6 +323,25 @@ def test_given_resource_move_when_previewing_then_deltas_and_grants_are_separate
         resource="model:orders",
         destination="outside/orders.sql",
     )
+    occupied, occupied_diagnostics = preview_scope_move(
+        lookup=report_scope_lookup(),
+        resource="model:orders",
+        destination="models/marts/expected_orders.sql",
+    )
+    base_lookup: ScopeLookup = report_scope_lookup()
+    source: ResourceRecord = base_lookup.index.resources[0]
+    duplicate_path: str = "models/marts/duplicate_orders.sql"
+    duplicate_lookup: ScopeLookup = build_scope_lookup(
+        index=replace(
+            base_lookup.index,
+            resources=(*base_lookup.index.resources, replace(source, path=duplicate_path)),
+        )
+    )
+    duplicate, duplicate_diagnostics = preview_scope_move(
+        lookup=duplicate_lookup,
+        resource="models/staging/orders.sql",
+        destination=duplicate_path,
+    )
 
     assert diagnostics == ()
     assert preview is not None
@@ -331,6 +351,10 @@ def test_given_resource_move_when_previewing_then_deltas_and_grants_are_separate
     assert [item.identity for item in preview.relationship_retained] == ["enum:mart_status"]
     assert invalid is None
     assert invalid_diagnostics[0].code is ScopeDiagnosticCode.INVALID_PROSPECTIVE_PATH
+    assert occupied is None
+    assert occupied_diagnostics[0].code is ScopeDiagnosticCode.INVALID_PROSPECTIVE_PATH
+    assert duplicate is None
+    assert duplicate_diagnostics[0].code is ScopeDiagnosticCode.INVALID_PROSPECTIVE_PATH
     assert test_case.expected_result
 
 

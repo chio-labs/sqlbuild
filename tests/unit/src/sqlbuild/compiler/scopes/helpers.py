@@ -167,8 +167,8 @@ def scope_index() -> ScopeIndex:
         OwnershipRoot("enums", OwnershipRootKind.GLOBAL),
         enum=EnumMetadata(
             (
-                EnumMemberMetadata("OPEN", "OPEN"),
-                EnumMemberMetadata("CLOSED", "CLOSED"),
+                EnumMemberMetadata("OPEN"),
+                EnumMemberMetadata("CLOSED"),
             ),
             "VARCHAR",
         ),
@@ -229,10 +229,7 @@ def report_scope_lookup(*, extra_globals: int = 0) -> ScopeLookup:
         model_root,
         owning_path="models/staging",
         enum=EnumMetadata(
-            tuple(
-                EnumMemberMetadata(f"STATUS_{index:02d}", f"status_{index:02d}")
-                for index in range(25)
-            ),
+            tuple(EnumMemberMetadata(f"STATUS_{index:02d}") for index in range(25)),
             "VARCHAR",
         ),
     )
