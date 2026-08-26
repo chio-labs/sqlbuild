@@ -13,10 +13,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 from sqlbuild.compiler.auditing.main._parse_audit_instance import parse_audit_instance
-from sqlbuild.compiler.compile._helpers.analysis.validation import (
-    validate_hook_sql_syntax,
-    validate_sql_syntax,
-)
+from sqlbuild.compiler.compile._helpers.analysis.validation import validate_sql_syntax
 from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_function_names,
     build_known_ref_names,
@@ -76,7 +73,6 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import (
     CompileContextKey,
 )
-from sqlbuild.compiler.discovery.exceptions import SqlHookParseError
 from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_columns
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
@@ -93,7 +89,6 @@ from sqlbuild.compiler.discovery.models import (
     SqlHookEntry,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-from sqlbuild.compiler.sql_hooks.main._validate_statement import validate_sql_hook_statement
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     LocalConfig,
@@ -346,15 +341,6 @@ def _build_model_inputs(
                             sql=hook_entry.statement,
                             context=f"Model '{model_file.file_path.stem}' {hook_name}",
                         )
-        if sql_validation_enabled:
-            for hook_name in ("pre_hooks", "post_hooks"):
-                validate_hook_sql_syntax(
-                    value=expanded_config.values.get(hook_name),
-                    hook_name=hook_name,
-                    model_name=model_file.file_path.stem,
-                    file_path=model_file.file_path,
-                    placeholders=sql_validation_placeholders,
-                )
         header_schema_entry: SchemaModelEntry | None = build_model_header_schema_entry(
             model_name=model_file.file_path.stem,
             model_header_values=expanded_config.values,
@@ -844,8 +830,14 @@ def expand_sql_macros_in_value(
             hook_key=hook_key,
             hook_index=hook_index,
         )
+        expanded_statement_text: str = str(expanded_statement)
+        _require_nonempty_sql_hook_payload(
+            statement=expanded_statement_text,
+            hook_label=_format_sql_hook_label(hook_key=hook_key, hook_index=hook_index),
+            file_path=context.file_path,
+        )
         return SqlHookEntry(
-            statement=str(expanded_statement),
+            statement=expanded_statement_text,
             name=value.name,
             relative_path=value.relative_path,
             definition_sql=value.definition_sql,
@@ -889,20 +881,15 @@ def expand_sql_macros_in_value(
             hook_index=hook_index,
         )
         expanded_statement_text: str = str(expanded_statement)
-        try:
-            validate_sql_hook_statement(
-                sql=expanded_statement_text,
-                file_path=hook_definition.file_path,
-            )
-        except SqlHookParseError as error:
-            hook_label = _format_named_sql_hook_label(
+        _require_nonempty_sql_hook_payload(
+            statement=expanded_statement_text,
+            hook_label=_format_named_sql_hook_label(
                 hook_name=value.name,
                 hook_key=hook_key,
                 hook_index=hook_index,
-            )
-            raise CompileInputError(
-                f"{hook_label} in '{context.file_path}' is invalid after rendering: {error}"
-            ) from error
+            ),
+            file_path=context.file_path,
+        )
         return SqlHookEntry(
             statement=expanded_statement_text,
             name=value.name,
@@ -952,6 +939,13 @@ def _format_named_sql_hook_label(
     if hook_index is None:
         return f'{hook_key} sql("{hook_name}")'
     return f'{hook_key}[{hook_index}] sql("{hook_name}")'
+
+
+def _require_nonempty_sql_hook_payload(*, statement: str, hook_label: str, file_path: Path) -> None:
+    if not statement.strip():
+        raise CompileInputError(
+            f"{hook_label} in '{file_path}' must render a non-empty SQL payload"
+        )
 
 
 def _index_sql_hook_definitions(

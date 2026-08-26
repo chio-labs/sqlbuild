@@ -21,7 +21,10 @@ from sqlbuild.compiler.compile._helpers.analysis.columns import (
     infer_columns_with_sql_analysis,
     table_function_analysis_name,
 )
-from sqlbuild.compiler.compile._helpers.analysis.validation import validate_sql_syntax
+from sqlbuild.compiler.compile._helpers.analysis.validation import (
+    validate_hook_sql_syntax,
+    validate_sql_syntax,
+)
 from sqlbuild.compiler.compile._helpers.deps.dependencies import (
     audit_scope_deps,
     function_build_deps,
@@ -275,6 +278,7 @@ def _assemble_compiled_model(
     allow_compact_analysis: bool = False,
 ) -> CompiledModel:
     model_name: str = model_input.model_file.file_path.stem
+    profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
     analysis_query_sql: str = cursor_intrinsics_analysis_sql(
         sql=model_input.query_sql,
         cursor_type=model_input.config.values.get("cursor_type"),
@@ -285,8 +289,17 @@ def _assemble_compiled_model(
     placeholders: dict[str, str] | None = (
         sql_analysis.placeholders if sql_analysis is not None else _model_placeholders(model_input)
     )
+    if sql_validation_enabled and model_input.sql_validation_enabled:
+        for hook_name in ("pre_hooks", "post_hooks"):
+            validate_hook_sql_syntax(
+                value=model_input.config.values.get(hook_name),
+                hook_name=hook_name,
+                model_name=model_name,
+                file_path=model_input.model_file.file_path,
+                placeholders=placeholders,
+                dialect=profile.sql_analysis_dialect,
+            )
     if sql_analysis_enabled:
-        profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
         polyglot_analysis: PolyglotAnalysisResult = (
             sql_analysis.polyglot_analysis
             if sql_analysis is not None
@@ -320,7 +333,6 @@ def _assemble_compiled_model(
                 inference_profile=profile,
             )
     elif sql_validation_enabled and model_input.sql_validation_enabled:
-        profile = inference_profile or ExpressionInferenceProfile()
         validate_sql_syntax(
             query_sql=analysis_query_sql,
             model_name=model_name,

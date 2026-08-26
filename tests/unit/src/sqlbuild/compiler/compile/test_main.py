@@ -3801,42 +3801,35 @@ path = "${CTX:schema}"
             expected_error_fragment="post_hooks entries must use typed inline_sql",
         ),
         BuildCompileInputsErrorTestCase(
-            description="raises when pre_hook sql has invalid syntax",
+            description="raises when inline hook renders an empty payload",
             repo_files=base_repo_files()
             | {
                 "models/staging/broken.sql": (
-                    "MODEL (pre_hooks [inline_sql('THIS IS NOT VALID SQL')]);\n\nSELECT 1 AS id\n"
-                ),
-            },
-            selected_target=None,
-            run_id=None,
-            expected_error_fragment=r"model 'broken' pre_hooks\[0\] inline_sql\(\"\.\.\.\"\) has invalid SQL",
-        ),
-        BuildCompileInputsErrorTestCase(
-            description="raises when post_hook sql has invalid syntax",
-            repo_files=base_repo_files()
-            | {
-                "models/staging/broken.sql": (
-                    "MODEL (post_hooks [inline_sql('THIS IS NOT VALID SQL')]);\n\nSELECT 1 AS id\n"
-                ),
-            },
-            selected_target=None,
-            run_id=None,
-            expected_error_fragment=r"model 'broken' post_hooks\[0\] inline_sql\(\"\.\.\.\"\) has invalid SQL",
-        ),
-        BuildCompileInputsErrorTestCase(
-            description="raises when hook sql is not an executable statement",
-            repo_files=base_repo_files()
-            | {
-                "models/staging/broken.sql": (
-                    "MODEL (post_hooks [inline_sql('1 + 1')]);\n\nSELECT 1 AS id\n"
+                    "MODEL (post_hooks [inline_sql('')]);\n\nSELECT 1 AS id\n"
                 ),
             },
             selected_target=None,
             run_id=None,
             expected_error_fragment=(
-                r"model 'broken' post_hooks\[0\] inline_sql\(\"\.\.\.\"\) has invalid SQL .* "
-                r"must be a valid executable SQL statement"
+                r"post_hooks\[0\] inline_sql\(\"\.\.\.\"\).*must render a non-empty SQL payload"
+            ),
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when named hook arguments render an empty payload",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
+                ),
+                "models/staging/broken.sql": (
+                    'MODEL (post_hooks [sql("dynamic", statement: "")]);\n\nSELECT 1 AS id\n'
+                ),
+                "hooks/sql/dynamic.sql": "HOOK ();\n\n@statement\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                r"post_hooks\[0\] sql\(\"dynamic\"\).*must render a non-empty SQL payload"
             ),
         ),
         BuildCompileInputsErrorTestCase(
@@ -3855,46 +3848,6 @@ path = "${CTX:schema}"
             expected_error_fragment=(
                 r"post_hooks\[0\] inline_sql\(\"\.\.\.\"\) .* uses unsupported \$\{\.\.\.\} "
                 r"template syntax"
-            ),
-        ),
-        BuildCompileInputsErrorTestCase(
-            description="raises when named hook arguments render multiple statements",
-            repo_files=base_repo_files()
-            | {
-                "sqlbuild_project.toml": (
-                    'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
-                ),
-                "models/staging/broken.sql": (
-                    'MODEL (post_hooks [sql("dynamic", statement: "SELECT 1; SELECT 2")]);'
-                    "\n\nSELECT 1 AS id\n"
-                ),
-                "hooks/sql/dynamic.sql": "HOOK ();\n\n@statement\n",
-            },
-            selected_target=None,
-            run_id=None,
-            expected_error_fragment=(
-                r"post_hooks\[0\] sql\(\"dynamic\"\).*invalid after rendering.*"
-                r"exactly one executable SQL statement"
-            ),
-        ),
-        BuildCompileInputsErrorTestCase(
-            description="raises when named hook arguments render an identifier expression",
-            repo_files=base_repo_files()
-            | {
-                "sqlbuild_project.toml": (
-                    'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_validation = false\n'
-                ),
-                "models/staging/broken.sql": (
-                    'MODEL (post_hooks [sql("dynamic", statement: "current_date")]);'
-                    "\n\nSELECT 1 AS id\n"
-                ),
-                "hooks/sql/dynamic.sql": "HOOK ();\n\n@statement\n",
-            },
-            selected_target=None,
-            run_id=None,
-            expected_error_fragment=(
-                r"post_hooks\[0\] sql\(\"dynamic\"\).*invalid after rendering.*"
-                r"one executable SQL statement"
             ),
         ),
         BuildCompileInputsErrorTestCase(

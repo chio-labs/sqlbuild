@@ -256,6 +256,15 @@ class AssembleCompiledProjectEffectiveTargetTestCase:
 
 
 @dataclass(frozen=True)
+class AssembleSqlHookValidationTestCase:
+    description: str
+    model_sql: str
+    named_hook_sql: str
+    dialect: str
+    expected_hook_statements: tuple[str, str]
+
+
+@dataclass(frozen=True)
 class InferColumnsTestCase:
     description: str
     query_sql: str
@@ -285,6 +294,15 @@ class PolyglotAnalysisTestCase:
 class ValidateSqlSyntaxTestCase:
     description: str
     query_sql: str
+    expected_valid: bool
+    expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class ValidateHookSqlSyntaxTestCase:
+    description: str
+    hook_sql: str
+    dialect: str
     expected_valid: bool
     expected_error_fragment: str | None = None
 

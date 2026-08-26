@@ -49,8 +49,8 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             command=("--no-color", "build"),
             expected_exit_code=1,
             expected_stderr_fragments=(
-                "model 'orders' pre_hooks[0] inline_sql(\"...\") has invalid SQL",
-                "hook SQL must be a valid executable SQL statement",
+                "Polyglot could not parse model 'orders' pre_hooks[0] inline_sql(\"...\")",
+                "Invalid expression / Unexpected token",
                 "settings.sql_validation: false",
             ),
         ),

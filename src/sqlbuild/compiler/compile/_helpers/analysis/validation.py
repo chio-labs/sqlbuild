@@ -1,4 +1,4 @@
-"""Optional Polyglot-backed SQL syntax validation for model queries."""
+"""Optional Polyglot-backed SQL syntax validation."""
 
 from __future__ import annotations
 
@@ -12,36 +12,6 @@ from sqlbuild.compiler.compile._helpers.analysis.columns import (
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
-
-_VALID_HOOK_ROOT_KEYS: frozenset[str] = frozenset(
-    {
-        "select",
-        "union",
-        "insert",
-        "update",
-        "delete",
-        "merge",
-        "create",
-        "alter",
-        "drop",
-        "truncate",
-        "grant",
-        "revoke",
-        "set",
-        "call",
-        "copy",
-        "use",
-        "attach",
-        "detach",
-        "analyze",
-        "vacuum",
-        "comment",
-        "transaction",
-        "commit",
-        "rollback",
-        "command",
-    }
-)
 
 
 def validate_sql_syntax(
@@ -114,16 +84,19 @@ def validate_hook_sql_syntax(
     file_path: Path,
     placeholders: dict[str, str] | None = None,
     hook_label: str | None = None,
+    dialect: str | None = None,
 ) -> None:
     """Validate hook SQL strings recursively inside supported hook container shapes."""
 
     if isinstance(value, str):
         effective_label: str = hook_label or hook_name
-        _validate_sql_syntax_with_message(
+        _validate_hook_sql_with_message(
             query_sql=value,
-            error_prefix=f"model '{model_name}' {effective_label} has invalid SQL ({file_path})",
+            error_prefix=(
+                f"Polyglot could not parse model '{model_name}' {effective_label} ({file_path})"
+            ),
             placeholders=placeholders,
-            require_hook_statement=True,
+            dialect=dialect,
         )
         return
     if isinstance(value, SqlHookEntry):
@@ -139,6 +112,7 @@ def validate_hook_sql_syntax(
             file_path=value.relative_path or file_path,
             placeholders=placeholders,
             hook_label=hook_label or entry_label,
+            dialect=dialect,
         )
         return
     if isinstance(value, PythonHookEntry):
@@ -163,6 +137,7 @@ def validate_hook_sql_syntax(
                 file_path=file_path,
                 placeholders=placeholders,
                 hook_label=item_label,
+                dialect=dialect,
             )
 
 
@@ -191,45 +166,61 @@ def _validate_sql_syntax_with_message(
     query_sql: str,
     error_prefix: str,
     placeholders: dict[str, str] | None = None,
-    require_hook_statement: bool = False,
+    dialect: str | None = None,
 ) -> None:
-    """Parse SQL with Polyglot and raise CompileInputError with a custom message."""
+    """Parse one SQL expression with Polyglot and raise a contextual error."""
 
-    cleaned_sql: str = _replace_refs_with_stubs(query_sql)
-    if placeholders:
-        cleaned_sql = substitute_placeholder_defaults(
-            query_sql=cleaned_sql, placeholders=placeholders
-        )
-
+    cleaned_sql: str = _clean_sql_for_validation(
+        query_sql=query_sql,
+        placeholders=placeholders,
+    )
     polyglot_module: Any | None = import_polyglot_sql()
     if polyglot_module is None:
-        parsed_error: str = "Polyglot SQL is not installed"
-        parsed: Any | None = None
+        error_message: str | None = "Polyglot SQL is not installed"
     else:
-        parsed_error = ""
-        parsed = None
         try:
-            parsed = polyglot_module.parse_one(cleaned_sql, dialect="generic")
-        except Exception as exc:
-            parsed_error = str(exc)
-    if parsed is None:
-        raise CompileInputError(
-            f"{error_prefix}: {parsed_error}\n\n"
-            f"To skip SQL validation for this model, add `sql_validation: false` "
-            f"to the MODEL header.\n"
-            f"To disable project-wide, set `settings.sql_validation: false` "
-            f"in sqlbuild_project.toml.\n"
-            f"To skip for this run, use `--no-sql-validation`."
-        ) from None
+            polyglot_module.parse_one(cleaned_sql, dialect=dialect or "generic")
+            error_message = None
+        except Exception as error:
+            error_message = str(error)
+    if error_message is not None:
+        _raise_sql_validation_error(error_prefix=error_prefix, error_message=error_message)
 
-    parsed_kind: str = str(getattr(parsed, "kind", ""))
-    if require_hook_statement and parsed_kind not in _VALID_HOOK_ROOT_KEYS:
-        raise CompileInputError(
-            f"{error_prefix}: hook SQL must be a valid executable SQL statement, "
-            f"but this parsed as a non-statement expression ('{parsed_kind}')\n\n"
-            f"To skip SQL validation for this model, add `sql_validation: false` "
-            f"to the MODEL header.\n"
-            f"To disable project-wide, set `settings.sql_validation: false` "
-            f"in sqlbuild_project.toml.\n"
-            f"To skip for this run, use `--no-sql-validation`."
+
+def _validate_hook_sql_with_message(
+    *,
+    query_sql: str,
+    error_prefix: str,
+    placeholders: dict[str, str] | None,
+    dialect: str | None,
+) -> None:
+    """Validate a complete hook execution payload with Polyglot."""
+
+    cleaned_sql: str = _clean_sql_for_validation(
+        query_sql=query_sql,
+        placeholders=placeholders,
+    )
+    error_message: str | None = _validate_sql_with_polyglot(sql=cleaned_sql, dialect=dialect)
+    if error_message is not None:
+        _raise_sql_validation_error(error_prefix=error_prefix, error_message=error_message)
+
+
+def _clean_sql_for_validation(*, query_sql: str, placeholders: dict[str, str] | None) -> str:
+    cleaned_sql: str = _replace_refs_with_stubs(query_sql)
+    if placeholders:
+        return substitute_placeholder_defaults(
+            query_sql=cleaned_sql,
+            placeholders=placeholders,
         )
+    return cleaned_sql
+
+
+def _raise_sql_validation_error(*, error_prefix: str, error_message: str) -> None:
+    raise CompileInputError(
+        f"{error_prefix}: {error_message}\n\n"
+        f"To skip SQL validation for this model, add `sql_validation: false` "
+        f"to the MODEL header.\n"
+        f"To disable project-wide, set `settings.sql_validation: false` "
+        f"in sqlbuild_project.toml.\n"
+        f"To skip for this run, use `--no-sql-validation`."
+    ) from None

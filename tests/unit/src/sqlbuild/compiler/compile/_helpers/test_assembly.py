@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 import pytest
 
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
@@ -17,10 +19,11 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, SqlHookEntry
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     AssembleCompiledProjectEffectiveTargetTestCase,
     AssembleCompiledProjectTestCase,
+    AssembleSqlHookValidationTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     compiled_sql_test_expected_model_names,
@@ -605,3 +608,76 @@ def test_given_connection_location_when_assembling_project_then_sets_effective_t
 
     assert compiled.effective_target_database == test_case.expected_effective_target_database
     assert compiled.effective_target_schema == test_case.expected_effective_target_schema
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        AssembleSqlHookValidationTestCase(
+            description="validates named and inline payloads with adapter dialect",
+            model_sql=(
+                'MODEL (pre_hooks [sql("vendor_hook")], '
+                'post_hooks [inline_sql("SELECT [other] FROM [orders]; '
+                'SELECT [other] FROM [orders]")]);\n\nSELECT 1 AS id\n'
+            ),
+            named_hook_sql=(
+                "HOOK ();\n\nSELECT [value] FROM [orders]; SELECT [value] FROM [orders]\n"
+            ),
+            dialect="tsql",
+            expected_hook_statements=(
+                "SELECT [value] FROM [orders]; SELECT [value] FROM [orders]",
+                "SELECT [other] FROM [orders]; SELECT [other] FROM [orders]",
+            ),
+        ),
+        AssembleSqlHookValidationTestCase(
+            description="skips named and inline Polyglot validation for model opt out",
+            model_sql=(
+                'MODEL (sql_validation false, pre_hooks [sql("vendor_hook")], '
+                'post_hooks [inline_sql("DBCC CHECKIDENT (orders, RESEED, 0)")]);'
+                "\n\nSELECT 1 AS id\n"
+            ),
+            named_hook_sql="HOOK ();\n\nDBCC CHECKIDENT ('orders', RESEED, 0)\n",
+            dialect="tsql",
+            expected_hook_statements=(
+                "DBCC CHECKIDENT ('orders', RESEED, 0)",
+                "DBCC CHECKIDENT (orders, RESEED, 0)",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_sql_hooks_when_assembling_then_applies_adapter_aware_validation(
+    test_case: AssembleSqlHookValidationTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
+            "models/orders.sql": test_case.model_sql,
+            "hooks/sql/vendor_hook.sql": test_case.named_hook_sql,
+        },
+    )
+    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+    compile_inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discovered,
+        run_id="test_run_id",
+    )
+
+    compiled: CompiledProject = assemble_compiled_project(
+        inputs=compile_inputs,
+        inference_profile=ExpressionInferenceProfile(
+            sql_analysis_dialect=test_case.dialect,
+        ),
+    )
+
+    pre_hooks: list[SqlHookEntry] = cast(
+        list[SqlHookEntry],
+        compiled.models[0].config.values["pre_hooks"],
+    )
+    post_hooks: list[SqlHookEntry] = cast(
+        list[SqlHookEntry],
+        compiled.models[0].config.values["post_hooks"],
+    )
+    assert (pre_hooks[0].statement, post_hooks[0].statement) == test_case.expected_hook_statements
