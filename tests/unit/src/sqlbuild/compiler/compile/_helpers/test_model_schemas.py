@@ -31,7 +31,10 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ModelSchemaErrorTestCase,
     ModelSchemaIdentityTestCase,
 )
-from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import compile_first_model
+from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
+    DUCKDB_COMPILE_ADAPTER_CONTEXT,
+    compile_first_model,
+)
 
 _PROJECT_FILE: str = """
 name = "demo"
@@ -164,6 +167,7 @@ SELECT
     )
     inputs: CompileProjectInputs = build_compile_inputs(
         discovered_inputs=discovered,
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run",
     )
     project: CompiledProject = assemble_project(inputs=inputs)
@@ -304,7 +308,11 @@ SELECT {test_case.projection}
 
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
     project: CompiledProject = assemble_project(
-        inputs=build_compile_inputs(discovered_inputs=discovered, run_id="test_run")
+        inputs=build_compile_inputs(
+            discovered_inputs=discovered,
+            adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+            run_id="test_run",
+        )
     )
 
     diagnostics: tuple[CompilerDiagnostic, ...] = evaluate_model_contracts(
@@ -535,7 +543,11 @@ def test_given_invalid_model_schema_when_compiling_then_fails_closed(
 
     with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
         discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-        build_compile_inputs(discovered_inputs=discovered, run_id="test_run")
+        build_compile_inputs(
+            discovered_inputs=discovered,
+            adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+            run_id="test_run",
+        )
 
 
 if __name__ == "__main__":

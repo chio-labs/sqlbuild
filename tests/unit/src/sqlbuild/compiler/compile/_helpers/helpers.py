@@ -9,6 +9,7 @@ from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
+    CompileAdapterContext,
     CompileAnalysisSelection,
     CompiledDirectLogicSqlTestPayload,
     CompiledModel,
@@ -16,11 +17,30 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledSqlTest,
     CompileProjectInputs,
+    DeclarationExpansionContext,
+    DeclarationResolutionContext,
     LoadedMacro,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
+from sqlbuild.sql_values.types import CollectionRendering
+
+DUCKDB_COMPILE_ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
+    value_renderer=DuckDbAdapter(),
+    collection_rendering=CollectionRendering.VALUE_LIST,
+    python_functions_inherit_default_namespace=True,
+)
+DUCKDB_ARRAY_COMPILE_ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
+    value_renderer=DUCKDB_COMPILE_ADAPTER_CONTEXT.value_renderer,
+    collection_rendering=CollectionRendering.ARRAY,
+    python_functions_inherit_default_namespace=True,
+)
+DUCKDB_DECLARATION_EXPANSION_CONTEXT: DeclarationExpansionContext = DeclarationExpansionContext(
+    declarations=DeclarationResolutionContext(),
+    value_renderer=DUCKDB_COMPILE_ADAPTER_CONTEXT.value_renderer,
+    collection_rendering=DUCKDB_COMPILE_ADAPTER_CONTEXT.collection_rendering,
+)
 
 
 def build_loaded_macros(tmp_path: Path, macro_file_contents: str) -> dict[str, LoadedMacro]:
@@ -45,6 +65,7 @@ def compile_first_model(*, project_dir: Path) -> CompiledModel:
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
     compile_inputs: CompileProjectInputs = build_compile_inputs(
         discovered_inputs=discovered_inputs,
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run",
     )
     compiled_project: CompiledProject = assemble_project(

@@ -17,6 +17,7 @@ from sqlbuild.compiler.discovery.models import (
     SqlHookEntry,
 )
 from sqlbuild.spec.contracts.models import SourceLocation
+from sqlbuild.sql_values.models import AuthoredSqlSet, AuthoredSqlValueCall
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DeferredModelOutputLocationTestCase,
     ModelHeaderColumnLocationTestCase,
@@ -64,6 +65,28 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
 @pytest.mark.parametrize(
     "test_case",
     [
+        ParseModelSqlHeaderTestCase(
+            description="preserves authored set and typed constant calls",
+            contents="""
+        MODEL (
+          constants (
+            _countries {"FR", "GB", "FR"},
+            _array constant(value [1, 2], render_as array),
+          ),
+        );
+
+        SELECT 1
+        """,
+            expected_header_values={
+                "constants": {
+                    "_countries": AuthoredSqlSet(("FR", "GB", "FR")),
+                    "_array": AuthoredSqlValueCall(
+                        arguments=(("value", [1, 2]), ("render_as", "array"))
+                    ),
+                }
+            },
+            expected_query="SELECT 1",
+        ),
         ParseModelSqlHeaderTestCase(
             description="accepts an empty model header",
             contents="""

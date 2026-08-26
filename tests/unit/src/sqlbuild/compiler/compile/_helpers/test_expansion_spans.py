@@ -10,7 +10,10 @@ from sqlbuild.compiler.compile._helpers.render.spans import map_through_passes
 from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_with_spans
 from sqlbuild.compiler.compile.models import ExpansionSpan, LoadedMacro, MacroContext, MappedOffset
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import ExpandWithSpansTestCase
-from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import build_loaded_macros
+from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
+    DUCKDB_COMPILE_ADAPTER_CONTEXT,
+    build_loaded_macros,
+)
 
 _MACRO_CONTEXT: MacroContext = MacroContext(
     adapter_name="duckdb",
@@ -91,6 +94,8 @@ def test_given_expanded_offset_when_mapping_then_authored_position_matches(
         effective_vars=test_case.effective_vars,
         loaded_macros=loaded_macros,
         macro_context=_MACRO_CONTEXT,
+        value_renderer=DUCKDB_COMPILE_ADAPTER_CONTEXT.value_renderer,
+        collection_rendering=DUCKDB_COMPILE_ADAPTER_CONTEXT.collection_rendering,
     )
     assert expanded_sql == test_case.expected_expanded_sql
     resolved: MappedOffset = map_through_passes(

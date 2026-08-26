@@ -29,6 +29,7 @@ from sqlbuild.adapter.contract.types import (
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
+from sqlbuild.sql_values.models import SqlValue
 
 
 class StrictAdapter(
@@ -670,6 +671,26 @@ class StrictAdapter(
     @abstractmethod
     def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
         """Render one source-loader logical type for this adapter."""
+        ...
+
+    @abstractmethod
+    def render_typed_scalar(self, *, value: SqlValue) -> str:
+        """Render one validated typed SQL scalar."""
+        ...
+
+    @abstractmethod
+    def render_typed_value_list(self, *, value: SqlValue) -> str:
+        """Render one validated collection as a parenthesized SQL value list."""
+        ...
+
+    @abstractmethod
+    def render_typed_array(self, *, value: SqlValue) -> str:
+        """Render one validated collection as an adapter-native array."""
+        ...
+
+    @abstractmethod
+    def render_typed_object(self, *, value: SqlValue) -> str:
+        """Render one validated object as an adapter-native JSON expression."""
         ...
 
     @abstractmethod

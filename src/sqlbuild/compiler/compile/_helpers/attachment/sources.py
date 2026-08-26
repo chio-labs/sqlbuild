@@ -19,14 +19,13 @@ from sqlbuild.compiler.compile._helpers.render.templating import (
 )
 from sqlbuild.compiler.compile.models import (
     CompileSourceInput,
+    DeclarationExpansionContext,
     LoadedMacro,
     MacroContext,
 )
 from sqlbuild.compiler.discovery.models import (
-    ConstantDeclaration,
     DiscoveredProjectInputs,
     DiscoveredSourceFile,
-    EnumDeclaration,
 )
 from sqlbuild.spec.contracts.models import (
     SchemaAuditInstance,
@@ -50,8 +49,7 @@ def build_source_inputs(
     effective_settings: SettingsConfig,
     macro_context: MacroContext,
     loaded_macros: dict[str, LoadedMacro],
-    public_enums: dict[str, EnumDeclaration] | None = None,
-    public_constants: dict[str, ConstantDeclaration] | None = None,
+    declaration_expansion: DeclarationExpansionContext,
     no_sql_validation: bool = False,
 ) -> tuple[CompileSourceInput, ...]:
     """Normalize discovered source declarations into one collection."""
@@ -72,8 +70,7 @@ def build_source_inputs(
                 effective_vars=effective_vars,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
-                public_enums=public_enums,
-                public_constants=public_constants,
+                declaration_expansion=declaration_expansion,
             )
             source_expression: str | None = source_entry.expression
             if source_expression is not None:
@@ -106,8 +103,7 @@ def expand_source_entry_templates(
     effective_vars: dict[str, object],
     loaded_macros: dict[str, LoadedMacro],
     macro_context: MacroContext,
-    public_enums: dict[str, EnumDeclaration] | None = None,
-    public_constants: dict[str, ConstantDeclaration] | None = None,
+    declaration_expansion: DeclarationExpansionContext,
 ) -> SourceEntry:
     """Apply config templating and SQL interpolation to source metadata."""
 
@@ -119,8 +115,10 @@ def expand_source_entry_templates(
             effective_vars=effective_vars,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
-            enums=public_enums,
-            constants=public_constants,
+            enums=declaration_expansion.declarations.enums,
+            constants=declaration_expansion.declarations.constants,
+            value_renderer=declaration_expansion.value_renderer,
+            collection_rendering=declaration_expansion.collection_rendering,
         )
     return replace(
         source_entry,

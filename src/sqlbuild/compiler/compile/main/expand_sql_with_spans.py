@@ -35,4 +35,6 @@ def expand_sql_with_spans(
         macro_context=context.macro_context,
         enums=enums,
         constants=constants,
+        value_renderer=context.value_renderer,
+        collection_rendering=context.collection_rendering,
     )

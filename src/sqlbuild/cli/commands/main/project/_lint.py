@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.cli.commands._helpers.lint.runs import prepare_lint_run, render_lint_result
+from sqlbuild.cli.commands._helpers.lint.runs import (
+    prepare_lint_run,
+    render_lint_result,
+    resolve_lint_value_renderer,
+)
 from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import LintConfig, LintRunResult
 
@@ -18,6 +22,13 @@ def run_lint_command(*, project_dir: Path | None, no_sqruff: bool = False) -> in
     )
     if prepared[1] is not None:
         print(f"WARN  {prepared[1]}")
-    result: LintRunResult = run_lint(project_dir=base_dir, config=prepared[0])
+    result: LintRunResult = run_lint(
+        project_dir=base_dir,
+        config=prepared[0],
+        value_renderer=resolve_lint_value_renderer(
+            project_dir=base_dir,
+            config=prepared[0],
+        ),
+    )
     _ = render_lint_result(result=result, show_formatted=False)
     return 1 if result.violations else 0

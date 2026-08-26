@@ -3,6 +3,23 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Protocol
+
+from sqlbuild.sql_values.models import SqlValue
+
+
+class TypedSqlValueRenderer(Protocol):
+    """Adapter rendering operations consumed by authored SQL expansion."""
+
+    adapter_name: str
+
+    def render_typed_scalar(self, *, value: SqlValue) -> str: ...
+
+    def render_typed_value_list(self, *, value: SqlValue) -> str: ...
+
+    def render_typed_array(self, *, value: SqlValue) -> str: ...
+
+    def render_typed_object(self, *, value: SqlValue) -> str: ...
 
 
 class AttachedAuditTargetKind(StrEnum):

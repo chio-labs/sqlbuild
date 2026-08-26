@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.compiler.compile.models import SqlExpansionContext
+from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.lint._helpers.expansion import build_lint_expansion_context, prepare_lint_body
 from sqlbuild.lint._helpers.headers import scan_headers, sql_body_ranges
 from sqlbuild.lint._helpers.native import format_native_headers, lint_native_headers
@@ -20,7 +21,12 @@ from sqlbuild.lint.models import (
 )
 
 
-def run_format(*, project_dir: Path, config: LintConfig) -> LintRunResult:
+def run_format(
+    *,
+    project_dir: Path,
+    config: LintConfig,
+    value_renderer: TypedSqlValueRenderer | None = None,
+) -> LintRunResult:
     """Format all DSL files in place and report the violations that remain."""
 
     files: dict[Path, str] = collect_project_files(project_dir=project_dir)
@@ -40,7 +46,11 @@ def run_format(*, project_dir: Path, config: LintConfig) -> LintRunResult:
             )
         formatted.append(file_path)
     violations: list[LintViolation] = _lint_final_contents(
-        files=files, updated_contents=updated_contents, config=config, project_dir=project_dir
+        files=files,
+        updated_contents=updated_contents,
+        config=config,
+        project_dir=project_dir,
+        value_renderer=value_renderer,
     )
     return LintRunResult(
         files_checked=len(files),
@@ -90,6 +100,7 @@ def _lint_final_contents(
     updated_contents: dict[Path, str],
     config: LintConfig,
     project_dir: Path,
+    value_renderer: TypedSqlValueRenderer | None,
 ) -> list[LintViolation]:
     """Lint final contents so reported violations match a follow-up lint run."""
 
@@ -98,7 +109,10 @@ def _lint_final_contents(
     bodies: list[LintBody] = []
     context: SqlExpansionContext | None = None
     if config.sqruff_enabled:
-        context = build_lint_expansion_context(project_dir=project_dir)
+        context = build_lint_expansion_context(
+            project_dir=project_dir,
+            value_renderer=value_renderer,
+        )
     file_path: Path
     contents: str
     for file_path, contents in sorted(files.items()):

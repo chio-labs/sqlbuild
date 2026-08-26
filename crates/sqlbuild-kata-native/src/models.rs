@@ -126,6 +126,9 @@ pub(crate) struct Declaration {
     pub name: String,
     pub relative_path: String,
     pub members: Vec<DeclarationMember>,
+    pub value: Option<Value>,
+    pub value_type: Option<String>,
+    pub render_as: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]

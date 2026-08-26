@@ -27,6 +27,7 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
 )
+from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
 from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
     is_identifier_character as _is_identifier_continue,
@@ -37,6 +38,7 @@ from sqlbuild.compiler.sql_analysis.main._is_identifier_start import (
 from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
 from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
+from sqlbuild.sql_values.types import CollectionRendering
 
 _CONTEXT: str = "SQL interpolation"
 
@@ -64,6 +66,8 @@ def expand_authored_sql(
     effective_vars: dict[str, object],
     loaded_macros: dict[str, LoadedMacro],
     macro_context: MacroContext,
+    value_renderer: TypedSqlValueRenderer,
+    collection_rendering: CollectionRendering,
     context_values: Mapping[str, str | None] | None = None,
     enums: dict[str, EnumDeclaration] | None = None,
     constants: dict[str, ConstantDeclaration] | None = None,
@@ -81,6 +85,8 @@ def expand_authored_sql(
         file_path=file_path,
         enums=enums or {},
         constants=constants or {},
+        value_renderer=value_renderer,
+        collection_rendering=collection_rendering,
     )
     return expand_sql_macros(
         sql=declaration_expanded_sql,
@@ -97,6 +103,8 @@ def expand_authored_sql_with_spans(
     effective_vars: dict[str, object],
     loaded_macros: dict[str, LoadedMacro],
     macro_context: MacroContext,
+    value_renderer: TypedSqlValueRenderer,
+    collection_rendering: CollectionRendering,
     context_values: Mapping[str, str | None] | None = None,
     enums: dict[str, EnumDeclaration] | None = None,
     constants: dict[str, ConstantDeclaration] | None = None,
@@ -118,6 +126,8 @@ def expand_authored_sql_with_spans(
         file_path=file_path,
         enums=enums or {},
         constants=constants or {},
+        value_renderer=value_renderer,
+        collection_rendering=collection_rendering,
     )
     macro_expanded_sql: str
     macro_spans: tuple[ExpansionSpan, ...]

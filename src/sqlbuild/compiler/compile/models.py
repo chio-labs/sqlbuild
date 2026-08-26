@@ -14,6 +14,7 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticSeverity,
     FunctionLanguage,
     SqlTestMode,
+    TypedSqlValueRenderer,
 )
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
@@ -53,6 +54,7 @@ from sqlbuild.spec.contracts.models import (
     SourceLocation,
     TargetConfig,
 )
+from sqlbuild.sql_values.types import CollectionRendering
 
 
 @dataclass(frozen=True)
@@ -163,6 +165,24 @@ class DeclarationResolutionContext:
 
 
 @dataclass(frozen=True)
+class DeclarationExpansionContext:
+    """Declarations and adapter rendering used by one authored SQL owner."""
+
+    declarations: DeclarationResolutionContext
+    value_renderer: TypedSqlValueRenderer
+    collection_rendering: CollectionRendering
+
+
+@dataclass(frozen=True)
+class CompileAdapterContext:
+    """Cycle-free adapter behavior required while building compile inputs."""
+
+    value_renderer: TypedSqlValueRenderer
+    collection_rendering: CollectionRendering
+    python_functions_inherit_default_namespace: bool
+
+
+@dataclass(frozen=True)
 class ModelInputBuildContext:
     """Run-constant config and macros for building model compile inputs."""
 
@@ -173,9 +193,24 @@ class ModelInputBuildContext:
     run_id: str
     macro_context: MacroContext
     loaded_macros: dict[str, LoadedMacro]
+    value_renderer: TypedSqlValueRenderer
+    collection_rendering: CollectionRendering
     public_enums: dict[str, EnumDeclaration] = field(default_factory=dict)
     public_constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
     public_model_schemas: dict[str, ModelSchemaDeclaration] = field(default_factory=dict)
+
+    @property
+    def declaration_expansion(self) -> DeclarationExpansionContext:
+        """Build the public declaration expansion context for non-model resources."""
+
+        return DeclarationExpansionContext(
+            declarations=DeclarationResolutionContext(
+                enums=self.public_enums,
+                constants=self.public_constants,
+            ),
+            value_renderer=self.value_renderer,
+            collection_rendering=self.collection_rendering,
+        )
 
 
 @dataclass(frozen=True)
@@ -673,6 +708,8 @@ class SqlExpansionContext:
     macro_context: MacroContext
     enums: dict[str, EnumDeclaration]
     constants: dict[str, ConstantDeclaration]
+    value_renderer: TypedSqlValueRenderer
+    collection_rendering: CollectionRendering
     local_declarations: dict[Path, DeclarationResolutionContext] = field(default_factory=dict)
 
 

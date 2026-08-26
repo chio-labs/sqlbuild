@@ -36,6 +36,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestCte,
     CompileSqlTestCtes,
     CompileSqlTestInput,
+    DeclarationExpansionContext,
     LoadedMacro,
     MacroContext,
 )
@@ -66,8 +67,7 @@ def build_test_inputs(
     effective_vars: dict[str, object] | None = None,
     macro_context: MacroContext,
     loaded_macros: dict[str, LoadedMacro],
-    public_enums: dict[str, EnumDeclaration] | None = None,
-    public_constants: dict[str, ConstantDeclaration] | None = None,
+    declaration_expansion: DeclarationExpansionContext,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = (),
 ) -> tuple[CompileSqlTestInput, ...]:
@@ -128,8 +128,10 @@ def build_test_inputs(
                 effective_vars=vars_for_substitution,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
-                enums=public_enums,
-                constants=public_constants,
+                enums=declaration_expansion.declarations.enums,
+                constants=declaration_expansion.declarations.constants,
+                value_renderer=declaration_expansion.value_renderer,
+                collection_rendering=declaration_expansion.collection_rendering,
             )
             reject_cursor_intrinsics(
                 sql=expanded_sql_body,
@@ -353,8 +355,7 @@ def build_scenario_inputs(
     effective_vars: dict[str, object] | None = None,
     macro_context: MacroContext,
     loaded_macros: dict[str, LoadedMacro],
-    public_enums: dict[str, EnumDeclaration] | None = None,
-    public_constants: dict[str, ConstantDeclaration] | None = None,
+    declaration_expansion: DeclarationExpansionContext,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> tuple[CompileSqlScenarioInput, ...]:
     """Build compile-time scenario inputs from discovered SQL-native scenario files."""
@@ -376,8 +377,10 @@ def build_scenario_inputs(
             effective_vars=vars_for_substitution,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
-            enums=public_enums,
-            constants=public_constants,
+            enums=declaration_expansion.declarations.enums,
+            constants=declaration_expansion.declarations.constants,
+            value_renderer=declaration_expansion.value_renderer,
+            collection_rendering=declaration_expansion.collection_rendering,
         )
         reject_cursor_intrinsics(
             sql=expanded_sql_body,
