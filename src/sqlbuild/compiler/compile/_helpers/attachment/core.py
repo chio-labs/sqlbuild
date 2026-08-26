@@ -487,7 +487,10 @@ def _build_visible_declaration_indexes(
         enums=context.public_enums,
         constants=context.public_constants,
     )
-    if context.declaration_resolver is not None:
+    if (
+        context.declaration_resolver is not None
+        and context.declaration_resolver.lookup.index.declarations
+    ):
         visible = resolve_declaration_context(
             resolver=context.declaration_resolver, file_path=model_file.file_path
         )

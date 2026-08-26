@@ -35,43 +35,24 @@ def build_declaration_scope(
         validate_scope_index(index=index)
     except ScopeValidationError as error:
         raise CompileInputError(str(error)) from error
-    build: DeclarationScopeBuild = DeclarationScopeBuild(
+    relationships: ScopeRelationshipBuild = (
+        build_scope_relationship_grants(discovered_inputs=discovered_inputs, index=index)
+        if discovered_inputs.test_files or discovered_inputs.scenario_files
+        else ScopeRelationshipBuild()
+    )
+    if relationships.faults:
+        raise CompileInputError(relationships.faults[0].message)
+    index = replace(
+        index,
+        grants=tuple(dict.fromkeys((*index.grants, *relationships.grants))),
+        completeness=replace(index.completeness, relationships=True),
+    )
+    return DeclarationScopeBuild(
         loaded_macros=loaded_macros,
         index=index,
         resolver=build_declaration_scope_resolver(
             discovered_inputs=discovered_inputs,
             scope_index=index,
             loaded_macros=loaded_macros,
-        ),
-    )
-    return attach_expected_model_grants(
-        build=build,
-        discovered_inputs=discovered_inputs,
-    )
-
-
-def attach_expected_model_grants(
-    *, build: DeclarationScopeBuild, discovered_inputs: DiscoveredProjectInputs
-) -> DeclarationScopeBuild:
-    """Return scope state enriched by explicit test and scenario model relationships."""
-
-    relationships: ScopeRelationshipBuild = build_scope_relationship_grants(
-        discovered_inputs=discovered_inputs, index=build.index
-    )
-    if relationships.faults:
-        raise CompileInputError(relationships.faults[0].message)
-
-    index: ScopeIndex = replace(
-        build.index,
-        grants=tuple(dict.fromkeys((*build.index.grants, *relationships.grants))),
-        completeness=replace(build.index.completeness, relationships=True),
-    )
-    return replace(
-        build,
-        index=index,
-        resolver=build_declaration_scope_resolver(
-            discovered_inputs=discovered_inputs,
-            scope_index=index,
-            loaded_macros=build.loaded_macros,
         ),
     )

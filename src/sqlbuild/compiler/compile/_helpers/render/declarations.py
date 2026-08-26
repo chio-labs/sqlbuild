@@ -290,7 +290,7 @@ def resolve_declaration_expansion(
 ) -> DeclarationExpansionContext:
     """Return an expansion context scoped to one authored resource path."""
 
-    if context.resolver is None:
+    if context.resolver is None or not context.resolver.lookup.index.declarations:
         return context
     return replace(
         context,
