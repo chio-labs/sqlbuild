@@ -11,7 +11,6 @@ from yaml import YAMLError
 
 from sqlbuild.compiler.discovery.exceptions import SqlHookParseError
 from sqlbuild.compiler.discovery.models import DiscoveredSqlHookFile
-from sqlbuild.compiler.sql_hooks.main._validate_statement import validate_sql_hook_statement
 
 _SUPPORTED_HOOK_HEADER_KEYS: frozenset[str] = frozenset({"description"})
 _SQL_ESCAPE_CHARACTER: str = "\\"
@@ -33,7 +32,6 @@ def parse_sql_hook_file(
     sql_body: str = cleandoc(raw_sql_body)
     if not sql_body:
         raise SqlHookParseError(f"SQL hook '{file_path}' must define SQL after HOOK(...)")
-    validate_sql_hook_statement(sql=sql_body, file_path=file_path)
     description_value: object | None = header_values.get("description")
     return DiscoveredSqlHookFile(
         file_path=file_path,

@@ -4,9 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.analysis.validation import validate_sql_syntax
+from sqlbuild.compiler.compile._helpers.analysis.validation import (
+    validate_hook_sql_syntax,
+    validate_sql_syntax,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
+    ValidateHookSqlSyntaxTestCase,
     ValidateSqlSyntaxTestCase,
 )
 
@@ -96,6 +100,66 @@ def test_given_invalid_sql_when_validating_syntax_then_raises_compile_error(
             query_sql=test_case.query_sql,
             model_name=_MODEL_NAME,
             file_path=_FILE_PATH,
+        )
+
+    assert test_case.expected_valid is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ValidateHookSqlSyntaxTestCase(
+            description="accepts multiple statements as one execution payload",
+            hook_sql="DELETE FROM staging; VACUUM staging;",
+            dialect="duckdb",
+            expected_valid=True,
+        ),
+        ValidateHookSqlSyntaxTestCase(
+            description="uses the adapter dialect for vendor syntax",
+            hook_sql="SELECT [value] FROM [orders]",
+            dialect="tsql",
+            expected_valid=True,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_polyglot_supported_hook_sql_when_validating_then_does_not_raise(
+    test_case: ValidateHookSqlSyntaxTestCase,
+) -> None:
+    validate_hook_sql_syntax(
+        value=test_case.hook_sql,
+        hook_name="pre_hooks",
+        model_name=_MODEL_NAME,
+        file_path=_FILE_PATH,
+        dialect=test_case.dialect,
+    )
+
+    assert test_case.expected_valid is True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ValidateHookSqlSyntaxTestCase(
+            description="rejects malformed SQL when validation is enabled",
+            hook_sql="THIS IS NOT VALID SQL",
+            dialect="duckdb",
+            expected_valid=False,
+            expected_error_fragment="Polyglot could not parse model 'test_model' pre_hooks",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_hook_sql_when_validating_then_raises_compile_error(
+    test_case: ValidateHookSqlSyntaxTestCase,
+) -> None:
+    with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
+        validate_hook_sql_syntax(
+            value=test_case.hook_sql,
+            hook_name="pre_hooks",
+            model_name=_MODEL_NAME,
+            file_path=_FILE_PATH,
+            dialect=test_case.dialect,
         )
 
     assert test_case.expected_valid is False
