@@ -101,16 +101,14 @@ def _validate_macro_module(
             statement=statement,
             current_module_name=_macro_module_name(macro_file),
         )
+        matching_names: list[str] = []
+        imported_name: str
+        for imported_name in imported_module_names:
+            if _matches_macro_module(imported_name=imported_name, module_names=module_names):
+                matching_names.append(imported_name)
         matched_module_names: tuple[str, ...] = tuple(
             sorted(
-                (
-                    name
-                    for name in imported_module_names
-                    if any(
-                        module_name == name or module_name.startswith(f"{name}.")
-                        for module_name in module_names
-                    )
-                ),
+                matching_names,
                 key=lambda name: (name not in module_names, -len(name), name),
             )
         )
@@ -125,6 +123,14 @@ def _validate_macro_module(
                 f"Macro module '{macro_file.relative_path}' declaration "
                 f"'{public_declaration_name}' must be underscore-private"
             )
+
+
+def _matches_macro_module(*, imported_name: str, module_names: frozenset[str]) -> bool:
+    module_name: str
+    for module_name in module_names:
+        if module_name == imported_name or module_name.startswith(f"{imported_name}."):
+            return True
+    return False
 
 
 def _imported_module_names(*, statement: ast.stmt, current_module_name: str) -> tuple[str, ...]:
