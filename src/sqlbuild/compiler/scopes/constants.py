@@ -2,9 +2,25 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
 
 SCOPE_METADATA_SCHEMA_VERSION: int = 1
+SCOPE_CACHE_SCHEMA_VERSION: int = 1
+SCOPE_FINGERPRINT_ALGORITHM_VERSION: int = 1
+SCOPE_CACHE_DIRECTORY: Path = Path("target/compile-cache/declaration-scopes-v1")
+SCOPE_CACHE_FILENAME: str = "scope-index.json"
+SCOPE_CACHE_MAX_BYTES: int = 16 * 1024 * 1024
+SCOPE_SOURCE_SUFFIXES: frozenset[str] = frozenset({".sql", ".yml", ".yaml", ".py"})
+SCOPE_MACRO_SUFFIX: str = ".py"
+SCOPE_RELATIONSHIP_ROOTS: frozenset[tuple[str, str]] = frozenset(
+    {("tests", "unit"), ("tests", "scenarios")}
+)
+SCOPE_LOCAL_CONFIG_KEYS: frozenset[str] = frozenset({"adapter", "settings", "vars"})
+SCOPE_PROJECT_CONFIG_KEYS: frozenset[str] = frozenset(
+    {"adapter", "constants", "defaults", "path_defaults", "settings", "vars"}
+)
 DEFAULT_ENUM_MEMBER_PREVIEW: int = 20
 QUALIFIED_IDENTITY_SEPARATOR: str = ":"
 PRIVATE_IDENTITY_SEPARATOR: str = "."

@@ -53,6 +53,7 @@ from sqlbuild.compiler.discovery.exceptions import (
     SchemaParseError,
 )
 from sqlbuild.compiler.discovery.models import (
+    ConstantDeclaration,
     DiscoveredAdapterFile,
     DiscoveredAssetFunction,
     DiscoveredAuditFile,
@@ -75,8 +76,11 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlHookFile,
     DiscoveredSqlModelFile,
     DiscoveredSqlScenarioFile,
+    DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
     DiscoveredTaskFunction,
+    DiscoveryFileFault,
+    EnumDeclaration,
 )
 from sqlbuild.compiler.scopes.constants import (
     DECLARATION_DIRECTORY_FACTS,
@@ -253,6 +257,7 @@ def discover_model_files(
     project_dir: Path,
     extract_implicit_alias_columns: bool = True,
     extract_output_column_locations: bool = True,
+    on_fault: Callable[[DiscoveryFileFault], None] | None = None,
 ) -> tuple[DiscoveredSqlModelFile, ...]:
     """Discover SQL model files under models/."""
 
@@ -265,49 +270,69 @@ def discover_model_files(
     for file_path in sorted(model_root.rglob("*.sql")):
         if _is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir):
             continue
-        contents: str = file_path.read_text(encoding="utf-8")
-        relative_path: Path = file_path.relative_to(project_dir)
-        header_values: dict[str, object]
-        query_sql: str
-        header_values, query_sql = parse_model_sql(contents=contents, file_path=file_path)
-        discovered_model_files.append(
-            DiscoveredSqlModelFile(
-                file_path=file_path,
-                relative_path=relative_path,
-                contents=contents,
-                header_values=header_values,
-                header_column_locations=model_header_column_locations(
-                    contents=contents,
-                    relative_path=relative_path,
-                ),
-                output_column_locations=(
-                    model_output_column_locations(
-                        contents=contents,
-                        relative_path=relative_path,
-                        extract_implicit_alias_columns=extract_implicit_alias_columns,
-                    )
-                    if extract_output_column_locations
-                    else {}
-                ),
-                query_sql=query_sql,
-                enum_declarations=parse_model_enum_declarations(
-                    raw_value=header_values.get("enums"),
-                    model_name=file_path.stem,
-                    relative_path=relative_path,
-                ),
-                constant_declarations=parse_model_constant_declarations(
-                    raw_value=header_values.get("constants"),
-                    model_name=file_path.stem,
-                    relative_path=relative_path,
-                ),
-                output_column_locations_extracted=extract_output_column_locations,
-                extract_implicit_alias_columns=extract_implicit_alias_columns,
+        try:
+            discovered_model_files.append(
+                _discover_model_file(
+                    project_dir=project_dir,
+                    file_path=file_path,
+                    extract_implicit_alias_columns=extract_implicit_alias_columns,
+                    extract_output_column_locations=extract_output_column_locations,
+                )
             )
-        )
+        except (OSError, UnicodeError, ValueError, SyntaxError) as error:
+            if on_fault is None:
+                raise
+            on_fault(_discovery_fault(project_dir=project_dir, path=file_path, error=error))
+            continue
     return tuple(discovered_model_files)
 
 
-def discover_enum_files(*, project_dir: Path) -> tuple[DiscoveredEnumFile, ...]:
+def _discover_model_file(
+    *,
+    project_dir: Path,
+    file_path: Path,
+    extract_implicit_alias_columns: bool,
+    extract_output_column_locations: bool,
+) -> DiscoveredSqlModelFile:
+    contents: str = file_path.read_text(encoding="utf-8")
+    header_values, query_sql = parse_model_sql(contents=contents, file_path=file_path)
+    relative_path: Path = file_path.relative_to(project_dir)
+    return DiscoveredSqlModelFile(
+        file_path=file_path,
+        relative_path=relative_path,
+        contents=contents,
+        header_values=header_values,
+        header_column_locations=model_header_column_locations(
+            contents=contents, relative_path=relative_path
+        ),
+        output_column_locations=(
+            model_output_column_locations(
+                contents=contents,
+                relative_path=relative_path,
+                extract_implicit_alias_columns=extract_implicit_alias_columns,
+            )
+            if extract_output_column_locations
+            else {}
+        ),
+        query_sql=query_sql,
+        enum_declarations=parse_model_enum_declarations(
+            raw_value=header_values.get("enums"),
+            model_name=file_path.stem,
+            relative_path=relative_path,
+        ),
+        constant_declarations=parse_model_constant_declarations(
+            raw_value=header_values.get("constants"),
+            model_name=file_path.stem,
+            relative_path=relative_path,
+        ),
+        output_column_locations_extracted=extract_output_column_locations,
+        extract_implicit_alias_columns=extract_implicit_alias_columns,
+    )
+
+
+def discover_enum_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredEnumFile, ...]:
     """Discover global and scoped enum declaration files."""
 
     discovered_files: list[DiscoveredEnumFile] = []
@@ -315,17 +340,24 @@ def discover_enum_files(*, project_dir: Path) -> tuple[DiscoveredEnumFile, ...]:
     for facts in _discover_declaration_file_facts(project_dir=project_dir):
         if facts.declaration_kind is not DeclarationKind.ENUM:
             continue
-        contents: str = facts.file_path.read_text(encoding="utf-8")
+        try:
+            contents: str = facts.file_path.read_text(encoding="utf-8")
+            declarations: tuple[EnumDeclaration, ...] = parse_enum_declaration_file(
+                contents=contents,
+                file_path=facts.file_path,
+                relative_path=facts.relative_path,
+            )
+        except (OSError, UnicodeError, ValueError, SyntaxError) as error:
+            if on_fault is None:
+                raise
+            on_fault(_discovery_fault(project_dir=project_dir, path=facts.file_path, error=error))
+            continue
         discovered_files.append(
             DiscoveredEnumFile(
                 file_path=facts.file_path,
                 relative_path=facts.relative_path,
                 contents=contents,
-                declarations=parse_enum_declaration_file(
-                    contents=contents,
-                    file_path=facts.file_path,
-                    relative_path=facts.relative_path,
-                ),
+                declarations=declarations,
                 scope_kind=facts.scope_kind,
                 ownership_root=facts.ownership_root,
                 owning_path=facts.owning_path,
@@ -335,7 +367,9 @@ def discover_enum_files(*, project_dir: Path) -> tuple[DiscoveredEnumFile, ...]:
     return tuple(discovered_files)
 
 
-def discover_constant_files(*, project_dir: Path) -> tuple[DiscoveredConstantFile, ...]:
+def discover_constant_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredConstantFile, ...]:
     """Discover global and scoped constant declaration files."""
 
     discovered_files: list[DiscoveredConstantFile] = []
@@ -343,17 +377,24 @@ def discover_constant_files(*, project_dir: Path) -> tuple[DiscoveredConstantFil
     for facts in _discover_declaration_file_facts(project_dir=project_dir):
         if facts.declaration_kind is not DeclarationKind.CONSTANT:
             continue
-        contents: str = facts.file_path.read_text(encoding="utf-8")
+        try:
+            contents: str = facts.file_path.read_text(encoding="utf-8")
+            declarations: tuple[ConstantDeclaration, ...] = parse_constant_declaration_file(
+                contents=contents,
+                file_path=facts.file_path,
+                relative_path=facts.relative_path,
+            )
+        except (OSError, UnicodeError, ValueError, SyntaxError) as error:
+            if on_fault is None:
+                raise
+            on_fault(_discovery_fault(project_dir=project_dir, path=facts.file_path, error=error))
+            continue
         discovered_files.append(
             DiscoveredConstantFile(
                 file_path=facts.file_path,
                 relative_path=facts.relative_path,
                 contents=contents,
-                declarations=parse_constant_declaration_file(
-                    contents=contents,
-                    file_path=facts.file_path,
-                    relative_path=facts.relative_path,
-                ),
+                declarations=declarations,
                 scope_kind=facts.scope_kind,
                 ownership_root=facts.ownership_root,
                 owning_path=facts.owning_path,
@@ -389,7 +430,9 @@ def discover_model_schema_files(*, project_dir: Path) -> tuple[DiscoveredModelSc
     return tuple(discovered_files)
 
 
-def discover_sql_function_files(*, project_dir: Path) -> tuple[DiscoveredSqlFunctionFile, ...]:
+def discover_sql_function_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredSqlFunctionFile, ...]:
     """Discover SQL function files under functions/sql/."""
 
     function_root: Path = project_dir / "functions" / "sql"
@@ -401,10 +444,16 @@ def discover_sql_function_files(*, project_dir: Path) -> tuple[DiscoveredSqlFunc
     for file_path in sorted(function_root.rglob("*.sql")):
         if _is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir):
             continue
-        contents: str = file_path.read_text(encoding="utf-8")
-        header_values: dict[str, object]
-        body_sql: str
-        header_values, body_sql = parse_function_sql(contents=contents, file_path=file_path)
+        try:
+            contents: str = file_path.read_text(encoding="utf-8")
+            header_values: dict[str, object]
+            body_sql: str
+            header_values, body_sql = parse_function_sql(contents=contents, file_path=file_path)
+        except (OSError, UnicodeError, ValueError, SyntaxError) as error:
+            if on_fault is None:
+                raise
+            on_fault(_discovery_fault(project_dir=project_dir, path=file_path, error=error))
+            continue
         discovered_function_files.append(
             DiscoveredSqlFunctionFile(
                 file_path=file_path,
@@ -491,7 +540,9 @@ def discover_schema_files(*, project_dir: Path) -> tuple[DiscoveredSchemaFile, .
     return tuple(discovered_schema_files)
 
 
-def discover_source_files(*, project_dir: Path) -> tuple[DiscoveredSourceFile, ...]:
+def discover_source_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredSourceFile, ...]:
     """Discover source declaration YAML files under sources/."""
 
     sources_root: Path = project_dir / "sources"
@@ -504,10 +555,16 @@ def discover_source_files(*, project_dir: Path) -> tuple[DiscoveredSourceFile, .
     discovered_source_files: list[DiscoveredSourceFile] = []
     file_path: Path
     for file_path in yaml_paths:
-        contents: str = file_path.read_text(encoding="utf-8")
-        source_entries: tuple[SourceEntry, ...] = parse_sources_yml(
-            contents=contents, file_path=file_path
-        )
+        try:
+            contents: str = file_path.read_text(encoding="utf-8")
+            source_entries: tuple[SourceEntry, ...] = parse_sources_yml(
+                contents=contents, file_path=file_path
+            )
+        except (OSError, UnicodeError, ValueError, SyntaxError) as error:
+            if on_fault is None:
+                raise
+            on_fault(_discovery_fault(project_dir=project_dir, path=file_path, error=error))
+            continue
         discovered_source_files.append(
             DiscoveredSourceFile(
                 file_path=file_path,
@@ -536,7 +593,9 @@ def discover_seed_files(*, project_dir: Path) -> tuple[DiscoveredSeedFile, ...]:
     )
 
 
-def discover_test_files(*, project_dir: Path) -> tuple[DiscoveredSqlTestFile, ...]:
+def discover_test_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredSqlTestFile, ...]:
     """Discover SQL-native unit test files under tests/unit/."""
 
     tests_root: Path = project_dir / "tests" / "unit"
@@ -548,19 +607,30 @@ def discover_test_files(*, project_dir: Path) -> tuple[DiscoveredSqlTestFile, ..
     for file_path in sorted(tests_root.rglob("*.sql")):
         if _is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir):
             continue
-        contents: str = file_path.read_text(encoding="utf-8")
+        try:
+            contents: str = file_path.read_text(encoding="utf-8")
+            blocks: tuple[DiscoveredSqlTestBlock, ...] = parse_sql_test_file(
+                contents=contents, file_path=file_path
+            )
+        except (OSError, UnicodeError, ValueError, SyntaxError) as error:
+            if on_fault is None:
+                raise
+            on_fault(_discovery_fault(project_dir=project_dir, path=file_path, error=error))
+            continue
         discovered_test_files.append(
             DiscoveredSqlTestFile(
                 file_path=file_path,
                 relative_path=file_path.relative_to(project_dir),
                 contents=contents,
-                blocks=parse_sql_test_file(contents=contents, file_path=file_path),
+                blocks=blocks,
             )
         )
     return tuple(discovered_test_files)
 
 
-def discover_scenario_files(*, project_dir: Path) -> tuple[DiscoveredSqlScenarioFile, ...]:
+def discover_scenario_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredSqlScenarioFile, ...]:
     """Discover SQL-native scenario files under tests/scenarios/."""
 
     scenarios_root: Path = project_dir / "tests" / "scenarios"
@@ -572,18 +642,25 @@ def discover_scenario_files(*, project_dir: Path) -> tuple[DiscoveredSqlScenario
     for file_path in sorted(scenarios_root.rglob("*.sql")):
         if _is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir):
             continue
-        contents: str = file_path.read_text(encoding="utf-8")
-        discovered_scenario_files.append(
-            parse_sql_scenario_file(
+        try:
+            contents: str = file_path.read_text(encoding="utf-8")
+            scenario: DiscoveredSqlScenarioFile = parse_sql_scenario_file(
                 contents=contents,
                 file_path=file_path,
                 relative_path=file_path.relative_to(project_dir),
             )
-        )
+        except (OSError, UnicodeError, ValueError, SyntaxError) as error:
+            if on_fault is None:
+                raise
+            on_fault(_discovery_fault(project_dir=project_dir, path=file_path, error=error))
+            continue
+        discovered_scenario_files.append(scenario)
     return tuple(discovered_scenario_files)
 
 
-def discover_audit_files(*, project_dir: Path) -> tuple[DiscoveredAuditFile, ...]:
+def discover_audit_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredAuditFile, ...]:
     """Discover audit SQL files under audits/."""
 
     audits_root: Path = project_dir / "audits"
@@ -595,15 +672,21 @@ def discover_audit_files(*, project_dir: Path) -> tuple[DiscoveredAuditFile, ...
     for file_path in sorted(audits_root.rglob("*.sql")):
         if _is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir):
             continue
-        contents: str = file_path.read_text(encoding="utf-8")
-        discovered_audit_files.append(
-            DiscoveredAuditFile(
-                file_path=file_path,
-                relative_path=file_path.relative_to(project_dir),
-                contents=contents,
-                blocks=parse_sql_audit_file(contents=contents, file_path=file_path),
+        try:
+            contents: str = file_path.read_text(encoding="utf-8")
+            discovered_audit_files.append(
+                DiscoveredAuditFile(
+                    file_path=file_path,
+                    relative_path=file_path.relative_to(project_dir),
+                    contents=contents,
+                    blocks=parse_sql_audit_file(contents=contents, file_path=file_path),
+                )
             )
-        )
+        except (OSError, UnicodeError, ValueError, SyntaxError) as error:
+            if on_fault is None:
+                raise
+            on_fault(_discovery_fault(project_dir=project_dir, path=file_path, error=error))
+            continue
     return tuple(discovered_audit_files)
 
 
@@ -623,6 +706,15 @@ def discover_macro_files(*, project_dir: Path) -> tuple[DiscoveredMacroFile, ...
         for facts in _discover_declaration_file_facts(project_dir=project_dir)
         if facts.declaration_kind is DeclarationKind.MACRO
     )
+
+
+def _discovery_fault(*, project_dir: Path, path: Path, error: Exception) -> DiscoveryFileFault:
+    try:
+        relative_path: Path | None = path.relative_to(project_dir)
+    except ValueError:
+        relative_path = None
+    message: str = str(error).replace(str(project_dir), ".")
+    return DiscoveryFileFault(path=relative_path, message=message)
 
 
 def discover_materialization_files(
@@ -767,7 +859,9 @@ def discover_hook_functions(
     return tuple(discovered_hooks)
 
 
-def discover_sql_hook_files(*, project_dir: Path) -> tuple[DiscoveredSqlHookFile, ...]:
+def discover_sql_hook_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredSqlHookFile, ...]:
     """Discover named SQL lifecycle hook resources under hooks/sql/."""
 
     hooks_root: Path = project_dir / "hooks" / "sql"
@@ -781,15 +875,21 @@ def discover_sql_hook_files(*, project_dir: Path) -> tuple[DiscoveredSqlHookFile
             file_path=file_path, project_dir=project_dir
         ):
             continue
-        relative_path: Path = file_path.relative_to(project_dir)
-        contents: str = file_path.read_text(encoding="utf-8")
-        discovered_hooks.append(
-            parse_sql_hook_file(
-                contents=contents,
-                file_path=file_path,
-                relative_path=relative_path,
+        try:
+            relative_path: Path = file_path.relative_to(project_dir)
+            contents: str = file_path.read_text(encoding="utf-8")
+            discovered_hooks.append(
+                parse_sql_hook_file(
+                    contents=contents,
+                    file_path=file_path,
+                    relative_path=relative_path,
+                )
             )
-        )
+        except (OSError, UnicodeError, ValueError, SyntaxError) as error:
+            if on_fault is None:
+                raise
+            on_fault(_discovery_fault(project_dir=project_dir, path=file_path, error=error))
+            continue
     return tuple(discovered_hooks)
 
 

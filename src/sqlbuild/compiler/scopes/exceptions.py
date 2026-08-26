@@ -34,6 +34,10 @@ class DuplicateScopeIdentityError(ScopeError):
     code: str = "S003"
 
 
+class ScopeCacheDecodeError(ScopeError):
+    """Raised when a persistent scope-index payload is malformed."""
+
+
 class ScopeValidationError(ScopeError):
     """Aggregate error raised only when strict scope validation is requested."""
 

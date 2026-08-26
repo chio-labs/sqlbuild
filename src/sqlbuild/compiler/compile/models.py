@@ -46,6 +46,7 @@ from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, Sql
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
+    GrantRecord,
     ResourceIdentity,
     ScopeIndex,
     ScopeLookup,
@@ -153,6 +154,49 @@ class LoadedMacro:
     relative_path: Path
     raw_source: str
     function: Callable[..., object]
+
+
+@dataclass(frozen=True)
+class StaticMacroExport:
+    """Value-free AST inventory for one project-owned macro export."""
+
+    name: str
+    relative_path: Path
+    parameters: tuple[str, ...]
+    line: int
+    source_digest: str
+
+
+@dataclass(frozen=True)
+class StaticMacroFault:
+    """One value-free static macro inventory fault."""
+
+    relative_path: Path
+    message: str
+
+
+@dataclass(frozen=True)
+class StaticMacroInventory:
+    """AST macro exports and faults collected without module execution."""
+
+    exports: tuple[StaticMacroExport, ...] = field(default_factory=tuple)
+    faults: tuple[StaticMacroFault, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ScopeRelationshipFault:
+    """One test or scenario relationship extraction fault."""
+
+    relative_path: Path
+    message: str
+
+
+@dataclass(frozen=True)
+class ScopeRelationshipBuild:
+    """Expected-model grants and independently retained relationship faults."""
+
+    grants: tuple[GrantRecord, ...] = field(default_factory=tuple)
+    faults: tuple[ScopeRelationshipFault, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from sqlbuild.compiler.scopes.models import DeclarationIdentity, ResourceIdentity
@@ -112,3 +113,41 @@ class PlacementValidationCase:
     consumer_paths: tuple[str, ...]
     expected_codes: tuple[ScopeDiagnosticCode, ...]
     expected_direct_codes: tuple[ScopeDiagnosticCode, ...] = ()
+
+
+@dataclass(frozen=True)
+class FingerprintMutationCase:
+    """One project mutation and whether it changes scope inputs."""
+
+    description: str
+    path: str
+    initial: str
+    updated: str
+    expected_changes_fingerprint: bool
+
+
+@dataclass(frozen=True)
+class CacheFaultCase:
+    """One persistent cache envelope fault."""
+
+    description: str
+    mutate: Callable[..., None]
+    expected_schema_version: int = 1
+
+
+@dataclass(frozen=True)
+class OfflineScopeCase:
+    """One scalar expectation for an offline scope-index behavior."""
+
+    description: str
+    expected_result: bool = True
+
+
+@dataclass(frozen=True)
+class TolerantCategoryCase:
+    """One broken authored file with a valid sibling retained by tolerant discovery."""
+
+    description: str
+    files: dict[str, str]
+    expected_kind: ResourceKind
+    expected_paths: tuple[str, ...]

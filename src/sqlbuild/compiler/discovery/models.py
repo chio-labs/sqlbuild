@@ -465,3 +465,22 @@ class DiscoveredProjectInputs:
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
     providers: tuple[DiscoveredProvider, ...] = field(default_factory=tuple)
     adapter_file: DiscoveredAdapterFile | None = None
+
+
+@dataclass(frozen=True)
+class DiscoveryFileFault:
+    """One project-relative authored file fault captured during tolerant discovery."""
+
+    path: Path | None
+    message: str
+
+
+@dataclass(frozen=True)
+class TolerantScopeDiscovery:
+    """Parsed scope inputs and independently categorized tolerant discovery faults."""
+
+    discovered_inputs: DiscoveredProjectInputs
+    resource_faults: tuple[DiscoveryFileFault, ...] = field(default_factory=tuple)
+    declaration_faults: tuple[DiscoveryFileFault, ...] = field(default_factory=tuple)
+    relationship_faults: tuple[DiscoveryFileFault, ...] = field(default_factory=tuple)
+    config_faults: tuple[DiscoveryFileFault, ...] = field(default_factory=tuple)

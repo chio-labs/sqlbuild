@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import importlib.util
 import inspect
 import re
@@ -27,6 +28,9 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
     MacroExpansionResult,
+    StaticMacroExport,
+    StaticMacroFault,
+    StaticMacroInventory,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
 from sqlbuild.compiler.scopes.models import (
@@ -85,10 +89,9 @@ class _ExpansionState:
 def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[str, LoadedMacro]:
     """Load discovered project macro functions into a collision-checked registry."""
 
-    module_names: frozenset[str] = frozenset(_macro_module_name(file) for file in macro_files)
-    macro_file: DiscoveredMacroFile
-    for macro_file in macro_files:
-        _validate_macro_module(macro_file=macro_file, module_names=module_names)
+    inventory: StaticMacroInventory = _inventory_project_macros(macro_files=macro_files)
+    if inventory.faults:
+        raise CompileInputError(inventory.faults[0].message)
 
     loaded_macros: dict[str, LoadedMacro] = {}
     for macro_file in macro_files:
@@ -119,13 +122,78 @@ def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[st
     return loaded_macros
 
 
+def _inventory_project_macros(
+    *, macro_files: tuple[DiscoveredMacroFile, ...]
+) -> StaticMacroInventory:
+    """Validate and inventory project macro exports without executing authored code."""
+
+    module_names: frozenset[str] = frozenset(_macro_module_name(file) for file in macro_files)
+    exports: list[StaticMacroExport] = []
+    faults: list[StaticMacroFault] = []
+    owners: dict[str, Path] = {}
+    for macro_file in macro_files:
+        try:
+            module_ast: ast.Module = _validate_macro_module(
+                macro_file=macro_file, module_names=module_names
+            )
+        except CompileInputError as error:
+            faults.append(
+                StaticMacroFault(
+                    relative_path=macro_file.relative_path,
+                    message=str(error).replace(
+                        str(macro_file.file_path), macro_file.relative_path.as_posix()
+                    ),
+                )
+            )
+            continue
+        statement: ast.stmt
+        for statement in module_ast.body:
+            if not isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            if statement.name.startswith("_"):
+                continue
+            existing: Path | None = owners.get(statement.name)
+            if existing is not None:
+                collision_error: CompileInputError = CompileInputError(
+                    f"Macro name collision for '{statement.name}': "
+                    f"{existing} and {macro_file.file_path}"
+                )
+                faults.append(
+                    StaticMacroFault(
+                        relative_path=macro_file.relative_path,
+                        message=str(collision_error),
+                    )
+                )
+                continue
+            owners[statement.name] = macro_file.file_path
+            arguments: ast.arguments = statement.args
+            exports.append(
+                StaticMacroExport(
+                    name=statement.name,
+                    relative_path=macro_file.relative_path,
+                    parameters=tuple(
+                        argument.arg for argument in (*arguments.posonlyargs, *arguments.args)
+                    )
+                    + ((arguments.vararg.arg,) if arguments.vararg is not None else ())
+                    + tuple(argument.arg for argument in arguments.kwonlyargs)
+                    + ((arguments.kwarg.arg,) if arguments.kwarg is not None else ()),
+                    line=statement.lineno,
+                    source_digest=hashlib.sha256(macro_file.contents.encode()).hexdigest(),
+                )
+            )
+    return StaticMacroInventory(
+        exports=tuple(sorted(exports, key=lambda item: (item.name, item.relative_path.as_posix()))),
+        faults=tuple(faults),
+    )
+
+
 def _macro_module_name(macro_file: DiscoveredMacroFile) -> str:
     return ".".join(macro_file.relative_path.with_suffix("").parts)
 
 
 def _validate_macro_module(
     *, macro_file: DiscoveredMacroFile, module_names: frozenset[str]
-) -> None:
+) -> ast.Module:
     try:
         module_ast: ast.Module = ast.parse(macro_file.contents, filename=str(macro_file.file_path))
     except SyntaxError as error:
@@ -161,6 +229,7 @@ def _validate_macro_module(
                 f"Macro module '{macro_file.relative_path}' declaration "
                 f"'{public_declaration_name}' must be underscore-private"
             )
+    return module_ast
 
 
 def _matches_macro_module(*, imported_name: str, module_names: frozenset[str]) -> bool:

@@ -5,6 +5,14 @@ from __future__ import annotations
 from enum import StrEnum
 
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+type JsonObject = dict[str, object]
+
+
+class ScopeCacheIdentityType(StrEnum):
+    """Identity discriminator values persisted by the scope cache codec."""
+
+    RESOURCE = "resource"
+    DECLARATION = "declaration"
 
 
 class ResourceKind(StrEnum):
@@ -106,6 +114,11 @@ class ScopeDiagnosticCode(StrEnum):
     INVALID_MACRO_DEPENDENCY = "S016"
     MACRO_DEPENDENCY_CYCLE = "S017"
     DUPLICATE_RESOURCE = "S018"
+    RESOURCE_PARSE_ERROR = "S019"
+    DECLARATION_PARSE_ERROR = "S020"
+    MACRO_PARSE_ERROR = "S021"
+    RELATIONSHIP_PARSE_ERROR = "S022"
+    CONFIG_PARSE_ERROR = "S023"
 
 
 class CompletenessSection(StrEnum):

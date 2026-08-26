@@ -6,17 +6,30 @@ import hashlib
 import inspect
 from collections import defaultdict
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from types import CodeType
 
-from sqlbuild.compiler.compile.models import LoadedMacro
+from sqlbuild.compiler.compile.main._scope_relationship_grants import (
+    build_scope_relationship_grants,
+)
+from sqlbuild.compiler.compile.main._static_macro_inventory import inventory_project_macros
+from sqlbuild.compiler.compile.models import (
+    LoadedMacro,
+    ScopeRelationshipBuild,
+    StaticMacroExport,
+    StaticMacroInventory,
+)
+from sqlbuild.compiler.discovery.main._scope_snapshot import discover_scope_snapshot
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredConstantFile,
     DiscoveredEnumFile,
     DiscoveredMacroFile,
     DiscoveredProjectInputs,
+    DiscoveryFileFault,
     EnumDeclaration,
+    TolerantScopeDiscovery,
 )
 from sqlbuild.compiler.scopes._helpers.identities import format_identity
 from sqlbuild.compiler.scopes._helpers.paths import normalize_path
@@ -59,6 +72,7 @@ def build_index(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     loaded_macros: Mapping[str, LoadedMacro] | None,
+    static_macros: tuple[StaticMacroExport, ...] = (),
 ) -> ScopeIndex:
     resources: list[ResourceRecord] = []
     declarations: list[DeclarationRecord] = []
@@ -144,6 +158,13 @@ def build_index(
         }
         for loaded in loaded_macros.values():
             declarations.append(_macro_record(loaded=loaded, files=macro_files))
+    else:
+        macro_files = {
+            normalize_path(path=item.relative_path): item for item in discovered_inputs.macro_files
+        }
+        declarations.extend(
+            _static_macro_record(item=macro, files=macro_files) for macro in static_macros
+        )
 
     diagnostics: tuple[ScopeDiagnostic, ...] = tuple(
         sorted(
@@ -166,6 +187,125 @@ def build_index(
             promotion_impact=False,
         ),
     )
+
+
+def build_tolerant_scope_index(*, project_dir: Path) -> ScopeIndex:
+    """Build a partial static index from published tolerant compiler facts."""
+
+    snapshot: TolerantScopeDiscovery = discover_scope_snapshot(project_dir=project_dir)
+    macro_inventory: StaticMacroInventory = inventory_project_macros(
+        macro_files=snapshot.discovered_inputs.macro_files
+    )
+    index: ScopeIndex = build_index(
+        discovered_inputs=snapshot.discovered_inputs,
+        loaded_macros=None,
+        static_macros=macro_inventory.exports,
+    )
+    relationships: ScopeRelationshipBuild = build_scope_relationship_grants(
+        discovered_inputs=snapshot.discovered_inputs,
+        index=index,
+    )
+    diagnostics: tuple[ScopeDiagnostic, ...] = _tolerant_diagnostics(
+        snapshot=snapshot,
+        macro_inventory=macro_inventory,
+        relationships=relationships,
+    )
+    prospective: tuple[ResourceRecord, ...] = tuple(
+        record
+        for fault in (*snapshot.resource_faults, *snapshot.relationship_faults)
+        if fault.path is not None
+        if (record := _prospective_resource(path=fault.path)) is not None
+    )
+    return replace(
+        index,
+        grants=relationships.grants,
+        resources=tuple(
+            sorted(
+                dict.fromkeys((*index.resources, *prospective)),
+                key=_resource_key,
+            )
+        ),
+        diagnostics=tuple(
+            sorted(
+                (*index.diagnostics, *diagnostics),
+                key=_diagnostic_key,
+            )
+        ),
+        completeness=ScopeCompleteness(
+            discovery=False,
+            static_visibility=not (
+                snapshot.declaration_faults or snapshot.config_faults or macro_inventory.faults
+            ),
+            runtime_usage=False,
+            relationships=not snapshot.relationship_faults and not relationships.faults,
+            placement=False,
+            promotion_impact=False,
+        ),
+    )
+
+
+def _tolerant_diagnostics(
+    *,
+    snapshot: TolerantScopeDiscovery,
+    macro_inventory: StaticMacroInventory,
+    relationships: ScopeRelationshipBuild,
+) -> tuple[ScopeDiagnostic, ...]:
+    diagnostics: list[ScopeDiagnostic] = []
+    diagnostics.extend(
+        _discovery_diagnostic(fault=fault, code=ScopeDiagnosticCode.RESOURCE_PARSE_ERROR)
+        for fault in snapshot.resource_faults
+    )
+    diagnostics.extend(
+        _discovery_diagnostic(fault=fault, code=ScopeDiagnosticCode.DECLARATION_PARSE_ERROR)
+        for fault in snapshot.declaration_faults
+    )
+    diagnostics.extend(
+        _discovery_diagnostic(fault=fault, code=ScopeDiagnosticCode.RELATIONSHIP_PARSE_ERROR)
+        for fault in snapshot.relationship_faults
+    )
+    diagnostics.extend(
+        _discovery_diagnostic(fault=fault, code=ScopeDiagnosticCode.CONFIG_PARSE_ERROR)
+        for fault in snapshot.config_faults
+    )
+    diagnostics.extend(
+        ScopeDiagnostic(
+            ScopeDiagnosticCode.MACRO_PARSE_ERROR,
+            fault.message,
+            path=fault.relative_path.as_posix(),
+        )
+        for fault in macro_inventory.faults
+    )
+    diagnostics.extend(
+        ScopeDiagnostic(
+            ScopeDiagnosticCode.RELATIONSHIP_PARSE_ERROR,
+            fault.message,
+            path=fault.relative_path.as_posix(),
+        )
+        for fault in relationships.faults
+    )
+    return tuple(diagnostics)
+
+
+def _discovery_diagnostic(
+    *, fault: DiscoveryFileFault, code: ScopeDiagnosticCode
+) -> ScopeDiagnostic:
+    return ScopeDiagnostic(
+        code,
+        fault.message,
+        path=fault.path.as_posix() if fault.path is not None else None,
+    )
+
+
+def _prospective_resource(*, path: Path) -> ResourceRecord | None:
+    relative: str = path.as_posix()
+    for kind, root in _ROOTS.items():
+        if relative.startswith(f"{root}/"):
+            return ResourceRecord(
+                ResourceIdentity(kind, path.stem),
+                relative,
+                OwnershipRoot(root, resource_kind=kind),
+            )
+    return None
 
 
 def _resource_record(*, kind: ResourceKind, name: str, path: Path) -> ResourceRecord:
@@ -342,6 +482,30 @@ def _macro_record(
             parameters=tuple(inspect.signature(loaded.function).parameters),
             source_digest=hashlib.sha256(loaded.raw_source.encode()).hexdigest(),
         ),
+    )
+
+
+def _static_macro_record(
+    *, item: StaticMacroExport, files: dict[str, DiscoveredMacroFile]
+) -> DeclarationRecord:
+    path: str = normalize_path(path=item.relative_path)
+    discovered: DiscoveredMacroFile | None = files.get(path)
+    return DeclarationRecord(
+        identity=DeclarationIdentity(DeclarationKind.MACRO, item.name),
+        path=path,
+        line=item.line,
+        column=1,
+        scope=discovered.scope_kind if discovered is not None else ScopeKind.GLOBAL,
+        ownership_root=_root(
+            path=discovered.ownership_root if discovered is not None else None,
+            fallback="macros",
+        ),
+        owning_path=(
+            normalize_path(path=discovered.owning_path)
+            if discovered is not None and discovered.owning_path is not None
+            else None
+        ),
+        macro=MacroMetadata(parameters=item.parameters, source_digest=item.source_digest),
     )
 
 

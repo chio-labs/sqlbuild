@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
@@ -33,6 +36,67 @@ from sqlbuild.compiler.scopes.types import (
     ScopeKind,
 )
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
+
+SCOPE_CACHE_PROJECT: str = 'name = "demo"\nadapter = "duckdb"\n'
+SCOPE_CACHE_MODEL: str = "MODEL();\nSELECT 1 AS id\n"
+
+
+def write_scope_cache_project(
+    *, root: Path, write_repo_files: Callable[[Path, dict[str, str]], None]
+) -> None:
+    """Write the minimal valid project used by offline scope cache tests."""
+
+    write_repo_files(
+        root,
+        {
+            "sqlbuild_project.toml": SCOPE_CACHE_PROJECT,
+            "models/orders.sql": SCOPE_CACHE_MODEL,
+        },
+    )
+
+
+def write_non_text_cache(*, path: Path) -> None:
+    """Replace a cache with non-text bytes."""
+
+    path.write_bytes(b"\xff")
+
+
+def write_oversize_cache(*, path: Path) -> None:
+    """Replace a cache with an oversized payload."""
+
+    path.write_bytes(b"x" * (16 * 1024 * 1024 + 1))
+
+
+def write_wrong_version_cache(*, path: Path) -> None:
+    """Replace the envelope schema version."""
+
+    _write_cache_field(path=path, field="schema_version", value=999)
+
+
+def write_wrong_fingerprint_cache(*, path: Path) -> None:
+    """Replace the envelope input fingerprint."""
+
+    _write_cache_field(path=path, field="input_fingerprint", value="wrong")
+
+
+def write_wrong_digest_cache(*, path: Path) -> None:
+    """Replace the envelope payload digest."""
+
+    _write_cache_field(path=path, field="payload_sha256", value="0" * 64)
+
+
+def write_malformed_payload_cache(*, path: Path) -> None:
+    """Replace the canonical index payload with a malformed shape."""
+
+    _write_cache_field(path=path, field="payload", value={"resources": "not-a-list"})
+
+
+def _write_cache_field(*, path: Path, field: str, value: object) -> None:
+    envelope: dict[str, object] = cast(
+        dict[str, object], json.loads(path.read_text(encoding="ascii"))
+    )
+    envelope[field] = value
+    path.write_text(json.dumps(envelope), encoding="ascii")
 
 
 def discovered_inputs(**kwargs: object) -> DiscoveredProjectInputs:
