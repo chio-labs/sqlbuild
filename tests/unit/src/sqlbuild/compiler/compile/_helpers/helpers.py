@@ -75,6 +75,16 @@ def compile_first_model(*, project_dir: Path) -> CompiledModel:
     return compiled_project.models[0]
 
 
+def compile_project_inputs(*, project_dir: Path) -> CompileProjectInputs:
+    """Compile a discovered DuckDB fixture through the input attachment boundary."""
+
+    return build_compile_inputs(
+        discovered_inputs=discover_project_inputs(project_dir=project_dir),
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+        run_id="test_run",
+    )
+
+
 def compile_project_with_cache(
     *,
     project_dir: Path,

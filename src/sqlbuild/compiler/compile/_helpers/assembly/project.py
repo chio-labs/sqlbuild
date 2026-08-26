@@ -249,6 +249,7 @@ def assemble_compiled_project(
         loaded_macros=inputs.loaded_macros,
         diagnostics=inputs.diagnostics,
         external_sql_reference_resolver=inputs.external_sql_reference_resolver,
+        scope_index=inputs.scope_index,
     )
 
 

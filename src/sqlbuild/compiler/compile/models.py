@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -43,6 +43,12 @@ from sqlbuild.compiler.lineage.types import (
     InferredNullability,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
+from sqlbuild.compiler.scopes.models import (
+    DeclarationIdentity,
+    DeclarationRecord,
+    ScopeIndex,
+    ScopeLookup,
+)
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,
@@ -147,6 +153,33 @@ class LoadedMacro:
 
 
 @dataclass(frozen=True)
+class DeclarationRuntimeProjection:
+    """Process-only declaration values keyed by canonical static identity."""
+
+    declarations: Mapping[
+        DeclarationIdentity, EnumDeclaration | ConstantDeclaration | LoadedMacro
+    ] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class DeclarationScopeResolver:
+    """Process-only lookup state used to project visible runtime declarations."""
+
+    project_dir: Path | None
+    lookup: ScopeLookup
+    projection: DeclarationRuntimeProjection
+
+
+@dataclass(frozen=True)
+class DeclarationScopeBuild:
+    """Static artifact and process-local values shared by compile attachment phases."""
+
+    loaded_macros: dict[str, LoadedMacro]
+    index: ScopeIndex
+    resolver: DeclarationScopeResolver
+
+
+@dataclass(frozen=True)
 class MacroContext:
     """Compile-time context passed to adapter-aware SQL macros."""
 
@@ -158,10 +191,12 @@ class MacroContext:
 
 @dataclass(frozen=True)
 class DeclarationResolutionContext:
-    """Project-global declarations available during authored SQL expansion."""
+    """Declarations visible during one authored SQL expansion."""
 
     enums: dict[str, EnumDeclaration] = field(default_factory=dict)
     constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
+    inaccessible_enums: dict[str, DeclarationRecord] = field(default_factory=dict)
+    inaccessible_constants: dict[str, DeclarationRecord] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -171,6 +206,7 @@ class DeclarationExpansionContext:
     declarations: DeclarationResolutionContext
     value_renderer: TypedSqlValueRenderer
     collection_rendering: CollectionRendering
+    resolver: DeclarationScopeResolver | None = None
 
 
 @dataclass(frozen=True)
@@ -198,6 +234,7 @@ class ModelInputBuildContext:
     public_enums: dict[str, EnumDeclaration] = field(default_factory=dict)
     public_constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
     public_model_schemas: dict[str, ModelSchemaDeclaration] = field(default_factory=dict)
+    declaration_resolver: DeclarationScopeResolver | None = None
 
     @property
     def declaration_expansion(self) -> DeclarationExpansionContext:
@@ -210,7 +247,17 @@ class ModelInputBuildContext:
             ),
             value_renderer=self.value_renderer,
             collection_rendering=self.collection_rendering,
+            resolver=self.declaration_resolver,
         )
+
+
+@dataclass(frozen=True)
+class ModelInputScopeBuild:
+    """Model inputs paired with public declaration artifacts and updated context."""
+
+    inputs: tuple[CompileModelInput, ...]
+    declarations: DeclarationResolutionContext
+    context: ModelInputBuildContext
 
 
 @dataclass(frozen=True)
@@ -450,6 +497,7 @@ class CompileProjectInputs:
     audit_inputs: tuple[CompileAuditInput, ...] = field(default_factory=tuple)
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
+    scope_index: ScopeIndex = field(default_factory=ScopeIndex)
 
 
 @dataclass(frozen=True)
@@ -602,6 +650,7 @@ class CompiledProject:
     loaded_macros: dict[str, LoadedMacro] = field(default_factory=dict)
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
+    scope_index: ScopeIndex = field(default_factory=ScopeIndex)
 
 
 @dataclass(frozen=True)
@@ -712,6 +761,7 @@ class SqlExpansionContext:
     value_renderer: TypedSqlValueRenderer
     collection_rendering: CollectionRendering
     local_declarations: dict[Path, DeclarationResolutionContext] = field(default_factory=dict)
+    declaration_resolver: DeclarationScopeResolver | None = None
 
 
 @dataclass(frozen=True)

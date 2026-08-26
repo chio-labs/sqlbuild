@@ -1,9 +1,11 @@
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledObjectKey,
+    CompileProjectInputs,
     CompileSqlReference,
     ExpansionSpan,
     InferredColumn,
@@ -101,6 +103,30 @@ class DeclarationFingerprintTestCase:
     model_sql: str
     expected_query_hash_changed: bool
     expected_metadata_changed: bool
+
+
+@dataclass(frozen=True)
+class ScopedDeclarationCompileTestCase:
+    description: str
+    files: dict[str, str]
+    model_path: str
+    model_sql: str
+    expected_sql: str
+
+
+@dataclass(frozen=True)
+class ScopedDeclarationErrorTestCase:
+    description: str
+    files: dict[str, str]
+    expected_error_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ScopedDeclarationSurfaceTestCase:
+    description: str
+    files: dict[str, str]
+    result: Callable[[CompileProjectInputs], str | None]
+    expected_sql: str
 
 
 @dataclass(frozen=True)

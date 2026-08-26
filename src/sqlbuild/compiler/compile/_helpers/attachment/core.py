@@ -41,6 +41,7 @@ from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_model_declaration_indexes,
     expand_declaration_references,
+    resolve_declaration_context,
     resolve_enum_contract_columns,
 )
 from sqlbuild.compiler.compile._helpers.render.macros import (
@@ -91,6 +92,7 @@ from sqlbuild.compiler.discovery.models import (
     SqlHookEntry,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
+from sqlbuild.compiler.scopes.models import DeclarationRecord
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     LocalConfig,
@@ -118,6 +120,8 @@ class _VisibleModelDeclarations:
     local_constants: dict[str, ConstantDeclaration]
     enums: dict[str, EnumDeclaration]
     constants: dict[str, ConstantDeclaration]
+    inaccessible_enums: dict[str, DeclarationRecord]
+    inaccessible_constants: dict[str, DeclarationRecord]
 
 
 @dataclass(frozen=True)
@@ -231,6 +235,8 @@ def _build_model_inputs(
             constants=declarations.constants,
             value_renderer=context.value_renderer,
             collection_rendering=context.collection_rendering,
+            inaccessible_enums=declarations.inaccessible_enums,
+            inaccessible_constants=declarations.inaccessible_constants,
         )
         expanded_query_sql: str = expand_sql_macros(
             sql=declaration_expanded_sql,
@@ -329,9 +335,12 @@ def _build_model_inputs(
                     declarations=DeclarationResolutionContext(
                         enums=declarations.enums,
                         constants=declarations.constants,
+                        inaccessible_enums=declarations.inaccessible_enums,
+                        inaccessible_constants=declarations.inaccessible_constants,
                     ),
                     value_renderer=context.value_renderer,
                     collection_rendering=context.collection_rendering,
+                    resolver=context.declaration_resolver,
                 ),
                 sql_hook_definitions=sql_hook_definitions,
             ),
@@ -423,11 +432,21 @@ def _build_visible_declaration_indexes(
     local_enums: dict[str, EnumDeclaration]
     local_constants: dict[str, ConstantDeclaration]
     local_enums, local_constants = build_model_declaration_indexes(model_file=model_file)
+    visible: DeclarationResolutionContext = DeclarationResolutionContext(
+        enums=context.public_enums,
+        constants=context.public_constants,
+    )
+    if context.declaration_resolver is not None:
+        visible = resolve_declaration_context(
+            resolver=context.declaration_resolver, file_path=model_file.file_path
+        )
     return _VisibleModelDeclarations(
         local_enums=local_enums,
         local_constants=local_constants,
-        enums=context.public_enums | local_enums,
-        constants=context.public_constants | local_constants,
+        enums=visible.enums | local_enums,
+        constants=visible.constants | local_constants,
+        inaccessible_enums=visible.inaccessible_enums,
+        inaccessible_constants=visible.inaccessible_constants,
     )
 
 
@@ -820,6 +839,14 @@ def expand_sql_macros_in_value(
                 f"{hook_label} in '{context.file_path}' uses unsupported ${{...}} template syntax. "
                 "Use @@CTX:..., @@ENV:..., or @@project_var inside SQL hooks."
             )
+        declaration_context: DeclarationResolutionContext = (
+            context.declaration_expansion.declarations
+        )
+        if context.declaration_expansion.resolver is not None:
+            declaration_context = resolve_declaration_context(
+                resolver=context.declaration_expansion.resolver,
+                file_path=context.file_path,
+            )
         return expand_authored_sql(
             sql=value,
             file_path=context.file_path,
@@ -827,8 +854,7 @@ def expand_sql_macros_in_value(
             context_values=context.context_values,
             loaded_macros=context.loaded_macros,
             macro_context=context.macro_context,
-            enums=context.declaration_expansion.declarations.enums,
-            constants=context.declaration_expansion.declarations.constants,
+            declarations=declaration_context,
             value_renderer=context.declaration_expansion.value_renderer,
             collection_rendering=context.declaration_expansion.collection_rendering,
         )

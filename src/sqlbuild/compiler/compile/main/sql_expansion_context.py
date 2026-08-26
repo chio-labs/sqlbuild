@@ -6,10 +6,12 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile._helpers.attachment.core import build_effective_vars
 from sqlbuild.compiler.compile._helpers.render.declarations import (
+    build_declaration_scope_resolver,
     build_model_declaration_indexes,
     build_public_declaration_indexes,
 )
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     ConstantDeclaration,
     DeclarationResolutionContext,
@@ -21,6 +23,10 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
+from sqlbuild.compiler.scopes.main._build_scope_index import build_scope_index
+from sqlbuild.compiler.scopes.main._validate_scope_index import validate_scope_index
+from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
@@ -47,6 +53,13 @@ def build_sql_expansion_context(
         cli_vars={} if cli_vars is None else cli_vars,
     )
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
+    scope_index: ScopeIndex = build_scope_index(
+        discovered_inputs=discovered_inputs, loaded_macros=loaded_macros
+    )
+    try:
+        validate_scope_index(index=scope_index)
+    except ScopeValidationError as error:
+        raise CompileInputError(str(error)) from error
     enums: dict[str, EnumDeclaration]
     constants: dict[str, ConstantDeclaration]
     enums, constants = build_public_declaration_indexes(discovered_inputs=discovered_inputs)
@@ -79,4 +92,9 @@ def build_sql_expansion_context(
             declaration_override=None,
         ),
         local_declarations=local_declarations,
+        declaration_resolver=build_declaration_scope_resolver(
+            discovered_inputs=discovered_inputs,
+            scope_index=scope_index,
+            loaded_macros=loaded_macros,
+        ),
     )

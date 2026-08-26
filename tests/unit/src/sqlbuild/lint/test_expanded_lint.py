@@ -39,7 +39,18 @@ HEADER: str = 'MODEL (\n  materialized table,\n  description "ok"\n);\n'
             model_path="models/demo.sql",
             authored_sql='SELECT @const("countries") AS countries',
             expected_sql="SELECT ['GB', 'FR'] AS countries",
-        )
+        ),
+        ExpandedTypedConstantTestCase(
+            description="lint expansion uses inherited declaration visibility",
+            project_files={
+                "sqlbuild_project.toml": PROJECT_TOML,
+                "models/domain/_constants/value.sql": "CONSTANT (name value, value 9);\n",
+                "models/domain/child/demo.sql": f'{HEADER}SELECT @const("value") AS value\n',
+            },
+            model_path="models/domain/child/demo.sql",
+            authored_sql='SELECT @const("value") AS value',
+            expected_sql="SELECT 9 AS value",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -159,6 +170,15 @@ def test_given_project_when_linting_expanded_sql_then_positions_are_authored(
                 "models/demo.sql": f"{HEADER}SELECT 1 AS x\n",
             },
             expected_message_fragment="must not import project macro module 'macros.shared'",
+        ),
+        LintCompileFailureTestCase(
+            description="inaccessible declaration fails lint with compile visibility diagnostic",
+            project_files={
+                "sqlbuild_project.toml": PROJECT_TOML,
+                "models/one/_constants/value.sql": "CONSTANT (name value, value 1);\n",
+                "models/two/demo.sql": f'{HEADER}SELECT @const("value") AS value\n',
+            },
+            expected_message_fragment="known but inaccessible",
         ),
     ],
     ids=lambda case: case.description,

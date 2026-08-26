@@ -21,6 +21,7 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
 )
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
+from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_expansion
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
     expand_authored_sql,
 )
@@ -149,16 +150,18 @@ def build_sql_function_inputs(
             if isinstance(raw_schema, str)
             else schema
         )
+        scoped_declarations: DeclarationExpansionContext = resolve_declaration_expansion(
+            context=declaration_expansion, file_path=function_file.file_path
+        )
         expanded_body_sql: str = expand_authored_sql(
             sql=function_file.body_sql,
             file_path=function_file.file_path,
             effective_vars=effective_vars,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
-            enums=declaration_expansion.declarations.enums,
-            constants=declaration_expansion.declarations.constants,
-            value_renderer=declaration_expansion.value_renderer,
-            collection_rendering=declaration_expansion.collection_rendering,
+            declarations=scoped_declarations.declarations,
+            value_renderer=scoped_declarations.value_renderer,
+            collection_rendering=scoped_declarations.collection_rendering,
         )
         reject_cursor_intrinsics(
             sql=expanded_body_sql,

@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile._helpers.analysis.validation import (
     validate_source_expression_syntax,
 )
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
+from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_expansion
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
     expand_authored_sql,
 )
@@ -108,6 +109,9 @@ def expand_source_entry_templates(
     """Apply config templating and SQL interpolation to source metadata."""
 
     expression: str | None = None
+    scoped_declarations: DeclarationExpansionContext = resolve_declaration_expansion(
+        context=declaration_expansion, file_path=file_path
+    )
     if source_entry.expression is not None:
         expression = expand_authored_sql(
             sql=source_entry.expression,
@@ -115,10 +119,9 @@ def expand_source_entry_templates(
             effective_vars=effective_vars,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
-            enums=declaration_expansion.declarations.enums,
-            constants=declaration_expansion.declarations.constants,
-            value_renderer=declaration_expansion.value_renderer,
-            collection_rendering=declaration_expansion.collection_rendering,
+            declarations=scoped_declarations.declarations,
+            value_renderer=scoped_declarations.value_renderer,
+            collection_rendering=scoped_declarations.collection_rendering,
         )
     return replace(
         source_entry,

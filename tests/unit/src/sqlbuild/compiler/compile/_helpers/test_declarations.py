@@ -559,7 +559,7 @@ def test_given_declaration_change_when_compiling_then_updates_dependent_identity
                 "models/a.sql": "MODEL (constants (_limit 7));\nSELECT 1 AS value\n",
                 "models/b.sql": 'MODEL ();\nSELECT @const("_limit") AS value\n',
             },
-            expected_error_fragment="Unknown constant '_limit' in this model",
+            expected_error_fragment="Constant '_limit' is known but inaccessible",
         ),
         CompileDeclarationsErrorTestCase(
             description="non-private model constant name",
@@ -575,7 +575,7 @@ def test_given_declaration_change_when_compiling_then_updates_dependent_identity
                 "enums/nested/two.sql": "ENUM (name state, members [CLOSED]);",
                 "models/orders.sql": "MODEL ();\nSELECT 1 AS value\n",
             },
-            expected_error_fragment="Duplicate public enum 'state'",
+            expected_error_fragment="Duplicate declaration 'enum:state'",
         ),
         CompileDeclarationsErrorTestCase(
             description="nested collection cannot render as a portable value list",

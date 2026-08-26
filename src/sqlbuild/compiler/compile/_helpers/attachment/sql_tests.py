@@ -14,6 +14,7 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
 )
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
+from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_expansion
 from sqlbuild.compiler.compile._helpers.render.macros import (
     find_macro_call_names,
 )
@@ -106,6 +107,9 @@ def build_test_inputs(
     for test_file in discovered_inputs.test_files:
         test_block: DiscoveredSqlTestBlock
         for test_block in test_file.blocks:
+            scoped_declarations: DeclarationExpansionContext = resolve_declaration_expansion(
+                context=declaration_expansion, file_path=test_file.file_path
+            )
             test_mode: SqlTestMode = test_block.mode
             tested_resource_names: tuple[str, ...] = ()
             if test_mode in {SqlTestMode.MACRO, SqlTestMode.UDF, SqlTestMode.TABLE_FN}:
@@ -128,10 +132,9 @@ def build_test_inputs(
                 effective_vars=vars_for_substitution,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
-                enums=declaration_expansion.declarations.enums,
-                constants=declaration_expansion.declarations.constants,
-                value_renderer=declaration_expansion.value_renderer,
-                collection_rendering=declaration_expansion.collection_rendering,
+                declarations=scoped_declarations.declarations,
+                value_renderer=scoped_declarations.value_renderer,
+                collection_rendering=scoped_declarations.collection_rendering,
             )
             reject_cursor_intrinsics(
                 sql=expanded_sql_body,
@@ -371,16 +374,18 @@ def build_scenario_inputs(
     scenario_inputs: list[CompileSqlScenarioInput] = []
     scenario_file: DiscoveredSqlScenarioFile
     for scenario_file in discovered_inputs.scenario_files:
+        scoped_declarations: DeclarationExpansionContext = resolve_declaration_expansion(
+            context=declaration_expansion, file_path=scenario_file.file_path
+        )
         expanded_sql_body: str = expand_authored_sql(
             sql=scenario_file.sql_body,
             file_path=scenario_file.file_path,
             effective_vars=vars_for_substitution,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
-            enums=declaration_expansion.declarations.enums,
-            constants=declaration_expansion.declarations.constants,
-            value_renderer=declaration_expansion.value_renderer,
-            collection_rendering=declaration_expansion.collection_rendering,
+            declarations=scoped_declarations.declarations,
+            value_renderer=scoped_declarations.value_renderer,
+            collection_rendering=scoped_declarations.collection_rendering,
         )
         reject_cursor_intrinsics(
             sql=expanded_sql_body,
