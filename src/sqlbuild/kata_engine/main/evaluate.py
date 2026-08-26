@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.kata_engine._helpers.engine.evaluation import evaluate_project
+from sqlbuild.kata_engine._helpers.engine.ruleset import evaluate_project
 from sqlbuild.kata_engine.models import KataConfig, KataResult
 
 

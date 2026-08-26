@@ -1,5 +1,5 @@
 use crate::constants::{API_VERSION, BUILT_IN_RULE_NAMESPACE, CUSTOM_RULE_NAMESPACE};
-use crate::models::{CustomRule, ResolveRulesRequest, RuleMetadata};
+use crate::models::{CustomRule, ResolveRulesRequest, RuleGuidance, RuleMetadata};
 use fensu_policy::policy::errors::PolicyError;
 use fensu_policy::policy::main::resolve_policy::resolve_policy;
 use fensu_policy::policy::models::{PolicySelectors, ProductRuleCodeGrammar};
@@ -20,6 +20,7 @@ macro_rules! rule {
             slug: $slug.into(),
             message: $message.into(),
             remediation: $remediation.into(),
+            guidance: None,
             implementation_fingerprint: env!("CARGO_PKG_VERSION").into(),
             enabled_by_default: true,
             project_wide: matches!($code, "SQBKH101" | "SQBKH201" | "SQBKX201"),
@@ -154,21 +155,21 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
             "joins",
             "no-comma-join",
             "implicit comma joins are not permitted",
-            "Replace the comma join with an explicit JOIN ... ON <key> at this FROM.",
+            "Replace the comma-separated source with JOIN ... ON <key> or JOIN ... USING (<key>) at this FROM.",
         ),
         rule!(
             "SQBKJ101",
             "joins",
             "explicit-join-key",
-            "non-cross joins must declare ON or USING",
-            "Add an explicit JOIN ... ON <key> or JOIN ... USING (<key>) condition.",
+            "non-cross joins must declare a constraining ON or USING relationship",
+            "Replace the missing or unconditional constraint with JOIN ... ON <relationship> or JOIN ... USING (<key>); use CROSS JOIN only when a Cartesian product is intended and suppressed through the common policy.",
         ),
         rule!(
             "SQBKJ002",
             "joins",
             "no-cross-join",
             "cross joins require an explicit project exception",
-            "Replace CROSS JOIN with an explicit keyed join, or add a reasoned exact exception when the Cartesian product is intentional.",
+            "Replace CROSS JOIN with JOIN ... ON <relationship> or JOIN ... USING (<key>); when the Cartesian product is intentional, add a reasoned exact exception or scoped ignore through the common policy.",
         ),
         rule!(
             "SQBKN001",
@@ -226,13 +227,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
             "non-passthrough models must declare the configured minimum audits",
             "Attach concrete not_null, unique, or accepted_values audits to this model's contract; audits gate promotion when bad rows appear.",
         ),
-        rule!(
-            "SQBKX002",
-            "tests",
-            "minimum-tests",
-            "non-passthrough models must have the configured minimum unit tests",
-            "Add a failable SQL unit test that targets this model's real logic.",
-        ),
+        minimum_tests_rule(),
         rule!(
             "SQBKX201",
             "tests",
@@ -243,6 +238,31 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
     ];
     rules.sort_by(|a, b| a.code.cmp(&b.code));
     rules
+}
+
+fn minimum_tests_rule() -> RuleMetadata {
+    let guidance = RuleGuidance {
+        good_example: "For example:\n\nTEST();\n\nWITH\n__ref__upstream_model AS (\n  SELECT 1 AS order_id, 2 AS quantity\n),\n__expected__example_model AS (\n  SELECT 1 AS order_id, 4 AS doubled_quantity\n)\nSELECT 1"
+            .into(),
+        anti_tautology: "Choose input rows and concrete expected values that exercise the model's actual filter, join, aggregation, or mapping. Do not merely assert that inputs survive unchanged or re-derive expected values with the model's own logic."
+            .into(),
+        mutation_check: "Prove the test is failable: temporarily perturb the model logic or expected value, confirm the test fails, then revert the mutation."
+            .into(),
+    };
+    RuleMetadata {
+        code: "SQBKX002".into(),
+        family: "tests".into(),
+        slug: "minimum-tests".into(),
+        message: "non-passthrough models must have the configured minimum unit tests".into(),
+        remediation: guidance.remediation(
+            "Add a SQL unit test that mocks each real import and asserts concrete transformed rows.",
+        ),
+        guidance: Some(guidance),
+        implementation_fingerprint: env!("CARGO_PKG_VERSION").into(),
+        enabled_by_default: true,
+        project_wide: false,
+        custom: false,
+    }
 }
 
 pub(crate) fn with_custom(custom: &[CustomRule]) -> Result<Vec<RuleMetadata>, String> {
@@ -258,6 +278,7 @@ pub(crate) fn with_custom(custom: &[CustomRule]) -> Result<Vec<RuleMetadata>, St
             slug: item.slug.clone(),
             message: item.message.clone(),
             remediation: item.remediation.clone(),
+            guidance: None,
             implementation_fingerprint: item.implementation_fingerprint.clone(),
             enabled_by_default: item.enabled_by_default,
             project_wide: item.project_wide,

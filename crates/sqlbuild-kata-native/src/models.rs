@@ -44,11 +44,20 @@ pub(crate) struct SelectStarAllow {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ThresholdOverride {
+    pub paths: Vec<String>,
+    pub thresholds: BTreeMap<String, u32>,
+    pub reason: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct KataConfig {
     pub select: Vec<String>,
     pub ignore: Vec<String>,
     pub thresholds: BTreeMap<String, u32>,
+    pub threshold_overrides: Vec<ThresholdOverride>,
     pub rule_options: BTreeMap<String, BTreeMap<String, Value>>,
     pub rule_exceptions: Vec<RuleException>,
     pub rule_ignores: Vec<RuleIgnore>,
@@ -69,6 +78,7 @@ impl Default for KataConfig {
             select: vec![],
             ignore: vec![],
             thresholds: BTreeMap::new(),
+            threshold_overrides: vec![],
             rule_options: BTreeMap::new(),
             rule_exceptions: vec![],
             rule_ignores: vec![],
@@ -149,6 +159,12 @@ pub(crate) struct CustomRule {
     #[serde(default)]
     pub source: Option<String>,
     #[serde(default)]
+    pub source_line: u64,
+    #[serde(default)]
+    pub source_column: u64,
+    #[serde(default)]
+    pub owner: String,
+    #[serde(default)]
     pub project_wide: bool,
     #[serde(default)]
     pub check_name: String,
@@ -226,12 +242,29 @@ pub(crate) struct EvaluateResponse {
 }
 
 #[derive(Clone, Debug, Serialize)]
+pub(crate) struct RuleGuidance {
+    pub good_example: String,
+    pub anti_tautology: String,
+    pub mutation_check: String,
+}
+
+impl RuleGuidance {
+    pub(crate) fn remediation(&self, introduction: &str) -> String {
+        format!(
+            "{introduction}\n\n{}\n\n{}\n\n{}",
+            self.good_example, self.anti_tautology, self.mutation_check
+        )
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
 pub(crate) struct RuleMetadata {
     pub code: String,
     pub family: String,
     pub slug: String,
     pub message: String,
     pub remediation: String,
+    pub guidance: Option<RuleGuidance>,
     pub implementation_fingerprint: String,
     pub enabled_by_default: bool,
     pub project_wide: bool,

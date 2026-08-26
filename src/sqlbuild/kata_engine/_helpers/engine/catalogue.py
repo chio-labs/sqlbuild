@@ -17,7 +17,7 @@ from sqlbuild.kata_engine._helpers.engine.definition import rule_from_value
 from sqlbuild.kata_engine._helpers.engine.native import native_catalogue, native_selected_codes
 from sqlbuild.kata_engine.constants import KATA_DECORATOR_TOKEN
 from sqlbuild.kata_engine.exceptions import KataError
-from sqlbuild.kata_engine.models import KataConfig, KataFault, KataRule, RuleOption
+from sqlbuild.kata_engine.models import KataConfig, KataFault, KataRule, RuleGuidance, RuleOption
 
 
 def build_catalogue(*, config: KataConfig, project_dir: Path) -> tuple[KataRule, ...]:
@@ -56,8 +56,20 @@ def _builtins() -> tuple[KataRule, ...]:
             check=_native_builtin,
             enabled_by_default=bool(item["enabled_by_default"]),
             project_wide=bool(item["project_wide"]),
+            guidance=_guidance(item.get("guidance")),
         )
         for item in native_catalogue()
+    )
+
+
+def _guidance(value: object) -> RuleGuidance | None:
+    if not isinstance(value, dict):
+        return None
+    payload: dict[str, object] = {str(key): item for key, item in value.items()}
+    return RuleGuidance(
+        good_example=str(payload["good_example"]),
+        anti_tautology=str(payload["anti_tautology"]),
+        mutation_check=str(payload["mutation_check"]),
     )
 
 
@@ -66,11 +78,15 @@ def _native_builtin(*, model: object, ctx: object) -> list[KataFault]:
     raise KataError("built-in kata rules execute only through the native engine")
 
 
-def select_rules(*, catalogue: tuple[KataRule, ...], config: KataConfig) -> tuple[KataRule, ...]:
+def select_rules(
+    *, catalogue: tuple[KataRule, ...], config: KataConfig, project_dir: Path
+) -> tuple[KataRule, ...]:
     """Resolve the active catalogue through the native Fensu policy owner."""
 
     by_code: dict[str, KataRule] = {rule.code: rule for rule in catalogue}
-    codes: tuple[str, ...] = native_selected_codes(config=config, catalogue=catalogue)
+    codes: tuple[str, ...] = native_selected_codes(
+        config=config, catalogue=catalogue, project_dir=project_dir
+    )
     try:
         return tuple(by_code[code] for code in codes)
     except KeyError as error:

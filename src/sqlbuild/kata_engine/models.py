@@ -100,6 +100,15 @@ class RuleOption[T]:
 
 
 @dataclass(frozen=True)
+class RuleGuidance:
+    """Structured authoring guidance shared by diagnostics and generated documentation."""
+
+    good_example: str
+    anti_tautology: str
+    mutation_check: str
+
+
+@dataclass(frozen=True)
 class KataRule:
     """Immutable metadata and implementation for one kata rule."""
 
@@ -114,6 +123,7 @@ class KataRule:
     custom: bool = False
     source: str | None = None
     project_wide: bool = False
+    guidance: RuleGuidance | None = None
 
 
 @dataclass(frozen=True)
@@ -149,6 +159,13 @@ class SelectStarAllow:
 
 
 @dataclass(frozen=True)
+class ThresholdOverride:
+    paths: tuple[str, ...]
+    thresholds: dict[str, int]
+    reason: str
+
+
+@dataclass(frozen=True)
 class KataCacheConfig:
     enabled: bool = True
     require_cacheable: bool = False
@@ -159,6 +176,7 @@ class KataConfig:
     select: tuple[str, ...] = ()
     ignore: tuple[str, ...] = ()
     thresholds: dict[str, int] = field(default_factory=dict)
+    threshold_overrides: tuple[ThresholdOverride, ...] = ()
     rule_options: dict[str, dict[str, RuleOptionValue]] = field(default_factory=dict)
     rule_exceptions: tuple[RuleExemption, ...] = ()
     rule_ignores: tuple[RuleIgnore, ...] = ()

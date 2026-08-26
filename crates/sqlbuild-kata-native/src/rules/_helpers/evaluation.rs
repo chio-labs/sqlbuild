@@ -1,10 +1,10 @@
 use crate::constants::{
     BOOLEAN_TYPE, DATE_TYPE, DECLARATION_DOMAIN_COMPONENTS, ENFORCED_CONTRACT,
     MEANINGLESS_FINAL_NAME, NEGATION_OPERATOR, REFERENCE_KIND, SQL_AS_KEYWORD_LENGTH,
-    TIMESTAMP_TYPE, TRIVIAL_JOIN_VALUE, VIEW_MATERIALIZATION,
+    TIMESTAMP_TYPE, VIEW_MATERIALIZATION,
 };
 use crate::models::{Declaration, EvaluateRequest, Fault, KataConfig, Model, RuleMetadata};
-use crate::rules::models::{FaultCollector, ModelEvaluationRequest};
+use crate::rules::models::{FaultCollector, ModelEvaluationRequest, ResolvedThresholdOverride};
 use globset::{Glob, GlobSetBuilder};
 use sqlparser::ast::{
     BinaryOperator, Expr, GroupByExpr, JoinConstraint, JoinOperator, Query, Select, SelectItem,
@@ -64,6 +64,42 @@ enum JoinFact {
 struct ParsedModel<'a> {
     query: Query,
     model: &'a Model,
+    classification: ModelClassification,
+}
+
+struct ModelClassification {
+    authored_dependencies: Vec<String>,
+    ctes: Vec<CteClassification>,
+    passthrough: bool,
+}
+
+struct TestRuleEvaluation<'a> {
+    parsed: &'a ParsedModel<'a>,
+    config: &'a KataConfig,
+    threshold_overrides: &'a [ResolvedThresholdOverride],
+    selected: &'a BTreeMap<String, &'a RuleMetadata>,
+    faults: &'a FaultCollector,
+}
+
+struct CteClassification {
+    name: String,
+    position: Position,
+    dependency_import: bool,
+    kind: CteKind,
+}
+
+enum CteKind {
+    Logical,
+    Import {
+        dependencies: Vec<String>,
+        rejections: Vec<ImportRejection>,
+    },
+}
+
+enum ImportRejection {
+    MultipleDependencies,
+    AfterLogical,
+    Transformation,
 }
 
 pub(crate) fn evaluate_model(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault>, String> {
@@ -73,6 +109,7 @@ pub(crate) fn evaluate_model(request: ModelEvaluationRequest<'_>) -> Result<Vec<
         selected,
         request,
         is_anchor,
+        threshold_overrides,
     } = request;
     let mut statements = Parser::parse_sql(&GenericDialect {}, &model.query_sql)
         .map_err(|error| format!("could not parse {} for kata: {error}", model.relative_path))?;
@@ -89,9 +126,12 @@ pub(crate) fn evaluate_model(request: ModelEvaluationRequest<'_>) -> Result<Vec<
             model.relative_path
         ));
     };
+    let query = *query;
+    let classification = classify_model(&query, model);
     let parsed = ParsedModel {
-        query: *query,
+        query,
         model,
+        classification,
     };
     let metadata = |code: &str| selected.get(code).copied();
     let faults = FaultCollector::default();
@@ -150,7 +190,13 @@ pub(crate) fn evaluate_model(request: ModelEvaluationRequest<'_>) -> Result<Vec<
     evaluate_join_rules(&parsed, selected, &faults);
     evaluate_naming_rules(&parsed, selected, &faults);
     evaluate_literal_rules(&parsed, selected, &faults);
-    evaluate_test_rules(&parsed, config, selected, &faults);
+    evaluate_test_rules(TestRuleEvaluation {
+        parsed: &parsed,
+        config,
+        threshold_overrides,
+        selected,
+        faults: &faults,
+    });
 
     if is_anchor {
         if let Some(rule) = metadata("SQBKH101") {
@@ -321,6 +367,58 @@ fn sole_table_name(query: &Query) -> Option<String> {
     Some(name.to_string())
 }
 
+fn classify_model(query: &Query, model: &Model) -> ModelClassification {
+    let authored_dependencies = dependency_calls(&model.query_sql);
+    let mut logical_seen = false;
+    let ctes = top_ctes(query)
+        .iter()
+        .map(|cte| {
+            let dependencies = dependency_calls(&cte.query.to_string());
+            let dependency_import = dependency_import(&cte.query);
+            let kind = if dependencies.is_empty() {
+                logical_seen = true;
+                CteKind::Logical
+            } else {
+                let mut rejections: Vec<ImportRejection> = Vec::new();
+                if dependencies.len() > 1 {
+                    rejections.push(ImportRejection::MultipleDependencies);
+                }
+                if logical_seen {
+                    rejections.push(ImportRejection::AfterLogical);
+                }
+                if !dependency_import {
+                    rejections.push(ImportRejection::Transformation);
+                }
+                CteKind::Import {
+                    dependencies,
+                    rejections,
+                }
+            };
+            CteClassification {
+                name: cte.alias.name.value.clone(),
+                position: location_position(cte.alias.name.span.start),
+                dependency_import,
+                kind,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let passthrough = model.references.len() == 1
+        && authored_dependencies.len() == 1
+        && ctes.len() == 1
+        && ctes.first().is_some_and(|cte| {
+            cte.dependency_import
+                && sole_table_name(query).as_deref() == Some(cte.name.as_str())
+                && root_select(query).is_some_and(|select| plain_select(select, true))
+        });
+
+    ModelClassification {
+        authored_dependencies,
+        ctes,
+        passthrough,
+    }
+}
+
 fn comment_discipline(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &FaultCollector) {
     let mut previous_code = String::new();
     let mut cte_head_comment_seen = false;
@@ -464,59 +562,47 @@ fn dependency_calls(source: &str) -> Vec<String> {
 }
 
 fn import_ctes(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &FaultCollector) {
-    let authored = dependency_calls(&parsed.model.query_sql);
     let mut imported: Vec<String> = Vec::new();
-    let mut logical_seen = false;
-    for cte in top_ctes(&parsed.query) {
-        let body = cte.query.to_string();
-        let references = dependency_calls(&body);
-        if references.is_empty() {
-            logical_seen = true;
+    for cte in &parsed.classification.ctes {
+        let CteKind::Import {
+            dependencies,
+            rejections,
+        } = &cte.kind
+        else {
             continue;
+        };
+        if dependencies.len() == 1 {
+            imported.extend(dependencies.iter().cloned());
         }
-        let at = location_position(cte.alias.name.span.start);
-        if references.len() > 1 {
+        for rejection in rejections {
+            let message = match rejection {
+                ImportRejection::MultipleDependencies => {
+                    format!("import CTE {:?} reads multiple dependencies", cte.name)
+                }
+                ImportRejection::AfterLogical => {
+                    format!("import CTE {:?} appears after logical CTEs", cte.name)
+                }
+                ImportRejection::Transformation => {
+                    format!("import CTE {:?} contains transformation logic", cte.name)
+                }
+            };
             faults.push(custom_fault!(
                 parsed.model,
                 rule,
-                Some(&at),
-                format!(
-                    "import CTE {:?} reads multiple dependencies",
-                    cte.alias.name.value
-                ),
+                Some(&cte.position),
+                message,
                 None,
             ));
         }
-        if references.len() == 1 {
-            imported.extend(references);
-            if logical_seen {
-                faults.push(custom_fault!(
-                    parsed.model,
-                    rule,
-                    Some(&at),
-                    format!(
-                        "import CTE {:?} appears after logical CTEs",
-                        cte.alias.name.value
-                    ),
-                    None,
-                ));
-            }
-            if !dependency_import(&cte.query) {
-                faults.push(custom_fault!(
-                    parsed.model,
-                    rule,
-                    Some(&at),
-                    format!(
-                        "import CTE {:?} contains transformation logic",
-                        cte.alias.name.value
-                    ),
-                    None,
-                ));
-            }
-        }
     }
-    let duplicate = authored.iter().collect::<HashSet<_>>().len() != authored.len();
-    let mut authored_sorted = authored;
+    let duplicate = parsed
+        .classification
+        .authored_dependencies
+        .iter()
+        .collect::<HashSet<_>>()
+        .len()
+        != parsed.classification.authored_dependencies.len();
+    let mut authored_sorted = parsed.classification.authored_dependencies.clone();
     let mut imported_sorted = imported;
     authored_sorted.sort();
     imported_sorted.sort();
@@ -548,8 +634,11 @@ fn select_star(
         .map_err(|error| error.to_string())?
         .is_match(&parsed.model.relative_path);
     let mut import_positions: HashSet<(u64, u64)> = HashSet::new();
-    for cte in top_ctes(&parsed.query) {
-        if dependency_import(&cte.query) {
+    for (cte, classified) in top_ctes(&parsed.query)
+        .iter()
+        .zip(&parsed.classification.ctes)
+    {
+        if classified.dependency_import {
             for value in stars_in_query(&cte.query) {
                 import_positions.insert((value.line, value.column));
             }
@@ -1115,77 +1204,80 @@ fn evaluate_literal_rules(
     }
 }
 
-fn is_passthrough(parsed: &ParsedModel<'_>) -> bool {
-    let ctes = top_ctes(&parsed.query);
-    parsed.model.references.len() == 1
-        && ctes.len() == 1
-        && dependency_calls(&parsed.model.query_sql).len() == 1
-        && dependency_import(&ctes[0].query)
-        && sole_table_name(&parsed.query).as_deref() == Some(ctes[0].alias.name.value.as_str())
-        && root_select(&parsed.query).is_some_and(|select| plain_select(select, true))
-}
-
-fn evaluate_test_rules(
-    parsed: &ParsedModel<'_>,
-    config: &KataConfig,
-    selected: &BTreeMap<String, &RuleMetadata>,
-    faults: &FaultCollector,
-) {
-    if is_passthrough(parsed) {
+fn evaluate_test_rules(evaluation: TestRuleEvaluation<'_>) {
+    if evaluation.parsed.classification.passthrough {
         return;
     }
-    if let Some(rule) = selected.get("SQBKX001") {
-        let minimum = config
-            .thresholds
-            .get("min_audits_per_model")
-            .copied()
-            .unwrap_or(1);
-        if parsed.model.declared_audit_count < minimum {
-            faults.push(custom_fault!(
-                parsed.model,
+    if let Some(rule) = evaluation.selected.get("SQBKX001") {
+        let minimum = effective_threshold(&evaluation, "min_audits_per_model", 1);
+        if evaluation.parsed.model.declared_audit_count < minimum {
+            evaluation.faults.push(custom_fault!(
+                evaluation.parsed.model,
                 rule,
                 None,
                 format!(
                     "model {:?} has {} audits; {} required",
-                    parsed.model.name, parsed.model.declared_audit_count, minimum
+                    evaluation.parsed.model.name,
+                    evaluation.parsed.model.declared_audit_count,
+                    minimum
                 ),
                 None,
             ));
         }
     }
-    if let Some(rule) = selected.get("SQBKX002") {
-        let minimum = config
-            .thresholds
-            .get("min_tests_per_model")
-            .copied()
-            .unwrap_or(1);
-        if parsed.model.targeting_test_count < minimum {
-            faults.push(custom_fault!(
-                parsed.model,
+    if let Some(rule) = evaluation.selected.get("SQBKX002") {
+        let minimum = effective_threshold(&evaluation, "min_tests_per_model", 1);
+        if evaluation.parsed.model.targeting_test_count < minimum {
+            evaluation.faults.push(custom_fault!(
+                evaluation.parsed.model,
                 rule,
                 None,
                 format!(
                     "model {:?} has {} tests; {} required",
-                    parsed.model.name, parsed.model.targeting_test_count, minimum
+                    evaluation.parsed.model.name,
+                    evaluation.parsed.model.targeting_test_count,
+                    minimum
                 ),
-                Some(test_remediation(parsed.model)),
+                None,
             ));
         }
     }
 }
 
-fn test_remediation(model: &Model) -> String {
-    let mock = model.references.first().map_or_else(
-        || "__ref__upstream_model".into(),
-        |reference| format!("__{}__{}", reference.ref_kind, reference.ref_name),
-    );
-    let example = format!(
-        "TEST();\n\nWITH\n{mock} AS (\n  SELECT 1 AS input_id, 2 AS input_value\n),\n__expected__{} AS (\n  SELECT 1 AS output_id, 4 AS transformed_value\n)\nSELECT 1",
-        model.name
-    );
-    format!(
-        "Add a SQL unit test that mocks each real import and asserts concrete transformed rows, for example:\n\n{example}\n\nChoose input rows that exercise this model's actual filter, join, aggregation, or mapping. Do not merely assert that inputs survive unchanged or re-derive expected values with the model's own logic. Prove the test is failable: temporarily perturb the model logic or expected value, confirm the test fails, then revert the mutation."
-    )
+fn effective_threshold(evaluation: &TestRuleEvaluation<'_>, name: &str, default: u32) -> u32 {
+    let mut value = evaluation
+        .config
+        .thresholds
+        .get(name)
+        .copied()
+        .unwrap_or(default);
+    for entry in evaluation.threshold_overrides {
+        if entry.matches(&evaluation.parsed.model.relative_path) {
+            if let Some(overridden) = entry.threshold(name) {
+                value = overridden;
+            }
+        }
+    }
+    value
+}
+
+pub(crate) fn resolve_threshold_overrides(
+    config: &KataConfig,
+) -> Result<Vec<ResolvedThresholdOverride>, String> {
+    config
+        .threshold_overrides
+        .iter()
+        .map(|entry| {
+            let mut builder = GlobSetBuilder::new();
+            for pattern in &entry.paths {
+                builder.add(Glob::new(pattern).map_err(|error| error.to_string())?);
+            }
+            Ok(ResolvedThresholdOverride {
+                matcher: builder.build().map_err(|error| error.to_string())?,
+                thresholds: entry.thresholds.clone(),
+            })
+        })
+        .collect()
 }
 
 fn duplicate_enums(request: &EvaluateRequest, rule: &RuleMetadata, faults: &FaultCollector) {
@@ -1272,15 +1364,17 @@ fn custom_rule_test_coverage(
             continue;
         }
         if custom.test_case_count < minimum {
-            faults.push(path_fault(
-                custom.source.as_deref().unwrap_or("kata"),
-                rule,
-                format!(
+            faults.push(Fault {
+                code: rule.code.clone(),
+                path: custom.source.clone().unwrap_or_else(|| "kata".into()),
+                line: custom.source_line.max(1),
+                column: custom.source_column.max(1),
+                message: format!(
                     "custom rule {} has {} harness cases; {} required",
                     custom.code, custom.test_case_count, minimum
                 ),
-                rule.remediation.clone(),
-            ));
+                remediation: rule.remediation.clone(),
+            });
         }
     }
 }
@@ -1360,6 +1454,17 @@ fn select_facts(query: &Query) -> Vec<SelectFacts> {
                     if let Some(JoinConstraint::On(expr)) = join_constraint(&join.join_operator) {
                         comparison_facts(expr, &source_context, &mut result.comparisons);
                     }
+                }
+            }
+            for item in &select.projection {
+                match item {
+                    SelectItem::UnnamedExpr(expression)
+                    | SelectItem::ExprWithAlias {
+                        expr: expression, ..
+                    } => {
+                        case_comparison_facts(expression, &source_context, &mut result.comparisons);
+                    }
+                    SelectItem::QualifiedWildcard(_, _) | SelectItem::Wildcard(_) => {}
                 }
             }
             for expression in [
@@ -1466,16 +1571,111 @@ fn join_fact(operator: &JoinOperator) -> JoinFact {
     };
     match constraint {
         JoinConstraint::None => JoinFact::MissingKey,
-        JoinConstraint::On(Expr::BinaryOp {
-            left,
-            op: BinaryOperator::Eq,
-            right,
-        }) if numeric_value(left).as_deref() == Some(TRIVIAL_JOIN_VALUE)
-            && numeric_value(right).as_deref() == Some(TRIVIAL_JOIN_VALUE) =>
-        {
+        JoinConstraint::On(expression) if static_boolean(expression) == Some(true) => {
             JoinFact::TriviallyTrue
         }
         _ => JoinFact::Keyed,
+    }
+}
+
+#[derive(Clone, PartialEq)]
+enum StaticValue {
+    Boolean(bool),
+    Number(String),
+}
+
+fn static_boolean(expression: &Expr) -> Option<bool> {
+    match expression {
+        Expr::Nested(inner) => static_boolean(inner),
+        Expr::Value(value) => match value.value {
+            Value::Boolean(value) => Some(value),
+            _ => None,
+        },
+        Expr::UnaryOp { op, expr } if op.to_string().eq_ignore_ascii_case("NOT") => {
+            static_boolean(expr).map(|value| !value)
+        }
+        Expr::IsTrue(inner) | Expr::IsNotFalse(inner) => static_boolean(inner),
+        Expr::IsFalse(inner) | Expr::IsNotTrue(inner) => static_boolean(inner).map(|value| !value),
+        Expr::BinaryOp { left, op, right } => match op {
+            BinaryOperator::And => match (static_boolean(left), static_boolean(right)) {
+                (Some(false), _) | (_, Some(false)) => Some(false),
+                (Some(true), Some(true)) => Some(true),
+                _ => None,
+            },
+            BinaryOperator::Or => match (static_boolean(left), static_boolean(right)) {
+                (Some(true), _) | (_, Some(true)) => Some(true),
+                (Some(false), Some(false)) => Some(false),
+                _ => None,
+            },
+            BinaryOperator::Eq
+            | BinaryOperator::NotEq
+            | BinaryOperator::Gt
+            | BinaryOperator::GtEq
+            | BinaryOperator::Lt
+            | BinaryOperator::LtEq => {
+                static_comparison(static_value(left)?, op, static_value(right)?)
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn static_value(expression: &Expr) -> Option<StaticValue> {
+    match expression {
+        Expr::Nested(inner) => static_value(inner),
+        Expr::Value(value) => match &value.value {
+            Value::Boolean(value) => Some(StaticValue::Boolean(*value)),
+            Value::Number(value, _) => Some(StaticValue::Number(value.to_string())),
+            _ => None,
+        },
+        Expr::UnaryOp { op, expr } if op.to_string() == NEGATION_OPERATOR => {
+            match static_value(expr)? {
+                StaticValue::Number(value) => Some(StaticValue::Number(format!("-{value}"))),
+                StaticValue::Boolean(_) => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+fn static_comparison(
+    left: StaticValue,
+    operator: &BinaryOperator,
+    right: StaticValue,
+) -> Option<bool> {
+    match (left, right) {
+        (StaticValue::Boolean(left), StaticValue::Boolean(right)) => match operator {
+            BinaryOperator::Eq => Some(left == right),
+            BinaryOperator::NotEq => Some(left != right),
+            _ => None,
+        },
+        (StaticValue::Number(left), StaticValue::Number(right)) => {
+            static_numeric_comparison(&left, operator, &right)
+        }
+        _ => None,
+    }
+}
+
+fn static_numeric_comparison(left: &str, operator: &BinaryOperator, right: &str) -> Option<bool> {
+    if left == right {
+        return match operator {
+            BinaryOperator::Eq | BinaryOperator::GtEq | BinaryOperator::LtEq => Some(true),
+            BinaryOperator::NotEq | BinaryOperator::Gt | BinaryOperator::Lt => Some(false),
+            _ => None,
+        };
+    }
+    let (Ok(left), Ok(right)) = (left.parse::<i128>(), right.parse::<i128>()) else {
+        return None;
+    };
+    match operator {
+        BinaryOperator::Eq => Some(left == right),
+        BinaryOperator::NotEq => Some(left != right),
+        BinaryOperator::Gt => Some(left > right),
+        BinaryOperator::GtEq => Some(left >= right),
+        BinaryOperator::Lt => Some(left < right),
+        BinaryOperator::LtEq => Some(left <= right),
+        _ => None,
     }
 }
 
@@ -1518,6 +1718,42 @@ fn comparison_facts(root: &Expr, source_context: &SourceContext, output: &mut Ve
         }
     }
     let mut visitor = Comparisons {
+        source_context,
+        output,
+    };
+    let _ = root.visit(&mut visitor);
+}
+
+fn case_comparison_facts(
+    root: &Expr,
+    source_context: &SourceContext,
+    output: &mut Vec<ComparisonFact>,
+) {
+    struct CaseComparisons<'a> {
+        source_context: &'a SourceContext,
+        output: &'a mut Vec<ComparisonFact>,
+    }
+    impl Visitor for CaseComparisons<'_> {
+        type Break = ();
+
+        fn pre_visit_expr(&mut self, expression: &Expr) -> ControlFlow<Self::Break> {
+            if let Expr::Case {
+                operand,
+                conditions,
+                ..
+            } = expression
+            {
+                if let Some(value) = operand {
+                    comparison_facts(value, self.source_context, self.output);
+                }
+                for condition in conditions {
+                    comparison_facts(&condition.condition, self.source_context, self.output);
+                }
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let mut visitor = CaseComparisons {
         source_context,
         output,
     };

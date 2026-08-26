@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sqlbuild.kata_engine._helpers.engine.native import render_native_owned_skill
 from sqlbuild.kata_engine._helpers.engine.ruleset import resolve_ruleset
-from sqlbuild.kata_engine.constants import KATA_THRESHOLD_DEFAULTS
+from sqlbuild.kata_engine._helpers.guidance.thresholds import format_threshold_lines
 from sqlbuild.kata_engine.models import KataConfig, KataRule, ResolvedRuleset
 
 
@@ -38,8 +38,11 @@ def render_skills(*, config: KataConfig, project_dir: Path) -> tuple[str, str]:
             )
         )
         configured: Mapping[str, object] = config.rule_options.get(rule.code, {})
-        if configured:
-            body.extend(("", f"Effective options: {configured}"))
+        effective: dict[str, object] = {
+            option.name: configured.get(option.name, option.default) for option in rule.options
+        }
+        if effective:
+            body.extend(("", f"Effective options: {effective}"))
     if config.rule_exceptions or config.rule_ignores or config.select_star_allow:
         body.extend(
             (
@@ -58,9 +61,7 @@ def render_skills(*, config: KataConfig, project_dir: Path) -> tuple[str, str]:
             body.append(f"- Lone-star allowance `{','.join(entry.paths)}`: {entry.reason}")
     if any(rule.code.startswith("SQBKX") for rule in rules):
         body.extend(("", "## Effective Thresholds", ""))
-        thresholds: dict[str, int] = {**KATA_THRESHOLD_DEFAULTS, **config.thresholds}
-        for name, value in sorted(thresholds.items()):
-            body.append(f"- `{name}` = `{value}`")
+        body.extend(format_threshold_lines(config=config))
     if config.domains or config.approved_source_tokens or config.retired_source_tokens:
         body.extend(("", "## Naming Vocabulary", ""))
         body.append(f"- Domains: `{', '.join(config.domains)}`")
@@ -82,6 +83,7 @@ def _rule_example(*, rule: KataRule) -> str:
         "SQBKR001": "domain__int_clean__entity or domain__mart_v__entity.",
         "SQBKR401": "MODEL (contract enforced, columns (...)); declare authoritative columns.",
         "SQBKX001": "Attach not_null/unique audits to the model key.",
-        "SQBKX002": "Mock imports, assert __expected__<model>, then mutation-check the test.",
     }
+    if rule.guidance is not None:
+        return rule.guidance.good_example
     return examples.get(rule.code, f"Apply `{rule.slug}` at the SQL node named by the fault.")

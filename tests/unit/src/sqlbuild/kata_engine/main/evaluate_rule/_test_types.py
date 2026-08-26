@@ -11,3 +11,10 @@ class EvaluateRuleTestCase:
     rule_case: RuleCase
     expected_code: str
     expected_path: str
+
+
+@dataclass(frozen=True)
+class EvaluateRuleParityTestCase:
+    description: str
+    rule_case: RuleCase
+    expected_fault_count: int

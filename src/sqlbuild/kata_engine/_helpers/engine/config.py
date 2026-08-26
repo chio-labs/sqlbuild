@@ -12,6 +12,7 @@ from sqlbuild.kata_engine.models import (
     RuleExemption,
     RuleIgnore,
     SelectStarAllow,
+    ThresholdOverride,
 )
 from sqlbuild.kata_engine.types import RuleOptionValue
 
@@ -24,6 +25,14 @@ def load_kata_config(project_dir: Path) -> KataConfig:
         select=_strings(payload.get("select")),
         ignore=_strings(payload.get("ignore")),
         thresholds=_integers(payload.get("thresholds")),
+        threshold_overrides=tuple(
+            ThresholdOverride(
+                paths=_strings(item.get("paths")),
+                thresholds=_integers(item.get("thresholds")),
+                reason=str(item["reason"]),
+            )
+            for item in _tables(payload.get("threshold_overrides"))
+        ),
         rule_options=_rule_options(payload.get("rule_options")),
         rule_exceptions=tuple(
             RuleExemption(

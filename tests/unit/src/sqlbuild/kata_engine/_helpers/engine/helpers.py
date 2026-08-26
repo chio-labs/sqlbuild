@@ -1,33 +1,45 @@
 """Test helpers for custom kata rules."""
 
+from operator import attrgetter
 from pathlib import Path
 
 from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.kata_engine._helpers.engine.catalogue import build_catalogue
 from sqlbuild.kata_engine.constants import MIN_CUSTOM_RULE_TEST_CASES
-from sqlbuild.kata_engine.models import KataCacheConfig, KataConfig
+from sqlbuild.kata_engine.models import KataCacheConfig, KataConfig, KataRule
 from tests.unit.src.sqlbuild.kata_engine._helpers.engine._test_types import CustomRuleTestCase
 from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_project
 
 _MODEL_SQL: str = "WITH final AS (SELECT 1 AS id) SELECT id FROM final"
 
 
-def write_rule(*, root: Path, body: str, enabled_by_default: bool = False) -> Path:
-    path: Path = root / "kata" / "rules" / "custom.py"
-    path.parent.mkdir(parents=True)
+def write_rule(
+    *,
+    root: Path,
+    body: str,
+    enabled_by_default: bool = False,
+    filename: str = "custom.py",
+    code: str = "XSQBKT001",
+    check_name: str = "check",
+    module_import: str = "",
+) -> Path:
+    path: Path = root / "kata" / "rules" / filename
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         "\n".join(
             (
                 "from sqlbuild.kata import RuleContext, kata",
+                module_import,
                 "",
                 "@kata(",
-                '    code="XSQBKT001",',
+                f'    code="{code}",',
                 '    family="project",',
                 '    slug="test-rule",',
                 '    message="test rule fault",',
                 '    remediation="Fix this model at its models/<domain>/ path.",',
                 f"    enabled_by_default={enabled_by_default},",
                 ")",
-                "def check(*, model, ctx: RuleContext):",
+                f"def {check_name}(*, model, ctx: RuleContext):",
                 f"    {body}",
                 "",
             )
@@ -35,6 +47,13 @@ def write_rule(*, root: Path, body: str, enabled_by_default: bool = False) -> Pa
         encoding="utf-8",
     )
     return path.relative_to(root)
+
+
+def load_custom_rule(*, root: Path, configured_path: Path) -> KataRule:
+    config: KataConfig = KataConfig(rule_paths=(configured_path.as_posix(),))
+    catalogue: tuple[KataRule, ...] = build_catalogue(config=config, project_dir=root)
+    custom_rules: tuple[KataRule, ...] = tuple(filter(attrgetter("custom"), catalogue))
+    return custom_rules[0]
 
 
 def custom_rule_inputs(

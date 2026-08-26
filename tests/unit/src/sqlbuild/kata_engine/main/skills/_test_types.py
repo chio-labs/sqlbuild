@@ -18,3 +18,19 @@ class SkillDivergenceTestCase:
     selected_rule: str
     local_edit: str
     expected_error: str
+
+
+@dataclass(frozen=True)
+class SkillGuidanceTestCase:
+    description: str
+    expected_fragment: str
+    absent_fragment: str
+
+
+@dataclass(frozen=True)
+class SkillInstallationTestCase:
+    description: str
+    selected_rule: str
+    changed_rule: str
+    expected_error: str
+    expected_fresh: bool = False
