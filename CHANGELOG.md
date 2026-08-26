@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.60.0](https://github.com/chio-labs/sqlbuild/compare/v0.59.0...v0.60.0) (2026-08-26)
+
+
+### Features
+
+* **scopes:** add compiler-enforced declaration scopes ([#366](https://github.com/chio-labs/sqlbuild/issues/366)) ([3bcd274](https://github.com/chio-labs/sqlbuild/commit/3bcd274ccdda48d366ce4ea18eb1d3abbf670315))
+
 ## [0.59.0](https://github.com/chio-labs/sqlbuild/compare/v0.58.0...v0.59.0) (2026-08-26)
 
 
