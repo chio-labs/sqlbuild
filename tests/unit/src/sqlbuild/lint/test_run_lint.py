@@ -34,6 +34,11 @@ PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n'
             expected_fault_codes=(),
         ),
         LintProjectTestCase(
+            description="schema declarations are discovered for linting",
+            files={"schemas/order.sql": "SCHEMA (name order, columns (id (type INTEGER)));\n"},
+            expected_fault_codes=(),
+        ),
+        LintProjectTestCase(
             description="sqruff engine violations are reported when enabled",
             extra_files={"sqlbuild_project.toml": PROJECT_TOML},
             files={
@@ -62,7 +67,7 @@ def test_given_synthetic_project_when_linting_then_results_match_expected(
         project_dir=tmp_path,
         config=LintConfig(sqruff_enabled=test_case.sqruff_enabled),
     )
-    assert result.files_checked == len(test_case.files)
+    assert result.files_checked == test_case.expected_files_checked
     codes: set = {(violation.file_path.name, violation.code) for violation in result.violations}
     expected_code: tuple[str, str]
     for expected_code in test_case.expected_fault_codes:

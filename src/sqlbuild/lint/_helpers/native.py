@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sqlbuild.compiler.discovery._helpers.sql.model_files import (
-    parse_header_values,  # noqa: FFL102 - lint owns header rules and reuses the compiler's header parser
+    parse_header_values,  # noqa: FFL102 - the compiler owns the canonical native header grammar
 )
 from sqlbuild.lint.constants import (
     DESCRIPTION_HEADER_KINDS,
@@ -20,7 +20,6 @@ from sqlbuild.lint.constants import (
     RULE_LEADING_COMMENT_DESCRIPTION,
     VIOLATION_SEVERITY_FAULT,
 )
-from sqlbuild.lint.exceptions import LintError
 from sqlbuild.lint.models import HeaderSpan, LintConfig, LintViolation
 
 _QUOTE_CHARACTERS: frozenset[str] = frozenset({"'", '"'})
@@ -32,7 +31,6 @@ _LINE_COMMENT_PREFIX: str = "--"
 _DESCRIPTION_KEY: str = "description"
 _DESCRIPTION_SENTINEL_PATH: str = "<lint>"
 _HEADER_INDENT: str = "  "
-_FUNCTION_KIND: str = "FUNCTION"
 
 
 @dataclass(frozen=True)
@@ -154,21 +152,11 @@ def _lint_header_values(
 
 def _parse_header_values(*, kind: str, header_text: str) -> dict[str, object]:
     inner: str = _inner_header_text(header_text=header_text)
-    if kind in (HEADER_KIND_MODEL, _FUNCTION_KIND):
-        return parse_header_values(
-            header=inner,
-            file_path=Path(_DESCRIPTION_SENTINEL_PATH),
-            statement_name=kind,
-        )
-    import yaml
-
-    stripped: str = inner.strip()
-    if not stripped:
-        return {}
-    parsed: object = yaml.safe_load(f"{{{stripped}}}")
-    if not isinstance(parsed, dict):
-        raise LintError("header must be a mapping")
-    return dict(parsed)
+    return parse_header_values(
+        header=inner,
+        file_path=Path(_DESCRIPTION_SENTINEL_PATH),
+        statement_name=kind,
+    )
 
 
 def _lint_header_whitespace(

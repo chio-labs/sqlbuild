@@ -271,8 +271,8 @@ SELECT 1
 """
 
 _VIRTUAL_SCENARIO_CUSTOMER_REVENUE_SQL: str = """SCENARIO (
-  description: "Customer revenue includes seed-backed waffle categories",
-  tags: ["virtual", "example"]
+  description "Customer revenue includes seed-backed waffle categories",
+  tags ["virtual", "example"]
 );
 
 WITH
