@@ -7,7 +7,11 @@ from bisect import bisect_right
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlbuild.compiler.discovery.exceptions import ModelHeaderSyntaxError, ModelSqlParseError
+from sqlbuild.compiler.discovery.exceptions import (
+    DiscoveryError,
+    ModelHeaderSyntaxError,
+    ModelSqlParseError,
+)
 from sqlbuild.compiler.discovery.models import NamedSqlHookEntry, PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SourceLocation
@@ -461,7 +465,13 @@ def _keyword_at(*, sql: str, keyword: str, index: int) -> bool:
     )
 
 
-def parse_header_values(*, header: str, file_path: Path, statement_name: str) -> dict[str, object]:
+def parse_header_values(
+    *,
+    header: str,
+    file_path: Path,
+    statement_name: str,
+    error_class: type[DiscoveryError] = ModelSqlParseError,
+) -> dict[str, object]:
     """Parse one SQLBuild parenthesized header into nested Python values."""
 
     try:
@@ -470,7 +480,7 @@ def parse_header_values(*, header: str, file_path: Path, statement_name: str) ->
     except ModelSqlParseError:
         raise
     except ModelHeaderSyntaxError as error:
-        raise ModelSqlParseError(
+        raise error_class(
             f"{statement_name}(...) in '{file_path}' contains invalid SQLBuild header syntax: "
             f"{error}"
         ) from error

@@ -1,4 +1,4 @@
-SCENARIO (description: "Mocked dbt ref scenario", tags: ["dbt_ref"]);
+SCENARIO (description "Mocked dbt ref scenario", tags ["dbt_ref"]);
 
 WITH
 __dbt_ref__analytics__fact_orders AS (

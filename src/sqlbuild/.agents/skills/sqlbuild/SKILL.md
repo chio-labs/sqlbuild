@@ -256,8 +256,8 @@ Beyond the multi-model tests shown above, SQLBuild runs end-to-end scenario test
 
 ```sql
 SCENARIO (
-  description: "Daily revenue includes only successful payments",
-  tags: ["revenue"]
+  description "Daily revenue includes only successful payments",
+  tags ["revenue"]
 );
 
 WITH
@@ -624,7 +624,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Macros as test helpers | Tests are SQL - macros work as reusable fixture generators | No (YAML stubs) | No |
 | E2E scenario tests | Fixture worlds with real graph execution | No | No |
 | Local E2E replay | Capture from warehouse, replay in DuckDB | No | No |
-| Macro / UDF / table function tests | `TEST(mode: macro/udf/table_fn)` | No | No |
+| Macro / UDF / table function tests | `TEST(mode macro)`, `TEST(mode udf)`, or `TEST(mode table_fn)` | No | No |
 | Zero-row assertions | `__assert__` CTEs in tests and scenarios | No | No |
 
 #### Audits
@@ -2867,7 +2867,7 @@ SQLBuild discovers `.sql` files recursively under `hooks/sql/`. Each file define
 
 ```sql
 HOOK (
-  description: "Grant a warehouse role access to the model relation"
+  description "Grant a warehouse role access to the model relation"
 );
 
 GRANT SELECT ON @relation TO @role
@@ -2900,6 +2900,8 @@ MODEL (
 SELECT 1 AS id
 ```
 
+SQLBuild resource-header fields use native `key value` syntax, as in `TEST (mode macro)`, `SCENARIO (tags ["revenue"])`, `AUDIT (severity error)`, and `HOOK (description "...")`. The `relation: ...` and `role: ...` entries above intentionally retain `key: value` syntax because they are nested named arguments to the `sql(...)` hook call, not resource-header fields. The same distinction applies to named arguments passed to `python(...)`.
+
 ### SQL hook arguments
 
 Named SQL hooks declare parameters by using them in the SQL body. Arguments are supplied as named values in `sql("name", args...)`:
@@ -2913,7 +2915,7 @@ Named SQL hooks declare parameters by using them in the SQL body. Arguments are 
 
 ```sql
 HOOK (
-  description: "Record access configuration"
+  description "Record access configuration"
 );
 
 INSERT INTO audit.access_log (relation_name, role_name)
@@ -5247,7 +5249,10 @@ Singular audits are standalone SQL files under `audits/` (outside the `generic/`
 
 ```sql
 -- audits/orders_have_payments.sql
-AUDIT ();
+AUDIT (
+  name "completed orders have payments",
+  severity error
+);
 
 SELECT o.order_id
 FROM __ref("fact_orders") o
@@ -5605,7 +5610,7 @@ By default, `TEST()` runs in model mode - mocking sources/refs and comparing mod
 Test macro output by calling the macro in `__macro_actual__` and comparing against `__macro_expected__`:
 
 ```sql
-TEST (mode: macro, name: "calculates line total cents");
+TEST (mode macro, name "calculates line total cents");
 
 WITH
 input_values AS (
@@ -5628,7 +5633,7 @@ Macros are compile-time code, so macro tests expand the macro at compile time an
 Test scalar UDFs by calling them in `__udf_actual__` and comparing against `__udf_expected__`:
 
 ```sql
-TEST (mode: udf, name: "detects completed orders");
+TEST (mode udf, name "detects completed orders");
 
 WITH
 input_values AS (
@@ -5657,7 +5662,7 @@ UDFs are warehouse objects, so the function is created before the test runs. Dur
 Test table functions by calling them in `__table_fn_actual__` and comparing against `__table_fn_expected__`:
 
 ```sql
-TEST (mode: table_fn, name: "returns customer orders");
+TEST (mode table_fn, name "returns customer orders");
 
 WITH
 __table_fn_actual__ AS (
@@ -5692,7 +5697,7 @@ CTE prefixes from other modes are not allowed. For example, `__source__` in a ma
 A single test file can contain multiple `TEST()` blocks. Each block must have a unique `name`:
 
 ```sql
-TEST (name: "completed orders only");
+TEST (name "completed orders only");
 
 WITH
 __source__raw__orders AS (
@@ -5703,7 +5708,7 @@ __expected__stg_orders AS (
 )
 SELECT 1
 
-TEST (name: "cancelled orders excluded");
+TEST (name "cancelled orders excluded");
 
 WITH
 __source__raw__orders AS (
@@ -5793,8 +5798,8 @@ Each file has a `SCENARIO()` header followed by CTEs that define inputs, expecte
 
 ```sql
 SCENARIO (
-  description: "Daily revenue includes only successful payments",
-  tags: ["revenue", "example"]
+  description "Daily revenue includes only successful payments",
+  tags ["revenue", "example"]
 );
 
 WITH

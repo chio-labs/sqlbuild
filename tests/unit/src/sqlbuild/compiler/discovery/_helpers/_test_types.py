@@ -276,6 +276,7 @@ class ParseSqlTestFileTestCase:
     expected_names: tuple[str | None, ...]
     expected_sql_bodies: tuple[str, ...]
     expected_test_indexes: tuple[int, ...]
+    expected_header_values: tuple[dict[str, object], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -320,6 +321,7 @@ class ParseSqlAuditFileTestCase:
     expected_names: tuple[str | None, ...]
     expected_sql_bodies: tuple[str, ...]
     expected_audit_indexes: tuple[int, ...]
+    expected_header_values: tuple[dict[str, object], ...] = ()
 
 
 @dataclass(frozen=True)

@@ -484,7 +484,7 @@ def write_snowflake_dbt_scenario_date_trunc_model(*, sqlbuild_project_dir: Path)
     scenarios_dir: Path = sqlbuild_project_dir / "tests" / "scenarios"
     scenarios_dir.mkdir(parents=True, exist_ok=True)
     scenarios_dir.joinpath("dbt_event_rollup.sql").write_text(
-        'SCENARIO (description: "dbt date_trunc scenario", tags: ["dbt"]);\n\n'
+        'SCENARIO (description "dbt date_trunc scenario", tags ["dbt"]);\n\n'
         "WITH\n"
         "__source__raw__events AS (\n"
         "  SELECT 10 AS customer_id,"

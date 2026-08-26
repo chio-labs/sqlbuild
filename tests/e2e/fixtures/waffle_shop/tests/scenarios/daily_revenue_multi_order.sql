@@ -1,6 +1,6 @@
 SCENARIO (
-  description: "Daily revenue aggregates multiple successful orders",
-  tags: ["revenue", "example"]
+  description "Daily revenue aggregates multiple successful orders",
+  tags ["revenue", "example"]
 );
 
 WITH

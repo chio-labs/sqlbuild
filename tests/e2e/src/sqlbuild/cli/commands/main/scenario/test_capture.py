@@ -217,7 +217,7 @@ def test_given_local_type_override_when_running_capture_then_manifest_uses_overr
         '"DECIMAL(*,*)" = "DECIMAL({1}, {2})"\n'
     )
     repo_files["tests/scenarios/order_totals_pass.sql"] = (
-        'SCENARIO (description: "Order totals scenario", tags: ["scenario"]);\n\n'
+        'SCENARIO (description "Order totals scenario", tags ["scenario"]);\n\n'
         "WITH\n"
         "__source__raw_orders AS (\n"
         "  SELECT\n"

@@ -323,17 +323,17 @@ def _classify_model_sql_test_ctes(
         if cte.name in {MACRO_ACTUAL_TEST_CTE_NAME, MACRO_EXPECTED_TEST_CTE_NAME}:
             raise CompileInputError(
                 f"SQL test '{file_label}' is mode '{DEFAULT_SQL_TEST_MODE.value}' but defines "
-                f"macro-test CTE '{cte.name}'; use TEST (mode: {SqlTestMode.MACRO.value})"
+                f"macro-test CTE '{cte.name}'; use TEST (mode {SqlTestMode.MACRO.value})"
             )
         if cte.name in {UDF_ACTUAL_TEST_CTE_NAME, UDF_EXPECTED_TEST_CTE_NAME}:
             raise CompileInputError(
                 f"SQL test '{file_label}' is mode '{DEFAULT_SQL_TEST_MODE.value}' but defines "
-                f"UDF-test CTE '{cte.name}'; use TEST (mode: {SqlTestMode.UDF.value})"
+                f"UDF-test CTE '{cte.name}'; use TEST (mode {SqlTestMode.UDF.value})"
             )
         if cte.name in {TABLE_FN_ACTUAL_TEST_CTE_NAME, TABLE_FN_EXPECTED_TEST_CTE_NAME}:
             raise CompileInputError(
                 f"SQL test '{file_label}' is mode '{DEFAULT_SQL_TEST_MODE.value}' but defines "
-                f"table_fn-test CTE '{cte.name}'; use TEST (mode: {SqlTestMode.TABLE_FN.value})"
+                f"table_fn-test CTE '{cte.name}'; use TEST (mode {SqlTestMode.TABLE_FN.value})"
             )
         if cte.name.startswith(MACRO_TEST_CTE_PREFIX):
             macro_name: str = _require_prefixed_name(

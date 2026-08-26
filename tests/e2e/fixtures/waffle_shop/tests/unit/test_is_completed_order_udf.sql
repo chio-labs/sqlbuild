@@ -1,4 +1,4 @@
-TEST (mode: udf, name: "detects completed orders");
+TEST (mode udf, name "detects completed orders");
 
 WITH
 input_values AS (

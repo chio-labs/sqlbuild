@@ -1,4 +1,4 @@
-TEST (mode: table_fn, name: "returns customer orders");
+TEST (mode table_fn, name "returns customer orders");
 
 WITH
 __table_fn_actual__ AS (

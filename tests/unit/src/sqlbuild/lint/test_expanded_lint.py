@@ -12,6 +12,7 @@ from sqlbuild.lint.models import LintConfig, LintRunResult
 from tests.unit.src.sqlbuild.lint._test_types import (
     ExpandedLintTestCase,
     LintCompileFailureTestCase,
+    LintProjectTestCase,
 )
 
 PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n'
@@ -122,3 +123,40 @@ def test_given_uncompilable_project_when_linting_then_it_fails_clearly(
     with pytest.raises(ProjectCompileError) as error:
         _ = run_lint(project_dir=tmp_path, config=LintConfig(sqruff_enabled=True))
     assert test_case.expected_message_fragment in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LintProjectTestCase(
+            description="canonical scenario header is accepted by lint and compile",
+            files={
+                "sqlbuild_project.toml": PROJECT_TOML,
+                "tests/scenarios/example.sql": (
+                    'SCENARIO (description "Contains: a colon", tags [yes, on]);\nSELECT 1\n'
+                ),
+            },
+            sqruff_enabled=True,
+            expected_fault_codes=(),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_canonical_scenario_header_when_linting_and_compiling_then_both_accept_it(
+    tmp_path: Path,
+    test_case: LintProjectTestCase,
+) -> None:
+    for relative_path, contents in test_case.files.items():
+        target: Path = tmp_path / relative_path
+        _ = target.parent.mkdir(parents=True, exist_ok=True)
+        _ = target.write_text(contents, encoding="utf-8")
+
+    result: LintRunResult = run_lint(
+        project_dir=tmp_path,
+        config=LintConfig(sqruff_enabled=test_case.sqruff_enabled),
+    )
+
+    assert (
+        tuple((violation.file_path.as_posix(), violation.code) for violation in result.violations)
+        == test_case.expected_fault_codes
+    )

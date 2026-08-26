@@ -23,9 +23,9 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
         ScanHeadersTestCase(
             description="finds scenario test and audit headers in one file",
             contents=(
-                'SCENARIO (description: "d");\nSELECT 1\n'
+                'SCENARIO (description "d");\nSELECT 1\n'
                 "TEST ();\nSELECT 2\n"
-                'AUDIT (name: "a");\nSELECT 3\n'
+                'AUDIT (name "a");\nSELECT 3\n'
             ),
             expected_kinds=("SCENARIO", "TEST", "AUDIT"),
         ),

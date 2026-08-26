@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_model_sql
+from sqlbuild.compiler.discovery._helpers.sql.scenarios import parse_sql_scenario_file
+from sqlbuild.compiler.discovery.exceptions import SqlScenarioParseError
 from sqlbuild.lint._helpers.headers import scan_headers
 from sqlbuild.lint._helpers.native import format_native_headers, lint_native_headers
 from sqlbuild.lint.models import LintConfig
@@ -34,13 +36,13 @@ DEFAULT_CONFIG: LintConfig = LintConfig()
         ),
         LintNativeTestCase(
             description="scenario without description does not fault",
-            contents='SCENARIO (tags: ["x"]);\nSELECT 1\n',
+            contents='SCENARIO (tags ["x"]);\nSELECT 1\n',
             expected_codes=(),
         ),
         LintNativeTestCase(
             description="long single-line scenario description passes",
             contents=(
-                'SCENARIO (description: "'
+                'SCENARIO (description "'
                 + " ".join(f"word{index}" for index in range(400))
                 + '");\nSELECT 1\n'
             ),
@@ -49,8 +51,8 @@ DEFAULT_CONFIG: LintConfig = LintConfig()
         LintNativeTestCase(
             description="oversized multiline scenario description faults",
             contents=(
-                'SCENARIO (description: "'
-                + "\\n ".join(f"line {index}" for index in range(11))
+                'SCENARIO (description "'
+                + "\n ".join(f"line {index}" for index in range(11))
                 + '");\nSELECT 1\n'
             ),
             expected_codes=("description-length",),
@@ -58,6 +60,11 @@ DEFAULT_CONFIG: LintConfig = LintConfig()
         LintNativeTestCase(
             description="broken model header faults with parse error",
             contents="MODEL (\n  materialized table,\n  description\n);\nSELECT 1\n",
+            expected_codes=("header-parse",),
+        ),
+        LintNativeTestCase(
+            description="legacy scenario colon syntax faults with parse error",
+            contents='SCENARIO (description: "legacy");\nSELECT 1\n',
             expected_codes=("header-parse",),
         ),
     ],
@@ -74,6 +81,38 @@ def test_given_contents_when_linting_then_codes_match_expected(
         config=DEFAULT_CONFIG,
     )
     assert tuple(violation.code for violation in violations) == test_case.expected_codes
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LintNativeTestCase(
+            description="legacy scenario header is rejected by lint and compile",
+            contents='SCENARIO (description: "legacy");\nSELECT 1\n',
+            expected_codes=("header-parse",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_legacy_scenario_header_when_linting_and_compiling_then_both_reject_it(
+    test_case: LintNativeTestCase,
+) -> None:
+    headers: tuple = scan_headers(contents=test_case.contents)
+
+    violations: tuple = lint_native_headers(
+        contents=test_case.contents,
+        file_path=FILE_PATH,
+        headers=headers,
+        config=DEFAULT_CONFIG,
+    )
+
+    assert tuple(violation.code for violation in violations) == test_case.expected_codes
+    with pytest.raises(SqlScenarioParseError, match="unexpected ':' after key 'description'"):
+        parse_sql_scenario_file(
+            contents=test_case.contents,
+            file_path=Path("tests/scenarios/example.sql"),
+            relative_path=Path("tests/scenarios/example.sql"),
+        )
 
 
 @pytest.mark.parametrize(

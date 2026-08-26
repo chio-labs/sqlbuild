@@ -1,6 +1,6 @@
 SCENARIO (
-  description: "Daily revenue includes only successful payments",
-  tags: ["revenue", "example"]
+  description "Daily revenue includes only successful payments",
+  tags ["revenue", "example"]
 );
 
 WITH
