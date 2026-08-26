@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.62.0](https://github.com/chio-labs/sqlbuild/compare/v0.61.0...v0.62.0) (2026-08-26)
+
+
+### Features
+
+* **tests:** add typed SQL test parameterization ([#370](https://github.com/chio-labs/sqlbuild/issues/370)) ([2b0f2d1](https://github.com/chio-labs/sqlbuild/commit/2b0f2d14ab1b21e74b30555175af50111f306e27))
+
 ## [0.61.0](https://github.com/chio-labs/sqlbuild/compare/v0.60.0...v0.61.0) (2026-08-26)
 
 
