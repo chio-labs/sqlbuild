@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import inspect
 import json
 import pickle
@@ -16,9 +15,12 @@ import sqlbuild._kata_native as _kata_native
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
+from sqlbuild.kata_engine._helpers.engine.custom_rule_evidence import (
+    custom_rule_implementation_fingerprint,
+    custom_rule_test_evidence,
+)
 from sqlbuild.kata_engine.constants import (
     CUSTOM_HOST_RUNTIME_VERSION,
-    EVALUATE_RULE_CALL,
     KATA_NATIVE_API_VERSION,
 )
 from sqlbuild.kata_engine.exceptions import KataError
@@ -115,7 +117,7 @@ def native_catalogue() -> tuple[dict[str, object], ...]:
 
 
 def native_selected_codes(
-    *, config: KataConfig, catalogue: tuple[KataRule, ...]
+    *, config: KataConfig, catalogue: tuple[KataRule, ...], project_dir: Path
 ) -> tuple[str, ...]:
     """Resolve the active policy through the native Fensu adapter."""
 
@@ -130,8 +132,10 @@ def native_selected_codes(
                 "message": rule.message,
                 "remediation": rule.remediation,
                 "enabled_by_default": rule.enabled_by_default,
-                "implementation_fingerprint": _rule_implementation_fingerprint(rule),
-                "source": rule.source,
+                "implementation_fingerprint": custom_rule_implementation_fingerprint(
+                    rule=rule, project_dir=project_dir
+                ),
+                **_custom_rule_source_payload(rule=rule, project_dir=project_dir),
                 "project_wide": rule.project_wide,
                 "check_name": getattr(rule.check, "__name__", ""),
                 "test_case_count": 0,
@@ -258,12 +262,6 @@ def _constant_payload(declaration: ConstantDeclaration) -> dict[str, object]:
 
 
 def _custom_rule_payload(*, rule: KataRule, project_dir: Path) -> dict[str, object]:
-    source: str | None = rule.source
-    if source is not None:
-        source_path: Path = Path(source).resolve()
-        root: Path = project_dir.resolve()
-        if source_path.is_relative_to(root):
-            source = source_path.relative_to(root).as_posix()
     check_name: str = getattr(rule.check, "__name__", "")
     return {
         "code": rule.code,
@@ -272,30 +270,34 @@ def _custom_rule_payload(*, rule: KataRule, project_dir: Path) -> dict[str, obje
         "message": rule.message,
         "remediation": rule.remediation,
         "enabled_by_default": rule.enabled_by_default,
-        "implementation_fingerprint": _rule_implementation_fingerprint(rule),
-        "source": source,
+        "implementation_fingerprint": custom_rule_implementation_fingerprint(
+            rule=rule, project_dir=project_dir
+        ),
+        **_custom_rule_source_payload(rule=rule, project_dir=project_dir),
         "project_wide": rule.project_wide,
         "check_name": check_name,
-        "test_case_count": _custom_rule_test_case_count(
-            project_dir=project_dir, check_name=check_name
-        ),
+        "test_case_count": len(custom_rule_test_evidence(rule=rule, project_dir=project_dir)),
     }
 
 
-def _rule_implementation_fingerprint(rule: KataRule) -> str:
-    digest: Any = hashlib.sha256(inspect.getsource(rule.check).encode())
-    if rule.source is not None:
-        digest.update(Path(rule.source).read_bytes())
-    return digest.hexdigest()
-
-
-def _custom_rule_test_case_count(*, project_dir: Path, check_name: str) -> int:
-    count: int = 0
-    for path in project_dir.glob("tests/**/*.py"):
-        source: str = path.read_text(encoding="utf-8")
-        if check_name in source and EVALUATE_RULE_CALL in source:
-            count += source.count("RuleCase(")
-    return count
+def _custom_rule_source_payload(*, rule: KataRule, project_dir: Path) -> dict[str, object]:
+    source: str | None = rule.source
+    if source is not None:
+        source_path: Path = Path(source).resolve()
+        root: Path = project_dir.resolve()
+        if source_path.is_relative_to(root):
+            source = source_path.relative_to(root).as_posix()
+    try:
+        source_line: int = inspect.getsourcelines(rule.check)[1]
+    except (OSError, TypeError):
+        source_line = 1
+    check_owner: str = getattr(rule.check, "__qualname__", getattr(rule.check, "__name__", ""))
+    return {
+        "source": source,
+        "source_line": source_line,
+        "source_column": 1,
+        "owner": f"{source or 'kata'}:{check_owner}",
+    }
 
 
 def _custom_host_payload(

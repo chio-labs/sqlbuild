@@ -44,6 +44,7 @@ fn validate_raw(value: &toml::Value) -> Result<(), String> {
         "select",
         "ignore",
         "thresholds",
+        "threshold_overrides",
         "rule_options",
         "rule_exceptions",
         "rule_ignores",
@@ -70,6 +71,10 @@ fn validate_raw(value: &toml::Value) -> Result<(), String> {
         ("rule_exceptions", ["rule", "path", "reason"].as_slice()),
         ("rule_ignores", ["rules", "paths", "reason"].as_slice()),
         ("select_star_allow", ["paths", "reason"].as_slice()),
+        (
+            "threshold_overrides",
+            ["paths", "thresholds", "reason"].as_slice(),
+        ),
     ] {
         let Some(entries) = table.get(key).and_then(toml::Value::as_array) else {
             continue;
@@ -100,6 +105,26 @@ pub(crate) fn validate(config: &KataConfig) -> Result<(), String> {
         .find(|key| !THRESHOLDS.contains(&key.as_str()))
     {
         return Err(format!("unknown kata thresholds: {name}"));
+    }
+    for entry in &config.threshold_overrides {
+        if entry.paths.is_empty() || entry.thresholds.is_empty() || entry.reason.trim().is_empty() {
+            return Err("kata.threshold_overrides requires paths, thresholds, and reason".into());
+        }
+        if let Some(name) = entry
+            .thresholds
+            .keys()
+            .find(|key| !["min_audits_per_model", "min_tests_per_model"].contains(&key.as_str()))
+        {
+            return Err(format!("unknown kata threshold override: {name}"));
+        }
+        for pattern in &entry.paths {
+            if pattern.trim().is_empty() {
+                return Err("kata threshold override paths must be non-empty globs".into());
+            }
+            globset::Glob::new(pattern).map_err(|error| {
+                format!("invalid kata threshold override path {pattern}: {error}")
+            })?;
+        }
     }
     let grammar = ProductRuleCodeGrammar::new("SQBK", "XSQBK")?;
     for selector in config.select.iter().chain(&config.ignore) {

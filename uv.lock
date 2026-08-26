@@ -4155,6 +4155,7 @@ version = "0.56.2"
 source = { editable = "." }
 dependencies = [
     { name = "duckdb" },
+    { name = "filelock" },
     { name = "polyglot-sql" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
@@ -4226,6 +4227,7 @@ requires-dist = [
     { name = "databricks-sql-connector", extras = ["pyarrow"], marker = "extra == 'databricks'", specifier = ">=4.1.2" },
     { name = "dlt", extras = ["duckdb", "filesystem", "sql-database"], marker = "extra == 'dlt'", specifier = ">=1.28.0,<2" },
     { name = "duckdb", specifier = ">=1.3.2" },
+    { name = "filelock", specifier = ">=3.20.3" },
     { name = "google-cloud-bigquery", marker = "extra == 'bigquery'", specifier = ">=3.37.0" },
     { name = "ingestr", marker = "extra == 'ingestr'", specifier = ">=1.0.0" },
     { name = "jinja2", marker = "extra == 'dbt'", specifier = ">=3.1" },

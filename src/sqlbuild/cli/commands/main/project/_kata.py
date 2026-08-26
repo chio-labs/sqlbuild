@@ -51,7 +51,7 @@ def run_kata_command(
         if not matching:
             print(f"Unknown kata rule: {request.rule_code}")
             return 2
-        print(format_rule(rule=matching[0]))
+        print(format_rule(rule=matching[0], config=config))
         return 0
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=base_dir)
     adapter: BaseAdapter = resolve_adapter(

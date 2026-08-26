@@ -2,7 +2,9 @@ use crate::configuration::main::validate as config;
 use crate::constants::{API_VERSION, TARGET_DIRECTORY};
 use crate::engine::_helpers::cache::Cache;
 use crate::models::{EvaluateRequest, EvaluateResponse, Fault, RuleMetadata};
-use crate::rules::main::{assemble_catalogue, evaluate as rules, fingerprint, select};
+use crate::rules::main::{
+    assemble_catalogue, evaluate as rules, fingerprint, resolve_threshold_overrides, select,
+};
 use crate::rules::models::ModelEvaluationRequest;
 use fensu_policy::lifecycle::constants::ANALYSIS_BATCH_SCHEMA_VERSION;
 use fensu_policy::lifecycle::errors::LifecycleError;
@@ -37,6 +39,8 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
         .map(|rule| (rule.code.clone(), *rule))
         .collect();
     let custom_faults = evaluate_custom_rules(&request, &selected_by_code)?;
+    let threshold_overrides =
+        resolve_threshold_overrides::resolve_threshold_overrides(&request.config)?;
     if selected.is_empty() {
         validate_exception_paths(&request)?;
         let _ = suppress_faults(&request, &selected, Vec::new())?;
@@ -94,6 +98,7 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
             selected: &selected_by_code,
             request: &request,
             is_anchor: model_index == 0,
+            threshold_overrides: &threshold_overrides,
         })?;
         if let (Some(store), Some(identity)) = (&cache, &fingerprint) {
             store.put(&model.relative_path, identity, &model_faults)?;
