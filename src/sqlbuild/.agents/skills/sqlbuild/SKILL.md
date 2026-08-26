@@ -40,6 +40,7 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/kata`
 - `concepts/kata/custom-rules`
 - `concepts/enums-and-constants`
+- `concepts/declaration-scopes`
 - `concepts/interpolation`
 - `concepts/macros`
 - `concepts/functions`
@@ -84,6 +85,7 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `cli/playground`
 - `cli/skills`
 - `cli/compile`
+- `cli/scope`
 - `cli/kata`
 - `cli/plan`
 - `cli/build`
@@ -645,6 +647,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | SQL architecture policy | Opt-in Kata rules over compiled models with coded faults, remediations, suppressions, and custom rules | Project conventions through packages and external tooling | Built-in audits and external linting |
 | SQL transpilation | For local E2E replay into DuckDB | No | For cross-dialect model execution |
 | Python macros | `@macro()` syntax | No (Jinja only) | SQLMesh macro syntax |
+| Compiler-enforced declaration scopes | Global, inherited, local, and model-private tiers with offline `sqb scope` inspection | No lexical declaration scopes | No lexical declaration scopes |
 | Jinja support | No (Python macros instead) | Yes (core templating) | Yes |
 
 #### Incremental
@@ -1008,6 +1011,8 @@ SQLBuild projects are configured with two files in the project root:
 
 - **`sqlbuild_project.toml`** - shared project configuration, committed to version control
 - **`sqlbuild_local.toml`** - local developer overrides, gitignored
+
+Macro, constant, and enum visibility is not configured in either file. Declaration scopes use filesystem conventions; see [Declaration Scopes](/concepts/declaration-scopes).
 
 Most projects need only one committed `sqlbuild_project.toml`. Define shared targets such
 as `dev` and `prod` there, including clone policies and team-wide defaults. Do not maintain
@@ -2008,6 +2013,8 @@ sources:
 
 Expression sources are resolved at compile time. They're the escape hatch for anything the framework doesn't natively model: external tables, warehouse-specific syntax, function calls, or any other relation type that doesn't fit a standard table reference.
 
+Macros, constants, and enums in an inline expression resolve from the source definition's authored path under `sources/`. Scoped declaration directories beside or above one source definition do not leak into sibling source paths. See [Declaration Scopes](/concepts/declaration-scopes).
+
 ### Source audits
 
 Sources support the same audit system as models. Audits attached to sources run before any dependent model is built:
@@ -3001,7 +3008,7 @@ An inline hook accepts exactly one quoted SQL string and no additional arguments
 
 ### Compile-time context
 
-Both named and inline SQL hooks are compiled in the model's context. They support:
+Both named and inline SQL hooks receive the invoking model's runtime context. They support:
 
 - Project variables such as `@@audit_schema`
 - Environment variables such as `@@ENV:DEPLOY_ROLE`
@@ -3009,7 +3016,9 @@ Both named and inline SQL hooks are compiled in the model's context. They suppor
 - Enums and constants such as `@enum("role").ANALYST` and `@const("retention_days")`
 - Python macros such as `@grant_target("@@CTX:destination.qualified")`
 
-For named hooks, SQLBuild first substitutes `@name` and `@'name'` arguments into the hook body. It then resolves interpolation, declarations, and macros in the calling model's effective context. A supplied argument such as `relation: "@@CTX:destination.qualified"` therefore resolves to that model's final target-overridden destination.
+For named hooks, SQLBuild first substitutes `@name` and `@'name'` arguments into the hook body. A supplied argument such as `relation: "@@CTX:destination.qualified"` therefore resolves to the invoking model's final target-overridden destination.
+
+Declaration visibility is lexical: an inline hook resolves macros, constants, and enums from the model file's path, while a named hook resolves them from its definition path under `hooks/sql/`. See [Declaration Scopes](/concepts/declaration-scopes#which-path-resolves-sql).
 
 `${...}` config-template syntax is not valid in SQL hooks.
 
@@ -3636,7 +3645,9 @@ Enums name a fixed domain of string or integer values. Constants name a compiler
 
 ### Public declarations
 
-Public declarations are available throughout the project. Put enum files anywhere under `enums/` and constant files anywhere under `constants/`; both roots are discovered recursively.
+Project-wide declarations are available throughout the project. Put enum files anywhere under the top-level `enums/` root and constant files anywhere under the top-level `constants/` root; both roots are discovered recursively.
+
+For narrower visibility, use inherited `_enums` and `_constants` directories or exact-directory `_local_enums` and `_local_constants` directories below an authored resource root. Public names remain globally unique within each declaration kind and cannot shadow one another. An enum and a constant may use the same name because their namespaces are independent. See [Declaration Scopes](/concepts/declaration-scopes) for directory placement, composition, and resource-path rules.
 
 ```sql
 -- enums/market/market_type.sql
@@ -3837,7 +3848,7 @@ Allowed values are `value_list` and `array`. Rendering mode is resolved in this 
 2. Project `[constants].collection_rendering`
 3. SQLBuild's `value_list` default
 
-The project default applies to both public and model-local collection constants. There is no reference-site override: one declaration has one representation throughout a compilation. Changing the resolved mode changes dependent rendered SQL and query identity.
+The project default applies to project-wide, inherited, local, and model-private collection constants. There is no reference-site override: one declaration has one representation throughout a compilation. Changing the resolved mode changes dependent rendered SQL and query identity.
 
 ### Model-local declarations
 
@@ -3883,7 +3894,7 @@ MODEL (
 );
 ```
 
-The wrapper is distinct from object syntax, so an object with keys named `value` or `render_as` remains unambiguous. Model-local names must start with `_`. They are available only in that model's query and SQL hooks; another model cannot resolve them.
+The wrapper is distinct from object syntax, so an object with keys named `value` or `render_as` remains unambiguous. Model-private names must start with exactly one `_`; names beginning with `__` are reserved for SQLBuild. They are available only in that model's query and inline SQL hooks; named SQL hooks resolve from their own definition paths, and no test, scenario, descendant, or other model can resolve them. Scope introspection qualifies private identities with their owner, such as `constant:model:stg_orders._minimum_value`; this does not change SQL reference syntax.
 
 ### Determinism and identity
 
@@ -3893,7 +3904,7 @@ SQLBuild normalizes constants before rendering and fingerprinting:
 - Set declaration order is ignored; membership is canonicalized, so reordering alone changes neither rendered SQL nor query identity.
 - Object key declaration order is ignored; keys are canonicalized, so reordering alone changes neither rendered SQL nor query identity.
 - Set membership, object values, rendering mode, and an applicable project rendering default all participate in dependent query identity.
-- An unused declaration does not invalidate unrelated models.
+- A declaration change affects the identities of its consumers rather than unrelated models. Completely unused declarations fail project validation.
 
 ### Enum validation
 
@@ -3942,6 +3953,140 @@ This behavior is intentionally independent of whether a particular warehouse sup
 
 Declaration changes participate in change detection. A changed referenced value changes compiled SQL; changed members of an enum-typed contract change the model's contract identity.
 
+## Declaration Scopes
+
+Source: `concepts/declaration-scopes.mdx`
+
+Control where macros, enums, and constants are visible with filesystem-based lexical scopes.
+
+SQLBuild gives macros, enums, and constants lexical visibility based on where they are declared and where SQL is authored. Use a top-level declaration root for project-wide vocabulary, or place an underscored declaration directory beside the SQL that owns narrower vocabulary.
+
+Declaration scopes are a filesystem convention. There is no TOML configuration for them.
+
+### Scope directories
+
+The three declaration kinds use parallel directory names:
+
+| Visibility | Macros | Constants | Enums |
+|------------|--------|-----------|-------|
+| Project-wide | `macros/` | `constants/` | `enums/` |
+| Inherited | `_macros/` | `_constants/` | `_enums/` |
+| Local | `_local_macros/` | `_local_constants/` | `_local_enums/` |
+
+Project-wide declarations remain under the top-level roots and are visible from every supported SQL surface. Inherited and local directories must be below one of these canonical authored roots:
+
+- `models/`
+- `tests/unit/`
+- `tests/scenarios/`
+- `hooks/sql/`
+- `functions/sql/`
+- `audits/`
+- `sources/`
+
+The parent of an underscored declaration directory is its owning path. Files may be organized recursively inside the declaration directory without changing that owning path.
+
+### One path example
+
+Consider this model tree:
+
+```text
+models/
+  _constants/
+    warehouse.sql
+  commerce/
+    _macros/
+      currency.py
+    _constants/
+      statuses.sql
+    _local_enums/
+      grain.sql
+    orders.sql
+    finance/
+      _macros/
+        tax.py
+      revenue.sql
+    fulfillment/
+      shipments.sql
+```
+
+The effective declarations are:
+
+| Authored SQL | Visible declarations |
+|--------------|----------------------|
+| `models/commerce/orders.sql` | Project-wide declarations, `models/_constants/warehouse.sql`, declarations under `models/commerce/_macros/` and `_constants/`, and `models/commerce/_local_enums/grain.sql` |
+| `models/commerce/finance/revenue.sql` | All matching inherited ancestors, including `models/_constants/`, `models/commerce/_macros/`, `models/commerce/_constants/`, and `models/commerce/finance/_macros/`; not the commerce-local enum |
+| `models/commerce/fulfillment/shipments.sql` | The inherited declarations from `models/` and `models/commerce/`; not the sibling `finance/_macros/` or the commerce-local enum |
+
+Inherited declarations compose from every matching ancestor. They do not stop at the nearest declaration directory. Local declarations apply only to resources whose exact parent is the owning path; they are not inherited by descendants.
+
+Declarations never flow upward, sideways into siblings, or out of their canonical authored root. An inaccessible name produces a compile error that distinguishes it from an unknown name.
+
+### Names and shadowing
+
+Every public declaration name must remain globally unique within its kind, including names in inherited and local directories. A narrower declaration cannot shadow a project-wide or ancestor declaration. For example, two public macros named `format_currency` conflict even when their owning paths do not overlap.
+
+Macro, constant, and enum namespaces are independent. A macro, constant, and enum may all use the same public name because references identify the kind: `@format_currency()`, `@const("format_currency")`, and `@enum("format_currency")`.
+
+Model-private constants and enums declared with an underscore name in `MODEL()` are different: they belong only to that model. Private names must begin with exactly one `_`; names beginning with `__` are reserved for SQLBuild. They are available in the owner's query and inline SQL hooks, but not to descendants, tests, scenarios, or any other resource. Their introspection identities include the owner, for example `enum:model:stg_orders._state`, so private names may repeat across models without shadowing.
+
+### Which path resolves SQL
+
+Most SQL resolves declarations from the path where that SQL is authored:
+
+| SQL surface | Scope path |
+|-------------|------------|
+| Model query | Model file |
+| Inline SQL hook | Model file containing `inline_sql(...)` |
+| Named SQL hook | Hook definition under `hooks/sql/` |
+| SQL function | Function definition under `functions/sql/` |
+| Singular or generic audit | Audit definition under `audits/` |
+| Inline source expression | Source definition under `sources/` |
+| Unit test | Test file under `tests/unit/` |
+| Scenario | Scenario file under `tests/scenarios/` |
+
+Named hook arguments are still supplied by the model invocation, and hook context such as `@@CTX:destination.qualified` still describes that model. The declarations and macros used by the named hook body, however, resolve from the hook definition path. Inline hooks resolve from the model path because that is where their SQL is authored.
+
+Tests and scenarios resolve macros and their directly visible enums and constants from the authored test or scenario path. Each explicit `__expected__<model>` relationship additionally grants the public enums and constants visible to that expected model. Grants are the deterministic union across all expected models and retain per-model provenance. They do not grant macros or model-private declarations, and filenames never imply a relationship.
+
+This lets expected SQL use the same public domain vocabulary as the model it describes without pretending that the test file lives in the model directory. Path visibility and relationship visibility remain separate facts.
+
+### Macro lexical scope
+
+Macro calls written directly in a model, hook, function, audit, source, test, or scenario resolve from that current author's path. This includes nested argument calls:
+
+```sql
+@format_money(@net_amount("amount_cents"))
+```
+
+Both `format_money` and `net_amount` are selected from the scope of the SQL containing this expression.
+
+A macro may return SQL containing further `@macro()` calls. Those emitted calls resolve from the callee macro's definition path, not from the original model or other caller. This keeps a macro's dependencies lexical and lets an inherited macro compose with project-wide declarations and declarations visible beside its own module.
+
+Macro modules must not import other project macro modules in Python. Compose them through tracked `@macro()` calls instead. SQLBuild rejects inaccessible emitted dependencies and dependency cycles. A project-wide macro therefore cannot depend on an inherited or local macro: its top-level definition has no access to narrower scopes.
+
+The generated manifest exposes each macro's declaration visibility and owning scope path, and records tracked macro dependencies in the macro node's dependency metadata.
+
+### Usage and placement
+
+SQLBuild records resolved enum, constant, and macro use while expanding the complete project. Comments, quoted text, macro test identity checks, and mocks do not count as runtime use. Generated enum contracts and audits do count because they depend on the enum domain.
+
+Every declaration must have a genuine use. Unused project-wide, inherited, local, and model-private declarations fail compilation.
+
+Project-wide declarations are an explicit stable API decision. Once used, they remain valid even when all current consumers happen to be close together; SQLBuild does not tell you to narrow them. Narrow declarations must use the closest exact placement required by all consumers:
+
+- One owning directory requires the corresponding `_local_.../` directory.
+- Multiple directories in one authored resource root require the inherited `_.../` directory at their lowest common ancestor.
+- Consumers in different authored resource roots require the top-level project-wide root.
+
+Expected-model grants anchor test and scenario use through the granting models, not through the test or scenario directory. Macro dependencies anchor through the consuming macro's lexical scope. Placement errors report the current definition, required scope and path, consumers, and exact target directory.
+
+### Related declarations
+
+- [`sqb scope`](/cli/scope) - inspect visibility, usage, placement, prospective paths, and move impact offline
+- [Python Macros](/concepts/macros)
+- [Enums and Constants](/concepts/enums-and-constants)
+- [Interpolation](/concepts/interpolation)
+
 ## Interpolation
 
 Source: `concepts/interpolation.mdx`
@@ -3974,6 +4119,8 @@ The rule is simple: if it's any SQL that will be executed, it uses `@`. If it's 
 `@@CTX:` is intentionally SQL-hook-only. Model SQL describes a relation's data and should not reference its own destination identity. SQL hooks are the operational SQL layer where destination context is useful - grants, logging, post-materialization DDL. Python hooks access the same information through `ctx.destination` on the [`HookContext`](/concepts/models/hooks/python#hook-context) object.
 
 See [Enums and Constants](/concepts/enums-and-constants) for scalar and collection syntax, visibility, collection-rendering precedence, adapter behavior, and contract integration.
+
+Macros, enums, and constants are resolved lexically. The authored resource path normally supplies the scope; named SQL hooks and macro-emitted calls use their definition paths. See [Declaration Scopes](/concepts/declaration-scopes) for the complete path and composition rules.
 
 ### Project variables
 
@@ -4118,7 +4265,7 @@ SQLBuild processes authored SQL in this order:
 
 This means:
 - Config templates resolve first, before any SQL processing
-- Named SQL hook arguments can contain `@@CTX:...`, `@@ENV:...`, project-variable, declaration, or macro text that is resolved in the calling model's context
+- Named SQL hook arguments can contain `@@CTX:...`, `@@ENV:...`, project-variable, declaration, or macro text; model context values describe the invoking model, while declarations and macros in the resulting named hook body resolve from the hook definition path
 - Macros see already-substituted variable values in the SQL
 - `@@CTX:destination.qualified` in SQL hooks sees the final target-overridden destination name because hooks are expanded after destination naming is fully resolved
 - SQL analysis validates the final expanded SQL, catching syntax errors from both vars and macros
@@ -4136,7 +4283,7 @@ For the full picture of how macros fit into SQLBuild's interpolation system, see
 
 ### Defining macros
 
-Create Python files under `macros/` in your project. Every public function in a macro file becomes a callable macro:
+Create Python files under the top-level `macros/` directory for project-wide macros. Every public ordinary function defined by a macro module becomes a callable macro:
 
 ```python
 # macros/currency.py
@@ -4146,6 +4293,30 @@ def cents_to_dollars(column):
 ```
 
 Macros can accept any Python arguments (strings, numbers, lists, dicts, booleans) and must return a SQL string when called from SQL.
+
+Only functions owned by the module are exported. Imported callables and classes remain implementation dependencies and do not become macros. Module-owned constants, classes, type aliases, and helper functions must use underscore-private names:
+
+```python
+# macros/orders.py
+from urllib.parse import quote
+
+_DEFAULT_STATUS = "completed"
+type _ColumnName = str
+
+class _ColumnFormatter:
+    def format(self, column: _ColumnName) -> str:
+        return quote(column)
+
+def _status_filter(status: str) -> str:
+    return f"status = '{status}'"
+
+def completed_orders() -> str:
+    return _status_filter(_DEFAULT_STATUS)
+```
+
+Here, only `completed_orders` is exported as a macro. `quote`, `_ColumnFormatter`, and `_status_filter` are implementation details.
+
+Macros may instead be inherited from `_macros/` directories or restricted to an exact directory with `_local_macros/`. See [Declaration Scopes](/concepts/declaration-scopes) for placement and lexical visibility. Public macro names remain globally unique even when their scopes do not overlap.
 
 ### Using macros in models
 
@@ -4287,16 +4458,41 @@ Inner macros used as arguments don't have to return strings - they can return an
 
 ### Composing macros
 
-Macro output cannot contain macro calls. Expansion is single-pass: if a macro returns SQL containing `@another_macro()`, SQLBuild raises an error. If you need composition, compose in Python:
+Macro output may contain further `@macro()` calls. SQLBuild expands those calls under the emitting macro's definition-path scope. Calls written as nested arguments resolve under the current SQL author's scope before the outer macro runs. Inaccessible dependencies and dependency cycles fail compilation.
+
+For implementation details used by one macro, call an underscore-private helper in the same file:
 
 ```python
 # macros/reporting.py
-from macros.currency import cents_to_dollars
+def _with_alias(expression, alias):
+    return f"{expression} AS {alias}"
 
-def revenue_column(column, alias):
-    dollars_expr = cents_to_dollars(column)
-    return f"{dollars_expr} AS {alias}"
+def revenue_column(expression, alias):
+    return _with_alias(expression, alias)
 ```
+
+Macro modules cannot import other project macro modules. To compose macros defined in different files, keep the calls in authored SQL using the tracked `@macro_name(...)` syntax. Nested calls evaluate from the inside out, so each macro call remains visible to SQLBuild:
+
+```sql
+SELECT
+  @revenue_column(
+    @cents_to_dollars('total_cents'),
+    'total_dollars'
+  )
+FROM __ref("fact_orders")
+```
+
+In this example, `cents_to_dollars` and `revenue_column` can be defined in separate macro files. Do not import one from the other in Python.
+
+An emitting macro can also compose lexically in its returned SQL:
+
+```python
+# models/commerce/_macros/revenue.py
+def revenue_column(column):
+    return f"@cents_to_dollars('{column}') AS revenue_dollars"
+```
+
+Here `cents_to_dollars` must be visible from `models/commerce/_macros/revenue.py`. It is not borrowed from whichever model calls `revenue_column`. In particular, a project-wide macro under `macros/` cannot depend on an inherited or local macro.
 
 ### Where macros are allowed
 
@@ -4309,10 +4505,14 @@ Macros are **not allowed** in MODEL() config values (other than SQL hook entries
 
 ### Discovery rules
 
-- SQLBuild discovers all `.py` files under `macros/` recursively
-- Every public function (not starting with `_`) becomes a macro
-- Macro names must be unique across all macro files - duplicates raise a compile error
+- SQLBuild discovers `.py` files recursively under top-level `macros/` and scoped `_macros/` or `_local_macros/` directories below canonical authored roots
+- Only public ordinary functions defined by the macro module become macros
+- Imported callables and classes are not exported as macros
+- Module-owned constants, classes, type aliases, and helper functions must start with `_`
+- A macro module must not Python-import another project macro module
+- Public macro names must be unique across all macro files; scopes do not provide shadowing
 - Macros are loaded once at compile time, not per-model
+- Manifest macro nodes expose declaration scope, owning path, and tracked macro dependencies
 
 ## Functions
 
@@ -4441,6 +4641,8 @@ SQL functions can reference the same resources as models:
 | Table function | `__table_fn("function_name")(arguments...)` |
 
 These references are resolved at compile time and create DAG edges. If a referenced model changes, the function is redeployed.
+
+Macros, constants, and enums used in a SQL function resolve from the function definition's authored path. Put inherited declarations in `_macros/`, `_constants/`, or `_enums/` above that function, or exact-directory declarations in the corresponding `_local_...` directory. See [Declaration Scopes](/concepts/declaration-scopes).
 
 ### Change propagation
 
@@ -5450,6 +5652,8 @@ Generic audit SQL uses `@name` for parameter placeholders. These are resolved by
 | `@'name'` | A quoted parameter passed from the audit declaration (e.g. `@'values'`) |
 | `@name` | An unquoted parameter passed from the audit declaration (e.g. `@expression`) |
 
+Macros, constants, and enums in both generic and singular audit SQL resolve from the audit definition's authored path under `audits/`, not from the path of a model or source that attaches the audit. See [Declaration Scopes](/concepts/declaration-scopes).
+
 #### Attaching custom generic audits
 
 ```sql
@@ -5748,6 +5952,10 @@ SELECT 1
 
 If the expected models form a chain (e.g. `stg_orders` feeds into `fact_orders` which feeds into `dim_customers`), SQLBuild resolves them in dependency order, using the output of earlier steps as input to later ones.
 
+Each explicit `__expected__<model>` CTE also grants the test authored SQL the public enums and constants visible to that model. A test with multiple expected models receives the deterministic union, with provenance retained for every granting model. Public names remain globally unique, so the union cannot shadow declarations.
+
+Only explicit expected CTEs create grants. A matching test filename, `__ref__` mock, or nearby model path does not. Model-private declarations and macros are never granted through expected models.
+
 ### Macro-powered mocks
 
 Because unit tests are written in SQL, they support macro calls. This lets you write reusable mock generators instead of copy-pasting mock data across test files:
@@ -5770,6 +5978,8 @@ SELECT 1
 ```
 
 The `@mock_orders()` call expands at compile time to whatever SQL the Python macro function returns.
+
+Macros and directly visible enums and constants in authored test SQL resolve from that test file's path under `tests/unit/`. This includes inherited declarations from every matching ancestor and local declarations owned by the test's exact parent directory; sibling and descendant declarations are inaccessible. Public enums and constants may also be available through explicit expected-model grants. Model-private constants and enums are not exported to tests. See [Declaration Scopes](/concepts/declaration-scopes).
 
 ### Macro mocking
 
@@ -6074,6 +6284,8 @@ SELECT 1
 For sources with two-part identity, use double underscores: `__source__raw__orders`.
 
 Every scenario must have at least one fixture CTE and at least one `__expected__` or `__assert__` CTE.
+
+Macros and directly visible constants and enums in authored scenario SQL resolve from that scenario file's path under `tests/scenarios/`. Inherited ancestors compose and local declarations apply only to the exact parent directory. Each explicit `__expected__<model>` CTE additionally grants the public enums and constants visible to that expected model. Multiple expected models contribute a deterministic union with per-model provenance; they do not grant macros or model-private declarations. See [Declaration Scopes](/concepts/declaration-scopes).
 
 #### SCENARIO() header
 
@@ -10498,6 +10710,250 @@ sqb compile --manifest
 # Skip SQL validation
 sqb compile --no-sql-validation
 ```
+
+## scope
+
+Source: `cli/scope.mdx`
+
+Inspect declaration visibility, usage, placement, and move impact offline.
+
+`sqb scope` explains the lexical environment around native SQLBuild macros, enums, and constants. Use it to see what a resource can access, what it actually uses, why a declaration is visible or inaccessible, and whether a move would cross a scope boundary.
+
+The command is read-only and offline. It does not connect to a warehouse, require warehouse credentials, or inspect relations. It reads the compiler-owned declaration-scope index and reuses a deterministic cache when the relevant source and configuration fingerprint has not changed. Building a cold cache uses the normal compiler expansion path, which loads the configured adapter and may execute authored Python macros; a warm cache hit reconstructs scope facts without importing macro modules.
+
+Text output is deterministic, bounded, and requires no interactive pager.
+
+### Usage
+
+```bash
+# Inspect an existing resource, declaration, or exact resource path
+sqb scope TARGET [flags]
+
+# Inspect the scope at a prospective file or directory
+sqb scope --at PATH [flags]
+
+# Preview moving an existing resource to a new path
+sqb scope TARGET --as-path PATH [flags]
+```
+
+`TARGET` is either a kind-qualified identity or an exact project-relative resource path:
+
+```bash
+sqb scope model:stg_orders
+sqb scope test:stg_orders__excludes_cancelled
+sqb scope scenario:daily_revenue
+sqb scope hook:grant_select
+sqb scope function:normalize_status
+sqb scope audit:positive_order_value
+sqb scope source:raw__orders
+
+sqb scope macro:normalize_order_status
+sqb scope enum:order_status
+sqb scope constant:minimum_order_value
+
+sqb scope models/staging/orders/stg_orders.sql
+```
+
+Bare names such as `stg_orders` and `order_status` are rejected even if they are currently unique. Qualification keeps commands stable when names collide across resource or declaration kinds. Public declaration identities are `macro:<name>`, `enum:<name>`, and `constant:<name>`.
+
+Model-private constants and enums include their owner in the introspection identity:
+
+```text
+enum:model:stg_orders._state
+constant:model:stg_orders._minimum_value
+```
+
+These identities are for inspection. SQL authored inside the owning model continues to use `@enum("_state")` and `@const("_minimum_value")`.
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--at PATH` | Inspect path-derived visibility for a prospective file or directory. A trailing `/` denotes a directory whose direct children are being considered. |
+| `--as-path PATH` | Preview moving the existing target resource to `PATH`. No file or configuration is changed. |
+| `--browse PATH` | Show direct child declaration folders and recursive counts without listing declarations. |
+| `--list PATH` | Recursively list declarations under one declaration folder. |
+| `--defined-under PATH` | Keep declarations whose definitions are under the project-relative path. |
+| `--kind KIND` | Keep `macro`, `enum`, or `constant` declarations. Repeat to include multiple kinds. |
+| `--match GLOB` | Match declaration names or qualified identities with a deterministic, case-sensitive glob. |
+| `--used-only` | Keep declarations used by the target. |
+| `--include-nearby` | Include bounded nearby declarations that are unavailable to the target. |
+| `--nearby-depth N` | Set filesystem proximity for nearby descendant and sibling discovery (default: `1`). |
+| `--dependency-depth N` | Expand dependencies from declarations in the used section by `N` edges (default: `0`). |
+| `--explain QUALIFIED_NAME` | Explain one qualified declaration in detail at the target. |
+| `--globals POLICY` | Control global declarations in the main report: `summary` (default), `used`, or `all`. |
+| `--page-size N` | Return at most `N` declarations per paged section (default: `100`). |
+| `--after CURSOR` | Continue after a declaration identity returned as the previous section's next cursor. |
+| `--paths MODE` | Render paths as `relative`, `compact`, or `none`. |
+| `--json` | Write the canonical versioned JSON report instead of the text tree. |
+
+Filters are orthogonal and combine in a fixed order: definition path, kind, glob, then usage. `--dependency-depth` expands the filtered used declarations afterward. Effective ancestor visibility is never depth-limited: every inherited ancestor always contributes to the scope.
+
+### Reading A Report
+
+The default text report keeps distinct facts in distinct sections:
+
+- **Available** contains declarations visible through the resource's own lexical path.
+- **Used** contains declarations consumed by the resource, including tracked declaration dependencies.
+- **Relationship scope** contains public enums and constants granted to a test or scenario through explicit expected-model relationships.
+- **Nearby unavailable** is opt-in and explains close declarations that are outside the target's scope.
+- **Scope chain** shows the exact local directory, every inherited ancestor, and the global tier.
+
+Each declaration includes its qualified identity, definition, scope and owning path, visibility reason, and safe type or signature metadata where useful. Placement information includes the narrowest required scope and path, current consumers, and promotion impact when those facts are complete.
+
+Global declarations are an intentional project-wide API and can be numerous. The default `--globals summary` always retains globals used by the target but collapses the unused global inventory with exact counts. Use `--globals used` for only used globals or `--globals all` when a bounded full list is appropriate.
+
+```bash
+# Include every global declaration in the paged report
+sqb scope model:stg_orders --globals all
+
+# Focus on constants and enums defined in finance
+sqb scope model:stg_orders \
+  --kind constant \
+  --kind enum \
+  --defined-under models/finance
+
+# Find visible or used settlement declarations
+sqb scope model:stg_orders --match '*settlement*'
+sqb scope model:stg_orders --used-only
+```
+
+### Relationship Scope
+
+Tests and scenarios have two independent sources of declaration visibility. Their authored paths provide ordinary lexical visibility. Each explicit `__expected__<model>` relationship separately grants the public enums and constants visible to that model.
+
+`sqb scope` does not flatten these grants into the path scope. Relationship entries retain the expected model or models that granted them. They never grant macros or model-private declarations, and a test filename, mirrored path, or mock does not create a relationship.
+
+```bash
+sqb scope test:orders__completed_only
+sqb scope scenario:daily_revenue --used-only
+```
+
+### Nearby And Explain
+
+Nearby discovery is deliberately opt-in and bounded. It considers relevant declarations in the same authored resource tree, ancestor scopes, close sibling and descendant domains, and relationship-connected domains. It does not dump every private declaration in the project.
+
+```bash
+# Find declarations just outside the model's effective scope
+sqb scope model:stg_orders --include-nearby
+
+# Include descendants and siblings two directory levels away
+sqb scope model:stg_orders --include-nearby --nearby-depth 2
+
+# Explain one declaration's visibility and placement at this model
+sqb scope model:stg_orders --explain enum:customer_status
+```
+
+An explanation distinguishes an inaccessible known declaration from an unknown identity. It reports the declaration's definition and ownership, the visibility or boundary reason, consumers and macro dependencies, expected-model grants, required placement, and promotion impact. It does not move or rewrite the declaration.
+
+`--dependency-depth` is separate from `--nearby-depth`: it follows tracked declaration dependencies from the used section rather than filesystem proximity.
+
+```bash
+sqb scope model:stg_orders --used-only --dependency-depth 2
+```
+
+### Prospective Paths
+
+Use `--at` before creating a resource. A prospective file receives the declarations implied by that exact authored path. A prospective directory describes what a direct child resource would receive.
+
+```bash
+sqb scope --at models/staging/orders/new_model.sql
+sqb scope --at tests/unit/staging/orders/
+```
+
+The path must be project-relative, below a configured authored resource root, and use the appropriate resource suffix (`.sql`, or `.yml`/`.yaml` for sources). Paths outside those roots produce a diagnostic rather than borrowing scope from a nearby directory.
+
+Prospective reports are intentionally partial: static path visibility is available, but runtime usage and expected-model relationship facts do not exist yet. The report marks those sections incomplete and exits nonzero while preserving the useful static result.
+
+### Move Preview
+
+`--as-path` calculates the visibility delta for moving one existing resource. It reports retained, gained, and lost declarations; direct usages that the move would invalidate; the new ownership root; owner-private declarations retained with the resource; and expected-model relationship grants retained independently of path visibility.
+
+```bash
+sqb scope model:stg_orders \
+  --as-path models/marts/orders/stg_orders.sql
+```
+
+The destination must be a valid project-relative file path for that resource kind. This is a pure preview: `sqb scope` never moves files, edits declarations, or changes configuration.
+
+### Folder Browsing
+
+Browse and list are separate so a project with 10,000 or more declarations remains safe to explore. `--browse` returns only direct child declaration folders. Each folder has exact recursive declaration, usage, kind, and nested-folder counts; no arbitrary alphabetical prefix of declarations is printed.
+
+Global roots appear in the browse namespace as `global/macros`, `global/constants`, and `global/enums`, regardless of how files are organized recursively beneath the top-level declaration roots.
+
+```bash
+# Start with folder summaries only
+sqb scope model:stg_orders --browse .
+
+# Walk down without listing declarations
+sqb scope model:stg_orders --browse global
+sqb scope model:stg_orders --browse global/macros/finance
+
+# List declarations only after choosing a bounded domain
+sqb scope model:stg_orders --list global/macros/finance/payments
+```
+
+`--list` is recursive and supports `--kind`, `--match`, `--defined-under`, `--used-only`, `--page-size`, and `--after`. Browse output itself stays folder-first.
+
+### Pagination
+
+Flat lists and report sections use qualified declaration identities as stable lexical cursors, not page numbers. Every paged section reports its total, returned count, completeness, truncation state, and `next_cursor`. Repeat the same command and filters with that identity as `--after`:
+
+```bash
+# First page
+sqb scope model:stg_orders \
+  --list global/macros/legacy \
+  --page-size 50
+
+# Continue with the next_cursor from the first result
+sqb scope model:stg_orders \
+  --list global/macros/legacy \
+  --page-size 50 \
+  --after macro:legacy_batch_0049
+```
+
+Keep all semantic filters unchanged while continuing. Qualified cursors avoid cross-kind ambiguity. A bare cursor is accepted only when it resolves uniquely; invalid or ambiguous cursors produce a diagnostic and nonzero status rather than silently selecting a different page.
+
+For automation, read each section's `next_cursor` from JSON and continue until it is `null`:
+
+```bash
+sqb scope model:stg_orders \
+  --list global/macros/legacy \
+  --page-size 50 \
+  --json > scope-page.json
+```
+
+### Paths And JSON
+
+`--paths relative` shows normalized project-relative paths. `compact` shortens repeated path context in text output, while `none` omits display paths when identities are sufficient. Paths in stable machine output never expose an absolute workspace root.
+
+`--json` emits the canonical schema rather than serializing the visual tree. The top-level `schema_version` is currently `1`. Reports include the target, scope chain, declaration sections, applied filters, section totals, collapsed and truncated flags, cursors, diagnostics, and aggregate and section-level completeness. Move previews and explanations appear when requested.
+
+JSON is deterministically ordered, ASCII, newline-terminated, and byte-stable for identical inputs. It contains no ANSI formatting. Consumers should check `schema_version` before relying on fields.
+
+### Partial Projects
+
+Scope inspection remains useful while a project is broken. SQLBuild retains valid facts and independently marks discovery, static visibility, runtime usage, expected-model relationships, placement, and promotion impact complete or incomplete. Text and JSON never present a partial section as complete.
+
+Diagnostics are stable and include project-relative source locations when available. A partial result, invalid target or cursor, or any error diagnostic produces a nonzero exit status after the available report is written. This lets an editor or agent consume path visibility while still treating incomplete analysis as a failed check.
+
+### Output Safety
+
+Scope reports describe declarations without exposing authored values or runtime secrets:
+
+- Constants show logical type, nullability, collection kind, item count, and rendering mode, not values.
+- Enums show scalar type, member count, and a bounded preview of member names, not member values.
+- Macros show parameters and tracked declaration dependencies, not source bodies, callables, or source digests.
+- Credentials, connection fields, environment variables, warehouse data, and absolute machine paths are not inspected or emitted.
+
+There is no `--show-values` option.
+
+### Native SQLBuild Only
+
+`sqb scope` inspects native SQLBuild authored resources and declarations. It does not discover or emulate dbt models, dbt or Jinja macros, package dispatch, dbt manifests, dbt selectors, dbt tests, or dbt schema YAML visibility. An external dbt graph dependency does not contribute declarations or lexical scope.
+
+For the declaration directory rules, all-ancestor composition, placement validation, expected-model grants, and macro expansion semantics, see [Declaration Scopes](/concepts/declaration-scopes).
 
 ## kata
 
