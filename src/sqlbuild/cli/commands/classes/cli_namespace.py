@@ -128,6 +128,23 @@ _DEFAULT_VALUES: dict[str, object] = {
     "kata_command": None,
     "kata_rule_code": None,
     "kata_skills_check": False,
+    "scope_target": None,
+    "scope_at": None,
+    "scope_as_path": None,
+    "scope_browse": None,
+    "scope_list": None,
+    "scope_defined_under": None,
+    "scope_kind": [],
+    "scope_match": None,
+    "scope_used_only": False,
+    "scope_include_nearby": False,
+    "scope_nearby_depth": 1,
+    "scope_dependency_depth": 0,
+    "scope_explain": None,
+    "scope_globals": "summary",
+    "scope_page_size": 100,
+    "scope_after": None,
+    "scope_paths": "relative",
 }
 
 
@@ -254,6 +271,23 @@ class CliNamespace:
     kata_command: str | None
     kata_rule_code: str | None
     kata_skills_check: bool
+    scope_target: str | None
+    scope_at: str | None
+    scope_as_path: str | None
+    scope_browse: str | None
+    scope_list: str | None
+    scope_defined_under: str | None
+    scope_kind: list[str]
+    scope_match: str | None
+    scope_used_only: bool
+    scope_include_nearby: bool
+    scope_nearby_depth: int
+    scope_dependency_depth: int
+    scope_explain: str | None
+    scope_globals: str
+    scope_page_size: int
+    scope_after: str | None
+    scope_paths: str
 
     def __init__(self) -> None:
         for name, value in _DEFAULT_VALUES.items():

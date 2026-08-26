@@ -55,12 +55,23 @@ from sqlbuild.compiler.scopes.models import (
 from sqlbuild.compiler.scopes.types import ScopeDiagnosticCode, ScopeKind
 
 
-def browse_folders(*, lookup: ScopeLookup, folder: str = ".") -> ScopeBrowseResult:
+def browse_folders(
+    *,
+    lookup: ScopeLookup,
+    folder: str = ".",
+    target: str | PurePath | ResourceIdentity | None = None,
+    target_is_prospective: bool = False,
+) -> ScopeBrowseResult:
     """Return only direct child declaration-definition folders."""
 
     normalized, diagnostic = _folder_path(folder=folder)
     if diagnostic is not None:
         return ScopeBrowseResult(folder, (), (diagnostic,), False)
+    used_identities, target_diagnostics, usage_complete = _target_used_identities(
+        lookup=lookup,
+        target=target,
+        prospective=target_is_prospective,
+    )
     paths: dict[str, list[DeclarationRecord]] = {}
     for record in lookup.index.declarations:
         definition_folder: str = _definition_folder(record=record)
@@ -73,14 +84,34 @@ def browse_folders(*, lookup: ScopeLookup, folder: str = ".") -> ScopeBrowseResu
         child: str = PurePosixPath(*parts[: len(parent_parts) + 1]).as_posix()
         paths.setdefault(child, []).append(record)
     folders: tuple[ScopeFolder, ...] = tuple(
-        _folder_report(lookup=lookup, path=path, records=records)
+        _folder_report(
+            path=path,
+            records=records,
+            used_identities=used_identities,
+        )
         for path, records in sorted(paths.items())
     )
-    return ScopeBrowseResult(normalized, folders, complete=lookup.index.completeness.discovery)
+    diagnostics: tuple[ScopeDiagnostic, ...] = (
+        *lookup.index.diagnostics,
+        *target_diagnostics,
+    )
+    return ScopeBrowseResult(
+        normalized,
+        folders,
+        diagnostics,
+        complete=(
+            lookup.index.completeness.discovery and usage_complete and not target_diagnostics
+        ),
+    )
 
 
 def list_folder(
-    *, lookup: ScopeLookup, folder: str, filters: ScopeReportFilters | None = None
+    *,
+    lookup: ScopeLookup,
+    folder: str,
+    filters: ScopeReportFilters | None = None,
+    target: str | PurePath | ResourceIdentity | None = None,
+    target_is_prospective: bool = False,
 ) -> ScopeListResult:
     """List declarations recursively beneath one definition folder."""
 
@@ -91,6 +122,11 @@ def list_folder(
             LIST_SECTION, 0, 0, complete=False, page_size=selected_filters.page_size
         )
         return ScopeListResult(folder, (), section, (diagnostic,))
+    used_identities, target_diagnostics, usage_complete = _target_used_identities(
+        lookup=lookup,
+        target=target,
+        prospective=target_is_prospective,
+    )
     records: list[DeclarationRecord] = [
         record
         for record in lookup.index.declarations
@@ -99,9 +135,7 @@ def list_folder(
     if selected_filters.kinds:
         records = [record for record in records if record.identity.kind in selected_filters.kinds]
     if selected_filters.used_only:
-        records = [
-            record for record in records if lookup.usages_by_declaration.get(record.identity)
-        ]
+        records = [record for record in records if record.identity in used_identities]
     if selected_filters.defined_under is not None:
         try:
             under: str = normalize_path(path=selected_filters.defined_under)
@@ -157,7 +191,9 @@ def list_folder(
         len(records),
         len(reports),
         truncated=truncated,
-        complete=lookup.index.completeness.discovery,
+        complete=(
+            lookup.index.completeness.discovery and usage_complete and not target_diagnostics
+        ),
         next_cursor=reports[-1].identity if reports and truncated else None,
         cursor=cursor,
         page_size=size,
@@ -166,7 +202,11 @@ def list_folder(
         normalized,
         reports,
         section,
-        (diagnostic,) if diagnostic is not None else (),
+        (
+            *lookup.index.diagnostics,
+            *target_diagnostics,
+            *((diagnostic,) if diagnostic is not None else ()),
+        ),
     )
 
 
@@ -181,7 +221,10 @@ def _definition_folder(*, record: DeclarationRecord) -> str:
 
 
 def _folder_report(
-    *, lookup: ScopeLookup, path: str, records: list[DeclarationRecord]
+    *,
+    path: str,
+    records: list[DeclarationRecord],
+    used_identities: set[DeclarationIdentity],
 ) -> ScopeFolder:
     child_paths: set[str] = set()
     prefix_parts: tuple[str, ...] = PurePosixPath(path).parts
@@ -197,8 +240,52 @@ def _folder_report(
         PurePosixPath(path).name,
         len(records),
         len(child_paths),
-        sum(bool(lookup.usages_by_declaration.get(record.identity)) for record in records),
+        sum(record.identity in used_identities for record in records),
         tuple(sorted(counts.items())),
+    )
+
+
+def _target_used_identities(
+    *,
+    lookup: ScopeLookup,
+    target: str | PurePath | ResourceIdentity | None,
+    prospective: bool,
+) -> tuple[set[DeclarationIdentity], tuple[ScopeDiagnostic, ...], bool]:
+    if prospective:
+        return set(), (), False
+    if target is None:
+        return set(lookup.usages_by_declaration), (), lookup.index.completeness.runtime_usage
+    try:
+        query: ScopeTargetQuery = query_target(lookup=lookup, target=target)
+    except (InvalidQualifiedIdentityError, InvalidScopePathError):
+        return (
+            set(),
+            (
+                ScopeDiagnostic(
+                    ScopeDiagnosticCode.UNKNOWN_TARGET,
+                    f"Browse/list target {target!s} is not a known resource",
+                ),
+            ),
+            False,
+        )
+    if len(query.matches) != 1:
+        return (
+            set(),
+            (
+                ScopeDiagnostic(
+                    ScopeDiagnosticCode.UNKNOWN_TARGET,
+                    f"Browse/list target {target!s} does not resolve to exactly one resource",
+                ),
+            ),
+            False,
+        )
+    return (
+        {
+            usage.declaration
+            for usage in lookup.usages_by_consumer.get(query.matches[0].identity, ())
+        },
+        (),
+        lookup.index.completeness.runtime_usage,
     )
 
 
@@ -291,14 +378,20 @@ def build_move_preview(
     )
 
 
-def serialize_report(*, report: ScopeReport) -> str:
-    """Serialize the schema-version-one payload as deterministic ASCII JSON."""
+def serialize_result(*, result: ScopeReport | ScopeBrowseResult | ScopeListResult) -> str:
+    """Serialize a schema-version-one scope result as deterministic ASCII JSON."""
 
-    payload: object = _value(report)
+    payload: object = _value(result)
     if not isinstance(payload, dict):
         raise ScopeError("Scope report serialization did not produce an object")
     payload = {"schema_version": 1, **payload}
     return json.dumps(payload, sort_keys=True, ensure_ascii=True, separators=(",", ":")) + "\n"
+
+
+def serialize_report(*, report: ScopeReport) -> str:
+    """Serialize the schema-version-one report payload as deterministic ASCII JSON."""
+
+    return serialize_result(result=report)
 
 
 def _reports(

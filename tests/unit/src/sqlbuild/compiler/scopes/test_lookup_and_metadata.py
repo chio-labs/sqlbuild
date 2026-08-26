@@ -8,11 +8,11 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild.compiler.scopes.main._build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.main._scope_metadata_json import (
     scope_metadata_json,
     scope_metadata_projection,
 )
+from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.models import (
     DeclarationRecord,
     ResourceIdentity,

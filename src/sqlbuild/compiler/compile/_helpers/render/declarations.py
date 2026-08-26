@@ -32,11 +32,11 @@ from sqlbuild.compiler.discovery.models import (
     ModelSchemaDeclaration,
 )
 from sqlbuild.compiler.planner.types import ContractPolicy
-from sqlbuild.compiler.scopes.main._build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.main._resolve_scope_path_visibility import (
     resolve_scope_path_visibility,
 )
 from sqlbuild.compiler.scopes.main._resolve_scope_visibility import resolve_scope_visibility
+from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,

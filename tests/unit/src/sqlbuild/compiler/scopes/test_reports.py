@@ -9,13 +9,13 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.compiler.scopes.main._browse_scope_folders import browse_scope_folders
-from sqlbuild.compiler.scopes.main._build_scope_lookup import build_scope_lookup
-from sqlbuild.compiler.scopes.main._explain_scope_declaration import explain_scope_declaration
-from sqlbuild.compiler.scopes.main._list_scope_declarations import list_scope_declarations
-from sqlbuild.compiler.scopes.main._preview_scope_move import preview_scope_move
-from sqlbuild.compiler.scopes.main._query_scope_report import query_scope_report
-from sqlbuild.compiler.scopes.main._serialize_scope_report import serialize_scope_report
+from sqlbuild.compiler.scopes.main.browse_scope_folders import browse_scope_folders
+from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
+from sqlbuild.compiler.scopes.main.explain_scope_declaration import explain_scope_declaration
+from sqlbuild.compiler.scopes.main.list_scope_declarations import list_scope_declarations
+from sqlbuild.compiler.scopes.main.preview_scope_move import preview_scope_move
+from sqlbuild.compiler.scopes.main.query_scope_report import query_scope_report
+from sqlbuild.compiler.scopes.main.serialize_scope_report import serialize_scope_report
 from sqlbuild.compiler.scopes.models import (
     OwnershipRoot,
     ScopeBrowseResult,
@@ -234,6 +234,32 @@ def test_given_folder_tree_when_browsing_and_listing_then_counts_are_exact(
     assert len(listed.declarations) == 10_000
     assert perf_counter() - started < 5.0
     assert test_case.expected_result
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (ExpectedBooleanCase("target_usage", True),),
+    ids=lambda case: case.description,
+)
+def test_given_target_when_browsing_and_listing_used_declarations_then_counts_are_target_scoped(
+    test_case: ExpectedBooleanCase,
+) -> None:
+    lookup: ScopeLookup = report_scope_lookup()
+    browse: ScopeBrowseResult = browse_scope_folders(
+        lookup=lookup,
+        folder="models/marts",
+        target="model:orders",
+    )
+    listed: ScopeListResult = list_scope_declarations(
+        lookup=lookup,
+        folder="models/marts",
+        target="model:orders",
+        filters=ScopeReportFilters(used_only=True),
+    )
+
+    assert browse.folders[0].used_count == 1
+    assert [item.identity for item in listed.declarations] == ["enum:mart_status"]
+    assert listed.section.complete is test_case.expected_result
 
 
 @pytest.mark.parametrize(

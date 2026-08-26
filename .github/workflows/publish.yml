@@ -85,6 +85,11 @@ jobs:
           /tmp/sqlbuild-wheel-smoke/bin/python -c "import sqlbuild._kata_native as native; assert native.catalogue_json()"
           /tmp/sqlbuild-wheel-smoke/bin/sqb --help
           /tmp/sqlbuild-wheel-smoke/bin/sqlbuild --help
+          mkdir -p /tmp/sqlbuild-scope-smoke/models
+          printf 'name = "scope_smoke"\nadapter = "duckdb"\n' > /tmp/sqlbuild-scope-smoke/sqlbuild_project.toml
+          printf 'MODEL();\nSELECT 1 AS id\n' > /tmp/sqlbuild-scope-smoke/models/orders.sql
+          /tmp/sqlbuild-wheel-smoke/bin/sqb --project-dir /tmp/sqlbuild-scope-smoke scope model:orders --json
+          /tmp/sqlbuild-wheel-smoke/bin/sqlbuild --project-dir /tmp/sqlbuild-scope-smoke scope model:orders
           /tmp/sqlbuild-wheel-smoke/bin/dupscore --help
       - uses: actions/upload-artifact@v4
         with:

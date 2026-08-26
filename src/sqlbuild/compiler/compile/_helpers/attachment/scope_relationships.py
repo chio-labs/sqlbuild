@@ -8,8 +8,8 @@ from sqlbuild.compiler.compile._helpers.scenarios.core import (
 from sqlbuild.compiler.compile._helpers.sql_tests.core import extract_sql_test_expected_model_names
 from sqlbuild.compiler.compile.models import ScopeRelationshipBuild, ScopeRelationshipFault
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.scopes.main._build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.main._resolve_scope_visibility import resolve_scope_visibility
+from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.models import (
     DeclarationRecord,
     GrantRecord,

@@ -12,7 +12,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlModelFile,
     EnumDeclaration,
 )
-from sqlbuild.compiler.scopes.main._build_scope_lookup import build_scope_lookup
+from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.models import (
     ConstantMetadata,
     DeclarationIdentity,

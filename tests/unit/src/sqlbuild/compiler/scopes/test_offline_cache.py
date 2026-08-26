@@ -11,7 +11,7 @@ import pytest
 
 from sqlbuild.compiler.scopes._helpers.cache import scope_index_fingerprint
 from sqlbuild.compiler.scopes.constants import SCOPE_CACHE_DIRECTORY, SCOPE_CACHE_FILENAME
-from sqlbuild.compiler.scopes.main._load_or_build_scope_index import load_or_build_scope_index
+from sqlbuild.compiler.scopes.main.load_or_build_scope_index import load_or_build_scope_index
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.compiler.scopes.types import ResourceKind, ScopeDiagnosticCode
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
