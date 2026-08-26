@@ -40,14 +40,15 @@ from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
 )
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_model_declaration_indexes,
-    expand_declaration_references,
+    expand_declaration_references_result,
+    resolve_declaration_context,
     resolve_enum_contract_columns,
 )
 from sqlbuild.compiler.compile._helpers.render.macros import (
-    expand_sql_macros,
+    expand_sql_macros_result,
 )
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
-    expand_authored_sql,
+    expand_authored_sql_result,
     substitute_sql_vars,
 )
 from sqlbuild.compiler.compile._helpers.render.templating import (
@@ -62,14 +63,18 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
+    AuthoredSqlExpansionResult,
     CompileModelConfig,
     CompileModelInput,
     CompileSeedInput,
     CompileSqlReference,
     DeclarationExpansionContext,
+    DeclarationExpansionResult,
     DeclarationResolutionContext,
+    HookExpansionResult,
     LoadedMacro,
     MacroContext,
+    MacroExpansionResult,
     ModelInputBuildContext,
 )
 from sqlbuild.compiler.compile.types import (
@@ -91,6 +96,19 @@ from sqlbuild.compiler.discovery.models import (
     SqlHookEntry,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
+from sqlbuild.compiler.scopes.models import (
+    DeclarationIdentity,
+    DeclarationRecord,
+    ResourceIdentity,
+    UsageRecord,
+    VisibilityRecord,
+)
+from sqlbuild.compiler.scopes.types import (
+    DeclarationKind,
+    ResourceKind,
+    UsageKind,
+    VisibilityReason,
+)
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     LocalConfig,
@@ -118,6 +136,10 @@ class _VisibleModelDeclarations:
     local_constants: dict[str, ConstantDeclaration]
     enums: dict[str, EnumDeclaration]
     constants: dict[str, ConstantDeclaration]
+    inaccessible_enums: dict[str, DeclarationRecord]
+    inaccessible_constants: dict[str, DeclarationRecord]
+    enum_visibility: dict[str, tuple[VisibilityRecord, ...]]
+    constant_visibility: dict[str, tuple[VisibilityRecord, ...]]
 
 
 @dataclass(frozen=True)
@@ -129,6 +151,16 @@ class _HookExpansionContext:
     macro_context: MacroContext
     declaration_expansion: DeclarationExpansionContext
     sql_hook_definitions: dict[str, DiscoveredSqlHookFile]
+    consumer: ResourceIdentity
+    facts: _HookExpansionFacts
+
+
+@dataclass
+class _HookExpansionFacts:
+    usages: list[UsageRecord]
+
+    def add(self, usages: tuple[UsageRecord, ...]) -> None:
+        self.usages.extend(usages)
 
 
 def build_model_inputs(
@@ -224,20 +256,34 @@ def _build_model_inputs(
             file_path=model_file.file_path,
             effective_vars=effective_vars,
         )
-        declaration_expanded_sql: str = expand_declaration_references(
+        model_identity: ResourceIdentity = ResourceIdentity(
+            ResourceKind.MODEL, model_file.file_path.stem
+        )
+        declaration_expansion: DeclarationExpansionResult = expand_declaration_references_result(
             sql=var_substituted_sql,
             file_path=model_file.file_path,
-            enums=declarations.enums,
-            constants=declarations.constants,
+            declarations=DeclarationResolutionContext(
+                enums=declarations.enums,
+                constants=declarations.constants,
+                inaccessible_enums=declarations.inaccessible_enums,
+                inaccessible_constants=declarations.inaccessible_constants,
+                enum_visibility=declarations.enum_visibility,
+                constant_visibility=declarations.constant_visibility,
+                consumer=model_identity,
+            ),
             value_renderer=context.value_renderer,
             collection_rendering=context.collection_rendering,
         )
-        expanded_query_sql: str = expand_sql_macros(
+        declaration_expanded_sql: str = declaration_expansion.sql
+        macro_expansion: MacroExpansionResult = expand_sql_macros_result(
             sql=declaration_expanded_sql,
             file_path=model_file.file_path,
             loaded_macros=loaded_macros,
             macro_context=macro_context,
+            declaration_resolver=context.declaration_resolver,
+            consumer=model_identity,
         )
+        expanded_query_sql: str = macro_expansion.sql
         expanded_query_sql = get_validated_model_cursor_intrinsics(
             sql=expanded_query_sql,
             config_values=effective_config.values,
@@ -311,30 +357,35 @@ def _build_model_inputs(
             query_sql=expanded_query_sql,
             custom_materialization_names=custom_materialization_names,
         )
-        expanded_config: CompileModelConfig = CompileModelConfig(
-            values=expand_model_hook_macros(
+        hook_expansion: HookExpansionResult = expand_model_hook_macros_result(
+            values=effective_config.values,
+            file_path=model_file.file_path,
+            effective_vars=effective_vars,
+            context_values=build_model_context_values(
                 values=effective_config.values,
-                file_path=model_file.file_path,
-                effective_vars=effective_vars,
-                context_values=build_model_context_values(
-                    values=effective_config.values,
-                    model_name=model_file.file_path.stem,
-                    effective_target_name=effective_target_name,
-                    run_id=run_id,
-                    include_target_values=True,
-                ),
-                loaded_macros=loaded_macros,
-                macro_context=macro_context,
-                declaration_expansion=DeclarationExpansionContext(
-                    declarations=DeclarationResolutionContext(
-                        enums=declarations.enums,
-                        constants=declarations.constants,
-                    ),
-                    value_renderer=context.value_renderer,
-                    collection_rendering=context.collection_rendering,
-                ),
-                sql_hook_definitions=sql_hook_definitions,
+                model_name=model_file.file_path.stem,
+                effective_target_name=effective_target_name,
+                run_id=run_id,
+                include_target_values=True,
             ),
+            loaded_macros=loaded_macros,
+            macro_context=macro_context,
+            declaration_expansion=DeclarationExpansionContext(
+                declarations=DeclarationResolutionContext(
+                    enums=declarations.enums,
+                    constants=declarations.constants,
+                    inaccessible_enums=declarations.inaccessible_enums,
+                    inaccessible_constants=declarations.inaccessible_constants,
+                ),
+                value_renderer=context.value_renderer,
+                collection_rendering=context.collection_rendering,
+                resolver=context.declaration_resolver,
+            ),
+            sql_hook_definitions=sql_hook_definitions,
+            consumer=model_identity,
+        )
+        expanded_config: CompileModelConfig = CompileModelConfig(
+            values=hook_expansion.values,
             matched_path_default=effective_config.matched_path_default,
             logical_schema=effective_config.logical_schema,
             logical_database=effective_config.logical_database,
@@ -365,20 +416,19 @@ def _build_model_inputs(
             config_values=model_config.values,
             enums=declarations.enums,
         )
-        schema_match: tuple[SchemaModelEntry, DiscoveredSchemaFile] | None = (
-            find_schema_model_match(
-                model_file=model_file,
-                schema_files=discovered_inputs.schema_files,
+        generated_usages: tuple[UsageRecord, ...] = _generated_enum_usages(
+            enum_columns=enum_columns,
+            declarations=declarations,
+            consumer=model_identity,
+        )
+        model_declaration_usages: tuple[UsageRecord, ...] = tuple(
+            dict.fromkeys(
+                (*declaration_expansion.usages, *generated_usages, *hook_expansion.usages)
             )
         )
-        if schema_match is not None:
-            schema_entry: SchemaModelEntry = schema_match[0]
-            schema_file: DiscoveredSchemaFile = schema_match[1]
-            raise CompileInputError(
-                f"Schema file {schema_file.relative_path} declares model '{schema_entry.name}', "
-                f"but model metadata must live in {model_file.relative_path} MODEL(...). "
-                "Move description, columns, and audits into the model header."
-            )
+        _reject_legacy_schema_match(
+            model_file=model_file, schema_files=discovered_inputs.schema_files
+        )
         if header_schema_entry is None:
             model_inputs.append(
                 CompileModelInput(
@@ -391,6 +441,9 @@ def _build_model_inputs(
                     enum_declarations=tuple(declarations.local_enums.values()),
                     constant_declarations=tuple(declarations.local_constants.values()),
                     enum_columns=enum_columns,
+                    macro_deps=tuple(item.name for item in macro_expansion.dependencies),
+                    macro_usages=macro_expansion.usages,
+                    declaration_usages=model_declaration_usages,
                 )
             )
             continue
@@ -407,6 +460,9 @@ def _build_model_inputs(
                 enum_declarations=tuple(declarations.local_enums.values()),
                 constant_declarations=tuple(declarations.local_constants.values()),
                 enum_columns=enum_columns,
+                macro_deps=tuple(item.name for item in macro_expansion.dependencies),
+                macro_usages=macro_expansion.usages,
+                declaration_usages=model_declaration_usages,
             )
         )
 
@@ -422,12 +478,88 @@ def _build_visible_declaration_indexes(
 ) -> _VisibleModelDeclarations:
     local_enums: dict[str, EnumDeclaration]
     local_constants: dict[str, ConstantDeclaration]
+    model_identity: ResourceIdentity = ResourceIdentity(
+        ResourceKind.MODEL, model_file.file_path.stem
+    )
+
     local_enums, local_constants = build_model_declaration_indexes(model_file=model_file)
+    visible: DeclarationResolutionContext = DeclarationResolutionContext(
+        enums=context.public_enums,
+        constants=context.public_constants,
+    )
+    if (
+        context.declaration_resolver is not None
+        and context.declaration_resolver.lookup.index.declarations
+    ):
+        visible = resolve_declaration_context(
+            resolver=context.declaration_resolver, file_path=model_file.file_path
+        )
     return _VisibleModelDeclarations(
         local_enums=local_enums,
         local_constants=local_constants,
-        enums=context.public_enums | local_enums,
-        constants=context.public_constants | local_constants,
+        enums=visible.enums | local_enums,
+        constants=visible.constants | local_constants,
+        inaccessible_enums=visible.inaccessible_enums,
+        inaccessible_constants=visible.inaccessible_constants,
+        enum_visibility=visible.enum_visibility
+        | {
+            name: (
+                VisibilityRecord(
+                    model_identity,
+                    DeclarationIdentity(DeclarationKind.ENUM, name, model_identity),
+                    reason=VisibilityReason.PRIVATE_OWNER,
+                ),
+            )
+            for name in local_enums
+        },
+        constant_visibility=visible.constant_visibility
+        | {
+            name: (
+                VisibilityRecord(
+                    model_identity,
+                    DeclarationIdentity(DeclarationKind.CONSTANT, name, model_identity),
+                    reason=VisibilityReason.PRIVATE_OWNER,
+                ),
+            )
+            for name in local_constants
+        },
+    )
+
+
+def _generated_enum_usages(
+    *,
+    enum_columns: dict[str, EnumDeclaration],
+    declarations: _VisibleModelDeclarations,
+    consumer: ResourceIdentity,
+) -> tuple[UsageRecord, ...]:
+    usages: list[UsageRecord] = []
+    for enum in enum_columns.values():
+        for visibility in declarations.enum_visibility.get(enum.name, ()):
+            usages.append(
+                UsageRecord(
+                    consumer=consumer,
+                    declaration=visibility.declaration,
+                    kind=UsageKind.GENERATED,
+                    through=visibility.through,
+                )
+            )
+    return tuple(usages)
+
+
+def _reject_legacy_schema_match(
+    *, model_file: DiscoveredSqlModelFile, schema_files: tuple[DiscoveredSchemaFile, ...]
+) -> None:
+    schema_match: tuple[SchemaModelEntry, DiscoveredSchemaFile] | None = find_schema_model_match(
+        model_file=model_file,
+        schema_files=schema_files,
+    )
+    if schema_match is None:
+        return
+    schema_entry, schema_file = schema_match
+    raise CompileInputError(
+        f"Schema file {schema_file.relative_path} declares model '{schema_entry.name}', "
+        f"but model metadata must live in {model_file.relative_path} MODEL(...). "
+        "Move description, columns, and audits into the model header."
     )
 
 
@@ -610,10 +742,39 @@ def expand_model_hook_macros(
     macro_context: MacroContext,
     declaration_expansion: DeclarationExpansionContext,
     sql_hook_definitions: dict[str, DiscoveredSqlHookFile] | None = None,
+    consumer: ResourceIdentity | None = None,
 ) -> dict[str, object]:
     """Expand SQL interpolation and macros within executable hook SQL strings."""
 
+    return expand_model_hook_macros_result(
+        values=values,
+        file_path=file_path,
+        effective_vars=effective_vars,
+        context_values=context_values,
+        loaded_macros=loaded_macros,
+        macro_context=macro_context,
+        declaration_expansion=declaration_expansion,
+        sql_hook_definitions=sql_hook_definitions,
+        consumer=consumer,
+    ).values
+
+
+def expand_model_hook_macros_result(
+    *,
+    values: dict[str, object],
+    file_path: Path,
+    effective_vars: dict[str, object],
+    context_values: dict[str, str | None],
+    loaded_macros: dict[str, LoadedMacro],
+    macro_context: MacroContext,
+    declaration_expansion: DeclarationExpansionContext,
+    sql_hook_definitions: dict[str, DiscoveredSqlHookFile] | None = None,
+    consumer: ResourceIdentity | None = None,
+) -> HookExpansionResult:
+    """Expand hooks and retain declaration usages from inline and named SQL."""
+
     expanded_values: dict[str, object] = dict(values)
+    facts: _HookExpansionFacts = _HookExpansionFacts(usages=[])
     hook_key: str
     for hook_key in _MODEL_HOOK_KEYS:
         raw_hook_value: object | None = expanded_values.get(hook_key)
@@ -629,10 +790,12 @@ def expand_model_hook_macros(
                 macro_context=macro_context,
                 declaration_expansion=declaration_expansion,
                 sql_hook_definitions=sql_hook_definitions or {},
+                consumer=consumer or ResourceIdentity(ResourceKind.MODEL, file_path.stem),
+                facts=facts,
             ),
             hook_key=hook_key,
         )
-    return expanded_values
+    return HookExpansionResult(values=expanded_values, usages=tuple(dict.fromkeys(facts.usages)))
 
 
 def validate_model_hook_config(*, values: dict[str, object], model_name: str) -> None:
@@ -820,18 +983,29 @@ def expand_sql_macros_in_value(
                 f"{hook_label} in '{context.file_path}' uses unsupported ${{...}} template syntax. "
                 "Use @@CTX:..., @@ENV:..., or @@project_var inside SQL hooks."
             )
-        return expand_authored_sql(
+        declaration_context: DeclarationResolutionContext = (
+            context.declaration_expansion.declarations
+        )
+        if context.declaration_expansion.resolver is not None:
+            declaration_context = resolve_declaration_context(
+                resolver=context.declaration_expansion.resolver,
+                file_path=context.file_path,
+            )
+        expansion: AuthoredSqlExpansionResult = expand_authored_sql_result(
             sql=value,
             file_path=context.file_path,
             effective_vars=context.effective_vars,
             context_values=context.context_values,
             loaded_macros=context.loaded_macros,
             macro_context=context.macro_context,
-            enums=context.declaration_expansion.declarations.enums,
-            constants=context.declaration_expansion.declarations.constants,
+            declaration_resolver=context.declaration_expansion.resolver,
             value_renderer=context.declaration_expansion.value_renderer,
             collection_rendering=context.declaration_expansion.collection_rendering,
+            declarations=replace(declaration_context, consumer=context.consumer),
         )
+        facts: _HookExpansionFacts = context.facts
+        facts.add(expansion.usages)
+        return expansion.sql
     if isinstance(value, SqlHookEntry):
         expanded_statement: object = expand_sql_macros_in_value(
             value=value.statement,
@@ -885,7 +1059,11 @@ def expand_sql_macros_in_value(
         )
         expanded_statement = expand_sql_macros_in_value(
             value=rendered_statement,
-            context=replace(context, file_path=hook_definition.file_path),
+            context=replace(
+                context,
+                file_path=hook_definition.file_path,
+                consumer=ResourceIdentity(ResourceKind.HOOK, value.name),
+            ),
             hook_key=hook_key,
             hook_index=hook_index,
         )

@@ -10,6 +10,21 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 
 
 @dataclass(frozen=True)
+class ScopeArgumentMisuseCase:
+    """One invalid scope argument combination."""
+
+    description: str
+    argv: tuple[str, ...]
+    expected_exit_code: int = 2
+
+
+@dataclass(frozen=True)
+class ScopeEntryCase:
+    description: str
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
 class MainTestCase:
     description: str
     argv: list[str]

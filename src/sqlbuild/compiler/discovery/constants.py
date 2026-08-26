@@ -45,6 +45,16 @@ MODEL_SCHEMAS_DIRECTORY_NAME: str = "schemas"
 SEEDS_DIRECTORY_NAME: str = "seeds"
 CURRENT_DIRECTORY_PATH: str = "."
 
+CANONICAL_AUTHORED_ROOTS: tuple[tuple[str, ...], ...] = (
+    ("models",),
+    ("tests", "unit"),
+    ("tests", "scenarios"),
+    ("hooks", "sql"),
+    ("functions", "sql"),
+    ("audits",),
+    ("sources",),
+)
+
 NOT_NULL_AUDIT_NAME: str = "not_null"
 SOURCE_FRESHNESS_DURATION_UNITS: frozenset[str] = frozenset({"m", "h", "d"})
 SOURCE_FRESHNESS_DAY_UNIT: str = "d"

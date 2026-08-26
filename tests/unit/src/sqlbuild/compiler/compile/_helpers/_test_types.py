@@ -1,15 +1,19 @@
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledObjectKey,
+    CompileProjectInputs,
     CompileSqlReference,
     ExpansionSpan,
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, SqlTestMode
 from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.compiler.scopes.models import UsageRecord
+from sqlbuild.compiler.scopes.types import ScopeKind
 
 
 @dataclass(frozen=True)
@@ -27,6 +31,21 @@ class FindMatchingPathDefaultTestCase:
 
 
 @dataclass(frozen=True)
+class LoadProjectMacrosTestCase:
+    description: str
+    macro_files: dict[str, str]
+    expected_macro_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LoadProjectMacrosErrorTestCase:
+    description: str
+    macro_files: dict[str, str]
+    expected_error_fragment: str
+    expected_marker_exists: bool = False
+
+
+@dataclass(frozen=True)
 class ExpandSqlMacrosTestCase:
     description: str
     macro_file_contents: str
@@ -39,6 +58,23 @@ class ExpandSqlMacrosTestCase:
 class ExpandSqlMacrosErrorTestCase:
     description: str
     macro_file_contents: str
+    sql: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ScopedMacroExpansionTestCase:
+    description: str
+    definitions: dict[str, tuple[str, ScopeKind, str | None, str]]
+    expected_sql: str
+    expected_dependencies: tuple[str, ...]
+    expected_usages: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class ScopedMacroExpansionErrorTestCase:
+    description: str
+    definitions: dict[str, tuple[str, ScopeKind, str | None, str]]
     sql: str
     expected_error_fragment: str
 
@@ -86,6 +122,55 @@ class DeclarationFingerprintTestCase:
     model_sql: str
     expected_query_hash_changed: bool
     expected_metadata_changed: bool
+    additional_files: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ScopedDeclarationCompileTestCase:
+    description: str
+    files: dict[str, str]
+    model_path: str
+    model_sql: str
+    expected_sql: str
+
+
+@dataclass(frozen=True)
+class ScopedDeclarationErrorTestCase:
+    description: str
+    files: dict[str, str]
+    expected_error_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ScopedDeclarationSurfaceTestCase:
+    description: str
+    files: dict[str, str]
+    result: Callable[[CompileProjectInputs], str | None]
+    expected_sql: str
+
+
+@dataclass(frozen=True)
+class ExpectedModelDeclarationGrantTestCase:
+    description: str
+    files: dict[str, str]
+    expected_sql_fragments: tuple[str, ...]
+    expected_grants: tuple[tuple[str, str, str], ...]
+    input_collection: str = "test_inputs"
+
+
+@dataclass(frozen=True)
+class RelationshipUsageTestCase:
+    description: str
+    files: dict[str, str]
+    expected_usage: UsageRecord
+
+
+@dataclass(frozen=True)
+class ScopePlacementCompileTestCase:
+    description: str
+    files: dict[str, str]
+    expected_fragment: str | None = None
+    expected_complete: bool = True
 
 
 @dataclass(frozen=True)

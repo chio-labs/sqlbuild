@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import importlib.util
 import inspect
 import re
+from dataclasses import dataclass, field
 from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
 
 from sqlbuild.compiler.compile.constants import (
     DECLARATION_REFERENCE_NAMES,
-    MACRO_CALL_PATTERN,
     MACRO_CONTEXT_PARAMETER_NAME,
     MACRO_TOKEN,
     PYTHON_LITERAL_NAMES,
@@ -21,11 +22,24 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
+    DeclarationResolutionContext,
+    DeclarationScopeResolver,
     ExpansionSpan,
     LoadedMacro,
     MacroContext,
+    MacroExpansionResult,
+    StaticMacroExport,
+    StaticMacroFault,
+    StaticMacroInventory,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
+from sqlbuild.compiler.scopes.models import (
+    DeclarationIdentity,
+    DeclarationRecord,
+    ResourceIdentity,
+    UsageRecord,
+)
+from sqlbuild.compiler.scopes.types import DeclarationKind, UsageKind
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
 from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
     is_identifier_character as _is_identifier_continue,
@@ -40,14 +54,46 @@ from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_te
 _CONTEXT: str = "Macro expansion"
 _LINE_COMMENT_TOKEN: str = "--"
 _BLOCK_COMMENT_TOKEN: str = "/*"
+_STAR_IMPORT_NAME: str = "*"
 _MACRO_SCAN_PATTERN: re.Pattern[str] = re.compile(r"@|--|/\*|'|\"|`")
+
+
+@dataclass
+class _ExpansionFacts:
+    dependencies: list[DeclarationIdentity] = field(default_factory=list)
+    usages: list[UsageRecord] = field(default_factory=list)
+
+    def add_dependency(self, identity: DeclarationIdentity) -> _ExpansionFacts:
+        """Record a resolved dependency in encounter order."""
+
+        self.dependencies.append(identity)
+        return self
+
+    def add_usage(self, usage: UsageRecord) -> _ExpansionFacts:
+        """Record a resolved macro-to-macro edge in encounter order."""
+
+        self.usages.append(usage)
+        return self
+
+
+@dataclass(frozen=True)
+class _ExpansionState:
+    loaded_macros: dict[str, LoadedMacro]
+    macro_overrides: dict[str, str]
+    macro_context: MacroContext
+    declaration_resolver: DeclarationScopeResolver | None
+    facts: _ExpansionFacts
+    consumer: ResourceIdentity | DeclarationIdentity | None = None
 
 
 def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[str, LoadedMacro]:
     """Load discovered project macro functions into a collision-checked registry."""
 
+    inventory: StaticMacroInventory = _inventory_project_macros(macro_files=macro_files)
+    if inventory.faults:
+        raise CompileInputError(inventory.faults[0].message)
+
     loaded_macros: dict[str, LoadedMacro] = {}
-    macro_file: DiscoveredMacroFile
     for macro_file in macro_files:
         module: ModuleType = _load_macro_module(macro_file=macro_file)
         attribute_name: str
@@ -55,7 +101,10 @@ def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[st
             if attribute_name.startswith("_"):
                 continue
             attribute_value: object = getattr(module, attribute_name)
-            if not callable(attribute_value):
+            if (
+                not inspect.isfunction(attribute_value)
+                or attribute_value.__module__ != module.__name__
+            ):
                 continue
             existing_macro: LoadedMacro | None = loaded_macros.get(attribute_name)
             if existing_macro is not None:
@@ -73,6 +122,171 @@ def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[st
     return loaded_macros
 
 
+def _inventory_project_macros(
+    *, macro_files: tuple[DiscoveredMacroFile, ...]
+) -> StaticMacroInventory:
+    """Validate and inventory project macro exports without executing authored code."""
+
+    module_names: frozenset[str] = frozenset(_macro_module_name(file) for file in macro_files)
+    exports: list[StaticMacroExport] = []
+    faults: list[StaticMacroFault] = []
+    owners: dict[str, Path] = {}
+    for macro_file in macro_files:
+        try:
+            module_ast: ast.Module = _validate_macro_module(
+                macro_file=macro_file, module_names=module_names
+            )
+        except CompileInputError as error:
+            faults.append(
+                StaticMacroFault(
+                    relative_path=macro_file.relative_path,
+                    message=str(error).replace(
+                        str(macro_file.file_path), macro_file.relative_path.as_posix()
+                    ),
+                )
+            )
+            continue
+        statement: ast.stmt
+        for statement in module_ast.body:
+            if not isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            if statement.name.startswith("_"):
+                continue
+            existing: Path | None = owners.get(statement.name)
+            if existing is not None:
+                collision_error: CompileInputError = CompileInputError(
+                    f"Macro name collision for '{statement.name}': "
+                    f"{existing} and {macro_file.file_path}"
+                )
+                faults.append(
+                    StaticMacroFault(
+                        relative_path=macro_file.relative_path,
+                        message=str(collision_error),
+                    )
+                )
+                continue
+            owners[statement.name] = macro_file.file_path
+            arguments: ast.arguments = statement.args
+            exports.append(
+                StaticMacroExport(
+                    name=statement.name,
+                    relative_path=macro_file.relative_path,
+                    parameters=tuple(
+                        argument.arg for argument in (*arguments.posonlyargs, *arguments.args)
+                    )
+                    + ((arguments.vararg.arg,) if arguments.vararg is not None else ())
+                    + tuple(argument.arg for argument in arguments.kwonlyargs)
+                    + ((arguments.kwarg.arg,) if arguments.kwarg is not None else ()),
+                    line=statement.lineno,
+                    source_digest=hashlib.sha256(macro_file.contents.encode()).hexdigest(),
+                )
+            )
+    return StaticMacroInventory(
+        exports=tuple(sorted(exports, key=lambda item: (item.name, item.relative_path.as_posix()))),
+        faults=tuple(faults),
+    )
+
+
+def _macro_module_name(macro_file: DiscoveredMacroFile) -> str:
+    return ".".join(macro_file.relative_path.with_suffix("").parts)
+
+
+def _validate_macro_module(
+    *, macro_file: DiscoveredMacroFile, module_names: frozenset[str]
+) -> ast.Module:
+    try:
+        module_ast: ast.Module = ast.parse(macro_file.contents, filename=str(macro_file.file_path))
+    except SyntaxError as error:
+        raise CompileInputError(
+            f"Failed to parse macros from '{macro_file.file_path}': {error}"
+        ) from error
+
+    statement: ast.stmt
+    for statement in module_ast.body:
+        imported_module_names: tuple[str, ...] = _imported_module_names(
+            statement=statement,
+            current_module_name=_macro_module_name(macro_file),
+        )
+        matching_names: list[str] = []
+        imported_name: str
+        for imported_name in imported_module_names:
+            if _matches_macro_module(imported_name=imported_name, module_names=module_names):
+                matching_names.append(imported_name)
+        matched_module_names: tuple[str, ...] = tuple(
+            sorted(
+                matching_names,
+                key=lambda name: (name not in module_names, -len(name), name),
+            )
+        )
+        if matched_module_names:
+            raise CompileInputError(
+                f"Macro module '{macro_file.relative_path}' must not import project macro module "
+                f"'{matched_module_names[0]}'"
+            )
+        public_declaration_name: str | None = _public_non_function_declaration_name(statement)
+        if public_declaration_name is not None:
+            raise CompileInputError(
+                f"Macro module '{macro_file.relative_path}' declaration "
+                f"'{public_declaration_name}' must be underscore-private"
+            )
+    return module_ast
+
+
+def _matches_macro_module(*, imported_name: str, module_names: frozenset[str]) -> bool:
+    module_name: str
+    for module_name in module_names:
+        if module_name == imported_name or module_name.startswith(f"{imported_name}."):
+            return True
+    return False
+
+
+def _imported_module_names(*, statement: ast.stmt, current_module_name: str) -> tuple[str, ...]:
+    if isinstance(statement, ast.Import):
+        return tuple(alias.name for alias in statement.names)
+    if not isinstance(statement, ast.ImportFrom):
+        return ()
+
+    base_module_name: str = statement.module or ""
+    if statement.level:
+        current_package_parts: list[str] = current_module_name.split(".")[:-1]
+        retained_part_count: int = len(current_package_parts) - statement.level + 1
+        base_parts: list[str] = current_package_parts[: max(retained_part_count, 0)]
+        if base_module_name:
+            base_parts.extend(base_module_name.split("."))
+        base_module_name = ".".join(base_parts)
+    names: list[str] = []
+    if base_module_name:
+        names.append(base_module_name)
+    alias: ast.alias
+    for alias in statement.names:
+        if alias.name == _STAR_IMPORT_NAME:
+            continue
+        imported_parts: list[str] = [base_module_name] if base_module_name else []
+        imported_parts.append(alias.name)
+        names.append(".".join(imported_parts))
+    return tuple(names)
+
+
+def _public_non_function_declaration_name(statement: ast.stmt) -> str | None:
+    if isinstance(statement, ast.ClassDef) and not statement.name.startswith("_"):
+        return statement.name
+    if isinstance(statement, ast.TypeAlias) and isinstance(statement.name, ast.Name):
+        return statement.name.id if not statement.name.id.startswith("_") else None
+    assignment_names: tuple[str, ...] = ()
+    if isinstance(statement, ast.Assign):
+        names: list[str] = []
+        target: ast.expr
+        for target in statement.targets:
+            node: ast.AST
+            for node in ast.walk(target):
+                if isinstance(node, ast.Name):
+                    names.append(node.id)
+        assignment_names = tuple(names)
+    elif isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
+        assignment_names = (statement.target.id,)
+    return next((name for name in assignment_names if not name.startswith("_")), None)
+
+
 def expand_sql_macros(
     *,
     sql: str,
@@ -80,6 +294,8 @@ def expand_sql_macros(
     loaded_macros: dict[str, LoadedMacro],
     macro_overrides: dict[str, str] | None = None,
     macro_context: MacroContext,
+    declaration_resolver: DeclarationScopeResolver | None = None,
+    consumer: ResourceIdentity | DeclarationIdentity | None = None,
 ) -> str:
     """Expand authored Python macros in one executable SQL string."""
 
@@ -90,6 +306,8 @@ def expand_sql_macros(
         loaded_macros=loaded_macros,
         macro_overrides=macro_overrides,
         macro_context=macro_context,
+        declaration_resolver=declaration_resolver,
+        consumer=consumer,
     )
     return expanded_sql
 
@@ -101,11 +319,77 @@ def expand_sql_macros_with_spans(
     loaded_macros: dict[str, LoadedMacro],
     macro_overrides: dict[str, str] | None = None,
     macro_context: MacroContext,
+    declaration_resolver: DeclarationScopeResolver | None = None,
+    consumer: ResourceIdentity | DeclarationIdentity | None = None,
 ) -> tuple[str, tuple[ExpansionSpan, ...]]:
     """Expand authored Python macros, returning the span of every substitution."""
 
+    result: MacroExpansionResult = expand_sql_macros_result(
+        sql=sql,
+        file_path=file_path,
+        loaded_macros=loaded_macros,
+        macro_overrides=macro_overrides,
+        macro_context=macro_context,
+        declaration_resolver=declaration_resolver,
+        consumer=consumer,
+    )
+    return result.sql, result.spans
+
+
+def expand_sql_macros_result(
+    *,
+    sql: str,
+    file_path: Path,
+    loaded_macros: dict[str, LoadedMacro],
+    macro_overrides: dict[str, str] | None = None,
+    macro_context: MacroContext,
+    declaration_resolver: DeclarationScopeResolver | None = None,
+    consumer: ResourceIdentity | DeclarationIdentity | None = None,
+) -> MacroExpansionResult:
+    """Expand macros and retain deterministic resolved dependency facts."""
+
+    facts: _ExpansionFacts = _ExpansionFacts()
+    state: _ExpansionState = _ExpansionState(
+        loaded_macros=loaded_macros,
+        macro_overrides={} if macro_overrides is None else macro_overrides,
+        macro_context=macro_context,
+        declaration_resolver=declaration_resolver,
+        facts=facts,
+        consumer=consumer,
+    )
+    expanded_sql, spans = _expand_sql_macros(
+        sql=sql,
+        consumer_path=file_path,
+        state=state,
+        stack=(),
+    )
+    return MacroExpansionResult(
+        sql=expanded_sql,
+        spans=spans,
+        dependencies=tuple(dict.fromkeys(facts.dependencies)),
+        usages=tuple(dict.fromkeys(facts.usages)),
+    )
+
+
+def _expand_sql_macros(
+    *,
+    sql: str,
+    consumer_path: Path,
+    state: _ExpansionState,
+    stack: tuple[DeclarationIdentity, ...],
+) -> tuple[str, tuple[ExpansionSpan, ...]]:
     if MACRO_TOKEN not in sql:
         return sql, ()
+
+    declarations: DeclarationResolutionContext | None = None
+    if state.declaration_resolver is not None:
+        from sqlbuild.compiler.compile._helpers.render.declarations import (
+            resolve_declaration_context,
+        )
+
+        declarations = resolve_declaration_context(
+            resolver=state.declaration_resolver, file_path=consumer_path
+        )
 
     rendered_sql_parts: list[str] = []
     spans: list[ExpansionSpan] = []
@@ -124,22 +408,16 @@ def expand_sql_macros_with_spans(
         macro_result, next_index = _evaluate_macro_call(
             sql=sql,
             call_start_index=macro_start_index,
-            file_path=file_path,
-            loaded_macros=loaded_macros,
-            macro_overrides={} if macro_overrides is None else macro_overrides,
-            macro_context=macro_context,
+            file_path=consumer_path,
+            state=state,
+            declarations=declarations,
+            stack=stack,
             top_level=True,
         )
         if not isinstance(macro_result, str):
             raise CompileInputError(
                 f"Macro '@{_parse_macro_name(sql=sql, call_start_index=macro_start_index)}' in "
-                f"'{file_path}' must return a SQL string when used directly in SQL"
-            )
-        matched_call: re.Match[str] | None = MACRO_CALL_PATTERN.search(macro_result)
-        if matched_call is not None:
-            raise CompileInputError(
-                f"Macro expansion in '{file_path}' produced output containing unexpanded macro "
-                f"call '{matched_call.group(0).rstrip()}'. Compose macros in Python instead."
+                f"'{consumer_path}' must return a SQL string when used directly in SQL"
             )
         rendered_sql_parts.append(macro_result)
         spans.append(
@@ -203,16 +481,30 @@ def _evaluate_macro_call(
     sql: str,
     call_start_index: int,
     file_path: Path,
-    loaded_macros: dict[str, LoadedMacro],
-    macro_overrides: dict[str, str],
-    macro_context: MacroContext,
+    state: _ExpansionState,
+    declarations: DeclarationResolutionContext | None,
+    stack: tuple[DeclarationIdentity, ...],
     top_level: bool,
 ) -> tuple[object, int]:
     macro_name: str = _parse_macro_name(sql=sql, call_start_index=call_start_index)
-    loaded_macro: LoadedMacro | None = loaded_macros.get(macro_name)
-    override_value: str | None = macro_overrides.get(macro_name)
-    if loaded_macro is None and override_value is None:
-        available_macro_names: str = ", ".join(sorted(loaded_macros)) or "none"
+    loaded_macro: LoadedMacro | None = (
+        declarations.macros.get(macro_name)
+        if declarations is not None
+        else state.loaded_macros.get(macro_name)
+    )
+    override_value: str | None = state.macro_overrides.get(macro_name)
+    if declarations is not None and macro_name in declarations.inaccessible_macros:
+        record: DeclarationRecord = declarations.inaccessible_macros[macro_name]
+        suggestions: str = ", ".join(sorted(declarations.macros)) or "none"
+        owner: str = record.owning_path or "global"
+        raise CompileInputError(
+            f"Macro '@{macro_name}' in '{file_path}' is inaccessible. Defined at "
+            f"'{record.path}:{record.line}:{record.column}' with scope owner '{owner}'; "
+            f"consumer/definition path is '{file_path}'. Visible macros: {suggestions}"
+        )
+    if loaded_macro is None:
+        available: object = declarations.macros if declarations is not None else state.loaded_macros
+        available_macro_names: str = ", ".join(sorted(available)) or "none"
         raise CompileInputError(
             f"Unknown macro '@{macro_name}' in '{file_path}'. Available macros: "
             f"{available_macro_names}"
@@ -225,22 +517,41 @@ def _evaluate_macro_call(
     )
     if override_value is not None:
         return override_value, closing_paren_index + 1
-    if loaded_macro is None:
-        raise CompileInputError("loaded macro is unexpectedly missing after validation")
+    identity: DeclarationIdentity = (
+        declarations.macro_records[macro_name].identity
+        if declarations is not None
+        else DeclarationIdentity(kind=DeclarationKind.MACRO, name=macro_name)
+    )
+    if identity in stack:
+        cycle: tuple[DeclarationIdentity, ...] = (*stack[stack.index(identity) :], identity)
+        chain: str = " -> ".join(item.name for item in cycle)
+        paths: str = " -> ".join(
+            str(state.loaded_macros[item.name].relative_path) for item in cycle
+        )
+        raise CompileInputError(
+            f"Macro expansion cycle detected: {chain}. Definition paths: {paths}"
+        )
+    _ = state.facts.add_dependency(identity)
+    if stack:
+        _ = state.facts.add_usage(
+            UsageRecord(stack[-1], identity, UsageKind.DECLARATION_DEPENDENCY),
+        )
+    elif state.consumer is not None:
+        _ = state.facts.add_usage(UsageRecord(state.consumer, identity, UsageKind.RUNTIME))
     args_source: str = sql[opening_paren_index + 1 : closing_paren_index]
     args: tuple[object, ...]
     kwargs: dict[str, object]
     args, kwargs = _parse_macro_arguments(
         args_source=args_source,
         file_path=file_path,
-        loaded_macros=loaded_macros,
-        macro_overrides=macro_overrides,
-        macro_context=macro_context,
+        state=state,
+        declarations=declarations,
+        stack=stack,
     )
     try:
         macro_result: object = _call_loaded_macro(
             loaded_macro=loaded_macro,
-            macro_context=macro_context,
+            macro_context=state.macro_context,
             args=args,
             kwargs=kwargs,
         )
@@ -256,6 +567,13 @@ def _evaluate_macro_call(
         raise CompileInputError(
             f"Macro '@{macro_name}' in '{file_path}' must return a SQL string when "
             "used directly in SQL"
+        )
+    if isinstance(macro_result, str) and MACRO_TOKEN in macro_result:
+        macro_result, _ = _expand_sql_macros(
+            sql=macro_result,
+            consumer_path=loaded_macro.file_path,
+            state=state,
+            stack=(*stack, identity),
         )
     return macro_result, closing_paren_index + 1
 
@@ -288,9 +606,9 @@ def _parse_macro_arguments(
     *,
     args_source: str,
     file_path: Path,
-    loaded_macros: dict[str, LoadedMacro],
-    macro_overrides: dict[str, str],
-    macro_context: MacroContext,
+    state: _ExpansionState,
+    declarations: DeclarationResolutionContext | None,
+    stack: tuple[DeclarationIdentity, ...],
 ) -> tuple[tuple[object, ...], dict[str, object]]:
     if not args_source.strip():
         return (), {}
@@ -299,9 +617,9 @@ def _parse_macro_arguments(
     rewritten_args_source, placeholder_values = _rewrite_nested_macro_calls(
         args_source=args_source,
         file_path=file_path,
-        loaded_macros=loaded_macros,
-        macro_overrides=macro_overrides,
-        macro_context=macro_context,
+        state=state,
+        declarations=declarations,
+        stack=stack,
     )
     try:
         expression: ast.Expression = ast.parse(f"_macro_call({rewritten_args_source})", mode="eval")
@@ -339,9 +657,9 @@ def _rewrite_nested_macro_calls(
     *,
     args_source: str,
     file_path: Path,
-    loaded_macros: dict[str, LoadedMacro],
-    macro_overrides: dict[str, str],
-    macro_context: MacroContext,
+    state: _ExpansionState,
+    declarations: DeclarationResolutionContext | None,
+    stack: tuple[DeclarationIdentity, ...],
 ) -> tuple[str, dict[str, object]]:
     rewritten_parts: list[str] = []
     placeholder_values: dict[str, object] = {}
@@ -359,9 +677,9 @@ def _rewrite_nested_macro_calls(
             sql=args_source,
             call_start_index=macro_start_index,
             file_path=file_path,
-            loaded_macros=loaded_macros,
-            macro_overrides=macro_overrides,
-            macro_context=macro_context,
+            state=state,
+            declarations=declarations,
+            stack=stack,
             top_level=False,
         )
         placeholder: str = f"__sqlbuild_macro_arg_{replacement_index}"

@@ -23,6 +23,7 @@ from sqlbuild.compiler.compile.constants import (
     SOURCE_TEST_CTE_PREFIX,
     SQL_ARGUMENT_SEPARATOR_TOKEN,
     SQL_OPEN_PAREN_TOKEN,
+    SQL_WITH_KEYWORD,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
@@ -52,6 +53,28 @@ def extract_sql_scenario_ctes(*, sql: str, file_label: str) -> CompileSqlScenari
             raise scanner_error from None
         ctes = tuple(CompileSqlScenarioCte(name=name, sql_body=body) for name, body in cte_values)
     return _classify_sql_scenario_ctes(ctes=ctes, file_label=file_label)
+
+
+def extract_sql_scenario_expected_model_names(*, sql: str, file_label: str) -> tuple[str, ...]:
+    """Extract explicit expected-model relationships without inspecting CTE bodies."""
+
+    start: int = _skip_ignorable(sql=sql, start=0)
+    if _try_consume_keyword(sql=sql, start=start, keyword=SQL_WITH_KEYWORD) is None:
+        return ()
+    ctes: tuple[CompileSqlScenarioCte, ...] = _extract_sql_scenario_ctes_with_scanner(
+        sql=sql,
+        file_label=file_label,
+    )
+    return tuple(
+        _require_prefixed_name(
+            cte_name=cte.name,
+            prefix=EXPECTED_TEST_CTE_PREFIX,
+            label="__expected__<model>",
+            file_label=file_label,
+        )
+        for cte in ctes
+        if cte.name.startswith(EXPECTED_TEST_CTE_PREFIX)
+    )
 
 
 def _extract_sql_scenario_ctes_with_scanner(

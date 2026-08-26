@@ -6,10 +6,12 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     MacroLoadCountIntegrationTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
+    build_manifest_for_pipeline_result,
     run_compile_pipeline_for_project,
 )
 
@@ -32,7 +34,7 @@ _COUNTING_MACRO_MODULE: str = (
     "test_case",
     [
         MacroLoadCountIntegrationTestCase(
-            description="user macro modules execute exactly once per compile pipeline run",
+            description="user macro modules execute once across compile and manifest generation",
             project_files={
                 "sqlbuild_project.toml": _PROJECT_TOML,
                 "macros/counting.py": _COUNTING_MACRO_MODULE,
@@ -45,16 +47,21 @@ _COUNTING_MACRO_MODULE: str = (
     ],
     ids=lambda case: case.description,
 )
-def test_given_side_effect_macro_when_running_compile_pipeline_then_imports_macros_once(
+def test_given_side_effect_macro_when_compiling_manifest_then_imports_macros_once(
     test_case: MacroLoadCountIntegrationTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    run_compile_pipeline_for_project(
+    result: CompilePipelineResult = run_compile_pipeline_for_project(
         project_dir=tmp_path,
         adapter=DuckDbAdapter(),
+    )
+    _ = build_manifest_for_pipeline_result(
+        result=result,
+        project_name="demo",
+        adapter_type="duckdb",
     )
 
     import_log: str = (tmp_path / "macro_import_log.txt").read_text(encoding="utf-8")

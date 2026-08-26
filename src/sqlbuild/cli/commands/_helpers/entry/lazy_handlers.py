@@ -83,6 +83,10 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
             module_name="sqlbuild.cli.commands.main.inspection._query",
             function_name="run_query",
         ),
+        "scope": _lazy_handler(
+            module_name="sqlbuild.cli.commands.main.inspection._scope",
+            function_name="run_scope",
+        ),
         "compile": _lazy_handler(
             module_name="sqlbuild.cli.commands.main.project._compile",
             function_name="run_compile",
@@ -265,6 +269,7 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
         run_scenario=lazy["scenario"],
         run_scenario_capture=lazy["scenario_capture"],
         run_kata=lazy["kata"],
+        run_scope=lazy["scope"],
     )
 
 

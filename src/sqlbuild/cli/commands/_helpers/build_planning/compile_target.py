@@ -7,7 +7,6 @@ from sqlbuild.cli.commands.models import (
     BuildCommandRequest,
     BuildInvocation,
 )
-from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 
@@ -25,7 +24,6 @@ def write_build_compile_target(
         manifest_payload = build_manifest(
             project=pipeline_result.project,
             plan_output=pipeline_result.plan_output,
-            loaded_macros=load_macros(invocation.discovered_inputs.macro_files),
             project_name=invocation.discovered_inputs.project_config.name,
             adapter_type=invocation.adapter_name,
             upstream_deps=pipeline_result.plan_output.upstream_deps,

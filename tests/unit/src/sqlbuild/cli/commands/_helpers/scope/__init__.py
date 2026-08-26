@@ -1,0 +1,1 @@
+"""Scope output helper tests."""

@@ -17,8 +17,9 @@ from sqlbuild.compiler.compile._helpers.render.arguments import (
     render_sql_argument_value,
 )
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
+from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_expansion
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
-    expand_authored_sql,
+    expand_authored_sql_result,
 )
 from sqlbuild.compiler.compile.constants import (
     AUDIT_DIRECTORY_NAME,
@@ -26,6 +27,7 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
+    AuthoredSqlExpansionResult,
     CompileAuditInput,
     CompileModelInput,
     CompileSourceInput,
@@ -43,6 +45,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.scopes.models import ResourceIdentity
+from sqlbuild.compiler.scopes.types import ResourceKind
 from sqlbuild.spec.contracts.models import (
     SchemaAuditInstance,
     SchemaColumn,
@@ -115,17 +119,26 @@ def build_audit_inputs(
             continue
         audit_block: DiscoveredAuditBlock
         for audit_block in audit_file.blocks:
-            expanded_sql_body: str = expand_authored_sql(
+            scoped_declarations: DeclarationExpansionContext = resolve_declaration_expansion(
+                context=declaration_expansion,
+                file_path=audit_file.file_path,
+                resource=ResourceIdentity(
+                    ResourceKind.AUDIT,
+                    audit_block.name or audit_file.relative_path.stem,
+                ),
+            )
+            expansion: AuthoredSqlExpansionResult = expand_authored_sql_result(
                 sql=audit_block.sql_body,
                 file_path=audit_file.file_path,
                 effective_vars=effective_vars,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
-                enums=declaration_expansion.declarations.enums,
-                constants=declaration_expansion.declarations.constants,
-                value_renderer=declaration_expansion.value_renderer,
-                collection_rendering=declaration_expansion.collection_rendering,
+                declarations=scoped_declarations.declarations,
+                declaration_resolver=scoped_declarations.resolver,
+                value_renderer=scoped_declarations.value_renderer,
+                collection_rendering=scoped_declarations.collection_rendering,
             )
+            expanded_sql_body: str = expansion.sql
             reject_cursor_intrinsics(
                 sql=expanded_sql_body,
                 context=f"Audit '{audit_block.name or audit_file.file_path.stem}'",
@@ -165,6 +178,7 @@ def build_audit_inputs(
                     severity=resolved_severity,
                     run_scope=resolved_run_scope,
                     always_run=header_always_run,
+                    declaration_usages=expansion.usages,
                 )
             )
     model_input: CompileModelInput
@@ -339,17 +353,26 @@ def build_attached_audit_input(
         owner_file=owner_file,
         definition_name=audit_instance.definition_name,
     )
-    expanded_sql_body: str = expand_authored_sql(
+    scoped_declarations: DeclarationExpansionContext = resolve_declaration_expansion(
+        context=context.declaration_expansion,
+        file_path=definition[0].file_path,
+        resource=ResourceIdentity(
+            ResourceKind.AUDIT,
+            definition[1].name or definition[0].relative_path.stem,
+        ),
+    )
+    expansion: AuthoredSqlExpansionResult = expand_authored_sql_result(
         sql=rendered_sql_body,
         file_path=definition[0].file_path,
         effective_vars=context.effective_vars,
         loaded_macros=context.loaded_macros,
         macro_context=context.macro_context,
-        enums=context.declaration_expansion.declarations.enums,
-        constants=context.declaration_expansion.declarations.constants,
-        value_renderer=context.declaration_expansion.value_renderer,
-        collection_rendering=context.declaration_expansion.collection_rendering,
+        declarations=scoped_declarations.declarations,
+        declaration_resolver=scoped_declarations.resolver,
+        value_renderer=scoped_declarations.value_renderer,
+        collection_rendering=scoped_declarations.collection_rendering,
     )
+    expanded_sql_body: str = expansion.sql
     reject_cursor_intrinsics(
         sql=expanded_sql_body,
         context=f"Audit '{audit_instance.definition_name}'",
@@ -389,6 +412,7 @@ def build_attached_audit_input(
         severity=resolved_severity,
         run_scope=resolved_run_scope,
         always_run=audit_instance.always_run,
+        declaration_usages=expansion.usages,
     )
 
 

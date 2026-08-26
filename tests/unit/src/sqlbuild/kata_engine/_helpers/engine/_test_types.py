@@ -62,3 +62,9 @@ class TypedConstantPayloadTestCase:
     raw_value: object
     expected_value: object
     expected_type: str
+
+
+@dataclass(frozen=True)
+class ScopePayloadTestCase:
+    description: str
+    expected_result: bool

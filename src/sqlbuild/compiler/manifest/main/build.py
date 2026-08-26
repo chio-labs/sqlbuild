@@ -10,7 +10,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledSeed,
     CompiledSource,
-    LoadedMacro,
 )
 from sqlbuild.compiler.manifest._helpers.graph_maps import (
     build_child_map,
@@ -41,7 +40,6 @@ def build_manifest(
     *,
     project: CompiledProject,
     plan_output: PlanOutput | None = None,
-    loaded_macros: dict[str, LoadedMacro],
     project_name: str,
     adapter_type: str,
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
@@ -58,9 +56,10 @@ def build_manifest(
     nodes: dict[str, dict[str, object]] = {}
     sources: dict[str, dict[str, object]] = {}
     macros: dict[str, dict[str, object]] = build_manifest_macro_nodes(
-        loaded_macros=loaded_macros,
+        loaded_macros=project.loaded_macros,
         sql_hook_files=project.sql_hook_files,
         project_name=project_name,
+        scope_index=project.scope_index,
     )
     python_hook_metadata: dict[str, dict[str, object]] = _build_python_hook_metadata(project)
 

@@ -3,12 +3,22 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
+from types import MappingProxyType
 
 from sqlbuild.compiler.compile.constants import MACRO_TOKEN, SQL_QUOTE_TOKENS
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import ExpansionSpan
+from sqlbuild.compiler.compile.models import (
+    DeclarationExpansionContext,
+    DeclarationExpansionResult,
+    DeclarationResolutionContext,
+    DeclarationRuntimeProjection,
+    DeclarationScopeResolver,
+    ExpansionSpan,
+    LoadedMacro,
+)
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
@@ -22,6 +32,21 @@ from sqlbuild.compiler.discovery.models import (
     ModelSchemaDeclaration,
 )
 from sqlbuild.compiler.planner.types import ContractPolicy
+from sqlbuild.compiler.scopes.main._resolve_scope_path_visibility import (
+    resolve_scope_path_visibility,
+)
+from sqlbuild.compiler.scopes.main._resolve_scope_visibility import resolve_scope_visibility
+from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
+from sqlbuild.compiler.scopes.models import (
+    DeclarationIdentity,
+    DeclarationRecord,
+    ResourceIdentity,
+    ScopeIndex,
+    UsageRecord,
+    VisibilityRecord,
+    VisibilityResolution,
+)
+from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, UsageKind
 from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
 from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
@@ -47,7 +72,7 @@ _ENUM_REFERENCE_KIND: str = "enum"
 def build_public_declaration_indexes(
     *, discovered_inputs: DiscoveredProjectInputs
 ) -> tuple[dict[str, EnumDeclaration], dict[str, ConstantDeclaration]]:
-    """Build collision-checked project-global declaration indexes."""
+    """Build collision-checked indexes of every public declaration."""
 
     enums: dict[str, EnumDeclaration] = {}
     constants: dict[str, ConstantDeclaration] = {}
@@ -70,6 +95,211 @@ def build_public_declaration_indexes(
                 kind="constant",
             )
     return enums, constants
+
+
+def build_declaration_scope_resolver(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    scope_index: ScopeIndex,
+    loaded_macros: Mapping[str, LoadedMacro] | None = None,
+) -> DeclarationScopeResolver:
+    """Pair the serializable static index with original process-local declaration values."""
+
+    declarations: dict[
+        DeclarationIdentity, EnumDeclaration | ConstantDeclaration | LoadedMacro
+    ] = {}
+    enum_file: DiscoveredEnumFile
+    for enum_file in discovered_inputs.enum_files:
+        for declaration in enum_file.declarations:
+            declarations[DeclarationIdentity(DeclarationKind.ENUM, declaration.name)] = declaration
+    constant_file: DiscoveredConstantFile
+    for constant_file in discovered_inputs.constant_files:
+        for declaration in constant_file.declarations:
+            declarations[DeclarationIdentity(DeclarationKind.CONSTANT, declaration.name)] = (
+                declaration
+            )
+    for model_file in discovered_inputs.model_files:
+        model_name_value: object = model_file.header_values.get("name")
+        model_name: str = (
+            model_name_value
+            if isinstance(model_name_value, str) and model_name_value
+            else model_file.relative_path.stem
+        )
+        owner: ResourceIdentity = ResourceIdentity(ResourceKind.MODEL, model_name)
+        for declaration in model_file.enum_declarations:
+            declarations[DeclarationIdentity(DeclarationKind.ENUM, declaration.name, owner)] = (
+                declaration
+            )
+        for declaration in model_file.constant_declarations:
+            declarations[DeclarationIdentity(DeclarationKind.CONSTANT, declaration.name, owner)] = (
+                declaration
+            )
+    if loaded_macros is not None:
+        for macro in loaded_macros.values():
+            declarations[DeclarationIdentity(DeclarationKind.MACRO, macro.name)] = macro
+    return DeclarationScopeResolver(
+        project_dir=discovered_inputs.project_dir,
+        lookup=build_scope_lookup(index=scope_index),
+        projection=DeclarationRuntimeProjection(declarations=MappingProxyType(declarations)),
+    )
+
+
+def resolve_declaration_context(
+    *,
+    resolver: DeclarationScopeResolver,
+    file_path: Path,
+    resource: ResourceIdentity | None = None,
+) -> DeclarationResolutionContext:
+    """Project canonical visibility for one authored path onto runtime declaration values."""
+
+    target_path: Path = file_path
+    if resolver.project_dir is not None and file_path.is_absolute():
+        try:
+            target_path = file_path.relative_to(resolver.project_dir)
+        except ValueError:
+            target_path = file_path
+    resolution: VisibilityResolution = resolve_scope_visibility(
+        lookup=resolver.lookup, target=resource or target_path
+    )
+    enums: dict[str, EnumDeclaration] = {}
+    constants: dict[str, ConstantDeclaration] = {}
+    inaccessible_enums: dict[str, DeclarationRecord] = {}
+    inaccessible_constants: dict[str, DeclarationRecord] = {}
+    macros: dict[str, LoadedMacro] = {}
+    macro_records: dict[str, DeclarationRecord] = {}
+    inaccessible_macros: dict[str, DeclarationRecord] = {}
+    visibility_by_declaration: dict[DeclarationIdentity, list[VisibilityRecord]] = {}
+    if resolution.target.unknown:
+        lexical_target_path: Path = target_path
+        definition_record: DeclarationRecord | None = next(
+            (
+                record
+                for record in resolver.lookup.index.declarations
+                if record.path == target_path.as_posix()
+                and record.identity.kind is DeclarationKind.MACRO
+            ),
+            None,
+        )
+        if definition_record is not None:
+            lexical_target_path = Path(definition_record.owning_path or ".") / "__macro__.sql"
+        visible_records, inaccessible_records = resolve_scope_path_visibility(
+            lookup=resolver.lookup, path=lexical_target_path
+        )
+    else:
+        visible_records: tuple[DeclarationRecord, ...] = tuple(
+            resolver.lookup.declarations[item.declaration][0] for item in resolution.visible
+        )
+        inaccessible_records: tuple[DeclarationRecord, ...] = tuple(
+            resolver.lookup.declarations[item.declaration][0] for item in resolution.inaccessible
+        )
+        for visible_record in resolution.visible:
+            visibility_by_declaration.setdefault(visible_record.declaration, []).append(
+                visible_record
+            )
+    for visible in visible_records:
+        value: EnumDeclaration | ConstantDeclaration | LoadedMacro | None = (
+            resolver.projection.declarations.get(visible.identity)
+        )
+        if isinstance(value, EnumDeclaration):
+            enums[visible.identity.name] = value
+        elif isinstance(value, ConstantDeclaration):
+            constants[visible.identity.name] = value
+        elif isinstance(value, LoadedMacro):
+            macros[visible.identity.name] = value
+            macro_records[visible.identity.name] = visible
+    for record in inaccessible_records:
+        if record.identity.kind is DeclarationKind.ENUM:
+            inaccessible_enums[record.identity.name] = record
+        elif record.identity.kind is DeclarationKind.CONSTANT:
+            inaccessible_constants[record.identity.name] = record
+        elif record.identity.kind is DeclarationKind.MACRO:
+            inaccessible_macros[record.identity.name] = record
+    enum_visibility: dict[str, tuple[VisibilityRecord, ...]] = {}
+    constant_visibility: dict[str, tuple[VisibilityRecord, ...]] = {}
+    for record in visible_records:
+        records: tuple[VisibilityRecord, ...] = tuple(
+            visibility_by_declaration.get(record.identity, ())
+        )
+        if record.identity.kind is DeclarationKind.ENUM:
+            enum_visibility[record.identity.name] = records
+        elif record.identity.kind is DeclarationKind.CONSTANT:
+            constant_visibility[record.identity.name] = records
+    return DeclarationResolutionContext(
+        enums=enums,
+        constants=constants,
+        inaccessible_enums=inaccessible_enums,
+        inaccessible_constants=inaccessible_constants,
+        enum_visibility=enum_visibility,
+        constant_visibility=constant_visibility,
+        macros=macros,
+        macro_records=macro_records,
+        inaccessible_macros=inaccessible_macros,
+        consumer=(
+            resource
+            or (resolution.target.matches[0].identity if resolution.target.matches else None)
+        ),
+    )
+
+
+def declaration_usage_records(
+    *, sql: str, resource: ResourceIdentity, declarations: DeclarationResolutionContext
+) -> tuple[UsageRecord, ...]:
+    """Collect declaration usages with path or expected-model provenance."""
+
+    usages: list[UsageRecord] = []
+    cursor: int = 0
+    while (reference_start := _find_next_reference_start(sql=sql, start=cursor)) is not None:
+        start_match: re.Match[str] | None = _DECLARATION_REFERENCE_START_PATTERN.match(
+            sql, reference_start
+        )
+        if start_match is None:
+            break
+        is_enum: bool = start_match.group("kind") == _ENUM_REFERENCE_KIND
+        match: re.Match[str] | None = (
+            _ENUM_REFERENCE_PATTERN.match(sql, reference_start)
+            if is_enum
+            else _CONSTANT_REFERENCE_PATTERN.match(sql, reference_start)
+        )
+        if match is None:
+            cursor = start_match.end()
+            continue
+        name: str = match.group("name")
+        visibility: tuple[VisibilityRecord, ...] = (
+            declarations.enum_visibility.get(name, ())
+            if is_enum
+            else declarations.constant_visibility.get(name, ())
+        )
+        for record in _usage_visibility(visibility=visibility, consumer=resource):
+            usages.append(
+                UsageRecord(
+                    consumer=resource,
+                    declaration=record.declaration,
+                    kind=UsageKind.RUNTIME,
+                    through=record.through,
+                )
+            )
+        cursor = match.end()
+    return tuple(dict.fromkeys(usages))
+
+
+def resolve_declaration_expansion(
+    *,
+    context: DeclarationExpansionContext,
+    file_path: Path,
+    resource: ResourceIdentity | None = None,
+) -> DeclarationExpansionContext:
+    """Return an expansion context scoped to one authored resource path."""
+
+    if context.resolver is None or not context.resolver.lookup.index.declarations:
+        return context
+    return replace(
+        context,
+        declarations=resolve_declaration_context(
+            resolver=context.resolver,
+            file_path=file_path,
+            resource=resource,
+        ),
+    )
 
 
 def build_model_declaration_indexes(
@@ -188,19 +418,24 @@ def expand_declaration_references(
     constants: dict[str, ConstantDeclaration],
     value_renderer: TypedSqlValueRenderer,
     collection_rendering: CollectionRendering,
+    inaccessible_enums: dict[str, DeclarationRecord] | None = None,
+    inaccessible_constants: dict[str, DeclarationRecord] | None = None,
 ) -> str:
     """Resolve enum-member and constant references to SQL scalar literals."""
 
-    rendered_sql: str
-    rendered_sql, _spans = expand_declaration_references_with_spans(
+    result: DeclarationExpansionResult = expand_declaration_references_result(
         sql=sql,
         file_path=file_path,
-        enums=enums,
-        constants=constants,
         value_renderer=value_renderer,
         collection_rendering=collection_rendering,
+        declarations=DeclarationResolutionContext(
+            enums=enums,
+            constants=constants,
+            inaccessible_enums=inaccessible_enums or {},
+            inaccessible_constants=inaccessible_constants or {},
+        ),
     )
-    return rendered_sql
+    return result.sql
 
 
 def expand_declaration_references_with_spans(
@@ -211,11 +446,39 @@ def expand_declaration_references_with_spans(
     constants: dict[str, ConstantDeclaration],
     value_renderer: TypedSqlValueRenderer,
     collection_rendering: CollectionRendering,
+    inaccessible_enums: dict[str, DeclarationRecord] | None = None,
+    inaccessible_constants: dict[str, DeclarationRecord] | None = None,
 ) -> tuple[str, tuple[ExpansionSpan, ...]]:
     """Resolve declaration references, returning the span of every substitution."""
 
+    result: DeclarationExpansionResult = expand_declaration_references_result(
+        sql=sql,
+        file_path=file_path,
+        value_renderer=value_renderer,
+        collection_rendering=collection_rendering,
+        declarations=DeclarationResolutionContext(
+            enums=enums,
+            constants=constants,
+            inaccessible_enums=inaccessible_enums or {},
+            inaccessible_constants=inaccessible_constants or {},
+        ),
+    )
+    return result.sql, result.spans
+
+
+def expand_declaration_references_result(
+    *,
+    sql: str,
+    file_path: Path,
+    declarations: DeclarationResolutionContext,
+    value_renderer: TypedSqlValueRenderer,
+    collection_rendering: CollectionRendering,
+) -> DeclarationExpansionResult:
+    """Resolve references and retain usage facts from the resolving token walk."""
+
     rendered_parts: list[str] = []
     spans: list[ExpansionSpan] = []
+    usages: list[UsageRecord] = []
     output_length: int = 0
     cursor: int = 0
     while cursor < len(sql):
@@ -233,23 +496,52 @@ def expand_declaration_references_with_spans(
             raise CompileInputError(f"Invalid declaration reference in '{file_path}'")
         kind: str = start_match.group("kind")
         if kind == _ENUM_REFERENCE_KIND:
+            enum_match: re.Match[str] | None = _ENUM_REFERENCE_PATTERN.match(sql, reference_start)
+            if enum_match is None:
+                raise CompileInputError(f"Invalid enum reference in '{file_path}'")
             replacement: str
             next_cursor: int
             replacement, next_cursor = _resolve_enum_reference(
                 sql=sql,
                 reference_start=reference_start,
                 file_path=file_path,
-                enums=enums,
+                enums=declarations.enums,
+                inaccessible_enums=declarations.inaccessible_enums,
             )
+            visibility: tuple[VisibilityRecord, ...] = declarations.enum_visibility.get(
+                enum_match.group("name"), ()
+            )
+            member: str | None = enum_match.group("member")
         else:
+            constant_match: re.Match[str] | None = _CONSTANT_REFERENCE_PATTERN.match(
+                sql, reference_start
+            )
+            if constant_match is None:
+                raise CompileInputError(f"Invalid constant reference in '{file_path}'")
             replacement, next_cursor = _resolve_constant_reference(
                 sql=sql,
                 reference_start=reference_start,
                 file_path=file_path,
-                constants=constants,
+                constants=declarations.constants,
+                inaccessible_constants=declarations.inaccessible_constants,
                 value_renderer=value_renderer,
                 collection_rendering=collection_rendering,
             )
+            visibility = declarations.constant_visibility.get(constant_match.group("name"), ())
+            member = None
+        if declarations.consumer is not None:
+            for visible in _usage_visibility(
+                visibility=visibility,
+                consumer=declarations.consumer,
+            ):
+                usages.append(
+                    UsageRecord(
+                        consumer=declarations.consumer,
+                        declaration=visible.declaration,
+                        through=visible.through,
+                        enum_member=member,
+                    )
+                )
         rendered_parts.append(replacement)
         spans.append(
             ExpansionSpan(
@@ -261,7 +553,27 @@ def expand_declaration_references_with_spans(
         )
         output_length += len(replacement)
         cursor = next_cursor
-    return "".join(rendered_parts), tuple(spans)
+    return DeclarationExpansionResult(
+        sql="".join(rendered_parts),
+        spans=tuple(spans),
+        usages=tuple(dict.fromkeys(usages)),
+    )
+
+
+def _usage_visibility(
+    *,
+    visibility: tuple[VisibilityRecord, ...],
+    consumer: ResourceIdentity | DeclarationIdentity,
+) -> tuple[VisibilityRecord, ...]:
+    if not isinstance(consumer, ResourceIdentity) or consumer.kind not in {
+        ResourceKind.TEST,
+        ResourceKind.SCENARIO,
+    }:
+        return visibility
+    relationship_visibility: tuple[VisibilityRecord, ...] = tuple(
+        record for record in visibility if record.through is not None
+    )
+    return relationship_visibility or visibility
 
 
 def resolve_enum_contract_columns(
@@ -314,6 +626,7 @@ def _resolve_enum_reference(
     reference_start: int,
     file_path: Path,
     enums: dict[str, EnumDeclaration],
+    inaccessible_enums: dict[str, DeclarationRecord],
 ) -> tuple[str, int]:
     match: re.Match[str] | None = _ENUM_REFERENCE_PATTERN.match(sql, reference_start)
     if match is None:
@@ -323,8 +636,18 @@ def _resolve_enum_reference(
     name: str = match.group("name")
     declaration: EnumDeclaration | None = enums.get(name)
     if declaration is None:
+        inaccessible: DeclarationRecord | None = inaccessible_enums.get(name)
+        if inaccessible is not None:
+            raise CompileInputError(
+                _inaccessible_declaration_message(
+                    kind="enum", name=name, record=inaccessible, consumer=file_path
+                )
+            )
         scope_help: str = " in this model" if name.startswith("_") else ""
-        raise CompileInputError(f"Unknown enum '{name}'{scope_help} in '{file_path}'")
+        visible: str = ", ".join(sorted(enums)) or "none"
+        raise CompileInputError(
+            f"Unknown enum '{name}'{scope_help} in '{file_path}'. Visible enums: {visible}"
+        )
     member_name: str = match.group("member")
     member: EnumMember | None = next(
         (candidate for candidate in declaration.members if candidate.name == member_name),
@@ -345,6 +668,7 @@ def _resolve_constant_reference(
     reference_start: int,
     file_path: Path,
     constants: dict[str, ConstantDeclaration],
+    inaccessible_constants: dict[str, DeclarationRecord],
     value_renderer: TypedSqlValueRenderer,
     collection_rendering: CollectionRendering,
 ) -> tuple[str, int]:
@@ -356,8 +680,18 @@ def _resolve_constant_reference(
     name: str = match.group("name")
     declaration: ConstantDeclaration | None = constants.get(name)
     if declaration is None:
+        inaccessible: DeclarationRecord | None = inaccessible_constants.get(name)
+        if inaccessible is not None:
+            raise CompileInputError(
+                _inaccessible_declaration_message(
+                    kind="constant", name=name, record=inaccessible, consumer=file_path
+                )
+            )
         scope_help: str = " in this model" if name.startswith("_") else ""
-        raise CompileInputError(f"Unknown constant '{name}'{scope_help} in '{file_path}'")
+        visible: str = ", ".join(sorted(constants)) or "none"
+        raise CompileInputError(
+            f"Unknown constant '{name}'{scope_help} in '{file_path}'. Visible constants: {visible}"
+        )
     selected_rendering: CollectionRendering = declaration.render_as or collection_rendering
     try:
         if declaration.value.kind in {
@@ -388,6 +722,23 @@ def _resolve_constant_reference(
             f"{selected_rendering.value}: {error}"
         ) from error
     return rendered, match.end()
+
+
+def _inaccessible_declaration_message(
+    *, kind: str, name: str, record: DeclarationRecord, consumer: Path
+) -> str:
+    owner: str = record.owning_path or record.ownership_root.path
+    owner_identity: str = (
+        f" ({record.identity.owner.kind.value} '{record.identity.owner.name}')"
+        if record.identity.owner is not None
+        else ""
+    )
+    return (
+        f"{kind.capitalize()} '{name}' is known but inaccessible in '{consumer}'. "
+        f"It is defined at {record.path}:{record.line}:{record.column} with "
+        f"{record.scope.value} scope owned by '{owner}'{owner_identity}; "
+        f"consumer path: '{consumer}'"
+    )
 
 
 def _render_scalar(*, value: str | int) -> str:

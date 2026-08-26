@@ -41,6 +41,7 @@ from sqlbuild.cli.commands.models import (
     ScenarioCaptureCommandRequest,
     ScenarioSnapshotLimitInputs,
     ScenarioTestCommandRequest,
+    ScopeCommandRequest,
     SeedCommandRequest,
     TestCommandRequest,
 )
@@ -80,6 +81,31 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                     skip_contracts=args.profile_skip_contracts,
                     skip_write=args.profile_skip_write,
                 ),
+            )
+        )
+    if args.command == CliCommand.SCOPE:
+        return handlers.run_scope(
+            request=ScopeCommandRequest(
+                project_dir=project_dir,
+                target=args.scope_target,
+                at=args.scope_at,
+                as_path=args.scope_as_path,
+                browse=args.scope_browse,
+                list_path=args.scope_list,
+                defined_under=args.scope_defined_under,
+                kinds=tuple(args.scope_kind),
+                match=args.scope_match,
+                used_only=args.scope_used_only,
+                include_nearby=args.scope_include_nearby,
+                nearby_depth=args.scope_nearby_depth,
+                dependency_depth=args.scope_dependency_depth,
+                explain=args.scope_explain,
+                globals=args.scope_globals,
+                page_size=args.scope_page_size,
+                after=args.scope_after,
+                paths=args.scope_paths,
+                json_output=args.json,
+                no_cache=args.no_cache,
             )
         )
     if args.command == CliCommand.DAG:

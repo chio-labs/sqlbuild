@@ -16,6 +16,7 @@ import sqlbuild._kata_native as _kata_native
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
+from sqlbuild.compiler.scopes.main.scope_metadata import scope_metadata_projection
 from sqlbuild.kata_engine._helpers.engine.custom_rule_evidence import (
     custom_rule_implementation_fingerprint,
     custom_rule_test_evidence,
@@ -55,6 +56,7 @@ def evaluate_native(
         "public_constants": [
             _constant_payload(declaration) for declaration in project.public_constants.values()
         ],
+        "scope_index": scope_metadata_projection(index=project.scope_index),
         "custom_rules": [
             _custom_rule_payload(rule=rule, project_dir=project_dir)
             for rule in catalogue

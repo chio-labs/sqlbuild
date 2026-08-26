@@ -4,7 +4,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    LoadedMacro,
 )
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 
@@ -14,7 +13,6 @@ class ManifestTopLevelTestCase:
     description: str
     project: CompiledProject
     plan_output: PlanOutput
-    loaded_macros: dict[str, LoadedMacro]
     project_name: str
     adapter_type: str
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
@@ -88,6 +86,9 @@ class ManifestMacroNodeTestCase:
     expected_resource_type: str
     expected_macro_sql: str
     expected_path: str
+    expected_visibility: str = "global"
+    expected_scope_path: str | None = None
+    expected_dependencies: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

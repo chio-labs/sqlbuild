@@ -23,6 +23,7 @@ from sqlbuild.cli.commands.types import (
     PlaygroundTemplate,
     QueryCommandHandler,
     ReconcileCommandHandler,
+    ScopeCommandHandler,
     SkillsUpdateCommandHandler,
     StateCommandHandler,
 )
@@ -1181,6 +1182,32 @@ class TestCommandRequest:
 
 
 @dataclass(frozen=True)
+class ScopeCommandRequest:
+    """CLI inputs for one offline declaration-scope inspection."""
+
+    project_dir: Path | None = None
+    target: str | None = None
+    at: str | None = None
+    as_path: str | None = None
+    browse: str | None = None
+    list_path: str | None = None
+    defined_under: str | None = None
+    kinds: tuple[str, ...] = ()
+    match: str | None = None
+    used_only: bool = False
+    include_nearby: bool = False
+    nearby_depth: int = 1
+    dependency_depth: int = 0
+    explain: str | None = None
+    globals: str = "summary"
+    page_size: int = 100
+    after: str | None = None
+    paths: str = "relative"
+    json_output: bool = False
+    no_cache: bool = False
+
+
+@dataclass(frozen=True)
 class TestInvocation:
     """Resolved project, adapter, and reporter context for the test command."""
 
@@ -1303,6 +1330,7 @@ class CliEntrypointHandlers:
     run_scenario: Callable[[ScenarioTestCommandRequest], int]
     run_scenario_capture: Callable[[ScenarioCaptureCommandRequest], int]
     run_kata: Callable[[KataCommandRequest], int]
+    run_scope: ScopeCommandHandler
 
 
 from sqlbuild.cli.commands.classes.build_progress_callbacks import (  # noqa: E402,F401

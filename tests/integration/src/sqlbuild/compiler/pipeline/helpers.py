@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.main.load_macros import load_macros
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.manifest.main.build import build_manifest
@@ -48,18 +47,15 @@ def run_compile_pipeline_for_project(
 
 def build_manifest_for_pipeline_result(
     *,
-    project_dir: Path,
     result: CompilePipelineResult,
     project_name: str,
     adapter_type: str,
 ) -> dict[str, object]:
     """Build the manifest artifact from a compile pipeline result."""
 
-    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
     return build_manifest(
         project=result.project,
         plan_output=result.plan_output,
-        loaded_macros=load_macros(discovered_inputs.macro_files),
         project_name=project_name,
         adapter_type=adapter_type,
         upstream_deps=result.plan_output.upstream_deps,

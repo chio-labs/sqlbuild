@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
+from sqlbuild.compiler.scopes.types import ScopeKind
 from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.models import ColumnLineageRef, RetryPolicy, SqlResourceRef
 from sqlbuild.python_nodes.types import PythonCheckSeverity
@@ -154,6 +155,10 @@ class DiscoveredEnumFile:
     relative_path: Path
     contents: str
     declarations: tuple[EnumDeclaration, ...]
+    scope_kind: ScopeKind = ScopeKind.GLOBAL
+    ownership_root: Path | None = None
+    owning_path: Path | None = None
+    declaration_root: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -164,6 +169,10 @@ class DiscoveredConstantFile:
     relative_path: Path
     contents: str
     declarations: tuple[ConstantDeclaration, ...]
+    scope_kind: ScopeKind = ScopeKind.GLOBAL
+    ownership_root: Path | None = None
+    owning_path: Path | None = None
+    declaration_root: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -288,6 +297,10 @@ class DiscoveredMacroFile:
     file_path: Path
     relative_path: Path
     contents: str
+    scope_kind: ScopeKind = ScopeKind.GLOBAL
+    ownership_root: Path | None = None
+    owning_path: Path | None = None
+    declaration_root: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -452,3 +465,22 @@ class DiscoveredProjectInputs:
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
     providers: tuple[DiscoveredProvider, ...] = field(default_factory=tuple)
     adapter_file: DiscoveredAdapterFile | None = None
+
+
+@dataclass(frozen=True)
+class DiscoveryFileFault:
+    """One project-relative authored file fault captured during tolerant discovery."""
+
+    path: Path | None
+    message: str
+
+
+@dataclass(frozen=True)
+class TolerantScopeDiscovery:
+    """Parsed scope inputs and independently categorized tolerant discovery faults."""
+
+    discovered_inputs: DiscoveredProjectInputs
+    resource_faults: tuple[DiscoveryFileFault, ...] = field(default_factory=tuple)
+    declaration_faults: tuple[DiscoveryFileFault, ...] = field(default_factory=tuple)
+    relationship_faults: tuple[DiscoveryFileFault, ...] = field(default_factory=tuple)
+    config_faults: tuple[DiscoveryFileFault, ...] = field(default_factory=tuple)

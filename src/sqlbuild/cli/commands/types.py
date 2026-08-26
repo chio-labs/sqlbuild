@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
+
+if TYPE_CHECKING:
+    from sqlbuild.cli.commands.models import ScopeCommandRequest
+    from sqlbuild.compiler.scopes.models import ScopeIndex
 
 
 class CompileLineageMode(StrEnum):
@@ -54,6 +58,15 @@ class CliCommand(StrEnum):
     LINT = "lint"
     FORMAT = "format"
     KATA = "kata"
+    SCOPE = "scope"
+
+
+class ScopeCommandHandler(Protocol):
+    def __call__(self, *, request: ScopeCommandRequest) -> int: ...
+
+
+class ScopeIndexLoader(Protocol):
+    def __call__(self, *, project_dir: Path, no_cache: bool = False) -> ScopeIndex: ...
 
 
 class DagCommandHandler(Protocol):
