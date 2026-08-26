@@ -1653,7 +1653,7 @@ SELECT 1 AS id
 """.strip()
                 + "\n",
                 "hooks/sql/record_access.sql": """
-HOOK (description: "Record model access");
+HOOK (description "Record model access");
 
 SELECT @'role' AS role, '@@CTX:destination.qualified' AS relation_name
 """.strip()
@@ -1960,7 +1960,7 @@ def project_columns() -> str:
                 + "\n",
                 "models/staging/orders.sql": "MODEL ();\n\nselect 1\n",
                 "tests/unit/orders.sql": """
-TEST (name: "first");
+TEST (name "first");
 
 WITH
 __ref__orders AS (
@@ -1971,7 +1971,7 @@ __expected__orders AS (
 )
 SELECT 1;
 
-TEST (name: "second");
+TEST (name "second");
 
 WITH
 __ref__orders AS (
@@ -1984,11 +1984,11 @@ SELECT 1
 """.strip()
                 + "\n",
                 "audits/orders.sql": """
-AUDIT (name: "first");
+AUDIT (name "first");
 
 SELECT @project_columns() FROM raw_orders;
 
-AUDIT (name: "second");
+AUDIT (name "second");
 
 SELECT @project_columns() FROM raw_customers
 """.strip()
@@ -2964,7 +2964,7 @@ SELECT customer_id AS order_id
 """.strip()
                 + "\n",
                 "tests/unit/test_customer_orders.sql": """
-TEST (mode: table_fn, name: "customer orders arity");
+TEST (mode table_fn, name "customer orders arity");
 
 WITH
 __table_fn_actual__ AS (

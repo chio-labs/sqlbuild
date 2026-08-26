@@ -537,7 +537,7 @@ def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_return
         __macro_expected__ AS (SELECT 'paid' AS status)
         SELECT 1
         """.strip(),
-            expected_error_fragment=r"use TEST \(mode: macro\)",
+            expected_error_fragment=r"use TEST \(mode macro\)",
         ),
         ExtractSqlTestCtesErrorTestCase(
             description="raises when model mode includes udf actual cte",
@@ -546,7 +546,7 @@ def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_return
         __udf_expected__ AS (SELECT '$12.50' AS formatted)
         SELECT 1
         """.strip(),
-            expected_error_fragment=r"use TEST \(mode: udf\)",
+            expected_error_fragment=r"use TEST \(mode udf\)",
         ),
         ExtractSqlTestCtesErrorTestCase(
             description="raises when model mode includes table function actual cte",
@@ -555,7 +555,7 @@ def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_return
         __table_fn_expected__ AS (SELECT 42 AS customer_id)
         SELECT 1
         """.strip(),
-            expected_error_fragment=r"use TEST \(mode: table_fn\)",
+            expected_error_fragment=r"use TEST \(mode table_fn\)",
         ),
         ExtractSqlTestCtesErrorTestCase(
             description="raises when macro mode includes model test cte",

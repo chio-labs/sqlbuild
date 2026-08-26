@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.discovery._helpers.sql.scenarios import parse_sql_scenario_file
+from sqlbuild.compiler.discovery.exceptions import SqlScenarioParseError
 from sqlbuild.compiler.discovery.models import DiscoveredSqlScenarioFile
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseSqlScenarioFileErrorTestCase,
@@ -18,7 +19,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
         ParseSqlScenarioFileTestCase(
             description="parses scenario metadata and sql body",
             contents="""
-        SCENARIO (description: "Customer refund case", tags: ["revenue", "refunds"]);
+        SCENARIO (description "Customer: refund case", tags [revenue, refunds, yes]);
 
         WITH
         __source__raw__orders AS (
@@ -31,8 +32,8 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
         """,
             expected_name="revenue__customer_refund",
             expected_header_values={
-                "description": "Customer refund case",
-                "tags": ["revenue", "refunds"],
+                "description": "Customer: refund case",
+                "tags": ["revenue", "refunds", "yes"],
             },
             expected_sql_body=(
                 "WITH\n"
@@ -94,7 +95,7 @@ def test_given_sql_scenario_file_variants_when_parsing_then_it_returns_expected_
         ParseSqlScenarioFileErrorTestCase(
             description="raises when scenario header includes unsupported name",
             contents="""
-        SCENARIO (name: "customer_refund");
+        SCENARIO (name "customer_refund");
 
         SELECT 1
         """,
@@ -103,19 +104,29 @@ def test_given_sql_scenario_file_variants_when_parsing_then_it_returns_expected_
         ParseSqlScenarioFileErrorTestCase(
             description="raises when description is not a string",
             contents="""
-        SCENARIO (description: 123);
+        SCENARIO (description 123);
 
         SELECT 1
         """,
             expected_error_fragment="description.*must be a string",
         ),
         ParseSqlScenarioFileErrorTestCase(
+            description="rejects an explicit null description",
+            contents="SCENARIO (description null);\n\nSELECT 1\n",
+            expected_error_fragment="description.*must be a string",
+        ),
+        ParseSqlScenarioFileErrorTestCase(
             description="raises when tags is not a list of strings",
             contents="""
-        SCENARIO (tags: [revenue, 123]);
+        SCENARIO (tags [revenue, 123]);
 
         SELECT 1
         """,
+            expected_error_fragment="tags.*must be a list of strings",
+        ),
+        ParseSqlScenarioFileErrorTestCase(
+            description="rejects explicit null tags",
+            contents="SCENARIO (tags null);\n\nSELECT 1\n",
             expected_error_fragment="tags.*must be a list of strings",
         ),
         ParseSqlScenarioFileErrorTestCase(
@@ -123,13 +134,23 @@ def test_given_sql_scenario_file_variants_when_parsing_then_it_returns_expected_
             contents="SCENARIO ();\n",
             expected_error_fragment="must define SQL after SCENARIO",
         ),
+        ParseSqlScenarioFileErrorTestCase(
+            description="rejects the old colon syntax",
+            contents='SCENARIO (description: "legacy");\n\nSELECT 1\n',
+            expected_error_fragment="unexpected ':' after key 'description'",
+        ),
+        ParseSqlScenarioFileErrorTestCase(
+            description="rejects duplicate scenario keys",
+            contents='SCENARIO (description "first", description "second");\n\nSELECT 1\n',
+            expected_error_fragment="duplicate.*description",
+        ),
     ],
     ids=lambda case: case.description,
 )
 def test_given_invalid_sql_scenario_file_contents_when_parsing_then_it_raises_clear_errors(
     test_case: ParseSqlScenarioFileErrorTestCase,
 ) -> None:
-    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+    with pytest.raises(SqlScenarioParseError, match=test_case.expected_error_fragment):
         parse_sql_scenario_file(
             contents=test_case.contents,
             file_path=Path("tests/scenarios/revenue/revenue__customer_refund.sql"),

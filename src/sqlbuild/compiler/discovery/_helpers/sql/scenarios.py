@@ -5,11 +5,8 @@ from __future__ import annotations
 import re
 from inspect import cleandoc
 from pathlib import Path
-from typing import cast
 
-import yaml
-from yaml import YAMLError
-
+from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_header_values
 from sqlbuild.compiler.discovery.exceptions import SqlScenarioParseError
 from sqlbuild.compiler.discovery.models import DiscoveredSqlScenarioFile
 
@@ -17,6 +14,8 @@ _SCENARIO_HEADER_PATTERN: re.Pattern[str] = re.compile(
     r"^\s*SCENARIO\s*\((?P<header>.*?)\)\s*;\s*(?P<sql>.*)\Z",
     re.DOTALL,
 )
+_SCENARIO_DESCRIPTION_HEADER_KEY: str = "description"
+_SCENARIO_TAGS_HEADER_KEY: str = "tags"
 
 
 def parse_sql_scenario_file(
@@ -52,25 +51,17 @@ def parse_sql_scenario_file(
 
 
 def _parse_scenario_header(*, header: str, file_path: Path) -> dict[str, object]:
-    stripped_header: str = header.strip()
-    if not stripped_header:
-        return {}
+    parsed_header: dict[str, object] = parse_header_values(
+        header=header,
+        file_path=file_path,
+        statement_name="SCENARIO",
+        error_class=SqlScenarioParseError,
+    )
 
-    try:
-        parsed_header: object = yaml.safe_load(f"{{{stripped_header}}}")
-    except YAMLError as error:
-        raise SqlScenarioParseError(
-            f"SCENARIO() header in '{file_path}' could not be parsed: {error}"
-        ) from error
-    if not isinstance(parsed_header, dict) or not all(
-        isinstance(key, str) for key in parsed_header
-    ):
-        raise SqlScenarioParseError(
-            f"SCENARIO() header in '{file_path}' must be a mapping like "
-            '`SCENARIO (description: "...");`'
-        )
-
-    supported_keys: set[str] = {"description", "tags"}
+    supported_keys: set[str] = {
+        _SCENARIO_DESCRIPTION_HEADER_KEY,
+        _SCENARIO_TAGS_HEADER_KEY,
+    }
     unsupported_keys: tuple[str, ...] = tuple(
         str(key) for key in parsed_header if key not in supported_keys
     )
@@ -80,13 +71,13 @@ def _parse_scenario_header(*, header: str, file_path: Path) -> dict[str, object]
             f"unsupported keys: {', '.join(unsupported_keys)}"
         )
 
-    description_value: object | None = parsed_header.get("description")
-    if description_value is not None and not isinstance(description_value, str):
+    description_value: object | None = parsed_header.get(_SCENARIO_DESCRIPTION_HEADER_KEY)
+    if _SCENARIO_DESCRIPTION_HEADER_KEY in parsed_header and not isinstance(description_value, str):
         raise SqlScenarioParseError(f"SCENARIO() description in '{file_path}' must be a string")
-    tags_value: object | None = parsed_header.get("tags")
-    if tags_value is not None and (
+    tags_value: object | None = parsed_header.get(_SCENARIO_TAGS_HEADER_KEY)
+    if _SCENARIO_TAGS_HEADER_KEY in parsed_header and (
         not isinstance(tags_value, list) or not all(isinstance(tag, str) for tag in tags_value)
     ):
         raise SqlScenarioParseError(f"SCENARIO() tags in '{file_path}' must be a list of strings")
 
-    return cast(dict[str, object], parsed_header)
+    return parsed_header

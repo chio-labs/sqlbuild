@@ -128,7 +128,7 @@ SELECT 1
                 "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
                 "models/orders.sql": "MODEL ();\n\nSELECT 1 AS order_id\n",
                 "audits/orders.sql": """
-AUDIT (always_run: true);
+AUDIT (always_run true);
 
 SELECT order_id FROM __ref("orders") WHERE order_id IS NULL
 """.strip()
@@ -276,7 +276,7 @@ seeds:
                 ),
                 "models/customers.sql": "MODEL ();\n\nSELECT 'active' AS status\n",
                 "tests/unit/test_normalize_status.sql": """
-TEST (mode: macro, name: "normalizes status");
+TEST (mode macro, name "normalizes status");
 
 WITH
 input_values AS (SELECT '  PAID  ' AS raw_status),
@@ -372,7 +372,7 @@ FUNCTION (
                 ),
                 "models/customers.sql": "MODEL ();\n\nSELECT 'active' AS status\n",
                 "tests/unit/test_format_cents.sql": """
-TEST (mode: udf, name: "formats cents");
+TEST (mode udf, name "formats cents");
 
 WITH
 input_values AS (SELECT 1250 AS amount_cents),
@@ -426,7 +426,7 @@ SELECT p_customer_id AS customer_id, 1 AS order_id
                     'FROM __table_fn("customer_orders")(42)\n'
                 ),
                 "tests/unit/test_customer_orders.sql": """
-TEST (mode: table_fn, name: "returns customer orders");
+TEST (mode table_fn, name "returns customer orders");
 
 WITH
 __table_fn_actual__ AS (

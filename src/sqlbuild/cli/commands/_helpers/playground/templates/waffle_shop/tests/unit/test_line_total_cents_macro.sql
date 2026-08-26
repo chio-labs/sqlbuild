@@ -1,4 +1,4 @@
-TEST (mode: macro, name: "calculates line total cents");
+TEST (mode macro, name "calculates line total cents");
 
 WITH
 input_values AS (

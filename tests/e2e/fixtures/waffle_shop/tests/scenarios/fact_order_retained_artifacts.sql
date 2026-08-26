@@ -1,6 +1,6 @@
 SCENARIO (
-  description: "Retained scenario artifacts include source ref seed and model relations",
-  tags: ["retention", "example"]
+  description "Retained scenario artifacts include source ref seed and model relations",
+  tags ["retention", "example"]
 );
 
 WITH

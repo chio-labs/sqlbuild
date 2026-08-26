@@ -40,7 +40,7 @@ def build_scenario_project_files() -> dict[str, str]:
             'FROM __ref("orders")\n'
         ),
         "tests/scenarios/order_totals_pass.sql": (
-            'SCENARIO (description: "Order totals scenario", tags: ["scenario"]);\n\n'
+            'SCENARIO (description "Order totals scenario", tags ["scenario"]);\n\n'
             "WITH\n"
             "__source__raw_orders AS (\n"
             "  SELECT 1 AS id, 10 AS amount\n"
@@ -365,7 +365,7 @@ def write_stale_order_totals_scenario(*, project_dir: Path) -> None:
 
     scenario_path: Path = project_dir / "tests" / "scenarios" / "order_totals_pass.sql"
     scenario_path.write_text(
-        'SCENARIO (description: "Order totals scenario", tags: ["scenario"]);\n\n'
+        'SCENARIO (description "Order totals scenario", tags ["scenario"]);\n\n'
         "WITH\n"
         "__source__raw_orders AS (\n"
         "  SELECT 1 AS id, 10 AS amount\n"

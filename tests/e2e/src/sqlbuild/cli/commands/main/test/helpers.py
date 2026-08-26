@@ -121,7 +121,7 @@ def build_macro_test_project_files() -> dict[str, str]:
             "MODEL (materialized table);\n\nSELECT @normalize_status(\"'  PAID  '\") AS status\n"
         ),
         "tests/unit/test_normalize_status.sql": (
-            'TEST (mode: macro, name: "normalizes status");\n\n'
+            'TEST (mode macro, name "normalizes status");\n\n'
             "WITH\n"
             "input_values AS (SELECT '  PAID  ' AS raw_status),\n"
             "__macro_actual__ AS (\n"

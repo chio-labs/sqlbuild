@@ -7,11 +7,9 @@ from inspect import cleandoc
 from pathlib import Path
 from typing import cast
 
-import yaml
-from yaml import YAMLError
-
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import SqlTestMode
+from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_header_values
 from sqlbuild.compiler.discovery.exceptions import SqlTestParseError
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock
 
@@ -23,6 +21,8 @@ _TEST_HEADER_ONLY_PATTERN: re.Pattern[str] = re.compile(
     r"^\s*TEST\s*\((?P<header>.*?)\)\s*;\s*",
     re.DOTALL | re.MULTILINE,
 )
+_TEST_NAME_HEADER_KEY: str = "name"
+_TEST_MODE_HEADER_KEY: str = "mode"
 
 
 def parse_sql_test_file(*, contents: str, file_path: Path) -> tuple[DiscoveredSqlTestBlock, ...]:
@@ -109,24 +109,14 @@ def _parse_single_sql_test_block(
 
 
 def _parse_test_header(*, header: str, file_path: Path) -> dict[str, object]:
-    stripped_header: str = header.strip()
-    if not stripped_header:
-        return {}
+    parsed_header: dict[str, object] = parse_header_values(
+        header=header,
+        file_path=file_path,
+        statement_name="TEST",
+        error_class=SqlTestParseError,
+    )
 
-    try:
-        parsed_header: object = yaml.safe_load(f"{{{stripped_header}}}")
-    except YAMLError as error:
-        raise SqlTestParseError(
-            f"TEST() header in '{file_path}' could not be parsed: {error}"
-        ) from error
-    if not isinstance(parsed_header, dict) or not all(
-        isinstance(key, str) for key in parsed_header
-    ):
-        raise SqlTestParseError(
-            f"TEST() header in '{file_path}' must be a mapping like `TEST (name: \"...\");`"
-        )
-
-    supported_keys: frozenset[str] = frozenset({"name", "mode"})
+    supported_keys: frozenset[str] = frozenset({_TEST_NAME_HEADER_KEY, _TEST_MODE_HEADER_KEY})
     unsupported_keys: tuple[str, ...] = tuple(
         str(key) for key in parsed_header if key not in supported_keys
     )
@@ -136,22 +126,20 @@ def _parse_test_header(*, header: str, file_path: Path) -> dict[str, object]:
             f"{', '.join(unsupported_keys)}"
         )
 
-    _validate_test_name(name_value=parsed_header.get("name"), file_path=file_path)
-    _validate_test_mode(mode_value=parsed_header.get("mode"), file_path=file_path)
+    if _TEST_NAME_HEADER_KEY in parsed_header:
+        _validate_test_name(name_value=parsed_header[_TEST_NAME_HEADER_KEY], file_path=file_path)
+    if _TEST_MODE_HEADER_KEY in parsed_header:
+        _validate_test_mode(mode_value=parsed_header[_TEST_MODE_HEADER_KEY], file_path=file_path)
 
-    return cast(dict[str, object], parsed_header)
+    return parsed_header
 
 
-def _validate_test_name(*, name_value: object | None, file_path: Path) -> None:
-    if name_value is None:
-        return
+def _validate_test_name(*, name_value: object, file_path: Path) -> None:
     if not isinstance(name_value, str) or not name_value.strip():
         raise SqlTestParseError(f"TEST() name in '{file_path}' must be a non-empty string")
 
 
-def _validate_test_mode(*, mode_value: object | None, file_path: Path) -> None:
-    if mode_value is None:
-        return
+def _validate_test_mode(*, mode_value: object, file_path: Path) -> None:
     if not isinstance(mode_value, str):
         raise SqlTestParseError(f"TEST() mode in '{file_path}' must be a string")
 

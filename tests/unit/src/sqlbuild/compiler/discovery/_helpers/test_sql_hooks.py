@@ -21,12 +21,10 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     [
         ParseSqlHookTestCase(
             description="parses hook description and SQL body",
-            contents=(
-                "HOOK (description: \"Grant access\");\n\nGRANT SELECT ON @relation TO @'role'\n"
-            ),
+            contents=('HOOK (description "Grant: access");\n\n@grant(role: "analyst:read")\n'),
             expected_name="grant_access",
-            expected_description="Grant access",
-            expected_sql_body="GRANT SELECT ON @relation TO @'role'",
+            expected_description="Grant: access",
+            expected_sql_body='@grant(role: "analyst:read")',
         ),
         ParseSqlHookTestCase(
             description="allows header-like text inside strings and comments",
@@ -37,7 +35,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
         ),
         ParseSqlHookTestCase(
             description="allows header terminator text inside quoted descriptions",
-            contents='HOOK (description: "Run cleanup(); safely");\n\nSELECT 1\n',
+            contents='HOOK (description "Run cleanup(); safely");\n\nSELECT 1\n',
             expected_name="grant_access",
             expected_description="Run cleanup(); safely",
             expected_sql_body="SELECT 1",
@@ -245,13 +243,33 @@ def test_given_nested_sql_hook_files_when_discovering_then_names_come_from_stems
         ),
         ParseSqlHookErrorTestCase(
             description="rejects unsupported hook header key",
-            contents='HOOK (name: "override");\nSELECT 1\n',
+            contents='HOOK (name "override");\nSELECT 1\n',
             expected_error_fragment="unsupported keys: name",
         ),
         ParseSqlHookErrorTestCase(
             description="rejects a missing hook header",
             contents="SELECT 1\n",
             expected_error_fragment="must start with a HOOK",
+        ),
+        ParseSqlHookErrorTestCase(
+            description="rejects the old colon syntax",
+            contents='HOOK (description: "legacy");\nSELECT 1\n',
+            expected_error_fragment="unexpected ':' after key 'description'",
+        ),
+        ParseSqlHookErrorTestCase(
+            description="rejects duplicate hook keys",
+            contents='HOOK (description "first", description "second");\nSELECT 1\n',
+            expected_error_fragment="duplicate.*description",
+        ),
+        ParseSqlHookErrorTestCase(
+            description="rejects a non-string description",
+            contents="HOOK (description 123);\nSELECT 1\n",
+            expected_error_fragment="description.*non-empty string",
+        ),
+        ParseSqlHookErrorTestCase(
+            description="rejects an explicit null description",
+            contents="HOOK (description null);\nSELECT 1\n",
+            expected_error_fragment="description.*non-empty string",
         ),
     ],
     ids=lambda case: case.description,

@@ -256,7 +256,7 @@ def test_given_project_with_python_hooks_when_building_then_hooks_execute(
             + "\n",
             "hooks/sql/select_one.sql": dedent(
                 """
-                HOOK (description: "Execute a parameterized SQL payload");
+                HOOK (description "Execute a parameterized SQL payload");
 
                 SELECT @value;
                 SELECT @value + 1

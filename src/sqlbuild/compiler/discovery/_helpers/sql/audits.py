@@ -7,9 +7,7 @@ from inspect import cleandoc
 from pathlib import Path
 from typing import cast
 
-import yaml
-from yaml import YAMLError
-
+from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_header_values
 from sqlbuild.compiler.discovery.exceptions import SqlAuditParseError
 from sqlbuild.compiler.discovery.models import DiscoveredAuditBlock
 
@@ -21,8 +19,17 @@ _AUDIT_HEADER_ONLY_PATTERN: re.Pattern[str] = re.compile(
     r"^\s*AUDIT\s*\((?P<header>.*?)\)\s*;\s*",
     re.DOTALL | re.MULTILINE,
 )
+_AUDIT_NAME_HEADER_KEY: str = "name"
+_AUDIT_SEVERITY_HEADER_KEY: str = "severity"
+_AUDIT_RUN_SCOPE_HEADER_KEY: str = "run_scope"
+_AUDIT_ALWAYS_RUN_HEADER_KEY: str = "always_run"
 _SUPPORTED_AUDIT_HEADER_KEYS: frozenset[str] = frozenset(
-    {"name", "severity", "run_scope", "always_run"}
+    {
+        _AUDIT_NAME_HEADER_KEY,
+        _AUDIT_SEVERITY_HEADER_KEY,
+        _AUDIT_RUN_SCOPE_HEADER_KEY,
+        _AUDIT_ALWAYS_RUN_HEADER_KEY,
+    }
 )
 
 
@@ -96,7 +103,7 @@ def _parse_single_sql_audit_block(
     if not sql_body:
         raise SqlAuditParseError(f"SQL audit '{file_path}' must define SQL after AUDIT(...)")
 
-    name_value: object | None = header_values.get("name")
+    name_value: object | None = header_values.get(_AUDIT_NAME_HEADER_KEY)
     audit_name: str | None = cast(str | None, name_value)
     return DiscoveredAuditBlock(
         audit_index=audit_index,
@@ -107,22 +114,12 @@ def _parse_single_sql_audit_block(
 
 
 def _parse_audit_header(*, header: str, file_path: Path) -> dict[str, object]:
-    stripped_header: str = header.strip()
-    if not stripped_header:
-        return {}
-
-    try:
-        parsed_header: object = yaml.safe_load(f"{{{stripped_header}}}")
-    except YAMLError as error:
-        raise SqlAuditParseError(
-            f"AUDIT() header in '{file_path}' could not be parsed: {error}"
-        ) from error
-    if not isinstance(parsed_header, dict) or not all(
-        isinstance(key, str) for key in parsed_header
-    ):
-        raise SqlAuditParseError(
-            f"AUDIT() header in '{file_path}' must be a mapping like `AUDIT (name: \"...\");`"
-        )
+    parsed_header: dict[str, object] = parse_header_values(
+        header=header,
+        file_path=file_path,
+        statement_name="AUDIT",
+        error_class=SqlAuditParseError,
+    )
 
     unsupported_keys: tuple[str, ...] = tuple(
         str(key) for key in parsed_header if key not in _SUPPORTED_AUDIT_HEADER_KEYS
@@ -132,11 +129,20 @@ def _parse_audit_header(*, header: str, file_path: Path) -> dict[str, object]:
             f"AUDIT() in '{file_path}' has unsupported keys: {', '.join(unsupported_keys)}"
         )
 
-    name_value: object | None = parsed_header.get("name")
-    if name_value is not None and (not isinstance(name_value, str) or not name_value.strip()):
+    name_value: object | None = parsed_header.get(_AUDIT_NAME_HEADER_KEY)
+    if _AUDIT_NAME_HEADER_KEY in parsed_header and (
+        not isinstance(name_value, str) or not name_value.strip()
+    ):
         raise SqlAuditParseError(f"AUDIT() name in '{file_path}' must be a non-empty string")
+    for key in (_AUDIT_SEVERITY_HEADER_KEY, _AUDIT_RUN_SCOPE_HEADER_KEY):
+        value: object | None = parsed_header.get(key)
+        if key in parsed_header and (not isinstance(value, str) or not value.strip()):
+            raise SqlAuditParseError(f"AUDIT() {key} in '{file_path}' must be a non-empty string")
+    always_run: object | None = parsed_header.get(_AUDIT_ALWAYS_RUN_HEADER_KEY)
+    if _AUDIT_ALWAYS_RUN_HEADER_KEY in parsed_header and not isinstance(always_run, bool):
+        raise SqlAuditParseError(f"AUDIT() always_run in '{file_path}' must be a boolean")
 
-    return cast(dict[str, object], parsed_header)
+    return parsed_header
 
 
 def _validate_audit_names(*, file_path: Path, blocks: tuple[DiscoveredAuditBlock, ...]) -> None:
