@@ -11,7 +11,15 @@ from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_header_values
 from sqlbuild.compiler.discovery.exceptions import SqlTestParseError
-from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredSqlTestBlock,
+    DiscoveredSqlTestCase,
+    SqlTestParameterDeclaration,
+)
+from sqlbuild.sql_values.exceptions import SqlValueValidationError
+from sqlbuild.sql_values.main.normalize import normalize_sql_value
+from sqlbuild.sql_values.models import SqlValue
+from sqlbuild.sql_values.types import SqlValueKind
 
 _TEST_HEADER_PATTERN: re.Pattern[str] = re.compile(
     r"^\s*TEST\s*\((?P<header>.*?)\)\s*;\s*(?P<sql>.*)\Z",
@@ -23,6 +31,16 @@ _TEST_HEADER_ONLY_PATTERN: re.Pattern[str] = re.compile(
 )
 _TEST_NAME_HEADER_KEY: str = "name"
 _TEST_MODE_HEADER_KEY: str = "mode"
+_TEST_PARAMETERS_HEADER_KEY: str = "parameters"
+_TEST_CASES_HEADER_KEY: str = "cases"
+_PARAMETER_TYPES: tuple[SqlValueKind, ...] = (
+    SqlValueKind.STRING,
+    SqlValueKind.INTEGER,
+    SqlValueKind.BOOLEAN,
+    SqlValueKind.FLOAT,
+    SqlValueKind.DECIMAL,
+)
+_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def parse_sql_test_file(*, contents: str, file_path: Path) -> tuple[DiscoveredSqlTestBlock, ...]:
@@ -99,12 +117,18 @@ def _parse_single_sql_test_block(
     test_name: str | None = cast(str | None, name_value)
     mode_value: object = header_values.get("mode", DEFAULT_SQL_TEST_MODE.value)
     test_mode: SqlTestMode = SqlTestMode(str(mode_value))
+    parameters, cases = _parse_test_parameters_and_cases(
+        header_values=header_values,
+        file_path=file_path,
+    )
     return DiscoveredSqlTestBlock(
         test_index=test_index,
         header_values=header_values,
         sql_body=sql_body,
         name=test_name,
         mode=test_mode,
+        parameters=parameters,
+        cases=cases,
     )
 
 
@@ -116,13 +140,21 @@ def _parse_test_header(*, header: str, file_path: Path) -> dict[str, object]:
         error_class=SqlTestParseError,
     )
 
-    supported_keys: frozenset[str] = frozenset({_TEST_NAME_HEADER_KEY, _TEST_MODE_HEADER_KEY})
+    supported_keys: frozenset[str] = frozenset(
+        {
+            _TEST_NAME_HEADER_KEY,
+            _TEST_MODE_HEADER_KEY,
+            _TEST_PARAMETERS_HEADER_KEY,
+            _TEST_CASES_HEADER_KEY,
+        }
+    )
     unsupported_keys: tuple[str, ...] = tuple(
         str(key) for key in parsed_header if key not in supported_keys
     )
     if unsupported_keys:
         raise SqlTestParseError(
-            f"TEST() in '{file_path}' only supports `name` and `mode`; unsupported keys: "
+            f"TEST() in '{file_path}' only supports `name`, `mode`, `parameters`, and "
+            "`cases`; unsupported keys: "
             f"{', '.join(unsupported_keys)}"
         )
 
@@ -132,6 +164,152 @@ def _parse_test_header(*, header: str, file_path: Path) -> dict[str, object]:
         _validate_test_mode(mode_value=parsed_header[_TEST_MODE_HEADER_KEY], file_path=file_path)
 
     return parsed_header
+
+
+def _parse_test_parameters_and_cases(
+    *, header_values: dict[str, object], file_path: Path
+) -> tuple[tuple[SqlTestParameterDeclaration, ...], tuple[DiscoveredSqlTestCase, ...]]:
+    raw_parameters: object | None = header_values.get(_TEST_PARAMETERS_HEADER_KEY)
+    raw_cases: object | None = header_values.get(_TEST_CASES_HEADER_KEY)
+    if raw_parameters is None and raw_cases is None:
+        return (), ()
+    if raw_parameters is None or raw_cases is None:
+        raise SqlTestParseError(
+            f"TEST() in '{file_path}' must define `parameters` and `cases` together"
+        )
+    if not isinstance(raw_parameters, dict) or not raw_parameters:
+        raise SqlTestParseError(f"TEST() parameters in '{file_path}' must be a non-empty mapping")
+    if not isinstance(raw_cases, dict) or not raw_cases:
+        raise SqlTestParseError(f"TEST() cases in '{file_path}' must be a non-empty mapping")
+
+    parameters: tuple[SqlTestParameterDeclaration, ...] = tuple(
+        _parse_parameter_declaration(
+            name=name,
+            raw_declaration=raw_declaration,
+            file_path=file_path,
+        )
+        for name, raw_declaration in cast(dict[object, object], raw_parameters).items()
+    )
+    parameter_names: tuple[str, ...] = tuple(parameter.name for parameter in parameters)
+    cases: tuple[DiscoveredSqlTestCase, ...] = tuple(
+        _parse_test_case(
+            name=name,
+            raw_values=raw_values,
+            case_index=case_index,
+            parameters=parameters,
+            parameter_names=parameter_names,
+            file_path=file_path,
+        )
+        for case_index, (name, raw_values) in enumerate(
+            cast(dict[object, object], raw_cases).items()
+        )
+    )
+    return parameters, cases
+
+
+def _parse_parameter_declaration(
+    *, name: object, raw_declaration: object, file_path: Path
+) -> SqlTestParameterDeclaration:
+    parameter_name: str = _parse_test_identifier(value=name, label="parameter", file_path=file_path)
+    nullable: bool = False
+    raw_type: object = raw_declaration
+    if isinstance(raw_declaration, dict):
+        declaration_options: dict[object, object] = cast(dict[object, object], raw_declaration)
+        unknown_options: set[object] = set(declaration_options) - {"type", "nullable"}
+        if unknown_options:
+            names: str = ", ".join(sorted(str(option) for option in unknown_options))
+            raise SqlTestParseError(
+                f"TEST() parameter '{parameter_name}' in '{file_path}' has unsupported "
+                f"options: {names}"
+            )
+        raw_type = declaration_options.get("type")
+        raw_nullable: object = declaration_options.get("nullable", False)
+        if not isinstance(raw_nullable, bool):
+            raise SqlTestParseError(
+                f"TEST() parameter '{parameter_name}' nullable option in '{file_path}' "
+                "must be boolean"
+            )
+        nullable = raw_nullable
+    if not isinstance(raw_type, str):
+        raise SqlTestParseError(
+            f"TEST() parameter '{parameter_name}' type in '{file_path}' must be an identifier"
+        )
+    try:
+        value_type: SqlValueKind = SqlValueKind(raw_type.lower())
+    except ValueError as error:
+        raise SqlTestParseError(
+            f"TEST() parameter '{parameter_name}' in '{file_path}' has unsupported "
+            f"type '{raw_type}'"
+        ) from error
+    if value_type not in _PARAMETER_TYPES:
+        allowed: str = ", ".join(value.value for value in _PARAMETER_TYPES)
+        raise SqlTestParseError(
+            f"TEST() parameter '{parameter_name}' in '{file_path}' must use a scalar "
+            f"type: {allowed}"
+        )
+    return SqlTestParameterDeclaration(
+        name=parameter_name,
+        value_type=value_type,
+        nullable=nullable,
+    )
+
+
+def _parse_test_case(
+    *,
+    name: object,
+    raw_values: object,
+    case_index: int,
+    parameters: tuple[SqlTestParameterDeclaration, ...],
+    parameter_names: tuple[str, ...],
+    file_path: Path,
+) -> DiscoveredSqlTestCase:
+    case_name: str = _parse_test_identifier(value=name, label="case", file_path=file_path)
+    if not isinstance(raw_values, dict):
+        raise SqlTestParseError(
+            f"TEST() case '{case_name}' in '{file_path}' must define a parameter mapping"
+        )
+    values: dict[object, object] = cast(dict[object, object], raw_values)
+    missing: tuple[str, ...] = tuple(name for name in parameter_names if name not in values)
+    extra: tuple[str, ...] = tuple(str(name) for name in values if name not in parameter_names)
+    if missing:
+        raise SqlTestParseError(
+            f"TEST() case '{case_name}' in '{file_path}' is missing parameters: "
+            f"{', '.join(missing)}"
+        )
+    if extra:
+        raise SqlTestParseError(
+            f"TEST() case '{case_name}' in '{file_path}' has undeclared parameters: "
+            f"{', '.join(extra)}"
+        )
+    normalized_values: list[tuple[str, SqlValue]] = []
+    parameter: SqlTestParameterDeclaration
+    for parameter in parameters:
+        raw_value: object = values[parameter.name]
+        if raw_value is None and not parameter.nullable:
+            raise SqlTestParseError(
+                f"TEST() case '{case_name}' parameter '{parameter.name}' in '{file_path}' "
+                "is not nullable"
+            )
+        try:
+            value: SqlValue = normalize_sql_value(
+                raw_value=raw_value,
+                explicit_type=None if raw_value is None else parameter.value_type.value,
+                context=f"TEST() case '{case_name}' parameter '{parameter.name}' in '{file_path}'",
+            )
+        except SqlValueValidationError as error:
+            raise SqlTestParseError(str(error)) from error
+        normalized_values.append((parameter.name, value))
+    return DiscoveredSqlTestCase(
+        name=case_name,
+        values=tuple(normalized_values),
+        case_index=case_index,
+    )
+
+
+def _parse_test_identifier(*, value: object, label: str, file_path: Path) -> str:
+    if not isinstance(value, str) or not _IDENTIFIER_PATTERN.fullmatch(value):
+        raise SqlTestParseError(f"TEST() {label} name in '{file_path}' must be a SQL identifier")
+    return value
 
 
 def _validate_test_name(*, name_value: object, file_path: Path) -> None:

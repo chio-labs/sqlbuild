@@ -43,6 +43,9 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
 )
 from sqlbuild.compiler.compile._helpers.render.templating import expand_template_data
 from sqlbuild.compiler.compile._helpers.sql_tests.core import extract_assertion_target_model_names
+from sqlbuild.compiler.compile._helpers.sql_tests.identity import (
+    build_sql_test_case_fingerprint,
+)
 from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME, PRESERVE_TARGET_VALUE
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
@@ -984,6 +987,28 @@ def _assemble_compiled_sql_test(
             assertion_ctes=model_payload.assertion_ctes,
             assertion_names=model_payload.assertion_names,
         )
+    tested_resources: tuple[CompiledSqlTestResource, ...] = (
+        tuple(
+            CompiledSqlTestResource(kind=test_input.payload.mode, name=name)
+            for name in test_input.payload.tested_resource_names
+        )
+        if isinstance(test_input.payload, CompileDirectLogicSqlTestInputPayload)
+        else ()
+    )
+    case_fingerprint: str | None = (
+        build_sql_test_case_fingerprint(
+            source_path=test_input.test_file.relative_path,
+            block_index=test_input.test_block.test_index,
+            case_name=test_input.case_name,
+            parameter_schema=test_input.parameter_schema,
+            parameter_values=test_input.parameter_values,
+            expanded_sql=test_input.sql_body,
+            scope_deps=scope_deps,
+            tested_resources=tested_resources,
+        )
+        if test_input.case_name is not None
+        else None
+    )
     return CompiledSqlTest(
         key=CompiledObjectKey(resource_type=CompiledResourceType.SQL_TEST, name=test_name),
         scope_deps=scope_deps,
@@ -997,6 +1022,12 @@ def _assemble_compiled_sql_test(
         ownership_root=test_input.test_file.ownership_root,
         block_index=test_input.test_block.test_index,
         explicit_name=test_input.test_block.name,
+        parent_name=test_input.parent_name,
+        case_name=test_input.case_name,
+        case_index=test_input.case_index,
+        case_fingerprint=case_fingerprint,
+        parameter_schema=test_input.parameter_schema,
+        parameter_values=test_input.parameter_values,
         expected_model_names=(
             test_input.payload.expected_model_names
             if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
@@ -1021,14 +1052,7 @@ def _assemble_compiled_sql_test(
             if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
             else ()
         ),
-        tested_resources=(
-            tuple(
-                CompiledSqlTestResource(kind=test_input.payload.mode, name=name)
-                for name in test_input.payload.tested_resource_names
-            )
-            if isinstance(test_input.payload, CompileDirectLogicSqlTestInputPayload)
-            else ()
-        ),
+        tested_resources=tested_resources,
     )
 
 
@@ -1167,9 +1191,10 @@ def _resolve_audit_name(audit_input: CompileAuditInput) -> str:
 
 
 def _resolve_test_name(test_input: CompileSqlTestInput) -> str:
-    if test_input.test_block.name is not None:
-        return test_input.test_block.name
-    return test_input.test_file.file_path.stem
+    parent_name: str = test_input.test_block.name or test_input.test_file.file_path.stem
+    if test_input.case_name is not None:
+        return f"{parent_name} [{test_input.case_name}]"
+    return parent_name
 
 
 def _build_model_relation_target(

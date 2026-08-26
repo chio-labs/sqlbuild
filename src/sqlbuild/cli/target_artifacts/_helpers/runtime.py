@@ -99,12 +99,26 @@ def write_test_runtime_target(
     """Write executed SQL unit-test statements under target/run/tests."""
 
     run_dir: Path = target_dir / _RUN_DIR
-    result_names: frozenset[str] = frozenset(result.test_name for result in results)
+    result_keys: frozenset[tuple[str, str | None, int | None, str | None]] = frozenset(
+        (
+            result.test_name,
+            result.source_path.as_posix() if result.source_path is not None else None,
+            result.block_index,
+            result.case_name,
+        )
+        for result in results
+    )
     entry: SqlTestPlanEntry
     for entry in plan_output.test_entries:
-        if entry.name not in result_names:
+        entry_key: tuple[str, str | None, int | None, str | None] = (
+            entry.name,
+            entry.source_path.as_posix() if entry.source_path is not None else None,
+            entry.block_index,
+            entry.case_name,
+        )
+        if entry_key not in result_keys:
             continue
-        test_run_path: Path = run_dir / _TESTS_DIR / _test_folder(entry) / f"{entry.name}.sql"
+        test_run_path: Path = run_dir / _TESTS_DIR / _test_output_path(entry)
         _write_sql(
             path=test_run_path,
             sql=build_sql_test_comparison_sql(
@@ -167,6 +181,13 @@ def _function_output_path(*, relative_path: Path, language: FunctionLanguage) ->
     ):
         return Path(*parts).with_suffix(_SQL_FILE_SUFFIX)
     return (Path(_FUNCTIONS_DIR) / language_dir / relative_path).with_suffix(_SQL_FILE_SUFFIX)
+
+
+def _test_output_path(entry: SqlTestPlanEntry) -> Path:
+    if entry.case_name is None or entry.source_path is None:
+        return _test_folder(entry) / f"{entry.name}{_SQL_FILE_SUFFIX}"
+    source_path: Path = entry.source_path.with_suffix("")
+    return source_path / f"block_{entry.block_index}__{entry.case_name}{_SQL_FILE_SUFFIX}"
 
 
 def _test_folder(entry: SqlTestPlanEntry) -> Path:

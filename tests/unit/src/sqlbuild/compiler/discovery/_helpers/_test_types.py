@@ -364,6 +364,10 @@ class ParseSqlTestFileTestCase:
     expected_sql_bodies: tuple[str, ...]
     expected_test_indexes: tuple[int, ...]
     expected_header_values: tuple[dict[str, object], ...] = ()
+    expected_parameter_types: tuple[str, ...] = ()
+    expected_parameter_nullability: tuple[bool, ...] = ()
+    expected_case_names: tuple[str, ...] = ()
+    expected_case_values: tuple[tuple[object, ...], ...] = ()
 
 
 @dataclass(frozen=True)

@@ -36,6 +36,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
     EnumDeclaration,
     ModelSchemaDeclaration,
+    SqlTestParameterDeclaration,
 )
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
@@ -64,6 +65,7 @@ from sqlbuild.spec.contracts.models import (
     SourceLocation,
     TargetConfig,
 )
+from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import CollectionRendering
 
 
@@ -847,6 +849,11 @@ class CompileSqlTestInput:
         default_factory=CompileModelSqlTestInputPayload
     )
     declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+    parent_name: str | None = None
+    case_name: str | None = None
+    case_index: int | None = None
+    parameter_schema: tuple[SqlTestParameterDeclaration, ...] = field(default_factory=tuple)
+    parameter_values: tuple[tuple[str, SqlValue], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -935,6 +942,12 @@ class CompiledSqlTest:
     ownership_root: Path | None = None
     block_index: int | None = None
     explicit_name: str | None = None
+    parent_name: str | None = None
+    case_name: str | None = None
+    case_index: int | None = None
+    case_fingerprint: str | None = None
+    parameter_schema: tuple[SqlTestParameterDeclaration, ...] = field(default_factory=tuple)
+    parameter_values: tuple[tuple[str, SqlValue], ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_target_model_names: tuple[str, ...] = field(default_factory=tuple)
@@ -950,3 +963,9 @@ class CompiledSqlTest:
             object.__setattr__(self, "block_index", self.test_block.test_index)
         if self.explicit_name is None and self.test_block.name is not None:
             object.__setattr__(self, "explicit_name", self.test_block.name)
+        if self.parent_name is None:
+            object.__setattr__(
+                self,
+                "parent_name",
+                self.test_block.name or self.test_file.relative_path.stem,
+            )

@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from sqlbuild.cli.commands._helpers.test.sql_progress import (
     build_test_expectation_rows,
+    format_parameterized_test_label,
     resolve_test_name_width,
     test_outcome_status,
 )
@@ -101,7 +102,12 @@ def execute_test_plan(
         on_progress=preparation.preflight_progress.report_preflight_progress,
         on_test_start=lambda entry: preparation.progress.on_item_start(
             group_name=_test_group_name_from_entry(entry),
-            item_name=entry.name,
+            item_name=format_parameterized_test_label(
+                name=entry.name,
+                source_path=entry.source_path,
+                parameter_schema=entry.parameter_schema,
+                parameter_values=entry.parameter_values,
+            ),
         ),
         on_test_complete=on_complete,
     )
@@ -118,7 +124,12 @@ def _build_on_complete(
         status_text: str = test_outcome_status(outcome=result.outcome)
         progress.on_item_complete(
             group_name=group_name,
-            item_name=result.test_name,
+            item_name=format_parameterized_test_label(
+                name=result.test_name,
+                source_path=result.source_path,
+                parameter_schema=result.parameter_schema,
+                parameter_values=result.parameter_values,
+            ),
             status_text=status_text,
             child_rows=build_test_expectation_rows(result),
             error_code=result.error_code,

@@ -835,6 +835,15 @@ def test_given_sql_test_when_building_manifest_then_produces_test_node(
         chain=chain,
         scope_deps=(model_key("orders"),),
     )
+    test_entry = replace(
+        test_entry,
+        source_path=Path("tests/unit/orders.sql"),
+        block_index=1,
+        parent_name="test_orders",
+        case_name="first",
+        case_index=0,
+        case_fingerprint="f" * 64,
+    )
     plan_output: PlanOutput = build_test_plan_output(
         model_entries=(build_test_plan_entry(name="orders"),),
         test_entries=(test_entry,),
@@ -845,8 +854,8 @@ def test_given_sql_test_when_building_manifest_then_produces_test_node(
         plan_output=plan_output,
         project_name=test_case.project_name,
         adapter_type=_ADAPTER,
-        upstream_deps={},
-        downstream_deps={},
+        upstream_deps={test_entry.key: (model.key,)},
+        downstream_deps={model.key: (test_entry.key,)},
     )
 
     node: dict[str, Any] = manifest_nodes(result)[test_case.expected_unique_id]
@@ -855,6 +864,11 @@ def test_given_sql_test_when_building_manifest_then_produces_test_node(
     assert node["resource_type"] == test_case.expected_resource_type
     assert node["name"] == test_case.expected_name
     assert node["meta"]["sqlbuild_test_type"] == test_case.expected_sqlbuild_test_type
+    assert node["checksum"] == {"name": "sha256", "checksum": "f" * 64}
+    assert node["meta"]["sqlbuild_case_index"] == 0
+    assert node["meta"]["sqlbuild_case_fingerprint"] == "f" * 64
+    assert result["parent_map"][test_case.expected_unique_id] == [f"model.{_PROJECT}.orders"]
+    assert f"model.{_PROJECT}.test_orders" not in result["parent_map"]
     assert test_case.expected_compiled_code_fragment in node["compiled_code"]
     dep_id: str
     for dep_id in test_case.expected_depends_on_nodes:

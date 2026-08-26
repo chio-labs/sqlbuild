@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild.cli.commands._helpers.test.sql_progress import format_parameterized_test_label
 from sqlbuild.cli.commands.models import TestCommandRequest, TestInvocation
 from sqlbuild.cli.output.main._sql_test_execution_json import format_test_execution_json
 from sqlbuild.cli.output.main._write_execution_json_output import write_execution_json_output
@@ -67,7 +68,15 @@ def _format_test_failure_details(
     lines: list[str] = [style.error_strong("Failures:"), ""]
     result: SqlTestExecutionResult
     for result in failed_results:
-        lines.append(f"  {result.test_name}")
+        lines.append(
+            "  "
+            + format_parameterized_test_label(
+                name=result.test_name,
+                source_path=result.source_path,
+                parameter_schema=result.parameter_schema,
+                parameter_values=result.parameter_values,
+            )
+        )
         error_message: str = result.error_message or "test failed"
         rendered_error: str = error_message
         if result.error_code is not None:

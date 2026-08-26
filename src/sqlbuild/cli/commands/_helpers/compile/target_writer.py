@@ -223,9 +223,7 @@ def _write_tests(
 
     managed_paths: set[Path] = set()
     for entry in plan_output.test_entries:
-        test_path: Path = (
-            target_dir / _COMPILED_DIR / _TESTS_DIR / _test_folder(entry) / f"{entry.name}.sql"
-        )
+        test_path: Path = target_dir / _COMPILED_DIR / _TESTS_DIR / _test_output_path(entry)
         _write_sql(
             path=test_path,
             sql=build_sql_test_comparison_sql(
@@ -254,9 +252,7 @@ def _write_static_tests(
             adapter=adapter,
             sql_analysis_enabled=project.settings.sql_analysis,
         )
-        test_path: Path = (
-            target_dir / _COMPILED_DIR / _TESTS_DIR / _test_folder(entry) / f"{entry.name}.sql"
-        )
+        test_path: Path = target_dir / _COMPILED_DIR / _TESTS_DIR / _test_output_path(entry)
         _write_sql(
             path=test_path,
             sql=build_sql_test_comparison_sql(
@@ -373,3 +369,10 @@ def _test_folder(entry: SqlTestPlanEntry) -> Path:
     if len(unique_names) <= 1:
         return Path(unique_names[0] if unique_names else entry.name)
     return Path(_CHAIN_DIR) / "__".join(unique_names)
+
+
+def _test_output_path(entry: SqlTestPlanEntry) -> Path:
+    if entry.case_name is None or entry.source_path is None:
+        return _test_folder(entry) / f"{entry.name}{_SQL_FILE_SUFFIX}"
+    source_path: Path = entry.source_path.with_suffix("")
+    return source_path / f"block_{entry.block_index}__{entry.case_name}{_SQL_FILE_SUFFIX}"

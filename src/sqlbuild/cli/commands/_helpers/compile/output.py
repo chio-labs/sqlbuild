@@ -34,6 +34,7 @@ from sqlbuild.presentation.main.status_cell import format_status_cell
 from sqlbuild.presentation.main.surface_header import format_surface_header
 from sqlbuild.presentation.main.tree_connector import tree_connector
 from sqlbuild.spec.contracts.models import SourceLocation
+from sqlbuild.sql_values.types import SqlValueKind
 
 _HUMAN_MODEL_LIMIT: int = 100
 _MIN_MODEL_NAME_WIDTH: int = 24
@@ -314,11 +315,44 @@ def _test_resource(test: CompiledSqlTest) -> dict[str, object]:
     expected_models: list[str] = []
     if isinstance(test.payload, CompiledModelSqlTestPayload):
         expected_models = list(test.payload.expected_model_names)
-    return {
+    item: dict[str, object] = {
         "name": test.name,
         "relative_path": str(test.test_file.relative_path),
         "expected_models": expected_models,
     }
+    if test.case_name is not None:
+        parameter_types: dict[str, str] = {
+            parameter.name: parameter.value_type.value for parameter in test.parameter_schema
+        }
+        item.update(
+            {
+                "source_path": (test.source_path or test.test_file.relative_path).as_posix(),
+                "block_index": test.block_index,
+                "parent_name": test.parent_name,
+                "case_name": test.case_name,
+                "case_index": test.case_index,
+                "case_fingerprint": test.case_fingerprint,
+                "parameter_schema": [
+                    {
+                        "name": parameter.name,
+                        "type": parameter.value_type.value,
+                        "nullable": parameter.nullable,
+                    }
+                    for parameter in test.parameter_schema
+                ],
+                "parameters": [
+                    {
+                        "name": name,
+                        "type": parameter_types[name],
+                        "value": (
+                            str(value.value) if value.kind == SqlValueKind.DECIMAL else value.value
+                        ),
+                    }
+                    for name, value in test.parameter_values
+                ],
+            }
+        )
+    return item
 
 
 def _lineage_summary(

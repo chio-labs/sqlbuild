@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import cast
 
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -35,6 +36,8 @@ from sqlbuild.executor.scenario.models import (
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.sql_values.models import SqlValue
+from sqlbuild.sql_values.types import SqlValueKind
 
 _JSON_VERSION: int = 1
 
@@ -486,7 +489,8 @@ def _format_sql_test_checks(
                 {
                     "kind": "sql_test",
                     "name": result.test_name,
-                    "check_id": f"sql_test:{result.test_name}",
+                    "check_id": _sql_test_check_id(result),
+                    **_sql_test_case_metadata(result),
                     "passed": result.outcome == SqlTestOutcome.PASS,
                     "status": result.outcome.value,
                     "asset_name": _sql_test_asset_name(result),
@@ -498,6 +502,63 @@ def _format_sql_test_checks(
             )
         )
     return tuple(checks)
+
+
+def _sql_test_check_id(result: SqlTestExecutionResult) -> str:
+    if result.case_name is None or result.source_path is None or result.block_index is None:
+        return f"sql_test:{result.test_name}"
+    return f"sql_test:{result.source_path.as_posix()}:{result.block_index}:{result.case_name}"
+
+
+def _sql_test_case_metadata(result: SqlTestExecutionResult) -> dict[str, object]:
+    if result.case_name is None or result.source_path is None:
+        return {}
+    parameter_types: dict[str, str] = {
+        parameter.name: parameter.value_type.value for parameter in result.parameter_schema
+    }
+    return {
+        "source_path": result.source_path.as_posix(),
+        "block_index": result.block_index,
+        "parent_name": result.parent_name,
+        "case_name": result.case_name,
+        "case_index": result.case_index,
+        "case_fingerprint": result.case_fingerprint,
+        "parameter_schema": tuple(
+            {
+                "name": parameter.name,
+                "type": parameter.value_type.value,
+                "nullable": parameter.nullable,
+            }
+            for parameter in result.parameter_schema
+        ),
+        "parameters": tuple(
+            {
+                "name": name,
+                "type": parameter_types[name],
+                "value": _sql_value_json(value),
+            }
+            for name, value in result.parameter_values
+        ),
+    }
+
+
+def _sql_value_json(value: SqlValue) -> object:
+    if value.kind == SqlValueKind.DECIMAL:
+        return str(value.value)
+    if value.kind in {
+        SqlValueKind.STRING,
+        SqlValueKind.INTEGER,
+        SqlValueKind.BOOLEAN,
+        SqlValueKind.FLOAT,
+        SqlValueKind.NULL,
+    }:
+        return value.value
+    if value.kind in {SqlValueKind.LIST, SqlValueKind.SET}:
+        return [_sql_value_json(item) for item in cast(tuple[SqlValue, ...], value.value)]
+    return {
+        name: _sql_value_json(item)
+        for name, item in cast(tuple[tuple[str, SqlValue], ...], value.value)
+    }
 
 
 def _format_python_check_results(
