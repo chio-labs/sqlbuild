@@ -42,4 +42,6 @@ def test_given_macro_files_when_discovering_then_skips_package_initializers(
 
     result: tuple[DiscoveredMacroFile, ...] = discover_macro_files(project_dir=tmp_path)
 
-    assert tuple(file.relative_path.as_posix() for file in result) == test_case.expected_relative_paths
+    assert (
+        tuple(file.relative_path.as_posix() for file in result) == test_case.expected_relative_paths
+    )

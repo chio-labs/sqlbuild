@@ -35,6 +35,7 @@ from sqlbuild.compiler.discovery._helpers.sql.tests import parse_sql_test_file
 from sqlbuild.compiler.discovery._helpers.yml.schema import parse_schema_yml
 from sqlbuild.compiler.discovery._helpers.yml.sources import parse_sources_yml
 from sqlbuild.compiler.discovery.constants import (
+    CANONICAL_AUTHORED_ROOTS,
     MODEL_SCHEMAS_DIRECTORY_NAME,
     PYTHON_FACTORY_FOLDER,
     PYTHON_INIT_MODULE_STEM,
@@ -45,6 +46,7 @@ from sqlbuild.compiler.discovery.constants import (
     YAML_FILE_SUFFIXES,
 )
 from sqlbuild.compiler.discovery.exceptions import (
+    DeclarationParseError,
     LoaderDiscoveryError,
     ProviderDiscoveryError,
     PythonNodeDiscoveryError,
@@ -76,6 +78,13 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
     DiscoveredTaskFunction,
 )
+from sqlbuild.compiler.scopes.constants import (
+    DECLARATION_DIRECTORY_FACTS,
+    GLOBAL_DECLARATION_DIRECTORIES,
+    INHERITED_DECLARATION_DIRECTORIES,
+    LOCAL_DECLARATION_DIRECTORIES,
+)
+from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
 from sqlbuild.provider.exceptions import ProviderInputError
 from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.main.read_asset_definition import read_asset_definition
@@ -124,6 +133,121 @@ class _PythonNodeDiscoveryBucket:
         self.checks.append(item)
 
 
+@dataclass(frozen=True)
+class _DeclarationFileFacts:
+    file_path: Path
+    relative_path: Path
+    declaration_kind: DeclarationKind
+    scope_kind: ScopeKind
+    ownership_root: Path
+    owning_path: Path | None
+    declaration_root: Path
+
+
+_SCOPED_DECLARATION_DIRECTORIES: frozenset[str] = (
+    INHERITED_DECLARATION_DIRECTORIES | LOCAL_DECLARATION_DIRECTORIES
+)
+
+
+def _discover_declaration_file_facts(*, project_dir: Path) -> tuple[_DeclarationFileFacts, ...]:
+    for directory_name in sorted(_SCOPED_DECLARATION_DIRECTORIES):
+        if (project_dir / directory_name).is_dir():
+            raise DeclarationParseError(
+                f"Scoped declaration root {directory_name}/ must be below a canonical authored root"
+            )
+
+    facts: list[_DeclarationFileFacts] = []
+    global_directory: str
+    for global_directory in sorted(GLOBAL_DECLARATION_DIRECTORIES):
+        declaration_root: Path = project_dir / global_directory
+        if declaration_root.is_dir():
+            facts.extend(
+                _declaration_files_under_root(
+                    project_dir=project_dir,
+                    ownership_root=Path(global_directory),
+                    declaration_root=declaration_root,
+                    owning_path=None,
+                )
+            )
+
+    root_components: tuple[str, ...]
+    for root_components in CANONICAL_AUTHORED_ROOTS:
+        authored_root: Path = project_dir.joinpath(*root_components)
+        if not authored_root.is_dir():
+            continue
+        directory: Path
+        for directory in sorted(path for path in authored_root.rglob("*") if path.is_dir()):
+            if directory.name not in _SCOPED_DECLARATION_DIRECTORIES:
+                continue
+            relative_directory: Path = directory.relative_to(project_dir)
+            descendants: tuple[str, ...] = relative_directory.parts[len(root_components) :]
+            if any(part in _SCOPED_DECLARATION_DIRECTORIES for part in descendants[:-1]):
+                raise DeclarationParseError(
+                    f"Declaration root {relative_directory.as_posix()}/ is nested inside another "
+                    "declaration tree"
+                )
+            facts.extend(
+                _declaration_files_under_root(
+                    project_dir=project_dir,
+                    ownership_root=Path(*root_components),
+                    declaration_root=directory,
+                    owning_path=relative_directory.parent,
+                )
+            )
+    return tuple(sorted(facts, key=lambda item: item.relative_path.as_posix()))
+
+
+def _declaration_files_under_root(
+    *,
+    project_dir: Path,
+    ownership_root: Path,
+    declaration_root: Path,
+    owning_path: Path | None,
+) -> list[_DeclarationFileFacts]:
+    nested_root: Path
+    for nested_root in sorted(
+        path
+        for path in declaration_root.rglob("*")
+        if path.is_dir() and path.name in DECLARATION_DIRECTORY_FACTS
+    ):
+        relative_nested_root: str = nested_root.relative_to(project_dir).as_posix()
+        raise DeclarationParseError(
+            f"Declaration root {relative_nested_root}/ is nested inside another declaration tree"
+        )
+    declaration_kind, scope_kind = DECLARATION_DIRECTORY_FACTS[declaration_root.name]
+    suffix: str = ".py" if declaration_kind is DeclarationKind.MACRO else ".sql"
+    results: list[_DeclarationFileFacts] = []
+    file_path: Path
+    for file_path in sorted(declaration_root.rglob(f"*{suffix}")):
+        if declaration_kind is DeclarationKind.MACRO and file_path.stem == PYTHON_INIT_MODULE_STEM:
+            continue
+        results.append(
+            _DeclarationFileFacts(
+                file_path=file_path,
+                relative_path=file_path.relative_to(project_dir),
+                declaration_kind=declaration_kind,
+                scope_kind=scope_kind,
+                ownership_root=ownership_root,
+                owning_path=owning_path,
+                declaration_root=declaration_root.relative_to(project_dir),
+            )
+        )
+    return results
+
+
+def _is_in_scoped_declaration_tree(*, file_path: Path, project_dir: Path) -> bool:
+    relative_parts: tuple[str, ...] = file_path.relative_to(project_dir).parts
+    root_components: tuple[str, ...]
+    for root_components in CANONICAL_AUTHORED_ROOTS:
+        if relative_parts[: len(root_components)] != root_components:
+            continue
+        return any(
+            component in _SCOPED_DECLARATION_DIRECTORIES
+            for component in relative_parts[len(root_components) : -1]
+        )
+    return False
+
+
 def discover_model_files(
     *,
     project_dir: Path,
@@ -139,6 +263,8 @@ def discover_model_files(
     discovered_model_files: list[DiscoveredSqlModelFile] = []
     file_path: Path
     for file_path in sorted(model_root.rglob("*.sql")):
+        if _is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir):
+            continue
         contents: str = file_path.read_text(encoding="utf-8")
         relative_path: Path = file_path.relative_to(project_dir)
         header_values: dict[str, object]
@@ -182,52 +308,56 @@ def discover_model_files(
 
 
 def discover_enum_files(*, project_dir: Path) -> tuple[DiscoveredEnumFile, ...]:
-    """Discover public enum declaration files under enums/."""
+    """Discover global and scoped enum declaration files."""
 
-    enum_root: Path = project_dir / "enums"
-    if not enum_root.is_dir():
-        return ()
     discovered_files: list[DiscoveredEnumFile] = []
-    file_path: Path
-    for file_path in sorted(enum_root.rglob("*.sql")):
-        contents: str = file_path.read_text(encoding="utf-8")
-        relative_path: Path = file_path.relative_to(project_dir)
+    facts: _DeclarationFileFacts
+    for facts in _discover_declaration_file_facts(project_dir=project_dir):
+        if facts.declaration_kind is not DeclarationKind.ENUM:
+            continue
+        contents: str = facts.file_path.read_text(encoding="utf-8")
         discovered_files.append(
             DiscoveredEnumFile(
-                file_path=file_path,
-                relative_path=relative_path,
+                file_path=facts.file_path,
+                relative_path=facts.relative_path,
                 contents=contents,
                 declarations=parse_enum_declaration_file(
                     contents=contents,
-                    file_path=file_path,
-                    relative_path=relative_path,
+                    file_path=facts.file_path,
+                    relative_path=facts.relative_path,
                 ),
+                scope_kind=facts.scope_kind,
+                ownership_root=facts.ownership_root,
+                owning_path=facts.owning_path,
+                declaration_root=facts.declaration_root,
             )
         )
     return tuple(discovered_files)
 
 
 def discover_constant_files(*, project_dir: Path) -> tuple[DiscoveredConstantFile, ...]:
-    """Discover public constant declaration files under constants/."""
+    """Discover global and scoped constant declaration files."""
 
-    constant_root: Path = project_dir / "constants"
-    if not constant_root.is_dir():
-        return ()
     discovered_files: list[DiscoveredConstantFile] = []
-    file_path: Path
-    for file_path in sorted(constant_root.rglob("*.sql")):
-        contents: str = file_path.read_text(encoding="utf-8")
-        relative_path: Path = file_path.relative_to(project_dir)
+    facts: _DeclarationFileFacts
+    for facts in _discover_declaration_file_facts(project_dir=project_dir):
+        if facts.declaration_kind is not DeclarationKind.CONSTANT:
+            continue
+        contents: str = facts.file_path.read_text(encoding="utf-8")
         discovered_files.append(
             DiscoveredConstantFile(
-                file_path=file_path,
-                relative_path=relative_path,
+                file_path=facts.file_path,
+                relative_path=facts.relative_path,
                 contents=contents,
                 declarations=parse_constant_declaration_file(
                     contents=contents,
-                    file_path=file_path,
-                    relative_path=relative_path,
+                    file_path=facts.file_path,
+                    relative_path=facts.relative_path,
                 ),
+                scope_kind=facts.scope_kind,
+                ownership_root=facts.ownership_root,
+                owning_path=facts.owning_path,
+                declaration_root=facts.declaration_root,
             )
         )
     return tuple(discovered_files)
@@ -269,6 +399,8 @@ def discover_sql_function_files(*, project_dir: Path) -> tuple[DiscoveredSqlFunc
     discovered_function_files: list[DiscoveredSqlFunctionFile] = []
     file_path: Path
     for file_path in sorted(function_root.rglob("*.sql")):
+        if _is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir):
+            continue
         contents: str = file_path.read_text(encoding="utf-8")
         header_values: dict[str, object]
         body_sql: str
@@ -325,7 +457,11 @@ def discover_schema_files(*, project_dir: Path) -> tuple[DiscoveredSchemaFile, .
     seeds_root: Path = project_dir / "seeds"
 
     if models_root.is_dir():
-        schema_paths.extend(sorted(models_root.rglob(SCHEMA_FILE_NAME)))
+        schema_paths.extend(
+            path
+            for path in sorted(models_root.rglob(SCHEMA_FILE_NAME))
+            if not _is_in_scoped_declaration_tree(file_path=path, project_dir=project_dir)
+        )
     if seeds_root.is_dir():
         yaml_path: Path
         for yaml_path in sorted(seeds_root.rglob("*.yaml")):
@@ -410,6 +546,8 @@ def discover_test_files(*, project_dir: Path) -> tuple[DiscoveredSqlTestFile, ..
     discovered_test_files: list[DiscoveredSqlTestFile] = []
     file_path: Path
     for file_path in sorted(tests_root.rglob("*.sql")):
+        if _is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir):
+            continue
         contents: str = file_path.read_text(encoding="utf-8")
         discovered_test_files.append(
             DiscoveredSqlTestFile(
@@ -432,6 +570,8 @@ def discover_scenario_files(*, project_dir: Path) -> tuple[DiscoveredSqlScenario
     discovered_scenario_files: list[DiscoveredSqlScenarioFile] = []
     file_path: Path
     for file_path in sorted(scenarios_root.rglob("*.sql")):
+        if _is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir):
+            continue
         contents: str = file_path.read_text(encoding="utf-8")
         discovered_scenario_files.append(
             parse_sql_scenario_file(
@@ -453,6 +593,8 @@ def discover_audit_files(*, project_dir: Path) -> tuple[DiscoveredAuditFile, ...
     discovered_audit_files: list[DiscoveredAuditFile] = []
     file_path: Path
     for file_path in sorted(audits_root.rglob("*.sql")):
+        if _is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir):
+            continue
         contents: str = file_path.read_text(encoding="utf-8")
         discovered_audit_files.append(
             DiscoveredAuditFile(
@@ -466,20 +608,20 @@ def discover_audit_files(*, project_dir: Path) -> tuple[DiscoveredAuditFile, ...
 
 
 def discover_macro_files(*, project_dir: Path) -> tuple[DiscoveredMacroFile, ...]:
-    """Discover project macro Python files under macros/."""
-
-    macros_root: Path = project_dir / "macros"
-    if not macros_root.is_dir():
-        return ()
+    """Discover global and scoped project macro Python files."""
 
     return tuple(
         DiscoveredMacroFile(
-            file_path=file_path,
-            relative_path=file_path.relative_to(project_dir),
-            contents=file_path.read_text(encoding="utf-8"),
+            file_path=facts.file_path,
+            relative_path=facts.relative_path,
+            contents=facts.file_path.read_text(encoding="utf-8"),
+            scope_kind=facts.scope_kind,
+            ownership_root=facts.ownership_root,
+            owning_path=facts.owning_path,
+            declaration_root=facts.declaration_root,
         )
-        for file_path in sorted(macros_root.rglob("*.py"))
-        if file_path.stem != PYTHON_INIT_MODULE_STEM
+        for facts in _discover_declaration_file_facts(project_dir=project_dir)
+        if facts.declaration_kind is DeclarationKind.MACRO
     )
 
 
@@ -635,7 +777,9 @@ def discover_sql_hook_files(*, project_dir: Path) -> tuple[DiscoveredSqlHookFile
     discovered_hooks: list[DiscoveredSqlHookFile] = []
     file_path: Path
     for file_path in sorted(hooks_root.rglob("*.sql")):
-        if file_path.name.startswith("_"):
+        if file_path.name.startswith("_") or _is_in_scoped_declaration_tree(
+            file_path=file_path, project_dir=project_dir
+        ):
             continue
         relative_path: Path = file_path.relative_to(project_dir)
         contents: str = file_path.read_text(encoding="utf-8")

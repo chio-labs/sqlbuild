@@ -13,6 +13,52 @@ class DiscoverMacroFilesTestCase:
 
 
 @dataclass(frozen=True)
+class DiscoverScopedDeclarationTestCase:
+    description: str
+    authored_root: str
+    expected_ownership_root: str
+
+
+@dataclass(frozen=True)
+class DiscoverGlobalDeclarationTestCase:
+    description: str
+    declaration_kind: str
+    directory_name: str
+    expected_scope_kind: str
+
+
+@dataclass(frozen=True)
+class InvalidScopedDeclarationRootTestCase:
+    description: str
+    relative_path: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class OrdinaryDiscoveryExclusionTestCase:
+    description: str
+    relative_path: str
+    contents: str
+    discoverer_name: str
+    expected_relative_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DiscoveryPathInventoryTestCase:
+    description: str
+    files: tuple[str, ...]
+    expected_relative_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class StrictScopedDiscoveryTestCase:
+    description: str
+    relative_path: str
+    contents: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class DeferredModelOutputLocationTestCase:
     description: str
     expected_extract_implicit_alias_columns: bool

@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
+from sqlbuild.compiler.scopes.types import ScopeKind
 from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.models import ColumnLineageRef, RetryPolicy, SqlResourceRef
 from sqlbuild.python_nodes.types import PythonCheckSeverity
@@ -154,6 +155,10 @@ class DiscoveredEnumFile:
     relative_path: Path
     contents: str
     declarations: tuple[EnumDeclaration, ...]
+    scope_kind: ScopeKind = ScopeKind.GLOBAL
+    ownership_root: Path | None = None
+    owning_path: Path | None = None
+    declaration_root: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -164,6 +169,10 @@ class DiscoveredConstantFile:
     relative_path: Path
     contents: str
     declarations: tuple[ConstantDeclaration, ...]
+    scope_kind: ScopeKind = ScopeKind.GLOBAL
+    ownership_root: Path | None = None
+    owning_path: Path | None = None
+    declaration_root: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -288,6 +297,10 @@ class DiscoveredMacroFile:
     file_path: Path
     relative_path: Path
     contents: str
+    scope_kind: ScopeKind = ScopeKind.GLOBAL
+    ownership_root: Path | None = None
+    owning_path: Path | None = None
+    declaration_root: Path | None = None
 
 
 @dataclass(frozen=True)

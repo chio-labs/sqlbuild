@@ -661,9 +661,7 @@ def test_given_macro_when_building_manifest_then_macro_node_present(
         raw_source=test_case.expected_macro_sql,
         function=lambda: "SELECT 1",
     )
-    project: CompiledProject = build_test_project(
-        loaded_macros={test_case.expected_name: macro}
-    )
+    project: CompiledProject = build_test_project(loaded_macros={test_case.expected_name: macro})
     plan_output: PlanOutput = build_test_plan_output()
 
     result: dict[str, Any] = run_manifest(
