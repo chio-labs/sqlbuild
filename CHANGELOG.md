@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.61.0](https://github.com/chio-labs/sqlbuild/compare/v0.60.0...v0.61.0) (2026-08-26)
+
+
+### Features
+
+* **kata:** add SQL test policy rules ([#368](https://github.com/chio-labs/sqlbuild/issues/368)) ([9379152](https://github.com/chio-labs/sqlbuild/commit/9379152bd38ae4dfe0f7eabaebb2387e51906922))
+
 ## [0.60.0](https://github.com/chio-labs/sqlbuild/compare/v0.59.0...v0.60.0) (2026-08-26)
 
 
