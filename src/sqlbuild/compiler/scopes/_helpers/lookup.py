@@ -66,6 +66,15 @@ def build_lookup(*, index: ScopeIndex) -> ScopeLookup:
     )
 
     canonical_index: ScopeIndex = ScopeIndex(
+        ownership_roots=tuple(
+            sorted(
+                index.ownership_roots,
+                key=lambda item: (
+                    item.path,
+                    item.resource_kind.value if item.resource_kind is not None else "",
+                ),
+            )
+        ),
         resources=tuple(resources),
         declarations=tuple(declarations),
         usages=tuple(sorted(index.usages, key=usage_sort_key)),

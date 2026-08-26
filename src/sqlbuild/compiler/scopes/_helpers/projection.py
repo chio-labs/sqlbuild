@@ -49,6 +49,21 @@ def build_projection(*, index: ScopeIndex) -> dict[str, JsonValue]:
     )
     return {
         "schema_version": SCOPE_METADATA_SCHEMA_VERSION,
+        "ownership_roots": [
+            {
+                "path": root.path,
+                "resource_kind": (
+                    root.resource_kind.value if root.resource_kind is not None else None
+                ),
+            }
+            for root in sorted(
+                index.ownership_roots,
+                key=lambda item: (
+                    item.path,
+                    item.resource_kind.value if item.resource_kind is not None else "",
+                ),
+            )
+        ],
         "resources": [
             {
                 "identity": format_identity(identity=record.identity),

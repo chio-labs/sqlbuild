@@ -198,6 +198,7 @@ class ScopeCompleteness:
 class ScopeIndex:
     """Canonical deterministic facts used by every future scope consumer."""
 
+    ownership_roots: tuple[OwnershipRoot, ...] = field(default_factory=tuple)
     resources: tuple[ResourceRecord, ...] = field(default_factory=tuple)
     declarations: tuple[DeclarationRecord, ...] = field(default_factory=tuple)
     usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
@@ -245,3 +246,171 @@ class VisibilityResolution:
     target: ScopeTargetQuery
     visible: tuple[VisibilityRecord, ...] = field(default_factory=tuple)
     inaccessible: tuple[InaccessibleRecord, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ScopeReportFilters:
+    """Orthogonal declaration filters applied in their documented fixed order."""
+
+    sections: tuple[str, ...] = ("available", "used", "relationship_scope")
+    include_nearby: bool = False
+    defined_under: str | None = None
+    kinds: tuple[DeclarationKind, ...] = field(default_factory=tuple)
+    glob: str | None = None
+    used_only: bool = False
+    dependency_depth: int = 0
+    sort: str = "identity"
+    cursor: str | None = None
+    page_size: int = 100
+    nearby_depth: int = 1
+    globals: str = "summary"
+
+
+@dataclass(frozen=True)
+class SourceLocation:
+    """Safe project-relative source location."""
+
+    path: str
+    line: int
+    column: int
+
+
+@dataclass(frozen=True)
+class VisibilityProvenance:
+    """Why a declaration is visible or inaccessible."""
+
+    reason: str
+    through: str | None = None
+
+
+@dataclass(frozen=True)
+class DeclarationReport:
+    """Value-free declaration projection used by every report section."""
+
+    identity: str
+    kind: str
+    name: str
+    owner: str | None
+    definition: SourceLocation
+    scope: str
+    owning_path: str | None
+    visibility: VisibilityProvenance | None = None
+    inaccessible_reason: str | None = None
+    metadata: tuple[tuple[str, object], ...] = field(default_factory=tuple)
+    consumers: tuple[str, ...] = field(default_factory=tuple)
+    dependencies: tuple[str, ...] = field(default_factory=tuple)
+    grants: tuple[str, ...] = field(default_factory=tuple)
+    required_scope: str | None = None
+    required_path: str | None = None
+    promotion_impact: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ScopeChainEntry:
+    """One exact or inherited lexical scope in deterministic path order."""
+
+    kind: str
+    path: str
+    declaration_count: int
+
+
+@dataclass(frozen=True)
+class ScopeSection:
+    """Pagination and completeness metadata for one report section."""
+
+    name: str
+    total: int
+    returned: int
+    collapsed: bool = False
+    collapsed_count: int = 0
+    truncated: bool = False
+    complete: bool = True
+    next_cursor: str | None = None
+    cursor: str | None = None
+    page_size: int = 100
+
+
+@dataclass(frozen=True)
+class ScopeResourceReport:
+    """Resolved existing resource or prospective authored path."""
+
+    target: str
+    identity: str | None
+    path: str | None
+    prospective: bool = False
+    directory: bool = False
+    duplicate_count: int = 0
+
+
+@dataclass(frozen=True)
+class DeclarationExplanation:
+    """Detailed explanation for one qualified declaration."""
+
+    declaration: DeclarationReport | None
+    complete: bool
+
+
+@dataclass(frozen=True)
+class MovePreview:
+    """Pure visibility delta for moving one existing resource."""
+
+    resource: str
+    destination: str
+    new_ownership_root: str | None
+    retained: tuple[DeclarationReport, ...] = field(default_factory=tuple)
+    gained: tuple[DeclarationReport, ...] = field(default_factory=tuple)
+    lost: tuple[DeclarationReport, ...] = field(default_factory=tuple)
+    invalidated_usages: tuple[str, ...] = field(default_factory=tuple)
+    private_retained: tuple[DeclarationReport, ...] = field(default_factory=tuple)
+    relationship_retained: tuple[DeclarationReport, ...] = field(default_factory=tuple)
+    complete: bool = True
+
+
+@dataclass(frozen=True)
+class ScopeFolder:
+    """One declaration-definition folder with exact recursive counts."""
+
+    path: str
+    name: str
+    descendant_count: int
+    child_count: int
+    used_count: int
+    kind_counts: tuple[tuple[str, int], ...]
+
+
+@dataclass(frozen=True)
+class ScopeBrowseResult:
+    """Folder-first browse result."""
+
+    folder: str
+    folders: tuple[ScopeFolder, ...]
+    diagnostics: tuple[ScopeDiagnostic, ...] = field(default_factory=tuple)
+    complete: bool = True
+
+
+@dataclass(frozen=True)
+class ScopeListResult:
+    """Recursive declaration list beneath one definition folder."""
+
+    folder: str
+    declarations: tuple[DeclarationReport, ...]
+    section: ScopeSection
+    diagnostics: tuple[ScopeDiagnostic, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ScopeReport:
+    """Canonical payload shared by all non-rendering scope consumers."""
+
+    resource: ScopeResourceReport
+    scope_chain: tuple[ScopeChainEntry, ...] = field(default_factory=tuple)
+    available: tuple[DeclarationReport, ...] = field(default_factory=tuple)
+    used: tuple[DeclarationReport, ...] = field(default_factory=tuple)
+    relationship_scope: tuple[DeclarationReport, ...] = field(default_factory=tuple)
+    nearby_unavailable: tuple[DeclarationReport, ...] = field(default_factory=tuple)
+    filters: ScopeReportFilters = field(default_factory=ScopeReportFilters)
+    sections: tuple[ScopeSection, ...] = field(default_factory=tuple)
+    explanation: DeclarationExplanation | None = None
+    move_preview: MovePreview | None = None
+    diagnostics: tuple[ScopeDiagnostic, ...] = field(default_factory=tuple)
+    complete: bool = True

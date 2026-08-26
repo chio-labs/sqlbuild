@@ -52,6 +52,16 @@ class ExpectedBooleanCase:
 
 
 @dataclass(frozen=True)
+class ScopeReportTargetCase:
+    """Expected target resolution result for one scope report query."""
+
+    description: str
+    target: str
+    expected_identity: str | None
+    expected_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ExpectedErrorCase:
     """One mutation error behavior case."""
 

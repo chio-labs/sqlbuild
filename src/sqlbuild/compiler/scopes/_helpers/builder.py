@@ -152,6 +152,10 @@ def build_index(
         )
     )
     return ScopeIndex(
+        ownership_roots=tuple(
+            OwnershipRoot(path=path, resource_kind=kind)
+            for kind, path in sorted(_ROOTS.items(), key=lambda item: item[1])
+        ),
         resources=tuple(sorted(resources, key=_resource_key)),
         declarations=tuple(sorted(declarations, key=_declaration_key)),
         diagnostics=diagnostics,

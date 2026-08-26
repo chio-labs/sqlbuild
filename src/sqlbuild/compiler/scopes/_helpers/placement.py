@@ -39,12 +39,6 @@ def build_placement_validated_index(*, index: ScopeIndex) -> ScopeIndex:
             ),
             completeness=replace(index.completeness, placement=False),
         )
-    resources: dict[ResourceIdentity, ResourceRecord] = {
-        record.identity: record for record in index.resources
-    }
-    declarations: dict[DeclarationIdentity, DeclarationRecord] = {
-        record.identity: record for record in index.declarations
-    }
     usages: dict[DeclarationIdentity, list[UsageRecord]] = {}
     for usage in index.usages:
         usages.setdefault(usage.declaration, []).append(usage)
@@ -73,20 +67,14 @@ def build_placement_validated_index(*, index: ScopeIndex) -> ScopeIndex:
             continue
         if declaration.scope in {ScopeKind.GLOBAL, ScopeKind.PRIVATE}:
             continue
-        anchors: list[tuple[OwnershipRoot, str, str]] = []
-        for usage in declaration_usages:
-            anchor: tuple[OwnershipRoot, str] | None = _usage_anchor(
-                usage=usage,
-                resources=resources,
-                declarations=declarations,
-            )
-            if anchor is not None:
-                anchors.append((*anchor, _consumer_label(usage)))
-        if not anchors:
+        required: tuple[ScopeKind, str | None, tuple[str, ...]] | None = resolve_required_placement(
+            index=index, declaration=declaration.identity
+        )
+        if required is None:
             continue
-        roots: set[OwnershipRoot] = {root for root, _path, _label in anchors}
-        consumers: str = ", ".join(sorted({label for _root, _path, label in anchors}))
-        if len(roots) != 1:
+        required_scope, required_path, consumer_labels = required
+        consumers: str = ", ".join(consumer_labels)
+        if required_scope is ScopeKind.GLOBAL:
             diagnostics.append(
                 _diagnostic(
                     declaration=declaration,
@@ -100,12 +88,6 @@ def build_placement_validated_index(*, index: ScopeIndex) -> ScopeIndex:
                 )
             )
             continue
-        paths: tuple[str, ...] = tuple(path for _root, path, _label in anchors)
-        distinct_paths: set[str] = set(paths)
-        required_path: str = next(iter(distinct_paths)) if len(distinct_paths) == 1 else _lca(paths)
-        required_scope: ScopeKind = (
-            ScopeKind.LOCAL if len(distinct_paths) == 1 else ScopeKind.INHERITED
-        )
         if declaration.scope is required_scope and declaration.owning_path == required_path:
             continue
         code: ScopeDiagnosticCode = (
@@ -130,6 +112,67 @@ def build_placement_validated_index(*, index: ScopeIndex) -> ScopeIndex:
         diagnostics=tuple(sorted(diagnostics, key=_diagnostic_key)),
         completeness=replace(index.completeness, placement=True),
     )
+
+
+def resolve_required_placement(
+    *, index: ScopeIndex, declaration: DeclarationIdentity
+) -> tuple[ScopeKind, str | None, tuple[str, ...]] | None:
+    """Return exact required placement using the validation anchor semantics."""
+
+    records: tuple[DeclarationRecord, ...] = tuple(
+        item for item in index.declarations if item.identity == declaration
+    )
+    if not records or not index.completeness.runtime_usage:
+        return None
+    record: DeclarationRecord = records[0]
+    if record.scope is ScopeKind.PRIVATE:
+        direct_private: tuple[UsageRecord, ...] = tuple(
+            usage
+            for usage in index.usages
+            if usage.declaration == declaration
+            and usage.consumer == declaration.owner
+            and usage.through is None
+        )
+        return (
+            (ScopeKind.PRIVATE, record.owning_path or record.ownership_root.path, ())
+            if direct_private
+            else None
+        )
+    declaration_usages: tuple[UsageRecord, ...] = tuple(
+        usage for usage in index.usages if usage.declaration == declaration
+    )
+    if not declaration_usages:
+        return None
+    if record.scope is ScopeKind.GLOBAL:
+        return (
+            ScopeKind.GLOBAL,
+            None,
+            tuple(sorted({_consumer_label(usage) for usage in declaration_usages})),
+        )
+    resources: dict[ResourceIdentity, ResourceRecord] = {
+        item.identity: item for item in index.resources
+    }
+    declarations: dict[DeclarationIdentity, DeclarationRecord] = {
+        item.identity: item for item in index.declarations
+    }
+    anchors: tuple[tuple[OwnershipRoot, str], ...] = tuple(
+        anchor
+        for usage in declaration_usages
+        if (anchor := _usage_anchor(usage=usage, resources=resources, declarations=declarations))
+        is not None
+    )
+    if not anchors:
+        return None
+    consumers: tuple[str, ...] = tuple(
+        sorted({_consumer_label(usage) for usage in declaration_usages})
+    )
+    if len({root for root, _path in anchors}) != 1:
+        return ScopeKind.GLOBAL, None, consumers
+    paths: tuple[str, ...] = tuple(path for _root, path in anchors)
+    distinct: set[str] = set(paths)
+    if len(distinct) == 1:
+        return ScopeKind.LOCAL, next(iter(distinct)), consumers
+    return ScopeKind.INHERITED, _lca(paths), consumers
 
 
 def _usage_anchor(
