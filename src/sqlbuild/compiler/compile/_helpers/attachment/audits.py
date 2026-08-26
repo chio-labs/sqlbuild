@@ -30,6 +30,7 @@ from sqlbuild.compiler.compile.models import (
     CompileModelInput,
     CompileSourceInput,
     CompileSqlReference,
+    DeclarationExpansionContext,
     LoadedMacro,
     MacroContext,
 )
@@ -37,11 +38,9 @@ from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
 )
 from sqlbuild.compiler.discovery.models import (
-    ConstantDeclaration,
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
     DiscoveredProjectInputs,
-    EnumDeclaration,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import (
@@ -65,8 +64,7 @@ class _AuditAttachmentContext:
     default_audit_run_scope: str | None
     effective_vars: dict[str, object]
     macro_context: MacroContext
-    public_enums: dict[str, EnumDeclaration]
-    public_constants: dict[str, ConstantDeclaration]
+    declaration_expansion: DeclarationExpansionContext
 
 
 _LEGACY_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hook", "post_hook"})
@@ -85,8 +83,7 @@ def build_audit_inputs(
     effective_vars: dict[str, object],
     macro_context: MacroContext,
     loaded_macros: dict[str, LoadedMacro],
-    public_enums: dict[str, EnumDeclaration] | None = None,
-    public_constants: dict[str, ConstantDeclaration] | None = None,
+    declaration_expansion: DeclarationExpansionContext,
     generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]]
     | None = None,
 ) -> tuple[CompileAuditInput, ...]:
@@ -109,8 +106,7 @@ def build_audit_inputs(
         default_audit_run_scope=default_audit_run_scope,
         effective_vars=effective_vars,
         macro_context=macro_context,
-        public_enums=public_enums or {},
-        public_constants=public_constants or {},
+        declaration_expansion=declaration_expansion,
     )
     audit_inputs: list[CompileAuditInput] = []
     audit_file: DiscoveredAuditFile
@@ -125,8 +121,10 @@ def build_audit_inputs(
                 effective_vars=effective_vars,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
-                enums=public_enums,
-                constants=public_constants,
+                enums=declaration_expansion.declarations.enums,
+                constants=declaration_expansion.declarations.constants,
+                value_renderer=declaration_expansion.value_renderer,
+                collection_rendering=declaration_expansion.collection_rendering,
             )
             reject_cursor_intrinsics(
                 sql=expanded_sql_body,
@@ -347,8 +345,10 @@ def build_attached_audit_input(
         effective_vars=context.effective_vars,
         loaded_macros=context.loaded_macros,
         macro_context=context.macro_context,
-        enums=context.public_enums,
-        constants=context.public_constants,
+        enums=context.declaration_expansion.declarations.enums,
+        constants=context.declaration_expansion.declarations.constants,
+        value_renderer=context.declaration_expansion.value_renderer,
+        collection_rendering=context.declaration_expansion.collection_rendering,
     )
     reject_cursor_intrinsics(
         sql=expanded_sql_body,

@@ -8,8 +8,9 @@ import json
 import pickle
 import sys
 from dataclasses import asdict
+from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import sqlbuild._kata_native as _kata_native
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
@@ -30,6 +31,8 @@ from sqlbuild.kata_engine.models import (
     KataResult,
     KataRule,
 )
+from sqlbuild.sql_values.models import SqlValue
+from sqlbuild.sql_values.types import SqlValueKind
 
 
 def evaluate_native(
@@ -258,6 +261,28 @@ def _constant_payload(declaration: ConstantDeclaration) -> dict[str, object]:
         "name": declaration.name,
         "relative_path": declaration.relative_path.as_posix(),
         "members": [],
+        "value": _typed_value_payload(declaration.value),
+        "value_type": declaration.logical_type.display_name,
+        "render_as": declaration.render_as.value if declaration.render_as is not None else None,
+    }
+
+
+def _typed_value_payload(value: SqlValue) -> object:
+    if value.kind == SqlValueKind.DECIMAL:
+        return str(cast(Decimal, value.value))
+    if value.kind in {
+        SqlValueKind.STRING,
+        SqlValueKind.INTEGER,
+        SqlValueKind.BOOLEAN,
+        SqlValueKind.FLOAT,
+        SqlValueKind.NULL,
+    }:
+        return value.value
+    if value.kind in {SqlValueKind.LIST, SqlValueKind.SET}:
+        return [_typed_value_payload(item) for item in cast(tuple[SqlValue, ...], value.value)]
+    return {
+        key: _typed_value_payload(item)
+        for key, item in cast(tuple[tuple[str, SqlValue], ...], value.value)
     }
 
 

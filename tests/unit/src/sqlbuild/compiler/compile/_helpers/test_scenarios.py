@@ -23,6 +23,9 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ExtractSqlScenarioCtesErrorTestCase,
     ExtractSqlScenarioCtesTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
+    DUCKDB_DECLARATION_EXPANSION_CONTEXT,
+)
 
 
 @pytest.mark.parametrize(
@@ -310,6 +313,7 @@ def test_given_discovered_scenario_when_building_scenario_inputs_then_it_attache
             adapter_name="duckdb", sql_analysis_enabled=True, target_name=None
         ),
         loaded_macros={},
+        declaration_expansion=DUCKDB_DECLARATION_EXPANSION_CONTEXT,
     )
 
     assert len(scenario_inputs) == 1
@@ -383,4 +387,5 @@ def test_given_invalid_scenario_source_refs_when_building_inputs_then_it_raises_
                 adapter_name="duckdb", sql_analysis_enabled=True, target_name=None
             ),
             loaded_macros={},
+            declaration_expansion=DUCKDB_DECLARATION_EXPANSION_CONTEXT,
         )

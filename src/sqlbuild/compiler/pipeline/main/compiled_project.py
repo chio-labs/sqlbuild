@@ -7,6 +7,7 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
+    CompileAdapterContext,
     CompileAnalysisSelection,
     CompiledProject,
     CompileProjectInputs,
@@ -29,6 +30,9 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
+)
+from sqlbuild.spec.contracts.main.resolve_effective_collection_rendering import (
+    resolve_effective_collection_rendering,
 )
 
 
@@ -54,14 +58,21 @@ def build_compiled_project(
     no_cache: bool = analysis_selection is not None and analysis_selection.no_cache
     compile_inputs: CompileProjectInputs = build_compile_inputs(
         discovered_inputs=discovered_inputs,
+        adapter_context=CompileAdapterContext(
+            value_renderer=adapter,
+            collection_rendering=resolve_effective_collection_rendering(
+                project_config=discovered_inputs.project_config,
+                declaration_override=None,
+            ),
+            python_functions_inherit_default_namespace=(
+                adapter.python_functions_inherit_default_namespace()
+            ),
+        ),
         selected_target=selected_target,
         no_sql_validation=no_sql_validation,
         defer_model_sql_validation=True,
         cli_vars=cli_vars,
         resolved_connection=resolved_connection,
-        python_functions_inherit_default_namespace=(
-            adapter.python_functions_inherit_default_namespace()
-        ),
         external_sql_reference_resolver=external_sql_reference_resolver,
         no_cache=no_cache,
     )

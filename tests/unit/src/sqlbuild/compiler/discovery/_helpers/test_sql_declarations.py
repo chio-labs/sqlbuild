@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from sqlbuild.compiler.discovery._helpers.sql.declarations import (
     parse_constant_declaration_file,
     parse_enum_declaration_file,
+    parse_model_constant_declarations,
     parse_model_schema_declaration_file,
 )
 from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
@@ -15,10 +18,13 @@ from sqlbuild.compiler.discovery.models import (
     EnumDeclaration,
     ModelSchemaDeclaration,
 )
+from sqlbuild.sql_values.models import AuthoredSqlValueCall, SqlValue
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseDeclarationFileErrorTestCase,
     ParseDeclarationFileTestCase,
+    ParseLocalTypedConstantsTestCase,
     ParseModelSchemaDeclarationTestCase,
+    ParseTypedConstantsTestCase,
 )
 
 
@@ -110,7 +116,138 @@ def test_given_constant_declarations_when_parsing_then_returns_typed_values(
         tuple(declaration.scalar_type for declaration in declarations)
         == test_case.expected_scalar_types
     )
-    assert tuple((declaration.value,) for declaration in declarations) == test_case.expected_values
+    assert (
+        tuple((declaration.value.value,) for declaration in declarations)
+        == test_case.expected_values
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseTypedConstantsTestCase(
+            description="all public typed value forms",
+            contents="""
+CONSTANT (name enabled, value true);
+CONSTANT (name ratio, value 0.75);
+CONSTANT (name missing_value, value null);
+CONSTANT (name usd_rate, type decimal, value "2.4700");
+CONSTANT (name countries, value ["GB", "FR", null]);
+CONSTANT (name unique_ids, value {2, 1}, render_as array);
+CONSTANT (name labels, value (FR "France", GB "Great Britain"));
+""",
+            expected_kinds=("boolean", "float", "null", "decimal", "list", "set", "object"),
+            expected_decimal=Decimal("2.4700"),
+            expected_rendering="array",
+            expected_object_keys=("FR", "GB"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_typed_public_constants_when_parsing_then_returns_normalized_values(
+    test_case: ParseTypedConstantsTestCase,
+) -> None:
+    declarations: tuple[ConstantDeclaration, ...] = parse_constant_declaration_file(
+        contents=test_case.contents,
+        file_path=Path("constants/domain.sql"),
+        relative_path=Path("constants/domain.sql"),
+    )
+
+    assert (
+        tuple(declaration.value.kind.value for declaration in declarations)
+        == test_case.expected_kinds
+    )
+    assert declarations[3].value.value == test_case.expected_decimal
+    assert declarations[5].render_as is not None
+    assert declarations[5].render_as.value == test_case.expected_rendering
+    object_entries: tuple[tuple[str, SqlValue], ...] = cast(
+        tuple[tuple[str, SqlValue], ...], declarations[6].value.value
+    )
+    assert tuple(key for key, _ in object_entries) == test_case.expected_object_keys
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseLocalTypedConstantsTestCase(
+            description="local shorthand and exact decimal wrapper",
+            raw_value={
+                "_enabled": True,
+                "_countries": ["GB", "FR"],
+                "_rate": AuthoredSqlValueCall(arguments=(("value", "2.4700"), ("type", "decimal"))),
+            },
+            expected_kinds=("boolean", "list", "decimal"),
+            expected_decimal=Decimal("2.4700"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_local_shorthand_and_wrapper_constants_when_parsing_then_honors_options(
+    test_case: ParseLocalTypedConstantsTestCase,
+) -> None:
+    declarations: tuple[ConstantDeclaration, ...] = parse_model_constant_declarations(
+        raw_value=test_case.raw_value,
+        model_name="orders",
+        relative_path=Path("models/orders.sql"),
+    )
+
+    assert (
+        tuple(declaration.value.kind.value for declaration in declarations)
+        == test_case.expected_kinds
+    )
+    assert declarations[2].value.value == test_case.expected_decimal
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseDeclarationFileErrorTestCase(
+            description="missing value",
+            contents="CONSTANT (name absent);",
+            expected_error_fragment="missing required value",
+        ),
+        ParseDeclarationFileErrorTestCase(
+            description="duplicate set value",
+            contents='CONSTANT (name countries, value {"GB", "FR", "GB"});',
+            expected_error_fragment="duplicate set value 'GB'",
+        ),
+        ParseDeclarationFileErrorTestCase(
+            description="mixed list types",
+            contents='CONSTANT (name countries, value ["GB", 2]);',
+            expected_error_fragment=r"constant 'countries'\[1\] has type integer; expected string",
+        ),
+        ParseDeclarationFileErrorTestCase(
+            description="empty list",
+            contents="CONSTANT (name countries, value []);",
+            expected_error_fragment="list must contain at least one value",
+        ),
+        ParseDeclarationFileErrorTestCase(
+            description="unquoted decimal",
+            contents="CONSTANT (name rate, type decimal, value 2.47);",
+            expected_error_fragment="requires a quoted decimal string",
+        ),
+        ParseDeclarationFileErrorTestCase(
+            description="scalar render mode",
+            contents='CONSTANT (name label, value "GB", render_as array);',
+            expected_error_fragment="is string and does not support render_as array",
+        ),
+        ParseDeclarationFileErrorTestCase(
+            description="null type option",
+            contents="CONSTANT (name label, value 1, type null);",
+            expected_error_fragment="type must be an identifier",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_typed_constant_when_parsing_then_raises_contextual_error(
+    test_case: ParseDeclarationFileErrorTestCase,
+) -> None:
+    with pytest.raises(DeclarationParseError, match=test_case.expected_error_fragment):
+        parse_constant_declaration_file(
+            contents=test_case.contents,
+            file_path=Path("constants/domain.sql"),
+            relative_path=Path("constants/domain.sql"),
+        )
 
 
 @pytest.mark.parametrize(

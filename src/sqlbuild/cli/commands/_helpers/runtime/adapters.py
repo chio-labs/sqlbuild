@@ -3,36 +3,19 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
-from sqlbuild.adapter.discovery.main.builtins import builtin_adapter_classes
-from sqlbuild.adapter.discovery.main.project_adapters import discover_project_adapters
+from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapter.discovery.main.resolve_adapter import (
+    resolve_adapter as resolve_registered_adapter,
+)
 from sqlbuild.cli.commands.exceptions import CliUserError
 
 
 def resolve_adapter(*, adapter_name: str, project_dir: Path | None = None) -> BaseAdapter:
     """Resolve an adapter name from project config to an adapter instance."""
 
-    builtin_adapters: dict[str, type[BaseAdapter]] = builtin_adapter_classes()
-    adapter_class: type[StrictAdapter] | None = None
-    if project_dir is not None:
-        local_adapters: dict[str, type[StrictAdapter]] = discover_project_adapters(
-            project_dir=project_dir,
-            reserved_names=frozenset(builtin_adapters),
-        )
-        adapter_class = local_adapters.get(adapter_name)
-    if adapter_class is None:
-        adapter_class = builtin_adapters.get(adapter_name)
-    if adapter_class is None:
-        available: tuple[str, ...] = tuple(sorted(builtin_adapters))
-        local_text: str = ""
-        if project_dir is not None:
-            local_text = " Project-local adapters are discovered from adapters/**/*.py."
-        raise CliUserError(
-            f"unknown adapter '{adapter_name}'. Available built-in adapters: "
-            f"{', '.join(available)}.{local_text}",
-            code="C601",
-        )
-    return cast(BaseAdapter, adapter_class())
+    try:
+        return resolve_registered_adapter(adapter_name=adapter_name, project_dir=project_dir)
+    except AdapterUserError as error:
+        raise CliUserError(error.message, code="C601", help=error.help) from error

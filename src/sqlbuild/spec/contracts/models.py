@@ -12,6 +12,7 @@ from sqlbuild.spec.contracts.types import (
     SourceFreshnessValueKind,
     SourceWriteStrategy,
 )
+from sqlbuild.sql_values.types import CollectionRendering
 
 
 @dataclass(frozen=True)
@@ -113,6 +114,13 @@ class CostConfig:
 
 
 @dataclass(frozen=True)
+class ConstantsConfig:
+    """Project-wide constant rendering configuration."""
+
+    collection_rendering: CollectionRendering = CollectionRendering.VALUE_LIST
+
+
+@dataclass(frozen=True)
 class DefaultsConfig:
     """Project-wide model defaults."""
 
@@ -210,6 +218,7 @@ class ProjectConfig:
     connection: dict[str, object] = field(default_factory=dict)
     settings: SettingsConfig = field(default_factory=SettingsConfig)
     cost: CostConfig = field(default_factory=CostConfig)
+    constants: ConstantsConfig = field(default_factory=ConstantsConfig)
     defaults: DefaultsConfig = field(default_factory=DefaultsConfig)
     path_defaults: dict[str, dict[str, object]] = field(default_factory=dict)
     vars: dict[str, str] = field(default_factory=dict)

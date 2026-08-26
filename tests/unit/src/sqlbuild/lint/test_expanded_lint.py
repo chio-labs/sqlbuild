@@ -6,11 +6,15 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.compiler.compile.main.expand_sql_with_spans import expand_sql_with_spans
+from sqlbuild.compiler.compile.models import SqlExpansionContext
+from sqlbuild.lint._helpers.expansion import build_lint_expansion_context
 from sqlbuild.lint.exceptions import ProjectCompileError
 from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import LintConfig, LintRunResult
 from tests.unit.src.sqlbuild.lint._test_types import (
     ExpandedLintTestCase,
+    ExpandedTypedConstantTestCase,
     LintCompileFailureTestCase,
     LintProjectTestCase,
 )
@@ -18,6 +22,44 @@ from tests.unit.src.sqlbuild.lint._test_types import (
 PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n'
 BAD_COLUMNS_MACRO: str = 'def bad_cols(ctx):\n    return "a,b"\n'
 HEADER: str = 'MODEL (\n  materialized table,\n  description "ok"\n);\n'
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpandedTypedConstantTestCase(
+            description="lint expansion uses configured adapter array rendering",
+            project_files={
+                "sqlbuild_project.toml": PROJECT_TOML,
+                "constants/countries.sql": (
+                    'CONSTANT (name countries, value ["GB", "FR"], render_as array);\n'
+                ),
+                "models/demo.sql": f'{HEADER}SELECT @const("countries") AS countries\n',
+            },
+            model_path="models/demo.sql",
+            authored_sql='SELECT @const("countries") AS countries',
+            expected_sql="SELECT ['GB', 'FR'] AS countries",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_typed_constant_when_building_lint_context_then_uses_adapter_rendering(
+    test_case: ExpandedTypedConstantTestCase,
+    tmp_path: Path,
+) -> None:
+    for relative_path, contents in test_case.project_files.items():
+        target: Path = tmp_path / relative_path
+        _ = target.parent.mkdir(parents=True, exist_ok=True)
+        _ = target.write_text(contents, encoding="utf-8")
+    context: SqlExpansionContext = build_lint_expansion_context(project_dir=tmp_path)
+
+    expanded_sql, _passes = expand_sql_with_spans(
+        sql=test_case.authored_sql,
+        file_path=tmp_path / test_case.model_path,
+        context=context,
+    )
+
+    assert expanded_sql == test_case.expected_sql
 
 
 @pytest.mark.parametrize(

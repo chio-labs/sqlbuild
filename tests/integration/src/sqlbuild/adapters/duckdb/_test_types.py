@@ -13,6 +13,12 @@ from sqlbuild.spec.contracts.models import SeedCsvSettings
 
 
 @dataclass(frozen=True)
+class TypedSqlRenderingExecutionTestCase:
+    description: str
+    expected_row: tuple[object, ...]
+
+
+@dataclass(frozen=True)
 class PhysicalRelationGenerationTestCase:
     description: str
     expected_stable: bool

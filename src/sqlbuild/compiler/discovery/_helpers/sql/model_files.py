@@ -15,16 +15,19 @@ from sqlbuild.compiler.discovery.exceptions import (
 from sqlbuild.compiler.discovery.models import NamedSqlHookEntry, PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SourceLocation
+from sqlbuild.sql_values.models import AuthoredSqlSet, AuthoredSqlValueCall
 
 _MODEL_HEADER_END_TOKEN: str = "end"
 _MODEL_HEADER_WORD_TOKEN: str = "word"
 _MODEL_HEADER_STRING_TOKEN: str = "string"
 _MODEL_HEADER_SYMBOL_TOKEN: str = "symbol"
-_MODEL_HEADER_SYMBOLS: frozenset[str] = frozenset({"(", ")", "[", "]", ","})
+_MODEL_HEADER_SYMBOLS: frozenset[str] = frozenset({"(", ")", "[", "]", "{", "}", ","})
 _MODEL_HEADER_OPEN_PAREN: str = "("
 _MODEL_HEADER_CLOSE_PAREN: str = ")"
 _MODEL_HEADER_OPEN_BRACKET: str = "["
 _MODEL_HEADER_CLOSE_BRACKET: str = "]"
+_MODEL_HEADER_OPEN_BRACE: str = "{"
+_MODEL_HEADER_CLOSE_BRACE: str = "}"
 _MODEL_HEADER_COMMA: str = ","
 _MODEL_HEADER_KEY_VALUE_SEPARATOR: str = ":"
 _MODEL_HEADER_QUOTE_NAMES: dict[str, str] = {"'": "single", '"': "double"}
@@ -51,6 +54,7 @@ _MODEL_HEADER_HOOK_FIELD_NAMES: frozenset[str] = frozenset({"pre_hooks", "post_h
 _MODEL_HEADER_TRUE_VALUE: str = "true"
 _MODEL_HEADER_FALSE_VALUE: str = "false"
 _MODEL_HEADER_NULL_VALUE: str = "null"
+_MODEL_HEADER_TYPED_CONSTANT_CALL: str = "constant"
 _SQL_IDENTIFIER_SEPARATOR: str = "_"
 _SQL_SELECT_KEYWORD: str = "SELECT"
 _SQL_UNION_KEYWORD: str = "UNION"
@@ -540,22 +544,33 @@ class _ModelHeaderParser:
                     return self._parse_relation_call(token.value)
                 if token.value in _MODEL_HEADER_HOOK_CALL_NAMES:
                     return self._parse_hook_call(token.value)
+                if token.value == _MODEL_HEADER_TYPED_CONSTANT_CALL:
+                    return AuthoredSqlValueCall(
+                        arguments=tuple(
+                            self._parse_map(end_symbol=_MODEL_HEADER_CLOSE_PAREN).items()
+                        )
+                    )
                 return {token.value: self._parse_map(end_symbol=_MODEL_HEADER_CLOSE_PAREN)}
             return _parse_word_value(token.value)
         if self._match_symbol(_MODEL_HEADER_OPEN_BRACKET):
             return self._parse_list()
+        if self._match_symbol(_MODEL_HEADER_OPEN_BRACE):
+            return AuthoredSqlSet(values=tuple(self._parse_sequence(_MODEL_HEADER_CLOSE_BRACE)))
         if self._match_symbol(_MODEL_HEADER_OPEN_PAREN):
             return self._parse_map(end_symbol=_MODEL_HEADER_CLOSE_PAREN)
         raise ModelHeaderSyntaxError(f"expected value at position {token.position}")
 
     def _parse_list(self) -> list[object]:
+        return self._parse_sequence(_MODEL_HEADER_CLOSE_BRACKET)
+
+    def _parse_sequence(self, end_symbol: str) -> list[object]:
         values: list[object] = []
-        while not self._is_at_end_symbol(_MODEL_HEADER_CLOSE_BRACKET):
+        while not self._is_at_end_symbol(end_symbol):
             if self._match_symbol(_MODEL_HEADER_COMMA):
                 continue
             values.append(self._parse_value())
             self._match_symbol(_MODEL_HEADER_COMMA)
-        self._consume_symbol(_MODEL_HEADER_CLOSE_BRACKET)
+        self._consume_symbol(end_symbol)
         return values
 
     def _parse_hook_field_value(self, field_name: str) -> list[object]:
@@ -580,7 +595,7 @@ class _ModelHeaderParser:
         if token.kind == _MODEL_HEADER_STRING_TOKEN:
             self._advance()
             return token.value
-        if token.kind != _MODEL_HEADER_WORD_TOKEN:
+        if token.kind not in {_MODEL_HEADER_WORD_TOKEN, _MODEL_HEADER_STRING_TOKEN}:
             raise ModelHeaderSyntaxError(
                 f"{field_name} entries must use typed inline_sql(...), sql(...), or "
                 "python(...) hook syntax"
@@ -696,6 +711,19 @@ def _tokenize_model_header(header: str) -> list[_ModelHeaderToken]:
         if character.isspace():
             index += 1
             continue
+        if header.startswith("${", index):
+            template_end: int = header.find("}", index + 2)
+            if template_end < 0:
+                raise ModelHeaderSyntaxError(f"unterminated template value at position {index}")
+            tokens.append(
+                _ModelHeaderToken(
+                    kind=_MODEL_HEADER_WORD_TOKEN,
+                    value=header[index : template_end + 1],
+                    position=index,
+                )
+            )
+            index = template_end + 1
+            continue
         if character in _MODEL_HEADER_SYMBOLS:
             tokens.append(
                 _ModelHeaderToken(kind=_MODEL_HEADER_SYMBOL_TOKEN, value=character, position=index)
@@ -722,6 +750,14 @@ def _tokenize_model_header(header: str) -> list[_ModelHeaderToken]:
         value: str
         next_index = index
         while next_index < len(header):
+            if header.startswith("${", next_index):
+                embedded_template_end: int = header.find("}", next_index + 2)
+                if embedded_template_end < 0:
+                    raise ModelHeaderSyntaxError(
+                        f"unterminated template value at position {next_index}"
+                    )
+                next_index = embedded_template_end + 1
+                continue
             next_character: str = header[next_index]
             if (
                 next_character.isspace()

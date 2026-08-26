@@ -17,6 +17,7 @@ DATETIME_TYPE_NAME: str = "DATETIME"
 POLYGLOT_CUSTOM_TYPE_NAME: str = "CUSTOM"
 TIMESTAMP_TYPE_TOKEN: str = "TIMESTAMP"
 INTEGER_TYPE_TOKEN: str = "INT"
+TYPED_OBJECT_ENTRY_PART_COUNT: int = 2
 TABLE_RELATION_TYPE_NAMES: frozenset[str] = frozenset(
     {"base table", "table", "managed", "external"}
 )

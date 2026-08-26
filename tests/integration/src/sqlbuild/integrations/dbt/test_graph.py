@@ -30,6 +30,7 @@ from tests.integration.src.sqlbuild.integrations.dbt._test_types import (
     RealDbtCombinedGraphTestCase,
 )
 from tests.integration.src.sqlbuild.integrations.dbt.helpers import (
+    DUCKDB_COMPILE_ADAPTER_CONTEXT,
     build_external_sql_reference_resolver,
     build_sqlbuild_project_with_manifest,
 )
@@ -81,6 +82,7 @@ def test_given_real_dbt_manifest_and_sqlbuild_project_when_building_graph_then_e
     )
     compile_inputs: CompileProjectInputs = build_compile_inputs(
         discovered_inputs=discovered_inputs,
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         external_sql_reference_resolver=build_external_sql_reference_resolver(
             manifest_source=manifest_source
         ),

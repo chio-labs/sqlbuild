@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
-from sqlbuild.adapter.contract.constants import INTEGER_TYPE_TOKEN
-from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapter.contract.constants import (
+    INTEGER_TYPE_TOKEN,
+    TYPED_OBJECT_ENTRY_PART_COUNT,
+)
+from sqlbuild.adapter.contract.exceptions import (
+    AdapterUserError,
+    UnsupportedTypedSqlRenderingError,
+)
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
@@ -44,6 +51,23 @@ from sqlbuild.compiler.planner.types import InitialValidFrom, SnapshotStrategy
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
+from sqlbuild.sql_values.exceptions import SqlValueRenderingError
+from sqlbuild.sql_values.models import SqlValue
+from sqlbuild.sql_values.types import SqlValueKind
+
+_SCALAR_SQL_VALUE_KINDS: frozenset[SqlValueKind] = frozenset(
+    {
+        SqlValueKind.STRING,
+        SqlValueKind.INTEGER,
+        SqlValueKind.BOOLEAN,
+        SqlValueKind.FLOAT,
+        SqlValueKind.DECIMAL,
+        SqlValueKind.NULL,
+    }
+)
+_COLLECTION_SQL_VALUE_KINDS: frozenset[SqlValueKind] = frozenset(
+    {SqlValueKind.LIST, SqlValueKind.SET}
+)
 
 
 class BaseAdapter(StrictAdapter):
@@ -1685,6 +1709,40 @@ class BaseAdapter(StrictAdapter):
             case LoaderLogicalType.JSON:
                 return "JSON"
 
+    def render_typed_scalar(self, *, value: SqlValue) -> str:
+        """Render a validated typed scalar using ANSI-compatible literals."""
+
+        return _render_ansi_typed_scalar(value=value)
+
+    def render_typed_value_list(self, *, value: SqlValue) -> str:
+        """Render scalar collection members as a parenthesized SQL value list."""
+
+        return _render_typed_value_list(value=value, render_scalar=self.render_typed_scalar)
+
+    def render_typed_array(self, *, value: SqlValue) -> str:
+        del value
+        raise UnsupportedTypedSqlRenderingError(adapter_name=self.adapter_name, rendering="array")
+
+    def render_typed_object(self, *, value: SqlValue) -> str:
+        del value
+        raise UnsupportedTypedSqlRenderingError(adapter_name=self.adapter_name, rendering="object")
+
+    def _render_typed_array_item(self, value: SqlValue) -> str:
+        if value.kind in _SCALAR_SQL_VALUE_KINDS:
+            return self.render_typed_scalar(value=value)
+        if value.kind in _COLLECTION_SQL_VALUE_KINDS:
+            return self.render_typed_array(value=value)
+        if value.kind == SqlValueKind.OBJECT:
+            return self.render_typed_object(value=value)
+        raise AdapterUserError(
+            message=f"unsupported trusted typed SQL value kind '{value.kind.value}'"
+        )
+
+    def _render_typed_array_items(self, value: SqlValue) -> str:
+        return ", ".join(
+            self._render_typed_array_item(item) for item in _typed_collection_items(value)
+        )
+
     def render_loader_value_literal(
         self, *, value: object, logical_type: LoaderLogicalType | None
     ) -> str:
@@ -2059,6 +2117,132 @@ def _build_names_filter(
         return ""
     quoted: str = ", ".join(_quote_sql_string(name) for name in names)
     return f" AND {column_name} IN ({quoted})"
+
+
+def _typed_collection_items(value: SqlValue) -> tuple[SqlValue, ...]:
+    if value.kind not in _COLLECTION_SQL_VALUE_KINDS or not isinstance(value.value, tuple):
+        raise AdapterUserError(
+            message=f"expected trusted typed SQL collection, received '{value.kind.value}'"
+        )
+    if not all(isinstance(item, SqlValue) for item in value.value):
+        raise AdapterUserError(message="typed SQL collection contains an untrusted child")
+    return cast(tuple[SqlValue, ...], value.value)
+
+
+def _typed_object_items(value: SqlValue) -> tuple[tuple[str, SqlValue], ...]:
+    if value.kind != SqlValueKind.OBJECT or not isinstance(value.value, tuple):
+        raise AdapterUserError(
+            message=f"expected trusted typed SQL object, received '{value.kind.value}'"
+        )
+    entries: list[tuple[str, SqlValue]] = []
+    for entry in value.value:
+        if (
+            not isinstance(entry, tuple)
+            or len(entry) != TYPED_OBJECT_ENTRY_PART_COUNT
+            or not isinstance(entry[0], str)
+            or not isinstance(entry[1], SqlValue)
+        ):
+            raise AdapterUserError(message="typed SQL object contains an untrusted entry")
+        entries.append(cast(tuple[str, SqlValue], entry))
+    return tuple(entries)
+
+
+def _typed_scalar_payload(value: SqlValue) -> str | int | bool | float | Decimal | None:
+    payload: object = value.value
+    valid: bool
+    match value.kind:
+        case SqlValueKind.STRING:
+            valid = isinstance(payload, str)
+        case SqlValueKind.INTEGER:
+            valid = isinstance(payload, int) and not isinstance(payload, bool)
+        case SqlValueKind.BOOLEAN:
+            valid = isinstance(payload, bool)
+        case SqlValueKind.FLOAT:
+            valid = isinstance(payload, float)
+        case SqlValueKind.DECIMAL:
+            valid = isinstance(payload, Decimal)
+        case SqlValueKind.NULL:
+            valid = payload is None
+        case _:
+            raise AdapterUserError(
+                message=f"expected trusted typed SQL scalar, received '{value.kind.value}'"
+            )
+    if not valid:
+        raise AdapterUserError(message=f"typed SQL {value.kind.value} contains an invalid payload")
+    return cast(str | int | bool | float | Decimal | None, payload)
+
+
+def _render_ansi_typed_scalar(*, value: SqlValue) -> str:
+    payload: str | int | bool | float | Decimal | None = _typed_scalar_payload(value)
+    match value.kind:
+        case SqlValueKind.STRING:
+            return _quote_sql_string(cast(str, payload))
+        case SqlValueKind.BOOLEAN:
+            return "TRUE" if payload else "FALSE"
+        case SqlValueKind.NULL:
+            return "NULL"
+        case _:
+            return str(payload)
+
+
+def _render_typed_value_list(*, value: SqlValue, render_scalar: Callable[..., str]) -> str:
+    items: tuple[SqlValue, ...] = _typed_collection_items(value)
+    if any(item.kind not in _SCALAR_SQL_VALUE_KINDS for item in items):
+        raise SqlValueRenderingError(
+            "typed SQL value-list rendering supports scalar collection members only"
+        )
+    return "(" + ", ".join(render_scalar(value=item) for item in items) + ")"
+
+
+def _encode_typed_json(value: SqlValue) -> str:
+    if value.kind in _SCALAR_SQL_VALUE_KINDS:
+        payload: str | int | bool | float | Decimal | None = _typed_scalar_payload(value)
+        if value.kind == SqlValueKind.NULL:
+            return "null"
+        if value.kind == SqlValueKind.BOOLEAN:
+            return "true" if payload else "false"
+        if value.kind == SqlValueKind.STRING:
+            return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+        return str(payload)
+    if value.kind in _COLLECTION_SQL_VALUE_KINDS:
+        return (
+            "["
+            + ",".join(_encode_typed_json(item) for item in _typed_collection_items(value))
+            + "]"
+        )
+    if value.kind == SqlValueKind.OBJECT:
+        return (
+            "{"
+            + ",".join(
+                json.dumps(key, ensure_ascii=True, separators=(",", ":"))
+                + ":"
+                + _encode_typed_json(item)
+                for key, item in sorted(_typed_object_items(value), key=lambda entry: entry[0])
+            )
+            + "}"
+        )
+    raise AdapterUserError(message=f"unsupported trusted typed SQL value kind '{value.kind.value}'")
+
+
+def _validate_rectangular_typed_array(*, value: SqlValue, adapter_name: str) -> None:
+    def dimensions(node: SqlValue) -> tuple[int, ...] | None:
+        if node.kind == SqlValueKind.NULL:
+            return None
+        if node.kind not in _COLLECTION_SQL_VALUE_KINDS:
+            return ()
+        items: tuple[SqlValue, ...] = _typed_collection_items(node)
+        child_dimensions: tuple[tuple[int, ...], ...] = tuple(
+            child_shape for item in items if (child_shape := dimensions(item)) is not None
+        )
+        if child_dimensions and any(shape != child_dimensions[0] for shape in child_dimensions[1:]):
+            raise UnsupportedTypedSqlRenderingError(
+                adapter_name=adapter_name,
+                rendering="array",
+                reason="requires rectangular nested arrays",
+            )
+        return (len(items), *(child_dimensions[0] if child_dimensions else ()))
+
+    dimensions(value)
 
 
 def _quote_sql_string(value: str) -> str:

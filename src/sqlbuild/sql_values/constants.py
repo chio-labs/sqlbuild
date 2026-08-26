@@ -1,0 +1,8 @@
+"""Constants for typed SQL value validation."""
+
+MIN_SIGNED_64_BIT_INTEGER: int = -(2**63)
+MAX_SIGNED_64_BIT_INTEGER: int = 2**63 - 1
+DEFAULT_MAX_SQL_VALUE_DEPTH: int = 32
+DEFAULT_MAX_SQL_VALUE_ELEMENTS: int = 10_000
+DEFAULT_MAX_SQL_VALUE_SIZE: int = 1_000_000
+MISSING_SQL_VALUE: object = object()

@@ -9,6 +9,9 @@ from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_i
 from sqlbuild.compiler.compile.models import CompileProjectInputs
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
+    DUCKDB_COMPILE_ADAPTER_CONTEXT,
+)
 from tests.unit.src.sqlbuild.compiler.compile._test_types import (
     CursorStartCompileErrorTestCase,
     CursorStartCompileInputsTestCase,
@@ -44,7 +47,10 @@ def test_given_cursor_start_layers_when_building_compile_inputs_then_model_uses_
     write_repo_files(tmp_path, test_case.repo_files)
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(discovered_inputs=discovered_inputs)
+    compile_inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discovered_inputs,
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+    )
 
     assert (
         test_case.expected_cursor_start
@@ -91,4 +97,7 @@ def test_given_invalid_cursor_start_when_building_compile_inputs_then_raises_cle
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
-        build_compile_inputs(discovered_inputs=discovered_inputs)
+        build_compile_inputs(
+            discovered_inputs=discovered_inputs,
+            adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+        )

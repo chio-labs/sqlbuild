@@ -34,6 +34,7 @@ from sqlbuild.compiler.compile._helpers.render.declarations import (
 )
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
+    CompileAdapterContext,
     CompileAuditInput,
     CompileModelInput,
     CompileProjectInputs,
@@ -43,6 +44,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlFunctionInput,
     CompileSqlScenarioInput,
     CompileSqlTestInput,
+    DeclarationExpansionContext,
     DeclarationResolutionContext,
     LoadedMacro,
     MacroContext,
@@ -66,12 +68,12 @@ from sqlbuild.spec.contracts.models import SettingsConfig, TargetConfig
 def build_compile_inputs(
     *,
     discovered_inputs: DiscoveredProjectInputs,
+    adapter_context: CompileAdapterContext,
     selected_target: str | None = None,
     cli_vars: dict[str, object] | None = None,
     run_id: str | None = None,
     no_sql_validation: bool = False,
     defer_model_sql_validation: bool = False,
-    python_functions_inherit_default_namespace: bool = True,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     resolved_connection: dict[str, object] | None = None,
     no_cache: bool = False,
@@ -116,6 +118,8 @@ def build_compile_inputs(
         run_id=resolved_run_id,
         macro_context=macro_context,
         loaded_macros=loaded_macros,
+        value_renderer=adapter_context.value_renderer,
+        collection_rendering=adapter_context.collection_rendering,
     )
     model_inputs: tuple[CompileModelInput, ...]
     declarations: DeclarationResolutionContext
@@ -127,14 +131,21 @@ def build_compile_inputs(
         external_sql_reference_resolver=external_sql_reference_resolver,
         reference_cache_dir=compile_cache_dir,
     )
+    model_context = replace(
+        model_context,
+        public_enums=declarations.enums,
+        public_constants=declarations.constants,
+    )
     seed_inputs: tuple[CompileSeedInput, ...] = build_seed_inputs(discovered_inputs)
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = _build_sql_functions(
         discovered_inputs=discovered_inputs,
         context=model_context,
-        declarations=declarations,
+        declaration_expansion=model_context.declaration_expansion,
         model_inputs=model_inputs,
         no_sql_validation=no_sql_validation,
-        python_functions_inherit_default_namespace=(python_functions_inherit_default_namespace),
+        python_functions_inherit_default_namespace=(
+            adapter_context.python_functions_inherit_default_namespace
+        ),
     )
     source_inputs: tuple[CompileSourceInput, ...] = build_source_inputs(
         discovered_inputs=discovered_inputs,
@@ -142,8 +153,7 @@ def build_compile_inputs(
         effective_settings=effective_settings,
         macro_context=macro_context,
         loaded_macros=loaded_macros,
-        public_enums=declarations.enums,
-        public_constants=declarations.constants,
+        declaration_expansion=model_context.declaration_expansion,
         no_sql_validation=no_sql_validation,
     )
     test_inputs: tuple[CompileSqlTestInput, ...] = build_test_inputs(
@@ -151,8 +161,7 @@ def build_compile_inputs(
         effective_vars=effective_vars,
         macro_context=macro_context,
         loaded_macros=loaded_macros,
-        public_enums=declarations.enums,
-        public_constants=declarations.constants,
+        declaration_expansion=model_context.declaration_expansion,
         external_sql_reference_resolver=external_sql_reference_resolver,
         sql_function_inputs=sql_function_inputs,
     )
@@ -161,8 +170,7 @@ def build_compile_inputs(
         effective_vars=effective_vars,
         macro_context=macro_context,
         loaded_macros=loaded_macros,
-        public_enums=declarations.enums,
-        public_constants=declarations.constants,
+        declaration_expansion=model_context.declaration_expansion,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     project_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = (
@@ -181,8 +189,7 @@ def build_compile_inputs(
         effective_vars=effective_vars,
         macro_context=macro_context,
         loaded_macros=loaded_macros,
-        public_enums=declarations.enums,
-        public_constants=declarations.constants,
+        declaration_expansion=model_context.declaration_expansion,
         generic_audit_definitions=generic_audit_definitions,
     )
     return CompileProjectInputs(
@@ -224,7 +231,7 @@ def _build_sql_functions(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     context: ModelInputBuildContext,
-    declarations: DeclarationResolutionContext,
+    declaration_expansion: DeclarationExpansionContext,
     model_inputs: tuple[CompileModelInput, ...],
     no_sql_validation: bool,
     python_functions_inherit_default_namespace: bool,
@@ -237,7 +244,7 @@ def _build_sql_functions(
         adapter_name=context.macro_context.adapter_name,
         macro_context=context.macro_context,
         loaded_macros=context.loaded_macros,
-        declarations=declarations,
+        declaration_expansion=declaration_expansion,
         no_sql_validation=no_sql_validation,
         python_functions_inherit_default_namespace=python_functions_inherit_default_namespace,
     )

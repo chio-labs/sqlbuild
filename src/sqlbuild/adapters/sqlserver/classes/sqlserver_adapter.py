@@ -14,16 +14,23 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     BaseAdapter,
     _build_names_filter,
     _build_schemas_filter,
+    _encode_typed_json,
     _historical_hard_deleted_at_sql,
     _historical_timestamp_changes_new_records_cte_sql,
     _quote_sql_string,
+    _render_ansi_typed_scalar,
+    _render_typed_value_list,
     _snapshot_initial_valid_from_expr,
     _snapshot_key_condition,
+    _typed_scalar_payload,
 )
 from sqlbuild.adapter.contract.classes.microbatch import MicrobatchMixin
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.constants import DIFF_LEFT_SIDE, DIFF_RIGHT_SIDE
-from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapter.contract.exceptions import (
+    AdapterUserError,
+    UnsupportedTypedSqlRenderingError,
+)
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
@@ -70,6 +77,8 @@ from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.diagnostics.main.log_sql import log_sql
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
+from sqlbuild.sql_values.models import SqlValue
+from sqlbuild.sql_values.types import SqlValueKind
 
 
 class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
@@ -864,6 +873,24 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
                 return "DATE"
             case LoaderLogicalType.JSON:
                 return "NVARCHAR(MAX)"
+
+    def render_typed_scalar(self, *, value: SqlValue) -> str:
+        if value.kind == SqlValueKind.STRING:
+            rendered: str = _render_ansi_typed_scalar(value=value)
+            return f"N{rendered}"
+        if value.kind == SqlValueKind.BOOLEAN:
+            return "1" if _typed_scalar_payload(value) else "0"
+        return _render_ansi_typed_scalar(value=value)
+
+    def render_typed_value_list(self, *, value: SqlValue) -> str:
+        return _render_typed_value_list(value=value, render_scalar=self.render_typed_scalar)
+
+    def render_typed_array(self, *, value: SqlValue) -> str:
+        del value
+        raise UnsupportedTypedSqlRenderingError(adapter_name=self.adapter_name, rendering="array")
+
+    def render_typed_object(self, *, value: SqlValue) -> str:
+        return f"JSON_QUERY(N{self._quote_sql_string(_encode_typed_json(value))})"
 
     def render_loader_value_literal(
         self, *, value: object, logical_type: LoaderLogicalType | None

@@ -14,6 +14,7 @@ from tests.integration.src.sqlbuild.integrations.dbt._test_types import (
     RealDbtManifestCompileTestCase,
 )
 from tests.integration.src.sqlbuild.integrations.dbt.helpers import (
+    DUCKDB_COMPILE_ADAPTER_CONTEXT,
     build_external_sql_reference_resolver,
 )
 
@@ -68,6 +69,7 @@ def test_given_real_dbt_manifest_when_compiling_sqlbuild_then_preserves_dbt_ref(
     )
     compile_inputs: CompileProjectInputs = build_compile_inputs(
         discovered_inputs=discovered_inputs,
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         external_sql_reference_resolver=build_external_sql_reference_resolver(
             manifest_source=manifest_source
         ),

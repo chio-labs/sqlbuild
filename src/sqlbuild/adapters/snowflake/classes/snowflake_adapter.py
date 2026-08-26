@@ -11,7 +11,12 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar
 
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.base_adapter import (
+    BaseAdapter,
+    _encode_typed_json,
+    _render_ansi_typed_scalar,
+    _render_typed_value_list,
+)
 from sqlbuild.adapter.contract.classes.microbatch import MicrobatchMixin
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.constants import DIFF_LEFT_SIDE, DIFF_RIGHT_SIDE
@@ -71,6 +76,7 @@ from sqlbuild.cost.types import CostCapability, CostStatus
 from sqlbuild.diagnostics.main.log_sql import log_sql
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
+from sqlbuild.sql_values.models import SqlValue
 
 
 class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
@@ -944,6 +950,18 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
                 return "DATE"
             case LoaderLogicalType.JSON:
                 return "VARIANT"
+
+    def render_typed_scalar(self, *, value: SqlValue) -> str:
+        return _render_ansi_typed_scalar(value=value)
+
+    def render_typed_value_list(self, *, value: SqlValue) -> str:
+        return _render_typed_value_list(value=value, render_scalar=self.render_typed_scalar)
+
+    def render_typed_array(self, *, value: SqlValue) -> str:
+        return "ARRAY_CONSTRUCT(" + self._render_typed_array_items(value) + ")"
+
+    def render_typed_object(self, *, value: SqlValue) -> str:
+        return f"PARSE_JSON({self._quote_sql_string(_encode_typed_json(value))})"
 
     def render_loader_value_literal(
         self, *, value: object, logical_type: LoaderLogicalType | None

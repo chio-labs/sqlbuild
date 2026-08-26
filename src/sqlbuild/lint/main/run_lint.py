@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.compiler.compile.models import SqlExpansionContext
+from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.lint._helpers.expansion import build_lint_expansion_context, prepare_lint_body
 from sqlbuild.lint._helpers.headers import scan_headers, sql_body_ranges
 from sqlbuild.lint._helpers.native import lint_native_headers
@@ -13,14 +14,21 @@ from sqlbuild.lint._helpers.sqruff_engine import run_sqruff_lint
 from sqlbuild.lint.models import HeaderSpan, LintBody, LintConfig, LintRunResult, LintViolation
 
 
-def run_lint(*, project_dir: Path, config: LintConfig) -> LintRunResult:
+def run_lint(
+    *,
+    project_dir: Path,
+    config: LintConfig,
+    value_renderer: TypedSqlValueRenderer | None = None,
+) -> LintRunResult:
     """Lint all DSL files in the project without modifying anything."""
 
     files: dict[Path, str] = collect_project_files(project_dir=project_dir)
     violations: list[LintViolation] = []
     bodies: list[LintBody] = []
     context: SqlExpansionContext | None = _expansion_context(
-        project_dir=project_dir, sqruff_enabled=config.sqruff_enabled
+        project_dir=project_dir,
+        sqruff_enabled=config.sqruff_enabled,
+        value_renderer=value_renderer,
     )
     file_path: Path
     contents: str
@@ -62,10 +70,18 @@ def run_lint(*, project_dir: Path, config: LintConfig) -> LintRunResult:
     )
 
 
-def _expansion_context(*, project_dir: Path, sqruff_enabled: bool) -> SqlExpansionContext | None:
+def _expansion_context(
+    *,
+    project_dir: Path,
+    sqruff_enabled: bool,
+    value_renderer: TypedSqlValueRenderer | None,
+) -> SqlExpansionContext | None:
     if not sqruff_enabled:
         return None
-    return build_lint_expansion_context(project_dir=project_dir)
+    return build_lint_expansion_context(
+        project_dir=project_dir,
+        value_renderer=value_renderer,
+    )
 
 
 def _prepared_bodies(

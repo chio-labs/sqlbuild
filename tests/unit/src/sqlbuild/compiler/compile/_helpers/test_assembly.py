@@ -26,6 +26,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     AssembleSqlHookValidationTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
+    DUCKDB_COMPILE_ADAPTER_CONTEXT,
     compiled_sql_test_expected_model_names,
     compiled_sql_test_tested_resource_names,
 )
@@ -480,7 +481,9 @@ def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expe
     write_repo_files(tmp_path, test_case.repo_files)
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
     compile_inputs: CompileProjectInputs = build_compile_inputs(
-        discovered_inputs=discovered, run_id="test_run_id"
+        discovered_inputs=discovered,
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+        run_id="test_run_id",
     )
     compiled: CompiledProject = assemble_compiled_project(inputs=compile_inputs)
 
@@ -601,7 +604,9 @@ def test_given_connection_location_when_assembling_project_then_sets_effective_t
     )
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
     compile_inputs: CompileProjectInputs = build_compile_inputs(
-        discovered_inputs=discovered, run_id="test_run_id"
+        discovered_inputs=discovered,
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+        run_id="test_run_id",
     )
 
     compiled: CompiledProject = assemble_compiled_project(inputs=compile_inputs)
@@ -662,6 +667,7 @@ def test_given_sql_hooks_when_assembling_then_applies_adapter_aware_validation(
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
     compile_inputs: CompileProjectInputs = build_compile_inputs(
         discovered_inputs=discovered,
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run_id",
     )
 

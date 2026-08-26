@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
+from sqlbuild.sql_values.types import CollectionRendering
 
 
 @dataclass(frozen=True)
@@ -27,3 +28,11 @@ class EffectiveChangesOnlyResolutionTestCase:
     local_config: LocalConfig
     cli_changes_only: bool
     expected_changes_only: bool
+
+
+@dataclass(frozen=True)
+class EffectiveCollectionRenderingResolutionTestCase:
+    description: str
+    project_config: ProjectConfig
+    declaration_override: CollectionRendering | None
+    expected_collection_rendering: CollectionRendering

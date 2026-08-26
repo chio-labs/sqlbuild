@@ -64,6 +64,20 @@ class CompileDeclarationsTestCase:
 
 
 @dataclass(frozen=True)
+class CompileTypedConstantsTestCase:
+    description: str
+    expected_model_sql: str
+    expected_hook_sql: str
+    expected_named_hook_sql: str
+    expected_function_sql: str
+    expected_source_sql: str
+    expected_test_fragment: str
+    expected_scenario_fragment: str
+    expected_audit_sql: str
+    expected_attached_audit_sql: str
+
+
+@dataclass(frozen=True)
 class DeclarationFingerprintTestCase:
     description: str
     declaration_path: str

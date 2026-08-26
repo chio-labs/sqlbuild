@@ -18,12 +18,22 @@ from sqlbuild.compiler.compile.models import (
     MacroContext,
     SqlExpansionContext,
 )
+from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
+    resolve_effective_adapter_name,
+)
+from sqlbuild.spec.contracts.main.resolve_effective_collection_rendering import (
+    resolve_effective_collection_rendering,
+)
 
 
 def build_sql_expansion_context(
-    *, project_dir: Path, cli_vars: dict[str, object] | None = None
+    *,
+    project_dir: Path,
+    value_renderer: TypedSqlValueRenderer,
+    cli_vars: dict[str, object] | None = None,
 ) -> SqlExpansionContext:
     """Assemble project vars, macros and declarations for SQL expansion."""
 
@@ -53,12 +63,20 @@ def build_sql_expansion_context(
         effective_vars=effective_vars,
         loaded_macros=loaded_macros,
         macro_context=MacroContext(
-            adapter_name=discovered_inputs.project_config.adapter,
+            adapter_name=resolve_effective_adapter_name(
+                project_config=discovered_inputs.project_config,
+                local_config=discovered_inputs.local_config,
+            ),
             sql_analysis_enabled=False,
             target_name=discovered_inputs.project_config.default_target,
             vars=effective_vars,
         ),
         enums=enums,
         constants=constants,
+        value_renderer=value_renderer,
+        collection_rendering=resolve_effective_collection_rendering(
+            project_config=discovered_inputs.project_config,
+            declaration_override=None,
+        ),
         local_declarations=local_declarations,
     )

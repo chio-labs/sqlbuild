@@ -117,3 +117,12 @@ class LintCompileFailureTestCase:
     description: str
     project_files: dict[str, str]
     expected_message_fragment: str
+
+
+@dataclass(frozen=True)
+class ExpandedTypedConstantTestCase:
+    description: str
+    project_files: dict[str, str]
+    model_path: str
+    authored_sql: str
+    expected_sql: str

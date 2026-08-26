@@ -26,6 +26,9 @@ from sqlbuild.spec.contracts.models import (
     ProjectConfig,
     TargetConfig,
 )
+from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
+    DUCKDB_COMPILE_ADAPTER_CONTEXT,
+)
 from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
     base_repo_files,
     build_external_sql_reference_resolver,
@@ -2486,6 +2489,7 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
     compile_inputs: CompileProjectInputs = build_compile_inputs(
         discovered_inputs=discovered_inputs,
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         selected_target=test_case.selected_target,
         cli_vars=test_case.cli_vars,
         run_id=test_case.run_id,
@@ -4053,6 +4057,7 @@ def test_given_attachment_conflicts_when_building_compile_inputs_then_it_raises_
     with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
         build_compile_inputs(
             discovered_inputs=discovered_inputs,
+            adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
             selected_target=test_case.selected_target,
             run_id=test_case.run_id,
             external_sql_reference_resolver=build_external_sql_reference_resolver(
@@ -4095,7 +4100,10 @@ def test_given_python_hook_when_building_compile_inputs_then_validation_does_not
     write_repo_files(tmp_path, test_case.repo_files)
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
 
-    build_compile_inputs(discovered_inputs=discovered_inputs)
+    build_compile_inputs(
+        discovered_inputs=discovered_inputs,
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+    )
 
     assert (
         tmp_path / "hooks" / "executed.marker"
@@ -4190,6 +4198,7 @@ def test_given_snapshot_contract_schema_change_conflict_when_building_then_error
     with pytest.raises(ValueError, match=test_case.expected_error_fragment) as exc_info:
         build_compile_inputs(
             discovered_inputs=discovered_inputs,
+            adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
             selected_target=test_case.selected_target,
             run_id=test_case.run_id,
             external_sql_reference_resolver=build_external_sql_reference_resolver(
@@ -4234,6 +4243,9 @@ def test_given_model_referencing_seed_when_building_compile_inputs_then_succeeds
     write_repo_files(tmp_path, test_case.repo_files)
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(discovered_inputs=discovered_inputs)
+    compile_inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discovered_inputs,
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+    )
 
     assert len(compile_inputs.model_inputs) == test_case.expected_model_count

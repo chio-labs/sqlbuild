@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 
+from sqlbuild.sql_values.types import CollectionRendering
+
 
 @dataclass(frozen=True)
 class DeferredModelOutputLocationTestCase:
@@ -111,6 +113,20 @@ class LoadProjectCostConfigTestCase:
 class LoadProjectCostConfigErrorTestCase:
     description: str
     value: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class LoadProjectConstantsConfigTestCase:
+    description: str
+    constants_toml: str
+    expected_collection_rendering: CollectionRendering
+
+
+@dataclass(frozen=True)
+class LoadProjectConstantsConfigErrorTestCase:
+    description: str
+    constants_toml: str
     expected_error_fragment: str
 
 
@@ -239,6 +255,24 @@ class ParseDeclarationFileErrorTestCase:
     description: str
     contents: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ParseTypedConstantsTestCase:
+    description: str
+    contents: str
+    expected_kinds: tuple[str, ...]
+    expected_decimal: Decimal
+    expected_rendering: str
+    expected_object_keys: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ParseLocalTypedConstantsTestCase:
+    description: str
+    raw_value: dict[str, object]
+    expected_kinds: tuple[str, ...]
+    expected_decimal: Decimal
 
 
 @dataclass(frozen=True)

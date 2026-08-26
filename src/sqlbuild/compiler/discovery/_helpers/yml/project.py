@@ -31,6 +31,7 @@ from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.cost.constants import USD_PER_CREDIT_CONFIG_KEY
 from sqlbuild.spec.contracts.models import (
     ClonePolicy,
+    ConstantsConfig,
     CostConfig,
     DbtConfig,
     DefaultsConfig,
@@ -48,6 +49,7 @@ from sqlbuild.spec.contracts.models import (
     StateConfig,
     TargetConfig,
 )
+from sqlbuild.sql_values.types import CollectionRendering
 
 _SNAPSHOT_FULL_REFRESH_POLICIES: frozenset[str] = frozenset(
     {"allow", "deny", "require_confirmation"}
@@ -74,6 +76,9 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
     connection: dict[str, object] = _optional_mapping(payload=payload, key="connection")
     settings: SettingsConfig = _load_settings(payload=payload.get("settings"), file_path=file_path)
     cost: CostConfig = _load_cost(payload=payload.get("cost"), file_path=file_path)
+    constants: ConstantsConfig = _load_constants(
+        payload=payload.get("constants"), file_path=file_path
+    )
     defaults: DefaultsConfig = _load_defaults(payload=payload.get("defaults"), file_path=file_path)
     path_defaults: dict[str, dict[str, object]] = _load_path_defaults(
         payload=payload.get("path_defaults"),
@@ -105,6 +110,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         connection=connection,
         settings=settings,
         cost=cost,
+        constants=constants,
         defaults=defaults,
         path_defaults=path_defaults,
         vars=vars_map,
@@ -339,6 +345,30 @@ def _load_cost(*, payload: object, file_path: Path) -> CostConfig:
             f"{file_path} cost.usd_per_credit must be a finite number greater than zero"
         )
     return CostConfig(usd_per_credit=value, usd_per_credit_is_default=False)
+
+
+def _load_constants(*, payload: object, file_path: Path) -> ConstantsConfig:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label="constants", file_path=file_path
+    )
+    key: str = "collection_rendering"
+    _validate_allowed_keys(
+        mapping=mapping,
+        allowed_keys=frozenset({key}),
+        label="constants",
+        file_path=file_path,
+    )
+    raw_value: object = mapping.get(key, CollectionRendering.VALUE_LIST.value)
+    if not isinstance(raw_value, str):
+        raise ProjectConfigError(f"{file_path} constants.{key} must be a string")
+    try:
+        collection_rendering: CollectionRendering = CollectionRendering(raw_value)
+    except ValueError as error:
+        valid_values: str = ", ".join(rendering.value for rendering in CollectionRendering)
+        raise ProjectConfigError(
+            f"{file_path} constants.{key} must be one of: {valid_values}"
+        ) from error
+    return ConstantsConfig(collection_rendering=collection_rendering)
 
 
 def _load_local_settings(

@@ -66,6 +66,8 @@ from sqlbuild.compiler.compile.models import (
     CompileModelInput,
     CompileSeedInput,
     CompileSqlReference,
+    DeclarationExpansionContext,
+    DeclarationResolutionContext,
     LoadedMacro,
     MacroContext,
     ModelInputBuildContext,
@@ -125,8 +127,7 @@ class _HookExpansionContext:
     context_values: dict[str, str | None]
     loaded_macros: dict[str, LoadedMacro]
     macro_context: MacroContext
-    enums: dict[str, EnumDeclaration]
-    constants: dict[str, ConstantDeclaration]
+    declaration_expansion: DeclarationExpansionContext
     sql_hook_definitions: dict[str, DiscoveredSqlHookFile]
 
 
@@ -228,6 +229,8 @@ def _build_model_inputs(
             file_path=model_file.file_path,
             enums=declarations.enums,
             constants=declarations.constants,
+            value_renderer=context.value_renderer,
+            collection_rendering=context.collection_rendering,
         )
         expanded_query_sql: str = expand_sql_macros(
             sql=declaration_expanded_sql,
@@ -322,8 +325,14 @@ def _build_model_inputs(
                 ),
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
-                enums=declarations.enums,
-                constants=declarations.constants,
+                declaration_expansion=DeclarationExpansionContext(
+                    declarations=DeclarationResolutionContext(
+                        enums=declarations.enums,
+                        constants=declarations.constants,
+                    ),
+                    value_renderer=context.value_renderer,
+                    collection_rendering=context.collection_rendering,
+                ),
                 sql_hook_definitions=sql_hook_definitions,
             ),
             matched_path_default=effective_config.matched_path_default,
@@ -599,8 +608,7 @@ def expand_model_hook_macros(
     context_values: dict[str, str | None],
     loaded_macros: dict[str, LoadedMacro],
     macro_context: MacroContext,
-    enums: dict[str, EnumDeclaration],
-    constants: dict[str, ConstantDeclaration],
+    declaration_expansion: DeclarationExpansionContext,
     sql_hook_definitions: dict[str, DiscoveredSqlHookFile] | None = None,
 ) -> dict[str, object]:
     """Expand SQL interpolation and macros within executable hook SQL strings."""
@@ -619,8 +627,7 @@ def expand_model_hook_macros(
                 context_values=context_values,
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
-                enums=enums,
-                constants=constants,
+                declaration_expansion=declaration_expansion,
                 sql_hook_definitions=sql_hook_definitions or {},
             ),
             hook_key=hook_key,
@@ -820,8 +827,10 @@ def expand_sql_macros_in_value(
             context_values=context.context_values,
             loaded_macros=context.loaded_macros,
             macro_context=context.macro_context,
-            enums=context.enums,
-            constants=context.constants,
+            enums=context.declaration_expansion.declarations.enums,
+            constants=context.declaration_expansion.declarations.constants,
+            value_renderer=context.declaration_expansion.value_renderer,
+            collection_rendering=context.declaration_expansion.collection_rendering,
         )
     if isinstance(value, SqlHookEntry):
         expanded_statement: object = expand_sql_macros_in_value(
