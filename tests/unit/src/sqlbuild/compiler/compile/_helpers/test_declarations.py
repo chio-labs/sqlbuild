@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -25,9 +26,14 @@ from sqlbuild.compiler.planner.main.identity.version_identity_model_metadata imp
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     CompileDeclarationsErrorTestCase,
     CompileDeclarationsTestCase,
+    CompileTypedConstantsTestCase,
     DeclarationFingerprintTestCase,
 )
-from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import compile_first_model
+from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
+    DUCKDB_ARRAY_COMPILE_ADAPTER_CONTEXT,
+    DUCKDB_COMPILE_ADAPTER_CONTEXT,
+    compile_first_model,
+)
 
 _PROJECT_FILE: str = """
 name = "demo"
@@ -143,6 +149,7 @@ SELECT * FROM __ref("orders") WHERE threshold < @const("min_runners")
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
     compile_inputs: CompileProjectInputs = build_compile_inputs(
         discovered_inputs=discovered_inputs,
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run",
     )
 
@@ -259,6 +266,131 @@ SELECT * FROM __ref("orders") WHERE threshold < @const("min_runners")
 @pytest.mark.parametrize(
     "test_case",
     [
+        CompileTypedConstantsTestCase(
+            description="typed constants expand through every authored SQL surface",
+            expected_model_sql=(
+                "SELECT TRUE AS enabled, 0.75 AS ratio,\n"
+                "  2.4700 AS rate, NULL AS missing,\n"
+                "  ('GB', 'FR') AS countries, ('FR', 'GB') AS unique_countries,\n"
+                "  ['project', 'default'] AS project_array, ['GB', 'FR'] AS country_array,\n"
+                '  json(\'{"FR":"France","GB":"Great Britain"}\') AS labels,\n'
+                "  ['local', 'values'] AS local_values"
+            ),
+            expected_hook_sql="SELECT 'GB' IN ('GB', 'FR')",
+            expected_named_hook_sql="SELECT 'FR' IN ('GB', 'FR')",
+            expected_function_sql="value IN ('GB', 'FR')",
+            expected_source_sql="SELECT * FROM entries WHERE country IN ('GB', 'FR')\n",
+            expected_test_fragment="SELECT 'GB' IN ('GB', 'FR') AS supported",
+            expected_scenario_fragment="SELECT ['GB', 'FR'] AS countries",
+            expected_audit_sql=("SELECT * FROM entries WHERE country NOT IN ('FR', 'GB')"),
+            expected_attached_audit_sql=(
+                "SELECT * FROM __ref(\"orders\") WHERE country NOT IN ('GB', 'FR')"
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_typed_constants_when_compiling_then_all_sql_surfaces_use_adapter_rendering(
+    test_case: CompileTypedConstantsTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": (
+                _PROJECT_FILE + '\n[constants]\ncollection_rendering = "array"\n'
+            ),
+            "constants/typed.sql": """
+CONSTANT (name enabled, value true);
+CONSTANT (name ratio, value 0.75);
+CONSTANT (name rate, type decimal, value "2.4700");
+CONSTANT (name missing, value null);
+CONSTANT (name countries, value ["GB", "FR"], render_as value_list);
+CONSTANT (name unique_countries, value {"GB", "FR"}, render_as value_list);
+CONSTANT (name project_array, value ["project", "default"]);
+CONSTANT (name country_array, value ["GB", "FR"], render_as array);
+CONSTANT (name labels, value (GB "Great Britain", FR "France"));
+""",
+            "models/orders.sql": """
+MODEL (
+  pre_hooks [inline_sql("SELECT 'GB' IN @const('countries')")],
+  post_hooks [sql("typed_hook")],
+  audits [typed_audit],
+  constants (
+    _local_values constant(value ["local", "values"], render_as array),
+  ),
+);
+
+SELECT @const("enabled") AS enabled, @const("ratio") AS ratio,
+  @const("rate") AS rate, @const("missing") AS missing,
+  @const("countries") AS countries, @const("unique_countries") AS unique_countries,
+  @const("project_array") AS project_array, @const("country_array") AS country_array,
+  @const("labels") AS labels,
+  @const("_local_values") AS local_values
+""",
+            "functions/sql/is_supported.sql": """
+FUNCTION (arguments (value VARCHAR), returns BOOLEAN);
+value IN @const("countries")
+""",
+            "hooks/sql/typed_hook.sql": """
+HOOK (description "Typed constant hook");
+SELECT 'FR' IN @const("countries")
+""",
+            "sources/inline.yml": """
+sources:
+  - name: supported_entries
+    expression: |
+      SELECT * FROM entries WHERE country IN @const("countries")
+""",
+            "tests/unit/orders.sql": """
+TEST ();
+WITH __ref__orders AS (SELECT 'GB' IN @const("countries") AS supported),
+__expected__orders AS (SELECT true AS supported)
+SELECT 1
+""",
+            "tests/scenarios/orders.sql": """
+SCENARIO ();
+WITH __ref__orders AS (SELECT @const("country_array") AS countries),
+__expected__orders AS (SELECT @const("country_array") AS countries)
+SELECT 1
+""",
+            "audits/orders.sql": """
+AUDIT ();
+SELECT * FROM entries WHERE country NOT IN @const("unique_countries")
+""",
+            "audits/generic/typed_audit.sql": """
+AUDIT ();
+SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
+""",
+        },
+    )
+
+    compile_inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discover_project_inputs(project_dir=tmp_path),
+        adapter_context=DUCKDB_ARRAY_COMPILE_ADAPTER_CONTEXT,
+        run_id="typed_constants",
+    )
+
+    assert compile_inputs.model_inputs[0].query_sql == test_case.expected_model_sql
+    assert compile_inputs.model_inputs[0].config.values["pre_hooks"] == [
+        SqlHookEntry(statement=test_case.expected_hook_sql)
+    ]
+    named_hook: SqlHookEntry = cast(
+        list[SqlHookEntry], compile_inputs.model_inputs[0].config.values["post_hooks"]
+    )[0]
+    assert named_hook.statement == test_case.expected_named_hook_sql
+    assert compile_inputs.sql_function_inputs[0].body_sql == test_case.expected_function_sql
+    assert compile_inputs.source_inputs[0].source_entry.expression == test_case.expected_source_sql
+    assert test_case.expected_test_fragment in compile_inputs.test_inputs[0].sql_body
+    assert test_case.expected_scenario_fragment in compile_inputs.scenario_inputs[0].sql_body
+    assert compile_inputs.audit_inputs[0].sql_body == test_case.expected_audit_sql
+    assert compile_inputs.audit_inputs[1].sql_body == test_case.expected_attached_audit_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         DeclarationFingerprintTestCase(
             description="constant value changes rendered query identity",
             declaration_path="constants/threshold.sql",
@@ -266,6 +398,84 @@ SELECT * FROM __ref("orders") WHERE threshold < @const("min_runners")
             changed_declaration="CONSTANT (name threshold, value 8);\n",
             model_sql='MODEL ();\nSELECT @const("threshold") AS threshold\n',
             expected_query_hash_changed=True,
+            expected_metadata_changed=False,
+        ),
+        DeclarationFingerprintTestCase(
+            description="list order changes rendered query identity",
+            declaration_path="constants/countries.sql",
+            initial_declaration='CONSTANT (name countries, value ["GB", "FR"]);\n',
+            changed_declaration='CONSTANT (name countries, value ["FR", "GB"]);\n',
+            model_sql='MODEL ();\nSELECT @const("countries") AS countries\n',
+            expected_query_hash_changed=True,
+            expected_metadata_changed=False,
+        ),
+        DeclarationFingerprintTestCase(
+            description="list duplicate changes rendered query identity",
+            declaration_path="constants/countries.sql",
+            initial_declaration='CONSTANT (name countries, value ["GB", "FR"]);\n',
+            changed_declaration='CONSTANT (name countries, value ["GB", "FR", "FR"]);\n',
+            model_sql='MODEL ();\nSELECT @const("countries") AS countries\n',
+            expected_query_hash_changed=True,
+            expected_metadata_changed=False,
+        ),
+        DeclarationFingerprintTestCase(
+            description="set order does not change rendered query identity",
+            declaration_path="constants/countries.sql",
+            initial_declaration='CONSTANT (name countries, value {"GB", "FR"});\n',
+            changed_declaration='CONSTANT (name countries, value {"FR", "GB"});\n',
+            model_sql='MODEL ();\nSELECT @const("countries") AS countries\n',
+            expected_query_hash_changed=False,
+            expected_metadata_changed=False,
+        ),
+        DeclarationFingerprintTestCase(
+            description="object key order does not change rendered query identity",
+            declaration_path="constants/labels.sql",
+            initial_declaration=(
+                'CONSTANT (name labels, value (GB "Great Britain", FR "France"));\n'
+            ),
+            changed_declaration=(
+                'CONSTANT (name labels, value (FR "France", GB "Great Britain"));\n'
+            ),
+            model_sql='MODEL ();\nSELECT @const("labels") AS labels\n',
+            expected_query_hash_changed=False,
+            expected_metadata_changed=False,
+        ),
+        DeclarationFingerprintTestCase(
+            description="set membership changes rendered query identity",
+            declaration_path="constants/countries.sql",
+            initial_declaration='CONSTANT (name countries, value {"GB", "FR"});\n',
+            changed_declaration='CONSTANT (name countries, value {"GB", "HK"});\n',
+            model_sql='MODEL ();\nSELECT @const("countries") AS countries\n',
+            expected_query_hash_changed=True,
+            expected_metadata_changed=False,
+        ),
+        DeclarationFingerprintTestCase(
+            description="object value changes rendered query identity",
+            declaration_path="constants/labels.sql",
+            initial_declaration='CONSTANT (name labels, value (GB "Great Britain"));\n',
+            changed_declaration='CONSTANT (name labels, value (GB "Britain"));\n',
+            model_sql='MODEL ();\nSELECT @const("labels") AS labels\n',
+            expected_query_hash_changed=True,
+            expected_metadata_changed=False,
+        ),
+        DeclarationFingerprintTestCase(
+            description="collection render mode changes rendered query identity",
+            declaration_path="constants/countries.sql",
+            initial_declaration='CONSTANT (name countries, value ["GB", "FR"]);\n',
+            changed_declaration=(
+                'CONSTANT (name countries, value ["GB", "FR"], render_as array);\n'
+            ),
+            model_sql='MODEL ();\nSELECT @const("countries") AS countries\n',
+            expected_query_hash_changed=True,
+            expected_metadata_changed=False,
+        ),
+        DeclarationFingerprintTestCase(
+            description="unused constant changes do not alter model identity",
+            declaration_path="constants/countries.sql",
+            initial_declaration='CONSTANT (name countries, value ["GB", "FR"]);\n',
+            changed_declaration='CONSTANT (name countries, value ["GB", "HK"]);\n',
+            model_sql="MODEL ();\nSELECT 1 AS value\n",
+            expected_query_hash_changed=False,
             expected_metadata_changed=False,
         ),
         DeclarationFingerprintTestCase(
@@ -367,6 +577,16 @@ def test_given_declaration_change_when_compiling_then_updates_dependent_identity
             },
             expected_error_fragment="Duplicate public enum 'state'",
         ),
+        CompileDeclarationsErrorTestCase(
+            description="nested collection cannot render as a portable value list",
+            repo_files={
+                "constants/groups.sql": "CONSTANT (name groups, value [[1], [2]]);",
+                "models/orders.sql": 'MODEL ();\nSELECT @const("groups") AS groups\n',
+            },
+            expected_error_fragment=(
+                "constants/groups.sql constant 'groups'.*adapter 'duckdb'.*value_list"
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -384,7 +604,11 @@ def test_given_invalid_declaration_usage_when_compiling_then_raises_compile_erro
         match=test_case.expected_error_fragment,
     ):
         discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-        build_compile_inputs(discovered_inputs=discovered_inputs, run_id="test_run")
+        build_compile_inputs(
+            discovered_inputs=discovered_inputs,
+            adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+            run_id="test_run",
+        )
 
 
 if __name__ == "__main__":

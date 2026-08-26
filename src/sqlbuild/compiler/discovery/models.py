@@ -23,6 +23,8 @@ from sqlbuild.spec.contracts.models import (
     SourceLocation,
 )
 from sqlbuild.spec.contracts.types import SourceWriteStrategy
+from sqlbuild.sql_values.models import SqlLogicalType, SqlValue
+from sqlbuild.sql_values.types import CollectionRendering, SqlValueKind
 
 
 @dataclass(frozen=True)
@@ -118,10 +120,30 @@ class ConstantDeclaration:
     """One validated public or model-local constant declaration."""
 
     name: str
-    value: str | int
-    scalar_type: str
+    value: SqlValue
     relative_path: Path
     model_name: str | None = None
+    render_as: CollectionRendering | None = None
+
+    @property
+    def logical_type(self) -> SqlLogicalType:
+        """Return the normalized logical type."""
+
+        return self.value.logical_type
+
+    @property
+    def scalar_type(self) -> str:
+        """Retain the existing SQL scalar type label for scalar declarations."""
+
+        names: dict[SqlValueKind, str] = {
+            SqlValueKind.STRING: "VARCHAR",
+            SqlValueKind.INTEGER: "INTEGER",
+            SqlValueKind.BOOLEAN: "BOOLEAN",
+            SqlValueKind.FLOAT: "FLOAT",
+            SqlValueKind.DECIMAL: "DECIMAL",
+            SqlValueKind.NULL: "NULL",
+        }
+        return names.get(self.value.kind, self.value.logical_type.display_name.upper())
 
 
 @dataclass(frozen=True)

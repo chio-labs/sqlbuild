@@ -8,6 +8,19 @@ from sqlbuild.spec.contracts.models import (
     ScenarioConfig,
     ScenarioSnapshotLimitsConfig,
 )
+from sqlbuild.sql_values.types import CollectionRendering
+
+
+def resolve_effective_collection_rendering(
+    *,
+    project_config: ProjectConfig,
+    declaration_override: CollectionRendering | None,
+) -> CollectionRendering:
+    """Resolve declaration rendering over project configuration."""
+
+    if declaration_override is not None:
+        return declaration_override
+    return project_config.constants.collection_rendering
 
 
 def resolve_effective_adapter_name(

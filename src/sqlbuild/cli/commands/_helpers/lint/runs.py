@@ -5,6 +5,10 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
+from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
+from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
+from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.lint.constants import (
     DEFAULT_MAX_DESCRIPTION_LINES,
     DEFAULT_SQRUFF_CONFIG_PATH,
@@ -16,6 +20,9 @@ from sqlbuild.lint.constants import (
 )
 from sqlbuild.lint.main.ensure_config import ensure_sqruff_config
 from sqlbuild.lint.models import LintConfig, LintRunResult
+from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
+    resolve_effective_adapter_name,
+)
 
 
 def resolve_lint_config(*, project_dir: Path, no_sqruff: bool) -> LintConfig:
@@ -62,6 +69,24 @@ def prepare_lint_run(*, project_dir: Path, no_sqruff: bool) -> tuple[LintConfig,
         sqruff_enabled=config.sqruff_enabled,
     )
     return config, warning
+
+
+def resolve_lint_value_renderer(
+    *, project_dir: Path, config: LintConfig
+) -> TypedSqlValueRenderer | None:
+    """Resolve typed SQL rendering only when expanded-SQL lint is enabled."""
+
+    if not config.sqruff_enabled:
+        return None
+    discovered: DiscoveredProjectInputs = discover_project_inputs(
+        project_dir=project_dir,
+        sql_analysis_enabled_override=False,
+    )
+    adapter_name: str = resolve_effective_adapter_name(
+        project_config=discovered.project_config,
+        local_config=discovered.local_config,
+    )
+    return resolve_adapter(adapter_name=adapter_name, project_dir=project_dir)
 
 
 def render_lint_result(*, result: LintRunResult, show_formatted: bool) -> None:

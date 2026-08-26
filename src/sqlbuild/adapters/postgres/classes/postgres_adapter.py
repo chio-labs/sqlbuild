@@ -14,15 +14,19 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     BaseAdapter,
     _build_names_filter,
     _build_schemas_filter,
+    _encode_typed_json,
     _historical_check_snapshot_select_sql,
     _historical_hard_deleted_at_sql,
     _historical_snapshot_combined_close_sql,
     _historical_timestamp_changes_select_sql,
     _historical_timestamp_snapshot_select_sql,
     _quote_sql_string,
+    _render_ansi_typed_scalar,
+    _render_typed_value_list,
     _snapshot_hard_delete_close_sql,
     _snapshot_initial_valid_from_expr,
     _snapshot_key_condition,
+    _validate_rectangular_typed_array,
 )
 from sqlbuild.adapter.contract.classes.microbatch import MicrobatchMixin
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -71,6 +75,7 @@ from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.diagnostics.main.log_sql import log_sql
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
+from sqlbuild.sql_values.models import SqlValue
 
 
 class PostgresAdapter(MicrobatchMixin, BaseAdapter):
@@ -1597,6 +1602,19 @@ class PostgresAdapter(MicrobatchMixin, BaseAdapter):
                 return "DATE"
             case LoaderLogicalType.JSON:
                 return "JSONB"
+
+    def render_typed_scalar(self, *, value: SqlValue) -> str:
+        return _render_ansi_typed_scalar(value=value)
+
+    def render_typed_value_list(self, *, value: SqlValue) -> str:
+        return _render_typed_value_list(value=value, render_scalar=self.render_typed_scalar)
+
+    def render_typed_array(self, *, value: SqlValue) -> str:
+        _validate_rectangular_typed_array(value=value, adapter_name=self.adapter_name)
+        return "ARRAY[" + self._render_typed_array_items(value) + "]"
+
+    def render_typed_object(self, *, value: SqlValue) -> str:
+        return f"{self._quote_sql_string(_encode_typed_json(value))}::JSONB"
 
     def render_loader_value_literal(
         self, *, value: object, logical_type: LoaderLogicalType | None

@@ -54,3 +54,11 @@ class CustomRuleEvidenceTestCase:
     test_source: str
     expected_count: int
     test_path: str = "tests/test_custom.py"
+
+
+@dataclass(frozen=True)
+class TypedConstantPayloadTestCase:
+    description: str
+    raw_value: object
+    expected_value: object
+    expected_type: str

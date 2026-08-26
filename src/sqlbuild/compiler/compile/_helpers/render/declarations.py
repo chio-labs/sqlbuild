@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlbuild.compiler.compile.constants import MACRO_TOKEN, SQL_QUOTE_TOKENS
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import ExpansionSpan
+from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredConstantFile,
@@ -25,6 +26,9 @@ from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_c
 from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
 from sqlbuild.spec.contracts.models import SchemaAuditInstance, SchemaColumn, SchemaModelEntry
+from sqlbuild.sql_values.exceptions import SqlValueRenderingError, SqlValueValidationError
+from sqlbuild.sql_values.main.validate_rendered_size import validate_rendered_sql_value_size
+from sqlbuild.sql_values.types import CollectionRendering, SqlValueKind
 
 _ENUM_REFERENCE_PATTERN: re.Pattern[str] = re.compile(
     r"@enum\s*\(\s*(?P<quote>['\"])(?P<name>[A-Za-z_][A-Za-z0-9_]*)"
@@ -182,12 +186,19 @@ def expand_declaration_references(
     file_path: Path,
     enums: dict[str, EnumDeclaration],
     constants: dict[str, ConstantDeclaration],
+    value_renderer: TypedSqlValueRenderer,
+    collection_rendering: CollectionRendering,
 ) -> str:
     """Resolve enum-member and constant references to SQL scalar literals."""
 
     rendered_sql: str
     rendered_sql, _spans = expand_declaration_references_with_spans(
-        sql=sql, file_path=file_path, enums=enums, constants=constants
+        sql=sql,
+        file_path=file_path,
+        enums=enums,
+        constants=constants,
+        value_renderer=value_renderer,
+        collection_rendering=collection_rendering,
     )
     return rendered_sql
 
@@ -198,6 +209,8 @@ def expand_declaration_references_with_spans(
     file_path: Path,
     enums: dict[str, EnumDeclaration],
     constants: dict[str, ConstantDeclaration],
+    value_renderer: TypedSqlValueRenderer,
+    collection_rendering: CollectionRendering,
 ) -> tuple[str, tuple[ExpansionSpan, ...]]:
     """Resolve declaration references, returning the span of every substitution."""
 
@@ -234,6 +247,8 @@ def expand_declaration_references_with_spans(
                 reference_start=reference_start,
                 file_path=file_path,
                 constants=constants,
+                value_renderer=value_renderer,
+                collection_rendering=collection_rendering,
             )
         rendered_parts.append(replacement)
         spans.append(
@@ -330,6 +345,8 @@ def _resolve_constant_reference(
     reference_start: int,
     file_path: Path,
     constants: dict[str, ConstantDeclaration],
+    value_renderer: TypedSqlValueRenderer,
+    collection_rendering: CollectionRendering,
 ) -> tuple[str, int]:
     match: re.Match[str] | None = _CONSTANT_REFERENCE_PATTERN.match(sql, reference_start)
     if match is None:
@@ -341,7 +358,36 @@ def _resolve_constant_reference(
     if declaration is None:
         scope_help: str = " in this model" if name.startswith("_") else ""
         raise CompileInputError(f"Unknown constant '{name}'{scope_help} in '{file_path}'")
-    return _render_scalar(value=declaration.value), match.end()
+    selected_rendering: CollectionRendering = declaration.render_as or collection_rendering
+    try:
+        if declaration.value.kind in {
+            SqlValueKind.STRING,
+            SqlValueKind.INTEGER,
+            SqlValueKind.BOOLEAN,
+            SqlValueKind.FLOAT,
+            SqlValueKind.DECIMAL,
+            SqlValueKind.NULL,
+        }:
+            rendered: str = value_renderer.render_typed_scalar(value=declaration.value)
+        elif declaration.value.kind in {SqlValueKind.LIST, SqlValueKind.SET}:
+            rendered = (
+                value_renderer.render_typed_array(value=declaration.value)
+                if selected_rendering == CollectionRendering.ARRAY
+                else value_renderer.render_typed_value_list(value=declaration.value)
+            )
+        else:
+            rendered = value_renderer.render_typed_object(value=declaration.value)
+        validate_rendered_sql_value_size(
+            rendered_sql=rendered,
+            context=f"{declaration.relative_path} constant '{declaration.name}'",
+        )
+    except (SqlValueRenderingError, SqlValueValidationError) as error:
+        raise CompileInputError(
+            f"{declaration.relative_path} constant '{declaration.name}' could not be rendered "
+            f"in '{file_path}' by adapter '{value_renderer.adapter_name}' as "
+            f"{selected_rendering.value}: {error}"
+        ) from error
+    return rendered, match.end()
 
 
 def _render_scalar(*, value: str | int) -> str:

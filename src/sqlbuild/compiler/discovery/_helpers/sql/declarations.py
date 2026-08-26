@@ -20,6 +20,11 @@ from sqlbuild.compiler.discovery.models import (
     EnumMember,
     ModelSchemaDeclaration,
 )
+from sqlbuild.sql_values.constants import MISSING_SQL_VALUE
+from sqlbuild.sql_values.exceptions import SqlValueValidationError
+from sqlbuild.sql_values.main.normalize import normalize_sql_value
+from sqlbuild.sql_values.models import AuthoredSqlValueCall, SqlValue
+from sqlbuild.sql_values.types import CollectionRendering, SqlValueKind
 
 _IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _DECLARATION_START_PATTERN: re.Pattern[str] = re.compile(r"(?P<kind>ENUM|CONSTANT|SCHEMA)\s*\(")
@@ -67,11 +72,13 @@ def parse_constant_declaration_file(
     return tuple(
         _parse_constant_declaration(
             name=parsed_header.values.get("name"),
-            value=parsed_header.values.get("value"),
+            value=parsed_header.values.get("value", MISSING_SQL_VALUE),
+            explicit_type=parsed_header.values.get("type", MISSING_SQL_VALUE),
+            raw_render_as=parsed_header.values.get("render_as", MISSING_SQL_VALUE),
             file_path=file_path,
             relative_path=relative_path,
             model_name=None,
-            unknown_keys=set(parsed_header.values) - {"name", "value"},
+            unknown_keys=set(parsed_header.values) - {"name", "value", "type", "render_as"},
         )
         for parsed_header in _parse_declaration_headers(
             contents=contents,
@@ -203,6 +210,8 @@ def parse_model_constant_declarations(
             _parse_constant_declaration(
                 name=raw_name,
                 value=raw_value_item,
+                explicit_type=MISSING_SQL_VALUE,
+                raw_render_as=MISSING_SQL_VALUE,
                 file_path=relative_path,
                 relative_path=relative_path,
                 model_name=model_name,
@@ -365,6 +374,8 @@ def _parse_constant_declaration(
     *,
     name: object | None,
     value: object | None,
+    explicit_type: object | None,
+    raw_render_as: object | None,
     file_path: Path,
     relative_path: Path,
     model_name: str | None,
@@ -380,18 +391,72 @@ def _parse_constant_declaration(
         kind="constant",
         model_name=model_name,
     )
-    scalar_value: str | int = _parse_scalar(
-        raw_value=value,
+    if isinstance(value, AuthoredSqlValueCall):
+        if explicit_type is not MISSING_SQL_VALUE or raw_render_as is not MISSING_SQL_VALUE:
+            raise DeclarationParseError(
+                f"{file_path} constant '{parsed_name}' cannot combine wrapper and outer options"
+            )
+        wrapper_values: dict[str, object] = dict(value.arguments)
+        wrapper_unknown_keys: set[str] = set(wrapper_values) - {"value", "type", "render_as"}
+        if wrapper_unknown_keys:
+            raise DeclarationParseError(
+                f"{file_path} constant '{parsed_name}' wrapper has unknown keys: "
+                f"{', '.join(sorted(wrapper_unknown_keys))}"
+            )
+        value = wrapper_values.get("value", MISSING_SQL_VALUE)
+        explicit_type = wrapper_values.get("type", MISSING_SQL_VALUE)
+        raw_render_as = wrapper_values.get("render_as", MISSING_SQL_VALUE)
+    if value is MISSING_SQL_VALUE:
+        raise DeclarationParseError(
+            f"{file_path} constant '{parsed_name}' is missing required value"
+        )
+    parsed_explicit_type: str | None = _parse_constant_option(
+        raw_value=explicit_type,
         file_path=file_path,
-        label=f"constant '{parsed_name}'",
+        label=f"constant '{parsed_name}' type",
     )
+    render_as_text: str | None = _parse_constant_option(
+        raw_value=raw_render_as,
+        file_path=file_path,
+        label=f"constant '{parsed_name}' render_as",
+    )
+    try:
+        render_as: CollectionRendering | None = (
+            CollectionRendering(render_as_text) if render_as_text is not None else None
+        )
+    except ValueError as error:
+        raise DeclarationParseError(
+            f"{file_path} constant '{parsed_name}' render_as must be value_list or array"
+        ) from error
+    try:
+        typed_value: SqlValue = normalize_sql_value(
+            raw_value=value,
+            explicit_type=parsed_explicit_type,
+            context=f"{file_path} constant '{parsed_name}'",
+        )
+    except SqlValueValidationError as error:
+        raise DeclarationParseError(str(error)) from error
+    if render_as is not None and typed_value.kind not in {SqlValueKind.LIST, SqlValueKind.SET}:
+        raise DeclarationParseError(
+            f"{file_path} constant '{parsed_name}' is {typed_value.kind.value} and does not "
+            "support "
+            f"render_as {render_as.value}"
+        )
     return ConstantDeclaration(
         name=parsed_name,
-        value=scalar_value,
-        scalar_type=_scalar_type(value=scalar_value),
+        value=typed_value,
         relative_path=relative_path,
         model_name=model_name,
+        render_as=render_as,
     )
+
+
+def _parse_constant_option(*, raw_value: object, file_path: Path, label: str) -> str | None:
+    if raw_value is MISSING_SQL_VALUE:
+        return None
+    if not isinstance(raw_value, str) or not raw_value:
+        raise DeclarationParseError(f"{file_path} {label} must be an identifier")
+    return raw_value
 
 
 def _parse_declaration_name(

@@ -1047,6 +1047,9 @@ default_audit_severity = "warn"
 [defaults]
 materialized = "table"
 
+[constants]
+collection_rendering = "value_list"
+
 [targets.prod]
 schema = "prod"
 
@@ -1190,6 +1193,19 @@ tags = ["managed"]
 ```
 
 These apply to all models unless overridden by path defaults or the model's own `MODEL()` header.
+
+### Constants
+
+Collection constants default to parenthesized SQL value lists. Set a project-wide default when lists and sets should instead compile to first-class adapter-native arrays:
+
+```toml
+[constants]
+collection_rendering = "array"
+```
+
+`collection_rendering` accepts `value_list` (the SQLBuild default) or `array`. A public constant's `render_as` field or a model-local `constant(...)` wrapper overrides the project setting. The complete precedence order is declaration override, project setting, then `value_list`.
+
+This setting does not make unsupported adapter features portable. In particular, SQL Server rejects native arrays, and BigQuery rejects nested arrays. See [Enums and Constants](/concepts/enums-and-constants#rendering-configuration) for syntax, adapter output, and value-list usage constraints.
 
 ### Path defaults
 
@@ -1765,6 +1781,20 @@ project = "my-gcp-project"
 credentials_path = "/path/to/service-account.json"
 ```
 
+### Typed constants
+
+BigQuery renders typed constant arrays with bracket syntax, objects as native JSON expressions, and exact decimals as `NUMERIC` expressions. For example:
+
+```sql
+['GB', 'FR', 'HK']
+JSON '{"GB":"Great Britain"}'
+NUMERIC '2.4700'
+```
+
+BigQuery does not support arrays of arrays. A nested list or set requested with `render_as array` fails at compile time rather than producing invalid BigQuery SQL. Parenthesized `value_list` rendering remains available for ordinary scalar collections used with `IN`.
+
+See [Enums and Constants](/concepts/enums-and-constants#adapter-matrix) for declarations, rendering precedence, and the cross-adapter matrix.
+
 ## Databricks
 
 Source: `concepts/adapters/databricks.mdx`
@@ -1903,6 +1933,18 @@ database = "my_database"
 All fields in `connection` are passed to `pymssql.connect()`. See the [pymssql documentation](https://pymssql.readthedocs.io/en/stable/ref/pymssql.html) for all available options.
 
 SQL Server supports schema-only, full-row, and bounded `sqb diff` comparisons.
+
+### Typed constants
+
+SQL Server supports scalar and parenthesized `value_list` constants. Strings use Unicode literals where required, and objects render through a JSON expression such as:
+
+```sql
+JSON_QUERY(N'{"GB":"Great Britain"}')
+```
+
+SQL Server has no supported first-class native array expression. Any list or set that resolves to `render_as array`, whether through its declaration or `[constants].collection_rendering`, fails at compile time. SQLBuild does not silently substitute a value list or quoted JSON string.
+
+See [Enums and Constants](/concepts/enums-and-constants#adapter-matrix) for declarations, rendering precedence, and the cross-adapter matrix.
 
 ### Per-target connections
 
@@ -3121,7 +3163,7 @@ MODEL() header fields and SQL-validation controls.
 | `model_schema` | Reusable column schema name |
 | `audits` | Model-level audit instances |
 | `enums` | Model-local enum declarations; names must begin with `_` |
-| `constants` | Model-local scalar constants; names must begin with `_` |
+| `constants` | Model-local scalar, list, set, or object constants; names must begin with `_`. Use `constant(...)` for an explicit decimal type or collection rendering override. |
 | `schema` | Destination warehouse schema override |
 | `database` | Destination database override |
 | `alias` | Destination relation-name override |
@@ -3588,9 +3630,9 @@ exceptions.
 
 Source: `concepts/enums-and-constants.mdx`
 
-Declare compiler-validated domain values and scalar constants for use across SQLBuild SQL.
+Declare compiler-validated domain values and typed constants for use across SQLBuild SQL.
 
-Enums name a fixed domain of string or integer values. Constants name one string or integer value. SQLBuild validates references at compile time and renders them as SQL literals.
+Enums name a fixed domain of string or integer values. Constants name a compiler-validated SQL value: a scalar, list, set, or object. SQLBuild validates and normalizes declarations at compile time, then asks the active adapter to render them safely for its SQL dialect.
 
 ### Public declarations
 
@@ -3621,15 +3663,102 @@ ENUM (
 );
 ```
 
+Constants use canonical key-value fields. A file may contain multiple declarations:
+
 ```sql
 -- constants/market/thresholds.sql
 CONSTANT (name min_runners, value 7);
 CONSTANT (name fallback_source, value "centrum");
+CONSTANT (name enabled, value true);
+CONSTANT (name ratio, value 0.75);
+CONSTANT (name missing_value, value null);
 ```
 
-A file may contain multiple declarations. Public names must not start with `_`.
+Public names must not start with `_`.
 
-### References
+### Constant values
+
+#### Scalars
+
+Constants support strings, signed integers, booleans, finite floating-point numbers, exact decimals, and null. Integers use a portable signed 64-bit baseline. Non-finite floats such as NaN and positive or negative infinity are rejected.
+
+Use `type decimal` with a quoted value when decimal precision must be exact:
+
+```sql
+CONSTANT (
+  name usd_rate,
+  type decimal,
+  value "2.4700",
+);
+```
+
+SQLBuild parses the quoted representation directly as a decimal, without converting it through a binary float. An incompatible `type` and `value` fails compilation. Strings are otherwise kept as strings; SQLBuild never interprets a constant value as raw SQL.
+
+#### Lists
+
+Square brackets declare an ordered list. Lists preserve authored order and allow duplicates:
+
+```sql
+CONSTANT (
+  name supported_countries,
+  value ["GB", "FR", "HK"],
+);
+```
+
+#### Sets
+
+Curly braces declare a semantic set. Sets reject duplicate typed values and use a stable canonical order for rendering and identity:
+
+```sql
+CONSTANT (
+  name unique_countries,
+  value {"GB", "FR", "HK"},
+);
+```
+
+For example, `{true, 1}` does not contain a duplicate because boolean and integer are distinct logical types. By contrast, `{"GB", "FR", "GB"}` fails compilation rather than silently discarding the second `"GB"`.
+
+#### Objects
+
+Parenthesized key-value entries declare a string-keyed object. Object values may themselves be scalars, lists, sets, or objects:
+
+```sql
+CONSTANT (
+  name country_rules,
+  value (
+    GB (
+      label "Great Britain",
+      threshold 2.47,
+      enabled true,
+      regions ["ENG", "SCT", "WLS"],
+    ),
+    FR (
+      label "France",
+      threshold 2.5,
+      enabled true,
+      regions ["IDF", "NAQ"],
+    ),
+  ),
+);
+```
+
+Object keys must be unique strings accepted by header syntax. SQLBuild canonicalizes keys into a stable order. Objects are logical JSON values, not portable homogeneous SQL maps or structs.
+
+Nested numeric tokens are finite floating-point values. Exact decimal parsing currently applies to a top-level constant declared with `type decimal`; nested exact decimals require a future nested typed-value syntax.
+
+#### Collection restrictions
+
+Lists and sets must be non-empty and have one recursively compatible element type. Nullable elements are ignored while inferring that type, so `[1, null, 2]` is valid, but the following declarations fail:
+
+```sql
+CONSTANT (name empty_values, value []);          -- no element type
+CONSTANT (name unknown_values, value [null]);    -- no non-null element type
+CONSTANT (name mixed_values, value [1, "two"]); -- integer and string
+```
+
+The same empty, all-null, and mixed-type restrictions apply to sets. Objects may contain values of different types because each key has its own recursively validated value. SQLBuild also applies nesting-depth, element-count, and rendered-size safety limits; errors identify the declaration path and nested value path.
+
+### References and rendering
 
 Use `@enum("name").MEMBER` and `@const("name")` anywhere public declarations are supported:
 
@@ -3638,20 +3767,81 @@ SELECT *
 FROM prices
 WHERE market_type = @enum("market_type").WIN
   AND runner_count > @const("min_runners")
-```
-
-This compiles to:
-
-```sql
-WHERE market_type = 'WIN'
-  AND runner_count > 7
+  AND country_code IN @const("supported_countries")
 ```
 
 Public references work in model queries, SQL hooks, SQL functions, audits, unit tests, scenarios, and inline source expressions. Unknown declarations or enum members fail compilation.
 
+#### Value-list rendering
+
+Lists and sets render as `value_list` by default on every adapter. This targets the common `IN` use case:
+
+```sql
+WHERE country_code IN @const("supported_countries")
+```
+
+compiles to:
+
+```sql
+WHERE country_code IN ('GB', 'FR', 'HK')
+```
+
+Every element is escaped by the active adapter before SQLBuild constructs the parenthesized list.
+
+A `value_list` constant is a SQL fragment intended for a value-list position such as `IN (...)`. It is not a portable standalone projection or a first-class array value. For example, `SELECT @const("supported_countries")` does not have consistent meaning across adapters. Use `render_as array` when the constant must be an array expression.
+
+#### Array rendering
+
+Set `render_as array` to request a first-class adapter-native array. SQLBuild does not rewrite array membership operations, so use the operators and functions appropriate for your adapter.
+
+```sql
+CONSTANT (
+  name supported_countries_array,
+  value ["GB", "FR", "HK"],
+  render_as array,
+);
+```
+
+Sets support the same rendering modes after duplicate validation and canonical ordering. Scalars and objects reject `render_as` because value-list and array modes have no defined meaning for them.
+
+#### Adapter matrix
+
+The selected rendering mode has the same semantics on every adapter; only its SQL spelling changes.
+
+| Adapter | Native array expression | Object/JSON expression |
+|---------|-------------------------|------------------------|
+| DuckDB | `['GB', 'FR', 'HK']` | `json('{"GB":"Great Britain"}')` |
+| MotherDuck | `['GB', 'FR', 'HK']` | `json('{"GB":"Great Britain"}')` |
+| Snowflake | `ARRAY_CONSTRUCT('GB', 'FR', 'HK')` | `PARSE_JSON('{"GB":"Great Britain"}')` |
+| BigQuery | `['GB', 'FR', 'HK']` | `JSON '{"GB":"Great Britain"}'` |
+| Databricks | `array('GB', 'FR', 'HK')` | `parse_json('{"GB":"Great Britain"}')` |
+| PostgreSQL | `ARRAY['GB', 'FR', 'HK']` | `'{"GB":"Great Britain"}'::JSONB` |
+| SQL Server | Unsupported | `JSON_QUERY(N'{"GB":"Great Britain"}')` |
+
+Object constants always use the adapter's native JSON or semi-structured expression, or its validated JSON-text equivalent; they are not emitted as an ordinary quoted JSON string. Every nested scalar and key is escaped safely.
+
+BigQuery supports native arrays but does not support arrays whose elements are arrays. A nested-array constant requested with `render_as array` therefore fails during compilation. SQL Server has no native array representation, so any array request fails during compilation rather than falling back to a value list or string. See the [BigQuery](/concepts/adapters/bigquery#typed-constants) and [SQL Server](/concepts/adapters/sqlserver#typed-constants) adapter pages.
+
+### Rendering configuration
+
+Change the project default for list and set declarations in `sqlbuild_project.toml`:
+
+```toml
+[constants]
+collection_rendering = "array"
+```
+
+Allowed values are `value_list` and `array`. Rendering mode is resolved in this order:
+
+1. The declaration's `render_as` field
+2. Project `[constants].collection_rendering`
+3. SQLBuild's `value_list` default
+
+The project default applies to both public and model-local collection constants. There is no reference-site override: one declaration has one representation throughout a compilation. Changing the resolved mode changes dependent rendered SQL and query identity.
+
 ### Model-local declarations
 
-Use model-local declarations for values that should not enter the project-wide namespace:
+Use model-local declarations for values that should not enter the project-wide namespace. The shorthand accepts every scalar and collection form:
 
 ```sql
 MODEL (
@@ -3660,6 +3850,12 @@ MODEL (
   ),
   constants (
     _min_runners 7,
+    _supported_countries ["GB", "FR", "HK"],
+    _unique_countries {"GB", "FR", "HK"},
+    _country_labels (
+      GB "Great Britain",
+      FR "France",
+    ),
   ),
 );
 
@@ -3667,18 +3863,43 @@ SELECT *
 FROM runners
 WHERE state = @enum("_state").OPEN
   AND runner_count > @const("_min_runners")
+  AND country_code IN @const("_supported_countries")
 ```
 
-Model-local names must start with `_`. They are available only in that model's query and SQL hooks; another model cannot resolve them.
+Use the `constant(...)` wrapper when a local declaration needs an explicit type or rendering override:
 
-### Types and validation
+```sql
+MODEL (
+  constants (
+    _usd_rate constant(
+      type decimal,
+      value "2.4700",
+    ),
+    _supported_countries constant(
+      value ["GB", "FR", "HK"],
+      render_as array,
+    ),
+  ),
+);
+```
+
+The wrapper is distinct from object syntax, so an object with keys named `value` or `render_as` remains unambiguous. Model-local names must start with `_`. They are available only in that model's query and SQL hooks; another model cannot resolve them.
+
+### Determinism and identity
+
+SQLBuild normalizes constants before rendering and fingerprinting:
+
+- List order and duplicates are preserved, so changing either changes rendered SQL and query identity.
+- Set declaration order is ignored; membership is canonicalized, so reordering alone changes neither rendered SQL nor query identity.
+- Object key declaration order is ignored; keys are canonicalized, so reordering alone changes neither rendered SQL nor query identity.
+- Set membership, object values, rendering mode, and an applicable project rendering default all participate in dependent query identity.
+- An unused declaration does not invalidate unrelated models.
+
+### Enum validation
 
 Enums must contain at least one member and use one consistent scalar type. String and integer members cannot be mixed. Integer values use explicit member syntax.
 
-Names must be SQL identifiers. Enum member identifiers must be uppercase, even when an explicit
-member's stored value is lowercase. Member lookup is case-sensitive, so `.WIN` is valid for
-`WIN "win"` and `.win` is not. Duplicate declaration names, duplicate member names, invalid
-visibility prefixes, and malformed references all fail compilation.
+Names must be SQL identifiers. Enum member identifiers must be uppercase, even when an explicit member's stored value is lowercase. Member lookup is case-sensitive, so `.WIN` is valid for `WIN "win"` and `.win` is not. Duplicate declaration names, duplicate member names, invalid visibility prefixes, and malformed references all fail compilation.
 
 ### Enum-typed contracts
 
@@ -3739,7 +3960,7 @@ The rule is simple: if it's any SQL that will be executed, it uses `@`. If it's 
 | Syntax | Where | Resolved |
 |--------|-------|----------|
 | `@enum("name").MEMBER` | Executable SQL | Compile time - expands to the validated enum member value |
-| `@const("name")` | Executable SQL | Compile time - expands to the named scalar value |
+| `@const("name")` | Executable SQL | Compile time - expands to the named typed scalar, value list, native array, or object expression |
 | `@macro(args)` | Model SQL, SQL hooks, tests, audits, inline source expressions | Compile time - expands to macro return value |
 | `@@name` | Model SQL, SQL hooks, tests, audits, inline source expressions | Compile time - project variable substitution |
 | `@@ENV:NAME` | Model SQL, SQL hooks, tests, audits, inline source expressions | Compile time - environment variable |
@@ -3752,7 +3973,7 @@ The rule is simple: if it's any SQL that will be executed, it uses `@`. If it's 
 
 `@@CTX:` is intentionally SQL-hook-only. Model SQL describes a relation's data and should not reference its own destination identity. SQL hooks are the operational SQL layer where destination context is useful - grants, logging, post-materialization DDL. Python hooks access the same information through `ctx.destination` on the [`HookContext`](/concepts/models/hooks/python#hook-context) object.
 
-See [Enums and Constants](/concepts/enums-and-constants) for declaration syntax, visibility, and contract integration.
+See [Enums and Constants](/concepts/enums-and-constants) for scalar and collection syntax, visibility, collection-rendering precedence, adapter behavior, and contract integration.
 
 ### Project variables
 
@@ -3891,7 +4112,7 @@ SQLBuild processes authored SQL in this order:
 1. **Config templates** (`${CTX:...}`, `${ENV:...}`) in TOML/YAML config values are resolved during config compilation
 2. **Named SQL hook arguments** (`@name` and `@'name'`) are substituted into reusable hook bodies
 3. **Project variables** (`@@name`), **environment variables** (`@@ENV:NAME`), and **context variables** (`@@CTX:name` in SQL hooks) are substituted
-4. **Enum and constant references** are validated and expanded to scalar SQL literals
+4. **Enum and constant references** are validated, normalized, and expanded through the active adapter
 5. **Macro calls** (`@name(args)`) are expanded
 6. **SQL analysis validation** runs against the fully expanded SQL
 

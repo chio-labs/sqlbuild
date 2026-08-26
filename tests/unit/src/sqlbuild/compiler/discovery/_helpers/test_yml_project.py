@@ -11,11 +11,14 @@ from sqlbuild.compiler.discovery._helpers.yml.project import (
 )
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.spec.contracts.models import ProjectConfig
+from sqlbuild.sql_values.types import CollectionRendering
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     LoadLocalConfigErrorTestCase,
     LoadLocalConfigTestCase,
     LoadProjectConfigErrorTestCase,
     LoadProjectConfigTestCase,
+    LoadProjectConstantsConfigErrorTestCase,
+    LoadProjectConstantsConfigTestCase,
     LoadProjectCostConfigErrorTestCase,
     LoadProjectCostConfigTestCase,
 )
@@ -115,6 +118,68 @@ def test_given_invalid_cost_rate_when_loading_project_then_config_error_is_raise
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text(
         f'name = "demo"\nadapter = "snowflake"\n[cost]\nusd_per_credit = {test_case.value}\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProjectConfigError, match=test_case.expected_error_fragment):
+        load_project_config(project_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadProjectConstantsConfigTestCase(
+            description="omitted constants config uses value-list rendering",
+            constants_toml="",
+            expected_collection_rendering=CollectionRendering.VALUE_LIST,
+        ),
+        LoadProjectConstantsConfigTestCase(
+            description="array collection rendering is loaded",
+            constants_toml='[constants]\ncollection_rendering = "array"',
+            expected_collection_rendering=CollectionRendering.ARRAY,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_constants_config_when_loading_project_then_collection_rendering_is_typed(
+    test_case: LoadProjectConstantsConfigTestCase, tmp_path: Path
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "demo"\nadapter = "duckdb"\n{test_case.constants_toml}\n',
+        encoding="utf-8",
+    )
+
+    config: ProjectConfig = load_project_config(project_dir=tmp_path)
+
+    assert config.constants.collection_rendering is test_case.expected_collection_rendering
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadProjectConstantsConfigErrorTestCase(
+            description="non-string collection rendering is rejected",
+            constants_toml="[constants]\ncollection_rendering = true",
+            expected_error_fragment="constants.collection_rendering must be a string",
+        ),
+        LoadProjectConstantsConfigErrorTestCase(
+            description="unknown collection rendering is rejected",
+            constants_toml='[constants]\ncollection_rendering = "values"',
+            expected_error_fragment="constants.collection_rendering must be one of: value_list, array",
+        ),
+        LoadProjectConstantsConfigErrorTestCase(
+            description="unknown constants key is rejected",
+            constants_toml='[constants]\nrendering = "array"',
+            expected_error_fragment=r"constants contains unknown key\(s\): rendering",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_constants_config_when_loading_project_then_config_error_is_raised(
+    test_case: LoadProjectConstantsConfigErrorTestCase, tmp_path: Path
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "demo"\nadapter = "duckdb"\n{test_case.constants_toml}\n',
         encoding="utf-8",
     )
 
