@@ -10,10 +10,17 @@ from sqlbuild.compiler.scopes.types import JsonValue
 
 def build_projection(*, index: ScopeIndex) -> dict[str, JsonValue]:
     declarations: list[DeclarationRecord] = sorted(
-        index.declarations, key=lambda item: format_identity(identity=item.identity)
+        index.declarations,
+        key=lambda item: (
+            format_identity(identity=item.identity),
+            item.path,
+            item.line,
+            item.column,
+        ),
     )
     resources: list[ResourceRecord] = sorted(
-        index.resources, key=lambda item: format_identity(identity=item.identity)
+        index.resources,
+        key=lambda item: (format_identity(identity=item.identity), item.path),
     )
     return {
         "schema_version": SCOPE_METADATA_SCHEMA_VERSION,
@@ -45,6 +52,16 @@ def build_projection(*, index: ScopeIndex) -> dict[str, JsonValue]:
                 "path": diagnostic.path,
                 "line": diagnostic.line,
                 "column": diagnostic.column,
+                "declaration": (
+                    format_identity(identity=diagnostic.declaration)
+                    if diagnostic.declaration is not None
+                    else None
+                ),
+                "resource": (
+                    format_identity(identity=diagnostic.resource)
+                    if diagnostic.resource is not None
+                    else None
+                ),
             }
             for diagnostic in sorted(
                 index.diagnostics,

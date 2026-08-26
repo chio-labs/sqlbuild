@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from sqlbuild.compiler.scopes.models import ScopeDiagnostic
+
 
 class ScopeError(ValueError):
     """Base error for invalid scope-domain input."""
@@ -30,3 +32,14 @@ class DuplicateScopeIdentityError(ScopeError):
     """Raised when records duplicate a canonical identity."""
 
     code: str = "S003"
+
+
+class ScopeValidationError(ScopeError):
+    """Aggregate error raised only when strict scope validation is requested."""
+
+    def __init__(self, diagnostics: tuple[ScopeDiagnostic, ...]) -> None:
+        self.diagnostics = diagnostics
+        message: str = "Invalid declaration scope index:\n" + "\n".join(
+            f"[{diagnostic.code.value}] {diagnostic.message}" for diagnostic in diagnostics
+        )
+        super().__init__(message)

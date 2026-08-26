@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlbuild.compiler.scopes.models import DeclarationIdentity, ResourceIdentity
-from sqlbuild.compiler.scopes.types import ScopeKind
+from sqlbuild.compiler.scopes.types import InaccessibleReason, ScopeKind, VisibilityReason
 
 
 @dataclass(frozen=True)
@@ -60,3 +60,24 @@ class InvalidIdentityCase:
     description: str
     value: str
     expected_error: type[BaseException]
+
+
+@dataclass(frozen=True)
+class ResourceExpectation:
+    """One expected canonical resource projection."""
+
+    description: str
+    expected_kind: str
+    expected_name: str
+    expected_path: str
+    expected_root: str
+
+
+@dataclass(frozen=True)
+class VisibilityExpectation:
+    """One expected declaration visibility classification."""
+
+    description: str
+    expected_name: str
+    expected_visible_reason: VisibilityReason | None = None
+    expected_inaccessible_reason: InaccessibleReason | None = None

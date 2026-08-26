@@ -157,6 +157,7 @@ class ScopeDiagnostic:
     line: int | None = None
     column: int | None = None
     declaration: DeclarationIdentity | None = None
+    resource: ResourceIdentity | None = None
 
 
 @dataclass(frozen=True)
@@ -210,11 +211,35 @@ class ScopeLookup:
     """Immutable indexes over one canonical ``ScopeIndex``."""
 
     index: ScopeIndex
-    resources: Mapping[ResourceIdentity, ResourceRecord]
-    resources_by_path: Mapping[str, ResourceRecord]
-    declarations: Mapping[DeclarationIdentity, DeclarationRecord]
+    resources: Mapping[ResourceIdentity, tuple[ResourceRecord, ...]]
+    resources_by_path: Mapping[str, tuple[ResourceRecord, ...]]
+    declarations: Mapping[DeclarationIdentity, tuple[DeclarationRecord, ...]]
     usages_by_consumer: Mapping[ResourceIdentity | DeclarationIdentity, tuple[UsageRecord, ...]]
     usages_by_declaration: Mapping[DeclarationIdentity, tuple[UsageRecord, ...]]
     grants_by_resource: Mapping[ResourceIdentity, tuple[GrantRecord, ...]]
     visibility_by_resource: Mapping[ResourceIdentity, tuple[VisibilityRecord, ...]]
     inaccessible_by_resource: Mapping[ResourceIdentity, tuple[InaccessibleRecord, ...]]
+
+
+@dataclass(frozen=True)
+class ScopeTargetQuery:
+    """Non-throwing qualified-identity or path lookup result."""
+
+    value: str | ResourceIdentity | DeclarationIdentity
+    matches: tuple[ResourceRecord, ...] = field(default_factory=tuple)
+    declaration_matches: tuple[DeclarationRecord, ...] = field(default_factory=tuple)
+
+    @property
+    def unknown(self) -> bool:
+        """Return whether the target is absent rather than merely inaccessible."""
+
+        return not self.matches and not self.declaration_matches
+
+
+@dataclass(frozen=True)
+class VisibilityResolution:
+    """Complete static visibility classification for one queried target."""
+
+    target: ScopeTargetQuery
+    visible: tuple[VisibilityRecord, ...] = field(default_factory=tuple)
+    inaccessible: tuple[InaccessibleRecord, ...] = field(default_factory=tuple)

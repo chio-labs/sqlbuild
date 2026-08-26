@@ -8,7 +8,6 @@ from types import MappingProxyType
 
 from sqlbuild.compiler.scopes._helpers.identities import format_identity
 from sqlbuild.compiler.scopes._helpers.paths import normalize_path
-from sqlbuild.compiler.scopes.exceptions import DuplicateScopeIdentityError
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
@@ -41,29 +40,30 @@ def group_records[Record, Key: Hashable](
 
 
 def build_lookup(*, index: ScopeIndex) -> ScopeLookup:
-    resources: list[ResourceRecord] = sorted(
-        index.resources, key=lambda item: format_identity(identity=item.identity)
+    resources: list[ResourceRecord] = sorted(index.resources, key=resource_sort_key)
+    declarations: list[DeclarationRecord] = sorted(index.declarations, key=declaration_sort_key)
+    resource_map: MappingProxyType[ResourceIdentity, tuple[ResourceRecord, ...]] = group_records(
+        records=resources,
+        key=lambda item: item.identity,
+        sort_key=resource_sort_key,
     )
-    declarations: list[DeclarationRecord] = sorted(
-        index.declarations, key=lambda item: format_identity(identity=item.identity)
+    declaration_map: MappingProxyType[DeclarationIdentity, tuple[DeclarationRecord, ...]] = (
+        group_records(
+            records=declarations,
+            key=lambda item: item.identity,
+            sort_key=declaration_sort_key,
+        )
     )
-    resource_map: dict[ResourceIdentity, ResourceRecord] = {
-        record.identity: record for record in resources
-    }
-    declaration_map: dict[DeclarationIdentity, DeclarationRecord] = {
-        record.identity: record for record in declarations
-    }
-    if len(resource_map) != len(resources):
-        raise DuplicateScopeIdentityError("Duplicate resource identity in scope index")
-    if len(declaration_map) != len(declarations):
-        raise DuplicateScopeIdentityError("Duplicate declaration identity in scope index")
 
-    path_map: dict[str, ResourceRecord] = {}
+    paths: list[tuple[str, ResourceRecord]] = []
     for record in resources:
         path: str = normalize_path(path=record.path)
-        if path in path_map:
-            raise DuplicateScopeIdentityError(f"Duplicate resource path in scope index: {path}")
-        path_map[path] = record
+        paths.append((path, record))
+    path_map: MappingProxyType[str, tuple[tuple[str, ResourceRecord], ...]] = group_records(
+        records=paths,
+        key=lambda item: item[0],
+        sort_key=lambda item: resource_sort_key(item[1]),
+    )
 
     canonical_index: ScopeIndex = ScopeIndex(
         resources=tuple(resources),
@@ -85,11 +85,14 @@ def build_lookup(*, index: ScopeIndex) -> ScopeLookup:
         ),
         completeness=index.completeness,
     )
+    resources_by_path: dict[str, tuple[ResourceRecord, ...]] = {}
+    for path, records_for_path in path_map.items():
+        resources_by_path[path] = tuple(item[1] for item in records_for_path)
     return ScopeLookup(
         index=canonical_index,
-        resources=MappingProxyType(resource_map),
-        resources_by_path=MappingProxyType(path_map),
-        declarations=MappingProxyType(declaration_map),
+        resources=resource_map,
+        resources_by_path=MappingProxyType(resources_by_path),
+        declarations=declaration_map,
         usages_by_consumer=group_records(
             records=canonical_index.usages, key=lambda item: item.consumer, sort_key=usage_sort_key
         ),
@@ -118,6 +121,19 @@ def build_lookup(*, index: ScopeIndex) -> ScopeLookup:
 
 def identity_key(identity: ResourceIdentity | DeclarationIdentity) -> str:
     return format_identity(identity=identity)
+
+
+def resource_sort_key(record: ResourceRecord) -> tuple[str, ...]:
+    return (identity_key(record.identity), normalize_path(path=record.path))
+
+
+def declaration_sort_key(record: DeclarationRecord) -> tuple[str, ...]:
+    return (
+        identity_key(record.identity),
+        normalize_path(path=record.path),
+        str(record.line),
+        str(record.column),
+    )
 
 
 def usage_sort_key(record: UsageRecord) -> tuple[str, ...]:

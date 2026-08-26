@@ -1,5 +1,14 @@
 """Fixtures for compiler scope unit tests."""
 
+from __future__ import annotations
+
+from pathlib import Path
+
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredProjectInputs,
+    DiscoveredSqlModelFile,
+    EnumDeclaration,
+)
 from sqlbuild.compiler.scopes.models import (
     ConstantMetadata,
     DeclarationIdentity,
@@ -20,6 +29,57 @@ from sqlbuild.compiler.scopes.types import (
     ResourceKind,
     ScopeKind,
 )
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
+
+
+def discovered_inputs(**kwargs: object) -> DiscoveredProjectInputs:
+    """Return minimal discovered inputs with selected record tuples."""
+
+    return DiscoveredProjectInputs(
+        project_config=ProjectConfig(name="scope_project", adapter="duckdb"),
+        local_config=LocalConfig(),
+        **kwargs,  # ty: ignore[invalid-argument-type]
+    )
+
+
+def discovered_model(
+    *, name: str, path: str, enums: tuple[EnumDeclaration, ...] = ()
+) -> DiscoveredSqlModelFile:
+    """Return one minimal discovered model."""
+
+    relative: Path = Path(path)
+    return DiscoveredSqlModelFile(
+        file_path=relative,
+        relative_path=relative,
+        contents="MODEL(); SELECT 1",
+        header_values={"name": name},
+        header_column_locations={},
+        output_column_locations={},
+        query_sql="SELECT 1",
+        enum_declarations=enums,
+    )
+
+
+def declaration_record(
+    *,
+    name: str,
+    scope: ScopeKind,
+    owner_path: str | None,
+    owner: ResourceIdentity | None = None,
+    path: str | None = None,
+    kind: DeclarationKind = DeclarationKind.ENUM,
+) -> DeclarationRecord:
+    """Return one minimal declaration record."""
+
+    return DeclarationRecord(
+        DeclarationIdentity(kind, name, owner),
+        path or f"enums/{name}.sql",
+        1,
+        1,
+        scope,
+        OwnershipRoot("models", resource_kind=ResourceKind.MODEL),
+        owning_path=owner_path,
+    )
 
 
 def scope_index() -> ScopeIndex:

@@ -105,6 +105,7 @@ class ScopeDiagnosticCode(StrEnum):
     MACRO_MODULE_IMPORT = "S015"
     INVALID_MACRO_DEPENDENCY = "S016"
     MACRO_DEPENDENCY_CYCLE = "S017"
+    DUPLICATE_RESOURCE = "S018"
 
 
 class CompletenessSection(StrEnum):
