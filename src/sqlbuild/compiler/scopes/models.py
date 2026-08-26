@@ -1,0 +1,220 @@
+"""Immutable models for the canonical compiler scope index."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from types import MappingProxyType
+
+from sqlbuild.compiler.scopes.types import (
+    CompletenessSection,
+    DeclarationKind,
+    DiagnosticSeverity,
+    GrantKind,
+    InaccessibleReason,
+    OwnershipRootKind,
+    ResourceKind,
+    ScopeDiagnosticCode,
+    ScopeKind,
+    UsageKind,
+    VisibilityReason,
+)
+
+
+@dataclass(frozen=True, order=True)
+class ResourceIdentity:
+    """Stable kind-qualified identity of one authored resource."""
+
+    kind: ResourceKind
+    name: str
+
+
+@dataclass(frozen=True, order=True)
+class DeclarationIdentity:
+    """Stable declaration identity, including a private declaration owner."""
+
+    kind: DeclarationKind
+    name: str
+    owner: ResourceIdentity | None = None
+
+
+@dataclass(frozen=True, order=True)
+class OwnershipRoot:
+    """Normalized project-relative directory that owns resource scope."""
+
+    path: str
+    kind: OwnershipRootKind = OwnershipRootKind.RESOURCE
+    resource_kind: ResourceKind | None = None
+
+
+@dataclass(frozen=True)
+class ResourceRecord:
+    """One resource participating in lexical declaration scope."""
+
+    identity: ResourceIdentity
+    path: str
+    ownership_root: OwnershipRoot
+
+
+@dataclass(frozen=True)
+class MacroMetadata:
+    """Safe macro metadata required by scope and dependency inspection."""
+
+    parameters: tuple[str, ...] = field(default_factory=tuple)
+    dependencies: tuple[DeclarationIdentity, ...] = field(default_factory=tuple)
+    source_digest: str = ""
+
+
+@dataclass(frozen=True)
+class EnumMemberMetadata:
+    """One authored enum member and its normalized scalar value."""
+
+    name: str
+    value: str | int
+
+
+@dataclass(frozen=True)
+class EnumMetadata:
+    """Safe enum metadata; members are names and normalized scalar values."""
+
+    members: tuple[EnumMemberMetadata, ...]
+    scalar_type: str
+
+
+@dataclass(frozen=True)
+class ConstantMetadata:
+    """Value-free normalized metadata for one typed constant."""
+
+    logical_type: str
+    collection_kind: str | None = None
+    item_count: int | None = None
+    nullable: bool = False
+    render_as: str | None = None
+
+
+@dataclass(frozen=True)
+class DeclarationRecord:
+    """One declaration definition and its compiler-owned scope metadata."""
+
+    identity: DeclarationIdentity
+    path: str
+    line: int
+    column: int
+    scope: ScopeKind
+    ownership_root: OwnershipRoot
+    owning_path: str | None = None
+    macro: MacroMetadata | None = None
+    enum: EnumMetadata | None = None
+    constant: ConstantMetadata | None = None
+
+
+@dataclass(frozen=True)
+class UsageRecord:
+    """A runtime or declaration dependency edge."""
+
+    consumer: ResourceIdentity | DeclarationIdentity
+    declaration: DeclarationIdentity
+    kind: UsageKind = UsageKind.RUNTIME
+
+
+@dataclass(frozen=True)
+class GrantRecord:
+    """A compiler relationship granting a public declaration to a resource."""
+
+    resource: ResourceIdentity
+    declaration: DeclarationIdentity
+    through: ResourceIdentity
+    kind: GrantKind = GrantKind.EXPECTED_MODEL
+
+
+@dataclass(frozen=True)
+class VisibilityRecord:
+    """A resolved positive visibility fact with stable provenance."""
+
+    resource: ResourceIdentity
+    declaration: DeclarationIdentity
+    reason: VisibilityReason
+    through: ResourceIdentity | None = None
+
+
+@dataclass(frozen=True)
+class InaccessibleRecord:
+    """A resolved negative visibility fact with stable provenance."""
+
+    resource: ResourceIdentity
+    declaration: DeclarationIdentity
+    reason: InaccessibleReason
+
+
+@dataclass(frozen=True)
+class ScopeDiagnostic:
+    """Stable diagnostic retained even when an index is partial."""
+
+    code: ScopeDiagnosticCode
+    message: str
+    severity: DiagnosticSeverity = DiagnosticSeverity.ERROR
+    path: str | None = None
+    line: int | None = None
+    column: int | None = None
+    declaration: DeclarationIdentity | None = None
+
+
+@dataclass(frozen=True)
+class ScopeCompleteness:
+    """Independent completeness facts for partially invalid projects."""
+
+    discovery: bool = True
+    static_visibility: bool = True
+    runtime_usage: bool = True
+    relationships: bool = True
+    placement: bool = True
+    promotion_impact: bool = True
+
+    @property
+    def complete(self) -> bool:
+        """Return whether every index section is complete."""
+
+        return all(self.as_mapping().values())
+
+    def as_mapping(self) -> Mapping[CompletenessSection, bool]:
+        """Return immutable section completeness keyed by stable names."""
+
+        return MappingProxyType(
+            {
+                CompletenessSection.DISCOVERY: self.discovery,
+                CompletenessSection.STATIC_VISIBILITY: self.static_visibility,
+                CompletenessSection.RUNTIME_USAGE: self.runtime_usage,
+                CompletenessSection.RELATIONSHIPS: self.relationships,
+                CompletenessSection.PLACEMENT: self.placement,
+                CompletenessSection.PROMOTION_IMPACT: self.promotion_impact,
+            }
+        )
+
+
+@dataclass(frozen=True)
+class ScopeIndex:
+    """Canonical deterministic facts used by every future scope consumer."""
+
+    resources: tuple[ResourceRecord, ...] = field(default_factory=tuple)
+    declarations: tuple[DeclarationRecord, ...] = field(default_factory=tuple)
+    usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+    grants: tuple[GrantRecord, ...] = field(default_factory=tuple)
+    visibility: tuple[VisibilityRecord, ...] = field(default_factory=tuple)
+    inaccessible: tuple[InaccessibleRecord, ...] = field(default_factory=tuple)
+    diagnostics: tuple[ScopeDiagnostic, ...] = field(default_factory=tuple)
+    completeness: ScopeCompleteness = field(default_factory=ScopeCompleteness)
+
+
+@dataclass(frozen=True)
+class ScopeLookup:
+    """Immutable indexes over one canonical ``ScopeIndex``."""
+
+    index: ScopeIndex
+    resources: Mapping[ResourceIdentity, ResourceRecord]
+    resources_by_path: Mapping[str, ResourceRecord]
+    declarations: Mapping[DeclarationIdentity, DeclarationRecord]
+    usages_by_consumer: Mapping[ResourceIdentity | DeclarationIdentity, tuple[UsageRecord, ...]]
+    usages_by_declaration: Mapping[DeclarationIdentity, tuple[UsageRecord, ...]]
+    grants_by_resource: Mapping[ResourceIdentity, tuple[GrantRecord, ...]]
+    visibility_by_resource: Mapping[ResourceIdentity, tuple[VisibilityRecord, ...]]
+    inaccessible_by_resource: Mapping[ResourceIdentity, tuple[InaccessibleRecord, ...]]
