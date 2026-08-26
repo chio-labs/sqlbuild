@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.58.0](https://github.com/chio-labs/sqlbuild/compare/v0.57.0...v0.58.0) (2026-08-26)
+
+
+### Features
+
+* **sql:** unify native resource headers ([#362](https://github.com/chio-labs/sqlbuild/issues/362)) ([fbeafab](https://github.com/chio-labs/sqlbuild/commit/fbeafabb57e02a25a4da4c3771928a7191e806d6))
+
 ## [0.57.0](https://github.com/chio-labs/sqlbuild/compare/v0.56.2...v0.57.0) (2026-08-26)
 
 
