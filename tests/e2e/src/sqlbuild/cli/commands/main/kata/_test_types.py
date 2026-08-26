@@ -7,4 +7,6 @@ from dataclasses import dataclass
 class KataPerformanceGuardTestCase:
     description: str
     model_count: int
-    expected_max_seconds: float
+    hard_ceiling_seconds: int
+    expected_max_elapsed_seconds: float
+    expected_returncode: int

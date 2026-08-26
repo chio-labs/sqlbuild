@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 
-from sqlbuild.kata_engine.models import KataResult, KataRule
+from sqlbuild.kata_engine._helpers.guidance.thresholds import format_threshold_lines
+from sqlbuild.kata_engine.models import KataConfig, KataResult, KataRule
 
 
 def format_result_text(*, result: KataResult) -> str:
@@ -46,7 +47,7 @@ def format_result_json(*, result: KataResult) -> str:
     return json.dumps(payload, indent=2, sort_keys=True)
 
 
-def format_rule_text(*, rule: KataRule) -> str:
+def format_rule_text(*, rule: KataRule, config: KataConfig | None = None) -> str:
     lines: list[str] = [
         f"{rule.code}: {rule.slug}",
         f"Family: {rule.family}",
@@ -63,4 +64,6 @@ def format_rule_text(*, rule: KataRule) -> str:
         lines.extend(("", "Options:"))
         for option in rule.options:
             lines.append(f"- {option.name}: default={option.default!r} ({option.description})")
+    if config is not None and rule.code.startswith("SQBKX"):
+        lines.extend(("", "Effective thresholds:", *format_threshold_lines(config=config)))
     return "\n".join(lines)

@@ -28,3 +28,13 @@ class KataBehaviorTestCase:
     expected_cache_hits: int = 0
     expected_cache_misses: int = 0
     expected_error_pattern: str = ""
+
+
+@dataclass(frozen=True)
+class JoinRuleTestCase:
+    description: str
+    sql: str
+    select: tuple[str, ...]
+    expected_codes: tuple[str, ...]
+    expected_remediations: tuple[str, ...] = ()
+    kata_config: KataConfig = field(default_factory=KataConfig)

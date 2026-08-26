@@ -9,7 +9,6 @@ pub(crate) const BOOLEAN_TYPE: &str = "BOOLEAN";
 pub(crate) const TIMESTAMP_TYPE: &str = "TIMESTAMP";
 pub(crate) const DATE_TYPE: &str = "DATE";
 pub(crate) const NEGATION_OPERATOR: &str = "-";
-pub(crate) const TRIVIAL_JOIN_VALUE: &str = "1";
 pub(crate) const DECLARATION_DOMAIN_COMPONENTS: usize = 3;
 pub(crate) const SQL_AS_KEYWORD_LENGTH: usize = 2;
 pub(crate) const MEANINGLESS_FINAL_NAME: &str = "finalfinal";
