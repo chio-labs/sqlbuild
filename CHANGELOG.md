@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.59.0](https://github.com/chio-labs/sqlbuild/compare/v0.58.0...v0.59.0) (2026-08-26)
+
+
+### Features
+
+* **constants:** support typed SQL values ([#364](https://github.com/chio-labs/sqlbuild/issues/364)) ([530231d](https://github.com/chio-labs/sqlbuild/commit/530231df3ec731f72a0d0cad7395b07d52f140be))
+
 ## [0.58.0](https://github.com/chio-labs/sqlbuild/compare/v0.57.0...v0.58.0) (2026-08-26)
 
 
