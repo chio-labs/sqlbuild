@@ -128,9 +128,7 @@ def test_given_pipeline_directory_when_loading_then_returns_typed_relative_confi
     tmp_path: Path,
     test_case: SqlTestPolicyConfigTestCase,
 ) -> None:
-    (tmp_path / "sqlbuild_project.toml").write_text(
-        test_case.source, encoding="utf-8"
-    )
+    (tmp_path / "sqlbuild_project.toml").write_text(test_case.source, encoding="utf-8")
 
     config: KataConfig = load_kata_config(project_dir=tmp_path)
 

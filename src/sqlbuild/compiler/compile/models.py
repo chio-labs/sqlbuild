@@ -732,9 +732,7 @@ class CompiledSqlScenario:
                 self,
                 "target_model_names",
                 tuple(
-                    dict.fromkeys(
-                        (*self.expected_model_names, *self.assertion_target_model_names)
-                    )
+                    dict.fromkeys((*self.expected_model_names, *self.assertion_target_model_names))
                 ),
             )
 

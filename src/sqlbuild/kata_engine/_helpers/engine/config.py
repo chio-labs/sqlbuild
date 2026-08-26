@@ -122,6 +122,4 @@ def _sql_tests(value: object) -> SqlTestPolicyConfig:
     table: dict[str, object] = (
         {str(key): item for key, item in value.items()} if isinstance(value, dict) else {}
     )
-    return SqlTestPolicyConfig(
-        pipeline_directory=str(table.get("pipeline_directory", "pipelines"))
-    )
+    return SqlTestPolicyConfig(pipeline_directory=str(table.get("pipeline_directory", "pipelines")))

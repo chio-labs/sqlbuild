@@ -50,7 +50,11 @@ def test_given_compiled_sql_facts_when_evaluating_native_then_exact_safe_rows_ar
     direct_tests: tuple[CompiledSqlTest, ...] = tuple(
         direct_sql_test(mode=mode, name=name, block_index=index)
         for index, (mode, name) in enumerate(
-            ((SqlTestMode.MACRO, "normalize"), (SqlTestMode.UDF, "tax"), (SqlTestMode.TABLE_FN, "items")),
+            (
+                (SqlTestMode.MACRO, "normalize"),
+                (SqlTestMode.UDF, "tax"),
+                (SqlTestMode.TABLE_FN, "items"),
+            ),
             start=1,
         )
     )
