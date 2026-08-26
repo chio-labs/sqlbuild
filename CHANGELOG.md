@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.56.2](https://github.com/chio-labs/sqlbuild/compare/v0.56.1...v0.56.2) (2026-08-26)
+
+
+### Bug Fixes
+
+* simplify SQL hook validation ([#358](https://github.com/chio-labs/sqlbuild/issues/358)) ([7222e59](https://github.com/chio-labs/sqlbuild/commit/7222e5954753d9c83327a339dcb1661dc6977ab7))
+
 ## [0.56.1](https://github.com/chio-labs/sqlbuild/compare/v0.56.0...v0.56.1) (2026-08-25)
 
 
