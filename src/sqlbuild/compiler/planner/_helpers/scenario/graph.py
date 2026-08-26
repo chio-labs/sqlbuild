@@ -2,35 +2,18 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
-from typing import Any
 
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledSqlScenario,
-    CompileSqlScenarioCte,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.constants import (
-    SCENARIO_PLAN_GRAPH_VALIDATION,
-    SCENARIO_PLAN_SQLGLOT_PARSE,
-    SCENARIO_PLAN_SQLGLOT_UNAVAILABLE,
-)
+from sqlbuild.compiler.planner.constants import SCENARIO_PLAN_GRAPH_VALIDATION
 from sqlbuild.compiler.planner.models import PlanWarning, ScenarioGraphPlan
 from sqlbuild.compiler.planner.types import WarningSeverity
-from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import (
-    reference_call_prefix_pattern_text,
-)
-from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
-
-_REF_PATTERN: re.Pattern[str] = re.compile(
-    rf"{reference_call_prefix_pattern_text(SqlReferenceKind.REF)}\s*"
-    r"[\"']?(?P<name>[A-Za-z_][A-Za-z0-9_.]*)[\"']?\s*\)"
-)
 
 
 @dataclass(frozen=True)
@@ -58,18 +41,11 @@ def plan_scenario_graph(
     model_map: dict[str, CompiledModel] = {model.name: model for model in project.models}
     source_names: frozenset[str] = frozenset(source.name for source in project.sources)
     seed_names: frozenset[str] = frozenset(seed.name for seed in project.seeds)
-    assertion_target_names, assertion_warnings = _extract_assertion_target_names(
-        assertion_ctes=scenario.assertion_ctes,
-        scenario_name=scenario.name,
-        sql_analysis_enabled=sql_analysis_enabled,
-        sql_analysis_dialect=sql_analysis_dialect,
-    )
-    target_model_names: tuple[str, ...] = _dedupe_names(
-        (*scenario.expected_model_names, *assertion_target_names)
-    )
+    del sql_analysis_enabled, sql_analysis_dialect
+    assertion_target_names: tuple[str, ...] = scenario.assertion_target_model_names
+    target_model_names: tuple[str, ...] = scenario.target_model_names
 
     warnings: list[PlanWarning] = []
-    warnings.extend(assertion_warnings)
     warnings.extend(
         _declared_name_warnings(
             scenario=scenario,
@@ -145,77 +121,6 @@ def plan_scenario_graph(
         function_deps=tuple(function_deps),
     )
     return plan, tuple(warnings)
-
-
-def _extract_assertion_target_names(
-    *,
-    assertion_ctes: tuple[CompileSqlScenarioCte, ...],
-    scenario_name: str,
-    sql_analysis_enabled: bool,
-    sql_analysis_dialect: str | None,
-) -> tuple[tuple[str, ...], tuple[PlanWarning, ...]]:
-    names: list[str] = []
-    warnings: list[PlanWarning] = []
-    cte: CompileSqlScenarioCte
-    for cte in assertion_ctes:
-        if sql_analysis_enabled:
-            try:
-                names.extend(
-                    _extract_assertion_target_names_with_sql_analysis(
-                        sql=cte.sql_body,
-                        sql_analysis_dialect=sql_analysis_dialect,
-                    )
-                )
-            except ValueError as error:
-                warnings.append(
-                    _error(
-                        message=(
-                            f"Scenario '{scenario_name}' assertion CTE '{cte.name}' could not be "
-                            f"parsed with Polyglot: {error}"
-                        ),
-                        code=str(getattr(error, "code", SCENARIO_PLAN_SQLGLOT_PARSE)),
-                    )
-                )
-            continue
-        match: re.Match[str]
-        for match in _REF_PATTERN.finditer(cte.sql_body):
-            names.append(match.group("name"))
-    return _dedupe_names(tuple(names)), tuple(warnings)
-
-
-def _extract_assertion_target_names_with_sql_analysis(
-    *, sql: str, sql_analysis_dialect: str | None
-) -> tuple[str, ...]:
-    polyglot_module: Any | None = import_polyglot_sql()
-    if polyglot_module is None:
-        error: ValueError = ValueError("Polyglot is enabled but unavailable")
-        object.__setattr__(error, "code", SCENARIO_PLAN_SQLGLOT_UNAVAILABLE)
-        raise error
-    try:
-        parsed: Any = (
-            polyglot_module.parse_one(sql, dialect=sql_analysis_dialect)
-            if sql_analysis_dialect is not None
-            else polyglot_module.parse_one(sql, dialect="generic")
-        )
-    except Exception as error:
-        value_error: ValueError = ValueError(str(error))
-        object.__setattr__(value_error, "code", SCENARIO_PLAN_SQLGLOT_PARSE)
-        raise value_error from None
-
-    names: list[str] = []
-    function: Any
-    for function in parsed.find_all(polyglot_module.Function):
-        function_name: str = str(function.name).lower()
-        if function_name != SqlReferenceKind.REF.function_name:
-            continue
-        expressions: list[Any] = list(function.expressions)
-        if len(expressions) != 1:
-            continue
-        argument: Any = expressions[0]
-        if not hasattr(argument, "name"):
-            continue
-        names.append(str(argument.name))
-    return tuple(names)
 
 
 def _declared_name_warnings(

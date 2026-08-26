@@ -26,7 +26,10 @@ from sqlbuild.compiler.compile._helpers.render.sql_vars import (
     expand_authored_sql_result,
 )
 from sqlbuild.compiler.compile._helpers.scenarios.core import extract_sql_scenario_ctes
-from sqlbuild.compiler.compile._helpers.sql_tests.core import extract_sql_test_ctes
+from sqlbuild.compiler.compile._helpers.sql_tests.core import (
+    extract_assertion_target_model_names,
+    extract_sql_test_ctes,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
@@ -39,7 +42,6 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlScenarioCte,
     CompileSqlScenarioCtes,
     CompileSqlScenarioInput,
-    CompileSqlTestCte,
     CompileSqlTestCtes,
     CompileSqlTestInput,
     DeclarationExpansionContext,
@@ -432,6 +434,9 @@ def build_scenario_inputs(
             scenario_file=scenario_file,
             known_source_names=known_source_names,
         )
+        assertion_target_model_names: tuple[str, ...] = extract_assertion_target_model_names(
+            assertion_sql=tuple(cte.sql_body for cte in scenario_ctes.assertion_ctes)
+        )
         scenario_inputs.append(
             CompileSqlScenarioInput(
                 scenario_file=scenario_file,
@@ -445,6 +450,12 @@ def build_scenario_inputs(
                 dbt_ref_fixture_names=scenario_ctes.dbt_ref_fixture_names,
                 expected_model_names=scenario_ctes.expected_model_names,
                 assertion_names=scenario_ctes.assertion_names,
+                assertion_target_model_names=assertion_target_model_names,
+                target_model_names=tuple(
+                    dict.fromkeys(
+                        (*scenario_ctes.expected_model_names, *assertion_target_model_names)
+                    )
+                ),
                 declaration_usages=expansion.usages,
             )
         )
@@ -533,23 +544,11 @@ def validate_test_ctes(
             )
 
     assertion_target_name: str
-    for assertion_target_name in _extract_sql_test_assertion_ref_targets(
-        assertion_ctes=model_payload.assertion_ctes
+    for assertion_target_name in extract_assertion_target_model_names(
+        assertion_sql=tuple(cte.sql_body for cte in model_payload.assertion_ctes)
     ):
         if assertion_target_name not in known_model_names:
             raise CompileInputError(
                 f"SQL test file {test_file.relative_path} assertion references unknown model "
                 f"'{assertion_target_name}'"
             )
-
-
-def _extract_sql_test_assertion_ref_targets(
-    *, assertion_ctes: tuple[CompileSqlTestCte, ...]
-) -> tuple[str, ...]:
-    targets: list[str] = []
-    cte: CompileSqlTestCte
-    for cte in assertion_ctes:
-        match: re.Match[str]
-        for match in re.finditer(r'__ref\("([^"]+)"\)', cte.sql_body):
-            targets.append(match.group(1))
-    return tuple(dict.fromkeys(targets))

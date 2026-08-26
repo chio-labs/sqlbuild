@@ -8,6 +8,10 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import SqlTestMode
+from sqlbuild.compiler.discovery.constants import (
+    SQL_SCENARIOS_OWNERSHIP_ROOT,
+    SQL_TESTS_OWNERSHIP_ROOT,
+)
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.scopes.types import ScopeKind
 from sqlbuild.providers import Provider
@@ -245,6 +249,7 @@ class DiscoveredSqlTestFile:
     relative_path: Path
     contents: str
     blocks: tuple[DiscoveredSqlTestBlock, ...]
+    ownership_root: Path = Path(SQL_TESTS_OWNERSHIP_ROOT)
 
 
 @dataclass(frozen=True)
@@ -268,6 +273,7 @@ class DiscoveredSqlScenarioFile:
     header_values: dict[str, object]
     sql_body: str
     name: str
+    ownership_root: Path = Path(SQL_SCENARIOS_OWNERSHIP_ROOT)
 
 
 @dataclass(frozen=True)

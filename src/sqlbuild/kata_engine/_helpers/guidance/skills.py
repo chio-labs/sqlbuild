@@ -62,6 +62,13 @@ def render_skills(*, config: KataConfig, project_dir: Path) -> tuple[str, str]:
     if any(rule.code.startswith("SQBKX") for rule in rules):
         body.extend(("", "## Effective Thresholds", ""))
         body.extend(format_threshold_lines(config=config))
+    if any(rule.code.startswith("SQBKT") for rule in rules):
+        body.extend(("", "## SQL Test Paths", ""))
+        body.append("- Unit tests: `tests/unit/`")
+        body.append("- Scenarios: `tests/scenarios/`")
+        body.append(
+            f"- Cross-domain pipelines: `tests/unit/{config.sql_tests.pipeline_directory}/`"
+        )
     if config.domains or config.approved_source_tokens or config.retired_source_tokens:
         body.extend(("", "## Naming Vocabulary", ""))
         body.append(f"- Domains: `{', '.join(config.domains)}`")
@@ -82,6 +89,11 @@ def _rule_example(*, rule: KataRule) -> str:
         "SQBKL001": "stg -> int_clean -> int_enriched -> mart; skipping layers is valid.",
         "SQBKR001": "domain__int_clean__entity or domain__mart_v__entity.",
         "SQBKR401": "MODEL (contract enforced, columns (...)); declare authoritative columns.",
+        "SQBKT001": "Keep unit tests in tests/unit/ and scenarios in tests/scenarios/.",
+        "SQBKT002": "test_stg_orders__excludes_cancelled.sql and daily_revenue__minimal.sql.",
+        "SQBKT003": "models/staging/stg_orders.sql maps to tests/unit/staging/.",
+        "SQBKT004": 'TEST (name "stg_orders: excludes cancelled orders");',
+        "SQBKT101": 'SCENARIO (description "Daily revenue includes successful payments");',
         "SQBKX001": "Attach not_null/unique audits to the model key.",
     }
     if rule.guidance is not None:

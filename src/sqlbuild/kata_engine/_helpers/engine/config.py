@@ -12,6 +12,7 @@ from sqlbuild.kata_engine.models import (
     RuleExemption,
     RuleIgnore,
     SelectStarAllow,
+    SqlTestPolicyConfig,
     ThresholdOverride,
 )
 from sqlbuild.kata_engine.types import RuleOptionValue
@@ -59,6 +60,7 @@ def load_kata_config(project_dir: Path) -> KataConfig:
         retired_source_tokens=_string_mapping(payload.get("retired_source_tokens")),
         cte_name_whitelist=_strings(payload.get("cte_name_whitelist")),
         cte_name_denylist=_strings(payload.get("cte_name_denylist")),
+        sql_tests=_sql_tests(payload.get("sql_tests")),
         cache=_cache(payload.get("cache")),
     )
 
@@ -113,4 +115,13 @@ def _cache(value: object) -> KataCacheConfig:
     return KataCacheConfig(
         enabled=bool(table.get("enabled", True)),
         require_cacheable=bool(table.get("require_cacheable", False)),
+    )
+
+
+def _sql_tests(value: object) -> SqlTestPolicyConfig:
+    table: dict[str, object] = (
+        {str(key): item for key, item in value.items()} if isinstance(value, dict) else {}
+    )
+    return SqlTestPolicyConfig(
+        pipeline_directory=str(table.get("pipeline_directory", "pipelines"))
     )

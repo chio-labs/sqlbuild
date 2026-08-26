@@ -6,8 +6,10 @@ import pytest
 
 from sqlbuild.kata_engine.exceptions import KataError
 from sqlbuild.kata_engine.main.load_config import load_kata_config
+from sqlbuild.kata_engine.models import KataConfig, SqlTestPolicyConfig
 from tests.unit.src.sqlbuild.kata_engine._helpers.engine._test_types import (
     KataConfigErrorTestCase,
+    SqlTestPolicyConfigTestCase,
 )
 
 
@@ -78,6 +80,26 @@ from tests.unit.src.sqlbuild.kata_engine._helpers.engine._test_types import (
             source='[kata]\nselect = ["KTS"]\n',
             expected_error_pattern="malformed kata rule selector: KTS",
         ),
+        KataConfigErrorTestCase(
+            description="absolute pipeline directory",
+            source='[kata.sql_tests]\npipeline_directory = "/pipelines"\n',
+            expected_error_pattern="must be a normalized path relative to tests/unit",
+        ),
+        KataConfigErrorTestCase(
+            description="traversing pipeline directory",
+            source='[kata.sql_tests]\npipeline_directory = "../pipelines"\n',
+            expected_error_pattern="must be a normalized path relative to tests/unit",
+        ),
+        KataConfigErrorTestCase(
+            description="unnormalized pipeline directory",
+            source='[kata.sql_tests]\npipeline_directory = "chains//commerce"\n',
+            expected_error_pattern="must be a normalized path relative to tests/unit",
+        ),
+        KataConfigErrorTestCase(
+            description="unknown SQL test policy key",
+            source='[kata.sql_tests]\npipeline_directory = "pipelines"\nroot = "tests"\n',
+            expected_error_pattern="unknown field `root`",
+        ),
     ),
     ids=lambda case: case.description,
 )
@@ -89,3 +111,29 @@ def test_given_invalid_kata_config_when_loading_then_raises_clear_error(
 
     with pytest.raises(KataError, match=test_case.expected_error_pattern):
         load_kata_config(project_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SqlTestPolicyConfigTestCase(
+            description="nested pipeline directory",
+            source='[kata.sql_tests]\npipeline_directory = "chains/commerce"\n',
+            expected_pipeline_directory="chains/commerce",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_pipeline_directory_when_loading_then_returns_typed_relative_configuration(
+    tmp_path: Path,
+    test_case: SqlTestPolicyConfigTestCase,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        test_case.source, encoding="utf-8"
+    )
+
+    config: KataConfig = load_kata_config(project_dir=tmp_path)
+
+    assert config.sql_tests == SqlTestPolicyConfig(
+        pipeline_directory=test_case.expected_pipeline_directory
+    )

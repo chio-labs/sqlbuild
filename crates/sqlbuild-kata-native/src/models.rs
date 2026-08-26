@@ -53,6 +53,20 @@ pub(crate) struct ThresholdOverride {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
+pub(crate) struct SqlTestPolicyConfig {
+    pub pipeline_directory: String,
+}
+
+impl Default for SqlTestPolicyConfig {
+    fn default() -> Self {
+        Self {
+            pipeline_directory: "pipelines".into(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
 pub(crate) struct KataConfig {
     pub select: Vec<String>,
     pub ignore: Vec<String>,
@@ -69,6 +83,7 @@ pub(crate) struct KataConfig {
     pub retired_source_tokens: BTreeMap<String, String>,
     pub cte_name_whitelist: Vec<String>,
     pub cte_name_denylist: Vec<String>,
+    pub sql_tests: SqlTestPolicyConfig,
     pub cache: CacheConfig,
 }
 
@@ -90,6 +105,7 @@ impl Default for KataConfig {
             retired_source_tokens: BTreeMap::new(),
             cte_name_whitelist: vec![],
             cte_name_denylist: vec![],
+            sql_tests: SqlTestPolicyConfig::default(),
             cache: CacheConfig::enabled_by_default(),
         }
     }
@@ -422,6 +438,59 @@ pub(crate) struct Model {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum SqlTestMode {
+    Model,
+    Macro,
+    Udf,
+    TableFn,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum DirectTestResourceKind {
+    Macro,
+    Udf,
+    TableFn,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TestedResource {
+    pub kind: DirectTestResourceKind,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SqlTestFact {
+    pub source_path: String,
+    pub ownership_root: String,
+    pub block_index: u64,
+    pub name: String,
+    pub explicit_name: Option<String>,
+    pub mode: SqlTestMode,
+    pub expected_model_names: Vec<String>,
+    pub assertion_names: Vec<String>,
+    pub assertion_target_model_names: Vec<String>,
+    pub target_model_names: Vec<String>,
+    pub tested_resources: Vec<TestedResource>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SqlScenarioFact {
+    pub source_path: String,
+    pub ownership_root: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub expected_model_names: Vec<String>,
+    pub assertion_names: Vec<String>,
+    pub assertion_target_model_names: Vec<String>,
+    pub target_model_names: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct CustomRule {
     pub code: String,
@@ -466,6 +535,8 @@ pub(crate) struct EvaluateRequest {
     pub project_dir: String,
     pub config: KataConfig,
     pub models: Vec<Model>,
+    pub sql_tests: Vec<SqlTestFact>,
+    pub sql_scenarios: Vec<SqlScenarioFact>,
     pub public_enums: Vec<Declaration>,
     pub public_constants: Vec<Declaration>,
     pub scope_index: ScopeIndexFacts,
@@ -499,6 +570,8 @@ impl Default for EvaluateRequest {
             project_dir: ".".into(),
             config: KataConfig::default(),
             models: vec![],
+            sql_tests: vec![],
+            sql_scenarios: vec![],
             public_enums: vec![],
             public_constants: vec![],
             scope_index: ScopeIndexFacts::default(),

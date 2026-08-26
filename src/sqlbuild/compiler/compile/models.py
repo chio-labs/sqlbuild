@@ -538,6 +538,8 @@ class CompileSqlScenarioInput:
     dbt_ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_target_model_names: tuple[str, ...] = field(default_factory=tuple)
+    target_model_names: tuple[str, ...] = field(default_factory=tuple)
     declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
 
 
@@ -715,6 +717,26 @@ class CompiledSqlScenario:
     dbt_ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_target_model_names: tuple[str, ...] = field(default_factory=tuple)
+    target_model_names: tuple[str, ...] = field(default_factory=tuple)
+    source_path: Path | None = None
+    ownership_root: Path | None = None
+
+    def __post_init__(self) -> None:
+        if self.source_path is None:
+            object.__setattr__(self, "source_path", self.scenario_file.relative_path)
+        if self.ownership_root is None:
+            object.__setattr__(self, "ownership_root", self.scenario_file.ownership_root)
+        if not self.target_model_names:
+            object.__setattr__(
+                self,
+                "target_model_names",
+                tuple(
+                    dict.fromkeys(
+                        (*self.expected_model_names, *self.assertion_target_model_names)
+                    )
+                ),
+            )
 
 
 @dataclass(frozen=True)
@@ -890,6 +912,14 @@ class CompiledDirectLogicSqlTestPayload:
 
 
 @dataclass(frozen=True)
+class CompiledSqlTestResource:
+    """One direct SQL test resource with its authored resource kind."""
+
+    kind: SqlTestMode
+    name: str
+
+
+@dataclass(frozen=True)
 class CompiledSqlTest:
     """Compiled SQL-native unit test metadata selected by expected targets."""
 
@@ -903,3 +933,22 @@ class CompiledSqlTest:
     payload: CompiledModelSqlTestPayload | CompiledDirectLogicSqlTestPayload = field(
         default_factory=CompiledModelSqlTestPayload
     )
+    source_path: Path | None = None
+    ownership_root: Path | None = None
+    block_index: int | None = None
+    explicit_name: str | None = None
+    expected_model_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_names: tuple[str, ...] = field(default_factory=tuple)
+    assertion_target_model_names: tuple[str, ...] = field(default_factory=tuple)
+    target_model_names: tuple[str, ...] = field(default_factory=tuple)
+    tested_resources: tuple[CompiledSqlTestResource, ...] = field(default_factory=tuple)
+
+    def __post_init__(self) -> None:
+        if self.source_path is None:
+            object.__setattr__(self, "source_path", self.test_file.relative_path)
+        if self.ownership_root is None:
+            object.__setattr__(self, "ownership_root", self.test_file.ownership_root)
+        if self.block_index is None:
+            object.__setattr__(self, "block_index", self.test_block.test_index)
+        if self.explicit_name is None and self.test_block.name is not None:
+            object.__setattr__(self, "explicit_name", self.test_block.name)

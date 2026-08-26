@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -43,6 +42,7 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
     find_macro_call_names,
 )
 from sqlbuild.compiler.compile._helpers.render.templating import expand_template_data
+from sqlbuild.compiler.compile._helpers.sql_tests.core import extract_assertion_target_model_names
 from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME, PRESERVE_TARGET_VALUE
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
@@ -66,6 +66,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledSource,
     CompiledSqlScenario,
     CompiledSqlTest,
+    CompiledSqlTestResource,
     CompileModelInput,
     CompileModelSqlTestInputPayload,
     CompileProjectInputs,
@@ -73,7 +74,6 @@ from sqlbuild.compiler.compile.models import (
     CompileSourceInput,
     CompileSqlFunctionInput,
     CompileSqlScenarioInput,
-    CompileSqlTestCte,
     CompileSqlTestInput,
     InferredColumn,
     MacroContext,
@@ -960,8 +960,8 @@ def _assemble_compiled_sql_test(
         )
     else:
         model_payload: CompileModelSqlTestInputPayload = test_input.payload
-        assertion_target_model_names: tuple[str, ...] = _extract_sql_test_assertion_ref_targets(
-            assertion_ctes=model_payload.assertion_ctes
+        assertion_target_model_names: tuple[str, ...] = extract_assertion_target_model_names(
+            assertion_sql=tuple(cte.sql_body for cte in model_payload.assertion_ctes)
         )
         scope_deps = sql_test_scope_deps(
             expected_model_names=tuple(
@@ -993,6 +993,42 @@ def _assemble_compiled_sql_test(
         sql_body=test_input.sql_body,
         mode=test_input.mode,
         payload=compiled_payload,
+        source_path=test_input.test_file.relative_path,
+        ownership_root=test_input.test_file.ownership_root,
+        block_index=test_input.test_block.test_index,
+        explicit_name=test_input.test_block.name,
+        expected_model_names=(
+            test_input.payload.expected_model_names
+            if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
+            else ()
+        ),
+        assertion_names=(
+            test_input.payload.assertion_names
+            if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
+            else ()
+        ),
+        assertion_target_model_names=(
+            assertion_target_model_names
+            if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
+            else ()
+        ),
+        target_model_names=(
+            tuple(
+                dict.fromkeys(
+                    (*test_input.payload.expected_model_names, *assertion_target_model_names)
+                )
+            )
+            if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
+            else ()
+        ),
+        tested_resources=(
+            tuple(
+                CompiledSqlTestResource(kind=test_input.payload.mode, name=name)
+                for name in test_input.payload.tested_resource_names
+            )
+            if isinstance(test_input.payload, CompileDirectLogicSqlTestInputPayload)
+            else ()
+        ),
     )
 
 
@@ -1047,18 +1083,6 @@ def _function_sql_test_scope_deps(
         CompiledObjectKey(resource_type=CompiledResourceType.TABLE_FN, name=function_name)
         for function_name in tested_function_names
     )
-
-
-def _extract_sql_test_assertion_ref_targets(
-    *, assertion_ctes: tuple[CompileSqlTestCte, ...]
-) -> tuple[str, ...]:
-    targets: list[str] = []
-    cte: CompileSqlTestCte
-    for cte in assertion_ctes:
-        match: re.Match[str]
-        for match in re.finditer(r'__ref\("([^"]+)"\)', cte.sql_body):
-            targets.append(match.group(1))
-    return tuple(dict.fromkeys(targets))
 
 
 def _build_test_model_query_overrides(
@@ -1129,6 +1153,10 @@ def _assemble_compiled_sql_scenario(
         dbt_ref_fixture_names=scenario_input.dbt_ref_fixture_names,
         expected_model_names=scenario_input.expected_model_names,
         assertion_names=scenario_input.assertion_names,
+        assertion_target_model_names=scenario_input.assertion_target_model_names,
+        target_model_names=scenario_input.target_model_names,
+        source_path=scenario_input.scenario_file.relative_path,
+        ownership_root=scenario_input.scenario_file.ownership_root,
     )
 
 

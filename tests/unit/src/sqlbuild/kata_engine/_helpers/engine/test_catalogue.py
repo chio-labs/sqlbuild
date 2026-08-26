@@ -14,11 +14,13 @@ from sqlbuild.kata_engine.models import (
     KataConfig,
     KataResult,
     KataRule,
+    SqlTestPolicyConfig,
     ThresholdOverride,
 )
 from tests.unit.src.sqlbuild.kata_engine._helpers.engine._test_types import (
     KataGuidanceTestCase,
     KataSelectionTestCase,
+    SqlTestPolicyGuidanceTestCase,
 )
 from tests.unit.src.sqlbuild.kata_engine.main.evaluate.helpers import build_project
 
@@ -50,6 +52,11 @@ BUILT_IN_CODES: tuple[str, ...] = (
     "SQBKS302",
     "SQBKS401",
     "SQBKS501",
+    "SQBKT001",
+    "SQBKT002",
+    "SQBKT003",
+    "SQBKT004",
+    "SQBKT101",
     "SQBKX001",
     "SQBKX002",
     "SQBKX201",
@@ -65,6 +72,13 @@ STRUCTURE_CODES: tuple[str, ...] = (
     "SQBKS302",
     "SQBKS401",
     "SQBKS501",
+)
+SQL_TEST_CODES: tuple[str, ...] = (
+    "SQBKT001",
+    "SQBKT002",
+    "SQBKT003",
+    "SQBKT004",
+    "SQBKT101",
 )
 NON_STRUCTURE_CODES: tuple[str, ...] = (
     "SQBKH001",
@@ -84,6 +98,7 @@ NON_STRUCTURE_CODES: tuple[str, ...] = (
     "SQBKR201",
     "SQBKR301",
     "SQBKR401",
+    *SQL_TEST_CODES,
     "SQBKX001",
     "SQBKX002",
     "SQBKX201",
@@ -112,6 +127,12 @@ NON_STRUCTURE_CODES: tuple[str, ...] = (
             expected_codes=("SQBKS001",),
         ),
         KataSelectionTestCase(
+            description="SQL test family activates every SQL test policy rule",
+            select=("SQBKT",),
+            ignore=(),
+            expected_codes=SQL_TEST_CODES,
+        ),
+        KataSelectionTestCase(
             description="empty selection activates no rules",
             select=(),
             ignore=(),
@@ -138,6 +159,36 @@ def test_given_rule_selectors_when_resolving_then_returns_expected_codes(
     )
 
     assert tuple(rule.code for rule in selected) == test_case.expected_codes
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SqlTestPolicyGuidanceTestCase(
+            description="nested pipeline directory",
+            pipeline_directory="chains/commerce",
+            expected_path="tests/unit/chains/commerce/",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_sql_test_policy_when_inspecting_and_rendering_skills_then_effective_paths_match(
+    tmp_path: Path,
+    test_case: SqlTestPolicyGuidanceTestCase,
+) -> None:
+    config: KataConfig = KataConfig(
+        select=("SQBKT",),
+        sql_tests=SqlTestPolicyConfig(pipeline_directory=test_case.pipeline_directory),
+    )
+    catalogue: tuple[KataRule, ...] = build_catalogue(config=config, project_dir=tmp_path)
+    rules_by_code: dict[str, KataRule] = {item.code: item for item in catalogue}
+    rule: KataRule = rules_by_code["SQBKT003"]
+
+    inspection: str = format_rule(rule=rule, config=config)
+    skill, _ = render_skills(config=config, project_dir=tmp_path)
+
+    assert test_case.expected_path in inspection
+    assert test_case.expected_path in skill
 
 
 @pytest.mark.parametrize(

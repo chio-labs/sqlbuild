@@ -68,3 +68,24 @@ class TypedConstantPayloadTestCase:
 class ScopePayloadTestCase:
     description: str
     expected_result: bool
+
+
+@dataclass(frozen=True)
+class NativeFactPayloadTestCase:
+    description: str
+    expected_test_count: int
+    expected_scenario_count: int
+
+
+@dataclass(frozen=True)
+class SqlTestPolicyConfigTestCase:
+    description: str
+    source: str
+    expected_pipeline_directory: str
+
+
+@dataclass(frozen=True)
+class SqlTestPolicyGuidanceTestCase:
+    description: str
+    pipeline_directory: str
+    expected_path: str

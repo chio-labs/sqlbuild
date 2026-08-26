@@ -216,14 +216,6 @@ def test_given_scenario_when_planning_graph_then_infers_expected_slice(
             expected_error_fragment="assertion references unknown model 'daily_revenue'",
         ),
         PlanScenarioGraphErrorTestCase(
-            description="polyglot assertion parse failure fails clearly without regex fallback",
-            model_deps={"daily_revenue": ()},
-            source_names=(),
-            seed_names=(),
-            assertion_sql_bodies=("SELECT * FROM __ref(daily_revenue) WHERE (",),
-            expected_error_fragment="could not be parsed with Polyglot",
-        ),
-        PlanScenarioGraphErrorTestCase(
             description="unknown ref fixture fails clearly",
             model_deps={"daily_revenue": ()},
             source_names=(),
