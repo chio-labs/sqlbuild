@@ -2855,7 +2855,7 @@ Source: `concepts/models/hooks/sql.mdx`
 
 Define, parameterize, compile, and invoke reusable or inline SQL lifecycle hooks.
 
-SQL hooks execute one warehouse statement before or after model materialization. Use a named SQL hook for reusable behavior and `inline_sql(...)` for short model-specific statements.
+SQL hooks submit one rendered SQL payload to the adapter before or after model materialization. Use a named SQL hook for reusable behavior and `inline_sql(...)` for short model-specific payloads.
 
 For shared lifecycle ordering, failure timing, naming, and identity rules, see the [Hooks overview](/concepts/models/hooks).
 
@@ -2875,7 +2875,7 @@ GRANT SELECT ON @relation TO @role
 
 The hook name is always the filename stem, so this resource is invoked as `sql("grant_access", ...)`. Nested directories organize files but do not namespace names: `hooks/sql/admin/grant_access.sql` is still named `grant_access`.
 
-`HOOK()` accepts only an optional, non-empty `description`. It does not accept a `name`; rename the file to rename the hook. The SQL after the header must contain one executable statement.
+`HOOK()` accepts only an optional, non-empty `description`. It does not accept a `name`; rename the file to rename the hook. The content after the header must be non-empty and becomes the SQL payload for each invocation.
 
 Files beginning with `_` are skipped. All other `.sql` files under `hooks/sql/` are parsed as hook resources and must have a valid `HOOK()` header.
 
@@ -2953,7 +2953,7 @@ MODEL (
 SELECT 1 AS id
 ```
 
-An inline hook accepts exactly one quoted SQL string and no additional arguments. It must compile to one executable statement.
+An inline hook accepts exactly one quoted SQL string and no additional arguments. That string becomes one adapter execution payload.
 
 ### Compile-time context
 
@@ -2984,17 +2984,17 @@ For named hooks, SQLBuild first substitutes `@name` and `@'name'` arguments into
 
 ### Validation and diagnostics
 
-Every named SQL hook is required to render to exactly one executable statement. This statement-shape check is unconditional, so `sql_validation: false` and `--no-sql-validation` do not permit multiple statements or standalone expressions such as `1 + 1`.
+SQLBuild strictly validates hook resource syntax, arguments, interpolation, macros, metadata, and non-empty payloads. It does not classify executable statement kinds or implement vendor SQL grammar. Each rendered hook payload is passed to the adapter in one `execute` call; whether a driver accepts multiple statements or client-side batch separators is adapter and warehouse behavior. Use separate hook entries when portable ordering between statements matters.
 
-Full dialect syntax validation runs separately after expansion when the model's effective SQL-validation gate is enabled: SQL analysis must be enabled, `--no-sql-validation` must be absent, and the effective project or model `sql_validation` value must be true.
+After expansion, Polyglot validates the complete payload using the active adapter's analysis dialect when the model's effective SQL-validation gate is enabled, which it is by default. SQL analysis must be enabled, `--no-sql-validation` must be absent, and the effective project or model `sql_validation` value must be true. Polyglot does not understand every administrative or procedural command supported by every warehouse. If it cannot parse valid vendor-specific hook SQL, disable SQL validation for that model or invocation and let the adapter and warehouse provide the authoritative result. SQLBuild does not compensate with keyword allowlists or handwritten parser fallbacks.
 
 Common errors include:
 
-- Missing, repeated, or misplaced `HOOK(...)` headers
+- Missing or malformed leading `HOOK(...)` headers
 - Unsupported header keys, empty descriptions, and missing SQL bodies
 - Missing or unused arguments and unsupported argument values
 - Unknown named hooks, unquoted hook names, and bare hook strings
-- Invalid SQL, multiple statements, or non-statement expressions after compile-time expansion
+- SQL rejected by Polyglot while optional SQL validation is enabled
 
 Definition errors point to the hook file. Invocation and argument errors also identify the consuming model entry, such as `post_hooks[1] sql("grant_access")`. Runtime output preserves the authored hook index and identifies named and inline SQL entries.
 

@@ -174,6 +174,20 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
             expected_description=None,
             expected_sql_body=("IF 1 = 1 INSERT INTO target SELECT * FROM source"),
         ),
+        ParseSqlHookTestCase(
+            description="preserves multiple statements as one execution payload",
+            contents="HOOK ();\n\nDELETE FROM staging;\nVACUUM staging;\n",
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body="DELETE FROM staging;\nVACUUM staging;",
+        ),
+        ParseSqlHookTestCase(
+            description="preserves vendor SQL without classifying its grammar",
+            contents="HOOK ();\n\nDBCC CHECKIDENT ('orders', RESEED, 0);\n",
+            expected_name="grant_access",
+            expected_description=None,
+            expected_sql_body="DBCC CHECKIDENT ('orders', RESEED, 0);",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -225,9 +239,9 @@ def test_given_nested_sql_hook_files_when_discovering_then_names_come_from_stems
     "test_case",
     [
         ParseSqlHookErrorTestCase(
-            description="rejects multiple hook blocks",
-            contents="HOOK ();\nSELECT 1\n\nHOOK ();\nSELECT 2\n",
-            expected_error_fragment="one executable SQL statement",
+            description="rejects a missing SQL body",
+            contents="HOOK ();\n",
+            expected_error_fragment="must define SQL after HOOK",
         ),
         ParseSqlHookErrorTestCase(
             description="rejects unsupported hook header key",
@@ -235,77 +249,9 @@ def test_given_nested_sql_hook_files_when_discovering_then_names_come_from_stems
             expected_error_fragment="unsupported keys: name",
         ),
         ParseSqlHookErrorTestCase(
-            description="rejects multiple executable statements",
-            contents="HOOK ();\nSELECT 1; SELECT 2\n",
-            expected_error_fragment="one executable SQL statement",
-        ),
-        ParseSqlHookErrorTestCase(
-            description="rejects non-statement expressions",
-            contents="HOOK ();\n1 + 1\n",
-            expected_error_fragment="one executable SQL statement",
-        ),
-        ParseSqlHookErrorTestCase(
-            description="rejects identifier expressions",
-            contents="HOOK ();\ncurrent_date\n",
-            expected_error_fragment="one executable SQL statement",
-        ),
-        ParseSqlHookErrorTestCase(
-            description="rejects multiple procedural blocks",
-            contents="HOOK ();\nBEGIN SELECT 1; END\nBEGIN SELECT 2; END;\n",
-            expected_error_fragment="one executable SQL statement",
-        ),
-        ParseSqlHookErrorTestCase(
-            description="rejects SQL Server batch separators",
-            contents="HOOK ();\nCALL first()\ngo\nCALL second()\n",
-            expected_error_fragment="one executable SQL statement",
-        ),
-        ParseSqlHookErrorTestCase(
-            description="rejects adjacent select statements without semicolons",
-            contents="HOOK ();\nSELECT 1\nSELECT 2\n",
-            expected_error_fragment="one executable SQL statement",
-        ),
-        ParseSqlHookErrorTestCase(
-            description="rejects heterogeneous adjacent query statements",
-            contents="HOOK ();\nSELECT 1\nDELETE FROM target\n",
-            expected_error_fragment="one executable SQL statement",
-        ),
-        ParseSqlHookErrorTestCase(
-            description="rejects adjacent ddl and dml statements",
-            contents=("HOOK ();\nCREATE TABLE target (id INT)\nINSERT INTO target VALUES (1)\n"),
-            expected_error_fragment="one executable SQL statement",
-        ),
-        ParseSqlHookErrorTestCase(
-            description="rejects a query followed by a procedural block",
-            contents="HOOK ();\nSELECT 1\nBEGIN SELECT 2; END;\n",
-            expected_error_fragment="one executable SQL statement",
-        ),
-        ParseSqlHookErrorTestCase(
-            description="rejects adjacent insert and select batches",
-            contents=("HOOK ();\nINSERT INTO target VALUES (1)\nSELECT 2\n"),
-            expected_error_fragment="one executable SQL statement",
-        ),
-        ParseSqlHookErrorTestCase(
-            description="rejects adjacent set and select batches",
-            contents="HOOK ();\nSET search_path = public\nSELECT 2\n",
-            expected_error_fragment="one executable SQL statement",
-        ),
-        ParseSqlHookErrorTestCase(
-            description="rejects adjacent values batches",
-            contents="HOOK ();\nVALUES (1)\nVALUES (2)\n",
-            expected_error_fragment="one executable SQL statement",
-        ),
-        ParseSqlHookErrorTestCase(
-            description="rejects adjacent SQL Server backup and restore batches",
-            contents=(
-                "HOOK ();\nBACKUP DATABASE analytics TO DISK = 'a.bak' "
-                "RESTORE DATABASE analytics FROM DISK = 'a.bak'\n"
-            ),
-            expected_error_fragment="one executable SQL statement",
-        ),
-        ParseSqlHookErrorTestCase(
-            description="rejects statements after grant recipients",
-            contents=("HOOK ();\nGRANT SELECT ON orders TO analyst TRUNCATE TABLE orders\n"),
-            expected_error_fragment="one executable SQL statement",
+            description="rejects a missing hook header",
+            contents="SELECT 1\n",
+            expected_error_fragment="must start with a HOOK",
         ),
     ],
     ids=lambda case: case.description,
