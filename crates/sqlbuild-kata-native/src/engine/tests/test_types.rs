@@ -41,3 +41,22 @@ pub(crate) struct MissingScopeFactsTestCase {
     pub(crate) expected_complete: bool,
     pub(crate) expected_runtime_usage: bool,
 }
+
+pub(crate) struct SqlTestPolicyTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) code: &'static str,
+    pub(crate) tests: Value,
+    pub(crate) scenarios: Value,
+    pub(crate) scope_index: Value,
+    pub(crate) config: Value,
+    pub(crate) expected_fault_count: usize,
+    pub(crate) expected_evaluated_models: usize,
+    pub(crate) expected_paths: &'static [&'static str],
+}
+
+pub(crate) struct SqlTestPolicyCacheTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) expected_first_misses: u64,
+    pub(crate) expected_second_hits: u64,
+    pub(crate) expected_second_misses: u64,
+}

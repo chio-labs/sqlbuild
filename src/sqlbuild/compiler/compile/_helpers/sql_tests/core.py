@@ -108,6 +108,19 @@ def extract_sql_test_expected_model_names(
     )
 
 
+def extract_assertion_target_model_names(*, assertion_sql: tuple[str, ...]) -> tuple[str, ...]:
+    """Extract assertion model targets in authored order using canonical references."""
+
+    targets: list[str] = []
+    for sql in assertion_sql:
+        targets.extend(
+            reference.ref_name
+            for reference in extract_sql_references(sql)
+            if reference.ref_kind == SqlReferenceKind.REF
+        )
+    return tuple(dict.fromkeys(targets))
+
+
 def _extract_sql_test_ctes_with_scanner(
     *, sql: str, file_label: str
 ) -> tuple[CompileSqlTestCte, ...]:

@@ -7,6 +7,7 @@ from inspect import cleandoc
 from pathlib import Path
 
 from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_header_values
+from sqlbuild.compiler.discovery.constants import SQL_SCENARIOS_OWNERSHIP_ROOT
 from sqlbuild.compiler.discovery.exceptions import SqlScenarioParseError
 from sqlbuild.compiler.discovery.models import DiscoveredSqlScenarioFile
 
@@ -47,6 +48,7 @@ def parse_sql_scenario_file(
         header_values=header_values,
         sql_body=sql_body,
         name=file_path.stem,
+        ownership_root=Path(SQL_SCENARIOS_OWNERSHIP_ROOT),
     )
 
 

@@ -56,6 +56,7 @@ fn validate_raw(value: &toml::Value) -> Result<(), String> {
         "retired_source_tokens",
         "cte_name_whitelist",
         "cte_name_denylist",
+        "sql_tests",
         "cache",
     ];
     let mut unknown: Vec<String> = table
@@ -99,6 +100,27 @@ pub(crate) fn validate(config: &KataConfig) -> Result<(), String> {
         "min_tests_per_model",
         "min_custom_rule_test_cases",
     ];
+    let pipeline = Path::new(&config.sql_tests.pipeline_directory);
+    if config.sql_tests.pipeline_directory.trim().is_empty()
+        || config.sql_tests.pipeline_directory.contains('\\')
+        || config.sql_tests.pipeline_directory.contains("//")
+        || config.sql_tests.pipeline_directory.ends_with('/')
+        || config
+            .sql_tests
+            .pipeline_directory
+            .split('/')
+            .next()
+            .is_some_and(|component| component.ends_with(':'))
+        || pipeline.is_absolute()
+        || pipeline
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        return Err(
+            "kata.sql_tests.pipeline_directory must be a normalized path relative to tests/unit"
+                .into(),
+        );
+    }
     if let Some(name) = config
         .thresholds
         .keys()

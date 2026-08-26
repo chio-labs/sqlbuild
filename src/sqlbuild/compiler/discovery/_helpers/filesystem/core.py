@@ -43,6 +43,7 @@ from sqlbuild.compiler.discovery.constants import (
     PYTHON_NODE_KIND_VOWELS,
     SCHEMA_FILE_NAME,
     SEED_FILE_SUFFIX,
+    SQL_TESTS_OWNERSHIP_ROOT,
     YAML_FILE_SUFFIXES,
 )
 from sqlbuild.compiler.discovery.exceptions import (
@@ -646,6 +647,7 @@ def discover_test_files(
                 relative_path=file_path.relative_to(project_dir),
                 contents=contents,
                 blocks=blocks,
+                ownership_root=Path(SQL_TESTS_OWNERSHIP_ROOT),
             )
         )
     return tuple(discovered_test_files)

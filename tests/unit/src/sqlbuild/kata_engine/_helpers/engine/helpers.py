@@ -8,7 +8,17 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models import (
+    CompiledDirectLogicSqlTestPayload,
+    CompiledModelSqlTestPayload,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledSqlTest,
+    CompiledSqlTestResource,
+    CompileSqlTestCte,
+)
+from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
+from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.kata_engine._helpers.engine import native
 from sqlbuild.kata_engine._helpers.engine.catalogue import build_catalogue
@@ -59,6 +69,69 @@ def captured_native_request(
         catalogue=(),
     )
     return captured
+
+
+def direct_sql_test(*, mode: SqlTestMode, name: str, block_index: int) -> CompiledSqlTest:
+    test_file: DiscoveredSqlTestFile = DiscoveredSqlTestFile(
+        file_path=Path(f"/private/project/tests/unit/{name}.sql"),
+        relative_path=Path(f"tests/unit/{name}.sql"),
+        contents="secret fixture value",
+        blocks=(),
+    )
+    test_block: DiscoveredSqlTestBlock = DiscoveredSqlTestBlock(
+        test_index=block_index,
+        header_values={"name": name},
+        sql_body="SELECT 'secret fixture value'",
+        name=name,
+        mode=mode,
+    )
+    return CompiledSqlTest(
+        key=CompiledObjectKey(CompiledResourceType.SQL_TEST, name),
+        scope_deps=(CompiledObjectKey(CompiledResourceType.MODEL, "orders"),),
+        name=name,
+        test_file=test_file,
+        test_block=test_block,
+        sql_body=test_block.sql_body,
+        mode=mode,
+        payload=CompiledDirectLogicSqlTestPayload(
+            actual_cte=CompileSqlTestCte("__actual", "SELECT 1"),
+            expected_cte=CompileSqlTestCte("__expected", "SELECT 1"),
+            mode=mode,
+            tested_resource_names=(name,),
+        ),
+        tested_resources=(CompiledSqlTestResource(kind=mode, name=name),),
+    )
+
+
+def model_sql_test() -> CompiledSqlTest:
+    name: str = "orders: keeps paid orders"
+    test_file: DiscoveredSqlTestFile = DiscoveredSqlTestFile(
+        file_path=Path("/private/project/tests/unit/test_orders__keeps_paid.sql"),
+        relative_path=Path("tests/unit/test_orders__keeps_paid.sql"),
+        contents="secret model fixture",
+        blocks=(),
+    )
+    test_block: DiscoveredSqlTestBlock = DiscoveredSqlTestBlock(
+        test_index=1,
+        header_values={"name": name},
+        sql_body="SELECT 1",
+        name=name,
+        mode=SqlTestMode.MODEL,
+    )
+    return CompiledSqlTest(
+        key=CompiledObjectKey(CompiledResourceType.SQL_TEST, name),
+        scope_deps=(),
+        name=name,
+        test_file=test_file,
+        test_block=test_block,
+        sql_body=test_block.sql_body,
+        mode=SqlTestMode.MODEL,
+        payload=CompiledModelSqlTestPayload(),
+        expected_model_names=("orders",),
+        assertion_names=("paid",),
+        assertion_target_model_names=("orders",),
+        target_model_names=("orders",),
+    )
 
 
 def write_rule(

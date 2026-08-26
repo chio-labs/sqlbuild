@@ -44,6 +44,8 @@ MODELS_DIRECTORY_NAME: str = "models"
 MODEL_SCHEMAS_DIRECTORY_NAME: str = "schemas"
 SEEDS_DIRECTORY_NAME: str = "seeds"
 CURRENT_DIRECTORY_PATH: str = "."
+SQL_TESTS_OWNERSHIP_ROOT: str = "tests/unit"
+SQL_SCENARIOS_OWNERSHIP_ROOT: str = "tests/scenarios"
 
 CANONICAL_AUTHORED_ROOTS: tuple[tuple[str, ...], ...] = (
     ("models",),
