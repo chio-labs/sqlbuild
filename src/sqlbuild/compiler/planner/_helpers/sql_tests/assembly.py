@@ -251,6 +251,14 @@ def plan_test(
     entry: SqlTestPlanEntry = SqlTestPlanEntry(
         key=test.key,
         name=test.name,
+        source_path=test.source_path,
+        block_index=test.block_index,
+        parent_name=test.parent_name,
+        case_name=test.case_name,
+        case_index=test.case_index,
+        case_fingerprint=test.case_fingerprint,
+        parameter_schema=test.parameter_schema,
+        parameter_values=test.parameter_values,
         chain=tuple(chain_steps),
         assertions=assertion_steps,
         scope_deps=test.scope_deps,
@@ -351,6 +359,14 @@ def _plan_direct_logic_test(
     return SqlTestPlanEntry(
         key=test.key,
         name=test.name,
+        source_path=test.source_path,
+        block_index=test.block_index,
+        parent_name=test.parent_name,
+        case_name=test.case_name,
+        case_index=test.case_index,
+        case_fingerprint=test.case_fingerprint,
+        parameter_schema=test.parameter_schema,
+        parameter_values=test.parameter_values,
         chain=(
             ChainStep(
                 model_name=f"{label} {test.name}",

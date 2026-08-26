@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,9 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestCte,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
+from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
+from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.planner._helpers.sql_tests.assembly import plan_test
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
 from sqlbuild.executor.testing.main._execute import execute_sql_test
@@ -23,10 +26,74 @@ from sqlbuild.executor.testing.types import SqlTestOutcome
 from tests.integration.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     ExecuteChainTestCase,
     ExecuteMacroTestCase,
+    ExecuteParameterizedTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers import (
     build_test_and_project,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExecuteParameterizedTestCase(
+            description="expanded integer case executes against DuckDB",
+            parameter_value=7,
+            expected_case_name="seven",
+            expected_outcome="pass",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_parameterized_model_test_when_compiled_and_executed_then_duckdb_passes(
+    test_case: ExecuteParameterizedTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_orders\n    expression: SELECT 1 AS order_id\n"
+            ),
+            "models/orders.sql": ('MODEL ();\n\nSELECT order_id FROM __source("raw_orders")\n'),
+            "tests/unit/orders.sql": f"""
+TEST (
+  name "parameterized orders",
+  parameters (order_id integer),
+  cases (seven (order_id {test_case.parameter_value})),
+);
+
+WITH
+__source__raw_orders AS (SELECT @param("order_id") AS order_id),
+__expected__orders AS (SELECT @param("order_id") AS order_id)
+SELECT 1
+""".strip()
+            + "\n",
+        },
+    )
+    project: CompiledProject = build_compiled_project(
+        discovered_inputs=discover_project_inputs(project_dir=tmp_path),
+        adapter=adapter,
+    )
+    entry, warnings = plan_test(
+        test=project.sql_tests[0],
+        adapter=adapter,
+        project=project,
+    )
+
+    result: SqlTestExecutionResult = execute_sql_test(
+        test_entry=entry,
+        adapter=adapter,
+        connection=connection,
+    )
+
+    assert warnings == ()
+    assert entry.case_name == test_case.expected_case_name
+    assert result.outcome.value == test_case.expected_outcome
 
 
 @pytest.mark.parametrize(

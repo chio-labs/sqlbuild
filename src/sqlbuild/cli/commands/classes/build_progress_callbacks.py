@@ -8,6 +8,7 @@ import time
 
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
+from sqlbuild.cli.commands._helpers.test.sql_progress import format_parameterized_test_label
 from sqlbuild.cli.progress.main._expectation_detail import format_expectation_detail
 from sqlbuild.cli.progress.main._expectation_name import format_expectation_name
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
@@ -90,7 +91,7 @@ class BuildProgressCallbacks:
         self._model_entry_map: dict[str, ModelPlanEntry] = {
             entry.name: entry for entry in plan.model_entries
         }
-        self._test_results_by_model: dict[str, SqlTestExecutionResult] = {}
+        self._test_results_by_model: dict[str, list[SqlTestExecutionResult]] = {}
         self._total: int = (
             len(plan.model_entries)
             + len(plan.seed_entries)
@@ -264,7 +265,7 @@ class BuildProgressCallbacks:
             step: object
             for step in node_result.step_results:
                 if hasattr(step, "model_name"):
-                    self._test_results_by_model[step.model_name] = node_result
+                    self._test_results_by_model.setdefault(step.model_name, []).append(node_result)
             return
 
         self._stop_spinner_loop()
@@ -403,12 +404,15 @@ class BuildProgressCallbacks:
             label_width=hook_label_width,
         )
 
-        test_result: SqlTestExecutionResult | None = self._test_results_by_model.get(
-            model_result.model_name
-        )
-        if test_result is not None:
+        test_result: SqlTestExecutionResult
+        for test_result in self._test_results_by_model.get(model_result.model_name, []):
             test_status: str = self._style.status(status=_test_outcome_display(test_result.outcome))
-            test_name: str = test_result.test_name
+            test_name: str = format_parameterized_test_label(
+                name=test_result.test_name,
+                source_path=test_result.source_path,
+                parameter_schema=test_result.parameter_schema,
+                parameter_values=test_result.parameter_values,
+            )
             self._stream.write(
                 f"{sub_pad}{self._style.muted(f'{"test":<{_TYPE_WIDTH}}')}"
                 f"{test_name:<{sub_nw}} {test_status}\n"
@@ -479,7 +483,15 @@ class BuildProgressCallbacks:
             self._show_cursor()
         blank_ctr: str = " " * (len(str(self._total)) * 2 + 1)
         test_status: str = self._style.status(status=_test_outcome_display(test_result.outcome))
-        test_name: str = _truncate_name(name=test_result.test_name, width=self._name_width)
+        test_name: str = _truncate_name(
+            name=format_parameterized_test_label(
+                name=test_result.test_name,
+                source_path=test_result.source_path,
+                parameter_schema=test_result.parameter_schema,
+                parameter_values=test_result.parameter_values,
+            ),
+            width=self._name_width,
+        )
         self._stream.write(
             f"  {blank_ctr}  {self._style.muted(f'{"test":<{_TYPE_WIDTH}}')}"
             f"{test_name:<{self._name_width}} {test_status}\n"
@@ -896,7 +908,13 @@ def _format_failure_details(*, result: BuildExecutionResult, style: CliStyle) ->
             lines.append(style.error_strong("Failures:"))
             lines.append("")
             has_failures = True
-        lines.append(f"  {test_r.test_name}  (test)")
+        test_label: str = format_parameterized_test_label(
+            name=test_r.test_name,
+            source_path=test_r.source_path,
+            parameter_schema=test_r.parameter_schema,
+            parameter_values=test_r.parameter_values,
+        )
+        lines.append(f"  {test_label}  (test)")
         if test_r.error_message is not None:
             lines.extend(
                 _format_failure_error_block(

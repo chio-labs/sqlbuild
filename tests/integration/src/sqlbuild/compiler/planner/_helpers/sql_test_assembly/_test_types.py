@@ -21,3 +21,11 @@ class ExecuteMacroTestCase:
     actual_sql: str
     expected_sql: str
     expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ExecuteParameterizedTestCase:
+    description: str
+    parameter_value: int
+    expected_case_name: str
+    expected_outcome: str
