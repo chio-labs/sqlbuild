@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.57.0](https://github.com/chio-labs/sqlbuild/compare/v0.56.2...v0.57.0) (2026-08-26)
+
+
+### Features
+
+* **kata:** complete native policy verification ([#360](https://github.com/chio-labs/sqlbuild/issues/360)) ([cdd74c6](https://github.com/chio-labs/sqlbuild/commit/cdd74c6a9bff283093e1ed0df63491353779af25))
+
 ## [0.56.2](https://github.com/chio-labs/sqlbuild/compare/v0.56.1...v0.56.2) (2026-08-26)
 
 
