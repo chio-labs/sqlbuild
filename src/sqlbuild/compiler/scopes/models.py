@@ -116,6 +116,7 @@ class UsageRecord:
     declaration: DeclarationIdentity
     kind: UsageKind = UsageKind.RUNTIME
     through: ResourceIdentity | None = None
+    enum_member: str | None = None
 
 
 @dataclass(frozen=True)

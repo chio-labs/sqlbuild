@@ -29,7 +29,12 @@ from sqlbuild.compiler.compile.models import (
     MacroExpansionResult,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
-from sqlbuild.compiler.scopes.models import DeclarationIdentity, DeclarationRecord, UsageRecord
+from sqlbuild.compiler.scopes.models import (
+    DeclarationIdentity,
+    DeclarationRecord,
+    ResourceIdentity,
+    UsageRecord,
+)
 from sqlbuild.compiler.scopes.types import DeclarationKind, UsageKind
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
 from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
@@ -74,6 +79,7 @@ class _ExpansionState:
     macro_context: MacroContext
     declaration_resolver: DeclarationScopeResolver | None
     facts: _ExpansionFacts
+    consumer: ResourceIdentity | DeclarationIdentity | None = None
 
 
 def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[str, LoadedMacro]:
@@ -220,6 +226,7 @@ def expand_sql_macros(
     macro_overrides: dict[str, str] | None = None,
     macro_context: MacroContext,
     declaration_resolver: DeclarationScopeResolver | None = None,
+    consumer: ResourceIdentity | DeclarationIdentity | None = None,
 ) -> str:
     """Expand authored Python macros in one executable SQL string."""
 
@@ -231,6 +238,7 @@ def expand_sql_macros(
         macro_overrides=macro_overrides,
         macro_context=macro_context,
         declaration_resolver=declaration_resolver,
+        consumer=consumer,
     )
     return expanded_sql
 
@@ -243,6 +251,7 @@ def expand_sql_macros_with_spans(
     macro_overrides: dict[str, str] | None = None,
     macro_context: MacroContext,
     declaration_resolver: DeclarationScopeResolver | None = None,
+    consumer: ResourceIdentity | DeclarationIdentity | None = None,
 ) -> tuple[str, tuple[ExpansionSpan, ...]]:
     """Expand authored Python macros, returning the span of every substitution."""
 
@@ -253,6 +262,7 @@ def expand_sql_macros_with_spans(
         macro_overrides=macro_overrides,
         macro_context=macro_context,
         declaration_resolver=declaration_resolver,
+        consumer=consumer,
     )
     return result.sql, result.spans
 
@@ -265,6 +275,7 @@ def expand_sql_macros_result(
     macro_overrides: dict[str, str] | None = None,
     macro_context: MacroContext,
     declaration_resolver: DeclarationScopeResolver | None = None,
+    consumer: ResourceIdentity | DeclarationIdentity | None = None,
 ) -> MacroExpansionResult:
     """Expand macros and retain deterministic resolved dependency facts."""
 
@@ -275,6 +286,7 @@ def expand_sql_macros_result(
         macro_context=macro_context,
         declaration_resolver=declaration_resolver,
         facts=facts,
+        consumer=consumer,
     )
     expanded_sql, spans = _expand_sql_macros(
         sql=sql,
@@ -455,6 +467,8 @@ def _evaluate_macro_call(
         _ = state.facts.add_usage(
             UsageRecord(stack[-1], identity, UsageKind.DECLARATION_DEPENDENCY),
         )
+    elif state.consumer is not None:
+        _ = state.facts.add_usage(UsageRecord(state.consumer, identity, UsageKind.RUNTIME))
     args_source: str = sql[opening_paren_index + 1 : closing_paren_index]
     args: tuple[object, ...]
     kwargs: dict[str, object]

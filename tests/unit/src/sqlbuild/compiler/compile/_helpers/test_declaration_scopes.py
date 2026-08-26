@@ -35,6 +35,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ScopedDeclarationCompileTestCase,
     ScopedDeclarationErrorTestCase,
     ScopedDeclarationSurfaceTestCase,
+    ScopePlacementCompileTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,
@@ -308,13 +309,13 @@ def test_given_scoped_declaration_when_compiling_sql_surface_then_uses_authored_
         ExpectedModelDeclarationGrantTestCase(
             description="single model inherited local constant and enum",
             files={
-                "models/domain/_constants/inherited.sql": (
+                "models/domain/_local_constants/inherited.sql": (
                     "CONSTANT (name inherited_value, value 2);"
                 ),
                 "models/domain/_local_constants/local.sql": (
                     "CONSTANT (name local_value, value 3);"
                 ),
-                "models/domain/_enums/state.sql": "ENUM (name state, members [OPEN, CLOSED]);",
+                "models/domain/_local_enums/state.sql": "ENUM (name state, members [OPEN, CLOSED]);",
                 "models/domain/orders.sql": "MODEL ();\nSELECT 1 AS value, 'OPEN' AS state",
                 "tests/unit/check.sql": (
                     "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
@@ -332,9 +333,9 @@ def test_given_scoped_declaration_when_compiling_sql_surface_then_uses_authored_
         ExpectedModelDeclarationGrantTestCase(
             description="multiple expected models deterministic union",
             files={
-                "models/a/_constants/a.sql": "CONSTANT (name a_value, value 4);",
+                "models/a/_local_constants/a.sql": "CONSTANT (name a_value, value 4);",
                 "models/a/a.sql": "MODEL ();\nSELECT 4 AS value",
-                "models/b/_constants/b.sql": "CONSTANT (name b_value, value 5);",
+                "models/b/_local_constants/b.sql": "CONSTANT (name b_value, value 5);",
                 "models/b/b.sql": "MODEL ();\nSELECT 5 AS value",
                 "tests/unit/check.sql": (
                     "TEST ();\nWITH __ref__a AS (SELECT 1 AS value), "
@@ -351,9 +352,9 @@ def test_given_scoped_declaration_when_compiling_sql_surface_then_uses_authored_
         ExpectedModelDeclarationGrantTestCase(
             description="test path visibility remains separate from model grant",
             files={
-                "models/domain/_constants/model.sql": "CONSTANT (name model_value, value 6);",
+                "models/domain/_local_constants/model.sql": "CONSTANT (name model_value, value 6);",
                 "models/domain/orders.sql": "MODEL ();\nSELECT 1 AS value",
-                "tests/unit/_constants/test.sql": "CONSTANT (name test_value, value 7);",
+                "tests/unit/_local_constants/test.sql": "CONSTANT (name test_value, value 7);",
                 "tests/unit/check.sql": (
                     "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
                     "__expected__orders AS (SELECT @const('model_value') + "
@@ -366,7 +367,9 @@ def test_given_scoped_declaration_when_compiling_sql_surface_then_uses_authored_
         ExpectedModelDeclarationGrantTestCase(
             description="model private declaration is not granted",
             files={
-                "models/orders.sql": "MODEL (constants (_private 8));\nSELECT 1 AS value",
+                "models/orders.sql": (
+                    "MODEL (constants (_private 8));\nSELECT @const('_private') AS value"
+                ),
                 "tests/unit/check.sql": (
                     "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
                     "__expected__orders AS (SELECT 1 AS value) SELECT 1"
@@ -378,7 +381,6 @@ def test_given_scoped_declaration_when_compiling_sql_surface_then_uses_authored_
         ExpectedModelDeclarationGrantTestCase(
             description="filename resemblance and no expected model grant nothing",
             files={
-                "models/domain/_constants/value.sql": "CONSTANT (name model_value, value 9);",
                 "models/domain/orders.sql": "MODEL ();\nSELECT 1 AS value",
                 "tests/unit/orders.sql": (
                     "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
@@ -391,7 +393,7 @@ def test_given_scoped_declaration_when_compiling_sql_surface_then_uses_authored_
         ExpectedModelDeclarationGrantTestCase(
             description="scenario expected model grant",
             files={
-                "models/domain/_constants/value.sql": "CONSTANT (name scenario_value, value 10);",
+                "models/domain/_local_constants/value.sql": "CONSTANT (name scenario_value, value 10);",
                 "models/domain/orders.sql": "MODEL ();\nSELECT 1 AS value",
                 "tests/scenarios/check.sql": (
                     "SCENARIO ();\nWITH __ref__orders AS (SELECT 1 AS value), "
@@ -443,7 +445,9 @@ def test_given_expected_models_when_compiling_then_public_declarations_are_grant
         RelationshipUsageTestCase(
             description="expected model provenance is retained",
             files={
-                "models/domain/_constants/value.sql": ("CONSTANT (name model_value, value 6);"),
+                "models/domain/_local_constants/value.sql": (
+                    "CONSTANT (name model_value, value 6);"
+                ),
                 "models/domain/orders.sql": "MODEL ();\nSELECT 1 AS value",
                 "tests/unit/check.sql": (
                     "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
@@ -475,6 +479,95 @@ def test_given_relationship_granted_reference_when_compiling_then_usage_retains_
     compiled: CompiledProject = assemble_project(inputs=inputs, skip_column_inference=True)
 
     assert test_case.expected_usage in compiled.scope_index.usages
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ScopePlacementCompileTestCase(
+            description="used global remains accepted without narrowing",
+            files={
+                "constants/value.sql": "CONSTANT (name value, value 1);",
+                "models/orders.sql": 'MODEL ();\nSELECT @const("value") AS value',
+            },
+        ),
+        ScopePlacementCompileTestCase(
+            description="exact local placement is accepted",
+            files={
+                "models/domain/_local_constants/value.sql": ("CONSTANT (name value, value 1);"),
+                "models/domain/orders.sql": 'MODEL ();\nSELECT @const("value") AS value',
+            },
+        ),
+        ScopePlacementCompileTestCase(
+            description="inherited lowest common ancestor is accepted",
+            files={
+                "models/domain/_constants/value.sql": "CONSTANT (name value, value 1);",
+                "models/domain/a/orders.sql": 'MODEL ();\nSELECT @const("value") AS value',
+                "models/domain/b/customers.sql": 'MODEL ();\nSELECT @const("value") AS value',
+            },
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_exact_declaration_placement_when_assembling_then_project_is_accepted(
+    test_case: ScopePlacementCompileTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.files,
+    )
+
+    inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+    compiled: CompiledProject = assemble_project(inputs=inputs, skip_column_inference=True)
+
+    assert compiled.scope_index.completeness.runtime_usage is test_case.expected_complete
+    assert compiled.scope_index.completeness.placement is test_case.expected_complete
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ScopePlacementCompileTestCase(
+            description="unused global is rejected",
+            files={
+                "constants/value.sql": "CONSTANT (name value, value 1);",
+                "models/orders.sql": "MODEL ();\nSELECT 1 AS value",
+            },
+            expected_fragment="Unused global declaration 'constant:value'",
+        ),
+        ScopePlacementCompileTestCase(
+            description="unused private is rejected",
+            files={
+                "models/orders.sql": ("MODEL (constants (_value 1));\nSELECT 1 AS value"),
+            },
+            expected_fragment="Unused private declaration 'constant:model:orders._value'",
+        ),
+        ScopePlacementCompileTestCase(
+            description="inherited declaration used in one directory must be local",
+            files={
+                "models/domain/_constants/value.sql": "CONSTANT (name value, value 1);",
+                "models/domain/orders.sql": 'MODEL ();\nSELECT @const("value") AS value',
+            },
+            expected_fragment="required local at 'models/domain'",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_invalid_declaration_placement_when_assembling_then_project_is_rejected(
+    test_case: ScopePlacementCompileTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.files,
+    )
+    inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+
+    with pytest.raises(CompileInputError, match=cast(str, test_case.expected_fragment)):
+        _ = assemble_project(inputs=inputs, skip_column_inference=True)
 
 
 @pytest.mark.parametrize(

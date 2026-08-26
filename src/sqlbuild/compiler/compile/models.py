@@ -46,6 +46,7 @@ from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, Sql
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
+    ResourceIdentity,
     ScopeIndex,
     ScopeLookup,
     UsageRecord,
@@ -202,6 +203,31 @@ class MacroExpansionResult:
 
 
 @dataclass(frozen=True)
+class DeclarationExpansionResult:
+    """Expanded SQL and resolved declaration usage facts from one authored string."""
+
+    sql: str
+    spans: tuple[ExpansionSpan, ...] = field(default_factory=tuple)
+    usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class AuthoredSqlExpansionResult:
+    """Fully expanded authored SQL with all resolved declaration usages."""
+
+    sql: str
+    usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class HookExpansionResult:
+    """Expanded model hook values and declaration usage facts."""
+
+    values: dict[str, object]
+    usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class DeclarationResolutionContext:
     """Declarations visible during one authored SQL expansion."""
 
@@ -214,6 +240,7 @@ class DeclarationResolutionContext:
     macros: dict[str, LoadedMacro] = field(default_factory=dict)
     macro_records: dict[str, DeclarationRecord] = field(default_factory=dict)
     inaccessible_macros: dict[str, DeclarationRecord] = field(default_factory=dict)
+    consumer: ResourceIdentity | DeclarationIdentity | None = None
 
 
 @dataclass(frozen=True)
@@ -411,6 +438,7 @@ class CompileSqlFunctionInput:
     entry_point: str | None = None
     packages: tuple[str, ...] = field(default_factory=tuple)
     replay_on_change: str | None = None
+    declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -430,6 +458,7 @@ class CompileModelInput:
     enum_columns: dict[str, EnumDeclaration] = field(default_factory=dict)
     macro_deps: tuple[str, ...] = field(default_factory=tuple)
     macro_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+    declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -447,6 +476,7 @@ class CompileSourceInput:
 
     source_entry: SourceEntry
     source_file: DiscoveredSourceFile
+    declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -481,6 +511,7 @@ class CompileAuditInput:
     severity: str | None = None
     run_scope: str | None = None
     always_run: bool = False
+    declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         if self.attached_target_kind is not None:

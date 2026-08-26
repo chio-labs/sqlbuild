@@ -44,6 +44,7 @@ def build_projection(*, index: ScopeIndex) -> dict[str, JsonValue]:
             format_identity(identity=item.declaration),
             item.kind.value,
             format_identity(identity=item.through) if item.through is not None else "",
+            item.enum_member or "",
         ),
     )
     return {
@@ -79,10 +80,9 @@ def build_projection(*, index: ScopeIndex) -> dict[str, JsonValue]:
                 "declaration": format_identity(identity=record.declaration),
                 "kind": record.kind.value,
                 "through": (
-                    format_identity(identity=record.through)
-                    if record.through is not None
-                    else None
+                    format_identity(identity=record.through) if record.through is not None else None
                 ),
+                "enum_member": record.enum_member,
             }
             for record in usages
         ],

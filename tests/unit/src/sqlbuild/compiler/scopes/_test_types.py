@@ -5,7 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlbuild.compiler.scopes.models import DeclarationIdentity, ResourceIdentity
-from sqlbuild.compiler.scopes.types import InaccessibleReason, ScopeKind, VisibilityReason
+from sqlbuild.compiler.scopes.types import (
+    InaccessibleReason,
+    ResourceKind,
+    ScopeDiagnosticCode,
+    ScopeKind,
+    VisibilityReason,
+)
 
 
 @dataclass(frozen=True)
@@ -81,3 +87,18 @@ class VisibilityExpectation:
     expected_name: str
     expected_visible_reason: VisibilityReason | None = None
     expected_inaccessible_reason: InaccessibleReason | None = None
+
+
+@dataclass(frozen=True)
+class PlacementValidationCase:
+    """One exact declaration placement validation case."""
+
+    description: str
+    declaration_scope: ScopeKind
+    declaration_owner: str | None
+    declaration_path: str
+    ownership_root: str
+    root_resource_kind: ResourceKind | None
+    consumer_paths: tuple[str, ...]
+    expected_codes: tuple[ScopeDiagnosticCode, ...]
+    expected_direct_codes: tuple[ScopeDiagnosticCode, ...] = ()

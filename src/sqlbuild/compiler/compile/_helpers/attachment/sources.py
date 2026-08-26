@@ -12,13 +12,12 @@ from sqlbuild.compiler.compile._helpers.analysis.validation import (
 )
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
 from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_expansion
-from sqlbuild.compiler.compile._helpers.render.sql_vars import (
-    expand_authored_sql,
-)
+from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_result
 from sqlbuild.compiler.compile._helpers.render.templating import (
     expand_template_data,
 )
 from sqlbuild.compiler.compile.models import (
+    AuthoredSqlExpansionResult,
     CompileSourceInput,
     DeclarationExpansionContext,
     LoadedMacro,
@@ -28,6 +27,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSourceFile,
 )
+from sqlbuild.compiler.scopes.models import ResourceIdentity, UsageRecord
+from sqlbuild.compiler.scopes.types import ResourceKind
 from sqlbuild.spec.contracts.models import (
     SchemaAuditInstance,
     SettingsConfig,
@@ -65,7 +66,7 @@ def build_source_inputs(
     for source_file in discovered_inputs.source_files:
         source_entry: SourceEntry
         for raw_source_entry in source_file.source_entries:
-            source_entry = expand_source_entry_templates(
+            source_entry, usages = expand_source_entry_templates(
                 source_entry=raw_source_entry,
                 file_path=source_file.file_path,
                 effective_vars=effective_vars,
@@ -92,6 +93,7 @@ def build_source_inputs(
                 CompileSourceInput(
                     source_entry=source_entry,
                     source_file=source_file,
+                    declaration_usages=usages,
                 )
             )
     return tuple(source_inputs)
@@ -105,15 +107,18 @@ def expand_source_entry_templates(
     loaded_macros: dict[str, LoadedMacro],
     macro_context: MacroContext,
     declaration_expansion: DeclarationExpansionContext,
-) -> SourceEntry:
+) -> tuple[SourceEntry, tuple[UsageRecord, ...]]:
     """Apply config templating and SQL interpolation to source metadata."""
 
     expression: str | None = None
+    usages: tuple[UsageRecord, ...] = ()
     scoped_declarations: DeclarationExpansionContext = resolve_declaration_expansion(
-        context=declaration_expansion, file_path=file_path
+        context=declaration_expansion,
+        file_path=file_path,
+        resource=ResourceIdentity(ResourceKind.SOURCE, source_entry.name),
     )
     if source_entry.expression is not None:
-        expression = expand_authored_sql(
+        expansion: AuthoredSqlExpansionResult = expand_authored_sql_result(
             sql=source_entry.expression,
             file_path=file_path,
             effective_vars=effective_vars,
@@ -124,7 +129,9 @@ def expand_source_entry_templates(
             value_renderer=scoped_declarations.value_renderer,
             collection_rendering=scoped_declarations.collection_rendering,
         )
-    return replace(
+        expression = expansion.sql
+        usages = expansion.usages
+    expanded_entry: SourceEntry = replace(
         source_entry,
         database=_expand_source_template_value(
             raw_value=source_entry.database,
@@ -172,6 +179,7 @@ def expand_source_entry_templates(
             for audit_instance in source_entry.audits
         ),
     )
+    return expanded_entry, usages
 
 
 def expand_source_column_templates(

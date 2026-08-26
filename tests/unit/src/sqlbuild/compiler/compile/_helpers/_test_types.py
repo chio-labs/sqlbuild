@@ -122,6 +122,7 @@ class DeclarationFingerprintTestCase:
     model_sql: str
     expected_query_hash_changed: bool
     expected_metadata_changed: bool
+    additional_files: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -162,6 +163,14 @@ class RelationshipUsageTestCase:
     description: str
     files: dict[str, str]
     expected_usage: UsageRecord
+
+
+@dataclass(frozen=True)
+class ScopePlacementCompileTestCase:
+    description: str
+    files: dict[str, str]
+    expected_fragment: str | None = None
+    expected_complete: bool = True
 
 
 @dataclass(frozen=True)

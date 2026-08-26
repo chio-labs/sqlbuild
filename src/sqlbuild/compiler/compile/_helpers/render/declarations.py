@@ -12,6 +12,7 @@ from sqlbuild.compiler.compile.constants import MACRO_TOKEN, SQL_QUOTE_TOKENS
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     DeclarationExpansionContext,
+    DeclarationExpansionResult,
     DeclarationResolutionContext,
     DeclarationRuntimeProjection,
     DeclarationScopeResolver,
@@ -233,6 +234,10 @@ def resolve_declaration_context(
         macros=macros,
         macro_records=macro_records,
         inaccessible_macros=inaccessible_macros,
+        consumer=(
+            resource
+            or (resolution.target.matches[0].identity if resolution.target.matches else None)
+        ),
     )
 
 
@@ -264,7 +269,7 @@ def declaration_usage_records(
             if is_enum
             else declarations.constant_visibility.get(name, ())
         )
-        for record in visibility:
+        for record in _usage_visibility(visibility=visibility, consumer=resource):
             usages.append(
                 UsageRecord(
                     consumer=resource,
@@ -418,18 +423,19 @@ def expand_declaration_references(
 ) -> str:
     """Resolve enum-member and constant references to SQL scalar literals."""
 
-    rendered_sql: str
-    rendered_sql, _spans = expand_declaration_references_with_spans(
+    result: DeclarationExpansionResult = expand_declaration_references_result(
         sql=sql,
         file_path=file_path,
-        enums=enums,
-        constants=constants,
         value_renderer=value_renderer,
         collection_rendering=collection_rendering,
-        inaccessible_enums=inaccessible_enums,
-        inaccessible_constants=inaccessible_constants,
+        declarations=DeclarationResolutionContext(
+            enums=enums,
+            constants=constants,
+            inaccessible_enums=inaccessible_enums or {},
+            inaccessible_constants=inaccessible_constants or {},
+        ),
     )
-    return rendered_sql
+    return result.sql
 
 
 def expand_declaration_references_with_spans(
@@ -445,8 +451,34 @@ def expand_declaration_references_with_spans(
 ) -> tuple[str, tuple[ExpansionSpan, ...]]:
     """Resolve declaration references, returning the span of every substitution."""
 
+    result: DeclarationExpansionResult = expand_declaration_references_result(
+        sql=sql,
+        file_path=file_path,
+        value_renderer=value_renderer,
+        collection_rendering=collection_rendering,
+        declarations=DeclarationResolutionContext(
+            enums=enums,
+            constants=constants,
+            inaccessible_enums=inaccessible_enums or {},
+            inaccessible_constants=inaccessible_constants or {},
+        ),
+    )
+    return result.sql, result.spans
+
+
+def expand_declaration_references_result(
+    *,
+    sql: str,
+    file_path: Path,
+    declarations: DeclarationResolutionContext,
+    value_renderer: TypedSqlValueRenderer,
+    collection_rendering: CollectionRendering,
+) -> DeclarationExpansionResult:
+    """Resolve references and retain usage facts from the resolving token walk."""
+
     rendered_parts: list[str] = []
     spans: list[ExpansionSpan] = []
+    usages: list[UsageRecord] = []
     output_length: int = 0
     cursor: int = 0
     while cursor < len(sql):
@@ -464,25 +496,52 @@ def expand_declaration_references_with_spans(
             raise CompileInputError(f"Invalid declaration reference in '{file_path}'")
         kind: str = start_match.group("kind")
         if kind == _ENUM_REFERENCE_KIND:
+            enum_match: re.Match[str] | None = _ENUM_REFERENCE_PATTERN.match(sql, reference_start)
+            if enum_match is None:
+                raise CompileInputError(f"Invalid enum reference in '{file_path}'")
             replacement: str
             next_cursor: int
             replacement, next_cursor = _resolve_enum_reference(
                 sql=sql,
                 reference_start=reference_start,
                 file_path=file_path,
-                enums=enums,
-                inaccessible_enums=inaccessible_enums or {},
+                enums=declarations.enums,
+                inaccessible_enums=declarations.inaccessible_enums,
             )
+            visibility: tuple[VisibilityRecord, ...] = declarations.enum_visibility.get(
+                enum_match.group("name"), ()
+            )
+            member: str | None = enum_match.group("member")
         else:
+            constant_match: re.Match[str] | None = _CONSTANT_REFERENCE_PATTERN.match(
+                sql, reference_start
+            )
+            if constant_match is None:
+                raise CompileInputError(f"Invalid constant reference in '{file_path}'")
             replacement, next_cursor = _resolve_constant_reference(
                 sql=sql,
                 reference_start=reference_start,
                 file_path=file_path,
-                constants=constants,
-                inaccessible_constants=inaccessible_constants or {},
+                constants=declarations.constants,
+                inaccessible_constants=declarations.inaccessible_constants,
                 value_renderer=value_renderer,
                 collection_rendering=collection_rendering,
             )
+            visibility = declarations.constant_visibility.get(constant_match.group("name"), ())
+            member = None
+        if declarations.consumer is not None:
+            for visible in _usage_visibility(
+                visibility=visibility,
+                consumer=declarations.consumer,
+            ):
+                usages.append(
+                    UsageRecord(
+                        consumer=declarations.consumer,
+                        declaration=visible.declaration,
+                        through=visible.through,
+                        enum_member=member,
+                    )
+                )
         rendered_parts.append(replacement)
         spans.append(
             ExpansionSpan(
@@ -494,7 +553,27 @@ def expand_declaration_references_with_spans(
         )
         output_length += len(replacement)
         cursor = next_cursor
-    return "".join(rendered_parts), tuple(spans)
+    return DeclarationExpansionResult(
+        sql="".join(rendered_parts),
+        spans=tuple(spans),
+        usages=tuple(dict.fromkeys(usages)),
+    )
+
+
+def _usage_visibility(
+    *,
+    visibility: tuple[VisibilityRecord, ...],
+    consumer: ResourceIdentity | DeclarationIdentity,
+) -> tuple[VisibilityRecord, ...]:
+    if not isinstance(consumer, ResourceIdentity) or consumer.kind not in {
+        ResourceKind.TEST,
+        ResourceKind.SCENARIO,
+    }:
+        return visibility
+    relationship_visibility: tuple[VisibilityRecord, ...] = tuple(
+        record for record in visibility if record.through is not None
+    )
+    return relationship_visibility or visibility
 
 
 def resolve_enum_contract_columns(
