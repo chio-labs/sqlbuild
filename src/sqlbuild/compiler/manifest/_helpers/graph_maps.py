@@ -6,19 +6,13 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
 )
+from sqlbuild.compiler.manifest._helpers.shared import _key_to_unique_id
 
 
 def build_unique_id(*, key: CompiledObjectKey, project_name: str, project: CompiledProject) -> str:
     """Build a dbt-style unique_id from a CompiledObjectKey."""
-
-    source_names: frozenset[str] = frozenset(s.name for s in project.sources)
-    seed_names: frozenset[str] = frozenset(s.name for s in project.seeds)
-
-    if key.name in source_names:
-        return f"source.{project_name}.{key.name}"
-    if key.name in seed_names:
-        return f"seed.{project_name}.{key.name}"
-    return f"model.{project_name}.{key.name}"
+    del project
+    return _key_to_unique_id(key=key, project_name=project_name)
 
 
 def build_parent_map(

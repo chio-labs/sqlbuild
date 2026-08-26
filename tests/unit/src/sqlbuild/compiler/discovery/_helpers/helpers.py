@@ -11,6 +11,9 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredConstantFile,
     DiscoveredEnumFile,
     DiscoveredMacroFile,
+    DiscoveredSqlTestBlock,
+    DiscoveredSqlTestCase,
+    SqlTestParameterDeclaration,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     LoadProjectConfigTestCase,
@@ -53,3 +56,33 @@ def discover_declarations(
     *, project_dir: Path, kind: str
 ) -> tuple[DiscoveredMacroFile | DiscoveredEnumFile | DiscoveredConstantFile, ...]:
     return _DECLARATION_DISCOVERER_BY_KIND[kind](project_dir=project_dir)
+
+
+def discovered_test_parameters(
+    *, blocks: tuple[DiscoveredSqlTestBlock, ...]
+) -> tuple[SqlTestParameterDeclaration, ...]:
+    parameters: list[SqlTestParameterDeclaration] = []
+    block: DiscoveredSqlTestBlock
+    for block in blocks:
+        parameters.extend(block.parameters)
+    return tuple(parameters)
+
+
+def discovered_test_cases(
+    *, blocks: tuple[DiscoveredSqlTestBlock, ...]
+) -> tuple[DiscoveredSqlTestCase, ...]:
+    cases: list[DiscoveredSqlTestCase] = []
+    block: DiscoveredSqlTestBlock
+    for block in blocks:
+        cases.extend(block.cases)
+    return tuple(cases)
+
+
+def discovered_test_case_values(
+    *, cases: tuple[DiscoveredSqlTestCase, ...]
+) -> tuple[tuple[object, ...], ...]:
+    case_values: list[tuple[object, ...]] = []
+    test_case: DiscoveredSqlTestCase
+    for test_case in cases:
+        case_values.append(tuple(value.value for _name, value in test_case.values))
+    return tuple(case_values)

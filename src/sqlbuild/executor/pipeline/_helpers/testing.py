@@ -54,10 +54,12 @@ def run_test_pipeline(
         preflight_start: float = time.monotonic()
         if on_progress is not None:
             on_progress("Preparing test functions...")
-        missing_functions_by_test: dict[str, tuple[str, ...]] = _prepare_test_functions(
-            plan=plan,
-            adapter=adapter,
-            connection=connection,
+        missing_functions_by_test: dict[CompiledObjectKey, tuple[str, ...]] = (
+            _prepare_test_functions(
+                plan=plan,
+                adapter=adapter,
+                connection=connection,
+            )
         )
         if on_progress is not None:
             on_progress(f"Prepared test functions. ({time.monotonic() - preflight_start:.2f}s)")
@@ -66,7 +68,7 @@ def run_test_pipeline(
         for entry in plan.test_entries:
             if on_test_start is not None:
                 on_test_start(entry)
-            missing_functions: tuple[str, ...] = missing_functions_by_test.get(entry.name, ())
+            missing_functions: tuple[str, ...] = missing_functions_by_test.get(entry.key, ())
             if missing_functions:
                 result: SqlTestExecutionResult = _build_missing_function_result(
                     test_entry=entry,
@@ -92,7 +94,7 @@ def _prepare_test_functions(
     plan: PlanOutput,
     adapter: BaseAdapter,
     connection: Any,
-) -> dict[str, tuple[str, ...]]:
+) -> dict[CompiledObjectKey, tuple[str, ...]]:
     function_entries: dict[CompiledObjectKey, FunctionPlanEntry] = {
         entry.key: entry for entry in plan.function_entries
     }
@@ -143,13 +145,13 @@ def _prepare_test_functions(
         connection=connection,
     )
 
-    missing_by_test: dict[str, tuple[str, ...]] = {}
+    missing_by_test: dict[CompiledObjectKey, tuple[str, ...]] = {}
     for test_entry in plan.test_entries:
         missing_names: tuple[str, ...] = tuple(
             missing_by_key[dep] for dep in test_entry.function_deps if dep in missing_by_key
         )
         if missing_names:
-            missing_by_test[test_entry.name] = missing_names
+            missing_by_test[test_entry.key] = missing_names
     return missing_by_test
 
 
@@ -214,6 +216,14 @@ def _build_missing_function_result(
     return SqlTestExecutionResult(
         test_name=test_entry.name,
         outcome=SqlTestOutcome.ERROR,
+        source_path=test_entry.source_path,
+        block_index=test_entry.block_index,
+        parent_name=test_entry.parent_name,
+        case_name=test_entry.case_name,
+        case_index=test_entry.case_index,
+        case_fingerprint=test_entry.case_fingerprint,
+        parameter_schema=test_entry.parameter_schema,
+        parameter_values=test_entry.parameter_values,
         step_results=(
             StepResult(
                 model_name=model_name,

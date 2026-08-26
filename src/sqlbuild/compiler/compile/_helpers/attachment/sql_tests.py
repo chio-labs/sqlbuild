@@ -22,6 +22,7 @@ from sqlbuild.compiler.compile._helpers.render.declarations import (
 from sqlbuild.compiler.compile._helpers.render.macros import (
     find_macro_call_names,
 )
+from sqlbuild.compiler.compile._helpers.render.parameters import expand_test_parameters
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
     expand_authored_sql_result,
 )
@@ -56,6 +57,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSqlScenarioFile,
     DiscoveredSqlTestBlock,
+    DiscoveredSqlTestCase,
     DiscoveredSqlTestFile,
     EnumDeclaration,
 )
@@ -124,79 +126,112 @@ def build_test_inputs(
                 file_path=test_file.file_path,
                 resource=resource,
             )
-            test_mode: SqlTestMode = test_block.mode
-            tested_resource_names: tuple[str, ...] = ()
-            if test_mode in {SqlTestMode.MACRO, SqlTestMode.UDF, SqlTestMode.TABLE_FN}:
-                raw_test_ctes: CompileSqlTestCtes = _validate_raw_direct_logic_test_ctes(
-                    test_block=test_block,
-                    test_file=test_file,
-                    test_mode=test_mode,
-                )
-                tested_resource_names = _infer_tested_direct_logic_resource_names(
-                    raw_test_ctes=raw_test_ctes,
-                    test_file=test_file,
-                    loaded_macros=loaded_macros,
-                    known_function_names=known_function_names,
-                    known_table_function_names=known_table_function_names,
-                    table_function_argument_counts=table_function_argument_counts,
-                )
-            expansion: AuthoredSqlExpansionResult = expand_authored_sql_result(
-                sql=test_block.sql_body,
-                file_path=test_file.file_path,
-                effective_vars=vars_for_substitution,
-                loaded_macros=loaded_macros,
-                macro_context=macro_context,
-                declarations=(
-                    replace(scoped_declarations.declarations, consumer=None)
-                    if test_mode is SqlTestMode.MACRO
-                    else scoped_declarations.declarations
-                ),
-                declaration_resolver=scoped_declarations.resolver,
-                value_renderer=scoped_declarations.value_renderer,
-                collection_rendering=scoped_declarations.collection_rendering,
-            )
-            expanded_sql_body: str = expansion.sql
-            reject_cursor_intrinsics(
-                sql=expanded_sql_body,
-                context=f"SQL test '{test_block.name or test_file.file_path.stem}'",
-            )
-            test_ctes: CompileSqlTestCtes = extract_sql_test_ctes(
-                sql=expanded_sql_body,
-                file_label=str(test_file.relative_path),
-                mode=test_mode,
-            )
-            validate_test_ctes(
-                test_ctes=test_ctes,
-                test_file=test_file,
-                known_model_names=known_model_names,
-                known_seed_names=known_seed_names,
-                known_source_names=known_source_names,
-                loaded_macros=loaded_macros,
-            )
-            test_payload: (
-                CompileModelSqlTestInputPayload | CompileDirectLogicSqlTestInputPayload
-            ) = _build_test_input_payload(
-                test_ctes=test_ctes,
-                tested_resource_names=tested_resource_names,
-            )
-            test_inputs.append(
-                CompileSqlTestInput(
-                    test_file=test_file,
-                    test_block=test_block,
-                    sql_body=expanded_sql_body,
-                    mode=test_mode,
-                    payload=test_payload,
-                    declaration_usages=(
-                        declaration_usage_records(
-                            sql=test_block.sql_body,
-                            resource=resource,
-                            declarations=scoped_declarations.declarations,
+            case_variants: tuple[DiscoveredSqlTestCase | None, ...] = test_block.cases or (None,)
+            test_case: DiscoveredSqlTestCase | None
+            for test_case in case_variants:
+                parameter_sql: str = test_block.sql_body
+                if test_case is not None:
+                    parameter_sql, used_parameters = expand_test_parameters(
+                        sql=test_block.sql_body,
+                        file_path=test_file.file_path,
+                        values=test_case.values,
+                        value_renderer=scoped_declarations.value_renderer,
+                        test_name=test_block.name or test_file.file_path.stem,
+                        case_name=test_case.name,
+                    )
+                    unused_parameters: tuple[str, ...] = tuple(
+                        parameter.name
+                        for parameter in test_block.parameters
+                        if parameter.name not in used_parameters
+                    )
+                    if unused_parameters:
+                        raise CompileInputError(
+                            f"SQL test '{test_block.name or test_file.file_path.stem}' declares "
+                            f"unused parameters: {', '.join(unused_parameters)} in case "
+                            f"'{test_case.name}'"
                         )
-                        if test_mode is SqlTestMode.MACRO
-                        else expansion.usages
-                    ),
+                expanded_test_block: DiscoveredSqlTestBlock = replace(
+                    test_block,
+                    sql_body=parameter_sql,
                 )
-            )
+                test_mode: SqlTestMode = test_block.mode
+                tested_resource_names: tuple[str, ...] = ()
+                if test_mode in {SqlTestMode.MACRO, SqlTestMode.UDF, SqlTestMode.TABLE_FN}:
+                    raw_test_ctes: CompileSqlTestCtes = _validate_raw_direct_logic_test_ctes(
+                        test_block=expanded_test_block,
+                        test_file=test_file,
+                        test_mode=test_mode,
+                    )
+                    tested_resource_names = _infer_tested_direct_logic_resource_names(
+                        raw_test_ctes=raw_test_ctes,
+                        test_file=test_file,
+                        loaded_macros=loaded_macros,
+                        known_function_names=known_function_names,
+                        known_table_function_names=known_table_function_names,
+                        table_function_argument_counts=table_function_argument_counts,
+                    )
+                expansion: AuthoredSqlExpansionResult = expand_authored_sql_result(
+                    sql=parameter_sql,
+                    file_path=test_file.file_path,
+                    effective_vars=vars_for_substitution,
+                    loaded_macros=loaded_macros,
+                    macro_context=macro_context,
+                    declarations=(
+                        replace(scoped_declarations.declarations, consumer=None)
+                        if test_mode is SqlTestMode.MACRO
+                        else scoped_declarations.declarations
+                    ),
+                    declaration_resolver=scoped_declarations.resolver,
+                    value_renderer=scoped_declarations.value_renderer,
+                    collection_rendering=scoped_declarations.collection_rendering,
+                )
+                expanded_sql_body: str = expansion.sql
+                reject_cursor_intrinsics(
+                    sql=expanded_sql_body,
+                    context=f"SQL test '{test_block.name or test_file.file_path.stem}'",
+                )
+                test_ctes: CompileSqlTestCtes = extract_sql_test_ctes(
+                    sql=expanded_sql_body,
+                    file_label=str(test_file.relative_path),
+                    mode=test_mode,
+                )
+                validate_test_ctes(
+                    test_ctes=test_ctes,
+                    test_file=test_file,
+                    known_model_names=known_model_names,
+                    known_seed_names=known_seed_names,
+                    known_source_names=known_source_names,
+                    loaded_macros=loaded_macros,
+                )
+                test_payload: (
+                    CompileModelSqlTestInputPayload | CompileDirectLogicSqlTestInputPayload
+                ) = _build_test_input_payload(
+                    test_ctes=test_ctes,
+                    tested_resource_names=tested_resource_names,
+                )
+                test_inputs.append(
+                    CompileSqlTestInput(
+                        test_file=test_file,
+                        test_block=test_block,
+                        sql_body=expanded_sql_body,
+                        mode=test_mode,
+                        payload=test_payload,
+                        declaration_usages=(
+                            declaration_usage_records(
+                                sql=parameter_sql,
+                                resource=resource,
+                                declarations=scoped_declarations.declarations,
+                            )
+                            if test_mode is SqlTestMode.MACRO
+                            else expansion.usages
+                        ),
+                        parent_name=test_block.name or test_file.relative_path.stem,
+                        case_name=test_case.name if test_case is not None else None,
+                        case_index=test_case.case_index if test_case is not None else None,
+                        parameter_schema=test_block.parameters,
+                        parameter_values=test_case.values if test_case is not None else (),
+                    )
+                )
     return tuple(test_inputs)
 
 

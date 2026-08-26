@@ -14,7 +14,7 @@ from sqlbuild.cli.commands._helpers.compile.target_writer import (
 )
 from sqlbuild.cli.commands.models import WrittenTarget
 from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.planner.models import PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     TargetWriterTestCase,
@@ -85,6 +85,50 @@ def test_given_plan_output_when_writing_target_then_expected_files_are_written(
     assert json.loads(manifest_path.read_text()) == manifest
     assert manifest_path.stat().st_mtime_ns == unchanged_mtime_ns
     assert not (tmp_path / "target" / "run").exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TargetWriterTestCase(
+            description="writes SQL test cases to source and block scoped paths",
+            expected_files={
+                "compiled/tests/tests/unit/orders/block_1__small.sql": "",
+                "compiled/tests/tests/unit/orders/block_1__large.sql": "",
+            },
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_parameterized_test_entries_when_writing_target_then_case_artifacts_do_not_collide(
+    test_case: TargetWriterTestCase,
+    tmp_path: Path,
+) -> None:
+    plan_output: PlanOutput = build_target_writer_plan_output()
+    template: SqlTestPlanEntry = plan_output.test_entries[0]
+    case_entries: tuple[SqlTestPlanEntry, ...] = tuple(
+        replace(
+            template,
+            key=replace(template.key, name=f"orders [{case_name}]"),
+            name=f"orders [{case_name}]",
+            source_path=Path("tests/unit/orders.sql"),
+            block_index=1,
+            parent_name="orders",
+            case_name=case_name,
+        )
+        for case_name in ("small", "large")
+    )
+    parameterized_plan: PlanOutput = replace(plan_output, test_entries=case_entries)
+
+    write_compile_target(
+        target_dir=tmp_path / "target",
+        adapter=DuckDbAdapter(),
+        plan_output=parameterized_plan,
+    )
+
+    expected_path: str
+    for expected_path in test_case.expected_files:
+        assert (tmp_path / "target" / expected_path).is_file()
 
 
 @pytest.mark.parametrize(

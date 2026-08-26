@@ -37,6 +37,7 @@ from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.python_nodes.models import ColumnLineageRef, SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
 from sqlbuild.spec.contracts.models import SchemaColumn, SourceColumnEntry, SourceEntry
+from sqlbuild.sql_values.types import SqlValueKind
 
 _DAG_VERSION: int = 1
 
@@ -305,13 +306,53 @@ def _build_checks(
 
 def _build_sql_test_check(test: CompiledSqlTest) -> DagCheck:
     return DagCheck(
-        id=_node_id(test.key),
+        id=_sql_test_check_id(test),
         kind="sql_test",
         name=test.name,
         checked_asset_ids=tuple(_node_id(key) for key in test.scope_deps),
         path=str(test.test_file.relative_path),
         mode=test.mode.value,
+        meta=_sql_test_meta(test),
     )
+
+
+def _sql_test_check_id(test: CompiledSqlTest) -> str:
+    if test.case_name is None:
+        return _node_id(test.key)
+    source_path: str = (test.source_path or test.test_file.relative_path).as_posix()
+    return f"sql_test:{source_path}:{test.block_index}:{test.case_name}"
+
+
+def _sql_test_meta(test: CompiledSqlTest) -> dict[str, object]:
+    if test.case_name is None:
+        return {}
+    parameter_types: dict[str, str] = {
+        parameter.name: parameter.value_type.value for parameter in test.parameter_schema
+    }
+    return {
+        "source_path": (test.source_path or test.test_file.relative_path).as_posix(),
+        "block_index": test.block_index,
+        "parent_name": test.parent_name,
+        "case_name": test.case_name,
+        "case_index": test.case_index,
+        "case_fingerprint": test.case_fingerprint,
+        "parameter_schema": [
+            {
+                "name": parameter.name,
+                "type": parameter.value_type.value,
+                "nullable": parameter.nullable,
+            }
+            for parameter in test.parameter_schema
+        ],
+        "parameters": [
+            {
+                "name": name,
+                "type": parameter_types[name],
+                "value": (str(value.value) if value.kind == SqlValueKind.DECIMAL else value.value),
+            }
+            for name, value in test.parameter_values
+        ],
+    }
 
 
 def _build_audit_check(audit: CompiledAudit) -> DagCheck:

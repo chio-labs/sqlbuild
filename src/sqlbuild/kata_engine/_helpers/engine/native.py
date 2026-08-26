@@ -214,7 +214,7 @@ def _sql_test_payloads(project: CompiledProject) -> list[dict[str, object]]:
 
 
 def _sql_test_payload(test: CompiledSqlTest) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "source_path": (test.source_path or test.test_file.relative_path).as_posix(),
         "ownership_root": (test.ownership_root or test.test_file.ownership_root).as_posix(),
         "block_index": test.block_index or test.test_block.test_index,
@@ -230,6 +230,35 @@ def _sql_test_payload(test: CompiledSqlTest) -> dict[str, object]:
             for resource in test.tested_resources
         ],
     }
+    if test.case_name is not None:
+        parameter_types: dict[str, str] = {
+            parameter.name: parameter.value_type.value for parameter in test.parameter_schema
+        }
+        payload.update(
+            {
+                "parent_name": test.parent_name,
+                "case_name": test.case_name,
+                "case_index": test.case_index,
+                "case_fingerprint": test.case_fingerprint,
+                "parameter_schema": [
+                    {
+                        "name": parameter.name,
+                        "type": parameter.value_type.value,
+                        "nullable": parameter.nullable,
+                    }
+                    for parameter in test.parameter_schema
+                ],
+                "parameters": [
+                    {
+                        "name": name,
+                        "type": parameter_types[name],
+                        "value": _typed_value_payload(value),
+                    }
+                    for name, value in test.parameter_values
+                ],
+            }
+        )
+    return payload
 
 
 def _sql_scenario_payloads(project: CompiledProject) -> list[dict[str, object]]:

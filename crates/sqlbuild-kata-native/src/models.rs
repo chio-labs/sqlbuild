@@ -463,12 +463,42 @@ pub(crate) struct TestedResource {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct SqlTestParameterFact {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub value_type: String,
+    pub nullable: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SqlTestParameterValueFact {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub value_type: String,
+    pub value: serde_json::Value,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct SqlTestFact {
     pub source_path: String,
     pub ownership_root: String,
     pub block_index: u64,
     pub name: String,
     pub explicit_name: Option<String>,
+    #[serde(default)]
+    pub parent_name: Option<String>,
+    #[serde(default)]
+    pub case_name: Option<String>,
+    #[serde(default)]
+    pub case_index: Option<u64>,
+    #[serde(default)]
+    pub case_fingerprint: Option<String>,
+    #[serde(default)]
+    pub parameter_schema: Vec<SqlTestParameterFact>,
+    #[serde(default)]
+    pub parameters: Vec<SqlTestParameterValueFact>,
     pub mode: SqlTestMode,
     pub expected_model_names: Vec<String>,
     pub assertion_names: Vec<String>,

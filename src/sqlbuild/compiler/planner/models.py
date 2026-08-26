@@ -27,7 +27,7 @@ from sqlbuild.compiler.compile.models import (
     FunctionReturnColumn,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, SqlTestParameterDeclaration
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import (
@@ -54,6 +54,7 @@ from sqlbuild.compiler.source_freshness.models import (
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SeedCsvSettings, SourceEntry
 from sqlbuild.spec.contracts.types import SourceWriteStrategy
+from sqlbuild.sql_values.models import SqlValue
 
 
 @dataclass(frozen=True)
@@ -790,6 +791,14 @@ class SqlTestPlanEntry:
 
     key: CompiledObjectKey
     name: str
+    source_path: Path | None = None
+    block_index: int | None = None
+    parent_name: str | None = None
+    case_name: str | None = None
+    case_index: int | None = None
+    case_fingerprint: str | None = None
+    parameter_schema: tuple[SqlTestParameterDeclaration, ...] = field(default_factory=tuple)
+    parameter_values: tuple[tuple[str, SqlValue], ...] = field(default_factory=tuple)
     chain: tuple[ChainStep, ...] = field(default_factory=tuple)
     assertions: tuple[SqlTestAssertionStep, ...] = field(default_factory=tuple)
     scope_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)

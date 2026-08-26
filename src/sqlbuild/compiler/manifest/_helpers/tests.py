@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlbuild.compiler.manifest._helpers.shared import _key_to_unique_id
 from sqlbuild.compiler.manifest.constants import CHECKSUM_HASH_NAME, RESOURCE_TYPE_TEST
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ChainStep, SqlTestPlanEntry
+from sqlbuild.sql_values.types import SqlValueKind
 
 _TEST_CONFIG: dict[str, object] = {
     "enabled": True,
@@ -90,7 +91,7 @@ def build_sql_test_nodes(
 ) -> dict[str, dict[str, object]]:
     """Build dbt-compatible SingularTest nodes from one SQL test plan entry."""
 
-    unique_id: str = f"test.{project_name}.{test_entry.name}"
+    unique_id: str = _key_to_unique_id(key=test_entry.key, project_name=project_name)
 
     compiled_parts: list[str] = []
     step: ChainStep
@@ -114,12 +115,15 @@ def build_sql_test_nodes(
         "unique_id": unique_id,
         "fqn": [project_name, test_entry.name],
         "alias": test_entry.name,
-        "checksum": {"name": CHECKSUM_HASH_NAME, "checksum": ""},
+        "checksum": {
+            "name": CHECKSUM_HASH_NAME,
+            "checksum": test_entry.case_fingerprint or "",
+        },
         "config": dict(_TEST_CONFIG),
         "tags": [],
         "description": "",
         "columns": {},
-        "meta": {"sqlbuild_test_type": "sql_native"},
+        "meta": _sql_test_meta(test_entry),
         "group": None,
         "docs": {"show": True, "node_color": None},
         "patch_path": None,
@@ -134,3 +138,41 @@ def build_sql_test_nodes(
         "depends_on": {"macros": [], "nodes": depends_on_nodes},
     }
     return {unique_id: node}
+
+
+def _sql_test_meta(test_entry: SqlTestPlanEntry) -> dict[str, object]:
+    meta: dict[str, object] = {"sqlbuild_test_type": "sql_native"}
+    if test_entry.case_name is None or test_entry.source_path is None:
+        return meta
+    parameter_types: dict[str, str] = {
+        parameter.name: parameter.value_type.value for parameter in test_entry.parameter_schema
+    }
+    meta.update(
+        {
+            "sqlbuild_source_path": test_entry.source_path.as_posix(),
+            "sqlbuild_block_index": test_entry.block_index,
+            "sqlbuild_parent_name": test_entry.parent_name,
+            "sqlbuild_case_name": test_entry.case_name,
+            "sqlbuild_case_index": test_entry.case_index,
+            "sqlbuild_case_fingerprint": test_entry.case_fingerprint,
+            "sqlbuild_parameter_schema": [
+                {
+                    "name": parameter.name,
+                    "type": parameter.value_type.value,
+                    "nullable": parameter.nullable,
+                }
+                for parameter in test_entry.parameter_schema
+            ],
+            "sqlbuild_parameters": [
+                {
+                    "name": name,
+                    "type": parameter_types[name],
+                    "value": (
+                        str(value.value) if value.kind == SqlValueKind.DECIMAL else value.value
+                    ),
+                }
+                for name, value in test_entry.parameter_values
+            ],
+        }
+    )
+    return meta

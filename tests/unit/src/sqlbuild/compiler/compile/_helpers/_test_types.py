@@ -14,6 +14,7 @@ from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, SqlTestMode
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.scopes.models import UsageRecord
 from sqlbuild.compiler.scopes.types import ScopeKind
+from sqlbuild.sql_values.models import SqlValue
 
 
 @dataclass(frozen=True)
@@ -163,6 +164,37 @@ class RelationshipUsageTestCase:
     description: str
     files: dict[str, str]
     expected_usage: UsageRecord
+
+
+@dataclass(frozen=True)
+class ParameterizedSqlTestCompilationTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_names: tuple[str, ...]
+    expected_case_names: tuple[str, ...]
+    expected_sql_fragments: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class ParameterizedSqlTestCompilationErrorTestCase:
+    description: str
+    test_sql: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ParameterizedSqlTestRenderingErrorTestCase:
+    description: str
+    rendered_value: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ParameterizedSqlTestAdapterRenderingTestCase:
+    description: str
+    adapter_name: str
+    value: SqlValue
+    expected_sql: str
 
 
 @dataclass(frozen=True)

@@ -2,16 +2,29 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+from pathlib import Path
+
 import pytest
 
-from sqlbuild.cli.output._helpers.execution_protocol_v1 import _format_model_assets
+from sqlbuild.cli.commands._helpers.test.sql_progress import format_parameterized_test_label
+from sqlbuild.cli.output._helpers.execution_protocol_v1 import (
+    _format_model_assets,
+    _format_sql_test_checks,
+)
+from sqlbuild.compiler.discovery.models import SqlTestParameterDeclaration
 from sqlbuild.executor.run.models import (
     MicrobatchAccountingInterval,
     ModelExecutionResult,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.executor.testing.models import SqlTestExecutionResult
+from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.sql_values.models import SqlLogicalType, SqlValue
+from sqlbuild.sql_values.types import SqlValueKind
 from tests.unit.src.sqlbuild.cli.output._helpers._test_types import (
     MicrobatchExecutionProtocolTestCase,
+    SqlTestCaseExecutionProtocolTestCase,
 )
 
 
@@ -91,3 +104,92 @@ def test_given_microbatch_result_when_formatting_json_then_interval_provenance_i
             }
         ],
     }
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlTestCaseExecutionProtocolTestCase(
+            description="parameterized SQL test emits stable identity and safe decimal value",
+            expected_check_id="sql_test:tests/unit/orders.sql:2:large_order",
+            expected_decimal_value="12.3400",
+            expected_fingerprint="a" * 64,
+            expected_text_label=(
+                "order totals [large_order] (tests/unit/orders.sql; "
+                'amount:decimal="12.3400", note:string?=null)'
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_parameterized_sql_test_result_when_formatting_json_then_case_metadata_is_safe(
+    test_case: SqlTestCaseExecutionProtocolTestCase,
+) -> None:
+    result: SqlTestExecutionResult = SqlTestExecutionResult(
+        test_name="order totals [large_order]",
+        outcome=SqlTestOutcome.PASS,
+        source_path=Path("tests/unit/orders.sql"),
+        block_index=2,
+        parent_name="order totals",
+        case_name="large_order",
+        case_index=1,
+        case_fingerprint=test_case.expected_fingerprint,
+        parameter_schema=(
+            SqlTestParameterDeclaration(
+                name="amount",
+                value_type=SqlValueKind.DECIMAL,
+            ),
+            SqlTestParameterDeclaration(
+                name="note",
+                value_type=SqlValueKind.STRING,
+                nullable=True,
+            ),
+        ),
+        parameter_values=(
+            (
+                "amount",
+                SqlValue(
+                    logical_type=SqlLogicalType(SqlValueKind.DECIMAL),
+                    value=Decimal(test_case.expected_decimal_value),
+                ),
+            ),
+            (
+                "note",
+                SqlValue(
+                    logical_type=SqlLogicalType(SqlValueKind.NULL),
+                    value=None,
+                ),
+            ),
+        ),
+    )
+
+    check: dict[str, object] = _format_sql_test_checks((result,))[0]
+
+    assert check["check_id"] == test_case.expected_check_id
+    assert check["source_path"] == "tests/unit/orders.sql"
+    assert check["block_index"] == 2
+    assert check["parent_name"] == "order totals"
+    assert check["case_name"] == "large_order"
+    assert check["case_index"] == 1
+    assert check["case_fingerprint"] == test_case.expected_fingerprint
+    assert check["parameter_schema"] == (
+        {"name": "amount", "type": "decimal", "nullable": False},
+        {"name": "note", "type": "string", "nullable": True},
+    )
+    assert check["parameters"] == (
+        {
+            "name": "amount",
+            "type": "decimal",
+            "value": test_case.expected_decimal_value,
+        },
+        {"name": "note", "type": "string", "value": None},
+    )
+    assert (
+        format_parameterized_test_label(
+            name=result.test_name,
+            source_path=result.source_path,
+            parameter_schema=result.parameter_schema,
+            parameter_values=result.parameter_values,
+        )
+        == test_case.expected_text_label
+    )

@@ -51,6 +51,14 @@ def execute_sql_test(
         return SqlTestExecutionResult(
             test_name=test_entry.name,
             outcome=SqlTestOutcome.ERROR,
+            source_path=test_entry.source_path,
+            block_index=test_entry.block_index,
+            parent_name=test_entry.parent_name,
+            case_name=test_entry.case_name,
+            case_index=test_entry.case_index,
+            case_fingerprint=test_entry.case_fingerprint,
+            parameter_schema=test_entry.parameter_schema,
+            parameter_values=test_entry.parameter_values,
             step_results=(
                 StepResult(
                     model_name=error_model_name,
@@ -74,6 +82,14 @@ def execute_sql_test(
         return SqlTestExecutionResult(
             test_name=test_entry.name,
             outcome=SqlTestOutcome.ERROR,
+            source_path=test_entry.source_path,
+            block_index=test_entry.block_index,
+            parent_name=test_entry.parent_name,
+            case_name=test_entry.case_name,
+            case_index=test_entry.case_index,
+            case_fingerprint=test_entry.case_fingerprint,
+            parameter_schema=test_entry.parameter_schema,
+            parameter_values=test_entry.parameter_values,
             step_results=(
                 StepResult(
                     model_name=error_model_name,
@@ -103,6 +119,14 @@ def execute_sql_test(
     return SqlTestExecutionResult(
         test_name=test_entry.name,
         outcome=overall_outcome,
+        source_path=test_entry.source_path,
+        block_index=test_entry.block_index,
+        parent_name=test_entry.parent_name,
+        case_name=test_entry.case_name,
+        case_index=test_entry.case_index,
+        case_fingerprint=test_entry.case_fingerprint,
+        parameter_schema=test_entry.parameter_schema,
+        parameter_values=test_entry.parameter_values,
         step_results=tuple(step_results),
         error_code=SQL_TEST_ASSERTION_FAILED_CODE
         if overall_outcome == SqlTestOutcome.FAIL

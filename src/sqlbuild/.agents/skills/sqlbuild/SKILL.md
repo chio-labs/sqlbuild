@@ -623,6 +623,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Feature | SQLBuild | dbt | SQLMesh |
 |---------|----------|-----|---------|
 | Multi-model tests | Chain across multiple models | YAML-stub, single model | CTE-based, single model |
+| Typed parameterized unit tests | Independent named cases with adapter-rendered scalar values | No | No |
 | Macros as test helpers | Tests are SQL - macros work as reusable fixture generators | No (YAML stubs) | No |
 | E2E scenario tests | Fixture worlds with real graph execution | No | No |
 | Local E2E replay | Capture from warehouse, replay in DuckDB | No | No |
@@ -6217,6 +6218,108 @@ SELECT 1
 
 A file with a single test can omit the `name` field. Files with multiple tests require names on every block.
 
+### Repeating test logic
+
+SQLBuild supports three repetition patterns:
+
+| Pattern | Use when | Result identity |
+|---------|----------|-----------------|
+| Multiple `TEST` blocks | Cases need different SQL shapes | One result per block |
+| Macro or `VALUES` case table | One aggregate comparison is sufficient | One result for the table |
+| Native parameters and cases | Cases share a template but need independent status | One result per named case |
+
+#### Native independent cases
+
+Declare a typed schema and ordered named cases in one header:
+
+```sql
+TEST (
+  name "order status: maps source states",
+  parameters (
+    source_status string,
+    expected_status string,
+  ),
+  cases (
+    completed (source_status "completed", expected_status "completed"),
+    cancelled (source_status "cancelled", expected_status "excluded"),
+    pending (source_status "pending", expected_status "open"),
+  ),
+);
+
+WITH
+__source__raw__orders AS (
+  SELECT 1 AS id, @param("source_status") AS status
+),
+__expected__stg_orders AS (
+  SELECT 1 AS id, @param("expected_status") AS status
+)
+SELECT 1
+```
+
+The cases report independently as `order status: maps source states [completed]`, `[cancelled]`,
+and `[pending]`. Authored order controls display order. Selection remains at the parent test's
+resolved model or resource, so selecting `stg_orders` selects every case; there is no case selector.
+
+Supported scalar types are `string`, `integer`, `boolean`, `float`, and exact `decimal`. Decimal
+values are quoted, such as `tax_rate "0.2000"`, so they never pass through binary float. Boolean
+and integer remain distinct. Raw SQL and collection parameters are rejected.
+
+Nullable parameters use an expanded declaration and are valid where SQL can infer the null type:
+
+```sql
+parameters (
+  cancellation_reason (type string, nullable true),
+),
+cases (
+  completed (cancellation_reason null),
+)
+```
+
+Every case provides exactly the declared parameters, and every declaration must appear as
+`@param("name")` in the template. SQLBuild rejects missing, extra, incompatible, undeclared, and
+unused values before execution.
+
+Expansion is deterministic:
+
+```text
+parse TEST template and cases
+  -> render typed @param values with the active adapter
+  -> expand @const and @enum references
+  -> expand macros
+  -> validate SQL and compile expected models/assertions
+```
+
+Values can therefore feed macro arguments, for example
+`@order_fixture(@param("source_status"))`. Parameters work in model, macro, UDF, and table-function
+modes and preserve every expected model in multi-model tests.
+
+Text and JSON output include parent/case identity and safe typed values. Compile JSON, manifests,
+DAG checks, and compiled/runtime SQL artifacts retain source, block, case, and content-fingerprint
+provenance. Changing one case changes that case's fingerprint without reassigning another case's
+stable identity.
+
+Scenarios are intentionally not parameterized. Keep one scenario per coherent business world so
+capture and replay identity remains explicit.
+
+#### Aggregate SQL case tables
+
+When independent status is unnecessary, a normal SQL case table remains concise:
+
+```sql
+WITH cases(case_name, source_status, expected_status) AS (
+  VALUES
+    ('completed', 'completed', 'completed'),
+    ('cancelled', 'cancelled', 'excluded')
+),
+__expected__status_mapping AS (
+  SELECT case_name, expected_status FROM cases
+)
+SELECT 1
+```
+
+This produces one aggregate test result. Use native cases when each row must pass or fail
+independently.
+
 ### Test placement
 
 Place unit test files under `tests/unit/` in your project directory. SQLBuild discovers all `.sql` files in this directory recursively.
@@ -11529,7 +11632,8 @@ Run SQL unit tests and multi-model tests in isolation.
 
 ## sqb test
 
-Runs SQL unit tests and multi-model tests without building models. Useful for validating test logic independently.
+Runs SQL unit tests, independently reported parameterized cases, and multi-model tests without
+building models. Useful for validating test logic independently.
 
 ### Usage
 
@@ -11544,6 +11648,14 @@ sqb --project-dir <path> test [flags]
 | `--no-sql-validation` | Skip compile-time SQL syntax validation |
 | `--select`, `-s` | Select tests targeting specific models |
 | `--exclude` | Exclude tests targeting specific models |
+
+Parameterized cases use parent-level selection. Selecting a target model includes every case in
+each matching `TEST` template; case names are not model selectors.
+
+Text output identifies each case as `<parent> [<case>]` and includes its source path and safe typed
+parameters. Structured JSON emits one check per case with stable source/block/case identity,
+declared parameter types and nullability, typed values, and a content fingerprint. Exact decimals
+are strings in JSON so their scale is preserved.
 
 ### Examples
 

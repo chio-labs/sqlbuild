@@ -253,6 +253,24 @@ class DiscoveredSqlTestFile:
 
 
 @dataclass(frozen=True)
+class SqlTestParameterDeclaration:
+    """One typed parameter declared by a SQL-native test template."""
+
+    name: str
+    value_type: SqlValueKind
+    nullable: bool = False
+
+
+@dataclass(frozen=True)
+class DiscoveredSqlTestCase:
+    """One ordered named case belonging to a SQL-native test template."""
+
+    name: str
+    values: tuple[tuple[str, SqlValue], ...]
+    case_index: int
+
+
+@dataclass(frozen=True)
 class DiscoveredSqlTestBlock:
     """One raw TEST(...) block discovered from a SQL-native test file."""
 
@@ -261,6 +279,8 @@ class DiscoveredSqlTestBlock:
     sql_body: str
     name: str | None = None
     mode: SqlTestMode = DEFAULT_SQL_TEST_MODE
+    parameters: tuple[SqlTestParameterDeclaration, ...] = field(default_factory=tuple)
+    cases: tuple[DiscoveredSqlTestCase, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

@@ -105,6 +105,18 @@ from sqlbuild.spec.contracts.models import SnapshotsConfig, SourceEntry
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 
 
+def _test_result_authored_order(*, plan: PlanOutput, result: SqlTestExecutionResult) -> int:
+    entry: SqlTestPlanEntry
+    for index, entry in enumerate(plan.test_entries):
+        if (
+            entry.source_path == result.source_path
+            and entry.block_index == result.block_index
+            and entry.case_index == result.case_index
+        ):
+            return index
+    return len(plan.test_entries)
+
+
 class BuildScheduler:
     """DAG-aware scheduler that dispatches nodes as their dependencies complete."""
 
@@ -246,10 +258,13 @@ class BuildScheduler:
             tuple(self._seed_results),
             tuple(self._function_results),
             tuple(self._load_results),
-            tuple(self._test_results),
+            tuple(sorted(self._test_results, key=self._test_result_order)),
             tuple(self._source_audit_results),
             end_audit_results,
         )
+
+    def _test_result_order(self, result: SqlTestExecutionResult) -> int:
+        return _test_result_authored_order(plan=self._plan, result=result)
 
     def _provision_direct_microbatch_state(self) -> None:
         if self._runtime.microbatch_state_resolver is not None:

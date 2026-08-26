@@ -1,15 +1,25 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
 from sqlbuild.compiler.discovery._helpers.sql.tests import parse_sql_test_file
 from sqlbuild.compiler.discovery.exceptions import SqlTestParseError
-from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredSqlTestBlock,
+    DiscoveredSqlTestCase,
+    SqlTestParameterDeclaration,
+)
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseSqlTestFileErrorTestCase,
     ParseSqlTestFileTestCase,
+)
+from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
+    discovered_test_case_values,
+    discovered_test_cases,
+    discovered_test_parameters,
 )
 
 
@@ -73,6 +83,90 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
             expected_test_indexes=(1,),
             expected_header_values=({"name": "orders logic", "mode": "macro"},),
         ),
+        ParseSqlTestFileTestCase(
+            description="parses typed ordered cases with nullable values",
+            contents="""
+        TEST (
+          name "typed values",
+          parameters (
+            text_value string,
+            integer_value integer,
+            boolean_value boolean,
+            float_value float,
+            decimal_value decimal,
+            optional_value (type string, nullable true),
+          ),
+          cases (
+            first (
+              text_value "O\\'Brien",
+              integer_value -7,
+              boolean_value true,
+              float_value 1.25,
+              decimal_value "2.4700",
+              optional_value null,
+            ),
+            second (
+              text_value "open",
+              integer_value 8,
+              boolean_value false,
+              float_value -0.5,
+              decimal_value "3.00",
+              optional_value "present",
+            ),
+          ),
+        );
+
+        SELECT @param("text_value")
+        """,
+            expected_names=("typed values",),
+            expected_sql_bodies=('SELECT @param("text_value")',),
+            expected_test_indexes=(1,),
+            expected_header_values=(
+                {
+                    "name": "typed values",
+                    "parameters": {
+                        "text_value": "string",
+                        "integer_value": "integer",
+                        "boolean_value": "boolean",
+                        "float_value": "float",
+                        "decimal_value": "decimal",
+                        "optional_value": {"type": "string", "nullable": True},
+                    },
+                    "cases": {
+                        "first": {
+                            "text_value": "O'Brien",
+                            "integer_value": -7,
+                            "boolean_value": True,
+                            "float_value": 1.25,
+                            "decimal_value": "2.4700",
+                            "optional_value": None,
+                        },
+                        "second": {
+                            "text_value": "open",
+                            "integer_value": 8,
+                            "boolean_value": False,
+                            "float_value": -0.5,
+                            "decimal_value": "3.00",
+                            "optional_value": "present",
+                        },
+                    },
+                },
+            ),
+            expected_parameter_types=(
+                "string",
+                "integer",
+                "boolean",
+                "float",
+                "decimal",
+                "string",
+            ),
+            expected_parameter_nullability=(False, False, False, False, False, True),
+            expected_case_names=("first", "second"),
+            expected_case_values=(
+                ("O'Brien", -7, True, 1.25, Decimal("2.4700"), None),
+                ("open", 8, False, -0.5, Decimal("3.00"), "present"),
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -89,6 +183,19 @@ def test_given_sql_test_file_variants_when_parsing_then_it_returns_expected_raw_
     assert tuple(block.header_values for block in discovered_blocks) == (
         test_case.expected_header_values
     )
+    parameters: tuple[SqlTestParameterDeclaration, ...] = discovered_test_parameters(
+        blocks=discovered_blocks
+    )
+    cases: tuple[DiscoveredSqlTestCase, ...] = discovered_test_cases(blocks=discovered_blocks)
+    assert tuple(parameter.value_type.value for parameter in parameters) == (
+        test_case.expected_parameter_types
+    )
+    assert tuple(parameter.nullable for parameter in parameters) == (
+        test_case.expected_parameter_nullability
+    )
+    assert tuple(case.name for case in cases) == test_case.expected_case_names
+    assert tuple(case.case_index for case in cases) == tuple(range(len(cases)))
+    assert discovered_test_case_values(cases=cases) == test_case.expected_case_values
 
 
 @pytest.mark.parametrize(
@@ -125,7 +232,7 @@ def test_given_sql_test_file_variants_when_parsing_then_it_returns_expected_raw_
 
         SELECT 1
         """,
-            expected_error_fragment="only supports `name` and `mode`; unsupported keys: chain",
+            expected_error_fragment="unsupported keys: chain",
         ),
         ParseSqlTestFileErrorTestCase(
             description="raises when the test name is blank",
@@ -190,6 +297,61 @@ def test_given_sql_test_file_variants_when_parsing_then_it_returns_expected_raw_
             description="rejects an unknown test mode",
             contents="TEST (mode integration);\n\nSELECT 1\n",
             expected_error_fragment="mode.*must be one of",
+        ),
+        ParseSqlTestFileErrorTestCase(
+            description="rejects parameters without cases",
+            contents="TEST (parameters (status string));\n\nSELECT 1\n",
+            expected_error_fragment="must define `parameters` and `cases` together",
+        ),
+        ParseSqlTestFileErrorTestCase(
+            description="rejects duplicate parameter names",
+            contents=(
+                "TEST (parameters (status string, status string), "
+                'cases (one (status "open")));\nSELECT 1\n'
+            ),
+            expected_error_fragment="duplicate key 'status'",
+        ),
+        ParseSqlTestFileErrorTestCase(
+            description="rejects duplicate case names",
+            contents=(
+                "TEST (parameters (status string), cases ("
+                'one (status "open"), one (status "closed")));\nSELECT 1\n'
+            ),
+            expected_error_fragment="duplicate key 'one'",
+        ),
+        ParseSqlTestFileErrorTestCase(
+            description="rejects missing case parameters",
+            contents=(
+                "TEST (parameters (status string, expected string), "
+                'cases (one (status "open")));\nSELECT 1\n'
+            ),
+            expected_error_fragment="missing parameters: expected",
+        ),
+        ParseSqlTestFileErrorTestCase(
+            description="rejects undeclared case parameters",
+            contents=(
+                "TEST (parameters (status string), "
+                'cases (one (status "open", expected "open")));\nSELECT 1\n'
+            ),
+            expected_error_fragment="undeclared parameters: expected",
+        ),
+        ParseSqlTestFileErrorTestCase(
+            description="rejects incompatible typed values",
+            contents=('TEST (parameters (count integer), cases (one (count "1")));\nSELECT 1\n'),
+            expected_error_fragment="has type str; expected integer",
+        ),
+        ParseSqlTestFileErrorTestCase(
+            description="rejects null for non-nullable parameters",
+            contents="TEST (parameters (status string), cases (one (status null)));\nSELECT 1\n",
+            expected_error_fragment="is not nullable",
+        ),
+        ParseSqlTestFileErrorTestCase(
+            description="rejects malformed case names",
+            contents=(
+                "TEST (parameters (status string), "
+                'cases ("not valid" (status "open")));\nSELECT 1\n'
+            ),
+            expected_error_fragment="expected key",
         ),
     ],
     ids=lambda case: case.description,
