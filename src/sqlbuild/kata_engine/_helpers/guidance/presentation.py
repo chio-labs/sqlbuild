@@ -66,4 +66,14 @@ def format_rule_text(*, rule: KataRule, config: KataConfig | None = None) -> str
             lines.append(f"- {option.name}: default={option.default!r} ({option.description})")
     if config is not None and rule.code.startswith("SQBKX"):
         lines.extend(("", "Effective thresholds:", *format_threshold_lines(config=config)))
+    if config is not None and rule.code.startswith("SQBKT"):
+        lines.extend(
+            (
+                "",
+                "Effective SQL test paths:",
+                "- Unit tests: tests/unit/",
+                "- Scenarios: tests/scenarios/",
+                f"- Cross-domain pipelines: tests/unit/{config.sql_tests.pipeline_directory}/",
+            )
+        )
     return "\n".join(lines)

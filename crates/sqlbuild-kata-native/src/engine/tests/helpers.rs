@@ -1,6 +1,8 @@
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
+use crate::engine::main::evaluate::evaluate_json;
+
 pub(crate) fn request(project_dir: &TempDir, config: &Value) -> String {
     json!({
         "version": 1,
@@ -133,4 +135,72 @@ pub(crate) fn request_with_scope(scope: Value) -> Value {
         "project_fingerprint": null,
         "scope_index": scope
     })
+}
+
+pub(crate) fn sql_test_policy_evaluation(
+    project_dir: &TempDir,
+    code: &str,
+    tests: Value,
+    scenarios: Value,
+    scope_index: Value,
+    extra_config: Value,
+) -> Result<Value, String> {
+    let mut config = json!({
+        "select": [code],
+        "cache": {"enabled": false}
+    });
+    config
+        .as_object_mut()
+        .expect("base policy config is an object")
+        .extend(
+            extra_config
+                .as_object()
+                .expect("extra policy config is an object")
+                .clone(),
+        );
+    let request = json!({
+        "version": 1,
+        "project_dir": project_dir.path(),
+        "config": config,
+        "models": [],
+        "sql_tests": tests,
+        "sql_scenarios": scenarios,
+        "scope_index": scope_index
+    });
+    serde_json::from_str(&evaluate_json(&request.to_string())?).map_err(|error| error.to_string())
+}
+
+pub(crate) fn sql_test_fact(path: &str, name: Option<&str>, targets: Value) -> Value {
+    json!({
+        "source_path": path,
+        "ownership_root": "tests/unit",
+        "block_index": 1,
+        "name": name.unwrap_or("test_orders"),
+        "explicit_name": name,
+        "mode": "model",
+        "expected_model_names": targets,
+        "assertion_names": [],
+        "assertion_target_model_names": [],
+        "target_model_names": targets,
+        "tested_resources": []
+    })
+}
+
+pub(crate) fn cached_sql_test_policy_request(project_dir: &TempDir, name: Option<&str>) -> String {
+    json!({
+        "version": 1,
+        "project_dir": project_dir.path(),
+        "project_fingerprint": "compiler-project-v1",
+        "config": {"select": ["SQBKT004"], "cache": {"enabled": true}},
+        "models": [{
+            "name": "orders", "relative_path": "models/orders.sql",
+            "query_sql": "SELECT 1", "authored_sql": "SELECT 1"
+        }],
+        "sql_tests": [sql_test_fact(
+            "tests/unit/test_orders__paid.sql", name, json!(["orders"])
+        )],
+        "sql_scenarios": [],
+        "scope_index": scope_index()
+    })
+    .to_string()
 }

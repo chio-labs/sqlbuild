@@ -11,6 +11,9 @@ from types import MappingProxyType
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.compiler.compile._helpers.sql_tests.core import (
+    extract_assertion_target_model_names,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledDirectLogicSqlTestPayload,
@@ -605,6 +608,9 @@ def build_scenario_from_test_case(
         CompileSqlScenarioCte(name=f"__expected__{model_name}", sql_body="SELECT 1")
         for model_name in test_case.expected_model_names
     )
+    assertion_target_model_names: tuple[str, ...] = extract_assertion_target_model_names(
+        assertion_sql=test_case.assertion_sql_bodies
+    )
     return CompiledSqlScenario(
         key=scenario_key,
         name="revenue__customer_refund",
@@ -625,6 +631,10 @@ def build_scenario_from_test_case(
         dbt_ref_fixture_names=test_case.dbt_ref_fixture_names,
         expected_model_names=test_case.expected_model_names,
         assertion_names=tuple(cte.name.removeprefix("__assert__") for cte in assertion_ctes),
+        assertion_target_model_names=assertion_target_model_names,
+        target_model_names=tuple(
+            dict.fromkeys((*test_case.expected_model_names, *assertion_target_model_names))
+        ),
     )
 
 

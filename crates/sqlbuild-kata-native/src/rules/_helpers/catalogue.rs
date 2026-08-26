@@ -23,7 +23,8 @@ macro_rules! rule {
             guidance: None,
             implementation_fingerprint: env!("CARGO_PKG_VERSION").into(),
             enabled_by_default: true,
-            project_wide: matches!($code, "SQBKH101" | "SQBKH201" | "SQBKX201"),
+            project_wide: matches!($code, "SQBKH101" | "SQBKH201" | "SQBKX201")
+                || $code.starts_with("SQBKT"),
             custom: false,
         }
     };
@@ -219,6 +220,41 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
             "declaration-domain-placement",
             "public enum and constant files must live under a configured domain folder",
             "Move this declaration beneath enums/<domain>/ or constants/<domain>/.",
+        ),
+        rule!(
+            "SQBKT001",
+            "sql-tests",
+            "canonical-test-roots",
+            "SQL unit tests and scenarios must use their compiler-owned canonical roots",
+            "Move unit tests beneath tests/unit/ and scenarios beneath tests/scenarios/.",
+        ),
+        rule!(
+            "SQBKT002",
+            "sql-tests",
+            "test-filename-grammar",
+            "SQL test and scenario filenames must identify their subject and behavior",
+            "Use test_<subject>__<behavior>.sql for unit tests and <subject>__<behavior>.sql for scenarios.",
+        ),
+        rule!(
+            "SQBKT003",
+            "sql-tests",
+            "semantic-test-mirroring",
+            "SQL unit tests must mirror compiler-resolved resource ownership",
+            "Move the test to the reported directory derived from its resolved models or direct tested resource.",
+        ),
+        rule!(
+            "SQBKT004",
+            "sql-tests",
+            "structured-test-name",
+            "every SQL unit-test block must have a target-aware subject: expected behavior name",
+            "Add name \"<resolved subject>: <expected behavior>\" to this TEST header.",
+        ),
+        rule!(
+            "SQBKT101",
+            "sql-tests",
+            "scenario-business-description",
+            "scenario descriptions must identify a concrete business behavior",
+            "Write a non-generic SCENARIO description that states the business behavior under test.",
         ),
         rule!(
             "SQBKX001",

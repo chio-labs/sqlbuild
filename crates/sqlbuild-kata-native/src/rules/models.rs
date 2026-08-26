@@ -20,6 +20,12 @@ pub(crate) struct ModelEvaluationRequest<'a> {
 }
 
 #[derive(Debug)]
+pub(crate) struct ProjectEvaluationRequest<'a> {
+    pub(crate) selected: &'a BTreeMap<String, &'a RuleMetadata>,
+    pub(crate) request: &'a EvaluateRequest,
+}
+
+#[derive(Debug)]
 pub(crate) struct ResolvedThresholdOverride {
     pub(crate) matcher: GlobSet,
     pub(crate) thresholds: BTreeMap<String, u32>,

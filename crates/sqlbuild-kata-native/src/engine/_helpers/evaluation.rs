@@ -3,9 +3,10 @@ use crate::constants::{API_VERSION, TARGET_DIRECTORY};
 use crate::engine::_helpers::cache::Cache;
 use crate::models::{EvaluateRequest, EvaluateResponse, Fault, RuleMetadata};
 use crate::rules::main::{
-    assemble_catalogue, evaluate as rules, fingerprint, resolve_threshold_overrides, select,
+    assemble_catalogue, evaluate as rules, evaluate_project, fingerprint,
+    resolve_threshold_overrides, select,
 };
-use crate::rules::models::ModelEvaluationRequest;
+use crate::rules::models::{ModelEvaluationRequest, ProjectEvaluationRequest};
 use fensu_policy::lifecycle::constants::ANALYSIS_BATCH_SCHEMA_VERSION;
 use fensu_policy::lifecycle::errors::LifecycleError;
 use fensu_policy::lifecycle::models::{
@@ -63,7 +64,7 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
         .any(|rule| rule.project_wide || rule.code.starts_with("SQBKX") || rule.custom);
     let project_fingerprint = if project_aware {
         Some(match &request.project_fingerprint {
-            Some(value) => value.clone(),
+            Some(value) => fingerprint_request_facts(value.as_bytes(), &request)?,
             None => fingerprint_project(Path::new(&request.project_dir), &request)?,
         })
     } else {
@@ -74,7 +75,10 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
         .transpose()?;
     let mut models: Vec<_> = request.models.iter().collect();
     models.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
-    let mut raw_faults: Vec<Fault> = Vec::new();
+    let mut raw_faults = evaluate_project::evaluate_project(ProjectEvaluationRequest {
+        selected: &selected_by_code,
+        request: &request,
+    })?;
     let mut cache_hits = 0;
     let mut cache_misses = 0;
     for (model_index, model) in models.iter().enumerate() {
@@ -159,9 +163,20 @@ fn fingerprint_project(project_dir: &Path, request: &EvaluateRequest) -> Result<
             )
         })?);
     }
+    fingerprint_request_facts(&digest.finalize(), request)
+}
+
+fn fingerprint_request_facts(seed: &[u8], request: &EvaluateRequest) -> Result<String, String> {
+    let mut digest = Sha256::new();
+    digest.update(seed);
     digest.update(
-        serde_json::to_vec(&(&request.public_enums, &request.public_constants))
-            .map_err(|error| error.to_string())?,
+        serde_json::to_vec(&(
+            &request.public_enums,
+            &request.public_constants,
+            &request.sql_tests,
+            &request.sql_scenarios,
+        ))
+        .map_err(|error| error.to_string())?,
     );
     Ok(format!("{:x}", digest.finalize()))
 }

@@ -1,6 +1,12 @@
 pub(crate) const API_VERSION: u32 = 1;
 pub(crate) const SCOPE_METADATA_SCHEMA_VERSION: u32 = 1;
 pub(crate) const BUILT_IN_RULE_NAMESPACE: &str = "SQBK";
+pub(crate) const PIPELINE_SUBJECT: &str = "pipeline";
+pub(crate) const GENERIC_TEST_NAME: &str = "test";
+pub(crate) const GENERIC_WORKS_NAME: &str = "works";
+pub(crate) const GENERIC_BASIC_NAME: &str = "basic";
+pub(crate) const GENERIC_SCENARIO_NAME: &str = "scenario";
+pub(crate) const GENERIC_CASE_NAME: &str = "case";
 pub(crate) const CUSTOM_RULE_NAMESPACE: &str = "XSQBK";
 pub(crate) const TARGET_DIRECTORY: &str = "target";
 pub(crate) const REFERENCE_KIND: &str = "ref";

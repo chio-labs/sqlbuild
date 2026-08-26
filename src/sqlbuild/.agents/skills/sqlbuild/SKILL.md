@@ -3399,6 +3399,70 @@ min_tests_per_model = 1
 min_custom_rule_test_cases = 1
 ```
 
+#### SQL tests and scenarios
+
+The `SQBKT` family governs SQL authored under `tests/unit/` and `tests/scenarios/`. It consumes
+compiler-resolved test targets and resource ownership; it does not infer ownership from filenames
+or repeat compiler diagnostics for malformed tests.
+
+| Code | Check |
+|------|-------|
+| `SQBKT001` | Unit tests and scenarios use their compiler-owned canonical roots |
+| `SQBKT002` | Unit and scenario filenames identify their subject and behavior |
+| `SQBKT003` | Unit tests mirror resolved model, macro, UDF, or table-function ownership |
+| `SQBKT004` | Every `TEST` block has an explicit target-aware `subject: expected behavior` name |
+| `SQBKT101` | Scenario descriptions identify a concrete business behavior rather than generic case numbering |
+
+Select the family independently when adopting these conventions:
+
+```toml
+[kata]
+select = ["SQBKT"]
+```
+
+Every unit-test block, including the only block in a file, has an explicit name:
+
+```sql
+TEST (
+  name "stg_orders: excludes cancelled orders",
+);
+```
+
+The first colon separates a nonempty subject from nonempty behavior. Later colons are ordinary
+behavior prose. Single-model subjects match the resolved expected model, direct-mode subjects match
+the tested macro, UDF, or table function, and multi-model subjects name the common domain or an
+explicit pipeline. Generic values such as `test`, `works`, `basic`, and `case 1` are rejected without
+maintaining a verb allowlist.
+
+Unit filenames use either `test_<subject>.sql` or `test_<subject>__<behavior>.sql`. When a behavior
+suffix is present, it corresponds to the normalized behavior text; concise prefixes such as
+`excludes_cancelled` for `excludes cancelled orders` are valid. Scenario filenames omit the
+redundant prefix and use `<subject>__<behavior>.sql`:
+
+```text
+tests/unit/staging/test_stg_orders__excludes_cancelled.sql
+tests/scenarios/daily_revenue__multiple_orders.sql
+```
+
+Mirroring uses compiled relationships:
+
+- A single-model test mirrors the model parent below its compiler-owned model root.
+- A multi-model test mirrors the nearest common model-domain parent.
+- Models with no meaningful common parent use the configured pipeline directory.
+- Macro, UDF, and table-function tests mirror all resolved direct resource owners.
+- When ownership cannot be proven from compiler facts, Kata skips mirroring rather than guessing.
+
+The pipeline directory is relative to `tests/unit/`, normalized, and included in cache and generated
+guidance identity. The default is `pipelines`:
+
+```toml
+[kata.sql_tests]
+pipeline_directory = "chains/commerce"
+```
+
+This maps cross-domain tests to `tests/unit/chains/commerce/`. Absolute paths, traversal, repeated
+separators, and backslash paths are invalid configuration.
+
 ### Naming policy
 
 Naming and layer rules can use a closed project vocabulary:
@@ -11008,6 +11072,18 @@ models/mart/orders.sql:1:1 [SQBKS001] model SQL must keep transformation logic i
 Found 1 kata faults
 ```
 
+Project-phase SQL test policy also reports the authored test or scenario path. A finding can name
+the compiler-resolved target and exact destination:
+
+```text
+tests/unit/test_stg_orders.sql:1:1 [SQBKT003] unit test block 1 resolves to resources mirrored by tests/unit/staging/
+  Remediation: Move this test file beneath tests/unit/staging/.
+Found 1 kata faults
+```
+
+`SQBKT` rules run once per project, including projects with direct-resource tests but no models.
+Path-scoped exceptions and ignores match the reported test or scenario path.
+
 ### JSON output
 
 ```bash
@@ -11057,10 +11133,17 @@ Remediation: Move each __ref(...) or __source(...) into one named top-level impo
 
 Custom rules also show their source and declared option defaults.
 
+Inspecting an `SQBKT` rule also prints the effective canonical roots and configured cross-domain
+pipeline directory:
+
+```bash
+sqb kata rule SQBKT003
+```
+
 ### Generate policy skills
 
-Generate agent guidance from the active rules, options, thresholds, naming vocabulary, and scoped
-deviations:
+Generate agent guidance from the active rules, options, thresholds, naming vocabulary, SQL test
+paths, and scoped deviations:
 
 ```bash
 sqb kata skills

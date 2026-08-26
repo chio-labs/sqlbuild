@@ -13,8 +13,13 @@ from pathlib import Path
 from typing import Any, cast
 
 import sqlbuild._kata_native as _kata_native
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import (
+    CompiledModel,
+    CompiledProject,
+    CompiledSqlScenario,
+    CompiledSqlTest,
+)
+from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
 from sqlbuild.compiler.scopes.main.scope_metadata import scope_metadata_projection
 from sqlbuild.kata_engine._helpers.engine.custom_rule_evidence import (
@@ -50,6 +55,8 @@ def evaluate_native(
         "project_dir": str(project_dir.resolve()),
         "config": _config_payload(config),
         "models": _model_payloads(project),
+        "sql_tests": _sql_test_payloads(project),
+        "sql_scenarios": _sql_scenario_payloads(project),
         "public_enums": [
             _enum_payload(declaration) for declaration in project.public_enums.values()
         ],
@@ -188,12 +195,9 @@ def _model_payloads(project: CompiledProject) -> list[dict[str, object]]:
             )
     test_counts: dict[str, int] = {}
     for test in project.sql_tests:
-        names: frozenset[str] = frozenset(
-            dependency.name
-            for dependency in test.scope_deps
-            if dependency.resource_type == CompiledResourceType.MODEL
-        )
-        for name in names:
+        if test.mode is not SqlTestMode.MODEL:
+            continue
+        for name in test.target_model_names:
             test_counts[name] = test_counts.get(name, 0) + 1
     return [
         _model_payload(
@@ -203,6 +207,49 @@ def _model_payloads(project: CompiledProject) -> list[dict[str, object]]:
         )
         for model in project.models
     ]
+
+
+def _sql_test_payloads(project: CompiledProject) -> list[dict[str, object]]:
+    return [_sql_test_payload(test) for test in project.sql_tests]
+
+
+def _sql_test_payload(test: CompiledSqlTest) -> dict[str, object]:
+    return {
+        "source_path": (test.source_path or test.test_file.relative_path).as_posix(),
+        "ownership_root": (test.ownership_root or test.test_file.ownership_root).as_posix(),
+        "block_index": test.block_index or test.test_block.test_index,
+        "name": test.name,
+        "explicit_name": test.explicit_name,
+        "mode": test.mode.value,
+        "expected_model_names": list(test.expected_model_names),
+        "assertion_names": list(test.assertion_names),
+        "assertion_target_model_names": list(test.assertion_target_model_names),
+        "target_model_names": list(test.target_model_names),
+        "tested_resources": [
+            {"kind": resource.kind.value, "name": resource.name}
+            for resource in test.tested_resources
+        ],
+    }
+
+
+def _sql_scenario_payloads(project: CompiledProject) -> list[dict[str, object]]:
+    return [_sql_scenario_payload(scenario) for scenario in project.sql_scenarios]
+
+
+def _sql_scenario_payload(scenario: CompiledSqlScenario) -> dict[str, object]:
+    description: object | None = scenario.scenario_file.header_values.get("description")
+    return {
+        "source_path": (scenario.source_path or scenario.scenario_file.relative_path).as_posix(),
+        "ownership_root": (
+            scenario.ownership_root or scenario.scenario_file.ownership_root
+        ).as_posix(),
+        "name": scenario.name,
+        "description": description if isinstance(description, str) else None,
+        "expected_model_names": list(scenario.expected_model_names),
+        "assertion_names": list(scenario.assertion_names),
+        "assertion_target_model_names": list(scenario.assertion_target_model_names),
+        "target_model_names": list(scenario.target_model_names),
+    }
 
 
 def _model_payload(

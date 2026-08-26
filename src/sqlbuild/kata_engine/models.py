@@ -172,6 +172,11 @@ class KataCacheConfig:
 
 
 @dataclass(frozen=True)
+class SqlTestPolicyConfig:
+    pipeline_directory: str = "pipelines"
+
+
+@dataclass(frozen=True)
 class KataConfig:
     select: tuple[str, ...] = ()
     ignore: tuple[str, ...] = ()
@@ -188,6 +193,7 @@ class KataConfig:
     retired_source_tokens: dict[str, str] = field(default_factory=dict)
     cte_name_whitelist: tuple[str, ...] = ()
     cte_name_denylist: tuple[str, ...] = ()
+    sql_tests: SqlTestPolicyConfig = field(default_factory=SqlTestPolicyConfig)
     cache: KataCacheConfig = field(default_factory=KataCacheConfig)
 
 
