@@ -7,15 +7,19 @@ import pytest
 from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros,
     find_macro_call_names,
+    load_project_macros,
 )
 from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
 )
+from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ExpandSqlMacrosErrorTestCase,
     ExpandSqlMacrosTestCase,
     FindMacroCallNamesTestCase,
+    LoadProjectMacrosErrorTestCase,
+    LoadProjectMacrosTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import build_loaded_macros
 
@@ -25,6 +29,130 @@ _MACRO_CONTEXT: MacroContext = MacroContext(
     target_name="dev",
     vars={"project_name": "demo"},
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadProjectMacrosTestCase(
+            description="exports only public ordinary functions owned by each macro module",
+            macro_files={
+                "macros/orders.py": """
+from pathlib import Path
+from urllib.parse import quote
+
+_DEFAULT_LIMIT = 10
+
+
+class _Formatter:
+    pass
+
+
+def _helper() -> str:
+    return "order_id"
+
+
+def order_columns() -> str:
+    return _helper()
+""".strip()
+                + "\n",
+            },
+            expected_macro_names=("order_columns",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_macro_modules_when_loading_then_exports_only_owned_public_functions(
+    test_case: LoadProjectMacrosTestCase,
+    tmp_path: Path,
+) -> None:
+    macro_files: list[DiscoveredMacroFile] = []
+    relative_path: str
+    contents: str
+    for relative_path, contents in test_case.macro_files.items():
+        file_path: Path = tmp_path / relative_path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(contents, encoding="utf-8")
+        macro_files.append(
+            DiscoveredMacroFile(
+                file_path=file_path,
+                relative_path=Path(relative_path),
+                contents=contents,
+            )
+        )
+
+    loaded_macros: dict[str, LoadedMacro] = load_project_macros(tuple(macro_files))
+
+    assert tuple(loaded_macros) == test_case.expected_macro_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadProjectMacrosErrorTestCase(
+            description="rejects an absolute import of another project macro before execution",
+            macro_files={
+                "macros/a_consumer.py": (
+                    "from pathlib import Path\n"
+                    "Path(__file__).parent.parent.joinpath('executed').touch()\n"
+                    "from macros.shared import shared_macro\n"
+                ),
+                "macros/shared.py": "def shared_macro() -> str:\n    return 'shared'\n",
+            },
+            expected_error_fragment="must not import project macro module 'macros.shared'",
+        ),
+        LoadProjectMacrosErrorTestCase(
+            description="rejects a relative import of another project macro before execution",
+            macro_files={
+                "macros/a_consumer.py": "from . import shared\n",
+                "macros/shared.py": "def shared_macro() -> str:\n    return 'shared'\n",
+            },
+            expected_error_fragment="must not import project macro module 'macros.shared'",
+        ),
+        LoadProjectMacrosErrorTestCase(
+            description="rejects an import of a package containing project macros",
+            macro_files={
+                "macros/a_consumer.py": "import macros\n",
+                "macros/shared.py": "def shared_macro() -> str:\n    return 'shared'\n",
+            },
+            expected_error_fragment="must not import project macro module 'macros'",
+        ),
+        LoadProjectMacrosErrorTestCase(
+            description="rejects public module owned constants",
+            macro_files={"macros/orders.py": "DEFAULT_LIMIT = 10\n"},
+            expected_error_fragment="declaration 'DEFAULT_LIMIT' must be underscore-private",
+        ),
+        LoadProjectMacrosErrorTestCase(
+            description="rejects public module owned classes",
+            macro_files={"macros/orders.py": "class Formatter:\n    pass\n"},
+            expected_error_fragment="declaration 'Formatter' must be underscore-private",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_macro_module_when_loading_then_rejects_before_execution(
+    test_case: LoadProjectMacrosErrorTestCase,
+    tmp_path: Path,
+) -> None:
+    macro_files: list[DiscoveredMacroFile] = []
+    relative_path: str
+    contents: str
+    for relative_path, contents in test_case.macro_files.items():
+        file_path: Path = tmp_path / relative_path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(contents, encoding="utf-8")
+        macro_files.append(
+            DiscoveredMacroFile(
+                file_path=file_path,
+                relative_path=Path(relative_path),
+                contents=contents,
+            )
+        )
+
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+        load_project_macros(tuple(macro_files))
+
+    assert (tmp_path / "executed").exists() is test_case.expected_marker_exists
 
 
 @pytest.mark.parametrize(

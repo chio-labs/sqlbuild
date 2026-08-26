@@ -599,6 +599,7 @@ class CompiledProject:
     materialization_files: tuple[DiscoveredMaterializationFile, ...] = field(default_factory=tuple)
     public_enums: dict[str, EnumDeclaration] = field(default_factory=dict)
     public_constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
+    loaded_macros: dict[str, LoadedMacro] = field(default_factory=dict)
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
 

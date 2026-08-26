@@ -479,6 +479,7 @@ def discover_macro_files(*, project_dir: Path) -> tuple[DiscoveredMacroFile, ...
             contents=file_path.read_text(encoding="utf-8"),
         )
         for file_path in sorted(macros_root.rglob("*.py"))
+        if file_path.stem != PYTHON_INIT_MODULE_STEM
     )
 
 

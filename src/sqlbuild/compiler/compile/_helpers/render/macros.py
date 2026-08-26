@@ -40,14 +40,19 @@ from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_te
 _CONTEXT: str = "Macro expansion"
 _LINE_COMMENT_TOKEN: str = "--"
 _BLOCK_COMMENT_TOKEN: str = "/*"
+_STAR_IMPORT_NAME: str = "*"
 _MACRO_SCAN_PATTERN: re.Pattern[str] = re.compile(r"@|--|/\*|'|\"|`")
 
 
 def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[str, LoadedMacro]:
     """Load discovered project macro functions into a collision-checked registry."""
 
-    loaded_macros: dict[str, LoadedMacro] = {}
+    module_names: frozenset[str] = frozenset(_macro_module_name(file) for file in macro_files)
     macro_file: DiscoveredMacroFile
+    for macro_file in macro_files:
+        _validate_macro_module(macro_file=macro_file, module_names=module_names)
+
+    loaded_macros: dict[str, LoadedMacro] = {}
     for macro_file in macro_files:
         module: ModuleType = _load_macro_module(macro_file=macro_file)
         attribute_name: str
@@ -55,7 +60,10 @@ def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[st
             if attribute_name.startswith("_"):
                 continue
             attribute_value: object = getattr(module, attribute_name)
-            if not callable(attribute_value):
+            if (
+                not inspect.isfunction(attribute_value)
+                or attribute_value.__module__ != module.__name__
+            ):
                 continue
             existing_macro: LoadedMacro | None = loaded_macros.get(attribute_name)
             if existing_macro is not None:
@@ -71,6 +79,99 @@ def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[st
                 function=attribute_value,
             )
     return loaded_macros
+
+
+def _macro_module_name(macro_file: DiscoveredMacroFile) -> str:
+    return ".".join(macro_file.relative_path.with_suffix("").parts)
+
+
+def _validate_macro_module(
+    *, macro_file: DiscoveredMacroFile, module_names: frozenset[str]
+) -> None:
+    try:
+        module_ast: ast.Module = ast.parse(macro_file.contents, filename=str(macro_file.file_path))
+    except SyntaxError as error:
+        raise CompileInputError(
+            f"Failed to parse macros from '{macro_file.file_path}': {error}"
+        ) from error
+
+    statement: ast.stmt
+    for statement in module_ast.body:
+        imported_module_names: tuple[str, ...] = _imported_module_names(
+            statement=statement,
+            current_module_name=_macro_module_name(macro_file),
+        )
+        matched_module_names: tuple[str, ...] = tuple(
+            sorted(
+                (
+                    name
+                    for name in imported_module_names
+                    if any(
+                        module_name == name or module_name.startswith(f"{name}.")
+                        for module_name in module_names
+                    )
+                ),
+                key=lambda name: (name not in module_names, -len(name), name),
+            )
+        )
+        if matched_module_names:
+            raise CompileInputError(
+                f"Macro module '{macro_file.relative_path}' must not import project macro module "
+                f"'{matched_module_names[0]}'"
+            )
+        public_declaration_name: str | None = _public_non_function_declaration_name(statement)
+        if public_declaration_name is not None:
+            raise CompileInputError(
+                f"Macro module '{macro_file.relative_path}' declaration "
+                f"'{public_declaration_name}' must be underscore-private"
+            )
+
+
+def _imported_module_names(*, statement: ast.stmt, current_module_name: str) -> tuple[str, ...]:
+    if isinstance(statement, ast.Import):
+        return tuple(alias.name for alias in statement.names)
+    if not isinstance(statement, ast.ImportFrom):
+        return ()
+
+    base_module_name: str = statement.module or ""
+    if statement.level:
+        current_package_parts: list[str] = current_module_name.split(".")[:-1]
+        retained_part_count: int = len(current_package_parts) - statement.level + 1
+        base_parts: list[str] = current_package_parts[: max(retained_part_count, 0)]
+        if base_module_name:
+            base_parts.extend(base_module_name.split("."))
+        base_module_name = ".".join(base_parts)
+    names: list[str] = []
+    if base_module_name:
+        names.append(base_module_name)
+    alias: ast.alias
+    for alias in statement.names:
+        if alias.name == _STAR_IMPORT_NAME:
+            continue
+        imported_parts: list[str] = [base_module_name] if base_module_name else []
+        imported_parts.append(alias.name)
+        names.append(".".join(imported_parts))
+    return tuple(names)
+
+
+def _public_non_function_declaration_name(statement: ast.stmt) -> str | None:
+    if isinstance(statement, ast.ClassDef) and not statement.name.startswith("_"):
+        return statement.name
+    if isinstance(statement, ast.TypeAlias) and isinstance(statement.name, ast.Name):
+        return statement.name.id if not statement.name.id.startswith("_") else None
+    assignment_names: tuple[str, ...] = ()
+    if isinstance(statement, ast.Assign):
+        names: list[str] = []
+        target: ast.expr
+        for target in statement.targets:
+            node: ast.AST
+            for node in ast.walk(target):
+                if isinstance(node, ast.Name):
+                    names.append(node.id)
+        assignment_names = tuple(names)
+    elif isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
+        assignment_names = (statement.target.id,)
+    return next((name for name in assignment_names if not name.startswith("_")), None)
 
 
 def expand_sql_macros(

@@ -246,6 +246,7 @@ def assemble_compiled_project(
         materialization_files=inputs.discovered_inputs.materialization_files,
         public_enums=inputs.public_enums,
         public_constants=inputs.public_constants,
+        loaded_macros=inputs.loaded_macros,
         diagnostics=inputs.diagnostics,
         external_sql_reference_resolver=inputs.external_sql_reference_resolver,
     )

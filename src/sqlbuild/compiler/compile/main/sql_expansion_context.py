@@ -9,7 +9,7 @@ from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_model_declaration_indexes,
     build_public_declaration_indexes,
 )
-from sqlbuild.compiler.compile.main.load_macros import load_macros
+from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
     ConstantDeclaration,
     DeclarationResolutionContext,
@@ -46,7 +46,7 @@ def build_sql_expansion_context(
         target_config=None,
         cli_vars={} if cli_vars is None else cli_vars,
     )
-    loaded_macros: dict[str, LoadedMacro] = load_macros(discovered_inputs.macro_files)
+    loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
     enums: dict[str, EnumDeclaration]
     constants: dict[str, ConstantDeclaration]
     enums, constants = build_public_declaration_indexes(discovered_inputs=discovered_inputs)

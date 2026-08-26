@@ -150,6 +150,16 @@ def test_given_project_when_linting_expanded_sql_then_positions_are_authored(
             },
             expected_message_fragment="SQLBUILD_ABSENT_VAR",
         ),
+        LintCompileFailureTestCase(
+            description="project macro imports fail before lint expansion",
+            project_files={
+                "sqlbuild_project.toml": PROJECT_TOML,
+                "macros/orders.py": "from macros.shared import shared_macro\n",
+                "macros/shared.py": "def shared_macro() -> str:\n    return 'order_id'\n",
+                "models/demo.sql": f"{HEADER}SELECT 1 AS x\n",
+            },
+            expected_message_fragment="must not import project macro module 'macros.shared'",
+        ),
     ],
     ids=lambda case: case.description,
 )

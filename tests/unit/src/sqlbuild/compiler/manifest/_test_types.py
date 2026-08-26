@@ -4,7 +4,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    LoadedMacro,
 )
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 
@@ -14,7 +13,6 @@ class ManifestTopLevelTestCase:
     description: str
     project: CompiledProject
     plan_output: PlanOutput
-    loaded_macros: dict[str, LoadedMacro]
     project_name: str
     adapter_type: str
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]

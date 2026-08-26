@@ -6,6 +6,13 @@ from sqlbuild.sql_values.types import CollectionRendering
 
 
 @dataclass(frozen=True)
+class DiscoverMacroFilesTestCase:
+    description: str
+    files: dict[str, str]
+    expected_relative_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DeferredModelOutputLocationTestCase:
     description: str
     expected_extract_implicit_alias_columns: bool

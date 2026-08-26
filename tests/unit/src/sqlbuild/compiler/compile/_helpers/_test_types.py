@@ -27,6 +27,21 @@ class FindMatchingPathDefaultTestCase:
 
 
 @dataclass(frozen=True)
+class LoadProjectMacrosTestCase:
+    description: str
+    macro_files: dict[str, str]
+    expected_macro_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LoadProjectMacrosErrorTestCase:
+    description: str
+    macro_files: dict[str, str]
+    expected_error_fragment: str
+    expected_marker_exists: bool = False
+
+
+@dataclass(frozen=True)
 class ExpandSqlMacrosTestCase:
     description: str
     macro_file_contents: str

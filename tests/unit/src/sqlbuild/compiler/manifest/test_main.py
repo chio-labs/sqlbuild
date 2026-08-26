@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -137,7 +138,6 @@ _SOURCE_FIXTURES: dict[str, Any] = {
             plan_output=build_test_plan_output(
                 model_entries=(build_test_plan_entry(name="orders"),),
             ),
-            loaded_macros={},
             project_name=_PROJECT,
             adapter_type=_ADAPTER,
             upstream_deps={},
@@ -159,7 +159,6 @@ _SOURCE_FIXTURES: dict[str, Any] = {
             plan_output=build_test_plan_output(
                 model_entries=(build_test_plan_entry(name="orders"),),
             ),
-            loaded_macros={},
             project_name=_PROJECT,
             adapter_type=_ADAPTER,
             upstream_deps={},
@@ -180,7 +179,6 @@ def test_given_project_when_building_manifest_then_produces_correct_structure(
     result: dict[str, Any] = run_manifest(
         project=test_case.project,
         plan_output=test_case.plan_output,
-        loaded_macros=test_case.loaded_macros,
         project_name=test_case.project_name,
         adapter_type=test_case.adapter_type,
         upstream_deps=test_case.upstream_deps,
@@ -396,7 +394,6 @@ def test_given_model_when_building_manifest_then_produces_correct_node(
     result: dict[str, Any] = run_manifest(
         project=project,
         plan_output=plan_output,
-        loaded_macros={},
         project_name=test_case.project_name,
         adapter_type=_ADAPTER,
         upstream_deps={},
@@ -488,7 +485,6 @@ def test_given_source_when_building_manifest_then_produces_correct_node(
     result: dict[str, Any] = run_manifest(
         project=project,
         plan_output=plan_output,
-        loaded_macros={},
         project_name=test_case.project_name,
         adapter_type=_ADAPTER,
         upstream_deps={},
@@ -535,7 +531,6 @@ def test_given_seed_when_building_manifest_then_produces_correct_node(
     result: dict[str, Any] = run_manifest(
         project=project,
         plan_output=plan_output,
-        loaded_macros={},
         project_name=test_case.project_name,
         adapter_type=_ADAPTER,
         upstream_deps={},
@@ -626,7 +621,6 @@ def test_given_deps_when_building_manifest_then_parent_map_correct(
     result: dict[str, Any] = run_manifest(
         project=project,
         plan_output=plan_output,
-        loaded_macros={},
         project_name=test_case.project_name,
         adapter_type=_ADAPTER,
         upstream_deps=upstream,
@@ -667,13 +661,14 @@ def test_given_macro_when_building_manifest_then_macro_node_present(
         raw_source=test_case.expected_macro_sql,
         function=lambda: "SELECT 1",
     )
-    project: CompiledProject = build_test_project()
+    project: CompiledProject = build_test_project(
+        loaded_macros={test_case.expected_name: macro}
+    )
     plan_output: PlanOutput = build_test_plan_output()
 
     result: dict[str, Any] = run_manifest(
         project=project,
         plan_output=plan_output,
-        loaded_macros={test_case.expected_name: macro},
         project_name=test_case.project_name,
         adapter_type=_ADAPTER,
         upstream_deps={},
@@ -724,7 +719,6 @@ def test_given_audit_when_building_manifest_then_produces_test_node(
     result: dict[str, Any] = run_manifest(
         project=project,
         plan_output=plan_output,
-        loaded_macros={},
         project_name=test_case.project_name,
         adapter_type=_ADAPTER,
         upstream_deps={},
@@ -784,7 +778,6 @@ def test_given_sql_test_when_building_manifest_then_produces_test_node(
     result: dict[str, Any] = run_manifest(
         project=project,
         plan_output=plan_output,
-        loaded_macros={},
         project_name=test_case.project_name,
         adapter_type=_ADAPTER,
         upstream_deps={},
@@ -904,10 +897,10 @@ def test_given_full_project_when_building_manifest_then_validates_against_dbt_sc
         function=lambda: "SELECT 1",
     )
 
+    project = replace(project, loaded_macros={"my_macro": macro})
     result: dict[str, Any] = run_manifest(
         project=project,
         plan_output=plan_output,
-        loaded_macros={"my_macro": macro},
         project_name=test_case.project_name,
         adapter_type=test_case.adapter_type,
         upstream_deps=upstream,
