@@ -49,6 +49,7 @@ from sqlbuild.compiler.scopes.models import (
     ScopeIndex,
     ScopeLookup,
     UsageRecord,
+    VisibilityRecord,
 )
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
@@ -208,6 +209,8 @@ class DeclarationResolutionContext:
     constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
     inaccessible_enums: dict[str, DeclarationRecord] = field(default_factory=dict)
     inaccessible_constants: dict[str, DeclarationRecord] = field(default_factory=dict)
+    enum_visibility: dict[str, tuple[VisibilityRecord, ...]] = field(default_factory=dict)
+    constant_visibility: dict[str, tuple[VisibilityRecord, ...]] = field(default_factory=dict)
     macros: dict[str, LoadedMacro] = field(default_factory=dict)
     macro_records: dict[str, DeclarationRecord] = field(default_factory=dict)
     inaccessible_macros: dict[str, DeclarationRecord] = field(default_factory=dict)
@@ -461,6 +464,7 @@ class CompileSqlScenarioInput:
     dbt_ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
     expected_model_names: tuple[str, ...] = field(default_factory=tuple)
     assertion_names: tuple[str, ...] = field(default_factory=tuple)
+    declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -747,6 +751,7 @@ class CompileSqlTestInput:
     payload: CompileModelSqlTestInputPayload | CompileDirectLogicSqlTestInputPayload = field(
         default_factory=CompileModelSqlTestInputPayload
     )
+    declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

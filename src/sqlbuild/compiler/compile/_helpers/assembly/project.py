@@ -258,14 +258,18 @@ def assemble_compiled_project(
         loaded_macros=inputs.loaded_macros,
         diagnostics=inputs.diagnostics,
         external_sql_reference_resolver=inputs.external_sql_reference_resolver,
-        scope_index=_scope_index_with_macro_usages(inputs=inputs),
+        scope_index=_scope_index_with_compile_usages(inputs=inputs),
     )
 
 
-def _scope_index_with_macro_usages(*, inputs: CompileProjectInputs) -> ScopeIndex:
+def _scope_index_with_compile_usages(*, inputs: CompileProjectInputs) -> ScopeIndex:
     collected_usages: list[UsageRecord] = []
     for model_input in inputs.model_inputs:
         collected_usages.extend(model_input.macro_usages)
+    for test_input in inputs.test_inputs:
+        collected_usages.extend(test_input.declaration_usages)
+    for scenario_input in inputs.scenario_inputs:
+        collected_usages.extend(scenario_input.declaration_usages)
     usages: tuple[UsageRecord, ...] = tuple(dict.fromkeys(collected_usages))
     if not usages:
         return inputs.scope_index

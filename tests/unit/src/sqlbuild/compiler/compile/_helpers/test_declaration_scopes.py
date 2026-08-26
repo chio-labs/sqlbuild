@@ -8,16 +8,30 @@ from typing import cast
 import pytest
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
-from sqlbuild.compiler.compile.models import CompileModelInput, CompileProjectInputs
+from sqlbuild.compiler.compile.models import (
+    CompiledProject,
+    CompileModelInput,
+    CompileProjectInputs,
+)
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSourceFile,
     SqlHookEntry,
 )
+from sqlbuild.compiler.scopes.main._scope_metadata_json import scope_metadata_json
+from sqlbuild.compiler.scopes.models import (
+    DeclarationIdentity,
+    ResourceIdentity,
+    UsageRecord,
+)
+from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, UsageKind
 from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
+    ExpectedModelDeclarationGrantTestCase,
+    RelationshipUsageTestCase,
     ScopedDeclarationCompileTestCase,
     ScopedDeclarationErrorTestCase,
     ScopedDeclarationSurfaceTestCase,
@@ -135,6 +149,33 @@ def test_given_scoped_declaration_when_compiling_model_then_only_lexically_visib
                 ),
             },
             ("known but inaccessible", "models/orders.sql", "tests/unit/orders.sql"),
+        ),
+        ScopedDeclarationErrorTestCase(
+            "filename resemblance without expected relationship",
+            {
+                "models/domain/_constants/value.sql": "CONSTANT (name model_value, value 9);",
+                "models/domain/orders.sql": "MODEL ();\nSELECT 1 AS value",
+                "tests/unit/orders.sql": (
+                    "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
+                    "__assert__valid AS (SELECT @const('model_value') WHERE FALSE) SELECT 1"
+                ),
+            },
+            ("known but inaccessible", "models/domain/_constants/value.sql"),
+        ),
+        ScopedDeclarationErrorTestCase(
+            "unrelated production scope is not granted",
+            {
+                "models/orders/orders.sql": "MODEL ();\nSELECT 1 AS value",
+                "models/customers/_constants/value.sql": (
+                    "CONSTANT (name customer_value, value 10);"
+                ),
+                "models/customers/customers.sql": "MODEL ();\nSELECT 1 AS value",
+                "tests/unit/check.sql": (
+                    "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
+                    "__expected__orders AS (SELECT @const('customer_value') AS value) SELECT 1"
+                ),
+            },
+            ("known but inaccessible", "models/customers/_constants/value.sql"),
         ),
     ),
     ids=lambda case: case.description,
@@ -259,6 +300,181 @@ def test_given_scoped_declaration_when_compiling_sql_surface_then_uses_authored_
     actual: str | None = test_case.result(inputs)
 
     assert actual == test_case.expected_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ExpectedModelDeclarationGrantTestCase(
+            description="single model inherited local constant and enum",
+            files={
+                "models/domain/_constants/inherited.sql": (
+                    "CONSTANT (name inherited_value, value 2);"
+                ),
+                "models/domain/_local_constants/local.sql": (
+                    "CONSTANT (name local_value, value 3);"
+                ),
+                "models/domain/_enums/state.sql": "ENUM (name state, members [OPEN, CLOSED]);",
+                "models/domain/orders.sql": "MODEL ();\nSELECT 1 AS value, 'OPEN' AS state",
+                "tests/unit/check.sql": (
+                    "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
+                    "__expected__orders AS (SELECT @const('inherited_value') + "
+                    "@const('local_value') AS value, @enum('state').OPEN AS state) SELECT 1"
+                ),
+            },
+            expected_sql_fragments=("SELECT 2 + 3 AS value", "'OPEN' AS state"),
+            expected_grants=(
+                ("constant:inherited_value", "model:orders", "test:check"),
+                ("constant:local_value", "model:orders", "test:check"),
+                ("enum:state", "model:orders", "test:check"),
+            ),
+        ),
+        ExpectedModelDeclarationGrantTestCase(
+            description="multiple expected models deterministic union",
+            files={
+                "models/a/_constants/a.sql": "CONSTANT (name a_value, value 4);",
+                "models/a/a.sql": "MODEL ();\nSELECT 4 AS value",
+                "models/b/_constants/b.sql": "CONSTANT (name b_value, value 5);",
+                "models/b/b.sql": "MODEL ();\nSELECT 5 AS value",
+                "tests/unit/check.sql": (
+                    "TEST ();\nWITH __ref__a AS (SELECT 1 AS value), "
+                    "__expected__b AS (SELECT @const('b_value') AS value), "
+                    "__expected__a AS (SELECT @const('a_value') AS value) SELECT 1"
+                ),
+            },
+            expected_sql_fragments=("SELECT 5 AS value", "SELECT 4 AS value"),
+            expected_grants=(
+                ("constant:a_value", "model:a", "test:check"),
+                ("constant:b_value", "model:b", "test:check"),
+            ),
+        ),
+        ExpectedModelDeclarationGrantTestCase(
+            description="test path visibility remains separate from model grant",
+            files={
+                "models/domain/_constants/model.sql": "CONSTANT (name model_value, value 6);",
+                "models/domain/orders.sql": "MODEL ();\nSELECT 1 AS value",
+                "tests/unit/_constants/test.sql": "CONSTANT (name test_value, value 7);",
+                "tests/unit/check.sql": (
+                    "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
+                    "__expected__orders AS (SELECT @const('model_value') + "
+                    "@const('test_value') AS value) SELECT 1"
+                ),
+            },
+            expected_sql_fragments=("SELECT 6 + 7 AS value",),
+            expected_grants=(("constant:model_value", "model:orders", "test:check"),),
+        ),
+        ExpectedModelDeclarationGrantTestCase(
+            description="model private declaration is not granted",
+            files={
+                "models/orders.sql": "MODEL (constants (_private 8));\nSELECT 1 AS value",
+                "tests/unit/check.sql": (
+                    "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
+                    "__expected__orders AS (SELECT 1 AS value) SELECT 1"
+                ),
+            },
+            expected_sql_fragments=("SELECT 1 AS value",),
+            expected_grants=(),
+        ),
+        ExpectedModelDeclarationGrantTestCase(
+            description="filename resemblance and no expected model grant nothing",
+            files={
+                "models/domain/_constants/value.sql": "CONSTANT (name model_value, value 9);",
+                "models/domain/orders.sql": "MODEL ();\nSELECT 1 AS value",
+                "tests/unit/orders.sql": (
+                    "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
+                    "__assert__valid AS (SELECT 1 WHERE FALSE) SELECT 1"
+                ),
+            },
+            expected_sql_fragments=("__assert__valid",),
+            expected_grants=(),
+        ),
+        ExpectedModelDeclarationGrantTestCase(
+            description="scenario expected model grant",
+            files={
+                "models/domain/_constants/value.sql": "CONSTANT (name scenario_value, value 10);",
+                "models/domain/orders.sql": "MODEL ();\nSELECT 1 AS value",
+                "tests/scenarios/check.sql": (
+                    "SCENARIO ();\nWITH __ref__orders AS (SELECT 1 AS value), "
+                    "__expected__orders AS (SELECT @const('scenario_value') AS value) SELECT 1"
+                ),
+            },
+            expected_sql_fragments=("SELECT 10 AS value",),
+            expected_grants=(("constant:scenario_value", "model:orders", "scenario:check"),),
+            input_collection="scenario_inputs",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_expected_models_when_compiling_then_public_declarations_are_granted_with_provenance(
+    test_case: ExpectedModelDeclarationGrantTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.files)
+
+    first: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+    second: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+    compiled: CompiledProject = assemble_project(inputs=first, skip_column_inference=True)
+    sql_body: str = getattr(first, test_case.input_collection)[0].sql_body
+    grants: tuple[tuple[str, str, str], ...] = tuple(
+        sorted(
+            (
+                f"{grant.declaration.kind.value}:{grant.declaration.name}",
+                f"{grant.through.kind.value}:{grant.through.name}",
+                f"{grant.resource.kind.value}:{grant.resource.name}",
+            )
+            for grant in first.scope_index.grants
+        )
+    )
+
+    assert all(fragment in sql_body for fragment in test_case.expected_sql_fragments)
+    assert grants == test_case.expected_grants
+    assert first.scope_index.completeness.relationships
+    assert first.scope_index == second.scope_index
+    assert scope_metadata_json(index=first.scope_index) == scope_metadata_json(
+        index=second.scope_index
+    )
+    assert compiled.scope_index.grants == first.scope_index.grants
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        RelationshipUsageTestCase(
+            description="expected model provenance is retained",
+            files={
+                "models/domain/_constants/value.sql": ("CONSTANT (name model_value, value 6);"),
+                "models/domain/orders.sql": "MODEL ();\nSELECT 1 AS value",
+                "tests/unit/check.sql": (
+                    "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
+                    "__expected__orders AS "
+                    "(SELECT @const('model_value') AS value) SELECT 1"
+                ),
+            },
+            expected_usage=UsageRecord(
+                consumer=ResourceIdentity(ResourceKind.TEST, "check"),
+                declaration=DeclarationIdentity(DeclarationKind.CONSTANT, "model_value"),
+                kind=UsageKind.RUNTIME,
+                through=ResourceIdentity(ResourceKind.MODEL, "orders"),
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_relationship_granted_reference_when_compiling_then_usage_retains_model_provenance(
+    test_case: RelationshipUsageTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.files,
+    )
+
+    inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+    compiled: CompiledProject = assemble_project(inputs=inputs, skip_column_inference=True)
+
+    assert test_case.expected_usage in compiled.scope_index.usages
 
 
 @pytest.mark.parametrize(

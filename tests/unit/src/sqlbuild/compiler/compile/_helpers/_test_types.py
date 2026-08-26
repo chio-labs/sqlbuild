@@ -12,6 +12,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, SqlTestMode
 from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.compiler.scopes.models import UsageRecord
 from sqlbuild.compiler.scopes.types import ScopeKind
 
 
@@ -145,6 +146,22 @@ class ScopedDeclarationSurfaceTestCase:
     files: dict[str, str]
     result: Callable[[CompileProjectInputs], str | None]
     expected_sql: str
+
+
+@dataclass(frozen=True)
+class ExpectedModelDeclarationGrantTestCase:
+    description: str
+    files: dict[str, str]
+    expected_sql_fragments: tuple[str, ...]
+    expected_grants: tuple[tuple[str, str, str], ...]
+    input_collection: str = "test_inputs"
+
+
+@dataclass(frozen=True)
+class RelationshipUsageTestCase:
+    description: str
+    files: dict[str, str]
+    expected_usage: UsageRecord
 
 
 @dataclass(frozen=True)

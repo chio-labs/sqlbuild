@@ -137,7 +137,12 @@ def declaration_sort_key(record: DeclarationRecord) -> tuple[str, ...]:
 
 
 def usage_sort_key(record: UsageRecord) -> tuple[str, ...]:
-    return (identity_key(record.consumer), identity_key(record.declaration), record.kind.value)
+    return (
+        identity_key(record.consumer),
+        identity_key(record.declaration),
+        record.kind.value,
+        identity_key(record.through) if record.through else "",
+    )
 
 
 def grant_sort_key(record: GrantRecord) -> tuple[str, ...]:

@@ -115,6 +115,7 @@ class UsageRecord:
     consumer: ResourceIdentity | DeclarationIdentity
     declaration: DeclarationIdentity
     kind: UsageKind = UsageKind.RUNTIME
+    through: ResourceIdentity | None = None
 
 
 @dataclass(frozen=True)

@@ -51,6 +51,21 @@ HEADER: str = 'MODEL (\n  materialized table,\n  description "ok"\n);\n'
             authored_sql='SELECT @const("value") AS value',
             expected_sql="SELECT 9 AS value",
         ),
+        ExpandedTypedConstantTestCase(
+            description="lint expansion uses expected model declaration grants",
+            project_files={
+                "sqlbuild_project.toml": PROJECT_TOML,
+                "models/domain/_constants/value.sql": "CONSTANT (name value, value 12);\n",
+                "models/domain/orders.sql": f"{HEADER}SELECT 1 AS value\n",
+                "tests/unit/other/orders.sql": (
+                    "TEST ();\nWITH __expected__orders AS "
+                    '(SELECT @const("value") AS value) SELECT 1\n'
+                ),
+            },
+            model_path="tests/unit/other/orders.sql",
+            authored_sql=('WITH __expected__orders AS (SELECT @const("value") AS value) SELECT 1'),
+            expected_sql="WITH __expected__orders AS (SELECT 12 AS value) SELECT 1",
+        ),
     ],
     ids=lambda case: case.description,
 )

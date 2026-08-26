@@ -18,9 +18,7 @@ from sqlbuild.compiler.compile._helpers.attachment.core import (
     build_seed_inputs,
     resolve_run_id,
 )
-from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import (
-    build_declaration_scope,
-)
+from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import build_declaration_scope
 from sqlbuild.compiler.compile._helpers.attachment.functions import build_sql_function_inputs
 from sqlbuild.compiler.compile._helpers.attachment.references import (
     validate_table_function_call_arities,

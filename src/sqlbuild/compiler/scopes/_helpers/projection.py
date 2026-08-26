@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from sqlbuild.compiler.scopes._helpers.identities import format_identity
 from sqlbuild.compiler.scopes.constants import SCOPE_METADATA_SCHEMA_VERSION
-from sqlbuild.compiler.scopes.models import DeclarationRecord, ResourceRecord, ScopeIndex
+from sqlbuild.compiler.scopes.models import (
+    DeclarationRecord,
+    GrantRecord,
+    ResourceRecord,
+    ScopeIndex,
+    UsageRecord,
+)
 from sqlbuild.compiler.scopes.types import JsonValue
 
 
@@ -21,6 +27,24 @@ def build_projection(*, index: ScopeIndex) -> dict[str, JsonValue]:
     resources: list[ResourceRecord] = sorted(
         index.resources,
         key=lambda item: (format_identity(identity=item.identity), item.path),
+    )
+    grants: list[GrantRecord] = sorted(
+        index.grants,
+        key=lambda item: (
+            format_identity(identity=item.resource),
+            format_identity(identity=item.declaration),
+            format_identity(identity=item.through),
+            item.kind.value,
+        ),
+    )
+    usages: list[UsageRecord] = sorted(
+        index.usages,
+        key=lambda item: (
+            format_identity(identity=item.consumer),
+            format_identity(identity=item.declaration),
+            item.kind.value,
+            format_identity(identity=item.through) if item.through is not None else "",
+        ),
     )
     return {
         "schema_version": SCOPE_METADATA_SCHEMA_VERSION,
@@ -40,6 +64,28 @@ def build_projection(*, index: ScopeIndex) -> dict[str, JsonValue]:
             for record in resources
         ],
         "declarations": [declaration_projection(record=record) for record in declarations],
+        "grants": [
+            {
+                "resource": format_identity(identity=record.resource),
+                "declaration": format_identity(identity=record.declaration),
+                "through": format_identity(identity=record.through),
+                "kind": record.kind.value,
+            }
+            for record in grants
+        ],
+        "usages": [
+            {
+                "consumer": format_identity(identity=record.consumer),
+                "declaration": format_identity(identity=record.declaration),
+                "kind": record.kind.value,
+                "through": (
+                    format_identity(identity=record.through)
+                    if record.through is not None
+                    else None
+                ),
+            }
+            for record in usages
+        ],
         "complete": index.completeness.complete,
         "completeness": {
             section.value: complete for section, complete in index.completeness.as_mapping().items()

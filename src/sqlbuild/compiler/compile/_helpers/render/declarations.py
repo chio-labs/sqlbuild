@@ -41,9 +41,11 @@ from sqlbuild.compiler.scopes.models import (
     DeclarationRecord,
     ResourceIdentity,
     ScopeIndex,
+    UsageRecord,
+    VisibilityRecord,
     VisibilityResolution,
 )
-from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind
+from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, UsageKind
 from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
 from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
@@ -142,7 +144,10 @@ def build_declaration_scope_resolver(
 
 
 def resolve_declaration_context(
-    *, resolver: DeclarationScopeResolver, file_path: Path
+    *,
+    resolver: DeclarationScopeResolver,
+    file_path: Path,
+    resource: ResourceIdentity | None = None,
 ) -> DeclarationResolutionContext:
     """Project canonical visibility for one authored path onto runtime declaration values."""
 
@@ -153,7 +158,7 @@ def resolve_declaration_context(
         except ValueError:
             target_path = file_path
     resolution: VisibilityResolution = resolve_scope_visibility(
-        lookup=resolver.lookup, target=target_path
+        lookup=resolver.lookup, target=resource or target_path
     )
     enums: dict[str, EnumDeclaration] = {}
     constants: dict[str, ConstantDeclaration] = {}
@@ -162,6 +167,7 @@ def resolve_declaration_context(
     macros: dict[str, LoadedMacro] = {}
     macro_records: dict[str, DeclarationRecord] = {}
     inaccessible_macros: dict[str, DeclarationRecord] = {}
+    visibility_by_declaration: dict[DeclarationIdentity, list[VisibilityRecord]] = {}
     if resolution.target.unknown:
         lexical_target_path: Path = target_path
         definition_record: DeclarationRecord | None = next(
@@ -185,6 +191,10 @@ def resolve_declaration_context(
         inaccessible_records: tuple[DeclarationRecord, ...] = tuple(
             resolver.lookup.declarations[item.declaration][0] for item in resolution.inaccessible
         )
+        for visible_record in resolution.visible:
+            visibility_by_declaration.setdefault(visible_record.declaration, []).append(
+                visible_record
+            )
     for visible in visible_records:
         value: EnumDeclaration | ConstantDeclaration | LoadedMacro | None = (
             resolver.projection.declarations.get(visible.identity)
@@ -203,19 +213,75 @@ def resolve_declaration_context(
             inaccessible_constants[record.identity.name] = record
         elif record.identity.kind is DeclarationKind.MACRO:
             inaccessible_macros[record.identity.name] = record
+    enum_visibility: dict[str, tuple[VisibilityRecord, ...]] = {}
+    constant_visibility: dict[str, tuple[VisibilityRecord, ...]] = {}
+    for record in visible_records:
+        records: tuple[VisibilityRecord, ...] = tuple(
+            visibility_by_declaration.get(record.identity, ())
+        )
+        if record.identity.kind is DeclarationKind.ENUM:
+            enum_visibility[record.identity.name] = records
+        elif record.identity.kind is DeclarationKind.CONSTANT:
+            constant_visibility[record.identity.name] = records
     return DeclarationResolutionContext(
         enums=enums,
         constants=constants,
         inaccessible_enums=inaccessible_enums,
         inaccessible_constants=inaccessible_constants,
+        enum_visibility=enum_visibility,
+        constant_visibility=constant_visibility,
         macros=macros,
         macro_records=macro_records,
         inaccessible_macros=inaccessible_macros,
     )
 
 
+def declaration_usage_records(
+    *, sql: str, resource: ResourceIdentity, declarations: DeclarationResolutionContext
+) -> tuple[UsageRecord, ...]:
+    """Collect declaration usages with path or expected-model provenance."""
+
+    usages: list[UsageRecord] = []
+    cursor: int = 0
+    while (reference_start := _find_next_reference_start(sql=sql, start=cursor)) is not None:
+        start_match: re.Match[str] | None = _DECLARATION_REFERENCE_START_PATTERN.match(
+            sql, reference_start
+        )
+        if start_match is None:
+            break
+        is_enum: bool = start_match.group("kind") == _ENUM_REFERENCE_KIND
+        match: re.Match[str] | None = (
+            _ENUM_REFERENCE_PATTERN.match(sql, reference_start)
+            if is_enum
+            else _CONSTANT_REFERENCE_PATTERN.match(sql, reference_start)
+        )
+        if match is None:
+            cursor = start_match.end()
+            continue
+        name: str = match.group("name")
+        visibility: tuple[VisibilityRecord, ...] = (
+            declarations.enum_visibility.get(name, ())
+            if is_enum
+            else declarations.constant_visibility.get(name, ())
+        )
+        for record in visibility:
+            usages.append(
+                UsageRecord(
+                    consumer=resource,
+                    declaration=record.declaration,
+                    kind=UsageKind.RUNTIME,
+                    through=record.through,
+                )
+            )
+        cursor = match.end()
+    return tuple(dict.fromkeys(usages))
+
+
 def resolve_declaration_expansion(
-    *, context: DeclarationExpansionContext, file_path: Path
+    *,
+    context: DeclarationExpansionContext,
+    file_path: Path,
+    resource: ResourceIdentity | None = None,
 ) -> DeclarationExpansionContext:
     """Return an expansion context scoped to one authored resource path."""
 
@@ -223,7 +289,11 @@ def resolve_declaration_expansion(
         return context
     return replace(
         context,
-        declarations=resolve_declaration_context(resolver=context.resolver, file_path=file_path),
+        declarations=resolve_declaration_context(
+            resolver=context.resolver,
+            file_path=file_path,
+            resource=resource,
+        ),
     )
 
 

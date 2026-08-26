@@ -82,6 +82,32 @@ def extract_sql_test_ctes(
     return _classify_sql_test_ctes(ctes=ctes, file_label=file_label, mode=mode)
 
 
+def extract_sql_test_expected_model_names(
+    *, sql: str, file_label: str, mode: SqlTestMode = DEFAULT_SQL_TEST_MODE
+) -> tuple[str, ...]:
+    """Extract explicit expected-model relationships without inspecting CTE bodies."""
+
+    if mode is not SqlTestMode.MODEL:
+        return ()
+    start: int = _skip_ignorable(sql=sql, start=0)
+    if _try_consume_keyword(sql=sql, start=start, keyword=SQL_WITH_KEYWORD) is None:
+        return ()
+    ctes: tuple[CompileSqlTestCte, ...] = _extract_sql_test_ctes_with_scanner(
+        sql=sql,
+        file_label=file_label,
+    )
+    return tuple(
+        _require_prefixed_name(
+            cte_name=cte.name,
+            prefix=EXPECTED_TEST_CTE_PREFIX,
+            label="__expected__<model>",
+            file_label=file_label,
+        )
+        for cte in ctes
+        if cte.name.startswith(EXPECTED_TEST_CTE_PREFIX)
+    )
+
+
 def _extract_sql_test_ctes_with_scanner(
     *, sql: str, file_label: str
 ) -> tuple[CompileSqlTestCte, ...]:

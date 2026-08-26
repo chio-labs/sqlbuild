@@ -64,6 +64,9 @@ def resolve_visibility(
     inaccessible: list[InaccessibleRecord] = []
     resource: ResourceRecord
     for resource in query.matches:
+        granted_declarations: set[DeclarationIdentity] = {
+            grant.declaration for grant in lookup.grants_by_resource.get(resource.identity, ())
+        }
         declaration: DeclarationRecord
         for declaration in lookup.index.declarations:
             positive: VisibilityReason | None = _visibility_reason(
@@ -71,7 +74,18 @@ def resolve_visibility(
             )
             if positive is not None:
                 visible.append(VisibilityRecord(resource.identity, declaration.identity, positive))
-            else:
+            if declaration.identity in granted_declarations:
+                visible.extend(
+                    VisibilityRecord(
+                        resource.identity,
+                        declaration.identity,
+                        VisibilityReason.EXPECTED_MODEL,
+                        grant.through,
+                    )
+                    for grant in lookup.grants_by_resource.get(resource.identity, ())
+                    if grant.declaration == declaration.identity
+                )
+            elif positive is None:
                 inaccessible.append(
                     InaccessibleRecord(
                         resource.identity,
