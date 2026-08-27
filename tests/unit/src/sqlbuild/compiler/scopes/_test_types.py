@@ -25,6 +25,19 @@ class PathNormalizationCase:
 
 
 @dataclass(frozen=True)
+class PathNormalizationCacheCase:
+    """Expected bounded-cache behavior for repeated path normalization."""
+
+    description: str
+    path: str
+    call_count: int
+    expected_hits: int
+    expected_misses: int
+    expected_max_size: int
+    expected_current_size: int
+
+
+@dataclass(frozen=True)
 class PathVisibilityCase:
     """One component-aware lexical visibility case."""
 

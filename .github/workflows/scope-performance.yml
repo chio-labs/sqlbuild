@@ -1,0 +1,53 @@
+name: Scope Performance
+
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scope-performance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    name: Large Scope Explorer benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            Cargo.lock
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Install Python
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: uv sync --locked --all-groups --all-extras
+      - name: Run large scope benchmark
+        env:
+          SQLBUILD_RUN_LARGE_SCOPE_BENCHMARK: "1"
+        run: |
+          mkdir -p /tmp/opencode
+          uv run pytest \
+            tests/e2e/src/sqlbuild/cli/commands/main/scope/test_scope_performance.py \
+            -m performance -vv -s --log-cli-level=INFO \
+            -o junit_family=legacy \
+            --junitxml=/tmp/opencode/scope-performance.xml
+      - name: Upload benchmark result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scope-performance-${{ github.run_id }}
+          path: /tmp/opencode/scope-performance.xml
+          if-no-files-found: error
+          retention-days: 90
