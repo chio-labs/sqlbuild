@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.62.2](https://github.com/chio-labs/sqlbuild/compare/v0.62.1...v0.62.2) (2026-08-27)
+
+
+### Documentation
+
+* **skills:** simplify declaration entry points ([#374](https://github.com/chio-labs/sqlbuild/issues/374)) ([c9a92dc](https://github.com/chio-labs/sqlbuild/commit/c9a92dce72b52196018b29c12a4160c7a1944ef5))
+
 ## [0.62.1](https://github.com/chio-labs/sqlbuild/compare/v0.62.0...v0.62.1) (2026-08-27)
 
 
