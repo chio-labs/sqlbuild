@@ -37,14 +37,13 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/models/hooks/sql`
 - `concepts/models/hooks/python`
 - `concepts/models/configuration`
-- `concepts/kata`
-- `concepts/kata/custom-rules`
-- `concepts/declaration-scopes`
-- `concepts/declaration-scopes/visibility`
-- `concepts/declaration-scopes/placement`
-- `concepts/enums-and-constants`
+- `concepts/enums`
+- `concepts/constants`
+- `concepts/constants/collections-and-rendering`
+- `concepts/enums/model-contracts`
+- `concepts/model-private-values`
 - `concepts/macros`
-- `concepts/declaration-scopes/explorer`
+- `concepts/macros/composition-and-context`
 - `concepts/interpolation`
 - `concepts/functions`
 - `concepts/incremental`
@@ -59,6 +58,12 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/selectors`
 - `concepts/column-lineage`
 - `concepts/diff`
+- `concepts/declaration-scopes`
+- `concepts/declaration-scopes/visibility`
+- `concepts/declaration-scopes/placement`
+- `concepts/declaration-scopes/explorer`
+- `concepts/kata`
+- `concepts/kata/custom-rules`
 - `concepts/python-nodes/overview`
 - `concepts/python-nodes/loaders`
 - `concepts/python-nodes/tasks`
@@ -112,6 +117,7 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `cli/promote`
 - `cli/rollback`
 - `cli/reconcile`
+- `concepts/enums-and-constants`
 
 ## Introduction
 
@@ -1214,7 +1220,7 @@ collection_rendering = "array"
 
 `collection_rendering` accepts `value_list` (the SQLBuild default) or `array`. A public constant's `render_as` field or a model-local `constant(...)` wrapper overrides the project setting. The complete precedence order is declaration override, project setting, then `value_list`.
 
-This setting does not make unsupported adapter features portable. In particular, SQL Server rejects native arrays, and BigQuery rejects nested arrays. See [Enums and Constants](/concepts/enums-and-constants#rendering-configuration) for syntax, adapter output, and value-list usage constraints.
+This setting does not make unsupported adapter features portable. In particular, SQL Server rejects native arrays, and BigQuery rejects nested arrays. See [Collections and Rendering](/concepts/constants/collections-and-rendering#project-default) for syntax, adapter output, and value-list usage constraints.
 
 ### Path defaults
 
@@ -1802,7 +1808,7 @@ NUMERIC '2.4700'
 
 BigQuery does not support arrays of arrays. A nested list or set requested with `render_as array` fails at compile time rather than producing invalid BigQuery SQL. Parenthesized `value_list` rendering remains available for ordinary scalar collections used with `IN`.
 
-See [Enums and Constants](/concepts/enums-and-constants#adapter-matrix) for declarations, rendering precedence, and the cross-adapter matrix.
+See [Collections and Rendering](/concepts/constants/collections-and-rendering#native-array-rendering) for declarations, rendering precedence, and the cross-adapter matrix.
 
 ## Databricks
 
@@ -1953,7 +1959,7 @@ JSON_QUERY(N'{"GB":"Great Britain"}')
 
 SQL Server has no supported first-class native array expression. Any list or set that resolves to `render_as array`, whether through its declaration or `[constants].collection_rendering`, fails at compile time. SQLBuild does not silently substitute a value list or quoted JSON string.
 
-See [Enums and Constants](/concepts/enums-and-constants#adapter-matrix) for declarations, rendering precedence, and the cross-adapter matrix.
+See [Collections and Rendering](/concepts/constants/collections-and-rendering#native-array-rendering) for declarations, rendering precedence, and the cross-adapter matrix.
 
 ### Per-target connections
 
@@ -2017,7 +2023,9 @@ sources:
 
 Expression sources are resolved at compile time. They're the escape hatch for anything the framework doesn't natively model: external tables, warehouse-specific syntax, function calls, or any other relation type that doesn't fit a standard table reference.
 
-Macros, constants, and enums in an inline expression resolve from the source definition's authored path under `sources/`. Scoped declaration directories beside or above one source definition do not leak into sibling source paths. See [Declaration Scopes](/concepts/declaration-scopes).
+An inline source expression uses macros, constants, and enums available from its source definition
+under `sources/`. Declarations limited to one source folder are not available in sibling folders.
+See [How Visibility Works](/concepts/declaration-scopes/visibility).
 
 ### Source audits
 
@@ -2785,7 +2793,7 @@ MODEL (
 
 This does not require, create, or reference a warehouse-native enum type. SQLBuild resolves string-valued enums to `VARCHAR` and integer-valued enums to `INTEGER`. Under `contract enforced`, it also generates an `accepted_values` audit for the declared members. Audit severity and timing follow normal audit configuration and materialization behavior. With the default error severity, it gates staged-table promotion and pre-DML delta paths; views and custom materializations may already have changed their relation when the audit runs.
 
-Enum member references such as `@enum("market_type").WIN` are a separate feature that render one validated SQL literal. See [Enums and Constants](/concepts/enums-and-constants#enum-typed-contracts) for the complete distinction and lowering behavior.
+Enum member references such as `@enum("market_type").WIN` are a separate feature that render one validated SQL literal. See [Enum Model Contracts](/concepts/enums/model-contracts) for the complete distinction and lowering behavior.
 
 ### Related policies
 
@@ -3022,7 +3030,9 @@ Both named and inline SQL hooks receive the invoking model's runtime context. Th
 
 For named hooks, SQLBuild first substitutes `@name` and `@'name'` arguments into the hook body. A supplied argument such as `relation: "@@CTX:destination.qualified"` therefore resolves to the invoking model's final target-overridden destination.
 
-Declaration visibility is lexical: an inline hook resolves macros, constants, and enums from the model file's path, while a named hook resolves them from its definition path under `hooks/sql/`. See [Visibility and Resolution](/concepts/declaration-scopes/visibility#which-path-resolves-sql).
+An inline hook uses macros, constants, and enums available to its model file. A named hook uses those
+available to its own file under `hooks/sql/`. See
+[How Visibility Works](/concepts/declaration-scopes/visibility#which-file-controls-visibility).
 
 `${...}` config-template syntax is not valid in SQL hooks.
 
@@ -3261,761 +3271,29 @@ See [Snapshots](/concepts/snapshots) for strategy combinations, defaults, and sa
 | `row_diff_exclude_columns` | Columns excluded from row-level comparison |
 | `row_diff_tolerances` | Numeric comparison tolerances |
 
-## Kata SQL Architecture Checks
+## Enums
 
-Source: `concepts/kata.mdx`
+Source: `concepts/enums.mdx`
 
-Enforce opt-in SQL architecture and model-shape policy over your compiled project.
+Define a fixed set of named string or integer values and use them safely in SQL.
 
-Kata is SQLBuild's opt-in SQL architecture policy. It compiles the project, then checks model
-structure, naming, dependency boundaries, joins, contracts, and test coverage. Built-in checks run
-offline: they do not execute warehouse SQL or rewrite source files. Findings have stable codes and
-concrete remediations.
+Enums give a name to a fixed set of allowed values. SQLBuild checks the enum and every member
+reference during compilation, then renders the selected value as a safe SQL literal.
 
-Kata is error-only: every retained finding blocks the command. Use it for conventions that a team
-has deliberately adopted, not as a collection of advisory style warnings.
+### Create an enum
 
-Tests codify behavioral expectations; Kata codifies architectural expectations for SQL models.
-For equivalent boundaries, repository structure, and code-shape checks in Python projects, see
-[Fensu](https://docs.fensu.dev/).
-
-### Where Kata fits
-
-| Command | Responsibility |
-|---------|----------------|
-| `sqb compile` | SQL validity, references, inferred columns, contracts, and lineage |
-| `sqb lint` / `sqb format` | SQL presentation and formatting |
-| `sqb kata` | Repository architecture and model-shape conventions |
-| `sqb test` | Transformation behavior |
-| `sqb audit` | Data quality against materialized data |
-
-Kata is a separate command. It is not run automatically by `compile` or `build`.
-
-### Enable Kata
-
-Commit the shared policy to `sqlbuild_project.toml`:
-
-```toml
-[kata]
-select = ["SQBK"]
-```
-
-This activates the complete standard policy. Start here, then use `ignore` to switch off conventions
-the repository is not ready to enforce.
-
-Kata evaluates no rules when `[kata].select` is empty. Prefixes select matching rules that are
-enabled by default; exact codes also select individually opt-in rules. All current built-ins are
-enabled by default, so `SQBK` selects the complete built-in catalogue.
-
-Rule selectors are case-sensitive prefixes. They do not use `*` wildcards:
-
-- Built-in rules use `SQBK<family><three digits>`, such as `SQBKS101`.
-- Custom rules use `XSQBK<family><three digits>`, such as `XSQBKP001`.
-- `select` activates rules; `ignore` removes matching rules from the active policy.
-- An exact code activates that rule even when it is opt-in.
-- The CLI `--select` and `--exclude` flags scope models, not rules.
-
-Inspect any built-in or configured custom rule without enabling it:
-
-```bash
-sqb kata rule SQBKS101
-```
-
-### Built-in rules
-
-All current built-ins form the standard policy and are enabled by matching prefixes.
-
-#### Structure
-
-| Code | Check |
-|------|-------|
-| `SQBKS000` | Standalone comments belong on the first inner line of a CTE |
-| `SQBKS001` | Transformation logic belongs in top-level CTEs |
-| `SQBKS002` | The terminal SELECT reads plainly from the final top-level CTE |
-| `SQBKS101` | Each `__ref` and `__source` is isolated in one dependency import CTE |
-| `SQBKS201` | `SELECT *` is restricted to dependency import CTEs |
-| `SQBKS202` | Positional set-operation branches enumerate their columns |
-| `SQBKS301` | CTEs are top-level, not nested |
-| `SQBKS302` | Recursive CTEs are not permitted |
-| `SQBKS401` | View materialization agrees with the `stg_v`, `int_v`, or `mart_v` marker |
-| `SQBKS501` | CTE names describe their contents |
-
-#### Layers and model grammar
-
-| Code | Check |
-|------|-------|
-| `SQBKL001` | Dependencies flow forward through the layer order |
-| `SQBKL101` | Qualified table dependencies use `__ref` or `__source` |
-| `SQBKR001` | Model names follow `<domain>__<layer>__<entity>[__<source>]` |
-| `SQBKR002` | Model layer names agree with their folders |
-| `SQBKR201` | Model source suffixes and source dependency names use approved, current tokens |
-| `SQBKR301` | Referenced model identifiers follow Kata model-name grammar |
-| `SQBKR401` | Models declare `contract enforced` |
-
-#### Joins
-
-| Code | Check |
-|------|-------|
-| `SQBKJ001` | Implicit comma joins are not permitted |
-| `SQBKJ002` | Cross joins require an exact, reasoned exception |
-| `SQBKJ101` | Non-cross joins declare `ON` or `USING` keys |
-
-#### Column naming and types
-
-| Code | Check |
-|------|-------|
-| `SQBKN001` | `is_`, `has_`, and `can_` columns are BOOLEAN |
-| `SQBKN002` | `*_at`, `*_ts`, and `*_timestamp` columns use timestamp types |
-| `SQBKN003` | `*_date` columns are DATE |
-
-These checks use declared contract columns, not inferred output columns.
-
-#### Decision hygiene
-
-| Code | Check |
-|------|-------|
-| `SQBKH001` | Enum comparisons use declared members and normalized operands |
-| `SQBKH002` | Non-canonical numeric decisions use named constants |
-| `SQBKH101` | Identical enum domains are consolidated |
-| `SQBKH201` | Public enum and constant files live under domain folders |
-
-`SQBKH001` requires direct comparisons to `@enum("<enum>").<MEMBER>`. Normalize controlled values
-upstream rather than wrapping either comparison operand. A direct source-side value may be
-normalized in the comparison because the project does not control source casing; the enum member
-must still remain unwrapped.
-
-#### Tests and coverage
-
-| Code | Check |
-|------|-------|
-| `SQBKX001` | Non-passthrough models meet the configured audit minimum |
-| `SQBKX002` | Non-passthrough models meet the configured SQL test minimum |
-| `SQBKX201` | Selected custom rules have statically discoverable public-harness test cases |
-
-Selecting a custom rule automatically adds `SQBKX201` unless the policy ignores it. This is a
-static check for conventional `RuleCase` and `evaluate_rule` usage; it does not execute the tests.
-Thresholds default to one and can be set to zero to disable the corresponding minimum:
-
-```toml
-[kata.thresholds]
-min_audits_per_model = 1
-min_tests_per_model = 1
-min_custom_rule_test_cases = 1
-```
-
-#### SQL tests and scenarios
-
-The `SQBKT` family governs SQL authored under `tests/unit/` and `tests/scenarios/`. It consumes
-compiler-resolved test targets and resource ownership; it does not infer ownership from filenames
-or repeat compiler diagnostics for malformed tests.
-
-| Code | Check |
-|------|-------|
-| `SQBKT001` | Unit tests and scenarios use their compiler-owned canonical roots |
-| `SQBKT002` | Unit and scenario filenames identify their subject and behavior |
-| `SQBKT003` | Unit tests mirror resolved model, macro, UDF, or table-function ownership |
-| `SQBKT004` | Every `TEST` block has an explicit target-aware `subject: expected behavior` name |
-| `SQBKT101` | Scenario descriptions identify a concrete business behavior rather than generic case numbering |
-
-Select the family independently when adopting these conventions:
-
-```toml
-[kata]
-select = ["SQBKT"]
-```
-
-Every unit-test block, including the only block in a file, has an explicit name:
-
-```sql
-TEST (
-  name "stg_orders: excludes cancelled orders",
-);
-```
-
-The first colon separates a nonempty subject from nonempty behavior. Later colons are ordinary
-behavior prose. Single-model subjects match the resolved expected model, direct-mode subjects match
-the tested macro, UDF, or table function, and multi-model subjects name the common domain or an
-explicit pipeline. Generic values such as `test`, `works`, `basic`, and `case 1` are rejected without
-maintaining a verb allowlist.
-
-Unit filenames use either `test_<subject>.sql` or `test_<subject>__<behavior>.sql`. When a behavior
-suffix is present, it corresponds to the normalized behavior text; concise prefixes such as
-`excludes_cancelled` for `excludes cancelled orders` are valid. Scenario filenames omit the
-redundant prefix and use `<subject>__<behavior>.sql`:
-
-```text
-tests/unit/staging/test_stg_orders__excludes_cancelled.sql
-tests/scenarios/daily_revenue__multiple_orders.sql
-```
-
-Mirroring uses compiled relationships:
-
-- A single-model test mirrors the model parent below its compiler-owned model root.
-- A multi-model test mirrors the nearest common model-domain parent.
-- Models with no meaningful common parent use the configured pipeline directory.
-- Macro, UDF, and table-function tests mirror all resolved direct resource owners.
-- When ownership cannot be proven from compiler facts, Kata skips mirroring rather than guessing.
-
-The pipeline directory is relative to `tests/unit/`, normalized, and included in cache and generated
-guidance identity. The default is `pipelines`:
-
-```toml
-[kata.sql_tests]
-pipeline_directory = "chains/commerce"
-```
-
-This maps cross-domain tests to `tests/unit/chains/commerce/`. Absolute paths, traversal, repeated
-separators, and backslash paths are invalid configuration.
-
-### Naming policy
-
-Naming and layer rules can use a closed project vocabulary:
-
-```toml
-[kata]
-domains = ["finance", "market"]
-approved_source_tokens = ["salesforce", "stripe"]
-cte_name_whitelist = ["finalized_rows"]
-cte_name_denylist = ["scratch_result"]
-
-[kata.retired_source_tokens]
-old_crm = "salesforce"
-```
-
-Valid Kata layers are `stg`, `stg_v`, `int_clean`, `int_v`, `int_enriched`, `mart`, and
-`mart_v`. Configuration supplies vocabulary to active rules; it does not activate them. When
-`SQBKR001` or `SQBKH201` is active, a non-empty `domains` list constrains model or declaration
-domains respectively.
-
-### Exceptions and scoped ignores
-
-Choose the narrowest mechanism that represents the policy:
-
-| Mechanism | Scope | Reason required | Stale-checked |
-|-----------|-------|-----------------|---------------|
-| `ignore` | Disable rules globally | No | No |
-| `rule_exceptions` | One exact rule and exact file | Yes | Yes |
-| `rule_ignores` | Rule prefixes or codes across path globs | Yes | No |
-| `select_star_allow` | Path-glob allowance for `SQBKS201` | Yes | No |
-
-```toml
-[[kata.rule_exceptions]]
-rule = "SQBKJ002"
-path = "models/mart/market__mart__matrix.sql"
-reason = "Intentional Cartesian product over a bounded dimension"
-
-[[kata.rule_ignores]]
-rules = ["SQBKS"]
-paths = ["models/legacy/**"]
-reason = "Legacy migration boundary"
-
-[[kata.select_star_allow]]
-paths = ["models/mart/*_export.sql"]
-reason = "Intentional passthrough export"
-```
-
-An exact exception fails when its active rule no longer produces a fault at that file, prompting
-the repository to remove obsolete exceptions. Broad migration boundaries and lone-star allowances
-remain reasoned but are intentionally not stale-checked.
-
-### Cache and CI
-
-Built-in policies use a persistent cache under `target/kata-cache`. Compiled model content, active
-rules, options, thresholds, naming vocabulary, and relevant project files participate in cache
-identity. Disable it when diagnosing cache behavior:
-
-```toml
-[kata.cache]
-enabled = false
-```
-
-Run Kata directly in CI. It exits `1` when faults remain:
-
-```bash
-sqb kata
-sqb kata --json
-```
-
-Generate agent guidance from the same resolved policy and verify that committed guidance remains
-fresh:
-
-```bash
-sqb kata skills
-sqb kata skills --check
-```
-
-Kata manages `.agents/skills/sqlbuild-kata/SKILL.md`,
-`.claude/skills/sqlbuild-kata/SKILL.md`, and `.opencode/skills/sqlbuild-kata/SKILL.md`. It refuses
-to overwrite divergent or unowned files.
-
-See [Custom Kata Rules](/concepts/kata/custom-rules) to encode repository-specific policy and the
-[Kata CLI reference](/cli/kata) for command output and exit behavior.
-
-## Custom Kata Rules
-
-Source: `concepts/kata/custom-rules.mdx`
-
-Define and test repository-owned SQL architecture rules with the public Kata API.
-
-Custom Kata rules extend the built-in policy when a repository has domain conventions that cannot
-be expressed by configuration alone. They use the same selection, suppression, deterministic
-ordering, and remediation output as built-ins.
-
-Custom rule codes use `XSQBK<family><three digits>`. Keep codes stable after adoption because they
-become part of configuration, CI output, and exceptions.
-
-### Define a rule
-
-```python
-from sqlbuild.kata import KataFault, RuleContext, kata
-
-@kata(
-    code="XSQBKP001",
-    family="prices",
-    slug="typed-currency",
-    message="price models must declare a currency column",
-    remediation="Declare currency in the MODEL columns contract.",
-)
-def typed_currency(*, model, ctx: RuleContext) -> list[KataFault]:
-    if any(column.name == "currency" for column in ctx.declared_columns):
-        return []
-    return [ctx.path_fault()]
-```
-
-The function signature is exactly two keyword-only arguments named `model` and `ctx`. Return an
-empty list when the model passes or one or more `KataFault` values when it fails.
-
-`RuleContext` exposes the compiled model, authored SQL, raw Polyglot AST, references, parsed model
-name, materialization, declared columns, audit and test counts, public declarations, active policy,
-and fault constructors. Repository files can be read safely through `project_read_text` and
-`project_glob`.
-
-### Load and select rules
-
-Load repository-owned files or dotted modules from `sqlbuild_project.toml`:
-
-```toml
-[kata]
-select = ["XSQBKP001"]
-rule_paths = ["kata/rules"]
-rule_modules = ["project_kata.rules"]
-```
-
-A directory in `rule_paths` is scanned recursively for Python files containing `@kata`. Dotted
-modules must resolve beneath the project root. Codes must be unique across built-in and custom
-rules.
-
-Custom rules require exact selectors by default. Set `enabled_by_default=True` on the decorator to
-include a rule in matching prefix selections. This does not activate Kata when
-`[kata].select` is empty.
-
-### Typed options
-
-Declare options with `RuleOption.boolean`, `integer`, `string`, `string_list`, or `integer_list`:
-
-```python
-from sqlbuild.kata import KataFault, RuleContext, RuleOption, kata
-
-REQUIRED_DOMAIN = RuleOption.string(
-    name="required_domain",
-    default="market",
-    description="Domain that owns price models",
-)
-
-@kata(
-    code="XSQBKP002",
-    family="prices",
-    slug="required-domain",
-    message="price models must belong to the configured domain",
-    remediation="Move or rename this model for the configured domain.",
-    options=(REQUIRED_DOMAIN,),
-)
-def required_domain(*, model, ctx: RuleContext) -> list[KataFault]:
-    parts = ctx.name_parts
-    if parts is not None and parts.domain == ctx.option(REQUIRED_DOMAIN):
-        return []
-    return [ctx.path_fault()]
-```
-
-Configure options under the exact rule code. Unknown rules, option names, or invalid values fail
-configuration:
-
-```toml
-[kata.rule_options.XSQBKP002]
-required_domain = "finance"
-```
-
-### Test every rule
-
-Use the public harness so tests exercise normal SQLBuild discovery, compilation, rule loading, and
-structured fault evaluation:
-
-```python
-from sqlbuild.kata import RuleCase, evaluate_rule
-
-from kata.rules.prices import typed_currency
-
-def test_missing_currency_faults() -> None:
-    result = evaluate_rule(
-        rule=typed_currency,
-        test_case=RuleCase(
-            description="missing currency faults",
-            source=(
-                "MODEL (materialized table);\n\n"
-                "WITH final AS (SELECT 1 AS price)\n"
-                "SELECT price FROM final\n"
-            ),
-            path="models/mart/market__mart__prices.sql",
-            expected_fault_count=1,
-        ),
-    )
-
-    assert result.fault_count == 1
-```
-
-`RuleCase.files` can add supporting project files and `RuleCase.config` supplies the rule's option
-values. Keep conventional `RuleCase` and `evaluate_rule` calls under `tests/` so `SQBKX201` can
-count statically discoverable harness cases. This coverage check does not execute the tests, so run
-the test suite separately in CI.
-
-### Execution and caching
-
-Selected custom rules execute in a bounded Python subprocess with a 30-second timeout. Exceptions
-are reported with the rule code and model path, and returned faults rejoin normal suppressions and
-deterministic ordering.
-
-Selecting any custom rule disables the model cache by default. To keep the built-in cache available,
-require hermetic custom rules explicitly:
-
-```toml
-[kata.cache]
-enabled = true
-require_cacheable = true
-```
-
-Cacheable rules may import supported pure modules such as `collections`, `dataclasses`, `enum`,
-`math`, `re`, `typing`, and `sqlbuild.kata`. Use `RuleContext` rather than direct filesystem calls.
-SQLBuild validates these constraints before evaluation.
-
-Custom findings are still recomputed on each invocation. `require_cacheable` preserves the native
-model cache around them; it does not cache custom subprocess output.
-
-Return to [Kata SQL Architecture Checks](/concepts/kata) for built-in rules, selectors, and
-exceptions.
-
-## Overview
-
-Source: `concepts/declaration-scopes.mdx`
-
-Place macros, enums, and constants where the SQL that owns them can see them.
-
-SQLBuild gives macros, enums, and constants lexical visibility based on the filesystem. Put shared
-vocabulary in a top-level declaration root, or place an underscored declaration directory beside
-the SQL that owns narrower vocabulary. The compiler resolves visibility, records usage, and checks
-that narrow declarations use the closest valid location.
-
-Declaration scopes require no TOML configuration.
-
-| Scope | Declaration form | Visibility |
-|-------|------------------|------------|
-| Project-wide | `macros/`, `constants/`, `enums/` | Every supported SQL surface |
-| Inherited | `_macros/`, `_constants/`, `_enums/` | Owning path and every descendant |
-| Exact-local | `_local_macros/`, `_local_constants/`, `_local_enums/` | Direct children of one owning path |
-| Model-private | Underscore-prefixed constants and enums in `MODEL()` | One model and its inline SQL hooks |
-
-### Read a scope tree
-
-The declaration directory's parent is its owning path:
-
-```text
-models/
-├── _constants/                 inherited throughout models/
-│   └── warehouse.sql
-└── commerce/
-    ├── _macros/                inherited throughout commerce/
-    │   └── currency.py
-    ├── _local_enums/           exact commerce/ directory only
-    │   └── grain.sql
-    ├── orders.sql              sees warehouse, currency, and grain
-    ├── finance/
-    │   ├── _macros/            inherited throughout finance/
-    │   │   └── tax.py
-    │   └── revenue.sql         sees warehouse, currency, and tax
-    └── fulfillment/
-        └── shipments.sql       sees warehouse and currency
-```
-
-Inherited declarations compose from every matching ancestor. They do not stop at the nearest
-declaration directory. Exact-local declarations do not flow into child directories.
-
-| Resource | Visible from the example tree | Not visible |
-|----------|-------------------------------|-------------|
-| `orders.sql` | Warehouse constant, commerce macro, commerce-local enum | Finance macro |
-| `finance/revenue.sql` | Warehouse constant, commerce macro, finance macro | Commerce-local enum |
-| `fulfillment/shipments.sql` | Warehouse constant, commerce macro | Commerce-local enum, finance macro |
-
-Declarations never flow upward, sideways into siblings, or out of their authored resource root.
-An inaccessible name produces a different compiler diagnostic from a name that does not exist.
-
-### Choose a scope
-
-| Consumer shape | Choose | Placement |
-|----------------|--------|-----------|
-| One model only | Model-private | In that model's `MODEL()` header |
-| One exact directory | Exact-local | Beside the consumers |
-| Multiple directories in one resource tree | Inherited | At their lowest common ancestor |
-| Multiple authored resource roots | Project-wide | Top-level declaration root |
-
-Public project-wide declarations are a deliberate stable API. SQLBuild does not ask you to narrow
-one merely because its current consumers happen to be close together. For narrow declarations, the
-compiler reports the exact required scope and destination when placement is too broad or too narrow.
-
-### Explore the feature
-
-    Learn which authored path controls resolution, how expected-model grants work, and why macro
-    dependencies resolve from their definition paths.
-    Understand genuine usage, closest placement, unused declarations, and move diagnostics.
-    Inspect a resource's scope chain, explain visibility, browse nearby declarations, and preview
-    moves offline.
-    Define typed domain vocabulary and model-private values.
-
-See [Python Macros](/concepts/macros) for macro authoring and lexical macro composition.
-See [Interpolation](/concepts/interpolation) for project, environment, and runtime context values;
-those are separate from declarations.
-
-## Visibility and Resolution
-
-Source: `concepts/declaration-scopes/visibility.mdx`
-
-Understand authored-path visibility, expected-model grants, and lexical macro resolution.
-
-SQLBuild resolves declarations from the path where SQL is authored. Visibility is a compiler fact;
-filenames, test placement, and runtime execution order do not create implicit relationships.
-
-### Authored resource roots
-
-Inherited and exact-local declaration directories may appear below these canonical roots:
-
-| Root | Authored SQL |
-|------|--------------|
-| `models/` | Model queries and inline model hooks |
-| `tests/unit/` | SQL unit tests |
-| `tests/scenarios/` | Scenario worlds and assertions |
-| `hooks/sql/` | Named SQL hooks |
-| `functions/sql/` | SQL UDFs and table functions |
-| `audits/` | Singular and generic audits |
-| `sources/` | Inline source expressions |
-
-Files may be organized recursively inside a declaration directory. That internal organization does
-not change the directory's owning path.
-
-### Which path resolves SQL
-
-    A model query and its inline SQL hooks resolve from the model file. Model-private constants and
-    enums are available only in that model's query and inline hooks.
-    Authored test or scenario SQL resolves from its file path. Expected-model relationships can add
-    public constants and enums through a separate compiler grant.
-    A named hook resolves from its definition under `hooks/sql/`. A SQL function resolves from its
-    definition under `functions/sql/`, even when a model invokes it elsewhere.
-    Audit SQL resolves from its audit definition. An inline source expression resolves from the
-    source definition under `sources/`.
-
-Named hook arguments and `@@CTX` values still describe the invoking model. Only declaration
-resolution comes from the named hook's definition path.
-
-### Expected-model grants
-
-A test or scenario has two distinct visibility sources:
-
-```text
-tests/unit/commerce/test_orders.sql
-|-- path scope
-|   |-- macros visible from the test path
-|   |-- enums visible from the test path
-|   `-- constants visible from the test path
-|
-`-- __expected__orders relationship
-    |-- grants public enums visible to orders
-    |-- grants public constants visible to orders
-    |-- does not grant macros
-    `-- does not grant model-private declarations
-```
-
-Multiple expected models contribute a deterministic union with provenance retained for every
-granting model. Public names remain globally unique, so grants cannot shadow one another.
-
-Only explicit expected-model relationships create grants. A matching filename, mirrored test path,
-mocked `__ref__`, or nearby model does not.
-
-### Macro lexical resolution
-
-Calls written directly in authored SQL resolve from that SQL's path, including nested argument calls:
-
-```sql
-@format_money(@net_amount("amount_cents"))
-```
-
-Both calls initially resolve from the path containing the expression. If `format_money` returns SQL
-containing another macro call, that emitted call resolves from `format_money`'s definition path:
-
-```text
-models/commerce/orders.sql
-`-- calls commerce/_macros/format_money.py
-    `-- emitted @currency_symbol() resolves from commerce/_macros/
-        `-- not from orders.sql or whichever model called format_money
-```
-
-This keeps macro dependencies lexical and statically trackable. Project macro modules must compose
-through `@macro()` calls rather than importing one another in Python. SQLBuild rejects inaccessible
-emitted dependencies and dependency cycles. A project-wide macro cannot depend on an inherited or
-exact-local macro because its top-level definition path cannot see narrower declarations.
-
-Generated manifest macro nodes expose declaration scope, owning path, and tracked macro dependencies.
-
-### Names and shadowing
-
-Every public name must be globally unique within its declaration kind. A narrower declaration
-cannot shadow a project-wide or ancestor declaration, even when their visible scopes do not overlap.
-
-Macro, constant, and enum namespaces remain independent. These may coexist because each reference
-identifies its kind:
-
-```sql
-@format_currency()
-@const("format_currency")
-@enum("format_currency").USD
-```
-
-Model-private constants and enums are different. Their names begin with exactly one underscore and
-their identities include the owning model, such as `enum:model:stg_orders._state`. They may repeat
-across models because they never enter the public namespace. Names beginning with `__` are reserved
-for SQLBuild.
-
-  See how compiler-recorded usage determines the closest valid declaration directory.
-
-## Placement and Usage
-
-Source: `concepts/declaration-scopes/placement.mdx`
-
-Use compiler-recorded consumers to place declarations at the closest valid scope.
-
-SQLBuild records resolved enum, constant, and macro use while expanding the complete project. It
-uses those relationships to reject unused declarations and validate the placement of narrow ones.
-
-### What counts as usage
-
-| Evidence | Counts as usage? |
-|----------|------------------|
-| Expanded model, hook, function, audit, source, test, or scenario SQL | Yes |
-| Generated enum contracts and enum-backed audits | Yes |
-| A macro dependency reached through an expanded macro call | Yes |
-| Expected-model enum or constant grant used by a test | Yes |
-| A reference inside a SQL comment or quoted string | No |
-| A mock, direct macro-test identity check, comment, or quoted value | No |
-| A declaration that is merely visible | No |
-
-Every project-wide, inherited, exact-local, and model-private declaration must have a genuine use.
-Unused declarations fail compilation.
-
-### Closest valid placement
-
-Use the consumer shape to choose the directory:
-
-| First matching consumer shape | Required scope | Required location |
-|-------------------------------|----------------|-------------------|
-| One model, with no intended external consumer | Model-private | The model's `MODEL()` header |
-| One exact parent directory | Exact-local | `_local_.../` beside the consumers |
-| Multiple directories in one authored root | Inherited | `_.../` at their lowest common ancestor |
-| Multiple authored resource roots | Project-wide | Top-level `macros/`, `constants/`, or `enums/` |
-
-### Placement examples
-
-#### One exact directory
-
-```text
-Consumers
-models/commerce/orders.sql
-models/commerce/customers.sql
-
-Required placement
-models/commerce/_local_constants/minimum_value.sql
-```
-
-#### Multiple descendant directories
-
-```text
-Consumers
-models/commerce/finance/revenue.sql
-models/commerce/fulfillment/shipments.sql
-
-Lowest common ancestor
-models/commerce/
-
-Required placement
-models/commerce/_constants/reporting_day.sql
-```
-
-#### Multiple authored roots
-
-```text
-Consumers
-models/commerce/orders.sql
-tests/scenarios/commerce/order_lifecycle.sql
-
-Required placement
-constants/order_status.sql
-```
-
-Expected-model grants anchor test and scenario enum/constant use through the granting model, not
-through the test file's directory. Macro dependencies anchor through the consuming macro's lexical
-scope. These rules prevent relationship-driven use from producing misleading filesystem placement.
-
-### Stable project-wide APIs
-
-A used project-wide declaration remains valid even if all current consumers could fit under a
-narrower root. Moving a public declaration is an API decision, not automatic cleanup. Closest exact
-placement applies when a declaration is already narrow.
-
-When placement is wrong, the compiler reports:
-
-- The current declaration path and scope
-- The required scope and owning path
-- The consumers that determine that placement
-- The exact destination directory
-
-  Use Scope Explorer to inspect placement facts and preview whether moving an authored resource
-  preserves its declaration visibility.
-
-## Enums and Constants
-
-Source: `concepts/enums-and-constants.mdx`
-
-Declare compiler-validated domain values and typed constants for use across SQLBuild SQL.
-
-Enums name a fixed domain of string or integer values. Constants name a compiler-validated SQL value: a scalar, list, set, or object. SQLBuild validates and normalizes declarations at compile time, then asks the active adapter to render them safely for its SQL dialect.
-
-### Project-wide declarations
-
-Project-wide declarations are available throughout the project. Put enum files anywhere under the top-level `enums/` root and constant files anywhere under the top-level `constants/` root; both roots are discovered recursively.
+Put project-wide enums under the top-level `enums/` directory. Files are discovered recursively, so
+subdirectories can organize a large enum library without changing where the enums are available.
 
 ```text
 my_project/
-├── enums/                      project-wide enum declarations
+├── enums/
 │   ├── market/
 │   │   └── market_type.sql
 │   └── order_status.sql
-├── constants/                  project-wide constant declarations
-│   ├── market/
-│   │   └── thresholds.sql
-│   └── reporting_day.sql
 ├── models/
-├── tests/
 └── sqlbuild_project.toml
 ```
-
-Folders below `enums/` and `constants/` are for organization; they do not change visibility.
-Public names remain globally unique within each declaration kind and cannot shadow one another. An
-enum and a constant may use the same name because their namespaces are independent.
 
 ```sql
 -- enums/market/market_type.sql
@@ -4025,7 +3303,8 @@ ENUM (
 );
 ```
 
-Shorthand members use the member name as the string value. Use explicit members when the reference name and stored value differ, or for integer enums:
+The shorthand above uses each member name as its string value. Use explicit values when the name
+used in SQLBuild should differ from the stored value:
 
 ```sql
 ENUM (
@@ -4035,14 +3314,77 @@ ENUM (
     PARISTURF "paristurf",
   ),
 );
+```
 
+Integer enums always use explicit values:
+
+```sql
 ENUM (
   name priority,
   members (LOW 1, HIGH 3),
 );
 ```
 
-Constants use canonical key-value fields. A file may contain multiple declarations:
+### Use an enum member
+
+Reference one member with `@enum("name").MEMBER`:
+
+```sql
+SELECT *
+FROM prices
+WHERE market_type = @enum("market_type").WIN
+  AND source = @enum("source").CENTRUM
+```
+
+SQLBuild validates the enum name and member name before the query runs. The active adapter safely
+renders the underlying string or integer value.
+
+Enum references work in model queries, SQL hooks, SQL functions, audits, unit tests, scenarios, and
+inline source expressions.
+
+### Validation rules
+
+- An enum must contain at least one member.
+- Every member must use the same value type: all strings or all integers.
+- Enum names and member names must be SQL identifiers.
+- Member names must be uppercase and lookup is case-sensitive.
+- Enum names must be unique across all public enums in the project.
+- Project-wide names cannot begin with `_`; that prefix is reserved for model-private values.
+
+Invalid declarations, unknown enums, and unknown members fail compilation.
+
+### More enum features
+
+    Use an enum as a portable model-column domain and generate accepted-value validation.
+    Keep an enum inside one model when no other resource should use it.
+
+To limit an enum to one folder, or to that folder and its child folders, see
+[Declarations and Scopes](/concepts/declaration-scopes).
+
+## Constants
+
+Source: `concepts/constants.mdx`
+
+Define reusable compiler-validated values and reference them safely from SQL.
+
+Constants give a name to a value used in SQL. SQLBuild validates the value during compilation and
+asks the active adapter to render it safely for its SQL dialect. Constant values are data, never raw
+SQL snippets.
+
+### Create a constant
+
+Put project-wide constants under the top-level `constants/` directory. Files are discovered
+recursively, and one file may contain more than one declaration.
+
+```text
+my_project/
+├── constants/
+│   ├── market/
+│   │   └── thresholds.sql
+│   └── reporting_day.sql
+├── models/
+└── sqlbuild_project.toml
+```
 
 ```sql
 -- constants/market/thresholds.sql
@@ -4053,13 +3395,28 @@ CONSTANT (name ratio, value 0.75);
 CONSTANT (name missing_value, value null);
 ```
 
-Public names must not start with `_`.
+Folders below `constants/` are organizational. They do not change where project-wide constants are
+available.
 
-### Constant values
+### Use a constant
 
-#### Scalars
+Reference a constant with `@const("name")`:
 
-Constants support strings, signed integers, booleans, finite floating-point numbers, exact decimals, and null. Integers use a portable signed 64-bit baseline. Non-finite floats such as NaN and positive or negative infinity are rejected.
+```sql
+SELECT *
+FROM prices
+WHERE runner_count >= @const("min_runners")
+  AND source = @const("fallback_source")
+```
+
+References work in model queries, SQL hooks, SQL functions, audits, unit tests, scenarios, and
+inline source expressions. An unknown constant fails compilation.
+
+### Scalar values
+
+Constants support strings, signed integers, booleans, finite floating-point numbers, exact
+decimals, and `null`. Integers use a portable signed 64-bit range. `NaN` and positive or negative
+infinity are rejected.
 
 Use `type decimal` with a quoted value when decimal precision must be exact:
 
@@ -4071,9 +3428,32 @@ CONSTANT (
 );
 ```
 
-SQLBuild parses the quoted representation directly as a decimal, without converting it through a binary float. An incompatible `type` and `value` fails compilation. Strings are otherwise kept as strings; SQLBuild never interprets a constant value as raw SQL.
+SQLBuild parses the quoted value directly as a decimal rather than first converting it to a binary
+float. An incompatible `type` and `value` fails compilation.
 
-#### Lists
+### Naming rules
+
+Public constant names must be unique among public constants and cannot begin with `_`. Enum,
+constant, and macro names use separate namespaces, so an enum and a constant may share a name.
+
+### More constant features
+
+    Define lists, sets, and objects, then choose value-list or native-array rendering.
+    Keep a constant inside one model when no other resource should use it.
+
+To limit a constant to one folder, or to that folder and its child folders, see
+[Declarations and Scopes](/concepts/declaration-scopes).
+
+## Collections and Rendering
+
+Source: `concepts/constants/collections-and-rendering.mdx`
+
+Define list, set, and object constants and control their adapter-specific SQL rendering.
+
+Constants can hold collections as well as scalar values. Use this page when a constant represents
+a reusable value list, native array, set, or structured object.
+
+### Lists
 
 Square brackets declare an ordered list. Lists preserve authored order and allow duplicates:
 
@@ -4084,9 +3464,10 @@ CONSTANT (
 );
 ```
 
-#### Sets
+### Sets
 
-Curly braces declare a semantic set. Sets reject duplicate typed values and use a stable canonical order for rendering and identity:
+Curly braces declare a set. Sets reject duplicate typed values and use a stable order when SQLBuild
+renders or fingerprints them:
 
 ```sql
 CONSTANT (
@@ -4095,11 +3476,13 @@ CONSTANT (
 );
 ```
 
-For example, `{true, 1}` does not contain a duplicate because boolean and integer are distinct logical types. By contrast, `{"GB", "FR", "GB"}` fails compilation rather than silently discarding the second `"GB"`.
+`{true, 1}` is valid because a boolean and an integer are different logical types.
+`{"GB", "FR", "GB"}` fails compilation instead of silently discarding the duplicate.
 
-#### Objects
+### Objects
 
-Parenthesized key-value entries declare a string-keyed object. Object values may themselves be scalars, lists, sets, or objects:
+Parenthesized key-value entries declare a string-keyed object. Values may be scalars, lists, sets,
+or other objects:
 
 ```sql
 CONSTANT (
@@ -4121,57 +3504,44 @@ CONSTANT (
 );
 ```
 
-Object keys must be unique strings accepted by header syntax. SQLBuild canonicalizes keys into a stable order. Objects are logical JSON values, not portable homogeneous SQL maps or structs.
+Object keys must be unique. Objects are logical JSON values rather than portable homogeneous SQL
+maps or structs.
 
-Nested numeric tokens are finite floating-point values. Exact decimal parsing currently applies to a top-level constant declared with `type decimal`; nested exact decimals require a future nested typed-value syntax.
+### Collection rules
 
-#### Collection restrictions
-
-Lists and sets must be non-empty and have one recursively compatible element type. Nullable elements are ignored while inferring that type, so `[1, null, 2]` is valid, but the following declarations fail:
+Lists and sets must be non-empty and have one compatible element type. Nullable elements do not
+determine the type, so `[1, null, 2]` is valid, while these declarations fail:
 
 ```sql
 CONSTANT (name empty_values, value []);          -- no element type
 CONSTANT (name unknown_values, value [null]);    -- no non-null element type
-CONSTANT (name mixed_values, value [1, "two"]); -- integer and string
+CONSTANT (name mixed_values, value [1, "two"]); -- incompatible types
 ```
 
-The same empty, all-null, and mixed-type restrictions apply to sets. Objects may contain values of different types because each key has its own recursively validated value. SQLBuild also applies nesting-depth, element-count, and rendered-size safety limits; errors identify the declaration path and nested value path.
+Objects may contain different value types because each key is checked independently. SQLBuild also
+applies nesting-depth, element-count, and rendered-size safety limits.
 
-### References and rendering
+### Value-list rendering
 
-Use `@enum("name").MEMBER` and `@const("name")` anywhere public declarations are supported:
-
-```sql
-SELECT *
-FROM prices
-WHERE market_type = @enum("market_type").WIN
-  AND runner_count > @const("min_runners")
-  AND country_code IN @const("supported_countries")
-```
-
-Public references work in model queries, SQL hooks, SQL functions, audits, unit tests, scenarios, and inline source expressions. Unknown declarations or enum members fail compilation.
-
-#### Value-list rendering
-
-Lists and sets render as `value_list` by default on every adapter. This targets the common `IN` use case:
+Lists and sets render as a parenthesized value list by default. This is designed for `IN`:
 
 ```sql
 WHERE country_code IN @const("supported_countries")
 ```
 
-compiles to:
-
 ```sql
 WHERE country_code IN ('GB', 'FR', 'HK')
 ```
 
-Every element is escaped by the active adapter before SQLBuild constructs the parenthesized list.
+Every element is escaped by the active adapter.
 
-A `value_list` constant is a SQL fragment intended for a value-list position such as `IN (...)`. It is not a portable standalone projection or a first-class array value. For example, `SELECT @const("supported_countries")` does not have consistent meaning across adapters. Use `render_as array` when the constant must be an array expression.
+  A value-list constant is intended for a value-list position such as `IN (...)`. It is not a
+  portable standalone projection. Use native-array rendering when the constant must be an array
+  expression.
 
-#### Array rendering
+### Native-array rendering
 
-Set `render_as array` to request a first-class adapter-native array. SQLBuild does not rewrite array membership operations, so use the operators and functions appropriate for your adapter.
+Set `render_as array` to request an adapter-native array:
 
 ```sql
 CONSTANT (
@@ -4181,11 +3551,11 @@ CONSTANT (
 );
 ```
 
-Sets support the same rendering modes after duplicate validation and canonical ordering. Scalars and objects reject `render_as` because value-list and array modes have no defined meaning for them.
+SQLBuild does not rewrite array membership operations. Use the operators and functions provided by
+your adapter.
 
-#### Adapter matrix
-
-The selected rendering mode has the same semantics on every adapter; only its SQL spelling changes.
+Sets support the same `value_list` and `array` modes as lists. Scalar and object constants reject
+`render_as` because those rendering modes do not apply to them.
 
 | Adapter | Native array expression | Object/JSON expression |
 |---------|-------------------------|------------------------|
@@ -4197,33 +3567,91 @@ The selected rendering mode has the same semantics on every adapter; only its SQ
 | PostgreSQL | `ARRAY['GB', 'FR', 'HK']` | `'{"GB":"Great Britain"}'::JSONB` |
 | SQL Server | Unsupported | `JSON_QUERY(N'{"GB":"Great Britain"}')` |
 
-Object constants always use the adapter's native JSON or semi-structured expression, or its validated JSON-text equivalent; they are not emitted as an ordinary quoted JSON string. Every nested scalar and key is escaped safely.
+BigQuery does not support arrays containing arrays. SQL Server has no native array representation.
+Unsupported requests fail compilation rather than silently changing representation.
 
-BigQuery supports native arrays but does not support arrays whose elements are arrays. A nested-array constant requested with `render_as array` therefore fails during compilation. SQL Server has no native array representation, so any array request fails during compilation rather than falling back to a value list or string. See the [BigQuery](/concepts/adapters/bigquery#typed-constants) and [SQL Server](/concepts/adapters/sqlserver#typed-constants) adapter pages.
+### Project default
 
-### Rendering configuration
-
-Change the project default for list and set declarations in `sqlbuild_project.toml`:
+Set the default for list and set constants in `sqlbuild_project.toml`:
 
 ```toml
 [constants]
 collection_rendering = "array"
 ```
 
-Allowed values are `value_list` and `array`. Rendering mode is resolved in this order:
+SQLBuild chooses the rendering mode in this order:
 
 1. The declaration's `render_as` field
 2. Project `[constants].collection_rendering`
-3. SQLBuild's `value_list` default
+3. The `value_list` default
 
-The project default applies to project-wide and model-private collection constants. There is no
-reference-site override: one declaration has one representation throughout a compilation. Changing
-the resolved mode changes dependent rendered SQL and query identity.
+One constant has one representation throughout a compilation. Changing its value or rendering mode
+changes the identity of SQL that uses it.
 
-### Model-private declarations
+### Stable values
 
-Use model-private declarations for values that belong to one model and should not enter the
-project-wide namespace. The shorthand accepts every scalar and collection form:
+- List order and duplicates are preserved.
+- Set order is ignored; membership is stored in a stable order.
+- Object key order is ignored; keys are stored in a stable order.
+- Changing set membership or object values changes dependent query identity.
+
+## Enum Model Contracts
+
+Source: `concepts/enums/model-contracts.mdx`
+
+Use an enum as a portable model-column domain with generated accepted-value validation.
+
+An enum can describe the allowed domain of a model column as well as provide individual SQL
+literals.
+
+These are separate uses:
+
+- `@enum("market_type").WIN` inserts one validated value into SQL.
+- `type market_type` declares that a model column uses the complete enum domain.
+
+### Declare an enum-typed column
+
+Use the enum name as the column type:
+
+```sql
+MODEL (
+  contract enforced,
+  columns (
+    market_type (type market_type),
+  ),
+);
+```
+
+SQLBuild does not send `market_type` to the warehouse as a physical type and does not create a
+warehouse-native enum. It translates the enum into portable column metadata:
+
+| Enum values | Physical column type | Generated validation |
+|-------------|----------------------|----------------------|
+| Strings such as `WIN` and `PLACE` | `VARCHAR` | `accepted_values` for the enum strings |
+| Integers such as `1` and `3` | `INTEGER` | `accepted_values` for the enum integers |
+
+### Contract behavior
+
+With `contract enforced`, SQLBuild runs the generated `accepted_values` audit with the model's other
+audits. Its severity and timing follow the model's ordinary audit and materialization settings.
+
+With `contract none`, SQLBuild still resolves the enum to its portable scalar column type but does
+not generate the domain audit.
+
+This behavior is the same on adapters with and without native enum support. The physical warehouse
+column remains an ordinary string or integer column.
+
+Changing the members of an enum-typed contract changes the model's contract identity and generated
+validation.
+
+## Model-Private Values
+
+Source: `concepts/model-private-values.mdx`
+
+Keep enums and constants inside one model when no other resource should use them.
+
+Put an enum or constant directly in `MODEL()` when it belongs to one model and should not enter the
+project-wide namespace.
 
 ```sql
 MODEL (
@@ -4233,11 +3661,6 @@ MODEL (
   constants (
     _min_runners 7,
     _supported_countries ["GB", "FR", "HK"],
-    _unique_countries {"GB", "FR", "HK"},
-    _country_labels (
-      GB "Great Britain",
-      FR "France",
-    ),
   ),
 );
 
@@ -4248,7 +3671,27 @@ WHERE state = @enum("_state").OPEN
   AND country_code IN @const("_supported_countries")
 ```
 
-Use the `constant(...)` wrapper when a local declaration needs an explicit type or rendering override:
+### Where private values work
+
+A model-private value is available in:
+
+- The owning model's query
+- Inline SQL hooks written in that model
+
+It is not available in:
+
+- Another model
+- A child or sibling model directory
+- A unit test or scenario
+- A named SQL hook stored under `hooks/sql/`
+
+Private names begin with exactly one `_`. Names beginning with `__` are reserved for SQLBuild.
+Because the model owns the name, different models may each define `_state` without creating a
+collision.
+
+### Explicit types and rendering
+
+Use `constant(...)` when a private constant needs an exact type or rendering choice:
 
 ```sql
 MODEL (
@@ -4265,119 +3708,46 @@ MODEL (
 );
 ```
 
-The wrapper is distinct from object syntax, so an object with keys named `value` or `render_as` remains unambiguous. Model-private names must start with exactly one `_`; names beginning with `__` are reserved for SQLBuild. They are available only in that model's query and inline SQL hooks; named SQL hooks resolve from their own definition paths, and no test, scenario, descendant, or other model can resolve them. Scope introspection qualifies private identities with their owner, such as `constant:model:stg_orders._minimum_value`; this does not change SQL reference syntax.
+### When a value becomes shared
 
-  This page focuses on the normal project-wide layout and declarations owned by one model. For
-  declarations shared by only part of a larger project, see
-  [Declarations and Scopes](/concepts/declaration-scopes).
+Move the declaration out of `MODEL()` when another resource needs it. Remove the `_` prefix and put
+it in the narrowest suitable enum or constant directory. See
+[Declarations and Scopes](/concepts/declaration-scopes) for those advanced placement options.
 
-### Determinism and identity
-
-SQLBuild normalizes constants before rendering and fingerprinting:
-
-- List order and duplicates are preserved, so changing either changes rendered SQL and query identity.
-- Set declaration order is ignored; membership is canonicalized, so reordering alone changes neither rendered SQL nor query identity.
-- Object key declaration order is ignored; keys are canonicalized, so reordering alone changes neither rendered SQL nor query identity.
-- Set membership, object values, rendering mode, and an applicable project rendering default all participate in dependent query identity.
-- A declaration change affects the identities of its consumers rather than unrelated models. Completely unused declarations fail project validation.
-
-### Enum validation
-
-Enums must contain at least one member and use one consistent scalar type. String and integer members cannot be mixed. Integer values use explicit member syntax.
-
-Names must be SQL identifiers. Enum member identifiers must be uppercase, even when an explicit member's stored value is lowercase. Member lookup is case-sensitive, so `.WIN` is valid for `WIN "win"` and `.win` is not. Duplicate declaration names, duplicate member names, invalid visibility prefixes, and malformed references all fail compilation.
-
-### Enum-typed contracts
-
-Enum references and enum-typed columns are separate capabilities:
-
-- `@enum("market_type").WIN` inserts one compiler-validated scalar literal into SQL.
-- `type market_type` uses the complete enum as a portable logical domain type for a model column.
-
-For the second form, use an enum name in a model column declaration:
-
-```sql
-MODEL (
-  contract enforced,
-  columns (
-    market_type (type market_type),
-  ),
-);
-```
-
-`market_type` is not sent to the warehouse as a physical type name. SQLBuild does not create a warehouse-native enum or emit enum DDL. Instead, it lowers the logical domain to portable model metadata:
-
-| Enum member values | Physical column type | Enforced domain check |
-|--------------------|----------------------|-----------------------|
-| Strings such as `WIN` and `PLACE` | `VARCHAR` | `accepted_values` for the declared strings |
-| Integers such as `1` and `3` | `INTEGER` | `accepted_values` for the declared integers |
-
-With `contract enforced`, the generated `accepted_values` audit runs with the model's other audits even though the warehouse column itself is an ordinary `VARCHAR` or `INTEGER`:
-
-```sql
--- Conceptual physical shape and validation, not generated source syntax:
-market_type VARCHAR
-accepted_values(market_type, ["WIN", "PLACE", "SHOW"])
-```
-
-Its severity and timing follow ordinary audit configuration and materialization behavior. With the default error severity, an out-of-domain value gates staged-table promotion and pre-DML delta paths. Views run audits after replacement, and custom materializations control their own audit timing.
-
-With `contract none`, SQLBuild still resolves the logical enum to its physical scalar type, but it does not generate the domain audit. Use `contract enforced` when SQLBuild should generate member validation, and choose a materialization path whose audit timing provides the gate your workflow requires.
-
-This behavior is intentionally independent of whether a particular warehouse supports native enums. A project has the same model contract and validation semantics across adapters.
-
-Declaration changes participate in change detection. A changed referenced value changes compiled SQL; changed members of an enum-typed contract change the model's contract identity.
-
-## Python Macros
+## Writing Macros
 
 Source: `concepts/macros.mdx`
 
-Reusable Python functions that generate SQL fragments at compile time.
+Write Python functions that generate reusable SQL fragments at compile time.
 
-Macros are Python functions that generate SQL fragments at compile time. Instead of Jinja templates, you write real Python - testable, debuggable, and composable with standard tooling.
+Macros are Python functions that generate SQL during compilation. They provide reusable,
+parameterized SQL without introducing a separate template language.
 
-For the full picture of how macros fit into SQLBuild's interpolation system, see [Interpolation](/concepts/interpolation).
+### Create a macro
 
-### Defining macros
+Put project-wide macros in Python files under the top-level `macros/` directory:
 
-Create Python files under the top-level `macros/` directory for project-wide macros. Every public ordinary function defined by a macro module becomes a callable macro:
+```text
+my_project/
+├── macros/
+│   ├── currency.py
+│   └── test_helpers.py
+├── models/
+└── sqlbuild_project.toml
+```
+
+Every public function defined by a macro file becomes callable from SQL:
 
 ```python
 # macros/currency.py
-def cents_to_dollars(column):
-    """Convert a cents integer column to a dollars decimal."""
-    return f"ROUND(CAST({column} AS DOUBLE) / 100, 2)"
+def cents_to_dollars(expression: str) -> str:
+    """Convert a cents expression to dollars."""
+    return f"ROUND(CAST({expression} AS DOUBLE) / 100, 2)"
 ```
 
-Macros can accept any Python arguments (strings, numbers, lists, dicts, booleans) and must return a SQL string when called from SQL.
+### Call a macro from SQL
 
-Only functions owned by the module are exported. Imported callables and classes remain implementation dependencies and do not become macros. Module-owned constants, classes, type aliases, and helper functions must use underscore-private names:
-
-```python
-# macros/orders.py
-from urllib.parse import quote
-
-_DEFAULT_STATUS = "completed"
-type _ColumnName = str
-
-class _ColumnFormatter:
-    def format(self, column: _ColumnName) -> str:
-        return quote(column)
-
-def _status_filter(status: str) -> str:
-    return f"status = '{status}'"
-
-def completed_orders() -> str:
-    return _status_filter(_DEFAULT_STATUS)
-```
-
-Here, only `completed_orders` is exported as a macro. `quote`, `_ColumnFormatter`, and `_status_filter` are implementation details.
-
-Macros may instead be inherited from `_macros/` directories or restricted to an exact directory with `_local_macros/`. See [Declaration Scopes](/concepts/declaration-scopes) for placement and lexical visibility. Public macro names remain globally unique even when their scopes do not overlap.
-
-### Using macros in models
-
-Call macros in model SQL using the `@macro_name(args)` syntax:
+Use `@macro_name(...)` in a model query:
 
 ```sql
 MODEL (
@@ -4386,25 +3756,68 @@ MODEL (
 );
 
 SELECT
-  CAST(o.ordered_at AS DATE) AS revenue_date,
-  COUNT(DISTINCT o.order_id) AS order_count,
-  SUM(p.amount_cents) AS total_revenue_cents,
-  @cents_to_dollars('SUM(p.amount_cents)') AS total_revenue_dollars
-FROM __ref("stg_orders") o
-INNER JOIN __ref("stg_payments") p ON o.order_id = p.order_id
-GROUP BY CAST(o.ordered_at AS DATE)
+  order_id,
+  @cents_to_dollars("amount_cents") AS amount_dollars
+FROM __ref("stg_orders")
 ```
 
-At compile time, `@cents_to_dollars('SUM(p.amount_cents)')` expands to `ROUND(CAST(SUM(p.amount_cents) AS DOUBLE) / 100, 2)`.
+During compilation, SQLBuild replaces the call with the function's returned SQL:
 
-### Using macros in tests
+```sql
+ROUND(CAST(amount_cents AS DOUBLE) / 100, 2)
+```
 
-Because unit tests are written in SQL, they support macro calls. This is useful for reusable mock data generators:
+A macro used directly in SQL must return a string.
+
+### Arguments
+
+Macro calls accept Python literal values:
+
+- Strings: `"value"` or `'value'`
+- Numbers: `42`, `3.14`, `-1`
+- Booleans: `True`, `False`
+- Lists: `[1, 2, 3]`
+- Dictionaries: `{"key": "value"}`
+- `None`
+- The result of another macro call
+
+Positional and keyword arguments are supported:
+
+```sql
+@mock_orders(count=5, status="completed")
+```
+
+Use quoted strings when passing SQL expressions such as column names. The macro decides how to
+place that text into its returned SQL.
+
+### Keep implementation details private
+
+Only public functions owned by the file are exported as macros. Prefix helpers, constants, classes,
+and type aliases with `_`:
+
+```python
+# macros/orders.py
+_DEFAULT_STATUS = "completed"
+
+def _status_filter(status: str) -> str:
+    return f"status = '{status}'"
+
+def completed_orders() -> str:
+    return _status_filter(_DEFAULT_STATUS)
+```
+
+Here, SQL may call `@completed_orders()`. `_status_filter` and `_DEFAULT_STATUS` remain ordinary
+Python implementation details.
+
+Imported functions are not re-exported as new macros from the importing file.
+
+### Use macros in tests
+
+Tests are SQL, so they can use macros as reusable fixture generators:
 
 ```python
 # macros/test_helpers.py
-def mock_orders(count=1):
-    """Generate mock order rows."""
+def mock_orders(count: int = 1) -> str:
     rows = [
         f"SELECT {i} AS id, {i * 100} AS customer_id, 'completed' AS status"
         for i in range(1, count + 1)
@@ -4429,49 +3842,164 @@ __expected__stg_orders AS (
 SELECT 1
 ```
 
-### Using macros in hooks
+### Use macros in hooks
 
-Macros are expanded inside `inline_sql(...)` entries and reusable `sql("name", ...)` hook files in `pre_hooks` and `post_hooks`:
+Macros work inside inline and named SQL hooks:
 
 ```python
 # macros/permissions.py
-def grant_target(target):
+def grant_target(target: str) -> str:
     return f"GRANT SELECT ON {target} TO analyst_role"
 ```
 
 ```sql
 MODEL (
-  materialized table,
   post_hooks [inline_sql('@grant_target(@@CTX:destination.qualified)')],
 );
 
 SELECT 1 AS id
 ```
 
-Hook SQL is validated at compile time, so invalid hook SQL is caught before execution. SQL hooks also support `@@CTX:` context variables, `@@name` project variables, and `@@ENV:NAME` environment variables directly without needing a macro wrapper.
+See [SQL Hooks](/concepts/models/hooks/sql) for hook lifecycle and context syntax.
 
-For shared parameterized SQL, put the statement under `hooks/sql/` and invoke it with `sql("name", args...)`. For hooks that need runtime control flow, providers, or skip decisions, use `python(...)` hooks instead. See [Hooks](/concepts/models/hooks) for the complete lifecycle hook syntax.
+### Where macros work
+
+Macros are supported in:
+
+- Model query SQL
+- Inline and named SQL hooks
+- Unit tests and scenarios
+- Standalone audit SQL
+- SQL functions and supported inline source expressions
+
+Macros are not accepted in ordinary `MODEL()` configuration fields. SQL hook entries are the
+exception because their contents are SQL.
+
+### Next steps
+
+    Compose macros through Python imports and use adapter or target context.
+    Limit a macro to one folder, or to that folder and its child folders.
+
+## Composition and Context
+
+Source: `concepts/macros/composition-and-context.mdx`
+
+Compose macros through Python, use compile context, and understand scoped imports.
+
+Macros are Python functions, so reusable macros should compose through ordinary Python calls. A
+macro returns final SQL; SQLBuild does not treat its output as another layer of macro source.
+
+### Compose helpers in one file
+
+Use underscore-prefixed helpers for implementation details that should not be callable from SQL:
+
+```python
+# macros/currency.py
+def _divide_by_100(expression: str) -> str:
+    return f"({expression} / 100.0)"
+
+def cents_to_dollars(expression: str) -> str:
+    return f"ROUND({_divide_by_100(expression)}, 2)"
+```
+
+Only `cents_to_dollars` is exported as a SQLBuild macro.
+
+Public macros in the same file are also ordinary Python functions and may call one another:
+
+```python
+def add_tax(expression: str) -> str:
+    return f"({expression} * 1.2)"
+
+def round_money(expression: str) -> str:
+    return f"ROUND({expression}, 2)"
+
+def formatted_total(expression: str) -> str:
+    return round_money(add_tax(expression))
+```
+
+### Compose macros from different files
+
+Import another project macro when it is visible from the importing macro file:
+
+```python
+# macros/orders.py
+from macros.currency import add_tax, round_money
+
+def formatted_order_total(expression: str) -> str:
+    return round_money(add_tax(expression))
+```
+
+SQLBuild records the imported macro files as dependencies. It rejects an import when the target
+macro is outside the importing file's declaration scope or when imports form a cycle.
+
+Imported functions do not become duplicate exports from the importing file. In the example above,
+`add_tax` and `round_money` retain their original identities; only `formatted_order_total` is newly
+exported by `orders.py`.
+
+The same visibility direction applies to scoped macros:
+
+- A scoped macro may import a project-wide macro.
+- A scoped macro may import a macro available from its own or an ancestor directory.
+- A project-wide macro cannot import a narrower macro.
+- A macro cannot import from a sibling or unrelated scope.
+
+See [Declarations and Scopes](/concepts/declaration-scopes) when macros are stored under `_macros/`
+or `_local_macros/`.
+
+### Macro output is final SQL
+
+Do not return SQL containing another `@macro()` call:
+
+```python
+# Invalid: creates another macro-expansion layer.
+def formatted_order_total(expression: str) -> str:
+    return f"@round_money(@add_tax({expression!r}))"
+```
+
+SQLBuild rejects this output. Import and call the Python functions instead:
+
+```python
+from macros.currency import add_tax, round_money
+
+def formatted_order_total(expression: str) -> str:
+    return round_money(add_tax(expression))
+```
+
+This keeps macro behavior readable in Python and ensures one expansion produces final SQL.
+
+### Nested calls written in SQL
+
+The SQL author may explicitly pass one macro's result to another:
+
+```sql
+SELECT @round_money(@add_tax("subtotal")) AS order_total
+```
+
+SQLBuild evaluates `add_tax` first and passes its returned string to `round_money`. This is not a
+second expansion of generated output: both calls are visible in the SQL source.
+
+Inner macros may return any Python value accepted by the outer macro. A macro used directly in SQL
+must return a string.
 
 ### Macro context
 
-When a macro function accepts a `ctx` parameter as its first argument, SQLBuild passes a `MacroContext` object with adapter and target information:
+When the first parameter is named `ctx`, SQLBuild passes a `MacroContext` with adapter, target, and
+project-variable information:
 
 ```python
 # macros/datetime.py
-def timestamp_trunc(ctx, grain: str, expr: str) -> str:
+def timestamp_trunc(ctx, grain: str, expression: str) -> str:
     if ctx.adapter_name == "bigquery":
-        return f"TIMESTAMP_TRUNC({expr}, {grain.upper()})"
-    return f"DATE_TRUNC('{grain}', {expr})"
+        return f"TIMESTAMP_TRUNC({expression}, {grain.upper()})"
+    return f"DATE_TRUNC('{grain}', {expression})"
 ```
-
-The macro context provides:
 
 | Field | Description |
 |-------|-------------|
-| `adapter_name` | The active adapter (e.g. `duckdb`, `snowflake`) |
+| `adapter_name` | Active adapter, such as `duckdb` or `snowflake` |
 | `sql_analysis_enabled` | Whether SQL analysis is enabled |
-| `target_name` | The active target name, if any |
-| `vars` | Effective project variables as a dict (merged from project config, target, local config, and CLI `--vars`) |
+| `target_name` | Active target name, when selected |
+| `vars` | Effective project variables after project, target, local, and CLI merging |
 
 ```python
 def schema_qualified(ctx, table: str) -> str:
@@ -4479,200 +4007,8 @@ def schema_qualified(ctx, table: str) -> str:
     return f"{schema}.{table}"
 ```
 
-### Macro arguments
-
-Macro arguments use Python literal syntax. Supported types:
-
-- **Strings:** `'value'` or `"value"`
-- **Numbers:** `42`, `3.14`, `-1`
-- **Booleans:** `True`, `False`
-- **Lists:** `[1, 2, 3]`
-- **Dicts:** `{'key': 'value'}`
-- **None:** `None`
-- **Nested macro calls:** `@other_macro('arg')`
-
-Keyword arguments are supported:
-
-```sql
-@mock_orders(count=5, status='completed')
-```
-
-#### Nested macro calls in arguments
-
-Macros can be passed as arguments to other macros. The inner macro evaluates first and its result becomes an argument to the outer macro:
-
-```sql
-@format_column('revenue', @cents_to_dollars('SUM(amount_cents)'))
-```
-
-You can mix regular arguments with nested macro calls:
-
-```sql
-@wrap_with_alias(@cents_to_dollars('total_cents'), 'total_dollars')
-```
-
-Inner macros used as arguments don't have to return strings - they can return any Python object that the outer macro accepts.
-
-### Composing macros
-
-Macro output may contain further `@macro()` calls. SQLBuild expands those calls under the emitting macro's definition-path scope. Calls written as nested arguments resolve under the current SQL author's scope before the outer macro runs. Inaccessible dependencies and dependency cycles fail compilation.
-
-For implementation details used by one macro, call an underscore-private helper in the same file:
-
-```python
-# macros/reporting.py
-def _with_alias(expression, alias):
-    return f"{expression} AS {alias}"
-
-def revenue_column(expression, alias):
-    return _with_alias(expression, alias)
-```
-
-Macro modules cannot import other project macro modules. To compose macros defined in different files, keep the calls in authored SQL using the tracked `@macro_name(...)` syntax. Nested calls evaluate from the inside out, so each macro call remains visible to SQLBuild:
-
-```sql
-SELECT
-  @revenue_column(
-    @cents_to_dollars('total_cents'),
-    'total_dollars'
-  )
-FROM __ref("fact_orders")
-```
-
-In this example, `cents_to_dollars` and `revenue_column` can be defined in separate macro files. Do not import one from the other in Python.
-
-An emitting macro can also compose lexically in its returned SQL:
-
-```python
-# models/commerce/_macros/revenue.py
-def revenue_column(column):
-    return f"@cents_to_dollars('{column}') AS revenue_dollars"
-```
-
-Here `cents_to_dollars` must be visible from `models/commerce/_macros/revenue.py`. It is not borrowed from whichever model calls `revenue_column`. In particular, a project-wide macro under `macros/` cannot depend on an inherited or local macro.
-
-### Where macros are allowed
-
-- **Model query SQL** - the SELECT statement after the MODEL() header
-- **SQL hooks** - `inline_sql(...)` entries and named hook files invoked by `sql("name", ...)`
-- **Test SQL** - unit test CTE bodies
-- **Audit SQL** - singular audit queries
-
-Macros are **not allowed** in MODEL() config values (other than SQL hook entries). If a config field contains `@macro()`, SQLBuild raises a compile error.
-
-### Discovery rules
-
-- SQLBuild discovers `.py` files recursively under top-level `macros/` and scoped `_macros/` or `_local_macros/` directories below canonical authored roots
-- Only public ordinary functions defined by the macro module become macros
-- Imported callables and classes are not exported as macros
-- Module-owned constants, classes, type aliases, and helper functions must start with `_`
-- A macro module must not Python-import another project macro module
-- Public macro names must be unique across all macro files; scopes do not provide shadowing
-- Macros are loaded once at compile time, not per-model
-- Manifest macro nodes expose declaration scope, owning path, and tracked macro dependencies
-
-## Scope Explorer
-
-Source: `concepts/declaration-scopes/explorer.mdx`
-
-Inspect visibility, explain resolution, browse declarations, and preview moves offline.
-
-Scope Explorer exposes the compiler's declaration index through `sqb scope`. It is read-only and
-offline: it never connects to the warehouse, moves files, or edits configuration.
-
-Use this page for common workflows. See the [`sqb scope` CLI reference](/cli/scope) for every flag,
-filter, text section, and JSON field.
-
-### Inspect a resource
-
-Start with a model, test, scenario, hook, function, audit, source, or declaration identity:
-
-```bash
-sqb scope model:stg_orders
-sqb scope test:orders__completed_only
-sqb scope macro:normalize_order_status
-```
-
-The report separates concepts that are easy to conflate:
-
-| Section | What it answers |
-|---------|-----------------|
-| Scope chain | Which exact-local, inherited, and global tiers apply? |
-| Available | What can this resource resolve through its lexical path? |
-| Used declarations | What did compilation actually consume? |
-| Relationship scope | Which expected models granted constants or enums? |
-| Nearby unavailable | Which close declarations are outside scope? This is opt-in. |
-| Placement | Is each narrow declaration at its closest valid location? |
-
-### Explain one declaration
-
-Ask why a declaration is visible, inaccessible, used, or granted:
-
-```bash
-sqb scope model:stg_orders --explain enum:customer_status
-sqb scope test:orders__completed_only --explain constant:order_status
-```
-
-Explanation output retains the resolution route. Expected-model grants remain distinct from path
-visibility, and macro dependency routes retain the consuming macro.
-
-### Browse nearby declarations
-
-Use nearby output when you know the resource but not the declaration name:
-
-```bash
-sqb scope model:stg_orders --include-nearby
-sqb scope model:stg_orders --include-nearby --nearby-depth 2
-```
-
-Browse the scope index like a deterministic tree when exploring a larger project:
-
-```bash
-sqb scope model:stg_orders --browse .
-sqb scope model:stg_orders --browse global
-sqb scope model:stg_orders --list global/macros/finance/payments
-```
-
-Filters for declaration kind, definition path, glob matching, and actual usage can be combined. Use
-pagination for large reports rather than trimming the compiler facts.
-
-### Check a prospective path
-
-Inspect what a resource would see before its file exists:
-
-```bash
-sqb scope --at models/commerce/finance/new_revenue.sql
-sqb scope --at tests/unit/commerce/orders/
-```
-
-Use `--as-path` to evaluate an existing resource from a proposed destination without moving it:
-
-```bash
-sqb scope model:stg_orders --as-path models/commerce/staging/stg_orders.sql
-```
-
-### Preview a resource move
-
-Use `--as-path` to preview moving an existing authored resource such as a model, test, hook, or
-function. The report shows retained, gained, and lost declarations and direct usages the move would
-invalidate:
-
-```bash
-sqb scope model:stg_orders \
-  --as-path models/marts/orders/stg_orders.sql
-```
-
-The destination must be valid for that resource kind. Scope Explorer does not move the file or
-preview moving declaration files themselves.
-
-### Automation
-
-Use `--json` for editor integrations and repository tooling. Scope JSON has a versioned schema,
-stable ordering, value-free declaration metadata, completeness facts, filters, pagination, and move
-preview results. Secret connection settings and declaration values are not included.
-
-    Review the compiler rules behind the report.
-    See all selectors, filters, pagination options, output sections, and JSON behavior.
+Use context when generated SQL genuinely differs by adapter or target. Prefer ordinary parameters
+for values that the SQL caller should choose explicitly.
 
 ## Interpolation
 
@@ -4705,9 +4041,13 @@ The rule is simple: if it's any SQL that will be executed, it uses `@`. If it's 
 
 `@@CTX:` is intentionally SQL-hook-only. Model SQL describes a relation's data and should not reference its own destination identity. SQL hooks are the operational SQL layer where destination context is useful - grants, logging, post-materialization DDL. Python hooks access the same information through `ctx.destination` on the [`HookContext`](/concepts/models/hooks/python#hook-context) object.
 
-See [Enums and Constants](/concepts/enums-and-constants) for scalar and collection syntax, visibility, collection-rendering precedence, adapter behavior, and contract integration.
+See [Enums](/concepts/enums) and [Constants](/concepts/constants) for reusable validated values. See
+[Collections and Rendering](/concepts/constants/collections-and-rendering) for lists, sets, objects,
+and adapter-specific rendering.
 
-Macros, enums, and constants are resolved lexically. The authored resource path normally supplies the scope; named SQL hooks and macro-emitted calls use their definition paths. See [Declaration Scopes](/concepts/declaration-scopes) for the complete path and composition rules.
+SQLBuild uses the location of a SQL file to determine which macros, enums, and constants it can
+use. Named SQL hooks use their own file location rather than the location of the calling model. See
+[How Visibility Works](/concepts/declaration-scopes/visibility) for the complete directory rules.
 
 ### Project variables
 
@@ -4986,7 +4326,9 @@ SQL functions can reference the same resources as models:
 
 These references are resolved at compile time and create DAG edges. If a referenced model changes, the function is redeployed.
 
-Macros, constants, and enums used in a SQL function resolve from the function definition's authored path. Put inherited declarations in `_macros/`, `_constants/`, or `_enums/` above that function, or exact-directory declarations in the corresponding `_local_...` directory. See [Declaration Scopes](/concepts/declaration-scopes).
+A SQL function uses macros, constants, and enums available from its file under `functions/sql/`.
+See [How Visibility Works](/concepts/declaration-scopes/visibility) to limit declarations to one
+function folder or to that folder and its children.
 
 ### Change propagation
 
@@ -5996,7 +5338,9 @@ Generic audit SQL uses `@name` for parameter placeholders. These are resolved by
 | `@'name'` | A quoted parameter passed from the audit declaration (e.g. `@'values'`) |
 | `@name` | An unquoted parameter passed from the audit declaration (e.g. `@expression`) |
 
-Macros, constants, and enums in both generic and singular audit SQL resolve from the audit definition's authored path under `audits/`, not from the path of a model or source that attaches the audit. See [Declaration Scopes](/concepts/declaration-scopes).
+Generic and singular audit SQL uses macros, constants, and enums available from the audit file under
+`audits/`, not from a model or source that uses the audit. See
+[How Visibility Works](/concepts/declaration-scopes/visibility).
 
 #### Attaching custom generic audits
 
@@ -6296,7 +5640,9 @@ SELECT 1
 
 If the expected models form a chain (e.g. `stg_orders` feeds into `fact_orders` which feeds into `dim_customers`), SQLBuild resolves them in dependency order, using the output of earlier steps as input to later ones.
 
-Each explicit `__expected__<model>` CTE also grants the test authored SQL the public enums and constants visible to that model. A test with multiple expected models receives the deterministic union, with provenance retained for every granting model. Public names remain globally unique, so the union cannot shadow declarations.
+When a test defines `__expected__model_name` output, it may also use the public enums and constants
+available to that model. A test that checks several models may use the public enums and constants
+available to each of them. Public names are unique, so those values cannot conflict.
 
 Only explicit expected CTEs create grants. A matching test filename, `__ref__` mock, or nearby model path does not. Model-private declarations and macros are never granted through expected models.
 
@@ -6323,7 +5669,10 @@ SELECT 1
 
 The `@mock_orders()` call expands at compile time to whatever SQL the Python macro function returns.
 
-Macros and directly visible enums and constants in authored test SQL resolve from that test file's path under `tests/unit/`. This includes inherited declarations from every matching ancestor and local declarations owned by the test's exact parent directory; sibling and descendant declarations are inaccessible. Public enums and constants may also be available through explicit expected-model grants. Model-private constants and enums are not exported to tests. See [Declaration Scopes](/concepts/declaration-scopes).
+Test SQL uses macros, enums, and constants available from the test file's directory under
+`tests/unit/`. Public enums and constants available to a model are also available when the test
+defines `__expected__model_name` output for that model. Model-private values are not available to
+tests. See [How Visibility Works](/concepts/declaration-scopes/visibility#tests-and-expected-models).
 
 ### Macro mocking
 
@@ -6731,7 +6080,11 @@ For sources with two-part identity, use double underscores: `__source__raw__orde
 
 Every scenario must have at least one fixture CTE and at least one `__expected__` or `__assert__` CTE.
 
-Macros and directly visible constants and enums in authored scenario SQL resolve from that scenario file's path under `tests/scenarios/`. Inherited ancestors compose and local declarations apply only to the exact parent directory. Each explicit `__expected__<model>` CTE additionally grants the public enums and constants visible to that expected model. Multiple expected models contribute a deterministic union with per-model provenance; they do not grant macros or model-private declarations. See [Declaration Scopes](/concepts/declaration-scopes).
+Scenario SQL uses macros, enums, and constants available from the scenario file's directory under
+`tests/scenarios/`. Public enums and constants available to a model are also available when the
+scenario defines `__expected__model_name` output for that model. Model-private values and macros
+available only to the model are not included. See
+[How Visibility Works](/concepts/declaration-scopes/visibility#tests-and-expected-models).
 
 #### SCENARIO() header
 
@@ -7371,6 +6724,860 @@ sqb diff prod:dev --full --select tag:acceptance
 ### Exit codes
 
 `sqb diff` returns exit code `0` when all selected models have no differences, and `1` when any model has schema or row differences. This makes it usable in CI pipelines as a validation gate.
+
+## Overview
+
+Source: `concepts/declaration-scopes.mdx`
+
+Limit enums, constants, and macros to the parts of a project that use them.
+
+Most projects can keep enums, constants, and macros in their ordinary top-level directories. Those
+declarations are available throughout the project.
+
+When an enum, constant, or macro should be available only within one folder or its child folders,
+you can keep it near the SQL that uses it. SQLBuild uses the declaration directory's location to
+decide which files can access it. No TOML configuration is required.
+
+| Scope | Declaration form | Visibility |
+|-------|------------------|------------|
+| Project-wide | `macros/`, `constants/`, `enums/` | Every supported SQL surface |
+| Inherited | `_macros/`, `_constants/`, `_enums/` | Owning path and every descendant |
+| Exact-local | `_local_macros/`, `_local_constants/`, `_local_enums/` | Direct children of one owning path |
+| Model-private | Underscore-prefixed constants and enums in `MODEL()` | One model and its inline SQL hooks |
+
+### Example
+
+The annotation beside each directory shows where its contents are available:
+
+```text
+models/
+├── _constants/                 inherited throughout models/
+│   └── warehouse.sql
+└── commerce/
+    ├── _macros/                inherited throughout commerce/
+    │   └── currency.py
+    ├── _local_enums/           exact commerce/ directory only
+    │   └── grain.sql
+    ├── orders.sql              sees warehouse, currency, and grain
+    ├── finance/
+    │   ├── _macros/            inherited throughout finance/
+    │   │   └── tax.py
+    │   └── revenue.sql         sees warehouse, currency, and tax
+    └── fulfillment/
+        └── shipments.sql       sees warehouse and currency
+```
+
+An inherited directory applies at its location and below it. An exact-local directory applies only
+to SQL files directly beside it.
+
+| Resource | Visible from the example tree | Not visible |
+|----------|-------------------------------|-------------|
+| `orders.sql` | Warehouse constant, commerce macro, commerce-local enum | Finance macro |
+| `finance/revenue.sql` | Warehouse constant, commerce macro, finance macro | Commerce-local enum |
+| `fulfillment/shipments.sql` | Warehouse constant, commerce macro | Commerce-local enum, finance macro |
+
+Declarations do not flow upward or sideways into sibling directories.
+
+### Choose a scope
+
+| Where the value is needed | Choose | Placement |
+|----------------|--------|-----------|
+| One model only | Model-private | In that model's `MODEL()` header |
+| One exact directory | Exact-local | Beside the consumers |
+| Multiple directories in one resource tree | Inherited | At their lowest common ancestor |
+| Different resource trees, such as models and tests | Project-wide | Top-level declaration root |
+
+SQLBuild does not ask you to narrow a project-wide declaration merely because its current users are
+close together. If a declaration is already scoped, SQLBuild checks that it is placed close enough
+to the files that use it.
+
+### Explore the feature
+
+    See which declarations a model, test, hook, or function can use.
+    Choose between project-wide, inherited, exact-local, and model-private placement.
+    Ask SQLBuild what a file can use and preview how moving it would change that answer.
+
+Learn the features themselves in [Enums](/concepts/enums), [Constants](/concepts/constants), and
+[Writing Macros](/concepts/macros). See [Interpolation](/concepts/interpolation) for project,
+environment, and runtime context values, which are separate from declarations.
+
+## How Visibility Works
+
+Source: `concepts/declaration-scopes/visibility.mdx`
+
+See which enums, constants, and macros are available to each SQL file.
+
+For most SQL, the rule is simple:
+
+> A file can use project-wide declarations, declarations inherited from `_.../` directories above
+> it, and declarations in a `_local_.../` directory directly beside it.
+
+### Start from the SQL file
+
+SQLBuild starts from the file containing the SQL and walks up that file's directory tree.
+
+```text
+models/
+├── _constants/                 available throughout models/
+│   └── warehouse.sql
+└── commerce/
+    ├── _enums/                 available throughout commerce/
+    │   └── order_status.sql
+    ├── _local_constants/       available directly in commerce/ only
+    │   └── minimum_value.sql
+    ├── orders.sql
+    └── history/
+        └── archived_orders.sql
+```
+
+From this tree:
+
+| File | Can use |
+|------|---------|
+| `orders.sql` | `warehouse`, `order_status`, and `minimum_value` |
+| `history/archived_orders.sql` | `warehouse` and `order_status` |
+
+`minimum_value` is not available in `history/` because `_local_constants/` applies only to files
+directly beside it.
+
+### Supported resource trees
+
+Scoped declaration directories can be placed below these SQL resource roots:
+
+| Root | Contents |
+|------|----------|
+| `models/` | Models and inline model hooks |
+| `tests/unit/` | Unit tests |
+| `tests/scenarios/` | Scenarios |
+| `hooks/sql/` | Named SQL hooks |
+| `functions/sql/` | SQL functions |
+| `audits/` | Audits |
+| `sources/` | Inline source expressions |
+
+Each root is a separate tree. For example, `models/_constants/` does not flow into `tests/`. Put a
+declaration in the top-level `constants/`, `enums/`, or `macros/` directory when it must be available
+across different resource trees. A project-root `_constants/`, `_enums/`, or `_macros/` directory is
+invalid.
+
+### Which file controls visibility?
+
+| SQL being compiled | SQLBuild starts from |
+|--------------------|----------------------|
+| Model query | The model file |
+| Inline SQL hook in a model | The model file |
+| Unit test or scenario SQL | The test or scenario file |
+| Named SQL hook | The hook file under `hooks/sql/` |
+| SQL function | The function file under `functions/sql/` |
+| Audit | The audit file |
+| Inline source expression | The source definition |
+
+This means a reusable named hook does not change meaning depending on which model calls it. The
+hook uses declarations available where the hook itself is stored.
+
+### Tests and expected models
+
+A test first sees declarations available from the test file's own directory. It may also use public
+enums and constants available to a model for which it defines expected output.
+
+```sql
+TEST();
+
+WITH
+__expected__orders AS (
+  SELECT
+    1 AS order_id,
+    @enum("order_status").COMPLETED AS status
+)
+SELECT 1
+```
+
+Because the test defines `__expected__orders`, it may use public enums and constants available to
+the `orders` model. This makes it possible for expected rows to use the same domain values as the
+model they check.
+
+This additional access does **not** include:
+
+- Macros available only to the model
+- Enums or constants declared privately inside the model's `MODEL()` header
+- Declarations from a model merely mentioned by filename or directory layout
+
+Only an explicit `__expected__model_name` relationship adds the model's public enums and constants.
+When a test checks several models, it can use the public enums and constants available to each of
+those models.
+
+### Macros importing macros
+
+A macro file may import another project macro file when the imported macro is available from the
+importing file's location. The same directory rules apply as they do to SQL.
+
+```python
+# models/commerce/_macros/orders.py
+from macros.currency import round_money
+
+def formatted_total(expression: str) -> str:
+    return round_money(expression)
+```
+
+A broadly available macro cannot import a macro from a narrower child or sibling directory. See
+[Composition and Context](/concepts/macros/composition-and-context) for complete examples.
+
+### Names do not shadow
+
+Public names must be unique within their feature:
+
+- One public macro name cannot be defined twice.
+- One public enum name cannot be defined twice.
+- One public constant name cannot be defined twice.
+
+Moving a declaration into a narrower directory changes where it is available; it does not create a
+second version that overrides another declaration.
+
+Macros, enums, and constants use separate namespaces, so these three references may coexist:
+
+```sql
+@format_currency()
+@const("format_currency")
+@enum("format_currency").USD
+```
+
+  Choose the simplest directory that matches where a declaration is used.
+
+## Where to Put Declarations
+
+Source: `concepts/declaration-scopes/placement.mdx`
+
+Choose project-wide, inherited, exact-local, or model-private placement.
+
+Start with the ordinary project-wide directories unless you have a reason to limit access:
+
+```text
+macros/
+enums/
+constants/
+```
+
+Use scoped directories when a declaration should be available only within one folder or its child
+folders.
+
+### Choose a location
+
+| Where it is needed | Location |
+|--------------------|----------|
+| One model only | Inside that model's `MODEL()` header, for enums and constants |
+| SQL files directly in one directory | `_local_macros/`, `_local_enums/`, or `_local_constants/` |
+| A directory and its descendants | `_macros/`, `_enums/`, or `_constants/` |
+| Different trees, such as models and tests | Top-level `macros/`, `enums/`, or `constants/` |
+
+### One directory
+
+These two models use the same constant and both sit directly in `commerce/`:
+
+```text
+models/
+└── commerce/
+    ├── _local_constants/
+    │   └── minimum_value.sql
+    ├── orders.sql
+    └── customers.sql
+```
+
+Use `_local_constants/` because no descendant directory needs the value.
+
+### One directory tree
+
+These models use the same constant across two child directories:
+
+```text
+models/
+└── commerce/
+    ├── _constants/
+    │   └── reporting_day.sql
+    ├── finance/
+    │   └── revenue.sql
+    └── fulfillment/
+        └── shipments.sql
+```
+
+Use `_constants/` in `commerce/` so both child directories inherit it.
+
+### Different resource trees
+
+When a declaration is used directly from unrelated trees, make it project-wide:
+
+```text
+my_project/
+├── constants/
+│   └── order_status.sql
+├── models/
+│   └── commerce/orders.sql
+└── tests/
+    └── scenarios/order_lifecycle.sql
+```
+
+Top-level placement is also valid when you deliberately want a stable, easy-to-discover project API.
+SQLBuild does not force a used project-wide declaration into a narrower directory.
+
+### What SQLBuild checks
+
+Every declaration must be used by real compiled SQL. A name appearing only in a comment, quoted
+string, mock identity, or documentation does not count as use.
+
+For declarations already placed in `_.../` or `_local_.../` directories, SQLBuild checks that the
+location matches the files that use them. If not, the error shows:
+
+- Where the declaration is now
+- Which files use it
+- Which directory form is required
+- The destination directory
+
+These checks use the complete project rather than only the models selected by the current command.
+
+  Use Scope Explorer to see what a file can access or preview moving the file.
+
+## Scope Explorer
+
+Source: `concepts/declaration-scopes/explorer.mdx`
+
+Inspect visibility, explain resolution, browse declarations, and preview moves offline.
+
+Scope Explorer answers questions about declaration visibility through `sqb scope`. It is read-only
+and offline: it never connects to the warehouse, moves files, or edits configuration.
+
+Use this page for common workflows. See the [`sqb scope` CLI reference](/cli/scope) for every flag,
+filter, text section, and JSON field.
+
+### Inspect a resource
+
+Start with a model, test, scenario, hook, function, audit, source, or declaration identity:
+
+```bash
+sqb scope model:stg_orders
+sqb scope test:orders__completed_only
+sqb scope macro:normalize_order_status
+```
+
+The report separates what a file can use from what it actually uses:
+
+| Section | What it answers |
+|---------|-----------------|
+| Scope chain | Which exact-local, inherited, and project-wide directories apply? |
+| Available | Which declarations can this file use? |
+| Used declarations | Which declarations does it currently use? |
+| Expected models | Which enums and constants are available through expected model output? |
+| Nearby unavailable | Which nearby declarations are outside its scope? This is opt-in. |
+| Placement | Is each scoped declaration in the right directory? |
+
+### Explain one declaration
+
+Ask why a declaration is available, unavailable, or used:
+
+```bash
+sqb scope model:stg_orders --explain enum:customer_status
+sqb scope test:orders__completed_only --explain constant:order_status
+```
+
+For a test, the explanation keeps declarations from the test's directory separate from enums and
+constants made available through an expected model.
+
+### Browse nearby declarations
+
+Use nearby output when you know the resource but not the declaration name:
+
+```bash
+sqb scope model:stg_orders --include-nearby
+sqb scope model:stg_orders --include-nearby --nearby-depth 2
+```
+
+Browse declarations by folder when a project contains more than a short list:
+
+```bash
+sqb scope model:stg_orders --browse .
+sqb scope model:stg_orders --browse global
+sqb scope model:stg_orders --list global/macros/finance/payments
+```
+
+Filters for declaration kind, definition path, glob matching, and actual usage can be combined. Use
+pagination for large reports rather than trimming the compiler facts.
+
+### Check a prospective path
+
+Inspect what a resource would see before its file exists:
+
+```bash
+sqb scope --at models/commerce/finance/new_revenue.sql
+sqb scope --at tests/unit/commerce/orders/
+```
+
+Use `--as-path` to evaluate an existing resource from a proposed destination without moving it:
+
+```bash
+sqb scope model:stg_orders --as-path models/commerce/staging/stg_orders.sql
+```
+
+### Preview a resource move
+
+Use `--as-path` to preview moving an existing authored resource such as a model, test, hook, or
+function. The report shows retained, gained, and lost declarations and direct usages the move would
+invalidate:
+
+```bash
+sqb scope model:stg_orders \
+  --as-path models/marts/orders/stg_orders.sql
+```
+
+The destination must be valid for that resource kind. Scope Explorer does not move the file or
+preview moving declaration files themselves.
+
+### Automation
+
+Use `--json` for editor integrations and repository tooling. Output has a versioned schema, stable
+ordering, filters, pagination, and move-preview results. Constant values, credentials, and secret
+connection settings are not included.
+
+    Review the directory rules behind the report.
+    See all selectors, filters, pagination options, output sections, and JSON behavior.
+
+## Kata SQL Architecture Checks
+
+Source: `concepts/kata.mdx`
+
+Enforce opt-in SQL architecture and model-shape policy over your compiled project.
+
+Kata is SQLBuild's opt-in SQL architecture policy. It compiles the project, then checks model
+structure, naming, dependency boundaries, joins, contracts, and test coverage. Built-in checks run
+offline: they do not execute warehouse SQL or rewrite source files. Findings have stable codes and
+concrete remediations.
+
+Kata is error-only: every retained finding blocks the command. Use it for conventions that a team
+has deliberately adopted, not as a collection of advisory style warnings.
+
+Tests codify behavioral expectations; Kata codifies architectural expectations for SQL models.
+For equivalent boundaries, repository structure, and code-shape checks in Python projects, see
+[Fensu](https://docs.fensu.dev/).
+
+### Where Kata fits
+
+| Command | Responsibility |
+|---------|----------------|
+| `sqb compile` | SQL validity, references, inferred columns, contracts, and lineage |
+| `sqb lint` / `sqb format` | SQL presentation and formatting |
+| `sqb kata` | Repository architecture and model-shape conventions |
+| `sqb test` | Transformation behavior |
+| `sqb audit` | Data quality against materialized data |
+
+Kata is a separate command. It is not run automatically by `compile` or `build`.
+
+### Enable Kata
+
+Commit the shared policy to `sqlbuild_project.toml`:
+
+```toml
+[kata]
+select = ["SQBK"]
+```
+
+This activates the complete standard policy. Start here, then use `ignore` to switch off conventions
+the repository is not ready to enforce.
+
+Kata evaluates no rules when `[kata].select` is empty. Prefixes select matching rules that are
+enabled by default; exact codes also select individually opt-in rules. All current built-ins are
+enabled by default, so `SQBK` selects the complete built-in catalogue.
+
+Rule selectors are case-sensitive prefixes. They do not use `*` wildcards:
+
+- Built-in rules use `SQBK<family><three digits>`, such as `SQBKS101`.
+- Custom rules use `XSQBK<family><three digits>`, such as `XSQBKP001`.
+- `select` activates rules; `ignore` removes matching rules from the active policy.
+- An exact code activates that rule even when it is opt-in.
+- The CLI `--select` and `--exclude` flags scope models, not rules.
+
+Inspect any built-in or configured custom rule without enabling it:
+
+```bash
+sqb kata rule SQBKS101
+```
+
+### Built-in rules
+
+All current built-ins form the standard policy and are enabled by matching prefixes.
+
+#### Structure
+
+| Code | Check |
+|------|-------|
+| `SQBKS000` | Standalone comments belong on the first inner line of a CTE |
+| `SQBKS001` | Transformation logic belongs in top-level CTEs |
+| `SQBKS002` | The terminal SELECT reads plainly from the final top-level CTE |
+| `SQBKS101` | Each `__ref` and `__source` is isolated in one dependency import CTE |
+| `SQBKS201` | `SELECT *` is restricted to dependency import CTEs |
+| `SQBKS202` | Positional set-operation branches enumerate their columns |
+| `SQBKS301` | CTEs are top-level, not nested |
+| `SQBKS302` | Recursive CTEs are not permitted |
+| `SQBKS401` | View materialization agrees with the `stg_v`, `int_v`, or `mart_v` marker |
+| `SQBKS501` | CTE names describe their contents |
+
+#### Layers and model grammar
+
+| Code | Check |
+|------|-------|
+| `SQBKL001` | Dependencies flow forward through the layer order |
+| `SQBKL101` | Qualified table dependencies use `__ref` or `__source` |
+| `SQBKR001` | Model names follow `<domain>__<layer>__<entity>[__<source>]` |
+| `SQBKR002` | Model layer names agree with their folders |
+| `SQBKR201` | Model source suffixes and source dependency names use approved, current tokens |
+| `SQBKR301` | Referenced model identifiers follow Kata model-name grammar |
+| `SQBKR401` | Models declare `contract enforced` |
+
+#### Joins
+
+| Code | Check |
+|------|-------|
+| `SQBKJ001` | Implicit comma joins are not permitted |
+| `SQBKJ002` | Cross joins require an exact, reasoned exception |
+| `SQBKJ101` | Non-cross joins declare `ON` or `USING` keys |
+
+#### Column naming and types
+
+| Code | Check |
+|------|-------|
+| `SQBKN001` | `is_`, `has_`, and `can_` columns are BOOLEAN |
+| `SQBKN002` | `*_at`, `*_ts`, and `*_timestamp` columns use timestamp types |
+| `SQBKN003` | `*_date` columns are DATE |
+
+These checks use declared contract columns, not inferred output columns.
+
+#### Decision hygiene
+
+| Code | Check |
+|------|-------|
+| `SQBKH001` | Enum comparisons use declared members and normalized operands |
+| `SQBKH002` | Non-canonical numeric decisions use named constants |
+| `SQBKH101` | Identical enum domains are consolidated |
+| `SQBKH201` | Public enum and constant files live under domain folders |
+
+`SQBKH001` requires direct comparisons to `@enum("<enum>").<MEMBER>`. Normalize controlled values
+upstream rather than wrapping either comparison operand. A direct source-side value may be
+normalized in the comparison because the project does not control source casing; the enum member
+must still remain unwrapped.
+
+#### Tests and coverage
+
+| Code | Check |
+|------|-------|
+| `SQBKX001` | Non-passthrough models meet the configured audit minimum |
+| `SQBKX002` | Non-passthrough models meet the configured SQL test minimum |
+| `SQBKX201` | Selected custom rules have statically discoverable public-harness test cases |
+
+Selecting a custom rule automatically adds `SQBKX201` unless the policy ignores it. This is a
+static check for conventional `RuleCase` and `evaluate_rule` usage; it does not execute the tests.
+Thresholds default to one and can be set to zero to disable the corresponding minimum:
+
+```toml
+[kata.thresholds]
+min_audits_per_model = 1
+min_tests_per_model = 1
+min_custom_rule_test_cases = 1
+```
+
+#### SQL tests and scenarios
+
+The `SQBKT` family governs SQL authored under `tests/unit/` and `tests/scenarios/`. It consumes
+compiler-resolved test targets and resource ownership; it does not infer ownership from filenames
+or repeat compiler diagnostics for malformed tests.
+
+| Code | Check |
+|------|-------|
+| `SQBKT001` | Unit tests and scenarios use their compiler-owned canonical roots |
+| `SQBKT002` | Unit and scenario filenames identify their subject and behavior |
+| `SQBKT003` | Unit tests mirror resolved model, macro, UDF, or table-function ownership |
+| `SQBKT004` | Every `TEST` block has an explicit target-aware `subject: expected behavior` name |
+| `SQBKT101` | Scenario descriptions identify a concrete business behavior rather than generic case numbering |
+
+Select the family independently when adopting these conventions:
+
+```toml
+[kata]
+select = ["SQBKT"]
+```
+
+Every unit-test block, including the only block in a file, has an explicit name:
+
+```sql
+TEST (
+  name "stg_orders: excludes cancelled orders",
+);
+```
+
+The first colon separates a nonempty subject from nonempty behavior. Later colons are ordinary
+behavior prose. Single-model subjects match the resolved expected model, direct-mode subjects match
+the tested macro, UDF, or table function, and multi-model subjects name the common domain or an
+explicit pipeline. Generic values such as `test`, `works`, `basic`, and `case 1` are rejected without
+maintaining a verb allowlist.
+
+Unit filenames use either `test_<subject>.sql` or `test_<subject>__<behavior>.sql`. When a behavior
+suffix is present, it corresponds to the normalized behavior text; concise prefixes such as
+`excludes_cancelled` for `excludes cancelled orders` are valid. Scenario filenames omit the
+redundant prefix and use `<subject>__<behavior>.sql`:
+
+```text
+tests/unit/staging/test_stg_orders__excludes_cancelled.sql
+tests/scenarios/daily_revenue__multiple_orders.sql
+```
+
+Mirroring uses compiled relationships:
+
+- A single-model test mirrors the model parent below its compiler-owned model root.
+- A multi-model test mirrors the nearest common model-domain parent.
+- Models with no meaningful common parent use the configured pipeline directory.
+- Macro, UDF, and table-function tests mirror all resolved direct resource owners.
+- When ownership cannot be proven from compiler facts, Kata skips mirroring rather than guessing.
+
+The pipeline directory is relative to `tests/unit/`, normalized, and included in cache and generated
+guidance identity. The default is `pipelines`:
+
+```toml
+[kata.sql_tests]
+pipeline_directory = "chains/commerce"
+```
+
+This maps cross-domain tests to `tests/unit/chains/commerce/`. Absolute paths, traversal, repeated
+separators, and backslash paths are invalid configuration.
+
+### Naming policy
+
+Naming and layer rules can use a closed project vocabulary:
+
+```toml
+[kata]
+domains = ["finance", "market"]
+approved_source_tokens = ["salesforce", "stripe"]
+cte_name_whitelist = ["finalized_rows"]
+cte_name_denylist = ["scratch_result"]
+
+[kata.retired_source_tokens]
+old_crm = "salesforce"
+```
+
+Valid Kata layers are `stg`, `stg_v`, `int_clean`, `int_v`, `int_enriched`, `mart`, and
+`mart_v`. Configuration supplies vocabulary to active rules; it does not activate them. When
+`SQBKR001` or `SQBKH201` is active, a non-empty `domains` list constrains model or declaration
+domains respectively.
+
+### Exceptions and scoped ignores
+
+Choose the narrowest mechanism that represents the policy:
+
+| Mechanism | Scope | Reason required | Stale-checked |
+|-----------|-------|-----------------|---------------|
+| `ignore` | Disable rules globally | No | No |
+| `rule_exceptions` | One exact rule and exact file | Yes | Yes |
+| `rule_ignores` | Rule prefixes or codes across path globs | Yes | No |
+| `select_star_allow` | Path-glob allowance for `SQBKS201` | Yes | No |
+
+```toml
+[[kata.rule_exceptions]]
+rule = "SQBKJ002"
+path = "models/mart/market__mart__matrix.sql"
+reason = "Intentional Cartesian product over a bounded dimension"
+
+[[kata.rule_ignores]]
+rules = ["SQBKS"]
+paths = ["models/legacy/**"]
+reason = "Legacy migration boundary"
+
+[[kata.select_star_allow]]
+paths = ["models/mart/*_export.sql"]
+reason = "Intentional passthrough export"
+```
+
+An exact exception fails when its active rule no longer produces a fault at that file, prompting
+the repository to remove obsolete exceptions. Broad migration boundaries and lone-star allowances
+remain reasoned but are intentionally not stale-checked.
+
+### Cache and CI
+
+Built-in policies use a persistent cache under `target/kata-cache`. Compiled model content, active
+rules, options, thresholds, naming vocabulary, and relevant project files participate in cache
+identity. Disable it when diagnosing cache behavior:
+
+```toml
+[kata.cache]
+enabled = false
+```
+
+Run Kata directly in CI. It exits `1` when faults remain:
+
+```bash
+sqb kata
+sqb kata --json
+```
+
+Generate agent guidance from the same resolved policy and verify that committed guidance remains
+fresh:
+
+```bash
+sqb kata skills
+sqb kata skills --check
+```
+
+Kata manages `.agents/skills/sqlbuild-kata/SKILL.md`,
+`.claude/skills/sqlbuild-kata/SKILL.md`, and `.opencode/skills/sqlbuild-kata/SKILL.md`. It refuses
+to overwrite divergent or unowned files.
+
+See [Custom Kata Rules](/concepts/kata/custom-rules) to encode repository-specific policy and the
+[Kata CLI reference](/cli/kata) for command output and exit behavior.
+
+## Custom Kata Rules
+
+Source: `concepts/kata/custom-rules.mdx`
+
+Define and test repository-owned SQL architecture rules with the public Kata API.
+
+Custom Kata rules extend the built-in policy when a repository has domain conventions that cannot
+be expressed by configuration alone. They use the same selection, suppression, deterministic
+ordering, and remediation output as built-ins.
+
+Custom rule codes use `XSQBK<family><three digits>`. Keep codes stable after adoption because they
+become part of configuration, CI output, and exceptions.
+
+### Define a rule
+
+```python
+from sqlbuild.kata import KataFault, RuleContext, kata
+
+@kata(
+    code="XSQBKP001",
+    family="prices",
+    slug="typed-currency",
+    message="price models must declare a currency column",
+    remediation="Declare currency in the MODEL columns contract.",
+)
+def typed_currency(*, model, ctx: RuleContext) -> list[KataFault]:
+    if any(column.name == "currency" for column in ctx.declared_columns):
+        return []
+    return [ctx.path_fault()]
+```
+
+The function signature is exactly two keyword-only arguments named `model` and `ctx`. Return an
+empty list when the model passes or one or more `KataFault` values when it fails.
+
+`RuleContext` exposes the compiled model, authored SQL, raw Polyglot AST, references, parsed model
+name, materialization, declared columns, audit and test counts, public declarations, active policy,
+and fault constructors. Repository files can be read safely through `project_read_text` and
+`project_glob`.
+
+### Load and select rules
+
+Load repository-owned files or dotted modules from `sqlbuild_project.toml`:
+
+```toml
+[kata]
+select = ["XSQBKP001"]
+rule_paths = ["kata/rules"]
+rule_modules = ["project_kata.rules"]
+```
+
+A directory in `rule_paths` is scanned recursively for Python files containing `@kata`. Dotted
+modules must resolve beneath the project root. Codes must be unique across built-in and custom
+rules.
+
+Custom rules require exact selectors by default. Set `enabled_by_default=True` on the decorator to
+include a rule in matching prefix selections. This does not activate Kata when
+`[kata].select` is empty.
+
+### Typed options
+
+Declare options with `RuleOption.boolean`, `integer`, `string`, `string_list`, or `integer_list`:
+
+```python
+from sqlbuild.kata import KataFault, RuleContext, RuleOption, kata
+
+REQUIRED_DOMAIN = RuleOption.string(
+    name="required_domain",
+    default="market",
+    description="Domain that owns price models",
+)
+
+@kata(
+    code="XSQBKP002",
+    family="prices",
+    slug="required-domain",
+    message="price models must belong to the configured domain",
+    remediation="Move or rename this model for the configured domain.",
+    options=(REQUIRED_DOMAIN,),
+)
+def required_domain(*, model, ctx: RuleContext) -> list[KataFault]:
+    parts = ctx.name_parts
+    if parts is not None and parts.domain == ctx.option(REQUIRED_DOMAIN):
+        return []
+    return [ctx.path_fault()]
+```
+
+Configure options under the exact rule code. Unknown rules, option names, or invalid values fail
+configuration:
+
+```toml
+[kata.rule_options.XSQBKP002]
+required_domain = "finance"
+```
+
+### Test every rule
+
+Use the public harness so tests exercise normal SQLBuild discovery, compilation, rule loading, and
+structured fault evaluation:
+
+```python
+from sqlbuild.kata import RuleCase, evaluate_rule
+
+from kata.rules.prices import typed_currency
+
+def test_missing_currency_faults() -> None:
+    result = evaluate_rule(
+        rule=typed_currency,
+        test_case=RuleCase(
+            description="missing currency faults",
+            source=(
+                "MODEL (materialized table);\n\n"
+                "WITH final AS (SELECT 1 AS price)\n"
+                "SELECT price FROM final\n"
+            ),
+            path="models/mart/market__mart__prices.sql",
+            expected_fault_count=1,
+        ),
+    )
+
+    assert result.fault_count == 1
+```
+
+`RuleCase.files` can add supporting project files and `RuleCase.config` supplies the rule's option
+values. Keep conventional `RuleCase` and `evaluate_rule` calls under `tests/` so `SQBKX201` can
+count statically discoverable harness cases. This coverage check does not execute the tests, so run
+the test suite separately in CI.
+
+### Execution and caching
+
+Selected custom rules execute in a bounded Python subprocess with a 30-second timeout. Exceptions
+are reported with the rule code and model path, and returned faults rejoin normal suppressions and
+deterministic ordering.
+
+Selecting any custom rule disables the model cache by default. To keep the built-in cache available,
+require hermetic custom rules explicitly:
+
+```toml
+[kata.cache]
+enabled = true
+require_cacheable = true
+```
+
+Cacheable rules may import supported pure modules such as `collections`, `dataclasses`, `enum`,
+`math`, `re`, `typing`, and `sqlbuild.kata`. Use `RuleContext` rather than direct filesystem calls.
+SQLBuild validates these constraints before evaluation.
+
+Custom findings are still recomputed on each invocation. `require_cacheable` preserves the native
+model cache around them; it does not cache custom subprocess output.
+
+Return to [Kata SQL Architecture Checks](/concepts/kata) for built-in rules, selectors, and
+exceptions.
 
 ## Overview
 
@@ -11290,7 +11497,10 @@ sqb scope model:stg_orders --include-nearby --nearby-depth 2
 sqb scope model:stg_orders --explain enum:customer_status
 ```
 
-An explanation distinguishes an inaccessible known declaration from an unknown identity. It reports the declaration's definition and ownership, the visibility or boundary reason, consumers and macro dependencies, expected-model grants, required placement, and promotion impact. It does not move or rewrite the declaration.
+An explanation distinguishes a known but unavailable declaration from an unknown name. It reports
+where the declaration is defined, why it is or is not available, which files use it, expected-model
+access, required placement, and the impact of broadening its scope. It does not move or rewrite the
+declaration.
 
 `--dependency-depth` is separate from `--nearby-depth`: it follows tracked declaration dependencies from the used section rather than filesystem proximity.
 
@@ -11399,7 +11609,8 @@ There is no `--show-values` option.
 
 `sqb scope` inspects native SQLBuild authored resources and declarations. It does not discover or emulate dbt models, dbt or Jinja macros, package dispatch, dbt manifests, dbt selectors, dbt tests, or dbt schema YAML visibility. An external dbt graph dependency does not contribute declarations or lexical scope.
 
-For the declaration directory rules, all-ancestor composition, placement validation, expected-model grants, and macro expansion semantics, see [Declaration Scopes](/concepts/declaration-scopes).
+For declaration directory rules, placement checks, test access through expected models, and scoped
+macro imports, see [Declarations and Scopes](/concepts/declaration-scopes).
 
 ## kata
 
@@ -13512,3 +13723,54 @@ sqb reconcile attach --virtual-env dev --model fact_orders \
 ```
 
 See [Reconcile](/concepts/virtual-environments/reconcile) for details on guards and when to use each subcommand.
+
+## Enums and Constants Have Moved
+
+Source: `concepts/enums-and-constants.mdx`
+
+Find the new focused guides for enums, constants, collections, contracts, and private values.
+
+Enums and constants now have separate guides so each feature is easier to find and learn. This page
+remains available for existing links and bookmarks but is not part of the main navigation.
+
+    Define fixed string or integer domains and reference validated members.
+    Define reusable scalar values and reference them safely from SQL.
+    Work with lists, sets, objects, value lists, and native arrays.
+    Keep enums and constants inside one model.
+
+### Public declarations
+
+See [Enums](/concepts/enums) and [Constants](/concepts/constants) for project-wide declarations.
+
+### Constant values
+
+See [Constants](/concepts/constants#scalar-values) for scalars and
+[Collections and Rendering](/concepts/constants/collections-and-rendering) for collections.
+
+### References and rendering
+
+See [Collections and Rendering](/concepts/constants/collections-and-rendering).
+
+### Adapter matrix
+
+See the [native-array rendering matrix](/concepts/constants/collections-and-rendering#native-array-rendering).
+
+### Rendering configuration
+
+See [Project default](/concepts/constants/collections-and-rendering#project-default).
+
+### Model-local declarations
+
+See [Model-Private Values](/concepts/model-private-values).
+
+### Model-private declarations
+
+See [Model-Private Values](/concepts/model-private-values).
+
+### Enum validation
+
+See [Enum validation rules](/concepts/enums#validation-rules).
+
+### Enum-typed contracts
+
+See [Enum Model Contracts](/concepts/enums/model-contracts).

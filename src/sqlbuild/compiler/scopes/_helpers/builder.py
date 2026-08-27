@@ -47,6 +47,7 @@ from sqlbuild.compiler.scopes.models import (
     ScopeCompleteness,
     ScopeDiagnostic,
     ScopeIndex,
+    UsageRecord,
 )
 from sqlbuild.compiler.scopes.types import (
     DeclarationKind,
@@ -54,6 +55,7 @@ from sqlbuild.compiler.scopes.types import (
     ResourceKind,
     ScopeDiagnosticCode,
     ScopeKind,
+    UsageKind,
 )
 from sqlbuild.sql_values.types import SqlValueKind
 
@@ -172,6 +174,7 @@ def build_index(
             key=_diagnostic_key,
         )
     )
+    usages: tuple[UsageRecord, ...] = _macro_dependency_usages(declarations=declarations)
     return ScopeIndex(
         ownership_roots=tuple(
             OwnershipRoot(path=path, resource_kind=kind)
@@ -179,6 +182,7 @@ def build_index(
         ),
         resources=tuple(sorted(resources, key=_resource_key)),
         declarations=tuple(sorted(declarations, key=_declaration_key)),
+        usages=usages,
         diagnostics=diagnostics,
         completeness=ScopeCompleteness(
             runtime_usage=False,
@@ -187,6 +191,22 @@ def build_index(
             promotion_impact=False,
         ),
     )
+
+
+def _macro_dependency_usages(*, declarations: list[DeclarationRecord]) -> tuple[UsageRecord, ...]:
+    usages: list[UsageRecord] = []
+    for record in declarations:
+        if record.macro is None:
+            continue
+        for dependency in record.macro.dependencies:
+            usages.append(
+                UsageRecord(
+                    consumer=record.identity,
+                    declaration=dependency,
+                    kind=UsageKind.DECLARATION_DEPENDENCY,
+                )
+            )
+    return tuple(dict.fromkeys(usages))
 
 
 def build_tolerant_scope_index(*, project_dir: Path) -> ScopeIndex:
@@ -478,6 +498,7 @@ def _macro_record(
         owning_path=owning_path,
         macro=MacroMetadata(
             parameters=tuple(inspect.signature(loaded.function).parameters),
+            dependencies=loaded.dependencies,
             source_digest=hashlib.sha256(loaded.raw_source.encode()).hexdigest(),
         ),
     )
@@ -503,7 +524,11 @@ def _static_macro_record(
             if discovered is not None and discovered.owning_path is not None
             else None
         ),
-        macro=MacroMetadata(parameters=item.parameters, source_digest=item.source_digest),
+        macro=MacroMetadata(
+            parameters=item.parameters,
+            dependencies=item.dependencies,
+            source_digest=item.source_digest,
+        ),
     )
 
 

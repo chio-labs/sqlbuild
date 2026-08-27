@@ -38,6 +38,14 @@ class MacroLoadCountIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class MacroCompositionIntegrationTestCase:
+    description: str
+    project_files: dict[str, str]
+    macro_name: str
+    expected_dependencies: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class CompileProgressIntegrationTestCase:
     description: str
     project_files: dict[str, str]

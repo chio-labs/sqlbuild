@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import ast
+import copy
 import hashlib
-import importlib.util
 import inspect
 import re
+import sys
+import threading
 from dataclasses import dataclass, field
-from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
 
@@ -39,7 +40,7 @@ from sqlbuild.compiler.scopes.models import (
     ResourceIdentity,
     UsageRecord,
 )
-from sqlbuild.compiler.scopes.types import DeclarationKind, UsageKind
+from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind, UsageKind
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
 from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
     is_identifier_character as _is_identifier_continue,
@@ -56,6 +57,27 @@ _LINE_COMMENT_TOKEN: str = "--"
 _BLOCK_COMMENT_TOKEN: str = "/*"
 _STAR_IMPORT_NAME: str = "*"
 _MACRO_SCAN_PATTERN: re.Pattern[str] = re.compile(r"@|--|/\*|'|\"|`")
+_SYNTHETIC_PACKAGE_PREFIX: str = "_sqlbuild_project_macros_"
+_MACRO_MODULE_LOAD_LOCK: threading.RLock = threading.RLock()
+
+
+@dataclass(frozen=True)
+class _MacroModuleAnalysis:
+    file: DiscoveredMacroFile
+    name: str
+    tree: ast.Module
+    exports: tuple[str, ...]
+    dependencies: dict[str, tuple[DeclarationIdentity, ...]]
+    module_dependencies: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _MacroAnalysisInputs:
+    files: dict[str, DiscoveredMacroFile]
+    trees: dict[str, ast.Module]
+    exports: dict[str, frozenset[str]]
+    module_names: frozenset[str]
+    package_names: frozenset[str]
 
 
 @dataclass
@@ -93,9 +115,16 @@ def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[st
     if inventory.faults:
         raise CompileInputError(inventory.faults[0].message)
 
+    analyses: dict[str, _MacroModuleAnalysis] = _analyze_project_macro_modules(
+        macro_files=macro_files
+    )
+    modules: dict[str, ModuleType] = _load_macro_modules(analyses=analyses)
+    export_dependencies: dict[tuple[Path, str], tuple[DeclarationIdentity, ...]] = {
+        (item.relative_path, item.name): item.dependencies for item in inventory.exports
+    }
     loaded_macros: dict[str, LoadedMacro] = {}
     for macro_file in macro_files:
-        module: ModuleType = _load_macro_module(macro_file=macro_file)
+        module: ModuleType = modules[_macro_module_name(macro_file)]
         attribute_name: str
         for attribute_name in dir(module):
             if attribute_name.startswith("_"):
@@ -118,6 +147,7 @@ def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[st
                 relative_path=macro_file.relative_path,
                 raw_source=macro_file.contents,
                 function=attribute_value,
+                dependencies=export_dependencies[(macro_file.relative_path, attribute_name)],
             )
     return loaded_macros
 
@@ -127,73 +157,162 @@ def _inventory_project_macros(
 ) -> StaticMacroInventory:
     """Validate and inventory project macro exports without executing authored code."""
 
-    module_names: frozenset[str] = frozenset(_macro_module_name(file) for file in macro_files)
-    exports: list[StaticMacroExport] = []
+    try:
+        analyses: dict[str, _MacroModuleAnalysis] = _analyze_project_macro_modules(
+            macro_files=macro_files
+        )
+    except CompileInputError:
+        return _inventory_project_macros_tolerantly(macro_files=macro_files)
+    return _inventory_from_analyses(macro_files=macro_files, analyses=analyses)
+
+
+def _macro_inventory_fault(
+    *, error: CompileInputError, macro_files: tuple[DiscoveredMacroFile, ...]
+) -> StaticMacroFault:
+    relative_path: Path = next(
+        (item.relative_path for item in macro_files if item.relative_path.as_posix() in str(error)),
+        macro_files[0].relative_path if macro_files else Path("macros"),
+    )
+    return StaticMacroFault(relative_path=relative_path, message=str(error))
+
+
+def _inventory_project_macros_tolerantly(
+    *, macro_files: tuple[DiscoveredMacroFile, ...]
+) -> StaticMacroInventory:
+    remaining: list[DiscoveredMacroFile] = list(macro_files)
     faults: list[StaticMacroFault] = []
-    owners: dict[str, Path] = {}
-    for macro_file in macro_files:
+    while remaining:
+        current: tuple[DiscoveredMacroFile, ...] = tuple(remaining)
         try:
-            module_ast: ast.Module = _validate_macro_module(
-                macro_file=macro_file, module_names=module_names
+            analyses: dict[str, _MacroModuleAnalysis] = _analyze_project_macro_modules(
+                macro_files=current
             )
         except CompileInputError as error:
-            faults.append(
-                StaticMacroFault(
-                    relative_path=macro_file.relative_path,
-                    message=str(error).replace(
-                        str(macro_file.file_path), macro_file.relative_path.as_posix()
-                    ),
-                )
+            collisions: tuple[tuple[str, tuple[DiscoveredMacroFile, ...]], ...] = (
+                _macro_module_path_collisions(macro_files=current)
             )
+            if collisions:
+                collided_paths: set[Path] = set()
+                for module_name, files in collisions:
+                    paths: str = " and ".join(str(file.relative_path) for file in files)
+                    for file in files:
+                        collided_paths.add(file.relative_path)
+                        faults.append(
+                            StaticMacroFault(
+                                relative_path=file.relative_path,
+                                message=(
+                                    f"Macro module path collision for '{module_name}': {paths}"
+                                ),
+                            )
+                        )
+                remaining = [item for item in remaining if item.relative_path not in collided_paths]
+                continue
+            fault: StaticMacroFault = _macro_inventory_fault(error=error, macro_files=current)
+            faults.append(fault)
+            remaining = [item for item in remaining if item.relative_path != fault.relative_path]
             continue
-        statement: ast.stmt
-        for statement in module_ast.body:
+        inventory: StaticMacroInventory = _inventory_from_analyses(
+            macro_files=current, analyses=analyses
+        )
+        return StaticMacroInventory(
+            exports=inventory.exports,
+            faults=_deduplicated_macro_faults((*faults, *inventory.faults)),
+        )
+    return StaticMacroInventory(faults=_deduplicated_macro_faults(tuple(faults)))
+
+
+def _macro_module_path_collisions(
+    *, macro_files: tuple[DiscoveredMacroFile, ...]
+) -> tuple[tuple[str, tuple[DiscoveredMacroFile, ...]], ...]:
+    grouped: dict[str, list[DiscoveredMacroFile]] = {}
+    for file in macro_files:
+        grouped.setdefault(_macro_module_name(file), []).append(file)
+    collisions: list[tuple[str, tuple[DiscoveredMacroFile, ...]]] = []
+    for module_name in sorted(grouped):
+        files: list[DiscoveredMacroFile] = grouped[module_name]
+        if len(files) > 1:
+            collisions.append((module_name, tuple(files)))
+    return tuple(collisions)
+
+
+def _inventory_from_analyses(
+    *,
+    macro_files: tuple[DiscoveredMacroFile, ...],
+    analyses: dict[str, _MacroModuleAnalysis],
+) -> StaticMacroInventory:
+    exports: dict[str, StaticMacroExport] = {}
+    collided_names: set[str] = set()
+    faults: list[StaticMacroFault] = []
+    for macro_file in macro_files:
+        analysis: _MacroModuleAnalysis = analyses[_macro_module_name(macro_file)]
+        for statement in analysis.tree.body:
             if not isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef):
                 continue
             if statement.name.startswith("_"):
                 continue
-            existing: Path | None = owners.get(statement.name)
+            item: StaticMacroExport = _static_macro_export(
+                macro_file=macro_file, analysis=analysis, statement=statement
+            )
+            existing: StaticMacroExport | None = exports.pop(item.name, None)
             if existing is not None:
-                collision_error: CompileInputError = CompileInputError(
-                    f"Macro name collision for '{statement.name}': "
-                    f"{existing} and {macro_file.file_path}"
-                )
+                collided_names.add(item.name)
                 faults.append(
                     StaticMacroFault(
-                        relative_path=macro_file.relative_path,
-                        message=str(collision_error),
+                        relative_path=item.relative_path,
+                        message=(
+                            f"Macro name collision for '{item.name}': "
+                            f"{existing.relative_path} and {item.relative_path}"
+                        ),
                     )
                 )
-                continue
-            owners[statement.name] = macro_file.file_path
-            arguments: ast.arguments = statement.args
-            exports.append(
-                StaticMacroExport(
-                    name=statement.name,
-                    relative_path=macro_file.relative_path,
-                    parameters=tuple(
-                        argument.arg for argument in (*arguments.posonlyargs, *arguments.args)
+            elif item.name in collided_names:
+                faults.append(
+                    StaticMacroFault(
+                        relative_path=item.relative_path,
+                        message=f"Macro name collision for '{item.name}' at {item.relative_path}",
                     )
-                    + ((arguments.vararg.arg,) if arguments.vararg is not None else ())
-                    + tuple(argument.arg for argument in arguments.kwonlyargs)
-                    + ((arguments.kwarg.arg,) if arguments.kwarg is not None else ()),
-                    line=statement.lineno,
-                    source_digest=hashlib.sha256(macro_file.contents.encode()).hexdigest(),
                 )
-            )
+            else:
+                exports[item.name] = item
     return StaticMacroInventory(
-        exports=tuple(sorted(exports, key=lambda item: (item.name, item.relative_path.as_posix()))),
+        exports=tuple(
+            sorted(exports.values(), key=lambda item: (item.name, item.relative_path.as_posix()))
+        ),
         faults=tuple(faults),
     )
+
+
+def _static_macro_export(
+    *,
+    macro_file: DiscoveredMacroFile,
+    analysis: _MacroModuleAnalysis,
+    statement: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> StaticMacroExport:
+    arguments: ast.arguments = statement.args
+    return StaticMacroExport(
+        name=statement.name,
+        relative_path=macro_file.relative_path,
+        parameters=tuple(argument.arg for argument in (*arguments.posonlyargs, *arguments.args))
+        + ((arguments.vararg.arg,) if arguments.vararg is not None else ())
+        + tuple(argument.arg for argument in arguments.kwonlyargs)
+        + ((arguments.kwarg.arg,) if arguments.kwarg is not None else ()),
+        line=statement.lineno,
+        source_digest=hashlib.sha256(macro_file.contents.encode()).hexdigest(),
+        dependencies=analysis.dependencies[statement.name],
+    )
+
+
+def _deduplicated_macro_faults(
+    faults: tuple[StaticMacroFault, ...],
+) -> tuple[StaticMacroFault, ...]:
+    return tuple(dict.fromkeys(faults))
 
 
 def _macro_module_name(macro_file: DiscoveredMacroFile) -> str:
     return ".".join(macro_file.relative_path.with_suffix("").parts)
 
 
-def _validate_macro_module(
-    *, macro_file: DiscoveredMacroFile, module_names: frozenset[str]
-) -> ast.Module:
+def _parse_macro_module(*, macro_file: DiscoveredMacroFile) -> ast.Module:
     try:
         module_ast: ast.Module = ast.parse(macro_file.contents, filename=str(macro_file.file_path))
     except SyntaxError as error:
@@ -201,28 +320,7 @@ def _validate_macro_module(
             f"Failed to parse macros from '{macro_file.file_path}': {error}"
         ) from error
 
-    statement: ast.stmt
     for statement in module_ast.body:
-        imported_module_names: tuple[str, ...] = _imported_module_names(
-            statement=statement,
-            current_module_name=_macro_module_name(macro_file),
-        )
-        matching_names: list[str] = []
-        imported_name: str
-        for imported_name in imported_module_names:
-            if _matches_macro_module(imported_name=imported_name, module_names=module_names):
-                matching_names.append(imported_name)
-        matched_module_names: tuple[str, ...] = tuple(
-            sorted(
-                matching_names,
-                key=lambda name: (name not in module_names, -len(name), name),
-            )
-        )
-        if matched_module_names:
-            raise CompileInputError(
-                f"Macro module '{macro_file.relative_path}' must not import project macro module "
-                f"'{matched_module_names[0]}'"
-            )
         public_declaration_name: str | None = _public_non_function_declaration_name(statement)
         if public_declaration_name is not None:
             raise CompileInputError(
@@ -232,12 +330,644 @@ def _validate_macro_module(
     return module_ast
 
 
+def _analyze_project_macro_modules(
+    *, macro_files: tuple[DiscoveredMacroFile, ...]
+) -> dict[str, _MacroModuleAnalysis]:
+    """Analyze every authored module and dependency edge before executing any of them."""
+
+    inputs: _MacroAnalysisInputs = _macro_analysis_inputs(macro_files=macro_files)
+    analyses: dict[str, _MacroModuleAnalysis] = {
+        module_name: _analyze_macro_module(module_name=module_name, inputs=inputs)
+        for module_name in inputs.trees
+    }
+    return _validated_macro_analyses(analyses=analyses)
+
+
+def _analyze_macro_module(
+    *, module_name: str, inputs: _MacroAnalysisInputs
+) -> _MacroModuleAnalysis:
+    tree: ast.Module = inputs.trees[module_name]
+    file: DiscoveredMacroFile = inputs.files[module_name]
+    _validate_no_nested_project_imports(
+        tree=tree,
+        module_name=module_name,
+        file=file,
+        module_names=inputs.module_names,
+        package_names=inputs.package_names,
+    )
+    imported, module_dependencies = _analyze_macro_imports(
+        tree=tree, module_name=module_name, inputs=inputs
+    )
+    functions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {
+        statement.name: statement
+        for statement in tree.body
+        if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef)
+    }
+    shadowed_imports: set[str] = set(functions).intersection(imported)
+    if shadowed_imports:
+        shadowed_name: str = sorted(shadowed_imports)[0]
+        raise CompileInputError(
+            f"Macro module '{file.relative_path}' defines function '{shadowed_name}' over an "
+            "imported macro binding; imported macros must not be replaced"
+        )
+    direct_dependencies, helper_calls, runtime_node_ids = _analyze_macro_calls(
+        functions=functions, imported=imported, file=file
+    )
+    _validate_local_call_cycles(
+        exports=inputs.exports[module_name], helper_calls=helper_calls, file=file
+    )
+    _validate_call_use_locations(
+        tree=tree,
+        imported=imported,
+        local_functions=frozenset(functions),
+        runtime_node_ids=runtime_node_ids,
+        file=file,
+    )
+    return _MacroModuleAnalysis(
+        file=file,
+        name=module_name,
+        tree=tree,
+        exports=tuple(sorted(inputs.exports[module_name])),
+        dependencies=_export_dependencies(
+            exports=inputs.exports[module_name],
+            direct_dependencies=direct_dependencies,
+            helper_calls=helper_calls,
+        ),
+        module_dependencies=module_dependencies,
+    )
+
+
+def _macro_analysis_inputs(*, macro_files: tuple[DiscoveredMacroFile, ...]) -> _MacroAnalysisInputs:
+    files: dict[str, DiscoveredMacroFile] = {}
+    for item in macro_files:
+        module_name: str = _macro_module_name(item)
+        existing: DiscoveredMacroFile | None = files.get(module_name)
+        if existing is not None:
+            raise CompileInputError(
+                f"Macro module path collision for '{module_name}': "
+                f"{existing.relative_path} and {item.relative_path}"
+            )
+        files[module_name] = item
+    trees: dict[str, ast.Module] = {
+        name: _parse_macro_module(macro_file=item) for name, item in files.items()
+    }
+    exports: dict[str, frozenset[str]] = {
+        name: _module_exports(tree=tree) for name, tree in trees.items()
+    }
+    return _MacroAnalysisInputs(
+        files=files,
+        trees=trees,
+        exports=exports,
+        module_names=frozenset(files),
+        package_names=frozenset(_macro_package_name(file) for file in files.values()),
+    )
+
+
+def _module_exports(*, tree: ast.Module) -> frozenset[str]:
+    exports: set[str] = set()
+    for statement in tree.body:
+        if isinstance(
+            statement, ast.FunctionDef | ast.AsyncFunctionDef
+        ) and not statement.name.startswith("_"):
+            exports.add(statement.name)
+    return frozenset(exports)
+
+
+def _analyze_macro_imports(
+    *,
+    tree: ast.Module,
+    module_name: str,
+    inputs: _MacroAnalysisInputs,
+) -> tuple[dict[str, DeclarationIdentity], tuple[str, ...]]:
+    imported: dict[str, DeclarationIdentity] = {}
+    module_dependencies: list[str] = []
+    file: DiscoveredMacroFile = inputs.files[module_name]
+    for statement in tree.body:
+        if isinstance(statement, ast.Import):
+            local_names: list[str] = [
+                name
+                for name in _imported_module_names(
+                    statement=statement, current_module_name=module_name
+                )
+                if _is_project_macro_import(
+                    imported_name=name,
+                    module_names=inputs.module_names,
+                    package_names=inputs.package_names,
+                )
+            ]
+            if local_names:
+                raise CompileInputError(
+                    f"Macro module '{file.relative_path}' must use 'from ... import ...' for "
+                    "project macro imports; module imports are not supported"
+                )
+            continue
+        if not isinstance(statement, ast.ImportFrom):
+            continue
+        resolved_module: str = _resolve_import_from_module(
+            statement=statement, current_module_name=module_name
+        )
+        if resolved_module not in inputs.files:
+            if _is_project_macro_import(
+                imported_name=resolved_module,
+                module_names=inputs.module_names,
+                package_names=inputs.package_names,
+            ):
+                raise CompileInputError(
+                    f"Macro module '{file.relative_path}' imports project package "
+                    f"'{resolved_module}' instead of a macro module"
+                )
+            continue
+        module_dependencies.append(resolved_module)
+        imported = _record_imported_macro_bindings(
+            statement=statement,
+            importer=file,
+            imported_file=inputs.files[resolved_module],
+            exported_names=inputs.exports[resolved_module],
+            imported=imported,
+            resolved_module=resolved_module,
+        )
+    return imported, tuple(dict.fromkeys(module_dependencies))
+
+
+def _record_imported_macro_bindings(
+    *,
+    statement: ast.ImportFrom,
+    importer: DiscoveredMacroFile,
+    imported_file: DiscoveredMacroFile,
+    exported_names: frozenset[str],
+    imported: dict[str, DeclarationIdentity],
+    resolved_module: str,
+) -> dict[str, DeclarationIdentity]:
+    updated: dict[str, DeclarationIdentity] = dict(imported)
+    for alias in statement.names:
+        if alias.name == _STAR_IMPORT_NAME:
+            raise CompileInputError(
+                f"Macro module '{importer.relative_path}' must not use star imports for project "
+                "macros"
+            )
+        if alias.name not in exported_names:
+            raise CompileInputError(
+                f"Macro module '{importer.relative_path}' cannot import '{alias.name}' from "
+                f"project macro module '{resolved_module}'; the name is not an exported macro"
+            )
+        _validate_macro_import_visibility(
+            importer=importer, imported=imported_file, name=alias.name
+        )
+        binding: str = alias.asname or alias.name
+        if binding in updated:
+            raise CompileInputError(
+                f"Macro module '{importer.relative_path}' binds project macro import '{binding}' "
+                "more than once"
+            )
+        updated[binding] = DeclarationIdentity(DeclarationKind.MACRO, alias.name)
+    return updated
+
+
+def _analyze_macro_calls(
+    *,
+    functions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef],
+    imported: dict[str, DeclarationIdentity],
+    file: DiscoveredMacroFile,
+) -> tuple[
+    dict[str, tuple[DeclarationIdentity, ...]],
+    dict[str, tuple[str, ...]],
+    frozenset[int],
+]:
+    direct_dependencies: dict[str, tuple[DeclarationIdentity, ...]] = {}
+    helper_calls: dict[str, tuple[str, ...]] = {}
+    runtime_node_ids: set[int] = set()
+    for function_name, function in functions.items():
+        runtime_nodes: tuple[ast.AST, ...] = _runtime_function_nodes(function=function)
+        runtime_node_ids.update(id(node) for node in runtime_nodes)
+        dependencies, called_helpers = _analyze_function_calls(
+            function=function,
+            runtime_nodes=runtime_nodes,
+            functions=frozenset(functions),
+            imported=imported,
+            file=file,
+        )
+        direct_dependencies[function_name] = dependencies
+        helper_calls[function_name] = called_helpers
+    return direct_dependencies, helper_calls, frozenset(runtime_node_ids)
+
+
+def _analyze_function_calls(
+    *,
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+    runtime_nodes: tuple[ast.AST, ...],
+    functions: frozenset[str],
+    imported: dict[str, DeclarationIdentity],
+    file: DiscoveredMacroFile,
+) -> tuple[tuple[DeclarationIdentity, ...], tuple[str, ...]]:
+    bound_names: set[str] = _function_bound_names(function=function, runtime_nodes=runtime_nodes)
+    shadowed_imports: set[str] = bound_names.intersection(imported)
+    if shadowed_imports:
+        shadowed_name: str = sorted(shadowed_imports)[0]
+        raise CompileInputError(
+            f"Macro module '{file.relative_path}' shadows imported macro '{shadowed_name}'; "
+            "imported macros must be called directly without shadowing"
+        )
+    dependencies: list[DeclarationIdentity] = []
+    called_helpers: list[str] = []
+    direct_call_nodes: set[int] = {
+        id(node.func)
+        for node in runtime_nodes
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    for node in runtime_nodes:
+        if isinstance(node, ast.Name) and node.id in imported and id(node) not in direct_call_nodes:
+            raise CompileInputError(
+                f"Macro module '{file.relative_path}' uses imported macro '{node.id}' "
+                "dynamically; call imported macros directly"
+            )
+        if (
+            isinstance(node, ast.Name)
+            and node.id in functions
+            and id(node) not in direct_call_nodes
+        ):
+            raise CompileInputError(
+                f"Macro module '{file.relative_path}' uses local helper '{node.id}' dynamically; "
+                "call local macros and helpers directly"
+            )
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+            continue
+        if node.func.id in imported:
+            dependencies.append(imported[node.func.id])
+        elif node.func.id in functions:
+            if node.func.id in bound_names:
+                raise CompileInputError(
+                    f"Macro module '{file.relative_path}' shadows local helper '{node.func.id}'; "
+                    "static macro dependency analysis cannot resolve this call"
+                )
+            called_helpers.append(node.func.id)
+    return tuple(dict.fromkeys(dependencies)), tuple(dict.fromkeys(called_helpers))
+
+
+def _function_bound_names(
+    *, function: ast.FunctionDef | ast.AsyncFunctionDef, runtime_nodes: tuple[ast.AST, ...]
+) -> set[str]:
+    names: set[str] = {
+        argument.arg
+        for argument in (
+            *function.args.posonlyargs,
+            *function.args.args,
+            *function.args.kwonlyargs,
+        )
+    }
+    if function.args.vararg is not None:
+        names.add(function.args.vararg.arg)
+    if function.args.kwarg is not None:
+        names.add(function.args.kwarg.arg)
+    names.update(
+        node.id
+        for node in runtime_nodes
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)
+    )
+    return names
+
+
+def _validate_call_use_locations(
+    *,
+    tree: ast.Module,
+    imported: dict[str, DeclarationIdentity],
+    local_functions: frozenset[str],
+    runtime_node_ids: frozenset[int],
+    file: DiscoveredMacroFile,
+) -> None:
+    unsupported: ast.Name | None = next(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Name)
+            and node.id in imported
+            and id(node) not in runtime_node_ids
+        ),
+        None,
+    )
+    if unsupported is not None:
+        raise CompileInputError(
+            f"Macro module '{file.relative_path}' uses imported macro '{unsupported.id}' outside "
+            "an ordinary function body; call imported macros directly from module-level macro or "
+            "helper functions"
+        )
+    unsupported_local: ast.Name | None = next(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Name)
+            and node.id in local_functions
+            and id(node) not in runtime_node_ids
+        ),
+        None,
+    )
+    if unsupported_local is not None:
+        raise CompileInputError(
+            f"Macro module '{file.relative_path}' uses local helper "
+            f"'{unsupported_local.id}' outside an ordinary function body; call local macros and "
+            "helpers directly from module-level macro or helper functions"
+        )
+
+
+def _macro_package_name(file: DiscoveredMacroFile) -> str:
+    root: Path = file.declaration_root or Path(file.relative_path.parts[0])
+    return ".".join(root.parts)
+
+
+def _runtime_function_nodes(
+    *, function: ast.FunctionDef | ast.AsyncFunctionDef
+) -> tuple[ast.AST, ...]:
+    """Return function-body nodes without entering dynamically nested scopes."""
+
+    nodes: list[ast.AST] = []
+    pending: list[ast.AST] = list(reversed(function.body))
+    while pending:
+        node: ast.AST = pending.pop()
+        nodes.append(node)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda | ast.ClassDef):
+            continue
+        pending.extend(reversed(tuple(ast.iter_child_nodes(node))))
+    return tuple(nodes)
+
+
+def _export_dependencies(
+    *,
+    exports: frozenset[str],
+    direct_dependencies: dict[str, tuple[DeclarationIdentity, ...]],
+    helper_calls: dict[str, tuple[str, ...]],
+) -> dict[str, tuple[DeclarationIdentity, ...]]:
+    dependencies: dict[str, tuple[DeclarationIdentity, ...]] = {}
+    for export in exports:
+        found: list[DeclarationIdentity] = []
+        pending: list[str] = [export]
+        visited: set[str] = set()
+        while pending:
+            function_name: str = pending.pop(0)
+            if function_name in visited:
+                continue
+            visited.add(function_name)
+            found.extend(direct_dependencies[function_name])
+            for called_function in helper_calls[function_name]:
+                if called_function in exports:
+                    found.append(DeclarationIdentity(DeclarationKind.MACRO, called_function))
+                pending.append(called_function)
+        dependencies[export] = tuple(dict.fromkeys(found))
+    return dependencies
+
+
+def _validate_local_call_cycles(
+    *,
+    exports: frozenset[str],
+    helper_calls: dict[str, tuple[str, ...]],
+    file: DiscoveredMacroFile,
+) -> None:
+    completed: frozenset[str] = frozenset()
+    for export in sorted(exports):
+        completed = _visit_local_call(
+            name=export,
+            helper_calls=helper_calls,
+            file=file,
+            active=(),
+            completed=completed,
+        )
+
+
+def _visit_local_call(
+    *,
+    name: str,
+    helper_calls: dict[str, tuple[str, ...]],
+    file: DiscoveredMacroFile,
+    active: tuple[str, ...],
+    completed: frozenset[str],
+) -> frozenset[str]:
+    if name in active:
+        cycle: tuple[str, ...] = (*active[active.index(name) :], name)
+        raise CompileInputError(f"Macro call cycle in '{file.relative_path}': {' -> '.join(cycle)}")
+    if name in completed:
+        return completed
+    updated: frozenset[str] = completed
+    for dependency in helper_calls[name]:
+        updated = _visit_local_call(
+            name=dependency,
+            helper_calls=helper_calls,
+            file=file,
+            active=(*active, name),
+            completed=updated,
+        )
+    return updated.union((name,))
+
+
+def _validated_macro_analyses(
+    *, analyses: dict[str, _MacroModuleAnalysis]
+) -> dict[str, _MacroModuleAnalysis]:
+    _validate_import_cycles(analyses=analyses)
+    return analyses
+
+
+def _resolve_import_from_module(*, statement: ast.ImportFrom, current_module_name: str) -> str:
+    base: str = statement.module or ""
+    if not statement.level:
+        return base
+    package_parts: list[str] = current_module_name.split(".")[:-1]
+    if statement.level > len(package_parts):
+        raise CompileInputError(
+            f"Relative project macro import in '{current_module_name}' escapes its top-level "
+            "package"
+        )
+    retained: int = len(package_parts) - statement.level + 1
+    parts: list[str] = package_parts[: max(retained, 0)]
+    if base:
+        parts.extend(base.split("."))
+    return ".".join(parts)
+
+
+def _validate_no_nested_project_imports(
+    *,
+    tree: ast.Module,
+    module_name: str,
+    file: DiscoveredMacroFile,
+    module_names: frozenset[str],
+    package_names: frozenset[str],
+) -> None:
+    top_level_imports: set[ast.Import | ast.ImportFrom] = {
+        statement for statement in tree.body if isinstance(statement, ast.Import | ast.ImportFrom)
+    }
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Import | ast.ImportFrom) or node in top_level_imports:
+            continue
+        imported_names: tuple[str, ...] = _imported_module_names(
+            statement=node, current_module_name=module_name
+        )
+        if any(
+            _is_project_macro_import(
+                imported_name=name,
+                module_names=module_names,
+                package_names=package_names,
+            )
+            for name in imported_names
+        ):
+            raise CompileInputError(
+                f"Macro module '{file.relative_path}' contains a nested project macro import; "
+                "project macro imports must be static and module-level"
+            )
+
+
+def _validate_macro_import_visibility(
+    *, importer: DiscoveredMacroFile, imported: DiscoveredMacroFile, name: str
+) -> None:
+    visible: bool = imported.scope_kind is ScopeKind.GLOBAL
+    importer_parent: Path = importer.owning_path or importer.relative_path.parent
+    owner: Path = imported.owning_path or Path(".")
+    if imported.scope_kind is ScopeKind.LOCAL:
+        visible = importer_parent == owner
+    elif imported.scope_kind is ScopeKind.INHERITED:
+        visible = importer_parent == owner or owner in importer_parent.parents
+    if not visible:
+        raise CompileInputError(
+            f"Macro module '{importer.relative_path}' cannot import macro '{name}' from "
+            f"'{imported.relative_path}': the imported macro is not visible from the importer scope"
+        )
+
+
+def _validate_import_cycles(*, analyses: dict[str, _MacroModuleAnalysis]) -> None:
+    completed: frozenset[str] = frozenset()
+    for name in sorted(analyses):
+        completed = _visit_macro_import(
+            name=name, analyses=analyses, active=(), completed=completed
+        )
+
+
+def _visit_macro_import(
+    *,
+    name: str,
+    analyses: dict[str, _MacroModuleAnalysis],
+    active: tuple[str, ...],
+    completed: frozenset[str],
+) -> frozenset[str]:
+    if name in active:
+        cycle: tuple[str, ...] = (*active[active.index(name) :], name)
+        raise CompileInputError(
+            f"Macro import cycle in '{analyses[name].file.relative_path}': {' -> '.join(cycle)}"
+        )
+    if name in completed:
+        return completed
+    updated: frozenset[str] = completed
+    for dependency in analyses[name].module_dependencies:
+        updated = _visit_macro_import(
+            name=dependency,
+            analyses=analyses,
+            active=(*active, name),
+            completed=updated,
+        )
+    return updated.union((name,))
+
+
+def _load_macro_modules(*, analyses: dict[str, _MacroModuleAnalysis]) -> dict[str, ModuleType]:
+    with _MACRO_MODULE_LOAD_LOCK:
+        return _load_macro_modules_locked(analyses=analyses)
+
+
+def _load_macro_modules_locked(
+    *, analyses: dict[str, _MacroModuleAnalysis]
+) -> dict[str, ModuleType]:
+    digest: str = hashlib.sha256(
+        "\0".join(
+            f"{name}\0{analyses[name].file.file_path}\0{analyses[name].file.contents}"
+            for name in sorted(analyses)
+        ).encode()
+    ).hexdigest()[:16]
+    root: str = f"{_SYNTHETIC_PACKAGE_PREFIX}{digest}"
+    synthetic_names: list[str] = []
+    previous_modules: dict[str, ModuleType] = {}
+    modules: dict[str, ModuleType] = {}
+    try:
+        package_names: set[str] = {root}
+        for name in analyses:
+            parts: list[str] = name.split(".")[:-1]
+            package_names.update(
+                f"{root}.{'/'.join(parts[:index]).replace('/', '.')}"
+                for index in range(1, len(parts) + 1)
+            )
+        for package_name in sorted(package_names, key=lambda item: item.count(".")):
+            package: ModuleType = ModuleType(package_name)
+            package.__package__ = package_name
+            package.__path__ = []  # type: ignore[attr-defined]
+            previous: ModuleType | None = sys.modules.get(package_name)
+            if previous is not None:
+                previous_modules[package_name] = previous
+            sys.modules[package_name] = package
+            synthetic_names.append(package_name)
+
+        pending: set[str] = set(analyses)
+        while pending:
+            name: str = min(
+                item
+                for item in pending
+                if not set(analyses[item].module_dependencies).intersection(pending)
+            )
+            analysis: _MacroModuleAnalysis = analyses[name]
+            synthetic_name: str = f"{root}.{name}"
+            module: ModuleType = ModuleType(synthetic_name)
+            module.__file__ = str(analysis.file.file_path)
+            module.__package__ = synthetic_name.rpartition(".")[0]
+            tree: ast.Module = _rewrite_absolute_project_imports(
+                tree=analysis.tree, module_names=frozenset(analyses), root=root
+            )
+            previous = sys.modules.get(synthetic_name)
+            if previous is not None:
+                previous_modules[synthetic_name] = previous
+            sys.modules[synthetic_name] = module
+            synthetic_names.append(synthetic_name)
+            try:
+                exec(compile(tree, str(analysis.file.file_path), "exec"), module.__dict__)
+            except Exception as error:
+                raise CompileInputError(
+                    f"Failed to load macros from '{analysis.file.file_path}': {error}"
+                ) from error
+            modules[name] = module
+            pending.remove(name)
+        return modules
+    finally:
+        for synthetic_name in reversed(synthetic_names):
+            previous = previous_modules.get(synthetic_name)
+            if previous is None:
+                sys.modules.pop(synthetic_name, None)
+            else:
+                sys.modules[synthetic_name] = previous
+
+
+def _rewrite_absolute_project_imports(
+    *, tree: ast.Module, module_names: frozenset[str], root: str
+) -> ast.Module:
+    class Rewriter(ast.NodeTransformer):
+        def visit_ImportFrom(self, node: ast.ImportFrom) -> ast.ImportFrom:  # noqa: N802
+            if node.level == 0 and node.module in module_names:
+                return ast.copy_location(
+                    ast.ImportFrom(module=f"{root}.{node.module}", names=node.names, level=0),
+                    node,
+                )
+            return node
+
+    return ast.fix_missing_locations(Rewriter().visit(copy.deepcopy(tree)))
+
+
 def _matches_macro_module(*, imported_name: str, module_names: frozenset[str]) -> bool:
     module_name: str
     for module_name in module_names:
         if module_name == imported_name or module_name.startswith(f"{imported_name}."):
             return True
     return False
+
+
+def _is_project_macro_import(
+    *,
+    imported_name: str,
+    module_names: frozenset[str],
+    package_names: frozenset[str],
+) -> bool:
+    return _matches_macro_module(imported_name=imported_name, module_names=module_names) or any(
+        imported_name == package or imported_name.startswith(f"{package}.")
+        for package in package_names
+    )
 
 
 def _imported_module_names(*, statement: ast.stmt, current_module_name: str) -> tuple[str, ...]:
@@ -436,6 +1166,14 @@ def _expand_sql_macros(
 def find_macro_call_names(sql: str) -> tuple[str, ...]:
     """Return unique authored macro call names in encounter order."""
 
+    return tuple(
+        name for name in _find_sqlbuild_call_names(sql) if name not in DECLARATION_REFERENCE_NAMES
+    )
+
+
+def _find_sqlbuild_call_names(sql: str) -> tuple[str, ...]:
+    """Return executable SQLBuild call names, excluding quoted and commented text."""
+
     if MACRO_TOKEN not in sql:
         return ()
 
@@ -447,7 +1185,7 @@ def find_macro_call_names(sql: str) -> tuple[str, ...]:
         if macro_start_index is None:
             break
         macro_name: str = _parse_macro_name(sql=sql, call_start_index=macro_start_index)
-        if macro_name not in seen and macro_name not in DECLARATION_REFERENCE_NAMES:
+        if macro_name not in seen:
             seen.add(macro_name)
             names.append(macro_name)
         opening_paren_index: int = _skip_whitespace(
@@ -455,25 +1193,6 @@ def find_macro_call_names(sql: str) -> tuple[str, ...]:
         )
         cursor = _find_matching_paren(sql=sql, opening_paren_index=opening_paren_index) + 1
     return tuple(names)
-
-
-def _load_macro_module(*, macro_file: DiscoveredMacroFile) -> ModuleType:
-    module_name: str = "sqlbuild_project_macro_" + "_".join(
-        macro_file.relative_path.with_suffix("").parts
-    ).replace("-", "_")
-    spec: ModuleSpec | None = importlib.util.spec_from_file_location(
-        module_name, macro_file.file_path
-    )
-    if spec is None or spec.loader is None:
-        raise CompileInputError(f"Could not load macros from '{macro_file.file_path}'")
-    module: ModuleType = importlib.util.module_from_spec(spec)
-    try:
-        spec.loader.exec_module(module)
-    except Exception as error:
-        raise CompileInputError(
-            f"Failed to load macros from '{macro_file.file_path}': {error}"
-        ) from error
-    return module
 
 
 def _evaluate_macro_call(
@@ -516,6 +1235,9 @@ def _evaluate_macro_call(
         sql=sql, opening_paren_index=opening_paren_index
     )
     if override_value is not None:
+        _validate_final_macro_sql(
+            macro_name=macro_name, file_path=file_path, macro_result=override_value
+        )
         return override_value, closing_paren_index + 1
     identity: DeclarationIdentity = (
         declarations.macro_records[macro_name].identity
@@ -568,14 +1290,24 @@ def _evaluate_macro_call(
             f"Macro '@{macro_name}' in '{file_path}' must return a SQL string when "
             "used directly in SQL"
         )
-    if isinstance(macro_result, str) and MACRO_TOKEN in macro_result:
-        macro_result, _ = _expand_sql_macros(
-            sql=macro_result,
-            consumer_path=loaded_macro.file_path,
-            state=state,
-            stack=(*stack, identity),
+    if isinstance(macro_result, str):
+        _validate_final_macro_sql(
+            macro_name=macro_name, file_path=file_path, macro_result=macro_result
         )
     return macro_result, closing_paren_index + 1
+
+
+def _validate_final_macro_sql(*, macro_name: str, file_path: Path, macro_result: str) -> None:
+    generated_calls: tuple[str, ...] = _find_sqlbuild_call_names(macro_result)
+    if not generated_calls:
+        return
+    calls: str = ", ".join(f"@{name}()" for name in generated_calls)
+    raise CompileInputError(
+        f"Macro '@{macro_name}' in '{file_path}' returned SQLBuild call(s) {calls}. "
+        "Macro output must be final SQL. Compose macros with ordinary Python imports and "
+        "function calls instead; nested @macro() calls are supported only when explicitly "
+        "authored in SQL"
+    )
 
 
 def _call_loaded_macro(

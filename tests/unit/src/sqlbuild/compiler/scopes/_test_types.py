@@ -144,6 +144,18 @@ class OfflineScopeCase:
 
 
 @dataclass(frozen=True)
+class TolerantMacroInventoryCase:
+    """Macro faults and declarations retained by tolerant offline inventory."""
+
+    description: str
+    files: dict[str, str]
+    expected_names: frozenset[str]
+    unexpected_names: frozenset[str]
+    expected_dependencies: tuple[tuple[str, str], ...] = ()
+    expected_diagnostic_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class TolerantCategoryCase:
     """One broken authored file with a valid sibling retained by tolerant discovery."""
 
