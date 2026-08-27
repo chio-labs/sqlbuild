@@ -47,6 +47,21 @@ class LoadProjectMacrosErrorTestCase:
 
 
 @dataclass(frozen=True)
+class MacroDependencyTestCase:
+    description: str
+    macro_files: dict[str, str]
+    macro_name: str
+    expected_result: str
+    expected_dependencies: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ScopedMacroImportErrorTestCase:
+    description: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class ExpandSqlMacrosTestCase:
     description: str
     macro_file_contents: str
@@ -61,6 +76,7 @@ class ExpandSqlMacrosErrorTestCase:
     macro_file_contents: str
     sql: str
     expected_error_fragment: str
+    macro_overrides: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

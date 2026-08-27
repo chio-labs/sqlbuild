@@ -19,6 +19,7 @@ from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
     FingerprintMutationCase,
     OfflineScopeCase,
     TolerantCategoryCase,
+    TolerantMacroInventoryCase,
 )
 from tests.unit.src.sqlbuild.compiler.scopes.helpers import (
     SCOPE_CACHE_MODEL,
@@ -245,10 +246,10 @@ def test_given_authored_values_and_secrets_when_caching_then_payload_is_value_fr
 
 @pytest.mark.parametrize(
     "test_case",
-    (OfflineScopeCase("target switch invalidates target-aware macro usage"),),
+    (OfflineScopeCase("target switch preserves static Python macro dependencies"),),
     ids=lambda case: case.description,
 )
-def test_given_target_aware_macro_when_switching_target_then_cache_rebuilds_usage(
+def test_given_target_aware_python_composition_when_switching_target_then_dependencies_are_static(
     test_case: OfflineScopeCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
@@ -262,11 +263,13 @@ def test_given_target_aware_macro_when_switching_target_then_cache_rebuilds_usag
             "sqlbuild_local.toml": 'target = "dev"\n',
             "models/orders.sql": "MODEL();\nSELECT @choose() AS value\n",
             "macros/choose.py": (
-                'def choose(ctx):\n    return "@dev_macro()" '
-                'if ctx.target_name == "dev" else "@prod_macro()"\n\n'
-                'def dev_macro():\n    return "1"\n\n'
-                'def prod_macro():\n    return "2"\n'
+                "from macros.dev import dev_macro\n"
+                "from macros.prod import prod_macro\n\n"
+                "def choose(ctx):\n    return dev_macro() "
+                'if ctx.target_name == "dev" else prod_macro()\n'
             ),
+            "macros/dev.py": 'def dev_macro():\n    return "1"\n',
+            "macros/prod.py": 'def prod_macro():\n    return "2"\n',
         },
     )
 
@@ -277,10 +280,8 @@ def test_given_target_aware_macro_when_switching_target_then_cache_rebuilds_usag
     prod_names: set[str] = {usage.declaration.name for usage in prod.usages}
 
     assert (
-        "dev_macro" in dev_names
-        and "prod_macro" not in dev_names
-        and "prod_macro" in prod_names
-        and "dev_macro" not in prod_names
+        {"choose", "dev_macro", "prod_macro"}.issubset(dev_names)
+        and {"choose", "dev_macro", "prod_macro"}.issubset(prod_names)
     ) is test_case.expected_result
 
 
@@ -313,6 +314,105 @@ def test_given_broken_declaration_category_when_loading_then_other_categories_re
     assert ({"limit", "identity"} <= identities and not index.completeness.discovery) is (
         test_case.expected_result
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        TolerantMacroInventoryCase(
+            description="syntax error retains valid composed macro and dependency",
+            files={
+                "macros/shared.py": "def shared():\n    return 'shared'\n",
+                "macros/consumer.py": (
+                    "from macros.shared import shared\n\ndef consumer():\n    return shared()\n"
+                ),
+                "macros/broken.py": "def broken(:\n    return 'broken'\n",
+            },
+            expected_names=frozenset({"shared", "consumer"}),
+            unexpected_names=frozenset({"broken"}),
+            expected_dependencies=(("consumer", "shared"),),
+            expected_diagnostic_fragments=("Failed to parse macros",),
+        ),
+        TolerantMacroInventoryCase(
+            description="scope-invalid macro import is omitted with diagnostic",
+            files={
+                "models/sales/_local_macros/shared.py": ("def shared():\n    return 'shared'\n"),
+                "models/finance/_macros/consumer.py": (
+                    "from models.sales._local_macros.shared import shared\n\n"
+                    "def consumer():\n    return shared()\n"
+                ),
+                "macros/broken.py": "def broken(:\n    return 'broken'\n",
+            },
+            expected_names=frozenset({"shared"}),
+            unexpected_names=frozenset({"consumer", "broken"}),
+            expected_diagnostic_fragments=("not visible from the importer scope",),
+        ),
+        TolerantMacroInventoryCase(
+            description="name collision retains unrelated valid macro",
+            files={
+                "macros/valid.py": "def valid():\n    return 'valid'\n",
+                "macros/first.py": "def duplicate():\n    return 'first'\n",
+                "macros/second.py": "def duplicate():\n    return 'second'\n",
+            },
+            expected_names=frozenset({"valid"}),
+            unexpected_names=frozenset({"duplicate"}),
+            expected_diagnostic_fragments=("Macro name collision for 'duplicate'",),
+        ),
+        TolerantMacroInventoryCase(
+            description="import cycle retains unrelated valid macro",
+            files={
+                "macros/valid.py": "def valid():\n    return 'valid'\n",
+                "macros/first.py": (
+                    "from macros.second import second\n\ndef first():\n    return second()\n"
+                ),
+                "macros/second.py": (
+                    "from macros.first import first\n\ndef second():\n    return first()\n"
+                ),
+            },
+            expected_names=frozenset({"valid"}),
+            unexpected_names=frozenset({"first", "second"}),
+            expected_diagnostic_fragments=("Macro import cycle",),
+        ),
+        TolerantMacroInventoryCase(
+            description="module path collision omits both ambiguous modules",
+            files={
+                "macros/valid.py": "def valid():\n    return 'valid'\n",
+                "macros/a.b.py": "def dotted():\n    return 'dotted'\n",
+                "macros/a/b.py": "def nested():\n    return 'nested'\n",
+            },
+            expected_names=frozenset({"valid"}),
+            unexpected_names=frozenset({"dotted", "nested"}),
+            expected_diagnostic_fragments=("Macro module path collision for 'macros.a.b'",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_macro_fault_when_loading_offline_then_valid_macro_facts_are_retained(
+    test_case: TolerantMacroInventoryCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": _PROJECT,
+            "models/orders.sql": _MODEL,
+            **test_case.files,
+        },
+    )
+
+    index: ScopeIndex = load_or_build_scope_index(project_dir=tmp_path, no_cache=True)
+    identities: set[str] = {record.identity.name for record in index.declarations}
+    dependencies: tuple[tuple[str, str], ...] = tuple(
+        (usage.consumer.name, usage.declaration.name) for usage in index.usages
+    )
+    diagnostics: str = "\n".join(item.message for item in index.diagnostics)
+
+    assert test_case.expected_names <= identities
+    assert not test_case.unexpected_names.intersection(identities)
+    assert dependencies == test_case.expected_dependencies
+    assert all(fragment in diagnostics for fragment in test_case.expected_diagnostic_fragments)
+    assert not index.completeness.discovery
 
 
 @pytest.mark.parametrize(

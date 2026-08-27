@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import PurePath
 
 from sqlbuild.compiler.scopes._helpers.identities import parse_identity
-from sqlbuild.compiler.scopes._helpers.paths import is_equal_or_descendant, normalize_path
+from sqlbuild.compiler.scopes._helpers.paths import normalize_path
 from sqlbuild.compiler.scopes.constants import (
     CURRENT_PATH_COMPONENT,
     PATH_SEPARATOR,
@@ -134,11 +135,11 @@ def _visibility_reason(
             if declaration.identity.owner == resource.identity
             else None
         )
-    owner: str = declaration.owning_path or CURRENT_PATH_COMPONENT
+    owner: str = _canonical_owner(declaration.owning_path or CURRENT_PATH_COMPONENT)
     parent: str = _parent(resource.path)
     if declaration.scope is ScopeKind.LOCAL:
         return VisibilityReason.LOCAL_OWNER if parent == owner else None
-    if declaration.scope is ScopeKind.INHERITED and is_equal_or_descendant(
+    if declaration.scope is ScopeKind.INHERITED and _is_canonical_descendant(
         path=parent, ancestor=owner
     ):
         return VisibilityReason.INHERITED_ANCESTOR
@@ -152,15 +153,16 @@ def _inaccessible_reason(
         return InaccessibleReason.PRIVATE_OWNER
     if declaration.scope is ScopeKind.LOCAL:
         return InaccessibleReason.LOCAL_BOUNDARY
-    owner: str = declaration.owning_path or CURRENT_PATH_COMPONENT
+    owner: str = _canonical_owner(declaration.owning_path or CURRENT_PATH_COMPONENT)
     parent: str = _parent(resource.path)
-    if is_equal_or_descendant(path=owner, ancestor=parent):
+    if _is_canonical_descendant(path=owner, ancestor=parent):
         return InaccessibleReason.DESCENDANT_SCOPE
     if declaration.ownership_root.path == resource.ownership_root.path:
         return InaccessibleReason.SIBLING_SCOPE
     return InaccessibleReason.UNRELATED_SCOPE
 
 
+@lru_cache(maxsize=65_536)
 def _parent(path: str) -> str:
     normalized: str = normalize_path(path=path)
     return (
@@ -168,3 +170,16 @@ def _parent(path: str) -> str:
         if PATH_SEPARATOR in normalized
         else CURRENT_PATH_COMPONENT
     )
+
+
+def _is_canonical_descendant(*, path: str, ancestor: str) -> bool:
+    return (
+        ancestor == CURRENT_PATH_COMPONENT
+        or path == ancestor
+        or path.startswith(f"{ancestor}{PATH_SEPARATOR}")
+    )
+
+
+@lru_cache(maxsize=65_536)
+def _canonical_owner(path: str) -> str:
+    return normalize_path(path=path)

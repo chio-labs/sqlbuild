@@ -156,6 +156,7 @@ class LoadedMacro:
     relative_path: Path
     raw_source: str
     function: Callable[..., object]
+    dependencies: tuple[DeclarationIdentity, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -167,6 +168,7 @@ class StaticMacroExport:
     parameters: tuple[str, ...]
     line: int
     source_digest: str
+    dependencies: tuple[DeclarationIdentity, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
