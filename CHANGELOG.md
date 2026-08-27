@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.62.1](https://github.com/chio-labs/sqlbuild/compare/v0.62.0...v0.62.1) (2026-08-27)
+
+
+### Documentation
+
+* **skills:** restructure declaration scopes guidance ([#372](https://github.com/chio-labs/sqlbuild/issues/372)) ([73a26c4](https://github.com/chio-labs/sqlbuild/commit/73a26c4cd3cc873d0f84f8e087979edb41464fd3))
+
 ## [0.62.0](https://github.com/chio-labs/sqlbuild/compare/v0.61.0...v0.62.0) (2026-08-26)
 
 
