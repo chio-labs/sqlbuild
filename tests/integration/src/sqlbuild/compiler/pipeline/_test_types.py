@@ -35,6 +35,7 @@ class MacroLoadCountIntegrationTestCase:
     description: str
     project_files: dict[str, str]
     expected_macro_import_count: int
+    expected_declaration_resolution_count: int
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,7 @@ class MacroCompositionIntegrationTestCase:
     project_files: dict[str, str]
     macro_name: str
     expected_dependencies: tuple[str, ...]
+    expected_declaration_resolution_count: int
 
 
 @dataclass(frozen=True)

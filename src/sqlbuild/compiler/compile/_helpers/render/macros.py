@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import copy
 import hashlib
+import heapq
 import inspect
 import re
 import sys
@@ -104,6 +105,7 @@ class _ExpansionState:
     macro_overrides: dict[str, str]
     macro_context: MacroContext
     declaration_resolver: DeclarationScopeResolver | None
+    declarations: DeclarationResolutionContext | None
     facts: _ExpansionFacts
     consumer: ResourceIdentity | DeclarationIdentity | None = None
 
@@ -111,13 +113,23 @@ class _ExpansionState:
 def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[str, LoadedMacro]:
     """Load discovered project macro functions into a collision-checked registry."""
 
-    inventory: StaticMacroInventory = _inventory_project_macros(macro_files=macro_files)
+    if not macro_files:
+        return {}
+    try:
+        analyses: dict[str, _MacroModuleAnalysis] = _analyze_project_macro_modules(
+            macro_files=macro_files
+        )
+    except CompileInputError:
+        fault_inventory: StaticMacroInventory = _inventory_project_macros_tolerantly(
+            macro_files=macro_files
+        )
+        raise CompileInputError(fault_inventory.faults[0].message) from None
+    inventory: StaticMacroInventory = _inventory_from_analyses(
+        macro_files=macro_files, analyses=analyses
+    )
     if inventory.faults:
         raise CompileInputError(inventory.faults[0].message)
 
-    analyses: dict[str, _MacroModuleAnalysis] = _analyze_project_macro_modules(
-        macro_files=macro_files
-    )
     modules: dict[str, ModuleType] = _load_macro_modules(analyses=analyses)
     export_dependencies: dict[tuple[Path, str], tuple[DeclarationIdentity, ...]] = {
         (item.relative_path, item.name): item.dependencies for item in inventory.exports
@@ -897,13 +909,21 @@ def _load_macro_modules_locked(
             sys.modules[package_name] = package
             synthetic_names.append(package_name)
 
-        pending: set[str] = set(analyses)
-        while pending:
-            name: str = min(
-                item
-                for item in pending
-                if not set(analyses[item].module_dependencies).intersection(pending)
-            )
+        remaining_dependencies: dict[str, int] = {
+            name: len(analysis.module_dependencies) for name, analysis in analyses.items()
+        }
+        dependents: dict[str, list[str]] = {}
+        for name, analysis in analyses.items():
+            for dependency in analysis.module_dependencies:
+                dependents.setdefault(dependency, []).append(name)
+        ready: list[str] = [
+            name
+            for name, dependency_count in remaining_dependencies.items()
+            if dependency_count == 0
+        ]
+        heapq.heapify(ready)
+        while ready:
+            name: str = heapq.heappop(ready)
             analysis: _MacroModuleAnalysis = analyses[name]
             synthetic_name: str = f"{root}.{name}"
             module: ModuleType = ModuleType(synthetic_name)
@@ -924,7 +944,10 @@ def _load_macro_modules_locked(
                     f"Failed to load macros from '{analysis.file.file_path}': {error}"
                 ) from error
             modules[name] = module
-            pending.remove(name)
+            for dependent in dependents.get(name, ()):
+                remaining_dependencies[dependent] -= 1
+                if remaining_dependencies[dependent] == 0:
+                    heapq.heappush(ready, dependent)
         return modules
     finally:
         for synthetic_name in reversed(synthetic_names):
@@ -1074,6 +1097,7 @@ def expand_sql_macros_result(
     macro_overrides: dict[str, str] | None = None,
     macro_context: MacroContext,
     declaration_resolver: DeclarationScopeResolver | None = None,
+    declarations: DeclarationResolutionContext | None = None,
     consumer: ResourceIdentity | DeclarationIdentity | None = None,
 ) -> MacroExpansionResult:
     """Expand macros and retain deterministic resolved dependency facts."""
@@ -1084,6 +1108,7 @@ def expand_sql_macros_result(
         macro_overrides={} if macro_overrides is None else macro_overrides,
         macro_context=macro_context,
         declaration_resolver=declaration_resolver,
+        declarations=declarations,
         facts=facts,
         consumer=consumer,
     )
@@ -1111,8 +1136,8 @@ def _expand_sql_macros(
     if MACRO_TOKEN not in sql:
         return sql, ()
 
-    declarations: DeclarationResolutionContext | None = None
-    if state.declaration_resolver is not None:
+    declarations: DeclarationResolutionContext | None = state.declarations
+    if declarations is None and state.declaration_resolver is not None:
         from sqlbuild.compiler.compile._helpers.render.declarations import (
             resolve_declaration_context,
         )

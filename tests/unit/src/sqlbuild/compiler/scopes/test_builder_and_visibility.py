@@ -161,6 +161,9 @@ def test_given_every_authored_resource_kind_when_building_then_uses_canonical_ro
         VisibilityExpectation("global", "global", VisibilityReason.GLOBAL),
         VisibilityExpectation("root_ancestor", "root", VisibilityReason.INHERITED_ANCESTOR),
         VisibilityExpectation("near_ancestor", "near", VisibilityReason.INHERITED_ANCESTOR),
+        VisibilityExpectation(
+            "noncanonical_ancestor", "noncanonical", VisibilityReason.INHERITED_ANCESTOR
+        ),
         VisibilityExpectation("local", "local", VisibilityReason.LOCAL_OWNER),
         VisibilityExpectation("private", "_private", VisibilityReason.PRIVATE_OWNER),
     ],
@@ -180,6 +183,11 @@ def test_given_all_scope_tiers_when_resolving_then_classifies_without_shadow_res
         declaration_record(name="global", scope=ScopeKind.GLOBAL, owner_path=None),
         declaration_record(name="root", scope=ScopeKind.INHERITED, owner_path="models"),
         declaration_record(name="near", scope=ScopeKind.INHERITED, owner_path="models/sales"),
+        declaration_record(
+            name="noncanonical",
+            scope=ScopeKind.INHERITED,
+            owner_path=r"models\.\sales\daily\..",
+        ),
         declaration_record(name="local", scope=ScopeKind.LOCAL, owner_path="models/sales/daily"),
         declaration_record(
             name="_private", scope=ScopeKind.PRIVATE, owner_path="models/sales/daily", owner=target

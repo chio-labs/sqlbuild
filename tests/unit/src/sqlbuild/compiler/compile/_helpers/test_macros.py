@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
+from sqlbuild.compiler.compile._helpers.render import macros as macros_module
 from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros,
     find_macro_call_names,
@@ -83,7 +85,10 @@ def order_columns() -> str:
 def test_given_macro_modules_when_loading_then_exports_only_owned_public_functions(
     test_case: LoadProjectMacrosTestCase,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    parser: Mock = Mock(wraps=macros_module._parse_macro_module)
+    monkeypatch.setattr(macros_module, "_parse_macro_module", parser)
     macro_files: list[DiscoveredMacroFile] = []
     relative_path: str
     contents: str
@@ -102,6 +107,7 @@ def test_given_macro_modules_when_loading_then_exports_only_owned_public_functio
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(tuple(macro_files))
 
     assert tuple(loaded_macros) == test_case.expected_macro_names
+    assert parser.call_count == len(test_case.macro_files)
 
 
 @pytest.mark.parametrize(

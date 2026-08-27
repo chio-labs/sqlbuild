@@ -3,10 +3,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
+from unittest.mock import Mock
 
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.scopes.models import DeclarationRecord
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
@@ -46,6 +48,7 @@ _COUNTING_MACRO_MODULE: str = (
                 ),
             },
             expected_macro_import_count=1,
+            expected_declaration_resolution_count=1,
         )
     ],
     ids=lambda case: case.description,
@@ -54,7 +57,10 @@ def test_given_side_effect_macro_when_compiling_manifest_then_imports_macros_onc
     test_case: MacroLoadCountIntegrationTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    resolver: Mock = Mock(wraps=attachment_core.resolve_declaration_context)
+    monkeypatch.setattr(attachment_core, "resolve_declaration_context", resolver)
     write_repo_files(tmp_path, test_case.project_files)
 
     result: CompilePipelineResult = run_compile_pipeline_for_project(
@@ -69,6 +75,7 @@ def test_given_side_effect_macro_when_compiling_manifest_then_imports_macros_onc
 
     import_log: str = (tmp_path / "macro_import_log.txt").read_text(encoding="utf-8")
     assert import_log.count("import") == test_case.expected_macro_import_count
+    assert resolver.call_count == test_case.expected_declaration_resolution_count
 
 
 @pytest.mark.parametrize(
@@ -88,6 +95,7 @@ def test_given_side_effect_macro_when_compiling_manifest_then_imports_macros_onc
             },
             macro_name="order_column",
             expected_dependencies=("shared",),
+            expected_declaration_resolution_count=1,
         )
     ],
     ids=lambda case: case.description,
@@ -96,7 +104,10 @@ def test_given_composed_macro_when_compiling_then_scope_and_manifest_emit_depend
     test_case: MacroCompositionIntegrationTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    resolver: Mock = Mock(wraps=attachment_core.resolve_declaration_context)
+    monkeypatch.setattr(attachment_core, "resolve_declaration_context", resolver)
     write_repo_files(tmp_path, test_case.project_files)
 
     result: CompilePipelineResult = run_compile_pipeline_for_project(
@@ -125,3 +136,4 @@ def test_given_composed_macro_when_compiling_then_scope_and_manifest_emit_depend
     assert macro_node["depends_on"] == {
         "macros": [f"macro.demo.{name}" for name in test_case.expected_dependencies]
     }
+    assert resolver.call_count == test_case.expected_declaration_resolution_count

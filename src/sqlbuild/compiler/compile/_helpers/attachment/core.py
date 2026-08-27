@@ -140,6 +140,9 @@ class _VisibleModelDeclarations:
     inaccessible_constants: dict[str, DeclarationRecord]
     enum_visibility: dict[str, tuple[VisibilityRecord, ...]]
     constant_visibility: dict[str, tuple[VisibilityRecord, ...]]
+    macros: dict[str, LoadedMacro]
+    macro_records: dict[str, DeclarationRecord]
+    inaccessible_macros: dict[str, DeclarationRecord]
 
 
 @dataclass(frozen=True)
@@ -259,18 +262,22 @@ def _build_model_inputs(
         model_identity: ResourceIdentity = ResourceIdentity(
             ResourceKind.MODEL, model_file.file_path.stem
         )
+        declaration_context: DeclarationResolutionContext = DeclarationResolutionContext(
+            enums=declarations.enums,
+            constants=declarations.constants,
+            inaccessible_enums=declarations.inaccessible_enums,
+            inaccessible_constants=declarations.inaccessible_constants,
+            enum_visibility=declarations.enum_visibility,
+            constant_visibility=declarations.constant_visibility,
+            macros=declarations.macros,
+            macro_records=declarations.macro_records,
+            inaccessible_macros=declarations.inaccessible_macros,
+            consumer=model_identity,
+        )
         declaration_expansion: DeclarationExpansionResult = expand_declaration_references_result(
             sql=var_substituted_sql,
             file_path=model_file.file_path,
-            declarations=DeclarationResolutionContext(
-                enums=declarations.enums,
-                constants=declarations.constants,
-                inaccessible_enums=declarations.inaccessible_enums,
-                inaccessible_constants=declarations.inaccessible_constants,
-                enum_visibility=declarations.enum_visibility,
-                constant_visibility=declarations.constant_visibility,
-                consumer=model_identity,
-            ),
+            declarations=declaration_context,
             value_renderer=context.value_renderer,
             collection_rendering=context.collection_rendering,
         )
@@ -281,6 +288,9 @@ def _build_model_inputs(
             loaded_macros=loaded_macros,
             macro_context=macro_context,
             declaration_resolver=context.declaration_resolver,
+            declarations=(
+                declaration_context if context.declaration_resolver is not None else None
+            ),
             consumer=model_identity,
         )
         expanded_query_sql: str = macro_expansion.sql
@@ -523,6 +533,9 @@ def _build_visible_declaration_indexes(
             )
             for name in local_constants
         },
+        macros=visible.macros,
+        macro_records=visible.macro_records,
+        inaccessible_macros=visible.inaccessible_macros,
     )
 
 
