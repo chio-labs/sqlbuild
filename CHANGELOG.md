@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.63.0](https://github.com/chio-labs/sqlbuild/compare/v0.62.2...v0.63.0) (2026-08-27)
+
+
+### Features
+
+* **macros:** restore Python composition ([#376](https://github.com/chio-labs/sqlbuild/issues/376)) ([b43eac7](https://github.com/chio-labs/sqlbuild/commit/b43eac784e7341473996a77324cd5607f68f3313))
+
 ## [0.62.2](https://github.com/chio-labs/sqlbuild/compare/v0.62.1...v0.62.2) (2026-08-27)
 
 
