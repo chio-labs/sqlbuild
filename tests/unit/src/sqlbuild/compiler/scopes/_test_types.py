@@ -25,6 +25,19 @@ class PathNormalizationCase:
 
 
 @dataclass(frozen=True)
+class PathNormalizationCacheCase:
+    """Expected bounded-cache behavior for repeated path normalization."""
+
+    description: str
+    path: str
+    call_count: int
+    expected_hits: int
+    expected_misses: int
+    expected_max_size: int
+    expected_current_size: int
+
+
+@dataclass(frozen=True)
 class PathVisibilityCase:
     """One component-aware lexical visibility case."""
 
@@ -141,6 +154,18 @@ class OfflineScopeCase:
 
     description: str
     expected_result: bool = True
+
+
+@dataclass(frozen=True)
+class TolerantMacroInventoryCase:
+    """Macro faults and declarations retained by tolerant offline inventory."""
+
+    description: str
+    files: dict[str, str]
+    expected_names: frozenset[str]
+    unexpected_names: frozenset[str]
+    expected_dependencies: tuple[tuple[str, str], ...] = ()
+    expected_diagnostic_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

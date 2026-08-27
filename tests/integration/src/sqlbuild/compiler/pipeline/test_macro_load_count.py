@@ -2,12 +2,17 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
+from unittest.mock import Mock
 
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.compiler.scopes.models import DeclarationRecord
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
+    MacroCompositionIntegrationTestCase,
     MacroLoadCountIntegrationTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
@@ -43,6 +48,7 @@ _COUNTING_MACRO_MODULE: str = (
                 ),
             },
             expected_macro_import_count=1,
+            expected_declaration_resolution_count=1,
         )
     ],
     ids=lambda case: case.description,
@@ -51,7 +57,10 @@ def test_given_side_effect_macro_when_compiling_manifest_then_imports_macros_onc
     test_case: MacroLoadCountIntegrationTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    resolver: Mock = Mock(wraps=attachment_core.resolve_declaration_context)
+    monkeypatch.setattr(attachment_core, "resolve_declaration_context", resolver)
     write_repo_files(tmp_path, test_case.project_files)
 
     result: CompilePipelineResult = run_compile_pipeline_for_project(
@@ -66,3 +75,65 @@ def test_given_side_effect_macro_when_compiling_manifest_then_imports_macros_onc
 
     import_log: str = (tmp_path / "macro_import_log.txt").read_text(encoding="utf-8")
     assert import_log.count("import") == test_case.expected_macro_import_count
+    assert resolver.call_count == test_case.expected_declaration_resolution_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MacroCompositionIntegrationTestCase(
+            description="private helper composition reaches scope and manifest dependency",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_TOML,
+                "macros/shared.py": "def shared() -> str:\n    return 'order_id'\n",
+                "macros/orders.py": (
+                    "from macros.shared import shared\n\n"
+                    "def _helper() -> str:\n    return shared()\n\n"
+                    "def order_column() -> str:\n    return _helper()\n"
+                ),
+                "models/orders.sql": "MODEL (materialized table);\n\nSELECT @order_column()",
+            },
+            macro_name="order_column",
+            expected_dependencies=("shared",),
+            expected_declaration_resolution_count=1,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_composed_macro_when_compiling_then_scope_and_manifest_emit_dependency(
+    test_case: MacroCompositionIntegrationTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resolver: Mock = Mock(wraps=attachment_core.resolve_declaration_context)
+    monkeypatch.setattr(attachment_core, "resolve_declaration_context", resolver)
+    write_repo_files(tmp_path, test_case.project_files)
+
+    result: CompilePipelineResult = run_compile_pipeline_for_project(
+        project_dir=tmp_path,
+        adapter=DuckDbAdapter(),
+    )
+    manifest: dict[str, object] = build_manifest_for_pipeline_result(
+        result=result,
+        project_name="demo",
+        adapter_type="duckdb",
+    )
+
+    records: dict[str, DeclarationRecord] = {
+        record.identity.name: record for record in result.project.scope_index.declarations
+    }
+    order_record: DeclarationRecord = records[test_case.macro_name]
+    assert order_record.macro is not None
+    assert (
+        tuple(item.name for item in order_record.macro.dependencies)
+        == test_case.expected_dependencies
+    )
+    macros: dict[str, object] = cast(dict[str, object], manifest["macros"])
+    macro_node: dict[str, object] = cast(
+        dict[str, object], macros[f"macro.demo.{test_case.macro_name}"]
+    )
+    assert macro_node["depends_on"] == {
+        "macros": [f"macro.demo.{name}" for name in test_case.expected_dependencies]
+    }
+    assert resolver.call_count == test_case.expected_declaration_resolution_count
