@@ -3994,11 +3994,28 @@ Declare compiler-validated domain values and typed constants for use across SQLB
 
 Enums name a fixed domain of string or integer values. Constants name a compiler-validated SQL value: a scalar, list, set, or object. SQLBuild validates and normalizes declarations at compile time, then asks the active adapter to render them safely for its SQL dialect.
 
-### Public declarations
+### Project-wide declarations
 
 Project-wide declarations are available throughout the project. Put enum files anywhere under the top-level `enums/` root and constant files anywhere under the top-level `constants/` root; both roots are discovered recursively.
 
-For narrower visibility, use inherited `_enums` and `_constants` directories or exact-directory `_local_enums` and `_local_constants` directories below an authored resource root. Public names remain globally unique within each declaration kind and cannot shadow one another. An enum and a constant may use the same name because their namespaces are independent. See [Declaration Scopes](/concepts/declaration-scopes) for directory placement, composition, and resource-path rules.
+```text
+my_project/
+|-- enums/
+|   |-- market/
+|   |   `-- market_type.sql
+|   `-- order_status.sql
+|-- constants/
+|   |-- market/
+|   |   `-- thresholds.sql
+|   `-- reporting_day.sql
+|-- models/
+|-- tests/
+`-- sqlbuild_project.toml
+```
+
+Folders below `enums/` and `constants/` are for organization; they do not change visibility.
+Public names remain globally unique within each declaration kind and cannot shadow one another. An
+enum and a constant may use the same name because their namespaces are independent.
 
 ```sql
 -- enums/market/market_type.sql
@@ -4199,11 +4216,14 @@ Allowed values are `value_list` and `array`. Rendering mode is resolved in this 
 2. Project `[constants].collection_rendering`
 3. SQLBuild's `value_list` default
 
-The project default applies to project-wide, inherited, local, and model-private collection constants. There is no reference-site override: one declaration has one representation throughout a compilation. Changing the resolved mode changes dependent rendered SQL and query identity.
+The project default applies to project-wide and model-private collection constants. There is no
+reference-site override: one declaration has one representation throughout a compilation. Changing
+the resolved mode changes dependent rendered SQL and query identity.
 
-### Model-local declarations
+### Model-private declarations
 
-Use model-local declarations for values that should not enter the project-wide namespace. The shorthand accepts every scalar and collection form:
+Use model-private declarations for values that belong to one model and should not enter the
+project-wide namespace. The shorthand accepts every scalar and collection form:
 
 ```sql
 MODEL (
@@ -4246,6 +4266,10 @@ MODEL (
 ```
 
 The wrapper is distinct from object syntax, so an object with keys named `value` or `render_as` remains unambiguous. Model-private names must start with exactly one `_`; names beginning with `__` are reserved for SQLBuild. They are available only in that model's query and inline SQL hooks; named SQL hooks resolve from their own definition paths, and no test, scenario, descendant, or other model can resolve them. Scope introspection qualifies private identities with their owner, such as `constant:model:stg_orders._minimum_value`; this does not change SQL reference syntax.
+
+  This page focuses on the normal project-wide layout and declarations owned by one model. For
+  declarations shared by only part of a larger project, see
+  [Declarations and Scopes](/concepts/declaration-scopes).
 
 ### Determinism and identity
 
