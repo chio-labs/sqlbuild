@@ -1,6 +1,7 @@
 """Snowflake adapter constants."""
 
 BASE_TABLE_METADATA_TYPE: str = "BASE TABLE"
+VIEW_RELATION_TYPE_TOKEN: str = "view"
 EXTERNAL_BROWSER_AUTHENTICATOR: str = "externalbrowser"
 MFA_AUTHENTICATOR: str = "username_password_mfa"
 OAUTH_AUTHORIZATION_CODE_AUTHENTICATOR: str = "oauth_authorization_code"

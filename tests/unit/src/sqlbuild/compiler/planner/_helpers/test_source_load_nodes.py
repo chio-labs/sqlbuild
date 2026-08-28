@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import (
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
+    CompileModelConfig,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.graph.loader_dag import (
     build_intermediate_source_map,
@@ -14,13 +22,16 @@ from sqlbuild.compiler.planner._helpers.graph.source_load_nodes import (
     build_source_load_entries,
     build_source_load_map,
 )
+from sqlbuild.compiler.planner._helpers.warehouse.snapshot import _build_metadata_name_filter
 from sqlbuild.compiler.planner.models import SourceLoadPlanEntry
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.models import SourceEntry
 from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     LoaderDagExpansionTestCase,
+    MetadataNameFilterTestCase,
     SourceLoadNodesTestCase,
+    SourceMetadataClosureTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     build_source_load_nodes_project,
@@ -85,6 +96,134 @@ def test_given_selected_source_load_keys_when_building_entries_then_returns_orde
 
     assert tuple(sorted(source_map)) == test_case.expected_map_names
     assert entries == test_case.expected_entries
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SourceMetadataClosureTestCase(
+            description="unrelated selected seed excludes all project sources",
+            expected_source_names=(),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unrelated_selected_seed_when_building_source_map_then_sources_are_excluded(
+    test_case: SourceMetadataClosureTestCase,
+) -> None:
+    project: CompiledProject = build_source_load_nodes_project()
+    seed_key: CompiledObjectKey = CompiledObjectKey(
+        CompiledResourceType.SEED, "country_codes"
+    )
+
+    source_map: dict[str, SourceEntry] = build_source_load_map(
+        project=project,
+        selected_keys=frozenset({seed_key}),
+        upstream_deps={seed_key: ()},
+    )
+
+    assert tuple(sorted(source_map)) == test_case.expected_source_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SourceMetadataClosureTestCase(
+            description="reachable source through unselected upstream model is retained",
+            expected_source_names=("raw_orders",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_transitive_unselected_upstream_when_building_source_map_then_source_is_retained(
+    test_case: SourceMetadataClosureTestCase,
+) -> None:
+    project: CompiledProject = build_source_load_nodes_project()
+    selected_key: CompiledObjectKey = CompiledObjectKey(
+        CompiledResourceType.MODEL, "fact_orders"
+    )
+    upstream_key: CompiledObjectKey = CompiledObjectKey(
+        CompiledResourceType.MODEL, "stg_orders"
+    )
+    source_key: CompiledObjectKey = CompiledObjectKey(
+        CompiledResourceType.SOURCE, "raw_orders"
+    )
+
+    source_map: dict[str, SourceEntry] = build_source_load_map(
+        project=project,
+        selected_keys=frozenset({selected_key}),
+        upstream_deps={
+            selected_key: (upstream_key,),
+            upstream_key: (source_key,),
+            source_key: (),
+        },
+    )
+
+    assert tuple(sorted(source_map)) == test_case.expected_source_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MetadataNameFilterTestCase(
+            description="selected closure inventories logical aliases by physical destination",
+            expected_physical_names=frozenset({"FACT_ORDERS_PHYSICAL", "STG_ORDERS_PHYSICAL"}),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unselected_upstream_in_closure_when_filtering_metadata_then_uses_physical_names(
+    test_case: MetadataNameFilterTestCase,
+) -> None:
+    selected_key: CompiledObjectKey = CompiledObjectKey(
+        CompiledResourceType.MODEL, "fact_orders"
+    )
+    upstream_key: CompiledObjectKey = CompiledObjectKey(
+        CompiledResourceType.MODEL, "stg_orders"
+    )
+    selected_model: CompiledModel = CompiledModel(
+        key=selected_key,
+        deps=(upstream_key,),
+        name="fact_orders",
+        relative_path=Path("models/fact_orders.sql"),
+        query_sql="SELECT * FROM __ref('stg_orders')",
+        config=CompileModelConfig(),
+        destination=CompiledRelationLocation(
+            database="RACING",
+            schema="ANALYTICS",
+            name="FACT_ORDERS_PHYSICAL",
+            qualified_name="RACING.ANALYTICS.FACT_ORDERS_PHYSICAL",
+        ),
+    )
+    upstream_model: CompiledModel = CompiledModel(
+        key=upstream_key,
+        deps=(),
+        name="stg_orders",
+        relative_path=Path("models/stg_orders.sql"),
+        query_sql="SELECT 1 AS id",
+        config=CompileModelConfig(),
+        destination=CompiledRelationLocation(
+            database="RACING",
+            schema="STAGING",
+            name="STG_ORDERS_PHYSICAL",
+            qualified_name="RACING.STAGING.STG_ORDERS_PHYSICAL",
+        ),
+    )
+    project: CompiledProject = CompiledProject(
+        run_id="test",
+        effective_target_name=None,
+        effective_connection={},
+        effective_vars={},
+        models=(selected_model, upstream_model),
+    )
+
+    names: tuple[str, ...] | None = _build_metadata_name_filter(
+        project=project,
+        selected_keys=frozenset({selected_key, upstream_key}),
+    )
+
+    assert names is not None
+    assert test_case.expected_physical_names.issubset(names)
 
 
 @pytest.mark.parametrize(

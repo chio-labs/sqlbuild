@@ -60,6 +60,16 @@ class SchemaMixin(ABC):
         ...
 
     @abstractmethod
+    def get_columns_for_relations(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+    ) -> dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]]:
+        """Return columns keyed by fully qualified physical relation identity."""
+        ...
+
+    @abstractmethod
     def relation_exists(
         self,
         *,

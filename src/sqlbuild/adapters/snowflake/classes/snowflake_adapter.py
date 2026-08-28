@@ -27,6 +27,7 @@ from sqlbuild.adapter.contract.models import (
     FunctionDefinition,
     FunctionInfo,
     QueryResult,
+    RelationInfo,
     RowDiffColumnResult,
     RowDiffResult,
     RowDiffSampleCell,
@@ -66,6 +67,7 @@ from sqlbuild.adapters.snowflake.constants import (
     SUCCESS_STATUS_TOKENS,
     TEXT_TYPE_NAMES,
     TRUE_METADATA_VALUE,
+    VIEW_RELATION_TYPE_TOKEN,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.types import InitialValidFrom, SnapshotStrategy
@@ -77,6 +79,9 @@ from sqlbuild.diagnostics.main.log_sql import log_sql
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
 from sqlbuild.sql_values.models import SqlValue
+
+_EXACT_COLUMN_INSPECTION_LIMIT: int = 32
+_BULK_COLUMN_RELATION_CHUNK_SIZE: int = 200
 
 
 class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
@@ -154,6 +159,11 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
     @staticmethod
     def _information_schema_identifier(value: str) -> str:
         return value.upper()
+
+    def _information_schema_relation(self, *, database: str | None, name: str) -> str:
+        if database is None:
+            return f"information_schema.{name}"
+        return f"{self.render_identifier(database)}.information_schema.{name}"
 
     @staticmethod
     def _freshness_request_key(
@@ -367,7 +377,9 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
         cursor: Any = connection.cursor()
         try:
             cursor.execute(
-                "SELECT table_type, last_altered FROM information_schema.tables WHERE "
+                "SELECT table_type, last_altered FROM "
+                + self._information_schema_relation(database=database, name="tables")
+                + " WHERE "
                 + " AND ".join(clauses),
                 tuple(params),
             )
@@ -441,7 +453,12 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
             try:
                 cursor.execute(
                     "SELECT table_catalog, table_schema, table_name, table_type, last_altered "
-                    "FROM information_schema.tables WHERE " + " AND ".join(clauses),
+                    "FROM "
+                    + self._information_schema_relation(
+                        database=scoped_requests[0].database, name="tables"
+                    )
+                    + " WHERE "
+                    + " AND ".join(clauses),
                     tuple(params),
                 )
                 rows: list[tuple[Any, ...]] = list(cursor.fetchall())
@@ -1539,7 +1556,10 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
         cursor: Any = connection.cursor()
         try:
             cursor.execute(
-                "SELECT 1 FROM information_schema.tables WHERE " + " AND ".join(clauses),
+                "SELECT 1 FROM "
+                + self._information_schema_relation(database=database, name="tables")
+                + " WHERE "
+                + " AND ".join(clauses),
                 tuple(params),
             )
             return cursor.fetchone() is not None
@@ -1556,7 +1576,7 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
     ) -> tuple[Any, ...]:
         query: str = (
             "SELECT table_name, table_schema, table_type, is_transient "
-            "FROM information_schema.tables WHERE 1=1"
+            f"FROM {self._information_schema_relation(database=database, name='tables')} WHERE 1=1"
         )
         params: list[str] = []
         if schemas:
@@ -1641,7 +1661,9 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
     ) -> tuple[ColumnInfo, ...]:
         query: str = (
             "SELECT column_name, data_type, numeric_precision, numeric_scale, "
-            "character_maximum_length FROM information_schema.columns "
+            "character_maximum_length FROM "
+            + self._information_schema_relation(database=database, name="columns")
+            + " "
             "WHERE table_name = %s"
         )
         params: list[str] = [self._information_schema_identifier(name)]
@@ -1681,7 +1703,9 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
     ) -> dict[str, tuple[ColumnInfo, ...]]:
         query: str = (
             "SELECT table_name, column_name, data_type, numeric_precision, numeric_scale, "
-            "character_maximum_length FROM information_schema.columns WHERE 1=1"
+            "character_maximum_length FROM "
+            + self._information_schema_relation(database=database, name="columns")
+            + " WHERE 1=1"
         )
         params: list[str] = []
         if schemas:
@@ -1718,6 +1742,160 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
                 )
             )
         return {key: tuple(value) for key, value in result.items()}
+
+    def get_columns_for_relations(
+        self,
+        *,
+        connection: _SnowflakeConnection,
+        relations: tuple[RelationInfo, ...],
+    ) -> dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]]:
+        """Use exact SHOW calls for sparse plans and qualified bulk metadata for broad plans."""
+
+        ordered_relations: tuple[RelationInfo, ...] = tuple(
+            sorted(
+                relations,
+                key=lambda relation: tuple(part or "" for part in relation.identity),
+            )
+        )
+        if len(ordered_relations) <= _EXACT_COLUMN_INSPECTION_LIMIT:
+            return {
+                relation.identity: self._show_columns_for_relation(
+                    connection=connection, relation=relation
+                )
+                for relation in ordered_relations
+            }
+        return self._get_columns_for_relations_bulk(
+            connection=connection, relations=ordered_relations
+        )
+
+    def _show_columns_for_relation(
+        self,
+        *,
+        connection: _SnowflakeConnection,
+        relation: RelationInfo,
+    ) -> tuple[ColumnInfo, ...]:
+        qualified_name: str | None = self.render_qualified_name(
+            database=relation.database,
+            schema=relation.schema,
+            name=relation.name,
+        )
+        if qualified_name is None:
+            raise AdapterUserError(message=f"Snowflake relation is not qualified: {relation.name}")
+        relation_kind: str = (
+            "VIEW" if VIEW_RELATION_TYPE_TOKEN in relation.relation_type.lower() else "TABLE"
+        )
+        cursor: Any = connection.cursor()
+        try:
+            cursor.execute(f"SHOW COLUMNS IN {relation_kind} {qualified_name}")
+            rows: list[tuple[Any, ...]] = list(cursor.fetchall())
+        finally:
+            cursor.close()
+        return tuple(
+            ColumnInfo(
+                name=str(row[2]).lower(),
+                type=self._build_show_columns_type(raw_data_type=row[3]),
+            )
+            for row in rows
+        )
+
+    def _get_columns_for_relations_bulk(
+        self,
+        *,
+        connection: _SnowflakeConnection,
+        relations: tuple[RelationInfo, ...],
+    ) -> dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]]:
+        by_database: dict[str | None, list[RelationInfo]] = {}
+        for relation in relations:
+            by_database.setdefault(relation.database, []).append(relation)
+        result: dict[tuple[str | None, str | None, str], list[ColumnInfo]] = {}
+        for database, database_relations in by_database.items():
+            chunk_start: int
+            for chunk_start in range(
+                0, len(database_relations), _BULK_COLUMN_RELATION_CHUNK_SIZE
+            ):
+                chunk: list[RelationInfo] = database_relations[
+                    chunk_start : chunk_start + _BULK_COLUMN_RELATION_CHUNK_SIZE
+                ]
+                rows: list[tuple[Any, ...]] = self._get_columns_for_relations_bulk_chunk(
+                    connection=connection, database=database, relations=chunk
+                )
+                for row in rows:
+                    identity: tuple[str | None, str | None, str] = (
+                        None if database is None else str(row[0]).lower(),
+                        None if row[1] is None else str(row[1]).lower(),
+                        str(row[2]).lower(),
+                    )
+                    result.setdefault(identity, []).append(
+                        ColumnInfo(
+                            name=str(row[3]).lower(),
+                            type=self._build_information_schema_type(
+                                data_type=str(row[4]),
+                                numeric_precision=row[5],
+                                numeric_scale=row[6],
+                                character_maximum_length=row[7],
+                            ),
+                        )
+                    )
+        return {identity: tuple(columns) for identity, columns in result.items()}
+
+    def _get_columns_for_relations_bulk_chunk(
+        self,
+        *,
+        connection: _SnowflakeConnection,
+        database: str | None,
+        relations: list[RelationInfo],
+    ) -> list[tuple[Any, ...]]:
+        scopes: dict[str | None, list[str]] = {}
+        for relation in relations:
+            scopes.setdefault(relation.schema, []).append(relation.name)
+        clauses: list[str] = []
+        params: list[str] = []
+        for schema, names in sorted(scopes.items(), key=lambda item: item[0] or ""):
+            name_placeholders: str = ", ".join(["%s"] * len(names))
+            if schema is None:
+                clauses.append(f"table_name IN ({name_placeholders})")
+            else:
+                clauses.append(f"(table_schema = %s AND table_name IN ({name_placeholders}))")
+                params.append(self._information_schema_identifier(schema))
+            params.extend(self._information_schema_identifier(name) for name in names)
+        metadata_table: str = self._information_schema_relation(
+            database=database, name="columns"
+        )
+        query: str = (
+            "SELECT table_catalog, table_schema, table_name, column_name, data_type, "
+            "numeric_precision, numeric_scale, character_maximum_length "
+            f"FROM {metadata_table} WHERE " + " OR ".join(clauses)
+            + " ORDER BY table_catalog, table_schema, table_name, ordinal_position"
+        )
+        cursor: Any = connection.cursor()
+        try:
+            cursor.execute(query, tuple(params))
+            return list(cursor.fetchall())
+        finally:
+            cursor.close()
+
+    def _build_show_columns_type(self, *, raw_data_type: object) -> str:
+        try:
+            decoded_data_type: object = json.loads(str(raw_data_type))
+        except (json.JSONDecodeError, TypeError) as error:
+            raise AdapterUserError(
+                message="Snowflake SHOW COLUMNS returned invalid type metadata"
+            ) from error
+        if not isinstance(decoded_data_type, dict):
+            raise AdapterUserError(message="Snowflake SHOW COLUMNS returned invalid type metadata")
+        data_type: dict[str, object] = decoded_data_type
+        raw_name: str = str(data_type.get("type", ""))
+        normalized_name: str = {
+            "FIXED": NUMBER_TYPE_NAME,
+            "TEXT": "VARCHAR",
+            "REAL": "FLOAT",
+        }.get(raw_name.upper(), raw_name.upper())
+        return self._build_information_schema_type(
+            data_type=normalized_name,
+            numeric_precision=data_type.get("precision"),
+            numeric_scale=data_type.get("scale"),
+            character_maximum_length=data_type.get("length"),
+        )
 
     def close(self, connection: _SnowflakeConnection) -> None:
         """Close a Snowflake connection."""

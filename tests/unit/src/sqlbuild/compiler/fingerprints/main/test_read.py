@@ -12,6 +12,7 @@ from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from tests.unit.src.sqlbuild.compiler.fingerprints.main._test_types import (
     ReadLatestFingerprintsErrorTestCase,
+    ReadLatestFingerprintsFilterTestCase,
     ReadLatestFingerprintsRendererTestCase,
     ReadLatestFingerprintsTestCase,
     WriteFingerprintIndexTestCase,
@@ -106,6 +107,37 @@ def test_given_latest_sql_renderer_when_reading_then_executes_renderer_sql(
     )
 
     assert execute.executed_sql == [test_case.expected_executed_sql]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ReadLatestFingerprintsFilterTestCase(
+            description="filters latest state to escaped relevant node names",
+            node_names=("country_codes", "quoted'name"),
+            expected_sql_fragment="WHERE node_name IN ('country_codes', 'quoted''name')",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_relevant_node_names_when_reading_then_filters_state_query(
+    test_case: ReadLatestFingerprintsFilterTestCase,
+) -> None:
+    execute: FakeFingerprintExecute = FakeFingerprintExecute(rows=[])
+
+    read_latest_fingerprints(
+        connection=object(),
+        execute=execute,
+        table_exists=True,
+        database=None,
+        schema="main",
+        render_qualified_name=render_qualified_name,
+        render_read_latest_sql=render_sentinel_read_latest_sql,
+        node_names=test_case.node_names,
+    )
+
+    assert len(execute.executed_sql) == 1
+    assert test_case.expected_sql_fragment in execute.executed_sql[0]
 
 
 @pytest.mark.parametrize(

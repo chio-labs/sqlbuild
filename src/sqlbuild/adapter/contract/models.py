@@ -73,6 +73,12 @@ class RelationInfo:
     last_altered_at: datetime | None = None
     is_transient: bool | None = None
 
+    @property
+    def identity(self) -> tuple[str | None, str | None, str]:
+        """Return the case-insensitive physical relation identity."""
+
+        return RelationLookup.key(database=self.database, schema=self.schema, name=self.name)
+
 
 @dataclass(frozen=True)
 class RelationLookup:
