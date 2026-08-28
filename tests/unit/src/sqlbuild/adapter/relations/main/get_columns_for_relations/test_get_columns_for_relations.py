@@ -69,9 +69,9 @@ def test_given_qualified_relations_when_getting_columns_then_groups_bulk_queries
     )
     adapter: _BulkRecordingAdapter = _BulkRecordingAdapter()
 
-    columns: dict[
-        tuple[str | None, str | None, str], tuple[ColumnInfo, ...]
-    ] = adapter.get_columns_for_relations(connection=object(), relations=relations)
+    columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
+        adapter.get_columns_for_relations(connection=object(), relations=relations)
+    )
 
     assert len(adapter.queries) == test_case.expected_query_count
     assert len(columns) == test_case.expected_identity_count
@@ -108,9 +108,9 @@ def test_given_broad_relation_scope_when_getting_columns_then_preserves_unrestri
     adapter: _BulkRecordingAdapter = _BulkRecordingAdapter()
     adapter.inventory_names[("DB_A", "SCHEMA_A")] = relation_names
 
-    columns: dict[
-        tuple[str | None, str | None, str], tuple[ColumnInfo, ...]
-    ] = adapter.get_columns_for_relations(connection=object(), relations=relations)
+    columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
+        adapter.get_columns_for_relations(connection=object(), relations=relations)
+    )
 
     assert len(adapter.queries) == test_case.expected_query_count
     assert len(columns) == test_case.expected_identity_count

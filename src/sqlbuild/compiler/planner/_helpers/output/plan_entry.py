@@ -679,11 +679,11 @@ def gather_source_columns(
             schemas=tuple(sorted(schemas)),
             names=names,
         )
-        all_columns: dict[
-            tuple[str | None, str | None, str], tuple[ColumnInfo, ...]
-        ] = adapter.get_columns_for_relations(
-            connection=connection,
-            relations=relations,
+        all_columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
+            adapter.get_columns_for_relations(
+                connection=connection,
+                relations=relations,
+            )
         )
         entry_iter: SourceEntry
         for entry_iter in entries:

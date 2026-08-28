@@ -79,9 +79,7 @@ def test_given_asymmetric_dag_when_sizing_workers_then_does_not_underestimate_ov
     root: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.MODEL, "root")
     slow: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.MODEL, "slow")
     fast: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.MODEL, "fast")
-    fast_child: CompiledObjectKey = CompiledObjectKey(
-        CompiledResourceType.MODEL, "fast_child"
-    )
+    fast_child: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.MODEL, "fast_child")
     final: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.MODEL, "final")
     plan: PlanOutput = PlanOutput(
         execution_order=(root, slow, fast, fast_child, final),

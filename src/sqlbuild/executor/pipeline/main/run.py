@@ -150,9 +150,9 @@ def _run_build_pipeline(
         )
         worker_connections = list(
             open_worker_connections(
-            adapter=adapter,
-            connection_config=connection_config,
-            connection_count=effective_concurrency,
+                adapter=adapter,
+                connection_config=connection_config,
+                connection_count=effective_concurrency,
             )
         )
     except BaseException as error:

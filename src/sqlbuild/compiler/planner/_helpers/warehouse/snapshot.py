@@ -138,9 +138,7 @@ def gather_warehouse_snapshot(
     """Gather relations, columns, and fingerprints for all target schemas."""
 
     database: str | None = _resolve_database(project=project, selected_keys=selected_keys)
-    schemas: tuple[str, ...] = _collect_target_schemas(
-        project=project, selected_keys=selected_keys
-    )
+    schemas: tuple[str, ...] = _collect_target_schemas(project=project, selected_keys=selected_keys)
     metadata_names: tuple[str, ...] | None = _build_metadata_name_filter(
         project=project,
         selected_keys=selected_keys,
@@ -402,10 +400,8 @@ def _gather_columns(
     """Fetch column metadata for all relations across target schemas."""
 
     physical_relations: tuple[RelationInfo, ...] = tuple(relations.values())
-    all_columns: dict[
-        tuple[str | None, str | None, str], tuple[ColumnInfo, ...]
-    ] = adapter.get_columns_for_relations(
-        connection=connection, relations=physical_relations
+    all_columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
+        adapter.get_columns_for_relations(connection=connection, relations=physical_relations)
     )
     return {
         logical_name: all_columns[relation.identity]

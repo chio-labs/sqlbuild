@@ -51,7 +51,7 @@ def _planned_relation_refs(*, plan_output: PlanOutput) -> frozenset[SqlResourceR
         for name in plan_output.model_locations
     }
     source_name: str
-    for source_name in (plan_output.source_read_map or plan_output.source_map):
+    for source_name in plan_output.source_read_map or plan_output.source_map:
         refs.add(SqlResourceRef(kind=SqlResourceRefKind.SOURCE, name=source_name))
     return frozenset(refs)
 
@@ -66,9 +66,7 @@ def _resolve_relation(
     if ref.kind == SqlResourceRefKind.MODEL:
         planned_model: CompiledRelationLocation | None = plan_output.model_locations.get(ref.name)
         if planned_model is not None:
-            return resolve_relation_location_qualified_name(
-                adapter=adapter, location=planned_model
-            )
+            return resolve_relation_location_qualified_name(adapter=adapter, location=planned_model)
         model: CompiledModel
         for model in project.models:
             if model.name == ref.name:

@@ -34,9 +34,7 @@ def _gather_scope_columns(
     *,
     adapter: Any,
     connection: Any,
-    scopes: tuple[
-        tuple[tuple[str | None, str | None], list[RelationInfo]], ...
-    ],
+    scopes: tuple[tuple[tuple[str | None, str | None], list[RelationInfo]], ...],
     scope_index: int,
     result: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]],
 ) -> dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]]:

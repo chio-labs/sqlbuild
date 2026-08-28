@@ -50,8 +50,7 @@ def read_latest_source_freshness(
             "'" + source_name.replace("'", "''") + "'" for source_name in source_names
         )
         read_sql = (
-            f"SELECT * FROM ({read_sql}) AS __sqlbuild_relevant "
-            f"WHERE source_name IN ({literals})"
+            f"SELECT * FROM ({read_sql}) AS __sqlbuild_relevant WHERE source_name IN ({literals})"
         )
     try:
         result: Any = execute(connection=connection, sql=read_sql)

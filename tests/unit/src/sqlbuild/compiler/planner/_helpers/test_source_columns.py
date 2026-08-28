@@ -82,14 +82,10 @@ class _QualifiedSourceAdapter(_RecordingAdapter):
         self.database_queries.append(database)
         relations_by_database: dict[str | None, tuple[RelationInfo, ...]] = {
             "DB_A": (
-                RelationInfo(
-                    database="DB_A", schema="RAW", name="SHARED", relation_type="table"
-                ),
+                RelationInfo(database="DB_A", schema="RAW", name="SHARED", relation_type="table"),
             ),
             "DB_B": (
-                RelationInfo(
-                    database="DB_B", schema="RAW", name="SHARED", relation_type="table"
-                ),
+                RelationInfo(database="DB_B", schema="RAW", name="SHARED", relation_type="table"),
             ),
         }
         return relations_by_database.get(database, ())
@@ -190,9 +186,7 @@ def test_given_multi_database_sources_when_gathering_columns_then_matches_curren
         source_entries=source_entries,
     )
 
-    actual_types: dict[str, str] = {
-        name: columns[0].type for name, columns in result.items()
-    }
+    actual_types: dict[str, str] = {name: columns[0].type for name, columns in result.items()}
     assert actual_types == test_case.expected_source_types
     assert tuple(adapter.database_queries) == test_case.expected_database_queries
 

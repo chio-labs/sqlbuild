@@ -112,9 +112,7 @@ def test_given_unrelated_selected_seed_when_building_source_map_then_sources_are
     test_case: SourceMetadataClosureTestCase,
 ) -> None:
     project: CompiledProject = build_source_load_nodes_project()
-    seed_key: CompiledObjectKey = CompiledObjectKey(
-        CompiledResourceType.SEED, "country_codes"
-    )
+    seed_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.SEED, "country_codes")
 
     source_map: dict[str, SourceEntry] = build_source_load_map(
         project=project,
@@ -139,15 +137,9 @@ def test_given_transitive_unselected_upstream_when_building_source_map_then_sour
     test_case: SourceMetadataClosureTestCase,
 ) -> None:
     project: CompiledProject = build_source_load_nodes_project()
-    selected_key: CompiledObjectKey = CompiledObjectKey(
-        CompiledResourceType.MODEL, "fact_orders"
-    )
-    upstream_key: CompiledObjectKey = CompiledObjectKey(
-        CompiledResourceType.MODEL, "stg_orders"
-    )
-    source_key: CompiledObjectKey = CompiledObjectKey(
-        CompiledResourceType.SOURCE, "raw_orders"
-    )
+    selected_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.MODEL, "fact_orders")
+    upstream_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.MODEL, "stg_orders")
+    source_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.SOURCE, "raw_orders")
 
     source_map: dict[str, SourceEntry] = build_source_load_map(
         project=project,
@@ -175,12 +167,8 @@ def test_given_transitive_unselected_upstream_when_building_source_map_then_sour
 def test_given_unselected_upstream_in_closure_when_filtering_metadata_then_uses_physical_names(
     test_case: MetadataNameFilterTestCase,
 ) -> None:
-    selected_key: CompiledObjectKey = CompiledObjectKey(
-        CompiledResourceType.MODEL, "fact_orders"
-    )
-    upstream_key: CompiledObjectKey = CompiledObjectKey(
-        CompiledResourceType.MODEL, "stg_orders"
-    )
+    selected_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.MODEL, "fact_orders")
+    upstream_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.MODEL, "stg_orders")
     selected_model: CompiledModel = CompiledModel(
         key=selected_key,
         deps=(upstream_key,),

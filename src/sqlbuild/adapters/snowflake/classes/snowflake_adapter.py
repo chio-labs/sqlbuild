@@ -1810,9 +1810,7 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
         result: dict[tuple[str | None, str | None, str], list[ColumnInfo]] = {}
         for database, database_relations in by_database.items():
             chunk_start: int
-            for chunk_start in range(
-                0, len(database_relations), _BULK_COLUMN_RELATION_CHUNK_SIZE
-            ):
+            for chunk_start in range(0, len(database_relations), _BULK_COLUMN_RELATION_CHUNK_SIZE):
                 chunk: list[RelationInfo] = database_relations[
                     chunk_start : chunk_start + _BULK_COLUMN_RELATION_CHUNK_SIZE
                 ]
@@ -1858,13 +1856,12 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
                 clauses.append(f"(table_schema = %s AND table_name IN ({name_placeholders}))")
                 params.append(self._information_schema_identifier(schema))
             params.extend(self._information_schema_identifier(name) for name in names)
-        metadata_table: str = self._information_schema_relation(
-            database=database, name="columns"
-        )
+        metadata_table: str = self._information_schema_relation(database=database, name="columns")
         query: str = (
             "SELECT table_catalog, table_schema, table_name, column_name, data_type, "
             "numeric_precision, numeric_scale, character_maximum_length "
-            f"FROM {metadata_table} WHERE " + " OR ".join(clauses)
+            f"FROM {metadata_table} WHERE "
+            + " OR ".join(clauses)
             + " ORDER BY table_catalog, table_schema, table_name, ordinal_position"
         )
         cursor: Any = connection.cursor()

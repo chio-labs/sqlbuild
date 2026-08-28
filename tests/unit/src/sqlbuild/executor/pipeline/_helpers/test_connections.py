@@ -60,7 +60,9 @@ def test_given_worker_count_when_opening_connections_then_each_call_returns_inde
     )
 
     assert len(connections) == test_case.expected_connection_count
-    assert len({id(connection) for connection in connections}) == test_case.expected_connection_count
+    assert (
+        len({id(connection) for connection in connections}) == test_case.expected_connection_count
+    )
     assert len(adapter.connect_calls) == test_case.connection_count
 
 

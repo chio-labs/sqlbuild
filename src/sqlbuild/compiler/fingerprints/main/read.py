@@ -57,8 +57,7 @@ def read_latest_fingerprints(
             relevant_predicate = f"node_name IN ({literals})"
         if filtered_node_types:
             type_literals: str = ", ".join(
-                "'" + node_type.replace("'", "''") + "'"
-                for node_type in filtered_node_types
+                "'" + node_type.replace("'", "''") + "'" for node_type in filtered_node_types
             )
             python_identity_predicate: str = f"node_type NOT IN ({type_literals})"
             relevant_predicate = (
@@ -66,10 +65,7 @@ def read_latest_fingerprints(
                 if relevant_predicate
                 else python_identity_predicate
             )
-        read_sql = (
-            f"SELECT * FROM ({read_sql}) AS __sqlbuild_relevant "
-            f"WHERE {relevant_predicate}"
-        )
+        read_sql = f"SELECT * FROM ({read_sql}) AS __sqlbuild_relevant WHERE {relevant_predicate}"
     try:
         result: Any = execute(connection=connection, sql=read_sql)
     except Exception as error:

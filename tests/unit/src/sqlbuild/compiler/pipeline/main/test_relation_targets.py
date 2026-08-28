@@ -73,9 +73,7 @@ def test_given_source_read_map_when_building_python_relation_targets_then_uses_r
 def test_given_narrow_plan_when_building_python_targets_then_only_required_refs_are_resolved(
     test_case: PythonRelationTargetScopeTestCase,
 ) -> None:
-    deferred_source: SourceEntry = SourceEntry(
-        name="orders", schema="deferred_raw", table="orders"
-    )
+    deferred_source: SourceEntry = SourceEntry(name="orders", schema="deferred_raw", table="orders")
     targets: dict[SqlResourceRef, str] = build_python_relation_targets(
         adapter=RelationTargetTestAdapter(),
         project=build_relation_target_project(),

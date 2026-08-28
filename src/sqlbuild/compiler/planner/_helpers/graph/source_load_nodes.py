@@ -27,7 +27,8 @@ def build_source_load_map(
         else None
     )
     source_map: dict[str, SourceEntry] = {
-        source.source_entry.name: source.source_entry for source in project.sources
+        source.source_entry.name: source.source_entry
+        for source in project.sources
         if relevant_keys is None or source.key in relevant_keys
     }
     source_map.update(build_intermediate_source_map(project=project, selected_keys=selected_keys))

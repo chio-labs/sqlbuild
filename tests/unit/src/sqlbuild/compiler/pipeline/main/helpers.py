@@ -35,9 +35,7 @@ def relation_target_python_node() -> None:
 
 
 def build_relation_target_project() -> CompiledProject:
-    source_entry: SourceEntry = SourceEntry(
-        name="orders", schema="load_raw", table="orders"
-    )
+    source_entry: SourceEntry = SourceEntry(name="orders", schema="load_raw", table="orders")
     source_file: DiscoveredSourceFile = DiscoveredSourceFile(
         file_path=Path("sources/raw.yml"),
         relative_path=Path("sources/raw.yml"),

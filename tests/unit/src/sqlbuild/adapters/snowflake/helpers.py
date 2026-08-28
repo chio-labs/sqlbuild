@@ -106,9 +106,7 @@ def build_qualified_column_relations(*, count: int) -> tuple[RelationInfo, ...]:
         *(f"RELATION_{index}" for index in range(2, count)),
     )
     schemas: tuple[str, ...] = tuple(islice(cycle(("SCHEMA_A", "SCHEMA_B")), count))
-    relation_types: tuple[str, ...] = tuple(
-        islice(cycle(("BASE TABLE", "VIEW")), count)
-    )
+    relation_types: tuple[str, ...] = tuple(islice(cycle(("BASE TABLE", "VIEW")), count))
     return tuple(
         RelationInfo(
             database="RACING",
@@ -151,9 +149,7 @@ def build_show_columns_rows(*, relation: RelationInfo) -> list[tuple[object, ...
     ]
 
 
-def build_bulk_columns_rows(
-    *, relations: tuple[RelationInfo, ...]
-) -> list[tuple[object, ...]]:
+def build_bulk_columns_rows(*, relations: tuple[RelationInfo, ...]) -> list[tuple[object, ...]]:
     """Build INFORMATION_SCHEMA rows equivalent to the exact SHOW fixtures."""
 
     rows: list[tuple[object, ...]] = []
@@ -200,9 +196,7 @@ def build_bulk_sequence_connection(
     chunk_start: int
     for chunk_start in range(0, len(relations), chunk_size):
         chunk: tuple[RelationInfo, ...] = relations[chunk_start : chunk_start + chunk_size]
-        cursors.append(
-            FakeSnowflakeMetadataCursor(rows=build_bulk_columns_rows(relations=chunk))
-        )
+        cursors.append(FakeSnowflakeMetadataCursor(rows=build_bulk_columns_rows(relations=chunk)))
     return FakeSnowflakeMetadataSequenceConnection(tuple(cursors))
 
 

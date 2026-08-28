@@ -339,16 +339,16 @@ def test_given_32_mixed_relations_when_getting_columns_then_exact_and_bulk_are_e
     )
     adapter: SnowflakeAdapter = SnowflakeAdapter()
 
-    exact_columns: dict[
-        tuple[str | None, str | None, str], tuple[ColumnInfo, ...]
-    ] = adapter.get_columns_for_relations(
-        connection=cast(Any, exact_connection), relations=relations
+    exact_columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
+        adapter.get_columns_for_relations(
+            connection=cast(Any, exact_connection), relations=relations
+        )
     )
-    bulk_columns: dict[
-        tuple[str | None, str | None, str], tuple[ColumnInfo, ...]
-    ] = adapter._get_columns_for_relations_bulk(
-        connection=cast(Any, FakeSnowflakeMetadataConnection(bulk_cursor)),
-        relations=relations,
+    bulk_columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
+        adapter._get_columns_for_relations_bulk(
+            connection=cast(Any, FakeSnowflakeMetadataConnection(bulk_cursor)),
+            relations=relations,
+        )
     )
 
     executed_sql: tuple[str, ...] = tuple(
@@ -385,10 +385,10 @@ def test_given_33_mixed_relations_when_getting_columns_then_uses_bulk_query(
     )
     adapter: SnowflakeAdapter = SnowflakeAdapter()
 
-    columns: dict[
-        tuple[str | None, str | None, str], tuple[ColumnInfo, ...]
-    ] = adapter.get_columns_for_relations(
-        connection=cast(Any, FakeSnowflakeMetadataConnection(cursor)), relations=relations
+    columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
+        adapter.get_columns_for_relations(
+            connection=cast(Any, FakeSnowflakeMetadataConnection(cursor)), relations=relations
+        )
     )
 
     assert cursor.executed_sql is not None
@@ -410,7 +410,7 @@ def test_given_33_mixed_relations_when_getting_columns_then_uses_bulk_query(
             description="1000 relations use five bounded bulk queries and merge all results",
             relation_count=1000,
             expected_statement_count=5,
-        )
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -427,10 +427,10 @@ def test_given_large_relation_set_when_getting_columns_then_chunks_and_merges_bu
         relations=ordered_relations, chunk_size=200
     )
 
-    columns: dict[
-        tuple[str | None, str | None, str], tuple[ColumnInfo, ...]
-    ] = SnowflakeAdapter().get_columns_for_relations(
-        connection=cast(Any, connection), relations=relations
+    columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
+        SnowflakeAdapter().get_columns_for_relations(
+            connection=cast(Any, connection), relations=relations
+        )
     )
 
     assert len(connection.returned_cursors) == test_case.expected_statement_count
