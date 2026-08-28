@@ -9,4 +9,8 @@ def runnable_graph_width(*, plan: PlanOutput) -> int:
     """Return a safe worker cap that cannot underestimate asynchronous overlap."""
 
     executable_node_count: int = len(plan.execution_order)
-    return max(1, executable_node_count)
+    microbatch_width: int = max(
+        (entry.batch_concurrency for entry in plan.model_entries),
+        default=1,
+    )
+    return max(1, executable_node_count, microbatch_width)

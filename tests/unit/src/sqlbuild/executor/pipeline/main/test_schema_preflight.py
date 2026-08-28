@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
+from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.executor.pipeline._helpers.graph_width import runnable_graph_width
 from sqlbuild.executor.pipeline.main.run import _prepare_build_schemas
 from tests.unit.src.sqlbuild.executor.pipeline.main._test_types import (
@@ -91,5 +94,37 @@ def test_given_asymmetric_dag_when_sizing_workers_then_does_not_underestimate_ov
             final: (slow, fast_child),
         },
     )
+
+    assert runnable_graph_width(plan=plan) == test_case.expected_width
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RunnableGraphWidthTestCase(description="one concurrent microbatch model", expected_width=3)],
+    ids=lambda case: case.description,
+)
+def test_given_concurrent_microbatch_when_sizing_workers_then_retains_batch_concurrency(
+    test_case: RunnableGraphWidthTestCase,
+) -> None:
+    key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.MODEL, "orders")
+    entry: ModelPlanEntry = ModelPlanEntry(
+        key=key,
+        name="orders",
+        relative_path=Path("models/orders.sql"),
+        materialization_type=MaterializationType.INCREMENTAL,
+        action=PlanAction.INCREMENTAL_DELETE_INSERT,
+        reason=PlanReason.NORMAL_INCREMENTAL,
+        destination=CompiledRelationLocation(
+            database=None,
+            schema="main",
+            name="orders",
+            qualified_name="main.orders",
+        ),
+        fingerprint_query_sql="SELECT 1",
+        resolved_sql="SELECT 1",
+        logical_ddl="SELECT 1",
+        batch_concurrency=3,
+    )
+    plan: PlanOutput = PlanOutput(execution_order=(key,), model_entries=(entry,))
 
     assert runnable_graph_width(plan=plan) == test_case.expected_width

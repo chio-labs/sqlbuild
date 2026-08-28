@@ -31,6 +31,7 @@ from sqlbuild.compiler.fingerprints.constants import (
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.planner._helpers.graph.buildability import check_buildability
+from sqlbuild.compiler.planner._helpers.graph.core import build_execution_upstream_deps
 from sqlbuild.compiler.planner._helpers.graph.loader_dag import (
     build_upstream_intermediate_source_map,
 )
@@ -137,11 +138,15 @@ def gather_warehouse_snapshot(
 ) -> WarehouseSnapshot:
     """Gather relations, columns, and fingerprints for all target schemas."""
 
-    database: str | None = _resolve_database(project=project, selected_keys=selected_keys)
-    schemas: tuple[str, ...] = _collect_target_schemas(project=project, selected_keys=selected_keys)
-    metadata_names: tuple[str, ...] | None = _build_metadata_name_filter(
+    relevant_keys: frozenset[CompiledObjectKey] | None = _relevant_state_keys(
         project=project,
         selected_keys=selected_keys,
+    )
+    database: str | None = _resolve_database(project=project, selected_keys=relevant_keys)
+    schemas: tuple[str, ...] = _collect_target_schemas(project=project, selected_keys=relevant_keys)
+    metadata_names: tuple[str, ...] | None = _build_metadata_name_filter(
+        project=project,
+        selected_keys=relevant_keys,
     )
     if not schemas and metadata_names is None:
         return WarehouseSnapshot()
@@ -170,7 +175,7 @@ def gather_warehouse_snapshot(
         database=database,
         schemas=query_schemas,
         fingerprint_state_schemas=fingerprint_state_schemas,
-        node_names=_selected_node_names(selected_keys),
+        node_names=_selected_node_names(relevant_keys),
     )
 
     cursor_snapshots: dict[str, ModelCursorSnapshot] = {}
@@ -193,6 +198,30 @@ def gather_warehouse_snapshot(
         cursor_snapshots=cursor_snapshots,
         source_freshness_state_schemas=freshness_state_schemas,
     )
+
+
+def _relevant_state_keys(
+    *,
+    project: CompiledProject,
+    selected_keys: frozenset[CompiledObjectKey] | None,
+) -> frozenset[CompiledObjectKey] | None:
+    """Retain state identities for the complete upstream closure of the selection."""
+
+    if selected_keys is None:
+        return None
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        build_execution_upstream_deps(project)
+    )
+    closure: set[CompiledObjectKey] = set(selected_keys)
+    pending: list[CompiledObjectKey] = list(selected_keys)
+    while pending:
+        key: CompiledObjectKey = pending.pop()
+        upstream_key: CompiledObjectKey
+        for upstream_key in upstream_deps.get(key, ()):
+            if upstream_key not in closure:
+                closure.add(upstream_key)
+                pending.append(upstream_key)
+    return frozenset(closure)
 
 
 def _resolve_database(
@@ -554,7 +583,12 @@ def _collect_cursor_models(
 
         target_tag: str | None = None
         target_relation: str | None = None
-        if model.destination.qualified_name is not None and model.name in existing_relations:
+        target_relation_info: RelationInfo | None = existing_relations.get(model.name)
+        if (
+            model.destination.qualified_name is not None
+            and target_relation_info is not None
+            and target_relation_info.name == model.name
+        ):
             target_tag = f"{model.name}__target__max"
             target_relation = model.destination.qualified_name
 
