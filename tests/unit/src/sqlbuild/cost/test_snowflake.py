@@ -50,8 +50,8 @@ class _Connection:
             description="bounded query history uses valid table function",
             expected_fragments=(
                 "TABLE(INFORMATION_SCHEMA.QUERY_HISTORY(",
-                "END_TIME_RANGE_START => TO_TIMESTAMP_TZ('2026-08-23T10:00:00+00:00')",
-                "END_TIME_RANGE_END => TO_TIMESTAMP_TZ('2026-08-23T10:05:00+00:00')",
+                "END_TIME_RANGE_START => TO_TIMESTAMP_LTZ('2026-08-23T10:00:00+00:00')",
+                "END_TIME_RANGE_END => TO_TIMESTAMP_LTZ('2026-08-23T10:05:00+00:00')",
                 "RESULT_LIMIT => 10000",
                 "EXECUTION_STATUS",
             ),
@@ -80,7 +80,7 @@ def test_given_time_range_when_rendering_query_history_then_uses_valid_bounded_t
             description="open query history includes visible running queries",
             expected_fragments=(
                 "TABLE(INFORMATION_SCHEMA.QUERY_HISTORY(",
-                "END_TIME_RANGE_START => TO_TIMESTAMP_TZ('2026-08-23T10:00:00+00:00')",
+                "END_TIME_RANGE_START => TO_TIMESTAMP_LTZ('2026-08-23T10:00:00+00:00')",
                 "RESULT_LIMIT => 10000",
                 "EXECUTION_STATUS",
             ),
