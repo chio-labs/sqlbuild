@@ -67,6 +67,8 @@ def prepare_check_execution(
     relation_targets: dict[SqlResourceRef, str] = build_check_relation_targets(
         adapter=invocation.adapter,
         pipeline_result=pipeline_result,
+        python_graph=python_graph,
+        selected_python_names=check_names,
     )
     return CheckExecutionPreparation(
         python_graph=python_graph,

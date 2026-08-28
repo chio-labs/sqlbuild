@@ -27,6 +27,7 @@ def read_latest_source_freshness(
     schema: str,
     render_qualified_name: Callable[..., str | None],
     render_read_latest_sql: Callable[..., str],
+    source_names: tuple[str, ...] | None = None,
 ) -> SourceFreshnessSet:
     """Read latest source freshness rows, trusting the caller-resolved table existence."""
 
@@ -42,6 +43,16 @@ def read_latest_source_freshness(
         database=database,
         schema=schema,
     )
+    if source_names is not None:
+        if not source_names:
+            return SourceFreshnessSet(schema=schema, records={})
+        literals: str = ", ".join(
+            "'" + source_name.replace("'", "''") + "'" for source_name in source_names
+        )
+        read_sql = (
+            f"SELECT * FROM ({read_sql}) AS __sqlbuild_relevant "
+            f"WHERE source_name IN ({literals})"
+        )
     try:
         result: Any = execute(connection=connection, sql=read_sql)
     except Exception as error:

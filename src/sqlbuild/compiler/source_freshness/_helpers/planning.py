@@ -55,6 +55,7 @@ def build_direct_source_freshness_planning_result(
     run_id: str,
     render_qualified_name: Callable[..., str | None],
     state_table_exists_by_schema: dict[str, bool],
+    filter_previous_to_sources: bool = False,
 ) -> DirectSourceFreshnessPlanningResult:
     previous_records_by_identity: dict[SourceFreshnessIdentity, SourceFreshnessRecord] = (
         _read_previous_records(
@@ -64,6 +65,11 @@ def build_direct_source_freshness_planning_result(
             state_schemas=state_schemas,
             render_qualified_name=render_qualified_name,
             state_table_exists_by_schema=state_table_exists_by_schema,
+            source_names=(
+                tuple(sorted(source.name for source in sources))
+                if filter_previous_to_sources
+                else None
+            ),
         )
     )
     observed_records: list[SourceFreshnessRecord] = []
@@ -214,6 +220,7 @@ def _read_previous_records(
     state_schemas: tuple[str, ...],
     render_qualified_name: Callable[..., str | None],
     state_table_exists_by_schema: dict[str, bool],
+    source_names: tuple[str, ...] | None,
 ) -> dict[SourceFreshnessIdentity, SourceFreshnessRecord]:
     previous_records_by_identity: dict[SourceFreshnessIdentity, SourceFreshnessRecord] = {}
     state_schema: str
@@ -227,6 +234,7 @@ def _read_previous_records(
             schema=state_schema,
             render_qualified_name=render_qualified_name,
             render_read_latest_sql=adapter.render_read_latest_source_freshness_sql,
+            source_names=source_names,
         )
         previous_records_by_identity = _merged_latest_previous_records(
             previous_records_by_identity=previous_records_by_identity,

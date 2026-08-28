@@ -137,8 +137,10 @@ def gather_warehouse_snapshot(
 ) -> WarehouseSnapshot:
     """Gather relations, columns, and fingerprints for all target schemas."""
 
-    database: str | None = _resolve_database(project)
-    schemas: tuple[str, ...] = _collect_target_schemas(project)
+    database: str | None = _resolve_database(project=project, selected_keys=selected_keys)
+    schemas: tuple[str, ...] = _collect_target_schemas(
+        project=project, selected_keys=selected_keys
+    )
     metadata_names: tuple[str, ...] | None = _build_metadata_name_filter(
         project=project,
         selected_keys=selected_keys,
@@ -151,6 +153,7 @@ def gather_warehouse_snapshot(
     fingerprint_state_schemas: frozenset[str]
     freshness_state_schemas: frozenset[str]
     relations, fingerprint_state_schemas, freshness_state_schemas = _gather_relations(
+        project=project,
         adapter=adapter,
         connection=connection,
         database=database,
@@ -160,9 +163,7 @@ def gather_warehouse_snapshot(
     columns: dict[str, tuple[ColumnInfo, ...]] = _gather_columns(
         adapter=adapter,
         connection=connection,
-        database=database,
-        schemas=query_schemas,
-        names=metadata_names,
+        relations=relations,
     )
     fingerprints: WarehouseFingerprints = _gather_fingerprints(
         adapter=adapter,
@@ -171,6 +172,7 @@ def gather_warehouse_snapshot(
         database=database,
         schemas=query_schemas,
         fingerprint_state_schemas=fingerprint_state_schemas,
+        node_names=_selected_node_names(selected_keys),
     )
 
     cursor_snapshots: dict[str, ModelCursorSnapshot] = {}
@@ -195,44 +197,62 @@ def gather_warehouse_snapshot(
     )
 
 
-def _resolve_database(project: CompiledProject) -> str | None:
+def _resolve_database(
+    *,
+    project: CompiledProject,
+    selected_keys: frozenset[CompiledObjectKey] | None,
+) -> str | None:
     """Extract the database from the first model target that declares one."""
 
-    if project.effective_target_database is not None:
-        return project.effective_target_database
     model: CompiledModel
     for model in project.models:
+        if selected_keys is not None and model.key not in selected_keys:
+            continue
         if model.destination.database is not None:
             return model.destination.database
     seed: CompiledSeed
     for seed in project.seeds:
+        if selected_keys is not None and seed.key not in selected_keys:
+            continue
         if seed.destination.database is not None:
             return seed.destination.database
     function: CompiledFunction
     for function in project.functions:
+        if selected_keys is not None and function.key not in selected_keys:
+            continue
         if function.destination.database is not None:
             return function.destination.database
-    return None
+    return project.effective_target_database
 
 
-def _collect_target_schemas(project: CompiledProject) -> tuple[str, ...]:
+def _collect_target_schemas(
+    *,
+    project: CompiledProject,
+    selected_keys: frozenset[CompiledObjectKey] | None,
+) -> tuple[str, ...]:
     """Collect distinct non-null target schemas from models, seeds, and functions."""
 
     schemas: set[str] = set()
-    if project.effective_target_schema is not None:
-        schemas.add(project.effective_target_schema)
     model: CompiledModel
     for model in project.models:
+        if selected_keys is not None and model.key not in selected_keys:
+            continue
         if model.destination.schema is not None:
             schemas.add(model.destination.schema)
     seed: CompiledSeed
     for seed in project.seeds:
+        if selected_keys is not None and seed.key not in selected_keys:
+            continue
         if seed.destination.schema is not None:
             schemas.add(seed.destination.schema)
     function: CompiledFunction
     for function in project.functions:
+        if selected_keys is not None and function.key not in selected_keys:
+            continue
         if function.destination.schema is not None:
             schemas.add(function.destination.schema)
+    if not schemas and project.effective_target_schema is not None:
+        schemas.add(project.effective_target_schema)
     return tuple(sorted(schemas))
 
 
@@ -324,6 +344,7 @@ def _model_upstream_names(
 
 def _gather_relations(
     *,
+    project: CompiledProject,
     adapter: BaseAdapter,
     connection: Any,
     database: str | None,
@@ -336,6 +357,16 @@ def _gather_relations(
         connection=connection, database=database, schemas=schemas, names=names
     )
     result: dict[str, RelationInfo] = {}
+    logical_names_by_identity: dict[tuple[str | None, str | None, str], str] = {}
+    model: CompiledModel
+    for model in project.models:
+        logical_names_by_identity[_location_identity(model.destination)] = model.name
+    seed: CompiledSeed
+    for seed in project.seeds:
+        logical_names_by_identity[_location_identity(seed.destination)] = seed.name
+    function: CompiledFunction
+    for function in project.functions:
+        logical_names_by_identity[_location_identity(function.destination)] = function.name
     fingerprint_schemas: set[str] = set()
     freshness_schemas: set[str] = set()
     relation: RelationInfo
@@ -348,24 +379,39 @@ def _gather_relations(
             if relation.schema is not None:
                 freshness_schemas.add(relation.schema.lower())
             continue
-        result[relation.name] = relation
+        result[logical_names_by_identity.get(relation.identity, relation.name)] = relation
     return result, frozenset(fingerprint_schemas), frozenset(freshness_schemas)
+
+
+def _location_identity(
+    location: CompiledRelationLocation,
+) -> tuple[str | None, str | None, str]:
+    return (
+        None if location.database is None else location.database.lower(),
+        None if location.schema is None else location.schema.lower(),
+        location.name.lower(),
+    )
 
 
 def _gather_columns(
     *,
     adapter: BaseAdapter,
     connection: Any,
-    database: str | None,
-    schemas: tuple[str, ...] | None,
-    names: tuple[str, ...] | None,
+    relations: dict[str, RelationInfo],
 ) -> dict[str, tuple[ColumnInfo, ...]]:
     """Fetch column metadata for all relations across target schemas."""
 
-    all_columns: dict[str, tuple[ColumnInfo, ...]] = adapter.get_all_columns(
-        connection=connection, database=database, schemas=schemas, names=names
+    physical_relations: tuple[RelationInfo, ...] = tuple(relations.values())
+    all_columns: dict[
+        tuple[str | None, str | None, str], tuple[ColumnInfo, ...]
+    ] = adapter.get_columns_for_relations(
+        connection=connection, relations=physical_relations
     )
-    return {name: cols for name, cols in all_columns.items() if name != FINGERPRINT_TABLE_NAME}
+    return {
+        logical_name: all_columns[relation.identity]
+        for logical_name, relation in relations.items()
+        if relation.identity in all_columns
+    }
 
 
 def _gather_fingerprints(
@@ -376,6 +422,7 @@ def _gather_fingerprints(
     database: str | None,
     schemas: tuple[str, ...] | None,
     fingerprint_state_schemas: frozenset[str],
+    node_names: tuple[str, ...] | None,
 ) -> WarehouseFingerprints:
     """Read latest fingerprints across all target schemas grouped by node type."""
 
@@ -395,6 +442,8 @@ def _gather_fingerprints(
             schema=schema,
             render_qualified_name=adapter.render_qualified_name,
             render_read_latest_sql=adapter.render_read_latest_fingerprints_sql,
+            node_names=node_names,
+            filtered_node_types=(NODE_TYPE_MODEL, *FUNCTION_NODE_TYPES, NODE_TYPE_SEED),
         )
         node_name: str
         fingerprint: Fingerprint
@@ -420,6 +469,14 @@ def _gather_fingerprints(
         seeds=seed_fingerprints,
         python_nodes=python_fingerprints,
     )
+
+
+def _selected_node_names(
+    selected_keys: frozenset[CompiledObjectKey] | None,
+) -> tuple[str, ...] | None:
+    if selected_keys is None:
+        return None
+    return tuple(sorted({key.name for key in selected_keys}))
 
 
 def _gather_cursor_snapshots(

@@ -14,18 +14,45 @@ from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def build_source_load_map(
-    *, project: CompiledProject, selected_keys: frozenset[CompiledObjectKey]
+    *,
+    project: CompiledProject,
+    selected_keys: frozenset[CompiledObjectKey],
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] | None = None,
 ) -> dict[str, SourceEntry]:
     """Return source entries available to source-load and source-read planning."""
 
+    relevant_keys: frozenset[CompiledObjectKey] | None = (
+        _upstream_closure(selected_keys=selected_keys, upstream_deps=upstream_deps)
+        if upstream_deps is not None
+        else None
+    )
     source_map: dict[str, SourceEntry] = {
         source.source_entry.name: source.source_entry for source in project.sources
+        if relevant_keys is None or source.key in relevant_keys
     }
     source_map.update(build_intermediate_source_map(project=project, selected_keys=selected_keys))
     source_map.update(
         build_upstream_intermediate_source_map(project=project, selected_keys=selected_keys)
     )
     return source_map
+
+
+def _upstream_closure(
+    *,
+    selected_keys: frozenset[CompiledObjectKey],
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+) -> frozenset[CompiledObjectKey]:
+    """Return an adapter-neutral dependency closure for selected metadata reads."""
+
+    closure: set[CompiledObjectKey] = set(selected_keys)
+    pending: list[CompiledObjectKey] = list(selected_keys)
+    while pending:
+        key: CompiledObjectKey = pending.pop()
+        for upstream_key in upstream_deps.get(key, ()):
+            if upstream_key not in closure:
+                closure.add(upstream_key)
+                pending.append(upstream_key)
+    return frozenset(closure)
 
 
 def build_source_load_entries(

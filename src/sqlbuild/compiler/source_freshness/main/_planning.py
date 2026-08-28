@@ -25,6 +25,7 @@ def build_direct_source_freshness_planning_result(
     run_id: str,
     render_qualified_name: Callable[..., str | None],
     state_table_exists_by_schema: dict[str, bool],
+    filter_previous_to_sources: bool = False,
 ) -> DirectSourceFreshnessPlanningResult:
     """Observe direct source freshness and compare it to latest append-only state."""
 
@@ -38,4 +39,5 @@ def build_direct_source_freshness_planning_result(
         run_id=run_id,
         render_qualified_name=render_qualified_name,
         state_table_exists_by_schema=state_table_exists_by_schema,
+        filter_previous_to_sources=filter_previous_to_sources,
     )

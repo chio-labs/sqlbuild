@@ -52,6 +52,9 @@ from sqlbuild.adapter.contract.types import (
     PromotionStrategy,
     TablePromotionMode,
 )
+from sqlbuild.adapter.relations.main.get_columns_for_relations import (
+    get_columns_for_relations_bulk,
+)
 from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
     render_insert_source_freshness_records_sql,
 )
@@ -91,6 +94,16 @@ from sqlbuild.sql_values.types import SqlValueKind
 
 class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
     """BigQuery adapter backed by google-cloud-bigquery."""
+
+    def get_columns_for_relations(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+    ) -> dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]]:
+        return get_columns_for_relations_bulk(
+            adapter=self, connection=connection, relations=relations
+        )
 
     adapter_name: ClassVar[str] = BuiltinAdapter.BIGQUERY.value
     sql_analysis_dialect_name: ClassVar[str | None] = "bigquery"
