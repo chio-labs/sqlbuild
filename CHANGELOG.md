@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.63.2](https://github.com/chio-labs/sqlbuild/compare/v0.63.1...v0.63.2) (2026-08-28)
+
+
+### Bug Fixes
+
+* **snowflake:** complete cost and accelerate planning ([#380](https://github.com/chio-labs/sqlbuild/issues/380)) ([003d08f](https://github.com/chio-labs/sqlbuild/commit/003d08f5f0e50ba855b9c36dff0e404d6c166f8a))
+
 ## [0.63.1](https://github.com/chio-labs/sqlbuild/compare/v0.63.0...v0.63.1) (2026-08-28)
 
 
