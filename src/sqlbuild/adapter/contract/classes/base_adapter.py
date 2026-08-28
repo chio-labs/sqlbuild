@@ -43,6 +43,9 @@ from sqlbuild.adapter.contract.types import (
     PromotionStrategy,
     TablePromotionMode,
 )
+from sqlbuild.adapter.relations.main.get_columns_for_relations import (
+    get_columns_for_relations_bulk,
+)
 from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
     render_insert_source_freshness_records_sql,
 )
@@ -369,6 +372,18 @@ class BaseAdapter(StrictAdapter):
                 result[table_name] = []
             result[table_name].append(ColumnInfo(name=row[1], type=row[2]))
         return {k: tuple(v) for k, v in result.items()}
+
+    def get_columns_for_relations(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+    ) -> dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]]:
+        """Fetch columns keyed by fully qualified physical relation identity."""
+
+        return get_columns_for_relations_bulk(
+            adapter=self, connection=connection, relations=relations
+        )
 
     def render_create_schema(
         self,

@@ -144,3 +144,10 @@ class SnowflakeInformationSchemaFilterTestCase:
     schemas: tuple[str, ...]
     names: tuple[str, ...]
     expected_params: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeQualifiedColumnInspectionTestCase:
+    description: str
+    relation_count: int
+    expected_statement_count: int

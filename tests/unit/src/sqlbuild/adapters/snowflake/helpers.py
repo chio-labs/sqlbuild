@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import sys
+from itertools import cycle, islice
 from types import ModuleType
 from typing import Any
 
-from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 
 
 class FakeSnowflakeDescribeCursor:
@@ -59,7 +60,7 @@ class FakeSnowflakeMetadataCursor:
         self.executed_params: tuple[object, ...] | None = None
         self.closed: bool = False
 
-    def execute(self, sql: str, params: tuple[object, ...]) -> None:
+    def execute(self, sql: str, params: tuple[object, ...] | None = None) -> None:
         self.executed_sql = sql
         self.executed_params = params
 
@@ -81,6 +82,128 @@ class FakeSnowflakeMetadataConnection:
 
     def cursor(self) -> FakeSnowflakeMetadataCursor:
         return self._cursor
+
+
+class FakeSnowflakeMetadataSequenceConnection:
+    """Connection double returning one metadata cursor per exact relation query."""
+
+    def __init__(self, cursors: tuple[FakeSnowflakeMetadataCursor, ...]) -> None:
+        self._cursors: list[FakeSnowflakeMetadataCursor] = list(cursors)
+        self.returned_cursors: list[FakeSnowflakeMetadataCursor] = []
+
+    def cursor(self) -> FakeSnowflakeMetadataCursor:
+        cursor: FakeSnowflakeMetadataCursor = self._cursors.pop(0)
+        self.returned_cursors.append(cursor)
+        return cursor
+
+
+def build_qualified_column_relations(*, count: int) -> tuple[RelationInfo, ...]:
+    """Build mixed table/view relations with a duplicate name across two schemas."""
+
+    names: tuple[str, ...] = (
+        "SHARED",
+        "SHARED",
+        *(f"RELATION_{index}" for index in range(2, count)),
+    )
+    schemas: tuple[str, ...] = tuple(islice(cycle(("SCHEMA_A", "SCHEMA_B")), count))
+    relation_types: tuple[str, ...] = tuple(
+        islice(cycle(("BASE TABLE", "VIEW")), count)
+    )
+    return tuple(
+        RelationInfo(
+            database="RACING",
+            schema=schema,
+            name=name,
+            relation_type=relation_type,
+        )
+        for name, schema, relation_type in zip(names, schemas, relation_types, strict=True)
+    )
+
+
+def build_show_columns_rows(*, relation: RelationInfo) -> list[tuple[object, ...]]:
+    """Build documented SHOW COLUMNS rows for numeric and text columns."""
+
+    return [
+        (
+            relation.name,
+            relation.schema,
+            "ID",
+            '{"type":"FIXED","precision":20,"scale":4,"nullable":false}',
+            False,
+            None,
+            "COLUMN",
+            None,
+            None,
+            relation.database,
+        ),
+        (
+            relation.name,
+            relation.schema,
+            "LABEL",
+            '{"type":"TEXT","length":128,"byteLength":512,"nullable":true}',
+            True,
+            None,
+            "COLUMN",
+            None,
+            None,
+            relation.database,
+        ),
+    ]
+
+
+def build_bulk_columns_rows(
+    *, relations: tuple[RelationInfo, ...]
+) -> list[tuple[object, ...]]:
+    """Build INFORMATION_SCHEMA rows equivalent to the exact SHOW fixtures."""
+
+    rows: list[tuple[object, ...]] = []
+    relation: RelationInfo
+    for relation in relations:
+        rows.extend(
+            (
+                (relation.database, relation.schema, relation.name, "ID", "NUMBER", 20, 4, None),
+                (
+                    relation.database,
+                    relation.schema,
+                    relation.name,
+                    "LABEL",
+                    "TEXT",
+                    None,
+                    None,
+                    128,
+                ),
+            )
+        )
+    return rows
+
+
+def expected_qualified_columns(
+    *, relations: tuple[RelationInfo, ...]
+) -> dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]]:
+    """Build normalized expected columns keyed by physical identity."""
+
+    return {
+        relation.identity: (
+            ColumnInfo(name="id", type="NUMBER(20,4)"),
+            ColumnInfo(name="label", type="VARCHAR(128)"),
+        )
+        for relation in relations
+    }
+
+
+def build_bulk_sequence_connection(
+    *, relations: tuple[RelationInfo, ...], chunk_size: int
+) -> FakeSnowflakeMetadataSequenceConnection:
+    """Build one bulk metadata cursor per expected relation chunk."""
+
+    cursors: list[FakeSnowflakeMetadataCursor] = []
+    chunk_start: int
+    for chunk_start in range(0, len(relations), chunk_size):
+        chunk: tuple[RelationInfo, ...] = relations[chunk_start : chunk_start + chunk_size]
+        cursors.append(
+            FakeSnowflakeMetadataCursor(rows=build_bulk_columns_rows(relations=chunk))
+        )
+    return FakeSnowflakeMetadataSequenceConnection(tuple(cursors))
 
 
 def describe_equivalent_numeric_relation(
