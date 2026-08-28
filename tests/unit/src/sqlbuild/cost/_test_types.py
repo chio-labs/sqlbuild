@@ -36,12 +36,39 @@ class CollectSnowflakeCostTestCase:
 @dataclass(frozen=True)
 class SnowflakeObservationTestCase:
     description: str
+    warehouse_name: str | None
     warehouse_size: str | None
     execution_ms: int
     execution_status: str
     expected_status: CostStatus
     expected_query_count: int
     expected_limitation_fragment: str = ""
+    query_type: str = "SELECT"
+    query_text: str = "SELECT * FROM orders"
+
+
+@dataclass(frozen=True)
+class SnowflakeStatementClassificationTestCase:
+    description: str
+    query_type: str
+    query_text: str
+    expected_metadata_only: bool
+
+
+@dataclass(frozen=True)
+class SnowflakeClockSkewTestCase:
+    description: str
+    snowflake_offset_seconds: int
+    expected_status: CostStatus
+    expected_query_count: int
+    expected_attributed_seconds: str
+
+
+@dataclass(frozen=True)
+class SnowflakeSaturationTestCase:
+    description: str
+    expected_saturated: bool
+    expected_observed_query_ids: frozenset[str]
 
 
 @dataclass(frozen=True)

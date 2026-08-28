@@ -16,4 +16,5 @@ NO_WAREHOUSE_COMPUTE_REASON: str = "no_warehouse_compute"
 MISSING_WAREHOUSE_METADATA_REASON: str = "missing_warehouse_metadata"
 INCOMPLETE_HISTORY_REASON: str = "incomplete_history"
 OUTSIDE_RUN_WINDOW_REASON: str = "outside_run_window"
+LEDGER_PERSISTENCE_FAILURE_LIMITATION_PREFIX: str = "Statement-ledger persistence failed ("
 COST_TELEMETRY_HEALTH: CostTelemetryHealth = CostTelemetryHealth()
