@@ -15,9 +15,7 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.relation_targets import (
-    build_python_relation_targets,
-)
+from sqlbuild.compiler.pipeline.main.relation_targets import build_python_relation_targets
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
@@ -141,7 +139,11 @@ def record_python_run_state_results(
 
 
 def build_check_relation_targets(
-    *, adapter: BaseAdapter, pipeline_result: CompilePipelineResult
+    *,
+    adapter: BaseAdapter,
+    pipeline_result: CompilePipelineResult,
+    python_graph: PythonNodeGraph,
+    selected_python_names: frozenset[str],
 ) -> dict[SqlResourceRef, str]:
     """Return SQL relation locations available to Python check dependencies."""
 
@@ -149,6 +151,9 @@ def build_check_relation_targets(
         adapter=adapter,
         project=pipeline_result.project,
         plan_output=pipeline_result.plan_output,
+        required_refs=python_graph.selected_sql_refs(
+            selected_names=selected_python_names,
+        ),
     )
 
 

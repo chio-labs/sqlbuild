@@ -11,6 +11,7 @@ from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     ExpressionInferenceProfile,
+    RelationInfo,
     SchemaDiffResult,
     TableFreshnessMetadata,
     TableFreshnessRequest,
@@ -31,6 +32,7 @@ from tests.unit.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeMergeExclusionTestCase,
     SnowflakeMoveOrCopyRelationTestCase,
     SnowflakePruneSqlTestCase,
+    SnowflakeQualifiedColumnInspectionTestCase,
     SnowflakeQueryColumnNamesTestCase,
     SnowflakeRenderCloneTestCase,
     SnowflakeRenderCursorBoundLiteralTestCase,
@@ -47,7 +49,13 @@ from tests.unit.src.sqlbuild.adapters.snowflake.helpers import (
     FakeSnowflakeDescribeCursor,
     FakeSnowflakeMetadataConnection,
     FakeSnowflakeMetadataCursor,
+    FakeSnowflakeMetadataSequenceConnection,
+    build_bulk_columns_rows,
+    build_bulk_sequence_connection,
+    build_qualified_column_relations,
+    build_show_columns_rows,
     describe_equivalent_numeric_relation,
+    expected_qualified_columns,
     install_fake_snowflake_connector,
 )
 
@@ -296,6 +304,137 @@ def test_given_lowercase_schema_when_getting_all_columns_then_uppercases_filter_
     assert "UPPER(table_" not in cursor.executed_sql
     assert tuple(columns) == ("race__stg_horse",)
     assert columns["race__stg_horse"][0].name == "id"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeQualifiedColumnInspectionTestCase(
+            description="32 mixed relations use exact SHOW and match bulk normalization",
+            relation_count=32,
+            expected_statement_count=32,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_32_mixed_relations_when_getting_columns_then_exact_and_bulk_are_equivalent(
+    test_case: SnowflakeQualifiedColumnInspectionTestCase,
+) -> None:
+    relations: tuple[RelationInfo, ...] = build_qualified_column_relations(
+        count=test_case.relation_count
+    )
+    ordered_relations: tuple[RelationInfo, ...] = tuple(
+        sorted(relations, key=lambda relation: tuple(part or "" for part in relation.identity))
+    )
+    exact_connection: FakeSnowflakeMetadataSequenceConnection = (
+        FakeSnowflakeMetadataSequenceConnection(
+            tuple(
+                FakeSnowflakeMetadataCursor(rows=build_show_columns_rows(relation=relation))
+                for relation in ordered_relations
+            )
+        )
+    )
+    bulk_cursor: FakeSnowflakeMetadataCursor = FakeSnowflakeMetadataCursor(
+        rows=build_bulk_columns_rows(relations=relations)
+    )
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+
+    exact_columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
+        adapter.get_columns_for_relations(
+            connection=cast(Any, exact_connection), relations=relations
+        )
+    )
+    bulk_columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
+        adapter._get_columns_for_relations_bulk(
+            connection=cast(Any, FakeSnowflakeMetadataConnection(bulk_cursor)),
+            relations=relations,
+        )
+    )
+
+    executed_sql: tuple[str, ...] = tuple(
+        cursor.executed_sql or "" for cursor in exact_connection.returned_cursors
+    )
+    assert len(executed_sql) == test_case.expected_statement_count
+    assert any("SHOW COLUMNS IN TABLE" in sql for sql in executed_sql)
+    assert any("SHOW COLUMNS IN VIEW" in sql for sql in executed_sql)
+    assert exact_columns == expected_qualified_columns(relations=relations)
+    assert bulk_columns == exact_columns
+    assert ("racing", "schema_a", "shared") in exact_columns
+    assert ("racing", "schema_b", "shared") in exact_columns
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeQualifiedColumnInspectionTestCase(
+            description="33 mixed relations use one database-qualified bulk query",
+            relation_count=33,
+            expected_statement_count=1,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_33_mixed_relations_when_getting_columns_then_uses_bulk_query(
+    test_case: SnowflakeQualifiedColumnInspectionTestCase,
+) -> None:
+    relations: tuple[RelationInfo, ...] = build_qualified_column_relations(
+        count=test_case.relation_count
+    )
+    cursor: FakeSnowflakeMetadataCursor = FakeSnowflakeMetadataCursor(
+        rows=build_bulk_columns_rows(relations=relations)
+    )
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+
+    columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
+        adapter.get_columns_for_relations(
+            connection=cast(Any, FakeSnowflakeMetadataConnection(cursor)), relations=relations
+        )
+    )
+
+    assert cursor.executed_sql is not None
+    assert test_case.expected_statement_count == 1
+    assert 'FROM "RACING".information_schema.columns' in cursor.executed_sql
+    assert "table_schema = %s AND table_name IN" in cursor.executed_sql
+    assert columns == expected_qualified_columns(relations=relations)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeQualifiedColumnInspectionTestCase(
+            description="251 relations use two bounded bulk queries and merge all results",
+            relation_count=251,
+            expected_statement_count=2,
+        ),
+        SnowflakeQualifiedColumnInspectionTestCase(
+            description="1000 relations use five bounded bulk queries and merge all results",
+            relation_count=1000,
+            expected_statement_count=5,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_large_relation_set_when_getting_columns_then_chunks_and_merges_bulk_results(
+    test_case: SnowflakeQualifiedColumnInspectionTestCase,
+) -> None:
+    relations: tuple[RelationInfo, ...] = build_qualified_column_relations(
+        count=test_case.relation_count
+    )
+    ordered_relations: tuple[RelationInfo, ...] = tuple(
+        sorted(relations, key=lambda relation: tuple(part or "" for part in relation.identity))
+    )
+    connection: FakeSnowflakeMetadataSequenceConnection = build_bulk_sequence_connection(
+        relations=ordered_relations, chunk_size=200
+    )
+
+    columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
+        SnowflakeAdapter().get_columns_for_relations(
+            connection=cast(Any, connection), relations=relations
+        )
+    )
+
+    assert len(connection.returned_cursors) == test_case.expected_statement_count
+    assert columns == expected_qualified_columns(relations=relations)
 
 
 @pytest.mark.parametrize(

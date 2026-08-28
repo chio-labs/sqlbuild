@@ -7,7 +7,7 @@ from datetime import date, datetime
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -121,6 +121,7 @@ def build_planner_relations_context(
     source_map: dict[str, SourceEntry] = build_source_load_map(
         project=project,
         selected_keys=scope.selected_keys,
+        upstream_deps=scope.upstream_deps if scope.all_keys else None,
     )
     source_read_map: dict[str, SourceEntry] = (
         build_source_read_map(
@@ -672,18 +673,33 @@ def gather_source_columns(
             schemas=schemas,
             source_entries=entries,
         )
-        all_columns: dict[str, tuple[ColumnInfo, ...]] = adapter.get_all_columns(
+        relations: tuple[RelationInfo, ...] = adapter.list_relations(
             connection=connection,
             database=database,
             schemas=tuple(sorted(schemas)),
             names=names,
         )
+        all_columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (
+            adapter.get_columns_for_relations(
+                connection=connection,
+                relations=relations,
+            )
+        )
         entry_iter: SourceEntry
         for entry_iter in entries:
-            if entry_iter.expression is not None:
+            if (
+                entry_iter.expression is not None
+                or (entry_iter.database or None) != database
+                or entry_iter.schema not in schemas
+            ):
                 continue
             table_name: str = entry_iter.table if entry_iter.table is not None else entry_iter.name
-            cols: tuple[ColumnInfo, ...] | None = all_columns.get(table_name)
+            identity: tuple[str | None, str | None, str] = (
+                None if database is None else database.lower(),
+                None if entry_iter.schema is None else entry_iter.schema.lower(),
+                table_name.lower(),
+            )
+            cols: tuple[ColumnInfo, ...] | None = all_columns.get(identity)
             if cols is not None:
                 result[entry_iter.name] = cols
 

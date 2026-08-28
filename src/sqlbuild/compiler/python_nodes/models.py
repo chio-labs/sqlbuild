@@ -98,6 +98,23 @@ class PythonNodeGraph:
     nodes_by_name: dict[str, DiscoveredPythonNode]
     nodes_by_typed_selector: dict[str, DiscoveredPythonNode]
 
+    def selected_sql_refs(self, *, selected_names: frozenset[str]) -> frozenset[SqlResourceRef]:
+        """Return SQL references required by a selected Python-node closure."""
+
+        refs: set[SqlResourceRef] = set()
+        pending: list[str] = list(selected_names)
+        visited: set[str] = set()
+        while pending:
+            node_name: str = pending.pop()
+            if node_name in visited:
+                continue
+            visited.add(node_name)
+            node: DiscoveredPythonNode | None = self.nodes_by_name.get(node_name)
+            if node is not None:
+                refs.update(node.sql_deps)
+            pending.extend(self.upstream_deps.get(node_name, ()))
+        return frozenset(refs)
+
 
 @dataclass(frozen=True)
 class PythonSqlSelection:

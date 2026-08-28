@@ -63,3 +63,11 @@ class SeedPipelineConcurrencyTestCase:
     expected_connection_count: int
     expected_seed_order: tuple[str, ...]
     expected_json_asset_order: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class WorkerConnectionTestCase:
+    description: str
+    connection_count: int
+    expected_connection_count: int
+    expected_close_attempts: int = 0

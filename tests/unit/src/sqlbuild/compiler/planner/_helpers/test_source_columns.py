@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     build_planner_relations_context,
@@ -20,6 +20,7 @@ from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     KnownSourceColumnsReuseTestCase,
+    MultiDatabaseSourceColumnsTestCase,
     SourceColumnsTestCase,
     SourceCursorInputColumnsTestCase,
 )
@@ -64,6 +65,46 @@ class _RecordingAdapter(BaseAdapter):
         return {}
 
 
+class _QualifiedSourceAdapter(_RecordingAdapter):
+    def __init__(self) -> None:
+        super().__init__(())
+        self.database_queries: list[str | None] = []
+
+    def list_relations(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[RelationInfo, ...]:
+        del connection, schemas, names
+        self.database_queries.append(database)
+        relations_by_database: dict[str | None, tuple[RelationInfo, ...]] = {
+            "DB_A": (
+                RelationInfo(database="DB_A", schema="RAW", name="SHARED", relation_type="table"),
+            ),
+            "DB_B": (
+                RelationInfo(database="DB_B", schema="RAW", name="SHARED", relation_type="table"),
+            ),
+        }
+        return relations_by_database.get(database, ())
+
+    def get_columns_for_relations(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+    ) -> dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]]:
+        del connection
+        return {
+            relation.identity: (
+                ColumnInfo(name="id", type=f"{relation.database}.{relation.schema}"),
+            )
+            for relation in relations
+        }
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -106,6 +147,48 @@ def test_given_sources_when_gathering_columns_then_returns_expected_source_colum
     assert tuple(column.name for column in result.get("raw_payments", ())) == (
         test_case.expected_source_column_names
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MultiDatabaseSourceColumnsTestCase(
+            description="same physical name in two databases remains isolated and missing omitted",
+            expected_source_types={
+                "source_a": "DB_A.RAW",
+                "source_b": "DB_B.RAW",
+            },
+            expected_database_queries=("DB_A", "DB_B"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_multi_database_sources_when_gathering_columns_then_matches_current_database_only(
+    test_case: MultiDatabaseSourceColumnsTestCase,
+) -> None:
+    project: CompiledProject = CompiledProject(
+        run_id="test",
+        effective_target_name=None,
+        effective_connection={},
+        effective_vars={},
+    )
+    adapter: _QualifiedSourceAdapter = _QualifiedSourceAdapter()
+    source_entries: tuple[SourceEntry, ...] = (
+        SourceEntry(name="source_a", database="DB_A", schema="RAW", table="SHARED"),
+        SourceEntry(name="source_b", database="DB_B", schema="RAW", table="SHARED"),
+        SourceEntry(name="missing", database="DB_A", schema="RAW", table="MISSING"),
+    )
+
+    result: dict[str, tuple[ColumnInfo, ...]] = gather_source_columns(
+        project=project,
+        adapter=adapter,
+        connection=None,
+        source_entries=source_entries,
+    )
+
+    actual_types: dict[str, str] = {name: columns[0].type for name, columns in result.items()}
+    assert actual_types == test_case.expected_source_types
+    assert tuple(adapter.database_queries) == test_case.expected_database_queries
 
 
 @pytest.mark.parametrize(

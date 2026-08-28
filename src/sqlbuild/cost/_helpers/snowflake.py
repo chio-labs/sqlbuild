@@ -10,14 +10,16 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from polyglot_sql import CreateTable, CreateView, ParseError, parse_one
+
 from sqlbuild.cost._helpers.allocation import allocate_run_cost
 from sqlbuild.cost._helpers.ledger import read_statement_ledger
 from sqlbuild.cost.constants import (
     COST_TELEMETRY_HEALTH,
     INCOMPLETE_HISTORY_REASON,
+    LEDGER_PERSISTENCE_FAILURE_LIMITATION_PREFIX,
     MISSING_WAREHOUSE_METADATA_REASON,
     NO_WAREHOUSE_COMPUTE_REASON,
-    OUTSIDE_RUN_WINDOW_REASON,
     RUNNING_EXECUTION_STATUS,
     SQLBUILD_QUERY_TAG_APP,
 )
@@ -33,6 +35,12 @@ _MINIMUM_SPLIT_WINDOW: timedelta = timedelta(milliseconds=1)
 _COLLECTION_DEADLINE_SECONDS: float = 10.0
 _QUERY_TIMEOUT_SECONDS: str = "5"
 _QUERY_HISTORY_RETENTION: timedelta = timedelta(days=7)
+_MAXIMUM_CLOCK_SKEW: timedelta = timedelta(minutes=10)
+_USE_QUERY_TYPE: str = "USE"
+_DROP_QUERY_TYPE: str = "DROP"
+_CREATE_QUERY_TYPE: str = "CREATE"
+_DYNAMIC_TABLE_MODIFIER: str = "DYNAMIC"
+_HOOK_RESOURCE_TYPE: str = "hook"
 _VISIBLE_QUERY_LIMITATION: str = (
     "Concurrency sharing includes only queries visible to the executing Snowflake role."
 )
@@ -65,6 +73,11 @@ def collect_snowflake_run_cost(
         entry.query_id: entry for entry in ledger if entry.query_id is not None
     }
     expected_query_ids: frozenset[str] = frozenset(ledger_by_query_id)
+    classification_query_ids: frozenset[str] = frozenset(
+        query_id
+        for query_id, entry in ledger_by_query_id.items()
+        if entry.resource_type != _HOOK_RESOURCE_TYPE
+    )
     if ledger and not expected_query_ids:
         no_query_id_summary: RunCostSummary = _apply_ledger_failure(
             summary=_partial_summary(
@@ -89,6 +102,8 @@ def collect_snowflake_run_cost(
             connection=connection,
             started_at=started_at,
             completed_at=completed_at,
+            expected_query_ids=expected_query_ids,
+            classification_query_ids=classification_query_ids,
             deadline=deadline,
         )
         attributed_observations: tuple[QueryCostObservation, ...] = tuple(
@@ -106,7 +121,10 @@ def collect_snowflake_run_cost(
             summary,
             limitations=tuple(sorted({*summary.limitations, _VISIBLE_QUERY_LIMITATION})),
         )
-        if expected_query_ids.issubset(observed_query_ids):
+        if expected_query_ids.issubset(observed_query_ids) and not _has_incomplete_observation(
+            expected_query_ids=expected_query_ids,
+            skipped_reasons=skipped_reasons,
+        ):
             summary = _apply_observation_gaps(
                 summary=summary,
                 expected_statement_count=len(ledger),
@@ -114,10 +132,7 @@ def collect_snowflake_run_cost(
                 observed_query_ids=observed_query_ids,
                 skipped_reasons=skipped_reasons,
             )
-            if summary.status == CostStatus.PENDING and not _has_incomplete_observation(
-                expected_query_ids=expected_query_ids,
-                skipped_reasons=skipped_reasons,
-            ):
+            if summary.status == CostStatus.PENDING:
                 summary = replace(
                     summary,
                     status=CostStatus.COMPLETE,
@@ -126,9 +141,9 @@ def collect_snowflake_run_cost(
             return _apply_ledger_failure(summary=summary, ledger_failure=ledger_failure)
         if attempt + 1 < attempts:
             remaining_seconds: float = deadline - time.monotonic()
-            if remaining_seconds <= 0:
-                raise TimeoutError("Snowflake cost collection deadline exceeded")
-            time.sleep(min(retry_delay_seconds, remaining_seconds))
+            if remaining_seconds <= retry_delay_seconds:
+                break
+            time.sleep(retry_delay_seconds)
 
     if summary is None:
         summary = _partial_summary(
@@ -175,7 +190,13 @@ def collect_snowflake_run_cost(
 
 
 def _query_observations(
-    *, connection: Any, started_at: datetime, completed_at: datetime, deadline: float
+    *,
+    connection: Any,
+    started_at: datetime,
+    completed_at: datetime,
+    expected_query_ids: frozenset[str],
+    classification_query_ids: frozenset[str],
+    deadline: float,
 ) -> tuple[
     tuple[QueryCostObservation, ...],
     frozenset[str],
@@ -184,22 +205,27 @@ def _query_observations(
 ]:
     open_rows: tuple[tuple[Any, ...], ...] = _query_open_history_rows(
         connection=connection,
-        started_at=started_at - timedelta(seconds=5),
+        started_at=started_at - _MAXIMUM_CLOCK_SKEW,
+        classification_query_ids=classification_query_ids,
         deadline=deadline,
     )
     saturated: bool = len(open_rows) >= _RESULT_LIMIT
     if saturated:
         bounded_rows, bounded_saturated = _query_history_rows(
             connection=connection,
-            started_at=started_at - timedelta(seconds=5),
-            completed_at=completed_at + timedelta(seconds=5),
+            started_at=started_at - _MAXIMUM_CLOCK_SKEW,
+            completed_at=completed_at + _MAXIMUM_CLOCK_SKEW,
+            classification_query_ids=classification_query_ids,
             deadline=deadline,
         )
         rows_by_query_id: dict[str, tuple[Any, ...]] = {
-            str(row[0]): row for row in (*open_rows, *bounded_rows)
+            str(row[0]): row for row in open_rows if _is_running_history_row(row=row)
         }
-        rows: tuple[tuple[Any, ...], ...] = tuple(rows_by_query_id.values())
-        saturated = saturated or bounded_saturated
+        rows_by_query_id.update({str(row[0]): row for row in bounded_rows})
+        rows: tuple[tuple[Any, ...], ...] = tuple(
+            rows_by_query_id[key] for key in sorted(rows_by_query_id)
+        )
+        saturated = bounded_saturated
     else:
         rows = open_rows
     observations: list[QueryCostObservation] = []
@@ -210,8 +236,7 @@ def _query_observations(
         observed_query_ids.add(query_id)
         observation, skip_reason = _row_to_observation(
             row=row,
-            interval_started_at=started_at,
-            interval_completed_at=completed_at,
+            require_complete=query_id in expected_query_ids,
         )
         if observation is not None:
             observations.append(observation)
@@ -221,13 +246,24 @@ def _query_observations(
     return tuple(observations), frozenset(observed_query_ids), skipped_reasons, saturated
 
 
+def _is_running_history_row(*, row: tuple[Any, ...]) -> bool:
+    return row[7] is None or str(row[10]).upper() == RUNNING_EXECUTION_STATUS
+
+
 def _query_open_history_rows(
-    *, connection: Any, started_at: datetime, deadline: float
+    *,
+    connection: Any,
+    started_at: datetime,
+    classification_query_ids: frozenset[str],
+    deadline: float,
 ) -> tuple[tuple[Any, ...], ...]:
     if time.monotonic() >= deadline:
         raise TimeoutError("Snowflake cost collection deadline exceeded")
     cursor: Any = connection.execute(
-        _render_open_query_history_sql(started_at=started_at),
+        _render_open_query_history_sql(
+            started_at=started_at,
+            classification_query_ids=classification_query_ids,
+        ),
         statement_params={"STATEMENT_TIMEOUT_IN_SECONDS": _QUERY_TIMEOUT_SECONDS},
     )
     if time.monotonic() >= deadline:
@@ -239,12 +275,21 @@ def _query_open_history_rows(
 
 
 def _query_history_rows(
-    *, connection: Any, started_at: datetime, completed_at: datetime, deadline: float
+    *,
+    connection: Any,
+    started_at: datetime,
+    completed_at: datetime,
+    classification_query_ids: frozenset[str],
+    deadline: float,
 ) -> tuple[tuple[tuple[Any, ...], ...], bool]:
     if time.monotonic() >= deadline:
         raise TimeoutError("Snowflake cost collection deadline exceeded")
     cursor: Any = connection.execute(
-        _render_query_history_sql(started_at=started_at, completed_at=completed_at),
+        _render_query_history_sql(
+            started_at=started_at,
+            completed_at=completed_at,
+            classification_query_ids=classification_query_ids,
+        ),
         statement_params={"STATEMENT_TIMEOUT_IN_SECONDS": _QUERY_TIMEOUT_SECONDS},
     )
     if time.monotonic() >= deadline:
@@ -262,12 +307,14 @@ def _query_history_rows(
         connection=connection,
         started_at=started_at,
         completed_at=midpoint,
+        classification_query_ids=classification_query_ids,
         deadline=deadline,
     )
     right_rows, right_saturated = _query_history_rows(
         connection=connection,
         started_at=midpoint,
         completed_at=completed_at,
+        classification_query_ids=classification_query_ids,
         deadline=deadline,
     )
     rows_by_query_id: dict[str, tuple[Any, ...]] = {
@@ -282,8 +329,7 @@ def _query_history_rows(
 def _row_to_observation(
     *,
     row: tuple[Any, ...],
-    interval_started_at: datetime,
-    interval_completed_at: datetime,
+    require_complete: bool,
 ) -> tuple[QueryCostObservation | None, str | None]:
     (
         query_id,
@@ -297,25 +343,26 @@ def _row_to_observation(
         execution_ms,
         bytes_scanned,
         execution_status,
+        query_type,
+        query_text,
+        observed_at,
     ) = row
     milliseconds: int = max(0, int(execution_ms or 0))
-    if milliseconds == 0 or warehouse_name is None:
+    if _is_metadata_only_statement(query_type=query_type, query_text=query_text):
         return None, NO_WAREHOUSE_COMPUTE_REASON
-    if warehouse_size is None:
+    running: bool = end_time is None or str(execution_status).upper() == RUNNING_EXECUTION_STATUS
+    if require_complete and running:
+        return None, INCOMPLETE_HISTORY_REASON
+    if milliseconds == 0 or warehouse_name is None or warehouse_size is None:
         return None, MISSING_WAREHOUSE_METADATA_REASON
     tag: dict[str, object] | None = _parse_sqlbuild_tag(query_tag)
-    effective_end: datetime = (
-        interval_completed_at
-        if end_time is None or str(execution_status).upper() == RUNNING_EXECUTION_STATUS
-        else min(end_time, interval_completed_at)
-    )
+    effective_end: datetime = observed_at if running else end_time
     active_start: datetime = max(
         start_time,
         effective_end - timedelta(milliseconds=milliseconds),
-        interval_started_at,
     )
     if effective_end <= active_start:
-        return None, OUTSIDE_RUN_WINDOW_REASON
+        return None, NO_WAREHOUSE_COMPUTE_REASON
     return (
         QueryCostObservation(
             query_id=str(query_id),
@@ -357,9 +404,14 @@ def _attribute_from_ledger(
     )
 
 
-def _render_query_history_sql(*, started_at: datetime, completed_at: datetime) -> str:
+def _render_query_history_sql(
+    *, started_at: datetime, completed_at: datetime, classification_query_ids: frozenset[str]
+) -> str:
     start: str = started_at.isoformat()
     end: str = completed_at.isoformat()
+    query_text_expression: str = _render_query_text_expression(
+        classification_query_ids=classification_query_ids
+    )
     return f"""
 SELECT
   QUERY_ID,
@@ -372,7 +424,10 @@ SELECT
   END_TIME,
   EXECUTION_TIME,
   BYTES_SCANNED,
-  EXECUTION_STATUS
+  EXECUTION_STATUS,
+  QUERY_TYPE,
+  {query_text_expression},
+  CURRENT_TIMESTAMP()
 FROM TABLE(INFORMATION_SCHEMA.QUERY_HISTORY(
   END_TIME_RANGE_START => TO_TIMESTAMP_LTZ('{start}'),
   END_TIME_RANGE_END => TO_TIMESTAMP_LTZ('{end}'),
@@ -382,8 +437,13 @@ ORDER BY START_TIME, QUERY_ID
 """.strip()
 
 
-def _render_open_query_history_sql(*, started_at: datetime) -> str:
+def _render_open_query_history_sql(
+    *, started_at: datetime, classification_query_ids: frozenset[str]
+) -> str:
     start: str = started_at.isoformat()
+    query_text_expression: str = _render_query_text_expression(
+        classification_query_ids=classification_query_ids
+    )
     return f"""
 SELECT
   QUERY_ID,
@@ -396,13 +456,30 @@ SELECT
   END_TIME,
   EXECUTION_TIME,
   BYTES_SCANNED,
-  EXECUTION_STATUS
+  EXECUTION_STATUS,
+  QUERY_TYPE,
+  {query_text_expression},
+  CURRENT_TIMESTAMP()
 FROM TABLE(INFORMATION_SCHEMA.QUERY_HISTORY(
   END_TIME_RANGE_START => TO_TIMESTAMP_LTZ('{start}'),
   RESULT_LIMIT => {_RESULT_LIMIT}
 ))
 ORDER BY START_TIME, QUERY_ID
 """.strip()
+
+
+def _render_query_text_expression(*, classification_query_ids: frozenset[str]) -> str:
+    if not classification_query_ids:
+        return "NULL AS QUERY_TEXT"
+    query_ids: str = ", ".join(
+        f"'{query_id.replace(chr(39), chr(39) * 2)}'"
+        for query_id in sorted(classification_query_ids)
+    )
+    return (
+        f"CASE WHEN QUERY_ID IN ({query_ids}) "
+        "AND (QUERY_TYPE = 'CREATE' OR QUERY_TYPE LIKE 'CREATE_%') "
+        "THEN QUERY_TEXT END AS QUERY_TEXT"
+    )
 
 
 def _parse_sqlbuild_tag(value: object) -> dict[str, object] | None:
@@ -417,6 +494,38 @@ def _parse_sqlbuild_tag(value: object) -> dict[str, object] | None:
     if payload.get("app") != SQLBUILD_QUERY_TAG_APP or payload.get("v") != 1:
         return None
     return payload
+
+
+def _is_metadata_only_statement(*, query_type: object, query_text: object) -> bool:
+    """Identify statements Snowflake executes without warehouse compute."""
+
+    normalized_type: str = str(query_type or "").upper().replace(" ", "_")
+    if normalized_type == _USE_QUERY_TYPE or normalized_type.startswith(f"{_USE_QUERY_TYPE}_"):
+        return True
+    if normalized_type == _DROP_QUERY_TYPE or normalized_type.startswith(f"{_DROP_QUERY_TYPE}_"):
+        return True
+    if normalized_type != _CREATE_QUERY_TYPE and not normalized_type.startswith(
+        f"{_CREATE_QUERY_TYPE}_"
+    ):
+        return False
+    if not isinstance(query_text, str) or not query_text.strip():
+        return False
+    try:
+        statement: Any = parse_one(query_text, dialect="snowflake")
+    except ParseError:
+        return False
+    if isinstance(statement, CreateTable):
+        return not any(
+            (
+                statement.args.get("as_select") is not None,
+                statement.args.get("clone_source") is not None,
+                statement.args.get("using_template") is not None,
+                str(statement.args.get("table_modifier") or "").upper() == _DYNAMIC_TABLE_MODIFIER,
+            )
+        )
+    if isinstance(statement, CreateView) and bool(statement.args.get("materialized")):
+        return False
+    return type(statement).__name__.startswith("Create")
 
 
 def _optional_string(value: object) -> str | None:
@@ -435,7 +544,7 @@ def _partial_summary(*, usd_per_credit: Decimal, rate_source: str, message: str)
 def _apply_ledger_failure(*, summary: RunCostSummary, ledger_failure: str | None) -> RunCostSummary:
     if ledger_failure is None:
         return summary
-    limitation: str = f"Statement-ledger persistence failed ({ledger_failure})."
+    limitation: str = f"{LEDGER_PERSISTENCE_FAILURE_LIMITATION_PREFIX}{ledger_failure})."
     return replace(
         summary,
         status=CostStatus.PARTIAL,

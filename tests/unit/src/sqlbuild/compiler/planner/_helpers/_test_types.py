@@ -68,12 +68,31 @@ class SourceColumnsTestCase:
 
 
 @dataclass(frozen=True)
+class MultiDatabaseSourceColumnsTestCase:
+    description: str
+    expected_source_types: dict[str, str]
+    expected_database_queries: tuple[str | None, ...]
+
+
+@dataclass(frozen=True)
 class KnownSourceColumnsReuseTestCase:
     description: str
     known_source_columns: dict[str, tuple[str, ...]] | None
     adapter_column_names: tuple[str, ...]
     expected_queried_sql_count: int
     expected_source_column_names: dict[str, tuple[str, ...]]
+
+
+@dataclass(frozen=True)
+class SourceMetadataClosureTestCase:
+    description: str
+    expected_source_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MetadataNameFilterTestCase:
+    description: str
+    expected_physical_names: frozenset[str]
 
 
 @dataclass(frozen=True)
