@@ -25,6 +25,13 @@ class ReadLatestFingerprintsRendererTestCase:
 
 
 @dataclass(frozen=True)
+class ReadLatestFingerprintsFilterTestCase:
+    description: str
+    node_names: tuple[str, ...]
+    expected_sql_fragment: str
+
+
+@dataclass(frozen=True)
 class WriteFingerprintIndexTestCase:
     description: str
     expected_index_sql: str

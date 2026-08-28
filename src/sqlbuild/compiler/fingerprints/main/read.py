@@ -27,6 +27,8 @@ def read_latest_fingerprints(
     render_qualified_name: Callable[..., str | None],
     render_read_latest_sql: Callable[..., str],
     require_table: bool = False,
+    node_names: tuple[str, ...] | None = None,
+    filtered_node_types: tuple[str, ...] = (),
 ) -> FingerprintSet:
     """Read the latest fingerprint per node identity from adapter-rendered SQL."""
 
@@ -44,6 +46,26 @@ def read_latest_fingerprints(
         database=database,
         schema=schema,
     )
+    if node_names is not None:
+        if not node_names and not filtered_node_types:
+            return FingerprintSet(schema=schema, fingerprints={})
+        relevant_predicate: str = ""
+        if node_names:
+            literals: str = ", ".join(
+                "'" + node_name.replace("'", "''") + "'" for node_name in node_names
+            )
+            relevant_predicate = f"node_name IN ({literals})"
+        if filtered_node_types:
+            type_literals: str = ", ".join(
+                "'" + node_type.replace("'", "''") + "'" for node_type in filtered_node_types
+            )
+            python_identity_predicate: str = f"node_type NOT IN ({type_literals})"
+            relevant_predicate = (
+                f"{relevant_predicate} OR {python_identity_predicate}"
+                if relevant_predicate
+                else python_identity_predicate
+            )
+        read_sql = f"SELECT * FROM ({read_sql}) AS __sqlbuild_relevant WHERE {relevant_predicate}"
     try:
         result: Any = execute(connection=connection, sql=read_sql)
     except Exception as error:

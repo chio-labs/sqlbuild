@@ -52,6 +52,7 @@ def build_planner_source_freshness_result(
                 state_schema: state_schema.lower() in freshness_state_schemas
                 for state_schema in state_schemas
             },
+            filter_previous_to_sources=True,
         )
     )
     return replace(

@@ -12,11 +12,20 @@ from sqlbuild.cli.commands.models import CostCommandRequest
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.cost.classes.run_cost_store import RunCostStore
+from sqlbuild.cost.constants import LEDGER_PERSISTENCE_FAILURE_LIMITATION_PREFIX
 from sqlbuild.cost.models import CostRunRecord, RunCostSummary
 from sqlbuild.cost.types import CostAwareAdapter, CostCapability, CostStatus
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
+
+_REFRESH_STATUS_RANK: dict[CostStatus, int] = {
+    CostStatus.COLLECTION_FAILED: 0,
+    CostStatus.UNAVAILABLE: 0,
+    CostStatus.PENDING: 1,
+    CostStatus.PARTIAL: 2,
+    CostStatus.COMPLETE: 3,
+}
 
 
 def refresh_pending_cost_run(request: CostCommandRequest) -> None:
@@ -61,7 +70,8 @@ def refresh_pending_cost_run(request: CostCommandRequest) -> None:
             usd_per_credit=record.cost.usd_per_credit,
             rate_source=record.cost.rate_source,
         )
-        RunCostStore.write(project_dir=project_dir, record=replace(record, cost=summary))
+        if _is_non_destructive_refresh(current=record.cost, candidate=summary):
+            RunCostStore.write(project_dir=project_dir, record=replace(record, cost=summary))
     except BaseException:
         return
 
@@ -73,3 +83,35 @@ def _resolve_refresh_record(*, project_dir: Path, selector: str) -> CostRunRecor
     if exact is not None:
         return exact
     return RunCostStore.resolve(project_dir=project_dir, selector=selector)
+
+
+def _is_non_destructive_refresh(*, current: RunCostSummary, candidate: RunCostSummary) -> bool:
+    """Accept refreshed telemetry only when persisted coverage cannot regress."""
+
+    if _REFRESH_STATUS_RANK[candidate.status] < _REFRESH_STATUS_RANK[current.status]:
+        return False
+    if _has_ledger_persistence_failure(summary=current) and not _has_coverage_gain(
+        current=current,
+        candidate=candidate,
+    ):
+        return False
+    return (
+        candidate.expected_statement_count >= current.expected_statement_count
+        and candidate.observed_statement_count >= current.observed_statement_count
+        and candidate.query_count >= current.query_count
+    )
+
+
+def _has_ledger_persistence_failure(*, summary: RunCostSummary) -> bool:
+    return any(
+        limitation.startswith(LEDGER_PERSISTENCE_FAILURE_LIMITATION_PREFIX)
+        for limitation in summary.limitations
+    )
+
+
+def _has_coverage_gain(*, current: RunCostSummary, candidate: RunCostSummary) -> bool:
+    return (
+        candidate.expected_statement_count > current.expected_statement_count
+        or candidate.observed_statement_count > current.observed_statement_count
+        or candidate.query_count > current.query_count
+    )

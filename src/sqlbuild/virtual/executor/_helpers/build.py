@@ -34,9 +34,7 @@ from sqlbuild.compiler.pipeline.main.materializations import load_custom_materia
 from sqlbuild.compiler.pipeline.main.prepare_versions import (
     load_custom_prepare_version_functions,
 )
-from sqlbuild.compiler.pipeline.main.relation_targets import (
-    build_python_relation_targets,
-)
+from sqlbuild.compiler.pipeline.main.relation_targets import build_python_relation_targets
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult, ProjectGraph, PythonPlanEntry
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.changes.replay_on_change import resolve_replay_on_change
@@ -988,6 +986,12 @@ def _prepare_virtual_python_execution(
             adapter=runtime.adapter,
             project=project,
             plan_output=plan_output,
+            required_refs=python_graph.selected_sql_refs(
+                selected_names=(
+                    lifecycle_plan.ingress_python_node_names
+                    | lifecycle_plan.read_side_python_node_names
+                ),
+            ),
         ),
         selected_python_node_names=python_selection.python_node_names,
     )

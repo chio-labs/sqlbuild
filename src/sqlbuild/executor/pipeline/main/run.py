@@ -26,6 +26,11 @@ from sqlbuild.executor.build.models import (
 from sqlbuild.executor.pipeline._helpers.auditing import (
     run_audit_pipeline as run_audit_pipeline,
 )
+from sqlbuild.executor.pipeline._helpers.connections import (
+    close_connections,
+    open_worker_connections,
+)
+from sqlbuild.executor.pipeline._helpers.graph_width import runnable_graph_width
 from sqlbuild.executor.pipeline._helpers.scenario import (
     run_scenario_capture_pipeline as run_scenario_capture_pipeline,
 )
@@ -102,7 +107,9 @@ def _run_build_pipeline(
         customizations=customizations,
         initial_state=initial_state,
     )
-    effective_concurrency: int = max(1, runtime.max_concurrency)
+    effective_concurrency: int = min(
+        max(1, runtime.max_concurrency), runnable_graph_width(plan=plan)
+    )
     logger: logging.Logger = logging.getLogger("sqlbuild.executor.pipeline")
     external_source_load_results: ExternalSourceLoadResults = (
         run_external_source_loads_before_connections(
@@ -126,40 +133,47 @@ def _run_build_pipeline(
         initial_failed_keys=inputs.initial_state.initial_failed_keys
         | external_source_load_results.failed_keys,
     )
-    _ = _prepare_build_schemas(
-        plan=plan,
-        adapter=adapter,
-        connection_config=connection_config,
-    )
     worker_connections: list[Any] = []
     scheduler_connection: Any | None = None
+    physical_connection_count: int = effective_concurrency + 1
     if inputs.callbacks.on_connection_start is not None:
-        inputs.callbacks.on_connection_start(effective_concurrency)
+        inputs.callbacks.on_connection_start(physical_connection_count)
     start: float = time.monotonic()
     try:
         logger.debug("open scheduler connection")
         scheduler_connection = adapter.connect(connection_config)
-        _i: int
-        for _i in range(effective_concurrency):
-            logger.debug("open worker connection index=%s", _i)
-            worker_connections.append(adapter.connect(connection_config))
-    except Exception:
+        _ = _prepare_build_schemas(
+            plan=plan,
+            adapter=adapter,
+            connection_config=connection_config,
+            connection=scheduler_connection,
+        )
+        worker_connections = list(
+            open_worker_connections(
+                adapter=adapter,
+                connection_config=connection_config,
+                connection_count=effective_concurrency,
+            )
+        )
+    except BaseException as error:
         if inputs.callbacks.on_connection_error is not None:
             inputs.callbacks.on_connection_error(
-                effective_concurrency, elapsed_seconds=time.monotonic() - start
+                physical_connection_count, elapsed_seconds=time.monotonic() - start
             )
-        conn: Any
-        for _i, conn in enumerate(worker_connections):
-            logger.debug("close worker connection index=%s", _i)
-            adapter.close(conn)
-        if scheduler_connection is not None:
-            logger.debug("close scheduler connection")
-            adapter.close(scheduler_connection)
+        cleanup_connections: tuple[Any, ...] = tuple(worker_connections) + (
+            () if scheduler_connection is None else (scheduler_connection,)
+        )
+        _ = close_connections(
+            adapter=adapter,
+            connections=cleanup_connections,
+            active_error=error,
+        )
         raise
     if inputs.callbacks.on_connection_complete is not None:
         inputs.callbacks.on_connection_complete(
-            effective_concurrency, elapsed_seconds=time.monotonic() - start
+            physical_connection_count, elapsed_seconds=time.monotonic() - start
         )
+    execution_error: BaseException | None = None
     try:
         return execute_build_plan(
             plan=plan,
@@ -172,14 +186,18 @@ def _run_build_pipeline(
             customizations=inputs.customizations,
             initial_state=merged_initial_state,
         )
+    except BaseException as error:
+        execution_error = error
+        raise
     finally:
-        conn: Any
-        for _i, conn in enumerate(worker_connections):
-            logger.debug("close worker connection index=%s", _i)
-            adapter.close(conn)
-        logger.debug("close scheduler connection")
-        if scheduler_connection is not None:
-            adapter.close(scheduler_connection)
+        cleanup_connections: tuple[Any, ...] = tuple(worker_connections) + (
+            () if scheduler_connection is None else (scheduler_connection,)
+        )
+        _ = close_connections(
+            adapter=adapter,
+            connections=cleanup_connections,
+            active_error=execution_error,
+        )
 
 
 def _prepare_build_schemas(
@@ -187,6 +205,7 @@ def _prepare_build_schemas(
     plan: PlanOutput,
     adapter: BaseAdapter,
     connection_config: dict[str, object],
+    connection: Any | None = None,
 ) -> None:
     schemas: set[tuple[str | None, str]] = set()
     for entry in (*plan.model_entries, *plan.seed_entries, *plan.function_entries):
@@ -199,15 +218,19 @@ def _prepare_build_schemas(
     if not schemas:
         return
 
-    connection: Any = adapter.connect(connection_config)
+    owned_connection: bool = connection is None
+    schema_connection: Any = (
+        connection if connection is not None else adapter.connect(connection_config)
+    )
     recorder: StatementRecorder = StatementRecorder()
     try:
         for database, schema in sorted(schemas, key=lambda item: (item[0] or "", item[1])):
             adapter.ensure_schema(
-                connection=connection,
+                connection=schema_connection,
                 database=database,
                 schema=schema,
                 statement_recorder=recorder,
             )
     finally:
-        adapter.close(connection)
+        if owned_connection:
+            adapter.close(schema_connection)

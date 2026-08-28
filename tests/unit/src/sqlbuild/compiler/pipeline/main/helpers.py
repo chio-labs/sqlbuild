@@ -4,10 +4,17 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
+from sqlbuild.compiler.compile.models import (
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledRelationLocation,
+    CompiledSource,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.models import DiscoveredSourceFile
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 class RelationTargetTestAdapter(BaseAdapter):
@@ -21,6 +28,38 @@ class RelationTargetTestAdapter(BaseAdapter):
     def execute(self, connection: Any, sql: str) -> object:
         del connection
         return sql
+
+
+def relation_target_python_node() -> None:
+    """No-op Python declaration used by relation target graph tests."""
+
+
+def build_relation_target_project() -> CompiledProject:
+    source_entry: SourceEntry = SourceEntry(name="orders", schema="load_raw", table="orders")
+    source_file: DiscoveredSourceFile = DiscoveredSourceFile(
+        file_path=Path("sources/raw.yml"),
+        relative_path=Path("sources/raw.yml"),
+        contents="",
+        source_entries=(source_entry,),
+    )
+    return CompiledProject(
+        run_id="test_run",
+        effective_target_name="dev",
+        effective_connection={},
+        effective_vars={},
+        sources=(
+            CompiledSource(
+                key=CompiledObjectKey(
+                    resource_type=CompiledResourceType.SOURCE,
+                    name="orders",
+                ),
+                deps=(),
+                name="orders",
+                source_entry=source_entry,
+                source_file=source_file,
+            ),
+        ),
+    )
 
 
 def build_plan_output_with_model(name: str = "orders") -> PlanOutput:
