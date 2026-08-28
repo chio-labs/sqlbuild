@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.63.1](https://github.com/chio-labs/sqlbuild/compare/v0.63.0...v0.63.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* **snowflake:** use local timestamps for query history ([#378](https://github.com/chio-labs/sqlbuild/issues/378)) ([0a1b39c](https://github.com/chio-labs/sqlbuild/commit/0a1b39c8323ee39516232ef68e2e2250160f2771))
+
 ## [0.63.0](https://github.com/chio-labs/sqlbuild/compare/v0.62.2...v0.63.0) (2026-08-27)
 
 
