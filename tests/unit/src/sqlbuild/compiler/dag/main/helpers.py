@@ -167,6 +167,7 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
                 name="orders",
                 relative_path=Path("models/orders.sql"),
                 query_sql="SELECT 1 AS order_id",
+                authored_sql="MODEL (materialized table);\n\nSELECT 1 AS order_id",
                 config=CompileModelConfig(values={"materialized": "table", "tags": ["daily"]}),
                 destination=model_target,
                 schema_entry=SchemaModelEntry(
