@@ -214,26 +214,37 @@ def describe_equivalent_numeric_relation(
 class FakeSnowflakeRawConnection:
     """Raw connector connection double for connect() tests."""
 
+    def __init__(self) -> None:
+        self.executed_sql: list[str] = []
+
     def cursor(self) -> Any:
-        raise AssertionError("connect test should not execute SQL")
+        return self
+
+    def execute(self, sql: str, **kwargs: object) -> Any:
+        del kwargs
+        self.executed_sql.append(sql)
+        return self
 
     def close(self) -> None:
         pass
 
 
-def install_fake_snowflake_connector(monkeypatch: Any) -> dict[str, object]:
+def install_fake_snowflake_connector(
+    monkeypatch: Any,
+) -> tuple[dict[str, object], FakeSnowflakeRawConnection]:
     """Install a fake optional snowflake.connector module and capture connect kwargs."""
 
     captured_kwargs: dict[str, object] = {}
+    raw_connection: FakeSnowflakeRawConnection = FakeSnowflakeRawConnection()
     snowflake_module: ModuleType = ModuleType("snowflake")
     connector_module: ModuleType = ModuleType("snowflake.connector")
 
     def connect(**kwargs: object) -> FakeSnowflakeRawConnection:
         captured_kwargs.update(kwargs)
-        return FakeSnowflakeRawConnection()
+        return raw_connection
 
     connector_module.__dict__["connect"] = connect
     snowflake_module.__dict__["connector"] = connector_module
     monkeypatch.setitem(sys.modules, "snowflake", snowflake_module)
     monkeypatch.setitem(sys.modules, "snowflake.connector", connector_module)
-    return captured_kwargs
+    return captured_kwargs, raw_connection

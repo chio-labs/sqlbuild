@@ -28,6 +28,7 @@ from tests.unit.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeConnectConfigTestCase,
     SnowflakeExpressionInferenceProfileTestCase,
     SnowflakeInformationSchemaFilterTestCase,
+    SnowflakeInvalidSecondaryRolesTestCase,
     SnowflakeLoadSeedTestCase,
     SnowflakeMergeExclusionTestCase,
     SnowflakeMoveOrCopyRelationTestCase,
@@ -50,6 +51,7 @@ from tests.unit.src.sqlbuild.adapters.snowflake.helpers import (
     FakeSnowflakeMetadataConnection,
     FakeSnowflakeMetadataCursor,
     FakeSnowflakeMetadataSequenceConnection,
+    FakeSnowflakeRawConnection,
     build_bulk_columns_rows,
     build_bulk_sequence_connection,
     build_qualified_column_relations,
@@ -184,19 +186,82 @@ def test_given_snowflake_adapter_when_getting_inference_profile_then_returns_exp
                 "token": "secret-token",
             },
         ),
+        SnowflakeConnectConfigTestCase(
+            description="allows explicit secondary roles",
+            config={
+                "account": "acct",
+                "authenticator": "programmatic_access_token",
+                "token": "secret-token",
+                "secondary_roles": "ALL",
+            },
+            expected_connect_kwargs={
+                "account": "acct",
+                "authenticator": "programmatic_access_token",
+                "token": "secret-token",
+            },
+            expected_session_statements=("USE SECONDARY ROLES ALL",),
+        ),
+        SnowflakeConnectConfigTestCase(
+            description="disables secondary roles before selecting primary session context",
+            config={
+                "account": "acct",
+                "role": "DEVELOPER",
+                "warehouse": "DEV_WH",
+                "database": "ANALYTICS",
+            },
+            expected_connect_kwargs={
+                "account": "acct",
+                "role": "DEVELOPER",
+                "warehouse": "DEV_WH",
+                "database": "ANALYTICS",
+            },
+            expected_session_statements=(
+                "USE SECONDARY ROLES NONE",
+                "USE ROLE DEVELOPER",
+                "USE WAREHOUSE DEV_WH",
+                "USE DATABASE ANALYTICS",
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_authenticator_when_connecting_then_uses_expected_token_cache_kwargs(
+def test_given_connection_config_when_connecting_then_uses_expected_connector_and_session_config(
     test_case: SnowflakeConnectConfigTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured_kwargs: dict[str, object] = install_fake_snowflake_connector(monkeypatch)
+    captured_kwargs: dict[str, object]
+    raw_connection: FakeSnowflakeRawConnection
+    captured_kwargs, raw_connection = install_fake_snowflake_connector(monkeypatch)
     adapter: SnowflakeAdapter = SnowflakeAdapter()
 
     adapter.connect(test_case.config)
 
     assert captured_kwargs == test_case.expected_connect_kwargs
+    assert tuple(raw_connection.executed_sql) == test_case.expected_session_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeInvalidSecondaryRolesTestCase(
+            description="named role is not a supported secondary-role mode",
+            secondary_roles="TRANSFORMER",
+            expected_error="secondary_roles must be 'ALL' or 'NONE'",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_secondary_roles_when_connecting_then_fails_before_opening_connection(
+    test_case: SnowflakeInvalidSecondaryRolesTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_kwargs, _ = install_fake_snowflake_connector(monkeypatch)
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+
+    with pytest.raises(AdapterUserError, match=test_case.expected_error):
+        adapter.connect({"account": "acct", "secondary_roles": test_case.secondary_roles})
+
+    assert captured_kwargs == {}
 
 
 @pytest.mark.parametrize(
