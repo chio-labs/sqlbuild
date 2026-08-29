@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.63.3](https://github.com/chio-labs/sqlbuild/compare/v0.63.2...v0.63.3) (2026-08-29)
+
+
+### Bug Fixes
+
+* enrich Dagster metadata and Snowflake inference ([#383](https://github.com/chio-labs/sqlbuild/issues/383)) ([9bcc4d3](https://github.com/chio-labs/sqlbuild/commit/9bcc4d36290e0fdcca1e6cef5dac74f718252a82))
+
 ## [0.63.2](https://github.com/chio-labs/sqlbuild/compare/v0.63.1...v0.63.2) (2026-08-28)
 
 
