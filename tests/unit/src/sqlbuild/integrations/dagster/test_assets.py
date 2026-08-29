@@ -67,6 +67,12 @@ dg: Any = pytest.importorskip("dagster")
                 (("analytics", "orders"), frozenset({"sqlbuild", "table"})),
             ),
             expected_group_names=("dagster_project",),
+            expected_model_description_fragments=(
+                "Clean orders",
+                "**SQLBuild SQL:**",
+                "MODEL (materialized table);",
+            ),
+            expected_seed_description=("SQLBuild seed `waffle_types`."),
         )
     ],
     ids=lambda case: case.description,
@@ -84,6 +90,7 @@ def test_given_sqlbuild_dag_when_building_specs_then_maps_assets_deps_and_checks
     }
     assert len(specs_by_key) == len(asset_specs)
     model_spec: Any = next(iter(specs_by_key.get(("analytics", "orders"), ())))
+    seed_spec: Any = next(iter(specs_by_key.get(("analytics", "waffle_types"), ())))
 
     assert asset_keys == test_case.expected_asset_keys
     assert tuple(tuple(dep.asset_key.path) for dep in model_spec.deps) == (
@@ -98,6 +105,14 @@ def test_given_sqlbuild_dag_when_building_specs_then_maps_assets_deps_and_checks
     assert (
         tuple(sorted({spec.group_name for spec in asset_specs})) == test_case.expected_group_names
     )
+    assert all(
+        fragment in model_spec.description
+        for fragment in test_case.expected_model_description_fragments
+    )
+    assert model_spec.metadata["sql"] == (
+        'MODEL (materialized table);\n\nSELECT * FROM __source("raw", "orders")'
+    )
+    assert seed_spec.description == test_case.expected_seed_description
 
 
 @pytest.mark.parametrize(

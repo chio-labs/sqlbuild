@@ -284,7 +284,7 @@ def test_given_unsuccessful_analysis_when_writing_then_does_not_persist_it(
 
 @pytest.mark.parametrize(
     "test_case",
-    (AnalysisCacheTestCase(description="semantic cache identities", expected_count=5),),
+    (AnalysisCacheTestCase(description="semantic cache identities", expected_count=6),),
     ids=lambda case: case.description,
 )
 def test_given_analysis_inputs_when_building_keys_then_all_semantic_inputs_affect_identity(
@@ -301,8 +301,16 @@ def test_given_analysis_inputs_when_building_keys_then_all_semantic_inputs_affec
         inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="snowflake"),
         allow_compact_analysis=True,
     )
+    return_type_context: AnalysisCacheContext | None = build_analysis_cache_context(
+        root=tmp_path,
+        inference_profile=ExpressionInferenceProfile(
+            sql_analysis_dialect="duckdb", function_return_types={"TO_VARIANT": "VARIANT"}
+        ),
+        allow_compact_analysis=False,
+    )
     assert base_context is not None
     assert profile_context is not None
+    assert return_type_context is not None
     reference: CompileSqlReference = CompileSqlReference(
         ref_kind=SqlReferenceKind.SOURCE,
         ref_name="raw_orders",
@@ -357,6 +365,14 @@ def test_given_analysis_inputs_when_building_keys_then_all_semantic_inputs_affec
         ),
         model_analysis_cache_key(
             context=profile_context,
+            query_sql="SELECT 1",
+            references=(reference,),
+            placeholders=None,
+            column_nullability_by_table={},
+            column_types_by_table={},
+        ),
+        model_analysis_cache_key(
+            context=return_type_context,
             query_sql="SELECT 1",
             references=(reference,),
             placeholders=None,
