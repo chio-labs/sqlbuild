@@ -6,6 +6,7 @@ from typing import cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.types import BuiltinAdapter
+from sqlbuild.compiler.compile.constants import PRESERVE_TARGET_VALUE
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.compile.main.effective_runtime import build_effective_runtime_config
 from sqlbuild.compiler.compile.main.expand_template_data import expand_template_data
@@ -159,6 +160,63 @@ def validate_project_targets(*, adapter_name: str, project: CompiledProject) -> 
         resource_kind="seed",
         targets={seed.name: seed.destination for seed in project.seeds},
     )
+
+
+def validate_managed_write_schemas(*, adapter: BaseAdapter, project: CompiledProject) -> None:
+    """Require an explicitly resolved physical schema for every managed warehouse write."""
+
+    if adapter.allows_implicit_managed_write_schema:
+        return
+    connection_schema: str | None = _optional_explicit_schema(
+        project.effective_connection.get("schema")
+    )
+    for model in project.models:
+        _validate_managed_write_schema(
+            resource_label=f"Model '{model.name}'",
+            schema=model.destination.schema,
+            connection_schema=connection_schema,
+        )
+    for seed in project.seeds:
+        _validate_managed_write_schema(
+            resource_label=f"Seed '{seed.name}'",
+            schema=seed.destination.schema,
+            connection_schema=connection_schema,
+        )
+    for function in project.functions:
+        _validate_managed_write_schema(
+            resource_label=f"Function '{function.name}'",
+            schema=function.destination.schema,
+            connection_schema=connection_schema,
+        )
+    for source in project.sources:
+        if not source.source_entry.managed:
+            continue
+        _validate_managed_write_schema(
+            resource_label=f"Managed source '{source.name}'",
+            schema=source.source_entry.schema,
+            connection_schema=connection_schema,
+        )
+
+
+def _validate_managed_write_schema(
+    *, resource_label: str, schema: str | None, connection_schema: str | None
+) -> None:
+    if _optional_explicit_schema(schema) is not None or connection_schema is not None:
+        return
+    raise PlannerInputError(
+        f"{resource_label} has no explicitly resolved physical write schema. Set schema on the "
+        "resource or its defaults, selected target, loader_schema, or connection.",
+        code="S103",
+    )
+
+
+def _optional_explicit_schema(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    schema: str = value.strip()
+    if not schema or schema == PRESERVE_TARGET_VALUE:
+        return None
+    return schema
 
 
 def _validate_required_target_parts(

@@ -17,6 +17,7 @@ class DuckDbAdapter(MicrobatchMixin, DuckDbBackedAdapter):
     """First-class DuckDB adapter with full method coverage."""
 
     adapter_name: ClassVar[str] = BuiltinAdapter.DUCKDB.value
+    allows_implicit_managed_write_schema: ClassVar[bool] = True
 
     def supports_concurrent_microbatch_dml(self) -> bool:
         return True
