@@ -17,7 +17,12 @@ from sqlbuild.cli.commands.models import (
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
 from sqlbuild.compiler.pipeline.models import ClonePipelineResult
-from sqlbuild.compiler.planner.models import CloneSourcePlanEntry, ModelPlanEntry, SeedPlanEntry
+from sqlbuild.compiler.planner.models import (
+    CloneSourcePlanEntry,
+    FunctionPlanEntry,
+    ModelPlanEntry,
+    SeedPlanEntry,
+)
 
 
 def prepare_clone_execution(
@@ -57,10 +62,14 @@ def prepare_clone_execution(
     destination_source_entries: tuple[CloneSourcePlanEntry, ...] = (
         pipeline_result.destination_source_entries
     )
+    destination_function_entries: tuple[FunctionPlanEntry, ...] = (
+        pipeline_result.destination_function_entries
+    )
     if (
         not destination_model_entries
         and not destination_seed_entries
         and not destination_source_entries
+        and not destination_function_entries
     ):
         raise CliUserError("no cloneable resources found in the selected scope", code="C407")
     return CloneExecutionPreparation(pipeline_result=pipeline_result)

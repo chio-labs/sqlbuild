@@ -27,6 +27,7 @@ def write_clone_execution_header(
         len(preparation.pipeline_result.destination_source_entries)
         + len(preparation.pipeline_result.destination_model_entries)
         + len(preparation.pipeline_result.destination_seed_entries)
+        + len(preparation.pipeline_result.destination_function_entries)
     )
     invocation.progress_stream.write(
         render_clone_header(

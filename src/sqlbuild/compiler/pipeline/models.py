@@ -14,6 +14,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
 from sqlbuild.compiler.planner.models import (
     CloneSourcePlanEntry,
     CursorOverrides,
+    FunctionPlanEntry,
     ModelPlanEntry,
     PlanOutput,
     SeedPlanEntry,
@@ -104,6 +105,7 @@ class ClonePipelineResult:
     destination_source_entries: tuple[CloneSourcePlanEntry, ...] = field(default_factory=tuple)
     destination_model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
     destination_seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
+    destination_function_entries: tuple[FunctionPlanEntry, ...] = field(default_factory=tuple)
     origin_model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
     origin_seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
     origin_source_entries: tuple[CloneSourcePlanEntry, ...] = field(default_factory=tuple)

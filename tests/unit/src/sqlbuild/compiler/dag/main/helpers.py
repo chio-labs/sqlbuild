@@ -92,9 +92,10 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
     )
     function_target: CompiledRelationLocation = CompiledRelationLocation(
         database=None,
-        schema="analytics",
+        schema="analytics_dev",
         name="normalize_email",
-        qualified_name="analytics.normalize_email",
+        qualified_name="analytics_dev.normalize_email",
+        logical_schema="analytics",
     )
     project: CompiledProject = CompiledProject(
         run_id="run-1",
@@ -140,9 +141,10 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
                 schema_file=schema_file,
                 destination=CompiledRelationLocation(
                     database=None,
-                    schema="analytics",
+                    schema="analytics_dev",
                     name="country_codes",
-                    qualified_name="analytics.country_codes",
+                    qualified_name="analytics_dev.country_codes",
+                    logical_schema="analytics",
                 ),
             ),
         ),

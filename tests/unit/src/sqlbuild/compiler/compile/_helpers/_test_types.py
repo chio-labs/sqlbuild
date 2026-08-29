@@ -388,6 +388,8 @@ class AssembleCompiledProjectTestCase:
     expected_seed_target_schemas: tuple[str | None, ...] = field(default_factory=tuple)
     expected_seed_target_databases: tuple[str | None, ...] = field(default_factory=tuple)
     expected_seed_target_qualified_names: tuple[str | None, ...] = field(default_factory=tuple)
+    expected_seed_logical_schemas: tuple[str | None, ...] = field(default_factory=tuple)
+    expected_seed_logical_databases: tuple[str | None, ...] = field(default_factory=tuple)
     expected_source_databases: tuple[str | None, ...] = field(default_factory=tuple)
     expected_source_schemas: tuple[str | None, ...] = field(default_factory=tuple)
     expected_audit_attached_target_kinds: tuple[AttachedAuditTargetKind | None, ...] = ()
@@ -400,6 +402,13 @@ class AssembleCompiledProjectEffectiveTargetTestCase:
     project_toml: str
     expected_effective_target_database: str | None
     expected_effective_target_schema: str | None
+
+
+@dataclass(frozen=True)
+class PreservedSeedTargetTestCase:
+    description: str
+    expected_physical_location: tuple[str | None, str | None]
+    expected_logical_location: tuple[str | None, str | None]
 
 
 @dataclass(frozen=True)
