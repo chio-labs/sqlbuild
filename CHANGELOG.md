@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.64.0](https://github.com/chio-labs/sqlbuild/compare/v0.63.8...v0.64.0) (2026-08-29)
+
+
+### Features
+
+* support glob path defaults ([#395](https://github.com/chio-labs/sqlbuild/issues/395)) ([717d57f](https://github.com/chio-labs/sqlbuild/commit/717d57fad586b86608b091b3752d1a9d59e991b3))
+
 ## [0.63.8](https://github.com/chio-labs/sqlbuild/compare/v0.63.7...v0.63.8) (2026-08-29)
 
 
