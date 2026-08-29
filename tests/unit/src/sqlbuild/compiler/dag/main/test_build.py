@@ -37,6 +37,7 @@ from tests.unit.src.sqlbuild.compiler.dag.main.helpers import build_dag_artifact
                 "sql_test:orders_test",
             ),
             expected_function_asset_key=("analytics", "normalize_email"),
+            expected_seed_asset_key=("analytics", "country_codes"),
             expected_source_asset_key=("raw", "orders"),
             expected_loader_asset_key=("shared_order_feed",),
         )
@@ -62,6 +63,14 @@ def test_given_project_graph_when_building_dag_artifact_then_includes_assets_edg
     assert tuple(cast(list[str], nodes_by_id["udf:normalize_email"]["asset_key"])) == (
         test_case.expected_function_asset_key
     )
+    assert tuple(cast(list[str], nodes_by_id["seed:country_codes"]["asset_key"])) == (
+        test_case.expected_seed_asset_key
+    )
+    function_target: dict[str, object] = cast(
+        dict[str, object], nodes_by_id["udf:normalize_email"]["target"]
+    )
+    assert function_target["schema"] == "analytics_dev"
+    assert function_target["logical_schema"] == "analytics"
     assert tuple(cast(list[str], nodes_by_id["source:raw_orders"]["asset_key"])) == (
         test_case.expected_source_asset_key
     )

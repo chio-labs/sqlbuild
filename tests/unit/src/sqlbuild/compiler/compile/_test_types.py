@@ -59,6 +59,8 @@ class BuildCompileInputsTestCase:
     expected_sql_function_body_sqls: tuple[str, ...] = field(default_factory=tuple)
     expected_sql_function_databases: tuple[str | None, ...] = field(default_factory=tuple)
     expected_sql_function_schemas: tuple[str | None, ...] = field(default_factory=tuple)
+    expected_sql_function_logical_databases: tuple[str | None, ...] | None = None
+    expected_sql_function_logical_schemas: tuple[str | None, ...] | None = None
     expected_sql_function_languages: tuple[str, ...] = field(default_factory=tuple)
     expected_sql_function_runtime_versions: tuple[str | None, ...] = field(default_factory=tuple)
     expected_sql_function_entry_points: tuple[str | None, ...] = field(default_factory=tuple)
@@ -155,3 +157,14 @@ class CursorStartCompileErrorTestCase:
     description: str
     repo_files: dict[str, str]
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class PreservedFunctionNamespaceTestCase:
+    description: str
+    expected_defaulted_namespace: tuple[str | None, str | None, str | None, str | None]
+    expected_explicit_namespace: tuple[str | None, str | None, str | None, str | None]
+    expected_unqualified_namespace: tuple[str | None, str | None, str | None, str | None]
+    expected_unqualified_fingerprint_namespace: tuple[str | None, str | None]
+    expected_physical_explicit_namespace: tuple[str | None, str | None]
+    expected_physical_unqualified_namespace: tuple[str | None, str | None]

@@ -7,6 +7,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.planner._helpers.reuse.clone import (
+    build_clone_function_entries,
     build_clone_model_entries,
     build_clone_plan_output,
     build_clone_seed_entries,
@@ -17,6 +18,7 @@ from sqlbuild.compiler.planner._helpers.reuse.clone import (
 )
 from sqlbuild.compiler.planner.models import (
     CloneSourcePlanEntry,
+    FunctionPlanEntry,
     ModelPlanEntry,
     PlanOutput,
     SeedPlanEntry,
@@ -38,6 +40,7 @@ def run_clone_planning(
     tuple[CloneSourcePlanEntry, ...],
     tuple[ModelPlanEntry, ...],
     tuple[SeedPlanEntry, ...],
+    tuple[FunctionPlanEntry, ...],
     tuple[ModelPlanEntry, ...],
     tuple[SeedPlanEntry, ...],
     tuple[CloneSourcePlanEntry, ...],
@@ -59,6 +62,13 @@ def run_clone_planning(
     destination_seed_entries: tuple[SeedPlanEntry, ...] = build_clone_seed_entries(
         project=project,
         plan=clone_plan,
+    )
+    destination_function_entries: tuple[FunctionPlanEntry, ...] = build_clone_function_entries(
+        project=project,
+        plan=clone_plan,
+        adapter=adapter,
+        connection=connection,
+        source_project=destination_source_project,
     )
     destination_source_entries: tuple[CloneSourcePlanEntry, ...] = ()
     if destination_source_project.effective_target_name == project.effective_target_name:
@@ -97,6 +107,7 @@ def run_clone_planning(
         destination_source_entries,
         destination_model_entries,
         destination_seed_entries,
+        destination_function_entries,
         origin_model_entries,
         origin_seed_entries,
         origin_source_entries,

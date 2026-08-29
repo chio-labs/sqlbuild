@@ -68,8 +68,10 @@ class _PythonFunctionBuildContext:
     effective_settings: SettingsConfig
     adapter_name: str
     no_sql_validation: bool
-    database: str | None
-    schema: str | None
+    logical_database: str | None
+    logical_schema: str | None
+    target_database: str | None
+    target_schema: str | None
     python_functions_inherit_default_namespace: bool
 
 
@@ -101,8 +103,11 @@ def build_sql_function_inputs(
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
     known_function_names: set[str] = build_known_function_names(discovered_inputs)
     known_table_function_names: set[str] = build_known_table_function_names(discovered_inputs)
-    database, schema = _resolve_function_namespace(
+    logical_database, logical_schema = _resolve_function_logical_namespace(
         defaults=discovered_inputs.project_config.defaults,
+        effective_vars=effective_vars,
+    )
+    target_database, target_schema = _resolve_function_target_overrides(
         target_config=target_config,
         effective_vars=effective_vars,
     )
@@ -133,23 +138,29 @@ def build_sql_function_inputs(
         )
         raw_database: object | None = header_values.get("database")
         raw_schema: object | None = header_values.get("schema")
-        function_database: str | None = (
+        function_logical_database: str | None = (
             _expand_function_header_value(
                 raw_value=raw_database,
                 effective_vars=effective_vars,
                 context_label=f"SQL function {function_file.relative_path} database",
             )
             if isinstance(raw_database, str)
-            else database
+            else logical_database
         )
-        function_schema: str | None = (
+        function_logical_schema: str | None = (
             _expand_function_header_value(
                 raw_value=raw_schema,
                 effective_vars=effective_vars,
                 context_label=f"SQL function {function_file.relative_path} schema",
             )
             if isinstance(raw_schema, str)
-            else schema
+            else logical_schema
+        )
+        function_database: str | None = (
+            function_logical_database if target_database is None else target_database
+        )
+        function_schema: str | None = (
+            function_logical_schema if target_schema is None else target_schema
         )
         scoped_declarations: DeclarationExpansionContext = resolve_declaration_expansion(
             context=declaration_expansion,
@@ -235,8 +246,12 @@ def build_sql_function_inputs(
                 references=references,
                 database=function_database,
                 schema=function_schema,
+                logical_database=function_logical_database,
+                logical_schema=function_logical_schema,
                 fingerprint_database=function_database,
                 fingerprint_schema=function_schema,
+                fingerprint_logical_database=function_logical_database,
+                fingerprint_logical_schema=function_logical_schema,
                 replay_on_change=_parse_optional_function_header(
                     header_values=header_values,
                     key="replay_on_change",
@@ -252,8 +267,10 @@ def build_sql_function_inputs(
         effective_settings=effective_settings,
         adapter_name=adapter_name,
         no_sql_validation=no_sql_validation,
-        database=database,
-        schema=schema,
+        logical_database=logical_database,
+        logical_schema=logical_schema,
+        target_database=target_database,
+        target_schema=target_schema,
         python_functions_inherit_default_namespace=(python_functions_inherit_default_namespace),
     )
     python_function_file: DiscoveredPythonFunctionFile
@@ -332,29 +349,49 @@ def _build_python_function_input(
     raw_database: object | None = header_values.get("database")
     raw_schema: object | None = header_values.get("schema")
     inherit: bool = context.python_functions_inherit_default_namespace
-    function_database: str | None
+    function_logical_database: str | None
     if isinstance(raw_database, str):
-        function_database = _expand_function_header_value(
+        function_logical_database = _expand_function_header_value(
             raw_value=raw_database,
             effective_vars=effective_vars,
             context_label=f"Python function {python_function_file.relative_path} database",
         )
     else:
-        function_database = context.database if inherit else None
-    function_schema: str | None
+        function_logical_database = context.logical_database if inherit else None
+    function_logical_schema: str | None
     if isinstance(raw_schema, str):
-        function_schema = _expand_function_header_value(
+        function_logical_schema = _expand_function_header_value(
             raw_value=raw_schema,
             effective_vars=effective_vars,
             context_label=f"Python function {python_function_file.relative_path} schema",
         )
     else:
-        function_schema = context.schema if inherit else None
+        function_logical_schema = context.logical_schema if inherit else None
+    function_database: str | None = (
+        function_logical_database
+        if context.target_database is None
+        else context.target_database
+        if isinstance(raw_database, str) or inherit
+        else None
+    )
+    function_schema: str | None = (
+        function_logical_schema
+        if context.target_schema is None
+        else context.target_schema
+        if isinstance(raw_schema, str) or inherit
+        else None
+    )
+    fingerprint_logical_database: str | None = (
+        function_logical_database if isinstance(raw_database, str) else context.logical_database
+    )
+    fingerprint_logical_schema: str | None = (
+        function_logical_schema if isinstance(raw_schema, str) else context.logical_schema
+    )
     fingerprint_database: str | None = (
-        function_database if isinstance(raw_database, str) else context.database
+        fingerprint_logical_database if context.target_database is None else context.target_database
     )
     fingerprint_schema: str | None = (
-        function_schema if isinstance(raw_schema, str) else context.schema
+        fingerprint_logical_schema if context.target_schema is None else context.target_schema
     )
     if (
         context.effective_settings.sql_analysis
@@ -384,8 +421,12 @@ def _build_python_function_input(
         body_sql=python_function_file.body_python,
         database=function_database,
         schema=function_schema,
+        logical_database=function_logical_database,
+        logical_schema=function_logical_schema,
         fingerprint_database=fingerprint_database,
         fingerprint_schema=fingerprint_schema,
+        fingerprint_logical_database=fingerprint_logical_database,
+        fingerprint_logical_schema=fingerprint_logical_schema,
         language=FunctionLanguage.PYTHON,
         runtime_version=runtime_version,
         entry_point=entry_point,
@@ -605,27 +646,55 @@ def validate_native_type(*, type_sql: str, adapter_name: str, context: str) -> N
         ) from error
 
 
-def _resolve_function_namespace(
+def _resolve_function_logical_namespace(
     *,
     defaults: DefaultsConfig,
-    target_config: TargetConfig | None,
     effective_vars: dict[str, object],
 ) -> tuple[str | None, str | None]:
-    database: str | None = defaults.database
-    schema: str | None = defaults.schema
-    if target_config is not None:
-        if target_config.database is not None:
-            database = _expand_function_environment_value(
-                raw_value=target_config.database,
-                effective_vars=effective_vars,
-                context_label="environment database",
-            )
-        if target_config.schema is not None:
-            schema = _expand_function_environment_value(
-                raw_value=target_config.schema,
-                effective_vars=effective_vars,
-                context_label="environment schema",
-            )
+    database: str | None = (
+        _expand_function_header_value(
+            raw_value=defaults.database,
+            effective_vars=effective_vars,
+            context_label="default database",
+        )
+        if defaults.database is not None
+        else None
+    )
+    schema: str | None = (
+        _expand_function_header_value(
+            raw_value=defaults.schema,
+            effective_vars=effective_vars,
+            context_label="default schema",
+        )
+        if defaults.schema is not None
+        else None
+    )
+    return database, schema
+
+
+def _resolve_function_target_overrides(
+    *, target_config: TargetConfig | None, effective_vars: dict[str, object]
+) -> tuple[str | None, str | None]:
+    if target_config is None:
+        return None, None
+    database: str | None = (
+        _expand_function_environment_value(
+            raw_value=target_config.database,
+            effective_vars=effective_vars,
+            context_label="target database",
+        )
+        if target_config.database is not None
+        else None
+    )
+    schema: str | None = (
+        _expand_function_environment_value(
+            raw_value=target_config.schema,
+            effective_vars=effective_vars,
+            context_label="target schema",
+        )
+        if target_config.schema is not None
+        else None
+    )
     return database, schema
 
 

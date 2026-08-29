@@ -36,6 +36,13 @@ from tests.unit.src.sqlbuild.executor.clone.main._test_types import (
             expected_label="view",
             expected_status="FAIL",
         ),
+        PrephaseCloneItemRowTestCase(
+            description="maps recreated function item to function OK row",
+            action="recreated_function",
+            status="success",
+            expected_label="function",
+            expected_status="OK",
+        ),
     ),
     ids=lambda case: case.description,
 )

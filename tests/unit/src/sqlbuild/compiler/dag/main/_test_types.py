@@ -10,6 +10,7 @@ class DagArtifactTestCase:
     expected_edge_pairs: tuple[tuple[str, str], ...]
     expected_check_ids: tuple[str, ...]
     expected_function_asset_key: tuple[str, ...]
+    expected_seed_asset_key: tuple[str, ...]
     expected_source_asset_key: tuple[str, ...]
     expected_loader_asset_key: tuple[str, ...]
 

@@ -4,12 +4,14 @@ import pytest
 
 from sqlbuild.cli.commands._helpers.build_planning.defer_clone import (
     defer_clone_boundary_selectors,
+    defer_clone_view_chain_selectors,
 )
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import PlannerScope
 from tests.unit.src.sqlbuild.cli.commands.main.build._test_types import (
     DeferCloneBoundaryTestCase,
+    FunctionDeferCloneBoundaryTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.build.helpers import (
     build_compiled_object_key,
@@ -22,6 +24,9 @@ SEED_COUNTRIES: CompiledObjectKey = build_compiled_object_key(
     CompiledResourceType.SEED, "countries"
 )
 SOURCE_RAW: CompiledObjectKey = build_compiled_object_key(CompiledResourceType.SOURCE, "raw_orders")
+FUNCTION_ADD_COUNTRY: CompiledObjectKey = build_compiled_object_key(
+    CompiledResourceType.UDF, "add_country"
+)
 
 
 @pytest.mark.parametrize(
@@ -67,3 +72,34 @@ def test_given_scope_when_resolving_defer_clone_boundary_then_returns_expected_s
     result: tuple[str, ...] = defer_clone_boundary_selectors(scope=scope)
 
     assert result == test_case.expected_selectors
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        FunctionDeferCloneBoundaryTestCase(
+            description="clones the seed boundary and recreates the intervening function",
+            expected_boundary_selectors=("countries",),
+            expected_view_chain_selectors=("add_country",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_function_between_model_and_seed_when_resolving_then_recreates_function_and_copies_seed(
+    test_case: FunctionDeferCloneBoundaryTestCase,
+) -> None:
+    scope: PlannerScope = PlannerScope(
+        selected_keys=frozenset({MODEL_C}),
+        upstream_deps={
+            MODEL_C: (FUNCTION_ADD_COUNTRY,),
+            FUNCTION_ADD_COUNTRY: (SEED_COUNTRIES,),
+            SEED_COUNTRIES: (),
+        },
+        downstream_deps={},
+        all_keys={},
+        models_by_name={},
+        execution_order=(),
+    )
+
+    assert defer_clone_boundary_selectors(scope=scope) == test_case.expected_boundary_selectors
+    assert defer_clone_view_chain_selectors(scope=scope) == test_case.expected_view_chain_selectors

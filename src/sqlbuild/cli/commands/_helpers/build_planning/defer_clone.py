@@ -44,7 +44,11 @@ from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.clone.main.execute import execute_clone
 from sqlbuild.executor.clone.main.fingerprinting import copy_clone_fingerprints
 from sqlbuild.executor.clone.main.run_prephase_clone_stream import run_prephase_clone_stream
-from sqlbuild.executor.clone.models import CloneExecutionResult, CloneSourceEntries
+from sqlbuild.executor.clone.models import (
+    CloneExecutionInput,
+    CloneExecutionResult,
+    CloneSourceEntries,
+)
 from sqlbuild.executor.clone.types import CloneStatus
 
 
@@ -88,7 +92,9 @@ def build_defer_clone_boundary_selectors(
     )
 
 
-def _scope_is_view(*, scope: PlannerScope, key: CompiledObjectKey) -> bool:
+def _scope_is_recreated(*, scope: PlannerScope, key: CompiledObjectKey) -> bool:
+    if key.resource_type in {CompiledResourceType.UDF, CompiledResourceType.TABLE_FN}:
+        return True
     model: CompiledModel | None = scope.models_by_name.get(key.name)
     if model is None:
         return False
@@ -99,7 +105,12 @@ def _scope_is_view(*, scope: PlannerScope, key: CompiledObjectKey) -> bool:
 
 
 def _scope_is_clonable(key: CompiledObjectKey) -> bool:
-    return key.resource_type in {CompiledResourceType.MODEL, CompiledResourceType.SEED}
+    return key.resource_type in {
+        CompiledResourceType.MODEL,
+        CompiledResourceType.SEED,
+        CompiledResourceType.UDF,
+        CompiledResourceType.TABLE_FN,
+    }
 
 
 def defer_clone_boundary_selectors(*, scope: PlannerScope) -> tuple[str, ...]:
@@ -109,19 +120,19 @@ def defer_clone_boundary_selectors(*, scope: PlannerScope) -> tuple[str, ...]:
         selected=scope.selected_keys,
         upstream=scope.upstream_deps,
         is_clonable=_scope_is_clonable,
-        is_view=lambda key: _scope_is_view(scope=scope, key=key),
+        is_view=lambda key: _scope_is_recreated(scope=scope, key=key),
     )
     return tuple(sorted(key.name for key in boundary_keys))
 
 
 def defer_clone_view_chain_selectors(*, scope: PlannerScope) -> tuple[str, ...]:
-    """Return out-of-selection view models that must rebuild over cloned boundaries."""
+    """Return out-of-selection views/functions rebuilt over cloned boundaries."""
 
     view_keys: frozenset[CompiledObjectKey] = resolve_skipped_view_chain(
         selected=scope.selected_keys,
         upstream=scope.upstream_deps,
         is_clonable=_scope_is_clonable,
-        is_view=lambda key: _scope_is_view(scope=scope, key=key),
+        is_view=lambda key: _scope_is_recreated(scope=scope, key=key),
     )
     return tuple(sorted(key.name for key in view_keys))
 
@@ -237,19 +248,25 @@ def run_defer_clone_prephase(
 
         def run_clone(on_item: Any) -> CloneExecutionResult:
             return execute_clone(
-                source_entries=CloneSourceEntries(
-                    origin=clone_pipeline.origin_source_entries,
-                    destination=clone_pipeline.destination_source_entries,
-                ),
-                origin_model_entries=clone_pipeline.origin_model_entries,
-                destination_model_entries=clone_pipeline.destination_model_entries,
-                origin_seed_entries=clone_pipeline.origin_seed_entries,
-                destination_seed_entries=clone_pipeline.destination_seed_entries,
-                adapter=adapter,
-                origin_connection=origin_connection,
-                destination_connection=destination_connection,
-                hard_copy=False,
-                on_item=on_item,
+                inputs=CloneExecutionInput(
+                    source_entries=CloneSourceEntries(
+                        origin=clone_pipeline.origin_source_entries,
+                        destination=clone_pipeline.destination_source_entries,
+                    ),
+                    origin_model_entries=clone_pipeline.origin_model_entries,
+                    destination_model_entries=clone_pipeline.destination_model_entries,
+                    origin_seed_entries=clone_pipeline.origin_seed_entries,
+                    destination_seed_entries=clone_pipeline.destination_seed_entries,
+                    destination_function_entries=clone_pipeline.destination_function_entries,
+                    execution_order=clone_pipeline.clone_plan.execution_order,
+                    adapter=adapter,
+                    origin_connection=origin_connection,
+                    destination_connection=destination_connection,
+                    hard_copy=False,
+                    run_id=clone_pipeline.destination_project.run_id,
+                    query_change_tracking=clone_pipeline.destination_project.settings.query_change_tracking,
+                    on_item=on_item,
+                )
             )
 
         result: CloneExecutionResult = (

@@ -10,7 +10,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import ModelPlanEntry
+from sqlbuild.compiler.planner.models import FunctionPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 
 
@@ -94,6 +94,9 @@ class FakeCloneAdapter(BaseAdapter):
         }
         return (statements[hard_copy],)
 
+    def render_create_function(self, **kwargs: Any) -> tuple[str, ...]:
+        return (f"CREATE FUNCTION {kwargs['destination']}",)
+
 
 def build_clone_model_entry(*, schema: str, name: str) -> ModelPlanEntry:
     return ModelPlanEntry(
@@ -112,4 +115,24 @@ def build_clone_model_entry(*, schema: str, name: str) -> ModelPlanEntry:
         fingerprint_query_sql="SELECT 1",
         resolved_sql="SELECT 1",
         logical_ddl="MODEL (materialized table);",
+    )
+
+
+def build_clone_function_entry(*, schema: str, name: str) -> FunctionPlanEntry:
+    destination: CompiledRelationLocation = CompiledRelationLocation(
+        database=None,
+        schema=schema,
+        name=name,
+        qualified_name=f"{schema}.{name}",
+    )
+    return FunctionPlanEntry(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.UDF, name=name),
+        name=name,
+        relative_path=Path("functions/sql") / f"{name}.sql",
+        destination=destination,
+        arguments=(),
+        returns="INTEGER",
+        body_sql="1",
+        fingerprint_query_sql="body=1",
+        fingerprint_destination=destination,
     )

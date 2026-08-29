@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from sqlbuild.compiler.compile._helpers.attachment.core import build_model_config
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
-from sqlbuild.compiler.compile.models import CompileModelConfig, CompileProjectInputs
+from sqlbuild.compiler.compile.models import (
+    CompileModelConfig,
+    CompileProjectInputs,
+    CompileSqlFunctionInput,
+)
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
@@ -44,6 +49,7 @@ from tests.unit.src.sqlbuild.compiler.compile._test_types import (
     BuildCompileInputsPythonHookValidationTestCase,
     BuildCompileInputsTestCase,
     BuildModelConfigHooksTestCase,
+    PreservedFunctionNamespaceTestCase,
     ResolveTargetConfigTestCase,
     SeedRefRegressionTestCase,
 )
@@ -1868,8 +1874,10 @@ FUNCTION (
             expected_sql_function_body_sqls=(
                 "order_status = 'completed' AND order_status <> 'cancelled'",
             ),
-            expected_sql_function_databases=("analytics",),
-            expected_sql_function_schemas=("udf_dev",),
+            expected_sql_function_databases=("analytics_default",),
+            expected_sql_function_schemas=("default_schema",),
+            expected_sql_function_logical_databases=("analytics",),
+            expected_sql_function_logical_schemas=("udf_dev",),
             expected_sql_function_languages=("sql",),
             expected_sql_function_runtime_versions=(None,),
             expected_sql_function_entry_points=(None,),
@@ -2101,7 +2109,9 @@ def main(order_status):
 """.strip(),
             ),
             expected_sql_function_databases=(None,),
-            expected_sql_function_schemas=("udf_dev",),
+            expected_sql_function_schemas=("default_schema",),
+            expected_sql_function_logical_databases=(None,),
+            expected_sql_function_logical_schemas=("udf_dev",),
             expected_sql_function_languages=("python",),
             expected_sql_function_runtime_versions=("3.11",),
             expected_sql_function_entry_points=("main",),
@@ -2694,6 +2704,20 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
         tuple(function_input.schema for function_input in compile_inputs.sql_function_inputs)
         == test_case.expected_sql_function_schemas
     )
+    actual_logical_databases: tuple[str | None, ...] = tuple(
+        function_input.logical_database for function_input in compile_inputs.sql_function_inputs
+    )
+    assert actual_logical_databases == expected_or_actual(
+        test_case.expected_sql_function_logical_databases,
+        actual_logical_databases,
+    )
+    actual_logical_schemas: tuple[str | None, ...] = tuple(
+        function_input.logical_schema for function_input in compile_inputs.sql_function_inputs
+    )
+    assert actual_logical_schemas == expected_or_actual(
+        test_case.expected_sql_function_logical_schemas,
+        actual_logical_schemas,
+    )
     assert (
         tuple(str(function_input.language) for function_input in compile_inputs.sql_function_inputs)
         == test_case.expected_sql_function_languages
@@ -2750,6 +2774,140 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     assert test_case.run_id is not None or re.fullmatch(
         r"\d{8}T\d{6}Z_[0-9a-f]{12}", compile_inputs.run_id
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        PreservedFunctionNamespaceTestCase(
+            description="retains authored function namespaces while physical targets override",
+            expected_defaulted_namespace=(
+                "logical_db",
+                "logical_schema",
+                "logical_db",
+                "logical_schema",
+            ),
+            expected_explicit_namespace=(
+                "function_db",
+                "function_schema",
+                "function_db",
+                "function_schema",
+            ),
+            expected_unqualified_namespace=(None, None, None, None),
+            expected_unqualified_fingerprint_namespace=("logical_db", "logical_schema"),
+            expected_physical_explicit_namespace=("physical_db", "physical_schema"),
+            expected_physical_unqualified_namespace=(None, None),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_preserved_target_when_building_functions_then_logical_namespaces_are_retained(
+    test_case: PreservedFunctionNamespaceTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        base_repo_files()
+        | {
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_target = "dev"
+
+[defaults]
+database = "logical_db"
+schema = "logical_schema"
+
+[targets.dev]
+database = "preserve"
+schema = "preserve"
+
+[targets.physical]
+database = "physical_db"
+schema = "physical_schema"
+""".strip()
+            + "\n",
+            "functions/sql/defaulted.sql": "FUNCTION (returns INTEGER);\n\n1\n",
+            "functions/python/explicit.py": """
+from sqlbuild.functions import udf
+
+@udf(
+    arguments={},
+    returns="INTEGER",
+    runtime_version="3.11",
+    database="function_db",
+    schema="function_schema",
+)
+def main():
+    return 1
+""".strip()
+            + "\n",
+            "functions/python/unqualified.py": """
+from sqlbuild.functions import udf
+
+@udf(arguments={}, returns="INTEGER", runtime_version="3.11")
+def main():
+    return 1
+""".strip()
+            + "\n",
+        },
+    )
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+
+    compile_inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discovered_inputs,
+        adapter_context=replace(
+            DUCKDB_COMPILE_ADAPTER_CONTEXT,
+            python_functions_inherit_default_namespace=False,
+        ),
+    )
+
+    functions: dict[str, CompileSqlFunctionInput] = {
+        entry.name: entry for entry in compile_inputs.sql_function_inputs
+    }
+    assert (
+        functions["defaulted"].database,
+        functions["defaulted"].schema,
+        functions["defaulted"].logical_database,
+        functions["defaulted"].logical_schema,
+    ) == test_case.expected_defaulted_namespace
+    assert (
+        functions["explicit"].database,
+        functions["explicit"].schema,
+        functions["explicit"].logical_database,
+        functions["explicit"].logical_schema,
+    ) == test_case.expected_explicit_namespace
+    assert (
+        functions["unqualified"].database,
+        functions["unqualified"].schema,
+        functions["unqualified"].logical_database,
+        functions["unqualified"].logical_schema,
+    ) == test_case.expected_unqualified_namespace
+    assert (
+        functions["unqualified"].fingerprint_database,
+        functions["unqualified"].fingerprint_schema,
+    ) == test_case.expected_unqualified_fingerprint_namespace
+
+    physical_inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discovered_inputs,
+        adapter_context=replace(
+            DUCKDB_COMPILE_ADAPTER_CONTEXT,
+            python_functions_inherit_default_namespace=False,
+        ),
+        selected_target="physical",
+    )
+    physical_functions: dict[str, CompileSqlFunctionInput] = {
+        entry.name: entry for entry in physical_inputs.sql_function_inputs
+    }
+    assert (
+        physical_functions["explicit"].database,
+        physical_functions["explicit"].schema,
+    ) == test_case.expected_physical_explicit_namespace
+    assert (
+        physical_functions["unqualified"].database,
+        physical_functions["unqualified"].schema,
+    ) == test_case.expected_physical_unqualified_namespace
 
 
 @pytest.mark.parametrize(

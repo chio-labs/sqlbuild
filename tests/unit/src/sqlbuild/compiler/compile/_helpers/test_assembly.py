@@ -12,6 +12,7 @@ from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_i
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
+    CompiledSeed,
     CompileProjectInputs,
 )
 from sqlbuild.compiler.compile.types import (
@@ -24,6 +25,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     AssembleCompiledProjectEffectiveTargetTestCase,
     AssembleCompiledProjectTestCase,
     AssembleSqlHookValidationTestCase,
+    PreservedSeedTargetTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,
@@ -107,6 +109,8 @@ SELECT 1
             expected_seed_target_schemas=("analytics",),
             expected_seed_target_databases=(None,),
             expected_seed_target_qualified_names=(None,),
+            expected_seed_logical_schemas=("analytics",),
+            expected_seed_logical_databases=(None,),
             expected_audit_names=("not_null",),
             expected_audit_scope_deps=(
                 (CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),),
@@ -202,6 +206,8 @@ seeds:
             expected_seed_target_schemas=("seeds_reporting",),
             expected_seed_target_databases=("local_reportingdb_reporting",),
             expected_seed_target_qualified_names=(None,),
+            expected_seed_logical_schemas=("analytics",),
+            expected_seed_logical_databases=(None,),
             expected_audit_names=(),
             expected_audit_scope_deps=(),
             expected_test_names=(),
@@ -252,9 +258,11 @@ seeds:
             expected_model_target_schemas=(),
             expected_source_names=(),
             expected_seed_names=("country_codes",),
-            expected_seed_target_schemas=("env_schema_lookups",),
-            expected_seed_target_databases=("seed_db",),
+            expected_seed_target_schemas=("env_schema",),
+            expected_seed_target_databases=("env_db",),
             expected_seed_target_qualified_names=(None,),
+            expected_seed_logical_schemas=("default_schema_lookups",),
+            expected_seed_logical_databases=("seed_db",),
             expected_audit_names=(),
             expected_audit_scope_deps=(),
             expected_test_names=(),
@@ -518,6 +526,14 @@ def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expe
         tuple(s.destination.qualified_name for s in compiled.seeds)
         == test_case.expected_seed_target_qualified_names
     )
+    actual_seed_logical_schemas: tuple[str | None, ...] = tuple(
+        s.destination.logical_schema for s in compiled.seeds
+    )
+    assert actual_seed_logical_schemas == test_case.expected_seed_logical_schemas
+    actual_seed_logical_databases: tuple[str | None, ...] = tuple(
+        s.destination.logical_database for s in compiled.seeds
+    )
+    assert actual_seed_logical_databases == test_case.expected_seed_logical_databases
     assert tuple(a.name for a in compiled.audits) == test_case.expected_audit_names
     assert tuple(a.scope_deps for a in compiled.audits) == test_case.expected_audit_scope_deps
     assert (
@@ -535,6 +551,70 @@ def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expe
     assert (
         tuple(compiled_sql_test_expected_model_names(t) for t in compiled.sql_tests)
         == test_case.expected_test_expected_model_names
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        PreservedSeedTargetTestCase(
+            description="preserves the authored seed namespace for preserve targets",
+            expected_physical_location=("seed_db", "seed_schema"),
+            expected_logical_location=("seed_db", "seed_schema"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_preserved_target_when_assembling_seed_then_declaration_remains_physical(
+    test_case: PreservedSeedTargetTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        base_repo_files()
+        | {
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_target = "dev"
+
+[defaults]
+database = "default_db"
+schema = "default_schema"
+
+[targets.dev]
+database = "preserve"
+schema = "preserve"
+""".strip()
+            + "\n",
+            "seeds/schema.yml": """
+seeds:
+  - name: country_codes
+    database: seed_db
+    schema: seed_schema
+    columns:
+      - name: code
+        type: VARCHAR
+""".strip()
+            + "\n",
+            "seeds/country_codes.csv": "code\nUS\n",
+        },
+    )
+    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+    compile_inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discovered,
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+    )
+
+    seed: CompiledSeed = assemble_compiled_project(inputs=compile_inputs).seeds[0]
+
+    assert (
+        seed.destination.database,
+        seed.destination.schema,
+    ) == test_case.expected_physical_location
+    assert (seed.destination.logical_database, seed.destination.logical_schema) == (
+        test_case.expected_logical_location
     )
 
 

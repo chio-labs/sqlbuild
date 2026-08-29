@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
+    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -30,6 +31,9 @@ from sqlbuild.compiler.planner._helpers.graph.selector_indexes import (
     build_model_tag_index_impl as build_model_tag_index,
 )
 from sqlbuild.compiler.planner._helpers.graph.selectors import resolve_selectors
+from sqlbuild.compiler.planner._helpers.identity.functions import (
+    build_compiled_function_fingerprint_sql,
+)
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     gather_source_columns,
 )
@@ -39,11 +43,15 @@ from sqlbuild.compiler.planner._helpers.resolve.refs import (
     build_model_locations,
     build_seed_locations,
 )
-from sqlbuild.compiler.planner._helpers.resolve.resolve import resolve_model_sql
+from sqlbuild.compiler.planner._helpers.resolve.resolve import (
+    resolve_function_sql,
+    resolve_model_sql,
+)
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CloneSourcePlanEntry,
     CursorOverridePair,
+    FunctionPlanEntry,
     ModelPlanContext,
     ModelPlanEntry,
     PlanOutput,
@@ -75,6 +83,7 @@ def build_clone_plan_output(
         **{model.name: model.key for model in project.models},
         **{source.name: source.key for source in project.sources},
         **{seed.name: seed.key for seed in project.seeds},
+        **{function.name: function.key for function in project.functions},
     }
     lineage_upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
         build_lineage_upstream_deps(project)
@@ -193,6 +202,63 @@ def build_clone_source_entries(
                     name=relation_name,
                 ),
             ),
+        )
+    return tuple(entries_by_key[key] for key in plan.execution_order if key in entries_by_key)
+
+
+def build_clone_function_entries(
+    *,
+    project: CompiledProject,
+    plan: PlanOutput,
+    adapter: BaseAdapter,
+    connection: Any,
+    source_project: CompiledProject | None = None,
+) -> tuple[FunctionPlanEntry, ...]:
+    """Build destination-resolved function definitions for clone recreation."""
+    effective_source_project: CompiledProject = source_project or project
+    model_locations: dict[str, CompiledRelationLocation] = build_model_locations(project.models)
+    seed_locations: dict[str, CompiledRelationLocation] = build_seed_locations(project.seeds)
+    function_locations: dict[str, CompiledRelationLocation] = build_function_locations(
+        project.functions
+    )
+    source_map: dict[str, SourceEntry] = {
+        source.name: source.source_entry for source in effective_source_project.sources
+    }
+    source_warehouse_columns: dict[str, tuple[Any, ...]] = gather_source_columns(
+        project=effective_source_project,
+        adapter=adapter,
+        connection=connection,
+    )
+    entries_by_key: dict[CompiledObjectKey, FunctionPlanEntry] = {}
+    function: CompiledFunction
+    for function in project.functions:
+        if function.key not in plan.selected_keys:
+            continue
+        entries_by_key[function.key] = FunctionPlanEntry(
+            key=function.key,
+            name=function.name,
+            relative_path=function.relative_path,
+            destination=function.destination,
+            arguments=function.arguments,
+            returns=function.returns,
+            body_sql=resolve_function_sql(
+                adapter=adapter,
+                function=function,
+                model_locations=model_locations,
+                seed_locations=seed_locations,
+                function_locations=function_locations,
+                source_map=source_map,
+                source_warehouse_columns=source_warehouse_columns,
+                star_exclude_keyword=adapter.star_exclude_keyword(),
+            ),
+            fingerprint_query_sql=build_compiled_function_fingerprint_sql(function),
+            fingerprint_destination=function.fingerprint_destination,
+            return_columns=function.return_columns,
+            language=function.language,
+            source_file_path=function.source_file_path,
+            runtime_version=function.runtime_version,
+            entry_point=function.entry_point,
+            packages=function.packages,
         )
     return tuple(entries_by_key[key] for key in plan.execution_order if key in entries_by_key)
 

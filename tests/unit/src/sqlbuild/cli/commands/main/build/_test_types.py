@@ -11,3 +11,10 @@ class DeferCloneBoundaryTestCase:
     selected_keys: frozenset[CompiledObjectKey]
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
     expected_selectors: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FunctionDeferCloneBoundaryTestCase:
+    description: str
+    expected_boundary_selectors: tuple[str, ...]
+    expected_view_chain_selectors: tuple[str, ...]

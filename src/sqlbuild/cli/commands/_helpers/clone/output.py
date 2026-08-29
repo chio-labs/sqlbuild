@@ -13,14 +13,14 @@ from sqlbuild.presentation.types import CompletionState
 def render_clone_header(
     *, origin_target_name: str, destination_target_name: str, total: int, use_color: bool
 ) -> str:
-    """Render the persistent clone header naming origin, destination, and relation count."""
+    """Render the persistent clone header naming origin, destination, and resource count."""
 
     style: CliStyle = CliStyle(use_color=use_color)
     return (
         f"{style.title('sqb clone')}  "
         f"{style.label('origin=')}{style.value(origin_target_name)} "
         f"{style.label('destination=')}{style.value(destination_target_name)}  "
-        f"{style.muted(f'({total} relation{"" if total == 1 else "s"})')}"
+        f"{style.muted(f'({total} resource{"" if total == 1 else "s"})')}"
     )
 
 
@@ -79,6 +79,9 @@ def render_clone_output(
     recreated_count: int = sum(
         1 for item in result.item_results if item.action == CloneAction.RECREATED_VIEW
     )
+    recreated_function_count: int = sum(
+        1 for item in result.item_results if item.action == CloneAction.RECREATED_FUNCTION
+    )
     print()
     elapsed: str = f"({elapsed_seconds:.2f}s)" if elapsed_seconds is not None else ""
     counts_summary: str = format_summary_footer(
@@ -86,6 +89,7 @@ def render_clone_output(
             ("CLONED", cloned_count),
             ("COPIED", copied_count),
             ("RECREATED_VIEWS", recreated_count),
+            ("RECREATED_FUNCTIONS", recreated_function_count),
             ("PASS", success_count),
             ("WARN", warning_count),
             ("FAIL", fail_count),

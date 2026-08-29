@@ -9,8 +9,11 @@ from textwrap import dedent
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.clone._test_types import (
+    CloneDeferredSourceFunctionE2ETestCase,
     CloneE2ETestCase,
+    CloneFunctionGraphE2ETestCase,
     ClonePolicyErrorTestCase,
+    ClonePythonFunctionE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
@@ -375,6 +378,343 @@ def test_given_managed_source_when_cloning_then_source_routing_is_preserved(
     for query, expected_rows in test_case.expected_query_results:
         actual_rows: list[tuple[object, ...]] = query_duckdb(db_path=db_path, sql=query)
         assert tuple(tuple(row) for row in actual_rows) == expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CloneFunctionGraphE2ETestCase(
+            description="recreates multi-schema functions in graph order",
+            expected_stdout_fragments=("(5 resources)", "RECREATED_FUNCTIONS=2"),
+            expected_resource_order=(
+                "bonuses",
+                "orders",
+                "add_bonus",
+                "order_rows",
+                "enriched_orders",
+            ),
+            expected_query_results=(
+                ("SELECT bonus FROM clone_dest.bonuses", ((5,),)),
+                (
+                    "SELECT order_id, amount FROM clone_dest.orders ORDER BY order_id",
+                    ((1, 10), (2, 20)),
+                ),
+                ("SELECT clone_dest.add_bonus(10)", ((15,),)),
+                ("SELECT order_id, amount FROM clone_dest.order_rows(2)", ((2, 20),)),
+                (
+                    "SELECT order_id, amount_with_bonus FROM clone_dest.enriched_orders "
+                    "ORDER BY order_id",
+                    ((1, 15), (2, 25)),
+                ),
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_multi_schema_functions_when_cloning_then_destination_graph_is_queryable(
+    test_case: CloneFunctionGraphE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="function_clone_project",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "function_clone_project"
+                adapter = "duckdb"
+                default_target = "dev"
+
+                [defaults]
+                schema = "default_origin"
+
+                [targets.prod]
+                schema = "preserve"
+
+                [targets.prod.connection]
+                database = "clone.duckdb"
+
+                [targets.prod.clone]
+                allow_as_clone_origin = true
+
+                [targets.dev]
+                schema = "clone_dest"
+
+                [targets.dev.connection]
+                database = "clone.duckdb"
+
+                [targets.dev.clone]
+                allow_as_clone_destination = true
+                """
+            ).strip()
+            + "\n",
+            "seeds/bonuses.csv": "bonus\n5\n",
+            "seeds/schema.yml": dedent(
+                """
+                seeds:
+                  - name: bonuses
+                    schema: seed_origin
+                    columns:
+                      - name: bonus
+                        type: INTEGER
+                """
+            ).strip()
+            + "\n",
+            "models/orders.sql": dedent(
+                """
+                MODEL (materialized table, schema model_origin);
+
+                SELECT * FROM (VALUES (1, 10), (2, 20)) AS orders(order_id, amount)
+                """
+            ).strip()
+            + "\n",
+            "functions/sql/add_bonus.sql": dedent(
+                """
+                FUNCTION (
+                  schema scalar_origin,
+                  arguments (amount INTEGER),
+                  returns INTEGER
+                );
+
+                amount + (SELECT bonus FROM __seed("bonuses"))
+                """
+            ).strip()
+            + "\n",
+            "functions/sql/order_rows.sql": dedent(
+                """
+                FUNCTION (
+                  schema table_function_origin,
+                  arguments (minimum_id INTEGER),
+                  returns table (
+                    order_id INTEGER,
+                    amount INTEGER
+                  )
+                );
+
+                SELECT order_id, amount
+                FROM __ref("orders")
+                WHERE order_id >= minimum_id
+                """
+            ).strip()
+            + "\n",
+            "models/enriched_orders.sql": dedent(
+                """
+                MODEL (materialized view, schema view_origin);
+
+                SELECT order_id, __udf("add_bonus")(amount) AS amount_with_bonus
+                FROM __table_fn("order_rows")(1)
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+    db_path: Path = project_dir / "clone.duckdb"
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--target", "prod"),
+        project_dir=project_dir,
+    )
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+
+    clone_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "clone", "--from", "prod", "--to", "dev"),
+        project_dir=project_dir,
+    )
+
+    assert clone_result.returncode == 0, clone_result.stdout + clone_result.stderr
+    fragment: str
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in clone_result.stdout
+    resource_positions: dict[str, int] = {
+        name: clone_result.stdout.index(name) for name in test_case.expected_resource_order
+    }
+    assert resource_positions["bonuses"] < resource_positions["add_bonus"]
+    assert resource_positions["orders"] < resource_positions["order_rows"]
+    assert resource_positions["add_bonus"] < resource_positions["enriched_orders"]
+    assert resource_positions["order_rows"] < resource_positions["enriched_orders"]
+    query: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for query, expected_rows in test_case.expected_query_results:
+        assert tuple(query_duckdb(db_path=db_path, sql=query)) == expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ClonePythonFunctionE2ETestCase(
+            description="registers Python UDF only on the clone execution connection",
+            expected_stdout_fragments=("add_one", "recreated_function", "RECREATED_FUNCTIONS=1"),
+            expected_unregistered_function_match="add_one",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_python_udf_when_cloning_then_recreates_for_clone_connection_scope(
+    test_case: ClonePythonFunctionE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="python_function_clone_project",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "python_function_clone_project"
+                adapter = "duckdb"
+                default_target = "dev"
+
+                [targets.prod.connection]
+                database = "clone.duckdb"
+
+                [targets.prod.clone]
+                allow_as_clone_origin = true
+
+                [targets.dev.connection]
+                database = "clone.duckdb"
+
+                [targets.dev.clone]
+                allow_as_clone_destination = true
+                """
+            ).strip()
+            + "\n",
+            "functions/python/add_one.py": dedent(
+                """
+                from sqlbuild.functions import udf
+
+                @udf(
+                    arguments={"value": "INTEGER"},
+                    returns="INTEGER",
+                    runtime_version="3.11",
+                )
+                def main(value):
+                    return value + 1
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "clone", "--from", "prod", "--to", "dev"),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    fragment: str
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout
+    # DuckDB Python UDF registration belongs to the connection used by clone execution.
+    with pytest.raises(Exception, match=test_case.expected_unregistered_function_match):
+        query_duckdb(db_path=project_dir / "clone.duckdb", sql="SELECT add_one(1)")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CloneDeferredSourceFunctionE2ETestCase(
+            description="binds cloned function to the deferred source without copying it",
+            expected_stdout_fragments=("recreated_function",),
+            expected_query_results=(
+                ("SELECT prod.add_deferred_bonus(10)", ((17,),)),
+                (
+                    "SELECT COUNT(*) FROM information_schema.tables "
+                    "WHERE table_schema = 'raw_prod' AND table_name = 'raw_bonus'",
+                    ((0,),),
+                ),
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_destination_source_deferral_when_cloning_then_function_reads_deferred_source(
+    test_case: CloneDeferredSourceFunctionE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="deferred_source_function_clone_project",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "deferred_source_function_clone_project"
+                adapter = "duckdb"
+                default_target = "prod"
+
+                [targets.dev]
+                schema = "dev"
+                loader_schema = "raw_dev"
+
+                [targets.dev.connection]
+                database = "clone.duckdb"
+
+                [targets.dev.clone]
+                allow_as_clone_origin = true
+
+                [targets.prod]
+                schema = "prod"
+                loader_schema = "raw_prod"
+                defer_sources_to = "dev"
+
+                [targets.prod.connection]
+                database = "clone.duckdb"
+
+                [targets.prod.clone]
+                allow_as_clone_destination = true
+                """
+            ).strip()
+            + "\n",
+            "loaders/raw.py": dedent(
+                """
+                from sqlbuild.loaders import loader
+
+                @loader
+                def raw_bonus(ctx):
+                    return []
+                """
+            ).strip()
+            + "\n",
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_bonus
+                    managed: true
+                    write_strategy: table
+                    columns:
+                      - name: bonus
+                        type: INTEGER
+                """
+            ).strip()
+            + "\n",
+            "functions/sql/add_deferred_bonus.sql": dedent(
+                """
+                FUNCTION (arguments (amount INTEGER), returns INTEGER);
+
+                amount + (SELECT bonus FROM __source("raw_bonus"))
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+    db_path: Path = project_dir / "clone.duckdb"
+
+    import duckdb
+
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(db_path))
+    connection.execute("CREATE SCHEMA raw_dev")
+    connection.execute("CREATE TABLE raw_dev.raw_bonus AS SELECT 7 AS bonus")
+    connection.close()
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "clone", "--from", "dev", "--to", "prod"),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    fragment: str
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout
+    query: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for query, expected_rows in test_case.expected_query_results:
+        assert tuple(query_duckdb(db_path=db_path, sql=query)) == expected_rows
 
 
 @pytest.mark.parametrize(

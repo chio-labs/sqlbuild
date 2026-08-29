@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import LifeCycleEvent
-from sqlbuild.compiler.planner.models import CloneSourcePlanEntry
-from sqlbuild.executor.clone.types import CloneAction, CloneStatus
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.planner.models import (
+    CloneSourcePlanEntry,
+    FunctionPlanEntry,
+    ModelPlanEntry,
+    SeedPlanEntry,
+)
+from sqlbuild.executor.clone.types import CloneAction, CloneItemCallback, CloneStatus
 
 
 @dataclass(frozen=True)
@@ -15,6 +23,26 @@ class CloneSourceEntries:
 
     origin: tuple[CloneSourcePlanEntry, ...] = field(default_factory=tuple)
     destination: tuple[CloneSourcePlanEntry, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class CloneExecutionInput:
+    """All runtime inputs required to execute one clone plan."""
+
+    source_entries: CloneSourceEntries
+    origin_model_entries: tuple[ModelPlanEntry, ...]
+    destination_model_entries: tuple[ModelPlanEntry, ...]
+    origin_seed_entries: tuple[SeedPlanEntry, ...]
+    destination_seed_entries: tuple[SeedPlanEntry, ...]
+    destination_function_entries: tuple[FunctionPlanEntry, ...]
+    execution_order: tuple[CompiledObjectKey, ...]
+    adapter: BaseAdapter
+    origin_connection: Any
+    destination_connection: Any
+    hard_copy: bool
+    run_id: str
+    query_change_tracking: bool
+    on_item: CloneItemCallback | None = None
 
 
 @dataclass(frozen=True)

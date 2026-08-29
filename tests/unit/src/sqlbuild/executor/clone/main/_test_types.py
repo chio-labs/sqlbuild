@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.executor.clone.types import CloneAction
+
 
 @dataclass(frozen=True)
 class CloneStreamTestCase:
@@ -11,6 +13,15 @@ class CloneStreamTestCase:
     destination_schema: str
     expected_positions: tuple[tuple[int, int], ...]
     expected_destination_relations: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class InterleavedCloneGraphTestCase:
+    description: str
+    expected_names: tuple[str, ...]
+    expected_actions: tuple[CloneAction, ...]
+    expected_function_statement: str
+    expected_view_statement_fragment: str
 
 
 @dataclass(frozen=True)
