@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.63.4](https://github.com/chio-labs/sqlbuild/compare/v0.63.3...v0.63.4) (2026-08-29)
+
+
+### Bug Fixes
+
+* **snowflake:** disable secondary roles by default ([#385](https://github.com/chio-labs/sqlbuild/issues/385)) ([1f7457b](https://github.com/chio-labs/sqlbuild/commit/1f7457b3cfd70bd928dd1a037adcc974d6bec68f))
+
 ## [0.63.3](https://github.com/chio-labs/sqlbuild/compare/v0.63.2...v0.63.3) (2026-08-29)
 
 
