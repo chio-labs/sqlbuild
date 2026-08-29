@@ -14,15 +14,25 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledRelationLocation,
 )
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline._helpers.target_validation import (
     validate_managed_write_schemas,
+    validate_named_target_schema_strategy,
     validate_project_targets,
+)
+from sqlbuild.spec.contracts.models import (
+    LocalConfig,
+    LocalTargetConfig,
+    ProjectConfig,
+    TargetConfig,
 )
 from tests.unit.src.sqlbuild.compiler.pipeline._helpers.target_validation._test_types import (
     ValidateManagedWriteSchemaTestCase,
+    ValidateNamedTargetSchemaTestCase,
     ValidateProjectTargetsTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.pipeline._helpers.target_validation.helpers import (
+    ConservativeCustomAdapter,
     build_project,
 )
 
@@ -190,4 +200,179 @@ def test_given_explicit_or_permitted_schema_when_validating_managed_write_then_i
     )
 
     validate_managed_write_schemas(adapter=test_case.adapter, project=project)
+    assert test_case.expected_error_fragment is None
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ValidateNamedTargetSchemaTestCase(
+            description="shared warehouse named target omits schema",
+            adapter=PostgresAdapter(),
+            project_config=ProjectConfig(
+                name="test",
+                adapter="postgres",
+                default_target="dev",
+                targets={"dev": TargetConfig()},
+            ),
+            local_config=LocalConfig(),
+            selected_target=None,
+            expected_error_fragment=(
+                "Named target 'dev' must explicitly set schema to a nonblank literal or 'preserve'"
+            ),
+        ),
+        ValidateNamedTargetSchemaTestCase(
+            description="local override leaves merged named target schema blank",
+            adapter=SnowflakeAdapter(),
+            project_config=ProjectConfig(
+                name="test", adapter="snowflake", targets={"ci": TargetConfig()}
+            ),
+            local_config=LocalConfig(targets={"ci": LocalTargetConfig(schema="   ")}),
+            selected_target="ci",
+            expected_error_fragment="Named target 'ci' must explicitly set schema",
+        ),
+        ValidateNamedTargetSchemaTestCase(
+            description="MotherDuck named target omits schema",
+            adapter=MotherDuckAdapter(),
+            project_config=ProjectConfig(
+                name="test",
+                adapter="motherduck",
+                default_target="dev",
+                targets={"dev": TargetConfig()},
+            ),
+            local_config=LocalConfig(),
+            selected_target=None,
+            expected_error_fragment="Named target 'dev' must explicitly set schema",
+        ),
+        ValidateNamedTargetSchemaTestCase(
+            description="BigQuery named target omits schema",
+            adapter=BigQueryAdapter(),
+            project_config=ProjectConfig(
+                name="test",
+                adapter="bigquery",
+                default_target="dev",
+                targets={"dev": TargetConfig()},
+            ),
+            local_config=LocalConfig(),
+            selected_target=None,
+            expected_error_fragment="Named target 'dev' must explicitly set schema",
+        ),
+        ValidateNamedTargetSchemaTestCase(
+            description="Databricks named target omits schema",
+            adapter=DatabricksAdapter(),
+            project_config=ProjectConfig(
+                name="test",
+                adapter="databricks",
+                default_target="dev",
+                targets={"dev": TargetConfig()},
+            ),
+            local_config=LocalConfig(),
+            selected_target=None,
+            expected_error_fragment="Named target 'dev' must explicitly set schema",
+        ),
+        ValidateNamedTargetSchemaTestCase(
+            description="SQL Server named target omits schema",
+            adapter=SqlServerAdapter(),
+            project_config=ProjectConfig(
+                name="test",
+                adapter="sqlserver",
+                default_target="dev",
+                targets={"dev": TargetConfig()},
+            ),
+            local_config=LocalConfig(),
+            selected_target=None,
+            expected_error_fragment="Named target 'dev' must explicitly set schema",
+        ),
+        ValidateNamedTargetSchemaTestCase(
+            description="custom adapter named target omits schema conservatively",
+            adapter=ConservativeCustomAdapter(),
+            project_config=ProjectConfig(
+                name="test", adapter="custom", default_target="dev", targets={"dev": TargetConfig()}
+            ),
+            local_config=LocalConfig(),
+            selected_target=None,
+            expected_error_fragment="Named target 'dev' must explicitly set schema",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_named_target_without_schema_when_validating_strategy_then_error_is_raised(
+    test_case: ValidateNamedTargetSchemaTestCase,
+) -> None:
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=test_case.project_config,
+        local_config=test_case.local_config,
+    )
+
+    with pytest.raises(ValueError, match=str(test_case.expected_error_fragment)):
+        validate_named_target_schema_strategy(
+            discovered_inputs=discovered_inputs,
+            adapter=test_case.adapter,
+            selected_target=test_case.selected_target,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ValidateNamedTargetSchemaTestCase(
+            description="literal named target schema is explicit",
+            adapter=BigQueryAdapter(),
+            project_config=ProjectConfig(
+                name="test",
+                adapter="bigquery",
+                default_target="dev",
+                targets={"dev": TargetConfig(schema="analytics")},
+            ),
+            local_config=LocalConfig(),
+            selected_target=None,
+            expected_error_fragment=None,
+        ),
+        ValidateNamedTargetSchemaTestCase(
+            description="preserve named target schema is explicit",
+            adapter=DatabricksAdapter(),
+            project_config=ProjectConfig(
+                name="test",
+                adapter="databricks",
+                default_target="dev",
+                targets={"dev": TargetConfig(schema="preserve")},
+            ),
+            local_config=LocalConfig(),
+            selected_target=None,
+            expected_error_fragment=None,
+        ),
+        ValidateNamedTargetSchemaTestCase(
+            description="named local DuckDB retains implicit main capability",
+            adapter=DuckDbAdapter(),
+            project_config=ProjectConfig(
+                name="test", adapter="duckdb", default_target="dev", targets={"dev": TargetConfig()}
+            ),
+            local_config=LocalConfig(),
+            selected_target=None,
+            expected_error_fragment=None,
+        ),
+        ValidateNamedTargetSchemaTestCase(
+            description="targetless shared warehouse remains under resource write policy",
+            adapter=SqlServerAdapter(),
+            project_config=ProjectConfig(name="test", adapter="sqlserver"),
+            local_config=LocalConfig(),
+            selected_target=None,
+            expected_error_fragment=None,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_explicit_or_exempt_target_when_validating_schema_strategy_then_it_passes(
+    test_case: ValidateNamedTargetSchemaTestCase,
+) -> None:
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=test_case.project_config,
+        local_config=test_case.local_config,
+    )
+
+    validate_named_target_schema_strategy(
+        discovered_inputs=discovered_inputs,
+        adapter=test_case.adapter,
+        selected_target=test_case.selected_target,
+    )
     assert test_case.expected_error_fragment is None

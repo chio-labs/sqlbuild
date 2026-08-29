@@ -44,6 +44,10 @@ _SEED_SCHEMA: str = (
 _POSTGRES_CONFIG_WITHOUT_SCHEMA: str = (
     'name = "namespace_validation"\nadapter = "postgres"\n\n[connection]\ndatabase = "analytics"\n'
 )
+_NAMED_POSTGRES_CONFIG_WITHOUT_SCHEMA: str = (
+    'name = "namespace_validation"\nadapter = "postgres"\ndefault_target = "dev"\n\n'
+    '[connection]\ndatabase = "analytics"\n\n[targets.dev]\n'
+)
 _PYTHON_FUNCTION: str = (
     "from sqlbuild.functions import udf\n\n"
     '@udf(arguments={}, returns="INTEGER", runtime_version="3.11")\n'
@@ -307,6 +311,51 @@ _MANAGED_SOURCE_LOADER: str = (
             expected_stderr_fragment="",
         ),
         NamespaceCompileTestCase(
+            description="preserve target schema retains model logical namespace",
+            repo_files={
+                "sqlbuild_project.toml": (
+                    _NAMED_POSTGRES_CONFIG_WITHOUT_SCHEMA + 'schema = "preserve"\n'
+                ),
+                "models/orders.sql": "MODEL (schema analytics);\n\nSELECT 1 AS id\n",
+            },
+            expected_exit_code=0,
+            expected_stderr_fragment="",
+        ),
+        NamespaceCompileTestCase(
+            description="named target rejects model logical schema as strategy",
+            repo_files={
+                "sqlbuild_project.toml": _NAMED_POSTGRES_CONFIG_WITHOUT_SCHEMA,
+                "models/orders.sql": "MODEL (schema analytics);\n\nSELECT 1 AS id\n",
+            },
+            expected_exit_code=1,
+            expected_stderr_fragment=(
+                "Named target 'dev' must explicitly set schema to a nonblank literal or 'preserve'"
+            ),
+        ),
+        NamespaceCompileTestCase(
+            description="named target rejects defaults schema as strategy",
+            repo_files={
+                "sqlbuild_project.toml": (
+                    _NAMED_POSTGRES_CONFIG_WITHOUT_SCHEMA + '\n[defaults]\nschema = "analytics"\n'
+                ),
+                "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+            },
+            expected_exit_code=1,
+            expected_stderr_fragment="Named target 'dev' must explicitly set schema",
+        ),
+        NamespaceCompileTestCase(
+            description="named target rejects connection schema as strategy",
+            repo_files={
+                "sqlbuild_project.toml": _NAMED_POSTGRES_CONFIG_WITHOUT_SCHEMA.replace(
+                    'database = "analytics"',
+                    'database = "analytics"\nschema = "connection_schema"',
+                ),
+                "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+            },
+            expected_exit_code=1,
+            expected_stderr_fragment="Named target 'dev' must explicitly set schema",
+        ),
+        NamespaceCompileTestCase(
             description="connection schema supplies physical namespace",
             repo_files={
                 "sqlbuild_project.toml": (
@@ -318,7 +367,7 @@ _MANAGED_SOURCE_LOADER: str = (
             expected_stderr_fragment="",
         ),
         NamespaceCompileTestCase(
-            description="loader schema supplies managed source physical namespace",
+            description="named target rejects loader schema as target strategy",
             repo_files={
                 "sqlbuild_project.toml": (
                     _POSTGRES_CONFIG_WITHOUT_SCHEMA.replace(
@@ -329,8 +378,8 @@ _MANAGED_SOURCE_LOADER: str = (
                 "sources/raw.yml": _MANAGED_SOURCE,
                 "loaders/raw_events.py": _MANAGED_SOURCE_LOADER,
             },
-            expected_exit_code=0,
-            expected_stderr_fragment="",
+            expected_exit_code=1,
+            expected_stderr_fragment="Named target 'dev' must explicitly set schema",
         ),
         NamespaceCompileTestCase(
             description="DuckDB may compile managed writes with implicit main schema",
@@ -346,6 +395,20 @@ _MANAGED_SOURCE_LOADER: str = (
                 "functions/sql/answer.sql": "FUNCTION (returns INTEGER);\n\n42\n",
                 "sources/raw.yml": _MANAGED_SOURCE,
                 "loaders/raw_events.py": _MANAGED_SOURCE_LOADER,
+            },
+            expected_exit_code=0,
+            expected_stderr_fragment="",
+        ),
+        NamespaceCompileTestCase(
+            description="named DuckDB target may compile with implicit main schema",
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "namespace_validation"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
+                    "[connection]\n"
+                    'database = ":memory:"\n\n'
+                    "[targets.dev]\n"
+                ),
+                "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
             },
             expected_exit_code=0,
             expected_stderr_fragment="",

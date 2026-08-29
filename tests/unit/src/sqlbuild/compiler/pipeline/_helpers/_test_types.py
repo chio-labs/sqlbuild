@@ -29,3 +29,11 @@ class PythonPlanIdentityStatusTestCase:
     description: str
     previous_version_hash: str | None
     expected_status: PythonIdentityStatus
+
+
+@dataclass(frozen=True)
+class CloneTargetSchemaTestCase:
+    description: str
+    origin_schema: str | None
+    destination_schema: str | None
+    expected_target_name: str

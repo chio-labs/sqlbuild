@@ -17,6 +17,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
+from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
 from sqlbuild.spec.contracts.models import SourceEntry, TargetConfig
 
 _CONNECTION_IDENTITY_KEYS: frozenset[str] = frozenset(
@@ -82,6 +83,38 @@ def validate_managed_loader_target_isolation(
                 f"targets.{right_target}.loader_schema values.",
                 code="S102",
             )
+
+
+def validate_named_target_schema_strategy(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    selected_target: str | None,
+) -> None:
+    """Require shared-warehouse named targets to choose a schema strategy."""
+
+    if adapter.allows_implicit_managed_write_schema:
+        return
+    target_name: str | None = resolve_target_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        selected_target=selected_target,
+    )
+    if target_name is None:
+        return
+    target_config: TargetConfig = resolve_target_config(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        target_name=target_name,
+    )
+    if isinstance(target_config.schema, str) and target_config.schema.strip():
+        return
+    raise PlannerInputError(
+        f"Named target '{target_name}' must explicitly set schema to a nonblank literal or "
+        f"'{PRESERVE_TARGET_VALUE}'. Resource schemas, defaults, and connection schemas do not "
+        "select a named target schema strategy.",
+        code="S104",
+    )
 
 
 def _connection_identity(connection: dict[str, object]) -> tuple[tuple[str, str], ...]:
