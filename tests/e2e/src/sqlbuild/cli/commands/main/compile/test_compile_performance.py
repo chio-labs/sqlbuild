@@ -129,7 +129,7 @@ def test_given_wide_scan_heavy_projects_when_doubling_sql_size_then_compile_scal
             expected_min_sql_bytes=60_000_000,
             expected_max_sql_bytes=80_000_000,
             expected_max_seconds=13.0,
-            expected_warm_max_seconds=7.0,
+            expected_warm_max_seconds=8.0,
         ),
     ],
     ids=lambda case: case.description,

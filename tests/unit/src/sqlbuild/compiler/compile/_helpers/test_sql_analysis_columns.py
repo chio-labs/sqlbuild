@@ -103,6 +103,30 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
             inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="snowflake"),
         ),
         InferColumnsTestCase(
+            description="uses adapter return types for Snowflake conversion functions",
+            query_sql=(
+                "SELECT "
+                "TO_VARIANT(raw_value) AS variant_value, "
+                "TO_ARRAY(raw_value) AS array_value, "
+                "TO_OBJECT(raw_value) AS object_value, "
+                "UNKNOWN_FUNCTION(raw_value) AS unknown_value"
+            ),
+            expected_columns=(
+                InferredColumn(name="variant_value", type="VARIANT"),
+                InferredColumn(name="array_value", type="ARRAY"),
+                InferredColumn(name="object_value", type="OBJECT"),
+                InferredColumn(name="unknown_value"),
+            ),
+            inference_profile=ExpressionInferenceProfile(
+                sql_analysis_dialect="snowflake",
+                function_return_types={
+                    "TO_ARRAY": "ARRAY",
+                    "TO_OBJECT": "OBJECT",
+                    "TO_VARIANT": "VARIANT",
+                },
+            ),
+        ),
+        InferColumnsTestCase(
             description="returns empty tuple for select star",
             query_sql='SELECT * FROM __ref("orders")',
             expected_columns=(),

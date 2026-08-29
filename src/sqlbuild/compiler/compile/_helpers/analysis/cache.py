@@ -384,6 +384,7 @@ def _inference_profile_payload(
     return {
         "sql_analysis_dialect": profile.sql_analysis_dialect,
         "function_nullability_rules": rules,
+        "function_return_types": dict(sorted(profile.function_return_types.items())),
     }
 
 

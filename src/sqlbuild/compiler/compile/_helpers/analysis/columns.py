@@ -49,6 +49,9 @@ from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_ANALYSIS_CAST_TYPE as _POLYGLOT_ANALYSIS_CAST_TYPE,
 )
 from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_FUNCTION_NAME as _POLYGLOT_ANALYSIS_FUNCTION_NAME,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_ANALYSIS_IS_STAR as _POLYGLOT_ANALYSIS_IS_STAR,
 )
 from sqlbuild.compiler.sql_analysis.constants import (
@@ -104,6 +107,9 @@ from sqlbuild.compiler.sql_analysis.constants import (
 )
 from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_ANALYSIS_TRANSFORM_DIRECT as _POLYGLOT_ANALYSIS_TRANSFORM_DIRECT,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_TRANSFORM_FUNCTION as _POLYGLOT_ANALYSIS_TRANSFORM_FUNCTION,
 )
 from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_ANALYSIS_TRANSFORM_KIND as _POLYGLOT_ANALYSIS_TRANSFORM_KIND,
@@ -411,7 +417,9 @@ def _analyze_columns_and_lineage_with_compact_polyglot(
         columns.append(
             InferredColumn(
                 name=output_column,
-                type=_compact_projection_type(projection),
+                type=_compact_projection_type(
+                    projection=projection, inference_profile=inference_profile
+                ),
                 nullability=_compact_projection_nullability(
                     projection=projection,
                     infer_nullability=infer_nullability,
@@ -559,13 +567,20 @@ def _compact_analysis_has_star(analysis: dict[str, Any]) -> bool:
     return isinstance(star_projections, list) and bool(star_projections)
 
 
-def _compact_projection_type(projection: dict[str, Any]) -> str | None:
+def _compact_projection_type(
+    *, projection: dict[str, Any], inference_profile: ExpressionInferenceProfile
+) -> str | None:
     cast_type: object = projection.get(_POLYGLOT_ANALYSIS_CAST_TYPE)
     if isinstance(cast_type, str) and cast_type and cast_type != UNKNOWN_SQL_TYPE_NAME:
         return cast_type
     type_hint: object = projection.get(_POLYGLOT_ANALYSIS_TYPE_HINT)
     if isinstance(type_hint, str) and type_hint and type_hint != UNKNOWN_SQL_TYPE_NAME:
         return type_hint
+    transform_function: object = projection.get(_POLYGLOT_ANALYSIS_TRANSFORM_FUNCTION)
+    if isinstance(transform_function, dict):
+        function_name: object = transform_function.get(_POLYGLOT_ANALYSIS_FUNCTION_NAME)
+        if isinstance(function_name, str):
+            return inference_profile.function_return_type(function_name)
     return None
 
 
@@ -725,7 +740,9 @@ def _infer_columns_from_polyglot_ast(
             if str(getattr(projection, "kind", "")) == _POLYGLOT_KIND_ALIAS
             else projection
         )
-        col_type: str | None = _polyglot_cast_type(inner)
+        col_type: str | None = _polyglot_expression_type(
+            expression=inner, inference_profile=inference_profile
+        )
         nullability: InferredNullability = InferredNullability.UNKNOWN
         if infer_nullability:
             nullability = _infer_polyglot_nullability(
@@ -795,7 +812,9 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
         output_column: str = str(getattr(projection, "output_name", "") or "")
         if not output_column or output_column == SQL_WILDCARD_TOKEN:
             continue
-        col_type: str | None = _polyglot_cast_type(inner)
+        col_type: str | None = _polyglot_expression_type(
+            expression=inner, inference_profile=inference_profile
+        )
         nullability: InferredNullability = InferredNullability.UNKNOWN
         if infer_nullability:
             nullability = (
@@ -1082,8 +1101,15 @@ def _polyglot_has_aggregation(expression: Any) -> bool:
     return any(str(getattr(node, "kind", "")) in _POLYGLOT_AGGREGATE_KINDS for node in nodes)
 
 
-def _polyglot_cast_type(expression: Any) -> str | None:
+def _polyglot_expression_type(
+    *, expression: Any, inference_profile: ExpressionInferenceProfile
+) -> str | None:
     kind: str = str(getattr(expression, "kind", ""))
+    function_type: str | None = inference_profile.function_return_type(
+        str(getattr(expression, "name", ""))
+    )
+    if function_type is not None:
+        return function_type
     if kind not in _POLYGLOT_CAST_KINDS:
         return None
     try:

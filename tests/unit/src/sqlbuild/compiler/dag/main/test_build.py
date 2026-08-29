@@ -69,6 +69,10 @@ def test_given_project_graph_when_building_dag_artifact_then_includes_assets_edg
         test_case.expected_loader_asset_key
     )
     assert nodes_by_id["model:orders"]["materialization_type"] == "table"
+    assert nodes_by_id["model:orders"]["sql"] == (
+        "MODEL (materialized table);\n\nSELECT 1 AS order_id"
+    )
+    assert nodes_by_id["udf:normalize_email"]["sql"] == "lower(email)"
     assert nodes_by_id["loader:shared_order_feed"]["kind"] == "loader"
     assert tuple(checks[0]["checked_asset_ids"]) == ("model:orders",)
 

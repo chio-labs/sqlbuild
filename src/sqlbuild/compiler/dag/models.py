@@ -55,6 +55,7 @@ class DagNode:
     target: DagTarget | None = None
     path: str | None = None
     description: str | None = None
+    sql: str | None = None
     tags: tuple[str, ...] = field(default_factory=tuple)
     group: str | None = None
     meta: dict[str, object] = field(default_factory=dict)

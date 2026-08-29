@@ -39,6 +39,7 @@ class SqlBuildDagsterTranslator:
             "path",
             "target",
             "description",
+            "sql",
             "columns",
             "column_lineage",
             "group",
@@ -53,8 +54,11 @@ class SqlBuildDagsterTranslator:
         return metadata
 
     def get_description(self, node: Mapping[str, Any]) -> str | None:
-        value: object = node.get("description")
-        return str(value) if value is not None else None
+        description: str = str(node.get("description") or _fallback_description(node))
+        sql: object = node.get("sql")
+        if isinstance(sql, str) and sql.strip():
+            return f"{description}\n\n**SQLBuild SQL:**\n```sql\n{sql.strip()}\n```"
+        return description
 
     def get_check_name(self, check: Mapping[str, Any]) -> str:
         parts: list[str] = [str(check.get("kind", "check")), str(check.get("name", "check"))]
@@ -81,3 +85,17 @@ def _normalize_tag_key(value: str) -> str:
 def _normalize_name(value: str) -> str:
     normalized: str = re.sub(r"[^A-Za-z0-9_]+", "_", value).strip("_")
     return normalized or "check"
+
+
+def _fallback_description(node: Mapping[str, Any]) -> str:
+    kind: str = str(node.get("kind") or "asset").replace("_", " ")
+    name: str = str(node.get("name") or "unknown")
+    target: object = node.get("target")
+    qualified_name: str = ""
+    if isinstance(target, Mapping):
+        qualified_name = str(target.get("qualified_name") or "")
+    relation_suffix: str = f" at `{qualified_name}`" if qualified_name else ""
+    materialization: object = node.get("materialization_type")
+    if materialization is not None:
+        return f"SQLBuild {kind} `{name}` materialized as `{materialization}`{relation_suffix}."
+    return f"SQLBuild {kind} `{name}`{relation_suffix}."

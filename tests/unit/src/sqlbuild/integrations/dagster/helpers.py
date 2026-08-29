@@ -54,6 +54,7 @@ def build_dagster_test_dag() -> Mapping[str, Any]:
                 "asset_key": ["analytics", "orders"],
                 "path": "models/orders.sql",
                 "description": "Clean orders",
+                "sql": 'MODEL (materialized table);\n\nSELECT * FROM __source("raw", "orders")',
                 "tags": ["daily"],
                 "materialization_type": "table",
             },

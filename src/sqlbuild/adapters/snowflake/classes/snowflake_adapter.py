@@ -2025,6 +2025,11 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
                 "LOWER": first_arg_nullability,
                 "UPPER": first_arg_nullability,
             },
+            function_return_types={
+                "TO_ARRAY": "ARRAY",
+                "TO_OBJECT": "OBJECT",
+                "TO_VARIANT": "VARIANT",
+            },
         )
 
     def supports_table_functions(self) -> bool:
