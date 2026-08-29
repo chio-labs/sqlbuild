@@ -1,14 +1,27 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
+from pathlib import Path
 from typing import cast
 
 import pytest
 
+from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
+from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
+from sqlbuild.compiler.compile.models import CompiledProject, CompileProjectInputs
 from sqlbuild.compiler.dag.main.build import build_dag_json
+from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline.models import ProjectGraph
+from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
+    DUCKDB_COMPILE_ADAPTER_CONTEXT,
+)
+from tests.unit.src.sqlbuild.compiler.compile._test_helpers import base_repo_files
 from tests.unit.src.sqlbuild.compiler.dag.main._test_types import (
     DagArtifactTestCase,
     DagJsonTestCase,
+    DagResourceNamespaceTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.dag.main.helpers import build_dag_artifact_test_graph
 
@@ -84,6 +97,96 @@ def test_given_project_graph_when_building_dag_artifact_then_includes_assets_edg
     assert nodes_by_id["udf:normalize_email"]["sql"] == "lower(email)"
     assert nodes_by_id["loader:shared_order_feed"]["kind"] == "loader"
     assert tuple(checks[0]["checked_asset_ids"]) == ("model:orders",)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagResourceNamespaceTestCase(
+            description="serializes resource defaults as preserved logical and physical namespaces",
+            expected_seed_namespace=("seed_db", "seed_schema", "seed_db", "seed_schema"),
+            expected_function_namespace=(
+                "function_db",
+                "function_schema",
+                "function_db",
+                "function_schema",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_resource_namespace_defaults_when_building_dag_then_targets_retain_namespaces(
+    test_case: DagResourceNamespaceTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        base_repo_files()
+        | {
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+default_target = "dev"
+
+[defaults]
+database = "model_db"
+schema = "model_schema"
+seed_database = "seed_db"
+seed_schema = "seed_schema"
+function_database = "function_db"
+function_schema = "function_schema"
+
+[targets.dev]
+database = "preserve"
+schema = "preserve"
+""".strip()
+            + "\n",
+            "seeds/schema.yml": """
+seeds:
+  - name: country_codes
+    columns:
+      - name: code
+        type: VARCHAR
+""".strip()
+            + "\n",
+            "seeds/country_codes.csv": "code\nUS\n",
+            "functions/sql/normalize.sql": "FUNCTION (returns VARCHAR);\n\n'normalized'\n",
+        },
+    )
+    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+    inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discovered,
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+    )
+    project: CompiledProject = assemble_compiled_project(inputs=inputs)
+    graph: ProjectGraph = ProjectGraph(
+        project=project,
+        upstream_deps={},
+        downstream_deps={},
+        tag_index={},
+        path_index={},
+        all_keys={},
+    )
+
+    payload: dict[str, object] = json.loads(build_dag_json(graph=graph, project_name="demo"))
+    nodes: dict[str, dict[str, object]] = {
+        str(node["id"]): node for node in cast(list[dict[str, object]], payload["nodes"])
+    }
+    seed_target: dict[str, object] = cast(dict[str, object], nodes["seed:country_codes"]["target"])
+    function_target: dict[str, object] = cast(dict[str, object], nodes["udf:normalize"]["target"])
+    assert (
+        seed_target["database"],
+        seed_target["schema"],
+        seed_target["logical_database"],
+        seed_target["logical_schema"],
+    ) == test_case.expected_seed_namespace
+    assert (
+        function_target["database"],
+        function_target["schema"],
+        function_target["logical_database"],
+        function_target["logical_schema"],
+    ) == test_case.expected_function_namespace
 
 
 @pytest.mark.parametrize(

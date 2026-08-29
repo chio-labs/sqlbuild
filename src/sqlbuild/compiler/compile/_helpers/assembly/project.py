@@ -1271,14 +1271,16 @@ def _resolve_seed_logical_namespace(
     effective_vars: dict[str, object],
 ) -> tuple[str | None, str | None]:
     database: str | None = _expand_seed_default_value(
-        raw_value=defaults.database,
+        raw_value=(
+            defaults.seed_database if defaults.seed_database is not None else defaults.database
+        ),
         effective_vars=effective_vars,
-        context_label="default database",
+        context_label="default seed database",
     )
     schema: str | None = _expand_seed_default_value(
-        raw_value=defaults.schema,
+        raw_value=defaults.seed_schema if defaults.seed_schema is not None else defaults.schema,
         effective_vars=effective_vars,
-        context_label="default schema",
+        context_label="default seed schema",
     )
     return database, schema
 
