@@ -25,6 +25,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlScenarioFile,
     DiscoveredTaskFunction,
 )
+from sqlbuild.compiler.path_defaults.main._select import select_path_default
 from sqlbuild.python_nodes.main.read_asset_definition import read_asset_definition
 from sqlbuild.python_nodes.main.read_check_definition import read_check_definition
 from sqlbuild.python_nodes.main.read_loader_definition import read_loader_definition
@@ -805,13 +806,18 @@ def _validate_path_defaults_match_models(
             }
         )
     )
+    matched_keys: set[str] = set()
+    model_path: str
+    for model_path in model_paths:
+        matched_keys.update(
+            select_path_default(
+                model_path=model_path,
+                path_keys=tuple(path_defaults),
+            ).matched_keys
+        )
     path_key: str
     for path_key in path_defaults:
-        path_key_parts: tuple[str, ...] = Path(path_key).parts
-        if any(
-            Path(model_path).parts[: len(path_key_parts)] == path_key_parts
-            for model_path in model_paths
-        ):
+        if path_key in matched_keys:
             continue
         known_folders: str = ", ".join(model_folders[:5]) if model_folders else "<none>"
         raise DiscoveryConflictError(

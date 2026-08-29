@@ -32,6 +32,14 @@ class FindMatchingPathDefaultTestCase:
 
 
 @dataclass(frozen=True)
+class FindMatchingPathDefaultErrorTestCase:
+    description: str
+    model_relative_path: str
+    path_defaults: dict[str, dict[str, object]]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class LoadProjectMacrosTestCase:
     description: str
     macro_files: dict[str, str]

@@ -98,6 +98,7 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
     SqlHookEntry,
 )
+from sqlbuild.compiler.path_defaults.main._select import select_path_default
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
@@ -1769,21 +1770,10 @@ def find_matching_path_default(
 ) -> str | None:
     """Return the nearest matching path_defaults key for a model file."""
 
-    relative_path: Path = Path(
-        str(model_file.relative_path).replace("\\", "/").removeprefix("models/")
-    )
-    best_match: str | None = None
-    best_length: int = -1
-
-    path_key: str
-    for path_key in path_defaults:
-        path_key_parts: tuple[str, ...] = Path(path_key).parts
-        if relative_path.parts[: len(path_key_parts)] != path_key_parts:
-            continue
-        if len(path_key_parts) > best_length:
-            best_match = path_key
-            best_length = len(path_key_parts)
-    return best_match
+    return select_path_default(
+        model_path=str(model_file.relative_path),
+        path_keys=tuple(path_defaults),
+    ).selected_key
 
 
 def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
