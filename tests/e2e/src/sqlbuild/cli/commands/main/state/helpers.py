@@ -37,6 +37,8 @@ def build_postgres_state_project_toml(
         f'dbname = "{config["dbname"]}"\n'
         f'user = "{config["user"]}"\n'
         f'password = "{config["password"]}"\n\n'
+        "[targets.dev]\n"
+        'schema = "preserve"\n\n'
         "[targets.dev.state]\n"
         'backend = "postgres"\n'
         f'schema = "{state_schema}"\n'

@@ -14,7 +14,7 @@ from sqlbuild.microbatches.constants import MICROBATCH_GENERATION_COMMENT_PREFIX
 
 
 class DuckDbAdapter(MicrobatchMixin, DuckDbBackedAdapter):
-    """First-class DuckDB adapter with full method coverage."""
+    """DuckDB adapter allowing implicit main for targetless and named local targets."""
 
     adapter_name: ClassVar[str] = BuiltinAdapter.DUCKDB.value
     allows_implicit_managed_write_schema: ClassVar[bool] = True

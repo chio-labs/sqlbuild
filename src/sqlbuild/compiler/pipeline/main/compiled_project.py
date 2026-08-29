@@ -18,6 +18,7 @@ from sqlbuild.compiler.pipeline._helpers.target_defaults import apply_target_def
 from sqlbuild.compiler.pipeline._helpers.target_validation import (
     validate_managed_loader_target_isolation,
     validate_managed_write_schemas,
+    validate_named_target_schema_strategy,
     validate_project_targets,
 )
 from sqlbuild.compiler.planner.main.selection._resolve_planner_scopes import (
@@ -52,6 +53,11 @@ def build_compiled_project(
 ) -> CompiledProject:
     """Build one compiled project with adapter defaults and target validation applied."""
 
+    validate_named_target_schema_strategy(
+        discovered_inputs=discovered_inputs,
+        adapter=adapter,
+        selected_target=selected_target,
+    )
     validate_managed_loader_target_isolation(
         discovered_inputs=discovered_inputs,
         adapter=adapter,

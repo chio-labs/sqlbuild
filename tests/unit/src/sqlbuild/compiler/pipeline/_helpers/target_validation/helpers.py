@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, ClassVar
 
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -12,6 +14,23 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+
+
+class ConservativeCustomAdapter(BaseAdapter):
+    """Custom adapter retaining the conservative schema capability default."""
+
+    adapter_name: ClassVar[str] = "custom"
+
+    def connect(self, config: dict[str, Any]) -> Any:
+        del config
+        return None
+
+    def close(self, connection: Any) -> None:
+        del connection
+
+    def execute(self, connection: Any, sql: str) -> Any:
+        del connection, sql
+        return None
 
 
 def build_project(
