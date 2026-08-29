@@ -330,7 +330,7 @@ def test_given_progress_callback_when_building_project_graph_then_reports_compil
     "test_case",
     [
         SnowflakeTargetValidationIntegrationTestCase(
-            description="snowflake compile accepts explicit connection database and schema",
+            description="snowflake compile requires explicit target database and schema",
             project_files={
                 "sqlbuild_project.toml": (
                     'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = "demo.duckdb"\n'
@@ -345,13 +345,12 @@ def test_given_progress_callback_when_building_project_graph_then_reports_compil
                 ),
                 "models/stg_orders.sql": "MODEL (materialized view);\n\nSELECT 1 AS order_id\n",
             },
-            expected_database="TEST_DB",
-            expected_schema="TEST_SCHEMA",
+            expected_error_fragment="snowflake execution requires explicit target database",
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_snowflake_local_override_with_connection_namespace_when_compiling_then_targets_resolve(
+def test_given_snowflake_local_override_without_target_namespace_when_compiling_then_it_fails_early(
     test_case: SnowflakeTargetValidationIntegrationTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
@@ -361,13 +360,12 @@ def test_given_snowflake_local_override_with_connection_namespace_when_compiling
     write_repo_files(tmp_path, test_case.project_files)
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
 
-    project: CompiledProject = compile_project(
-        discovered_inputs=discovered_inputs,
-        adapter=SnowflakeAdapter(),
-        no_sql_validation=True,
-    )
-    assert project.models[0].destination.database == test_case.expected_database
-    assert project.models[0].destination.schema == test_case.expected_schema
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+        compile_project(
+            discovered_inputs=discovered_inputs,
+            adapter=SnowflakeAdapter(),
+            no_sql_validation=True,
+        )
 
 
 @pytest.mark.parametrize(

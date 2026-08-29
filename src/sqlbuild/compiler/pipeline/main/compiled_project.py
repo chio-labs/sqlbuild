@@ -95,7 +95,7 @@ def build_compiled_project(
     project = apply_target_defaults(
         project=project,
         default_schema=project.effective_target_schema or adapter.default_schema(),
-        default_database=project.effective_target_database or adapter.default_database(),
+        default_database=adapter.default_database(),
         render_qualified_name=adapter.render_qualified_name,
         python_functions_inherit_default_namespace=(
             adapter.python_functions_inherit_default_namespace()
