@@ -63,6 +63,8 @@ from sqlbuild.adapters.snowflake.constants import (
     MFA_AUTHENTICATOR,
     NUMBER_TYPE_NAME,
     OAUTH_AUTHORIZATION_CODE_AUTHENTICATOR,
+    SECONDARY_ROLES_ALL,
+    SECONDARY_ROLES_NONE,
     STATUS_COLUMN_NAME,
     SUCCESS_STATUS_TOKENS,
     TEXT_TYPE_NAMES,
@@ -1478,10 +1480,14 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
         warehouse: object | None = connect_config.get("warehouse")
         database: object | None = connect_config.get("database")
         schema: object | None = connect_config.get("schema")
+        secondary_roles: str = self._normalize_secondary_roles(
+            connect_config.pop("secondary_roles", None)
+        )
         raw_connection: Any = snowflake.connector.connect(**connect_config)
         connection: _SnowflakeConnection = _SnowflakeConnection(raw_connection)
         self._initialize_session(
             connection=connection,
+            secondary_roles=secondary_roles,
             role=role,
             warehouse=warehouse,
             database=database,
@@ -2876,12 +2882,13 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
         self,
         *,
         connection: _SnowflakeConnection,
+        secondary_roles: str,
         role: object | None,
         warehouse: object | None,
         database: object | None,
         schema: object | None,
     ) -> None:
-        statements: list[str] = []
+        statements: list[str] = [f"USE SECONDARY ROLES {secondary_roles}"]
         normalized_role: str | None = self._normalize_session_value(role)
         normalized_warehouse: str | None = self._normalize_session_value(warehouse)
         normalized_database: str | None = self._normalize_session_value(database)
@@ -2901,6 +2908,18 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
         statement: str
         for statement in statements:
             self.execute(connection=connection, sql=statement)
+
+    @staticmethod
+    def _normalize_secondary_roles(value: object | None) -> str:
+        if value is None:
+            return SECONDARY_ROLES_NONE
+        normalized: str = str(value).strip().upper()
+        if normalized not in {SECONDARY_ROLES_ALL, SECONDARY_ROLES_NONE}:
+            raise AdapterUserError(
+                message="Snowflake connection secondary_roles must be 'ALL' or 'NONE'",
+                code="A301",
+            )
+        return normalized
 
     @staticmethod
     def _normalize_session_value(value: object | None) -> str | None:

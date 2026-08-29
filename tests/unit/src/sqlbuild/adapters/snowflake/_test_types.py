@@ -135,6 +135,14 @@ class SnowflakeConnectConfigTestCase:
     description: str
     config: dict[str, object]
     expected_connect_kwargs: dict[str, object]
+    expected_session_statements: tuple[str, ...] = ("USE SECONDARY ROLES NONE",)
+
+
+@dataclass(frozen=True)
+class SnowflakeInvalidSecondaryRolesTestCase:
+    description: str
+    secondary_roles: str
+    expected_error: str
 
 
 @dataclass(frozen=True)
