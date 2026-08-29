@@ -14,13 +14,15 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 
 
-def build_project(*, target: CompiledRelationLocation) -> CompiledProject:
+def build_project(
+    *, target: CompiledRelationLocation, effective_connection: dict[str, object]
+) -> CompiledProject:
     """Build a minimal compiled project for target validation tests."""
 
     return CompiledProject(
         run_id="run_123",
         effective_target_name=None,
-        effective_connection={},
+        effective_connection=effective_connection,
         effective_vars={},
         models=(
             CompiledModel(

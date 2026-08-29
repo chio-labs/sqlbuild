@@ -456,6 +456,16 @@ class ValidateSqlSyntaxTestCase:
 
 
 @dataclass(frozen=True)
+class PreservedLogicalNamespaceTestCase:
+    description: str
+    logical_database: str | None
+    logical_schema: str | None
+    target_database: str | None
+    target_schema: str | None
+    expected_error_fragment: str | None
+
+
+@dataclass(frozen=True)
 class ValidateHookSqlSyntaxTestCase:
     description: str
     hook_sql: str

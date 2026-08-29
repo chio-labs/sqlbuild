@@ -24,6 +24,9 @@ from sqlbuild.compiler.compile._helpers.analysis.validation import (
     validate_hook_sql_syntax,
     validate_sql_syntax,
 )
+from sqlbuild.compiler.compile._helpers.attachment.namespace_validation import (
+    validate_preserved_logical_namespace,
+)
 from sqlbuild.compiler.compile._helpers.deps.dependencies import (
     audit_scope_deps,
     function_build_deps,
@@ -800,6 +803,16 @@ def _build_source_relation_entry(
 ) -> SourceEntry:
     if source_entry.loader is None or target_config is None:
         return source_entry
+    loader_target_config: TargetConfig = replace(
+        target_config,
+        schema=target_config.loader_schema or target_config.schema,
+    )
+    validate_preserved_logical_namespace(
+        resource_label=f"Managed source '{source_entry.name}'",
+        logical_database=source_entry.database,
+        logical_schema=source_entry.schema,
+        target_config=loader_target_config,
+    )
     return replace(
         source_entry,
         database=(
@@ -1249,6 +1262,12 @@ def _build_seed_relation_target(
             effective_vars=effective_vars,
             context_label=f"seed '{seed_entry.name}' schema",
         )
+    validate_preserved_logical_namespace(
+        resource_label=f"Seed '{seed_entry.name}'",
+        logical_database=logical_database,
+        logical_schema=logical_schema,
+        target_config=target_config,
+    )
     database, schema = _apply_seed_target_overrides(
         logical_database=logical_database,
         logical_schema=logical_schema,

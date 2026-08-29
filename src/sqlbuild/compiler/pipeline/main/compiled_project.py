@@ -17,6 +17,7 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline._helpers.target_defaults import apply_target_defaults
 from sqlbuild.compiler.pipeline._helpers.target_validation import (
     validate_managed_loader_target_isolation,
+    validate_managed_write_schemas,
     validate_project_targets,
 )
 from sqlbuild.compiler.planner.main.selection._resolve_planner_scopes import (
@@ -82,17 +83,19 @@ def build_compiled_project(
         inference_profile=inference_profile,
         selection=analysis_selection,
     )
-    project: CompiledProject = apply_target_defaults(
-        project=assemble_project(
-            inputs=compile_inputs,
-            inference_profile=inference_profile,
-            skip_column_inference=skip_column_inference,
-            column_lineage_mode=column_lineage_mode,
-            analysis_cache_dir=compile_inputs.compile_cache_dir,
-            analysis_model_names=analysis_model_names,
-        ),
-        default_schema=adapter.default_schema(),
-        default_database=adapter.default_database(),
+    project: CompiledProject = assemble_project(
+        inputs=compile_inputs,
+        inference_profile=inference_profile,
+        skip_column_inference=skip_column_inference,
+        column_lineage_mode=column_lineage_mode,
+        analysis_cache_dir=compile_inputs.compile_cache_dir,
+        analysis_model_names=analysis_model_names,
+    )
+    validate_managed_write_schemas(adapter=adapter, project=project)
+    project = apply_target_defaults(
+        project=project,
+        default_schema=project.effective_target_schema or adapter.default_schema(),
+        default_database=project.effective_target_database or adapter.default_database(),
         render_qualified_name=adapter.render_qualified_name,
         python_functions_inherit_default_namespace=(
             adapter.python_functions_inherit_default_namespace()
