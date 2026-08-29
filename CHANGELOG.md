@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.63.6](https://github.com/chio-labs/sqlbuild/compare/v0.63.5...v0.63.6) (2026-08-29)
+
+
+### Bug Fixes
+
+* add seed and function namespace defaults ([#389](https://github.com/chio-labs/sqlbuild/issues/389)) ([318b5d4](https://github.com/chio-labs/sqlbuild/commit/318b5d425e2a8fc76f23932f5ed81fa9c08b6b28))
+
 ## [0.63.5](https://github.com/chio-labs/sqlbuild/compare/v0.63.4...v0.63.5) (2026-08-29)
 
 
