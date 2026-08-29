@@ -1009,6 +1009,17 @@ schema = "staging"
             expected_error_fragment="uses redundant 'models/' prefix",
         ),
         LoadProjectConfigErrorTestCase(
+            description="raises when path defaults uses partial segment glob",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[path_defaults."market/stag*"]
+schema = "staging"
+""".strip(),
+            expected_error_fragment=r"Use '\*' or '\*\*' as complete path segments",
+        ),
+        LoadProjectConfigErrorTestCase(
             description="raises when tracked-only janitor is enabled without query tracking",
             project_file_contents="""
 name = "demo"
