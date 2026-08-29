@@ -27,6 +27,7 @@ from sqlbuild.compiler.discovery.constants import (
     TOML_FILE_SUFFIX,
 )
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
+from sqlbuild.compiler.path_defaults.constants import GLOB_SEGMENTS, UNSUPPORTED_GLOB_MARKERS
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.cost.constants import USD_PER_CREDIT_CONFIG_KEY
 from sqlbuild.spec.contracts.models import (
@@ -432,6 +433,19 @@ def _normalize_path_default_key(*, path_key: str, file_path: Path) -> str:
         raise ProjectConfigError(
             f"{file_path} path_defaults['{path_key}'] uses redundant 'models/' prefix. "
             "Use a model-relative path such as 'staging' or 'staging/nested'."
+        )
+    unsupported_glob_parts_list: list[str] = []
+    for part in path_parts:
+        if part in GLOB_SEGMENTS:
+            continue
+        if any(marker in part for marker in UNSUPPORTED_GLOB_MARKERS):
+            unsupported_glob_parts_list.append(part)
+    unsupported_glob_parts: tuple[str, ...] = tuple(unsupported_glob_parts_list)
+    if unsupported_glob_parts:
+        unsupported: str = ", ".join(unsupported_glob_parts)
+        raise ProjectConfigError(
+            f"{file_path} path_defaults['{path_key}'] contains unsupported glob segment(s): "
+            f"{unsupported}. Use '*' or '**' as complete path segments."
         )
     return "/".join(path_parts)
 

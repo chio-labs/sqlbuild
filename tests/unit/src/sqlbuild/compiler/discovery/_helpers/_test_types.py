@@ -73,6 +73,14 @@ class ValidatePathDefaultsMatchModelsTestCase:
 
 
 @dataclass(frozen=True)
+class ValidatePathDefaultsMatchModelsErrorTestCase:
+    description: str
+    model_relative_paths: tuple[str, ...]
+    path_defaults: dict[str, dict[str, object]]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class LoadProjectConfigTestCase:
     description: str
     project_file_contents: str

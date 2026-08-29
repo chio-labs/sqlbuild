@@ -1239,17 +1239,31 @@ This setting does not make unsupported adapter features portable. In particular,
 Per-directory model defaults. Useful for applying different config to different parts of your project:
 
 ```toml
-[path_defaults."models/staging"]
+[path_defaults.staging]
 materialized = "view"
 tags = ["staging"]
 
-[path_defaults."models/marts"]
+[path_defaults.marts]
 materialized = "table"
 tags = ["marts"]
 replay_on_change = "full"
+
+[path_defaults."market/**/staging"]
+materialized = "view"
 ```
 
-Path matching uses the model's relative file path. A model at `models/staging/stg_orders.sql` matches the `models/staging` path default.
+Keys are POSIX-style paths relative to `models/`; do not include a leading `models/`. Literal
+keys retain inherited-prefix behavior, so `market/germantote/staging` applies to every model
+below that directory. `*` matches exactly one complete path segment, while `**` matches zero
+or more complete path segments. Thus `market/**/staging` applies below both
+`models/market/staging/` and `models/market/germantote/staging/`. Wildcards must be complete
+segments; partial and character-class globs are not supported.
+
+Literal matches always outrank wildcard matches. Wildcard specificity is compared by the number
+of literal segments, then the number of single-segment `*` wildcards, then by fewer recursive
+`**` wildcards. If equally most-specific wildcard patterns match the same model, discovery fails
+offline with `D007`; declaration order and equal configuration values do not break the tie. Every
+declared literal or glob key must match at least one model path.
 
 #### Config layering order
 
