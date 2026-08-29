@@ -253,6 +253,10 @@ changes_only = true
 
 [defaults]
 materialized = "table"
+seed_database = "seed_db"
+seed_schema = "seed_schema"
+function_database = "function_db"
+function_schema = "function_schema"
 row_diff_exclude_columns = ["loaded_at"]
 contract = "enforced"
 
@@ -345,6 +349,10 @@ enabled = true
                 },
             },
             expected_contract="enforced",
+            expected_seed_database="seed_db",
+            expected_seed_schema="seed_schema",
+            expected_function_database="function_db",
+            expected_function_schema="function_schema",
             expected_path_defaults={"staging": {"schema": "staging"}},
             expected_vars={"user": "kevin"},
             expected_targets={
@@ -415,6 +423,10 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.defaults.row_diff_exclude_columns == test_case.expected_row_diff_exclude_columns
     assert config.defaults.row_diff_tolerances == test_case.expected_row_diff_tolerances
     assert config.defaults.contract == test_case.expected_contract
+    assert config.defaults.seed_database == test_case.expected_seed_database
+    assert config.defaults.seed_schema == test_case.expected_seed_schema
+    assert config.defaults.function_database == test_case.expected_function_database
+    assert config.defaults.function_schema == test_case.expected_function_schema
     assert config.path_defaults == test_case.expected_path_defaults
     assert config.vars == test_case.expected_vars
     assert {

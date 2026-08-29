@@ -122,11 +122,15 @@ class ConstantsConfig:
 
 @dataclass(frozen=True)
 class DefaultsConfig:
-    """Project-wide model defaults."""
+    """Project-wide resource defaults."""
 
     materialized: str | None = None
     database: str | None = None
     schema: str | None = None
+    seed_database: str | None = None
+    seed_schema: str | None = None
+    function_database: str | None = None
+    function_schema: str | None = None
     incremental_strategy: str | None = None
     incremental_mode: str | None = None
     merge_exclude_columns: tuple[str, ...] = field(default_factory=tuple)
