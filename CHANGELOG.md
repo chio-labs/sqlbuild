@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.63.8](https://github.com/chio-labs/sqlbuild/compare/v0.63.7...v0.63.8) (2026-08-29)
+
+
+### Bug Fixes
+
+* require named targets to declare schema strategy ([#393](https://github.com/chio-labs/sqlbuild/issues/393)) ([e823e1c](https://github.com/chio-labs/sqlbuild/commit/e823e1c9c38edc000e2318412b5f8384e673116d))
+
 ## [0.63.7](https://github.com/chio-labs/sqlbuild/compare/v0.63.6...v0.63.7) (2026-08-29)
 
 
