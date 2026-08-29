@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.63.5](https://github.com/chio-labs/sqlbuild/compare/v0.63.4...v0.63.5) (2026-08-29)
+
+
+### Bug Fixes
+
+* preserve logical schemas across clone targets ([#387](https://github.com/chio-labs/sqlbuild/issues/387)) ([8bdb79d](https://github.com/chio-labs/sqlbuild/commit/8bdb79dec4af835b08838e39f41cd271955438aa))
+
 ## [0.63.4](https://github.com/chio-labs/sqlbuild/compare/v0.63.3...v0.63.4) (2026-08-29)
 
 
