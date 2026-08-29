@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.63.7](https://github.com/chio-labs/sqlbuild/compare/v0.63.6...v0.63.7) (2026-08-29)
+
+
+### Bug Fixes
+
+* require explicit warehouse write schemas ([#391](https://github.com/chio-labs/sqlbuild/issues/391)) ([253303e](https://github.com/chio-labs/sqlbuild/commit/253303ee2ba48cdbb1fbcba63dc6b2612ec7a39e))
+
 ## [0.63.6](https://github.com/chio-labs/sqlbuild/compare/v0.63.5...v0.63.6) (2026-08-29)
 
 
