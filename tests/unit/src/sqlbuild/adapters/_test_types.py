@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
 
 
@@ -44,3 +45,10 @@ class AdapterSeedSelectAfterCursorTestCase:
     cursor_start_exclusive: str
     cursor_type: str | None
     expected_sql: str
+
+
+@dataclass(frozen=True)
+class AdapterManagedWriteSchemaCapabilityTestCase:
+    description: str
+    adapter: BaseAdapter
+    expected_allows_implicit_schema: bool

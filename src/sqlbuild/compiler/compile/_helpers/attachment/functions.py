@@ -11,6 +11,9 @@ from sqlbuild.compiler.compile._helpers.analysis.columns import infer_columns_wi
 from sqlbuild.compiler.compile._helpers.analysis.validation import (
     validate_function_sql_syntax,
 )
+from sqlbuild.compiler.compile._helpers.attachment.namespace_validation import (
+    validate_preserved_logical_namespace,
+)
 from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_function_names,
     build_known_ref_names,
@@ -72,6 +75,7 @@ class _PythonFunctionBuildContext:
     logical_schema: str | None
     target_database: str | None
     target_schema: str | None
+    target_config: TargetConfig | None
     python_functions_inherit_default_namespace: bool
 
 
@@ -155,6 +159,12 @@ def build_sql_function_inputs(
             )
             if isinstance(raw_schema, str)
             else logical_schema
+        )
+        validate_preserved_logical_namespace(
+            resource_label=f"SQL function '{function_name}'",
+            logical_database=function_logical_database,
+            logical_schema=function_logical_schema,
+            target_config=target_config,
         )
         function_database: str | None = (
             function_logical_database if target_database is None else target_database
@@ -271,6 +281,7 @@ def build_sql_function_inputs(
         logical_schema=logical_schema,
         target_database=target_database,
         target_schema=target_schema,
+        target_config=target_config,
         python_functions_inherit_default_namespace=(python_functions_inherit_default_namespace),
     )
     python_function_file: DiscoveredPythonFunctionFile
@@ -386,6 +397,12 @@ def _build_python_function_input(
     )
     fingerprint_logical_schema: str | None = (
         function_logical_schema if isinstance(raw_schema, str) else context.logical_schema
+    )
+    validate_preserved_logical_namespace(
+        resource_label=f"Python function '{function_name}'",
+        logical_database=fingerprint_logical_database,
+        logical_schema=fingerprint_logical_schema,
+        target_config=context.target_config,
     )
     fingerprint_database: str | None = (
         fingerprint_logical_database if context.target_database is None else context.target_database

@@ -345,7 +345,7 @@ def test_given_progress_callback_when_building_project_graph_then_reports_compil
                 ),
                 "models/stg_orders.sql": "MODEL (materialized view);\n\nSELECT 1 AS order_id\n",
             },
-            expected_error_fragment="snowflake execution requires explicit target database, schema",
+            expected_error_fragment="snowflake execution requires explicit target database",
         )
     ],
     ids=lambda case: case.description,

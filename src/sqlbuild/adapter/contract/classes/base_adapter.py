@@ -80,6 +80,7 @@ class BaseAdapter(StrictAdapter):
     sql_analysis_dialect_name: ClassVar[str | None] = None
     max_identifier_length: ClassVar[int] = 63
     state_tables_transient: ClassVar[bool] = False
+    allows_implicit_managed_write_schema: ClassVar[bool] = False
 
     def supports_zero_copy_clone(self) -> bool:
         return False

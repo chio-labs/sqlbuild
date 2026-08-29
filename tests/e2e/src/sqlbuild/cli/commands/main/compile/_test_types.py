@@ -34,3 +34,11 @@ class DbtShapedCompilePerformanceGuardTestCase:
     expected_max_sql_bytes: int
     expected_max_seconds: float
     expected_warm_max_seconds: float
+
+
+@dataclass(frozen=True)
+class NamespaceCompileTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_exit_code: int
+    expected_stderr_fragment: str

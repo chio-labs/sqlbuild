@@ -14,6 +14,9 @@ from uuid import uuid4
 
 from sqlbuild.compiler.auditing.main._parse_audit_instance import parse_audit_instance
 from sqlbuild.compiler.compile._helpers.analysis.validation import validate_sql_syntax
+from sqlbuild.compiler.compile._helpers.attachment.namespace_validation import (
+    validate_preserved_logical_namespace,
+)
 from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_function_names,
     build_known_ref_names,
@@ -716,6 +719,12 @@ def build_model_config(
     logical_schema: str | None = raw_logical_schema if isinstance(raw_logical_schema, str) else None
     logical_database: str | None = (
         raw_logical_database if isinstance(raw_logical_database, str) else None
+    )
+    validate_preserved_logical_namespace(
+        resource_label=f"Model '{model_name}'",
+        logical_database=logical_database,
+        logical_schema=logical_schema,
+        target_config=target_config,
     )
     model_resolved_values = apply_environment_database_schema_overrides(
         values=model_resolved_values,
