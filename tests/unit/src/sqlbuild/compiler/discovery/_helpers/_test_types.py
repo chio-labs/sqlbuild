@@ -94,6 +94,10 @@ class LoadProjectConfigTestCase:
     expected_janitor_max_checkpoints: int
     expected_janitor_delete_tracked_only: bool
     expected_janitor_exclude_patterns: tuple[str, ...]
+    expected_seed_database: str | None = None
+    expected_seed_schema: str | None = None
+    expected_function_database: str | None = None
+    expected_function_schema: str | None = None
     expected_janitor_direct_state_history_versions: int = 20
     expected_current_state_full_refresh: str = "deny"
     expected_historical_full_refresh: str = "require_confirmation"

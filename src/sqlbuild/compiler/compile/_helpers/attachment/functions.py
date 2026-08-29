@@ -651,22 +651,28 @@ def _resolve_function_logical_namespace(
     defaults: DefaultsConfig,
     effective_vars: dict[str, object],
 ) -> tuple[str | None, str | None]:
+    raw_database: str | None = (
+        defaults.function_database if defaults.function_database is not None else defaults.database
+    )
     database: str | None = (
         _expand_function_header_value(
-            raw_value=defaults.database,
+            raw_value=raw_database,
             effective_vars=effective_vars,
-            context_label="default database",
+            context_label="default function database",
         )
-        if defaults.database is not None
+        if raw_database is not None
         else None
+    )
+    raw_schema: str | None = (
+        defaults.function_schema if defaults.function_schema is not None else defaults.schema
     )
     schema: str | None = (
         _expand_function_header_value(
-            raw_value=defaults.schema,
+            raw_value=raw_schema,
             effective_vars=effective_vars,
-            context_label="default schema",
+            context_label="default function schema",
         )
-        if defaults.schema is not None
+        if raw_schema is not None
         else None
     )
     return database, schema

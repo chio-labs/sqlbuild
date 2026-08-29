@@ -2783,9 +2783,9 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
             description="retains authored function namespaces while physical targets override",
             expected_defaulted_namespace=(
                 "logical_db",
-                "logical_schema",
+                "function_schema",
                 "logical_db",
-                "logical_schema",
+                "function_schema",
             ),
             expected_explicit_namespace=(
                 "function_db",
@@ -2794,7 +2794,7 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
                 "function_schema",
             ),
             expected_unqualified_namespace=(None, None, None, None),
-            expected_unqualified_fingerprint_namespace=("logical_db", "logical_schema"),
+            expected_unqualified_fingerprint_namespace=("logical_db", "function_schema"),
             expected_physical_explicit_namespace=("physical_db", "physical_schema"),
             expected_physical_unqualified_namespace=(None, None),
         ),
@@ -2818,6 +2818,7 @@ default_target = "dev"
 [defaults]
 database = "logical_db"
 schema = "logical_schema"
+function_schema = "function_schema"
 
 [targets.dev]
 database = "preserve"
@@ -2829,6 +2830,7 @@ schema = "physical_schema"
 """.strip()
             + "\n",
             "functions/sql/defaulted.sql": "FUNCTION (returns INTEGER);\n\n1\n",
+            "models/model_defaulted.sql": "MODEL ();\n\nSELECT 1 AS id\n",
             "functions/python/explicit.py": """
 from sqlbuild.functions import udf
 
@@ -2866,6 +2868,8 @@ def main():
     functions: dict[str, CompileSqlFunctionInput] = {
         entry.name: entry for entry in compile_inputs.sql_function_inputs
     }
+    assert compile_inputs.model_inputs[0].config.values["database"] == "logical_db"
+    assert compile_inputs.model_inputs[0].config.values["schema"] == "logical_schema"
     assert (
         functions["defaulted"].database,
         functions["defaulted"].schema,

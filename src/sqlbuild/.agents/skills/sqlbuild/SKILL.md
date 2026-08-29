@@ -1197,17 +1197,29 @@ Both policies default to `false`. `sqb clone --from prod --to dev` requires `all
 
 ### Defaults
 
-Project-wide model defaults. Any field you can set in a `MODEL()` header can be set here as a default:
+Project-wide resource defaults. Model header fields can be set here alongside resource-specific seed and function namespaces:
 
 ```toml
 [defaults]
 materialized = "table"
+database = "analytics"
+schema = "models"
+seed_schema = "lookups"
+function_schema = "functions"
 incremental_strategy = "delete_insert"
 replay_on_change = "full"
 tags = ["managed"]
 ```
 
-These apply to all models unless overridden by path defaults or the model's own `MODEL()` header.
+`database` and `schema` apply to models. Seeds and functions inherit those namespaces for
+backward compatibility, but can use `seed_database` / `seed_schema` and
+`function_database` / `function_schema` for resource-specific defaults. A namespace in a
+seed or function declaration overrides its resource-specific default. A literal target
+`database` or `schema` overrides the physical namespace for every resource, while the
+special target value `preserve` retains each resource's logical namespace.
+
+Model fields apply to all models unless overridden by path defaults or the model's own
+`MODEL()` header.
 
 ### Constants
 

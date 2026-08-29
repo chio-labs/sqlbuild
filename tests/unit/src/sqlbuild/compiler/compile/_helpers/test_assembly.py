@@ -558,9 +558,10 @@ def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expe
     "test_case",
     (
         PreservedSeedTargetTestCase(
-            description="preserves the authored seed namespace for preserve targets",
-            expected_physical_location=("seed_db", "seed_schema"),
-            expected_logical_location=("seed_db", "seed_schema"),
+            description="resolves seed namespace precedence across defaults declarations and targets",
+            expected_declared_location=("declared_seed_db", "declared_seed_schema"),
+            expected_defaulted_location=("default_seed_db", "default_seed_schema"),
+            expected_literal_target_location=("physical_db", "physical_schema"),
         ),
     ),
     ids=lambda case: case.description,
@@ -582,23 +583,34 @@ default_target = "dev"
 [defaults]
 database = "default_db"
 schema = "default_schema"
+seed_database = "default_seed_db"
+seed_schema = "default_seed_schema"
 
 [targets.dev]
 database = "preserve"
 schema = "preserve"
+
+[targets.physical]
+database = "physical_db"
+schema = "physical_schema"
 """.strip()
             + "\n",
             "seeds/schema.yml": """
 seeds:
   - name: country_codes
-    database: seed_db
-    schema: seed_schema
+    database: declared_seed_db
+    schema: declared_seed_schema
+    columns:
+      - name: code
+        type: VARCHAR
+  - name: currencies
     columns:
       - name: code
         type: VARCHAR
 """.strip()
             + "\n",
             "seeds/country_codes.csv": "code\nUS\n",
+            "seeds/currencies.csv": "code\nUSD\n",
         },
     )
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
@@ -607,15 +619,36 @@ seeds:
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
     )
 
-    seed: CompiledSeed = assemble_compiled_project(inputs=compile_inputs).seeds[0]
+    seeds: dict[str, CompiledSeed] = {
+        seed.name: seed for seed in assemble_compiled_project(inputs=compile_inputs).seeds
+    }
 
     assert (
-        seed.destination.database,
-        seed.destination.schema,
-    ) == test_case.expected_physical_location
-    assert (seed.destination.logical_database, seed.destination.logical_schema) == (
-        test_case.expected_logical_location
+        seeds["country_codes"].destination.database,
+        seeds["country_codes"].destination.schema,
+    ) == test_case.expected_declared_location
+    assert (
+        seeds["country_codes"].destination.logical_database,
+        seeds["country_codes"].destination.logical_schema,
+    ) == test_case.expected_declared_location
+    assert (
+        seeds["currencies"].destination.database,
+        seeds["currencies"].destination.schema,
+        seeds["currencies"].destination.logical_database,
+        seeds["currencies"].destination.logical_schema,
+    ) == test_case.expected_defaulted_location * 2
+
+    physical_inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discovered,
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+        selected_target="physical",
     )
+    physical_seeds: tuple[CompiledSeed, ...] = assemble_compiled_project(
+        inputs=physical_inputs
+    ).seeds
+    assert {(seed.destination.database, seed.destination.schema) for seed in physical_seeds} == {
+        test_case.expected_literal_target_location
+    }
 
 
 @pytest.mark.parametrize(

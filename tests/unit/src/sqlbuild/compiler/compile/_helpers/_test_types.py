@@ -407,8 +407,9 @@ class AssembleCompiledProjectEffectiveTargetTestCase:
 @dataclass(frozen=True)
 class PreservedSeedTargetTestCase:
     description: str
-    expected_physical_location: tuple[str | None, str | None]
-    expected_logical_location: tuple[str | None, str | None]
+    expected_declared_location: tuple[str | None, str | None]
+    expected_defaulted_location: tuple[str | None, str | None]
+    expected_literal_target_location: tuple[str | None, str | None]
 
 
 @dataclass(frozen=True)

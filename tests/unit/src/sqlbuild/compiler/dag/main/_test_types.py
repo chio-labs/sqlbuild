@@ -16,6 +16,13 @@ class DagArtifactTestCase:
 
 
 @dataclass(frozen=True)
+class DagResourceNamespaceTestCase:
+    description: str
+    expected_seed_namespace: tuple[str, str, str, str]
+    expected_function_namespace: tuple[str, str, str, str]
+
+
+@dataclass(frozen=True)
 class DagJsonTestCase:
     description: str
     expected_version: int
