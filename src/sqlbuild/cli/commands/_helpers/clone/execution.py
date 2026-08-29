@@ -16,6 +16,7 @@ from sqlbuild.cli.commands.models import (
 from sqlbuild.executor.clone.main.execute import execute_clone
 from sqlbuild.executor.clone.main.fingerprinting import copy_clone_fingerprints
 from sqlbuild.executor.clone.models import (
+    CloneExecutionInput,
     CloneExecutionResult,
     CloneItemResult,
     CloneSourceEntries,
@@ -38,19 +39,25 @@ def execute_clone_plan(
         use_color=invocation.use_color,
     )
     result: CloneExecutionResult = execute_clone(
-        source_entries=CloneSourceEntries(
-            origin=preparation.pipeline_result.origin_source_entries,
-            destination=preparation.pipeline_result.destination_source_entries,
-        ),
-        origin_model_entries=preparation.pipeline_result.origin_model_entries,
-        destination_model_entries=preparation.pipeline_result.destination_model_entries,
-        origin_seed_entries=preparation.pipeline_result.origin_seed_entries,
-        destination_seed_entries=preparation.pipeline_result.destination_seed_entries,
-        adapter=invocation.adapter,
-        origin_connection=connection_context.origin_connection,
-        destination_connection=connection_context.destination_connection,
-        hard_copy=request.hard_copy,
-        on_item=on_item,
+        inputs=CloneExecutionInput(
+            source_entries=CloneSourceEntries(
+                origin=preparation.pipeline_result.origin_source_entries,
+                destination=preparation.pipeline_result.destination_source_entries,
+            ),
+            origin_model_entries=preparation.pipeline_result.origin_model_entries,
+            destination_model_entries=preparation.pipeline_result.destination_model_entries,
+            origin_seed_entries=preparation.pipeline_result.origin_seed_entries,
+            destination_seed_entries=preparation.pipeline_result.destination_seed_entries,
+            destination_function_entries=preparation.pipeline_result.destination_function_entries,
+            execution_order=preparation.pipeline_result.clone_plan.execution_order,
+            adapter=invocation.adapter,
+            origin_connection=connection_context.origin_connection,
+            destination_connection=connection_context.destination_connection,
+            hard_copy=request.hard_copy,
+            run_id=preparation.pipeline_result.destination_project.run_id,
+            query_change_tracking=preparation.pipeline_result.destination_project.settings.query_change_tracking,
+            on_item=on_item,
+        )
     )
     copy_clone_fingerprints(
         result=result,

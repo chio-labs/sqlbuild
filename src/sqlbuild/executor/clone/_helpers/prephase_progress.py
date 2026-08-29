@@ -102,6 +102,8 @@ def prephase_row_from_clone_item(
 def clone_item_label(item: CloneItemResult) -> str:
     if item.action == CloneAction.RECREATED_VIEW:
         return "view"
+    if item.action == CloneAction.RECREATED_FUNCTION:
+        return "function"
     if item.action == CloneAction.COPIED:
         return "copy"
     return "clone"

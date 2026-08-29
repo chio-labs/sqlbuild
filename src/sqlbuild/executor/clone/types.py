@@ -29,5 +29,6 @@ class CloneAction(StrEnum):
     CLONED = "cloned"
     COPIED = "copied"
     RECREATED_VIEW = "recreated_view"
+    RECREATED_FUNCTION = "recreated_function"
     WARNING_MISSING_SOURCE = "warning_missing_source"
     FAILED = "failed"

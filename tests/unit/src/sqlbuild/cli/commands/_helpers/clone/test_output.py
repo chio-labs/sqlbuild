@@ -38,6 +38,11 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.clone._test_types import (
                         status=CloneStatus.FAILED,
                         message="boom",
                     ),
+                    CloneItemResult(
+                        name="add_tax",
+                        action=CloneAction.RECREATED_FUNCTION,
+                        status=CloneStatus.SUCCESS,
+                    ),
                 )
             ),
             expected_fragments=(
@@ -45,16 +50,17 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.clone._test_types import (
                 "missing in origin environment",
                 "dim_customers",
                 "boom",
+                "RECREATED_FUNCTIONS=1",
                 "\u2717 Completed with errors",
             ),
             expected_color_fragments=(
                 "\033[38;5;167m\u2717\033[0m \033[38;5;167m\033[1mCompleted with errors\033[0m",
                 "\033[2mCLONED=\033[0m\033[34m1\033[0m",
-                "\033[2mPASS=\033[0m\033[32m1\033[0m",
+                "\033[2mPASS=\033[0m\033[32m2\033[0m",
                 "\033[2mWARN=\033[0m\033[33m1\033[0m",
                 "\033[2mFAIL=\033[0m\033[38;5;167m1\033[0m",
             ),
-            unexpected_fragments=("fact_orders",),
+            unexpected_fragments=("fact_orders", "add_tax"),
         ),
     ],
     ids=lambda case: case.description,

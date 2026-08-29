@@ -888,12 +888,16 @@ def _assemble_compiled_function(
             schema=function_input.schema,
             name=function_input.name,
             qualified_name=None,
+            logical_database=function_input.logical_database,
+            logical_schema=function_input.logical_schema,
         ),
         fingerprint_destination=CompiledRelationLocation(
             database=function_input.fingerprint_database,
             schema=function_input.fingerprint_schema,
             name=function_input.name,
             qualified_name=None,
+            logical_database=function_input.fingerprint_logical_database,
+            logical_schema=function_input.fingerprint_logical_schema,
         ),
         language=function_input.language,
         source_file_path=function_input.function_file.file_path,
@@ -1223,61 +1227,98 @@ def _build_seed_relation_target(
     target_config: TargetConfig | None,
     effective_vars: dict[str, object],
 ) -> CompiledRelationLocation:
-    resolved_namespace: tuple[str | None, str | None] = _resolve_target_namespace(
+    logical_database, logical_schema = _resolve_seed_logical_namespace(
         defaults=defaults,
-        target_config=target_config,
         effective_vars=effective_vars,
     )
-    database: str | None = resolved_namespace[0]
-    schema: str | None = resolved_namespace[1]
     if seed_entry.database is not None:
-        database = _expand_seed_target_value(
+        logical_database: str | None = _expand_seed_target_value(
             raw_value=seed_entry.database,
             seed_name=seed_entry.name,
-            database=database,
-            schema=schema,
+            database=logical_database,
+            schema=logical_schema,
             effective_vars=effective_vars,
             context_label=f"seed '{seed_entry.name}' database",
         )
     if seed_entry.schema is not None:
-        schema = _expand_seed_target_value(
+        logical_schema: str | None = _expand_seed_target_value(
             raw_value=seed_entry.schema,
             seed_name=seed_entry.name,
-            database=database,
-            schema=schema,
+            database=logical_database,
+            schema=logical_schema,
             effective_vars=effective_vars,
             context_label=f"seed '{seed_entry.name}' schema",
         )
+    database, schema = _apply_seed_target_overrides(
+        logical_database=logical_database,
+        logical_schema=logical_schema,
+        target_config=target_config,
+        effective_vars=effective_vars,
+    )
     return CompiledRelationLocation(
         database=database,
         schema=schema,
         name=seed_entry.name,
         qualified_name=None,
+        logical_database=logical_database,
+        logical_schema=logical_schema,
     )
 
 
-def _resolve_target_namespace(
+def _resolve_seed_logical_namespace(
     *,
     defaults: DefaultsConfig,
+    effective_vars: dict[str, object],
+) -> tuple[str | None, str | None]:
+    database: str | None = _expand_seed_default_value(
+        raw_value=defaults.database,
+        effective_vars=effective_vars,
+        context_label="default database",
+    )
+    schema: str | None = _expand_seed_default_value(
+        raw_value=defaults.schema,
+        effective_vars=effective_vars,
+        context_label="default schema",
+    )
+    return database, schema
+
+
+def _apply_seed_target_overrides(
+    *,
+    logical_database: str | None,
+    logical_schema: str | None,
     target_config: TargetConfig | None,
     effective_vars: dict[str, object],
 ) -> tuple[str | None, str | None]:
-    database: str | None = defaults.database
-    schema: str | None = defaults.schema
-    if target_config is not None:
-        if target_config.database is not None:
-            database = _expand_seed_environment_value(
-                raw_value=target_config.database,
-                effective_vars=effective_vars,
-                context_label="target database",
-            )
-        if target_config.schema is not None:
-            schema = _expand_seed_environment_value(
-                raw_value=target_config.schema,
-                effective_vars=effective_vars,
-                context_label="target schema",
-            )
+    if target_config is None:
+        return logical_database, logical_schema
+    database: str | None = logical_database
+    schema: str | None = logical_schema
+    if target_config.database is not None and target_config.database != PRESERVE_TARGET_VALUE:
+        database = _expand_seed_environment_value(
+            raw_value=target_config.database,
+            effective_vars=effective_vars,
+            context_label="target database",
+        )
+    if target_config.schema is not None and target_config.schema != PRESERVE_TARGET_VALUE:
+        schema = _expand_seed_environment_value(
+            raw_value=target_config.schema,
+            effective_vars=effective_vars,
+            context_label="target schema",
+        )
     return database, schema
+
+
+def _expand_seed_default_value(
+    *, raw_value: str | None, effective_vars: dict[str, object], context_label: str
+) -> str | None:
+    if raw_value is None:
+        return None
+    return _expand_seed_environment_value(
+        raw_value=raw_value,
+        effective_vars=effective_vars,
+        context_label=context_label,
+    )
 
 
 def _expand_seed_environment_value(
