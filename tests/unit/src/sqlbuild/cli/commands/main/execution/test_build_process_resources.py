@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -183,3 +184,52 @@ def test_given_phase_failure_when_building_then_available_partial_timings_are_wr
     absent_fragment: str
     for absent_fragment in test_case.expected_absent_fragments:
         assert absent_fragment not in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildPartialTimingOutputTestCase(
+            description="JSON cost failure keeps stdout clean and writes partial timing to stderr",
+            error_type=RuntimeError,
+            compile_seconds=1.0,
+            planning_seconds=2.0,
+            connection_seconds=3.0,
+            execution_seconds=4.0,
+            expected_fragments=("Phase timings", "cost collection", "5.00s"),
+            expected_absent_fragments=(),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_json_cost_failure_when_building_then_partial_timing_only_uses_stderr(
+    test_case: BuildPartialTimingOutputTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    timing_tracker: Mock = Mock()
+    timing_tracker.snapshot.return_value = PartialBuildPhaseTimings(
+        compile_seconds=test_case.compile_seconds,
+        planning_seconds=test_case.planning_seconds,
+        connection_preparation_seconds=test_case.connection_seconds,
+        execution_seconds=test_case.execution_seconds,
+        cost_collection_seconds=5.0,
+        total_seconds=15.0,
+    )
+    timing_tracker.scope.return_value = nullcontext()
+
+    def fail_build(**_kwargs: object) -> int:
+        raise test_case.error_type("cost finalization failed")
+
+    monkeypatch.setattr(build_module, "BuildPhaseTimingTracker", lambda: timing_tracker)
+    monkeypatch.setattr(build_module, "process_resource_reporting", lambda **_kwargs: nullcontext())
+    monkeypatch.setattr(build_module, "_run_build", fail_build)
+
+    with pytest.raises(test_case.error_type, match="cost finalization failed"):
+        build_module.run_build(BuildCommandRequest(verbose=True, json_output=True))
+
+    captured: Any = capsys.readouterr()
+    assert captured.out == ""
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in captured.err

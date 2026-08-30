@@ -60,6 +60,19 @@ def write_partial_build_phase_timings(
     )
 
 
+def finish_cost_collection_timing(*, started_at: float) -> float | None:
+    """Retain cost collection elapsed time without affecting the active outcome."""
+
+    try:
+        elapsed_seconds: float = time.monotonic() - started_at
+        timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
+        if timing_tracker is not None:
+            timing_tracker.cost_collection_seconds = elapsed_seconds
+        return elapsed_seconds
+    except BaseException:
+        return None
+
+
 def finalize_no_work_with_timings(
     *,
     request: BuildCommandRequest,
@@ -70,15 +83,16 @@ def finalize_no_work_with_timings(
     """Finalize no-work output and append verbose phase timings when complete."""
 
     cost_started_at: float = time.monotonic()
-    finalized: bool = finalize_no_work_build_if_needed(
-        request=request,
-        invocation=invocation,
-        pipeline_result=pipeline_result,
-    )
-    cost_collection_seconds: float = time.monotonic() - cost_started_at
-    timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
-    if timing_tracker is not None:
-        timing_tracker.cost_collection_seconds = cost_collection_seconds
+    try:
+        finalized: bool = finalize_no_work_build_if_needed(
+            request=request,
+            invocation=invocation,
+            pipeline_result=pipeline_result,
+        )
+    finally:
+        cost_collection_seconds: float | None = finish_cost_collection_timing(
+            started_at=cost_started_at
+        )
     if finalized and (request.verbose or request.debug):
         write_build_phase_timings(
             stream=invocation.progress_stream,
@@ -105,16 +119,15 @@ def finalize_exceptional_with_timings(
     """Finalize exceptional cost state and available verbose phase timings."""
 
     cost_started_at: float = time.monotonic()
-    finalize_exceptional_direct_cost(
-        invocation=invocation,
-        pipeline_result=pipeline_result,
-        build_started_at=build_started_at,
-        error=error,
-    )
-    cost_collection_seconds: float = time.monotonic() - cost_started_at
-    timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
-    if timing_tracker is not None:
-        timing_tracker.cost_collection_seconds = cost_collection_seconds
+    try:
+        finalize_exceptional_direct_cost(
+            invocation=invocation,
+            pipeline_result=pipeline_result,
+            build_started_at=build_started_at,
+            error=error,
+        )
+    finally:
+        _ = finish_cost_collection_timing(started_at=cost_started_at)
 
 
 def write_virtual_build_phase_timings(

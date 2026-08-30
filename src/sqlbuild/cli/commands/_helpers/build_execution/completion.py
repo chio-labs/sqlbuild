@@ -11,6 +11,7 @@ from sqlbuild.cli.commands._helpers.build_execution.outputs import (
     write_build_runtime_targets,
 )
 from sqlbuild.cli.commands._helpers.build_execution.phase_timings import (
+    finish_cost_collection_timing,
     write_build_phase_timings,
 )
 from sqlbuild.cli.commands._helpers.cost.collection import finalize_build_cost, render_build_cost
@@ -24,7 +25,6 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.cost.models import CostRunRecord
-from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
 from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult
 
 
@@ -50,28 +50,29 @@ def complete_direct_build(
         check_results=check_results,
     )
     cost_started_at: float = time.monotonic()
-    cost_record: CostRunRecord | None = finalize_build_cost(
-        BuildCostFinalization(
-            project_dir=invocation.effective_project_dir,
-            adapter_name=invocation.adapter_name,
-            adapter=invocation.adapter,
-            connection_config=invocation.connection_config,
-            target_name=pipeline_result.project.effective_target_name,
-            target_database=pipeline_result.project.effective_target_database,
-            run_id=pipeline_result.project.run_id,
-            build_status="success" if exit_code == 0 else "failed",
-            started_at=build_started_at,
-            completed_at=build_completed_at,
-            config=invocation.discovered_inputs.project_config.cost,
-            output_stream=invocation.progress_stream,
-            use_color=invocation.use_color,
-            render=False,
+    try:
+        cost_record: CostRunRecord | None = finalize_build_cost(
+            BuildCostFinalization(
+                project_dir=invocation.effective_project_dir,
+                adapter_name=invocation.adapter_name,
+                adapter=invocation.adapter,
+                connection_config=invocation.connection_config,
+                target_name=pipeline_result.project.effective_target_name,
+                target_database=pipeline_result.project.effective_target_database,
+                run_id=pipeline_result.project.run_id,
+                build_status="success" if exit_code == 0 else "failed",
+                started_at=build_started_at,
+                completed_at=build_completed_at,
+                config=invocation.discovered_inputs.project_config.cost,
+                output_stream=invocation.progress_stream,
+                use_color=invocation.use_color,
+                render=False,
+            )
         )
-    )
-    cost_collection_seconds: float = time.monotonic() - cost_started_at
-    timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
-    if timing_tracker is not None:
-        timing_tracker.cost_collection_seconds = cost_collection_seconds
+    finally:
+        cost_collection_seconds: float | None = finish_cost_collection_timing(
+            started_at=cost_started_at
+        )
     write_build_completion_output(
         request=request,
         invocation=invocation,
