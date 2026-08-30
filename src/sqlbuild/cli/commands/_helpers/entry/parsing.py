@@ -86,7 +86,7 @@ def parse_cli_invocation(
                     dbt_passthrough_started = True
                     dbt_passthrough_args.append(dbt_arg)
                     continue
-                if dbt_arg == NO_COLOR_OPTION:
+                if dbt_arg == NO_COLOR_OPTION and not dbt_passthrough_started:
                     args.no_color = True
                     continue
                 if dbt_arg == DEBUG_OPTION and not dbt_passthrough_started:

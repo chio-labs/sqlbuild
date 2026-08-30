@@ -340,6 +340,12 @@ def test_given_dbt_command_without_sqlbuild_project_when_dispatching_then_does_n
             expected_dbt_args=("--", "--debug"),
         ),
         MainTestCase(
+            description="dbt no color argument after separator is preserved verbatim",
+            argv=["dbt", "run", "--", "--no-color"],
+            expected_exit_code=17,
+            expected_dbt_args=("--", "--no-color"),
+        ),
+        MainTestCase(
             description="dispatches dbt build and preserves dbt args",
             argv=[
                 "--project-dir",
