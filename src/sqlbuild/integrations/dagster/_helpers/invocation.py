@@ -233,9 +233,9 @@ def _forward_stream(*, source: IO[str], sink: TextIO, context: Any, stream_name:
     try:
         for chunk in iter(source.readline, ""):
             captured.append(chunk)
+            sink.write(chunk)
+            sink.flush()
             if logger is None:
-                sink.write(chunk)
-                sink.flush()
                 continue
             line: str = chunk.rstrip("\r\n")
             if stream_name == STDERR_STREAM_NAME:
