@@ -11,11 +11,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import RelationLookup
-from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
-from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
-    resolve_qualified_name_parts,
-)
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
@@ -30,17 +26,21 @@ from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
 from sqlbuild.compiler.pipeline.main.project_graph import (
     build_project_graph_from_compiled_project,
 )
-from sqlbuild.compiler.pipeline.models import ClonePipelineResult, ProjectGraph
+from sqlbuild.compiler.pipeline.models import (
+    ClonePipelineConnection,
+    ClonePipelineResult,
+    ProjectGraph,
+)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
+from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.virtual.executor._helpers.rewrite import (
     build_physical_destination,
     build_physical_seed_destination,
     relation_type_for_model,
 )
-from sqlbuild.virtual.executor.constants import DUCKDB_MEMORY_DATABASE
 from sqlbuild.virtual.executor.models import (
     CloneOriginLookup,
     CloneProjectContext,
@@ -49,8 +49,8 @@ from sqlbuild.virtual.executor.models import (
 )
 from sqlbuild.virtual.planner.main._semantics import build_virtual_plan_semantics
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
+from sqlbuild.virtual.state.exceptions import StateBackendConfigError
 from sqlbuild.virtual.state.main.encoding._encode_state_text import encode_state_text
-from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
 from sqlbuild.virtual.state.main.locks._model_version_lock import acquire_model_version_lease
 from sqlbuild.virtual.state.main.locks._release_lock import release_state_lease
 from sqlbuild.virtual.state.models import (
@@ -130,7 +130,6 @@ def hydrate_relation(
     destination_connection: Any,
     origin_location: CompiledRelationLocation,
     destination_location: CompiledRelationLocation,
-    origin_database_alias: str | None,
 ) -> str:
     if adapter.relation_exists(
         connection=destination_connection,
@@ -145,23 +144,14 @@ def hydrate_relation(
         schema=destination_location.schema or "",
         statement_recorder=StatementRecorder(),
     )
-    clone_origin_location: CompiledRelationLocation = (
-        replace_location_database(
-            adapter=adapter, location=origin_location, database=origin_database_alias
-        )
-        if origin_database_alias is not None
-        else origin_location
-    )
     adapter.durable_clone(
         connection=destination_connection,
-        origin=resolve_relation_location_qualified_name(
-            adapter=adapter, location=clone_origin_location
-        ),
+        origin=resolve_relation_location_qualified_name(adapter=adapter, location=origin_location),
         destination=resolve_relation_location_qualified_name(
             adapter=adapter, location=destination_location
         ),
         origin_is_transient=_location_is_transient(
-            adapter=adapter, connection=destination_connection, location=clone_origin_location
+            adapter=adapter, connection=destination_connection, location=origin_location
         ),
         statement_recorder=StatementRecorder(),
     )
@@ -325,67 +315,13 @@ def register_hydrated_seed_relation(
         backend.close(connection)
 
 
-def attach_origin_database_for_clone(
-    *,
-    adapter: BaseAdapter,
-    destination_connection: Any,
-    origin_connection_config: dict[str, object],
-    destination_connection_config: dict[str, object],
-) -> str | None:
-    if adapter.adapter_name != BuiltinAdapter.DUCKDB:
-        return None
-    origin_database: object | None = origin_connection_config.get("database")
-    destination_database: object | None = destination_connection_config.get("database")
-    if origin_database is None or origin_database in {
-        destination_database,
-        DUCKDB_MEMORY_DATABASE,
-    }:
-        return None
-    alias: str = "__sqb_clone_origin"
-    adapter.execute(
-        connection=destination_connection,
-        sql=f"ATTACH '{str(origin_database)}' AS {alias} (READ_ONLY)",
-    )
-    return alias
-
-
-def replace_location_database(
-    *, adapter: BaseAdapter, location: CompiledRelationLocation, database: str
-) -> CompiledRelationLocation:
-    return CompiledRelationLocation(
-        database=database,
-        schema=location.schema,
-        name=location.name,
-        qualified_name=resolve_qualified_name_parts(
-            adapter=adapter, database=database, schema=location.schema, name=location.name
-        ),
-        logical_schema=location.logical_schema,
-        logical_database=location.logical_database,
-    )
-
-
-def origin_lookup_location(
-    *,
-    adapter: BaseAdapter,
-    location: CompiledRelationLocation,
-    origin_database_alias: str | None,
-) -> CompiledRelationLocation:
-    """Resolve the origin relation location, applying the attached-database alias when present."""
-
-    if origin_database_alias is None:
-        return location
-    return replace_location_database(
-        adapter=adapter, location=location, database=origin_database_alias
-    )
-
-
 def compile_clone_pipeline(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
     origin_target_name: str,
     destination_target_name: str,
-    destination_connection_config: dict[str, object],
+    destination_connection: ClonePipelineConnection,
     no_sql_validation: bool,
     select: tuple[str, ...],
     exclude: tuple[str, ...],
@@ -394,22 +330,18 @@ def compile_clone_pipeline(
 ) -> ClonePipelineResult:
     """Compile origin and destination projects for one clone run."""
 
-    pipeline_destination_connection: Any = adapter.connect(destination_connection_config)
-    try:
-        return run_clone_pipeline(
-            discovered_inputs=discovered_inputs,
-            adapter=adapter,
-            origin_target_name=origin_target_name,
-            destination_target_name=destination_target_name,
-            no_sql_validation=no_sql_validation,
-            select=select,
-            exclude=exclude,
-            cli_vars=cli_vars,
-            destination_connection=pipeline_destination_connection,
-            external_sql_reference_resolver=external_sql_reference_resolver,
-        )
-    finally:
-        adapter.close(pipeline_destination_connection)
+    return run_clone_pipeline(
+        discovered_inputs=discovered_inputs,
+        adapter=adapter,
+        origin_target_name=origin_target_name,
+        destination_target_name=destination_target_name,
+        no_sql_validation=no_sql_validation,
+        select=select,
+        exclude=exclude,
+        cli_vars=cli_vars,
+        destination_connection=destination_connection,
+        external_sql_reference_resolver=external_sql_reference_resolver,
+    )
 
 
 def build_clone_project_context(clone_pipeline: ClonePipelineResult) -> CloneProjectContext:
@@ -447,23 +379,23 @@ def resolve_clone_versions(
     """Resolve model and seed version records to hydrate."""
 
     if virtual_environment_name is None:
-        origin_config, origin_backend = build_state_runtime(
-            discovered_inputs=discovered_inputs,
-            project_dir=project_dir,
-            selected_target=origin_target_name,
-        )
-        origin_state_connection: Any = origin_backend.connect(origin_config.connection)
-        try:
-            return _resolve_workspace_clone_versions(
-                clone_pipeline=clone_pipeline,
-                context=context,
-                backend=origin_backend,
-                state_connection=origin_state_connection,
-                schema=origin_config.schema,
-                origin_virtual_environment_name=origin_target_name,
+        origin_schema: str | None = resolve_target_config(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+            target_name=origin_target_name,
+        ).state.schema
+        if origin_schema is None:
+            raise StateBackendConfigError(
+                f"Target '{origin_target_name}' state config must define schema"
             )
-        finally:
-            origin_backend.close(origin_state_connection)
+        return _resolve_workspace_clone_versions(
+            clone_pipeline=clone_pipeline,
+            context=context,
+            backend=backend,
+            state_connection=state_connection,
+            schema=origin_schema,
+            origin_virtual_environment_name=origin_target_name,
+        )
     return _read_virtual_environment_clone_versions(
         backend=backend,
         state_connection=state_connection,
@@ -476,42 +408,33 @@ def resolve_clone_versions(
 def build_clone_origin_lookup(
     *,
     adapter: BaseAdapter,
-    origin_connection: Any,
+    destination_connection: Any,
     context: CloneProjectContext,
     versions: CloneVersions,
-    origin_database_alias: str | None,
 ) -> CloneOriginLookup:
     """Build origin lookup locations and the relation existence lookup."""
 
     model_locations: dict[str, CompiledRelationLocation] = {
-        model_name: origin_lookup_location(
+        model_name: build_physical_destination(
             adapter=adapter,
-            location=build_physical_destination(
-                adapter=adapter,
-                target=context.origin_models_by_name[model_name].destination,
-                model_name=model_name,
-                version_hash=versions.version_hashes[model_name],
-            ),
-            origin_database_alias=origin_database_alias,
+            target=context.origin_models_by_name[model_name].destination,
+            model_name=model_name,
+            version_hash=versions.version_hashes[model_name],
         )
         for model_name in context.model_names
     }
     seed_locations: dict[str, CompiledRelationLocation] = {
-        seed_name: origin_lookup_location(
+        seed_name: build_physical_seed_destination(
             adapter=adapter,
-            location=build_physical_seed_destination(
-                adapter=adapter,
-                target=context.origin_seeds_by_name[seed_name].destination,
-                seed_name=seed_name,
-                version_hash=versions.seed_versions[seed_name].version_hash,
-            ),
-            origin_database_alias=origin_database_alias,
+            target=context.origin_seeds_by_name[seed_name].destination,
+            seed_name=seed_name,
+            version_hash=versions.seed_versions[seed_name].version_hash,
         )
         for seed_name in context.seed_names
     }
     lookup: RelationLookup = build_relation_lookup(
         adapter=adapter,
-        connection=origin_connection,
+        connection=destination_connection,
         locations=tuple(
             (location.database, location.schema, location.name)
             for location in (*model_locations.values(), *seed_locations.values())
@@ -520,7 +443,6 @@ def build_clone_origin_lookup(
     return CloneOriginLookup(
         model_locations=model_locations,
         seed_locations=seed_locations,
-        origin_database_alias=origin_database_alias,
         lookup=lookup,
     )
 
@@ -597,7 +519,6 @@ def hydrate_clone_model_relations(
                 destination_connection=destination_connection,
                 origin_location=origin_location,
                 destination_location=destination_location,
-                origin_database_alias=origin_lookup.origin_database_alias,
             )
             register_hydrated_relation(
                 backend=backend,
@@ -671,7 +592,6 @@ def hydrate_clone_seed_relations(
             destination_connection=destination_connection,
             origin_location=origin_location,
             destination_location=destination_location,
-            origin_database_alias=origin_lookup.origin_database_alias,
         )
         register_hydrated_seed_relation(
             backend=backend,

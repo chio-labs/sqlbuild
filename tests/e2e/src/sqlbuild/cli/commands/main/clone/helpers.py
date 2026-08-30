@@ -74,14 +74,14 @@ def build_virtual_clone_project_toml() -> str:
         "[targets.prod]\n"
         'schema = "prod"\n\n'
         "[targets.prod.connection]\n"
-        'database = "prod.duckdb"\n\n'
+        'database = "dev.duckdb"\n\n'
         "[targets.prod.clone]\n"
         "allow_as_clone_origin = true\n\n"
         "[targets.prod.state]\n"
         'backend = "duckdb"\n'
         'schema = "sqlbuild_state"\n\n'
         "[targets.prod.state.connection]\n"
-        'database = "prod_state.duckdb"\n\n'
+        'database = "dev_state.duckdb"\n\n'
         "[targets.dev]\n"
         'schema = "dev"\n\n'
         "[targets.dev.connection]\n"
@@ -108,6 +108,21 @@ def build_prod_source_versions(project_dir: Path) -> None:
         command=("--no-color", "build"), project_dir=project_dir
     )
     assert build_result.returncode == 0, build_result.stderr
+    project_config_path: Path = project_dir / "sqlbuild_project.toml"
+    project_config_path.write_text(
+        project_config_path.read_text(encoding="utf-8")
+        .replace(
+            '[targets.prod.connection]\ndatabase = "dev.duckdb"',
+            "[targets.prod.connection]\n"
+            'database = "${ENV:SQLBUILD_TEST_UNUSED_VIRTUAL_ORIGIN_DATABASE}"',
+        )
+        .replace(
+            '[targets.prod.state.connection]\ndatabase = "dev_state.duckdb"',
+            "[targets.prod.state.connection]\n"
+            'database = "${ENV:SQLBUILD_TEST_UNUSED_VIRTUAL_ORIGIN_STATE_DATABASE}"',
+        ),
+        encoding="utf-8",
+    )
 
 
 def build_dev_target_versions(project_dir: Path) -> None:
@@ -137,7 +152,7 @@ def init_dev_state(project_dir: Path) -> None:
 def prod_version_hash(project_dir: Path, model_name: str) -> str:
     return str(
         query_duckdb(
-            db_path=project_dir / "prod_state.duckdb",
+            db_path=project_dir / "dev_state.duckdb",
             sql=(
                 "SELECT version_hash FROM sqlbuild_state.virtual_environment_node_refs "
                 "WHERE virtual_environment_name = 'prod' AND node_type = 'model' "
@@ -150,7 +165,7 @@ def prod_version_hash(project_dir: Path, model_name: str) -> str:
 def prod_seed_version_hash(project_dir: Path, seed_name: str) -> str:
     return str(
         query_duckdb(
-            db_path=project_dir / "prod_state.duckdb",
+            db_path=project_dir / "dev_state.duckdb",
             sql=(
                 "SELECT version_hash FROM sqlbuild_state.virtual_environment_node_refs "
                 "WHERE virtual_environment_name = 'prod' AND node_type = 'seed' "

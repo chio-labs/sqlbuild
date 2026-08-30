@@ -2,7 +2,7 @@ name = "waffle_shop"
 adapter = "duckdb"
 default_target = "dev"
 
-[connection]
+[connections.developer]
 database = "waffle_shop_control.duckdb"
 
 [settings]
@@ -12,9 +12,11 @@ default_audit_severity = "warn"
 materialized = "table"
 
 [targets.prod]
+connection = "developer"
 schema = "prod"
 
 [targets.dev]
+connection = "developer"
 schema = "dev"
 
 [path_defaults.staging]

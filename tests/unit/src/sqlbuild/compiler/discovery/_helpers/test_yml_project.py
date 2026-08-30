@@ -10,11 +10,12 @@ from sqlbuild.compiler.discovery._helpers.yml.project import (
     load_project_config,
 )
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
-from sqlbuild.spec.contracts.models import ProjectConfig
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from sqlbuild.sql_values.types import CollectionRendering
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     LoadLocalConfigErrorTestCase,
     LoadLocalConfigTestCase,
+    LoadNamedConnectionsTestCase,
     LoadProjectConfigErrorTestCase,
     LoadProjectConfigTestCase,
     LoadProjectConstantsConfigErrorTestCase,
@@ -921,15 +922,40 @@ user = false
             expected_error_fragment="expected string value for 'user'",
         ),
         LoadProjectConfigErrorTestCase(
-            description="raises when environment connection is not a mapping",
+            description="raises when environment connection is blank",
             project_file_contents="""
 name = "demo"
 adapter = "duckdb"
 
 [targets.dev]
-connection = "no"
+connection = "   "
 """.strip(),
-            expected_error_fragment="Expected 'connection' to be a mapping when provided",
+            expected_error_fragment="connection must be a non-empty string or mapping",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when named connection value is not a mapping",
+            project_file_contents='name = "demo"\nadapter = "duckdb"\nconnections = { dev = "bad" }',
+            expected_error_fragment="connections.dev must be a mapping",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when named connection name is blank",
+            project_file_contents='name = "demo"\nadapter = "duckdb"\n[connections.""]\ndatabase = "x"',
+            expected_error_fragment="connections contains an empty name",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when target contains connections typo",
+            project_file_contents='name = "demo"\nadapter = "duckdb"\n[targets.dev]\nconnections = "developer"',
+            expected_error_fragment=r"targets.dev contains unknown key\(s\): connections",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when clone contains unknown key",
+            project_file_contents='name = "demo"\nadapter = "duckdb"\n[targets.dev.clone]\nconnections = true',
+            expected_error_fragment=r"targets.dev.clone contains unknown key\(s\): connections",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when state contains unknown key",
+            project_file_contents='name = "demo"\nadapter = "duckdb"\n[targets.dev.state]\nconnections = {}',
+            expected_error_fragment=r"targets.dev.state contains unknown key\(s\): connections",
         ),
         LoadProjectConfigErrorTestCase(
             description="raises when environment clone allow_as_clone_origin is not a boolean",
@@ -1156,6 +1182,47 @@ def test_given_invalid_project_config_file_when_loading_project_config_then_it_r
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
         load_project_config(project_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadNamedConnectionsTestCase(
+            description="loads project named connection and scalar target reference",
+            filename="sqlbuild_project.toml",
+            contents='name = "demo"\nadapter = "snowflake"\n[connections.developer]\naccount = "acct"\ncustom = 7\n[targets.dev]\nconnection = "developer"',
+            expected_connections={"developer": {"account": "acct", "custom": 7}},
+            expected_connection_name="developer",
+        ),
+        LoadNamedConnectionsTestCase(
+            description="loads local-only named connection and scalar target reference",
+            filename="sqlbuild_local.toml",
+            contents='[connections.local]\ndatabase = "local.duckdb"\n[targets.dev]\nconnection = "local"',
+            expected_connections={"local": {"database": "local.duckdb"}},
+            expected_connection_name="local",
+        ),
+        LoadNamedConnectionsTestCase(
+            description="preserves legacy inline target connection mapping",
+            filename="sqlbuild_project.toml",
+            contents='name = "demo"\nadapter = "duckdb"\n[targets.dev.connection]\ndatabase = "legacy.duckdb"',
+            expected_connections={},
+            expected_connection_name=None,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_named_connection_syntax_when_loading_then_preserves_expected_shape(
+    test_case: LoadNamedConnectionsTestCase, tmp_path: Path
+) -> None:
+    (tmp_path / test_case.filename).write_text(test_case.contents, encoding="utf-8")
+
+    config: ProjectConfig | LocalConfig = {
+        "sqlbuild_project.toml": load_project_config,
+        "sqlbuild_local.toml": load_local_config,
+    }[test_case.filename](project_dir=tmp_path)
+
+    assert config.connections == test_case.expected_connections
+    assert config.targets["dev"].connection_name == test_case.expected_connection_name
 
 
 @pytest.mark.parametrize(

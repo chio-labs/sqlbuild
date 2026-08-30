@@ -25,6 +25,13 @@ class ScopeEntryCase:
 
 
 @dataclass(frozen=True)
+class SkillFreshnessNoticeTestCase:
+    description: str
+    expected_exit_code: int
+    expected_stderr_fragment: str
+
+
+@dataclass(frozen=True)
 class MainTestCase:
     description: str
     argv: list[str]

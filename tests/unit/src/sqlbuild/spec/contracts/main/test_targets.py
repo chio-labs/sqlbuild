@@ -136,7 +136,43 @@ def test_given_changes_only_config_when_resolving_then_precedence_is_applied(
             expected_loader_schema="raw_local",
             expected_defer_clone_from="staging",
             expected_changes_only=False,
-        )
+        ),
+        TargetConfigResolutionTestCase(
+            description="local target connection name overrides project target reference",
+            project_config=ProjectConfig(
+                name="demo",
+                adapter="duckdb",
+                targets={"dev": TargetConfig(connection_name="shared")},
+            ),
+            local_config=LocalConfig(
+                targets={"dev": LocalTargetConfig(connection_name="developer", compile_cache=False)}
+            ),
+            target_name="dev",
+            expected_backend=None,
+            expected_schema=None,
+            expected_connection={},
+            expected_allow_reset=False,
+            expected_connection_name="developer",
+        ),
+        TargetConfigResolutionTestCase(
+            description="local target inline mapping inherits project target reference",
+            project_config=ProjectConfig(
+                name="demo",
+                adapter="duckdb",
+                targets={"dev": TargetConfig(connection_name="shared")},
+            ),
+            local_config=LocalConfig(
+                targets={
+                    "dev": LocalTargetConfig(connection={"role": "local"}, compile_cache=False)
+                }
+            ),
+            target_name="dev",
+            expected_backend=None,
+            expected_schema=None,
+            expected_connection={},
+            expected_allow_reset=False,
+            expected_connection_name="shared",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -157,3 +193,4 @@ def test_given_project_and_local_state_config_when_resolving_then_local_override
     assert target_config.defer_clone_from == test_case.expected_defer_clone_from
     assert target_config.changes_only is test_case.expected_changes_only
     assert target_config.compile_cache is False
+    assert target_config.connection_name == test_case.expected_connection_name

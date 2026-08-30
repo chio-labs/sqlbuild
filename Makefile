@@ -89,7 +89,7 @@ test-virtual:
 
 skills:
 	uv run python -m scripts.generate_docs_skill
-	uv run sqb skills update --global --target opencode
+	uv run sqb skills --global --target opencode
 	uv run fensu skills
 
 

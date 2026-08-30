@@ -18,7 +18,7 @@ _PYTHON_NODES_PROJECT_TOML: str = """name = "python_nodes_demo"
 adapter = "duckdb"
 default_target = "dev"
 
-[connection]
+[connections.developer]
 database = "python_nodes_demo.duckdb"
 
 [settings]
@@ -28,6 +28,7 @@ default_audit_severity = "warn"
 materialized = "table"
 
 [targets.dev]
+connection = "developer"
 schema = "main"
 """
 
@@ -183,7 +184,7 @@ _VIRTUAL_PROJECT_TOML: str = """name = "loader_waffle_shop_virtual"
 adapter = "duckdb"
 default_target = "dev"
 
-[connection]
+[connections.developer]
 database = "loader_waffle_shop_virtual.duckdb"
 
 [settings]
@@ -194,6 +195,7 @@ default_audit_severity = "warn"
 materialized = "table"
 
 [targets.dev]
+connection = "developer"
 schema = "dev"
 
 [targets.dev.state]

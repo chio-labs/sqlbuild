@@ -6,6 +6,7 @@ import argparse
 import logging
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from sqlbuild.cli.commands._helpers.entry.dispatch import dispatch_cli_command
 from sqlbuild.cli.commands._helpers.entry.errors import (
@@ -15,8 +16,15 @@ from sqlbuild.cli.commands._helpers.entry.errors import (
 from sqlbuild.cli.commands._helpers.entry.lazy_handlers import build_lazy_cli_handlers
 from sqlbuild.cli.commands._helpers.entry.parser import build_cli_parser
 from sqlbuild.cli.commands._helpers.entry.parsing import parse_cli_invocation
+from sqlbuild.cli.commands._helpers.skills.update import maintain_sqlbuild_skills
+from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.models import CliEntrypointHandlers, ParsedCliInvocation
+from sqlbuild.cli.commands.models import (
+    CliEntrypointHandlers,
+    ParsedCliInvocation,
+    SkillMaintenanceResult,
+)
+from sqlbuild.cli.commands.types import CliCommand
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.kata_engine.exceptions import KataError
 from sqlbuild.lint.exceptions import LintError
@@ -69,3 +77,22 @@ def _main_with_dependencies(
             file=sys.stderr,
         )
         return 1
+    finally:
+        _report_skill_freshness(invocation=invocation)
+
+
+def _report_skill_freshness(*, invocation: ParsedCliInvocation) -> None:
+    args: CliNamespace | None = invocation.args
+    if args is None or args.command in {
+        CliCommand.INIT,
+        CliCommand.PLAYGROUND,
+        CliCommand.SKILLS,
+    }:
+        return
+    project_dir: Path = Path(args.project_dir) if args.project_dir is not None else Path.cwd()
+    try:
+        result: SkillMaintenanceResult = maintain_sqlbuild_skills(project_dir=project_dir)
+    except (CliUserError, OSError):
+        return
+    if result.message:
+        print(result.message, file=sys.stderr, end="")

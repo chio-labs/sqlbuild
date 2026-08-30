@@ -120,7 +120,7 @@ def test_given_source_dependent_origin_when_cloning_workspace_then_uses_origin_v
 ) -> None:
     project_dir: Path = prepare_virtual_source_clone_project(tmp_path)
     execute_duckdb(
-        db_path=project_dir / "prod.duckdb",
+        db_path=project_dir / "dev.duckdb",
         sql=(
             "CREATE SCHEMA raw; "
             "CREATE TABLE raw.raw_orders (id INTEGER, data_version INTEGER); "
@@ -245,7 +245,7 @@ def test_given_virtual_clone_when_source_artifact_missing_then_it_reports_missin
     init_dev_state(project_dir)
     source_hash: str = prod_version_hash(project_dir, "stg_orders")
     execute_duckdb(
-        db_path=project_dir / "prod.duckdb",
+        db_path=project_dir / "dev.duckdb",
         sql=f"DROP TABLE prod__sqb_physical.stg_orders__v_{source_hash[:8]}",
     )
 

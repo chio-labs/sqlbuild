@@ -19,6 +19,7 @@ class TargetConfigResolutionTestCase:
     expected_loader_schema: str | None = None
     expected_defer_clone_from: str | None = None
     expected_changes_only: bool | None = None
+    expected_connection_name: str | None = None
 
 
 @dataclass(frozen=True)
