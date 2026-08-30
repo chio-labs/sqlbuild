@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.65.6](https://github.com/chio-labs/sqlbuild/compare/v0.65.5...v0.65.6) (2026-08-30)
+
+
+### Bug Fixes
+
+* preserve Dagster compute stdout ([#412](https://github.com/chio-labs/sqlbuild/issues/412)) ([858b486](https://github.com/chio-labs/sqlbuild/commit/858b4869212bbc71172ecda6171847881d9d9c26))
+
 ## [0.65.5](https://github.com/chio-labs/sqlbuild/compare/v0.65.4...v0.65.5) (2026-08-30)
 
 
