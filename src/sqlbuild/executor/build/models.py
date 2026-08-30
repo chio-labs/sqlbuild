@@ -52,6 +52,7 @@ class SchedulerState:
     ready: int
     waiting: int
     limit: int
+    aborted: int = 0
 
 
 @dataclass(frozen=True)

@@ -112,6 +112,90 @@ def test_given_verbose_runtime_diagnostics_when_reporting_then_writes_concise_ra
 @pytest.mark.parametrize(
     "test_case",
     [
+        RuntimeDiagnosticsTestCase(
+            description="large runtime diagnostics are bounded with final identity summaries",
+            expected_fragments=(
+                "Scheduler diagnostics  2 transitions omitted after 50",
+                "51 waiting on dependencies",
+                "Query diagnostics  2 statements omitted after 25",
+                "query-26",
+            ),
+            expected_absent_fragments=("query-25  success",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_high_volume_runtime_diagnostics_when_closing_then_output_is_bounded(
+    test_case: RuntimeDiagnosticsTestCase,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
+        plan=PlanOutput(), use_color=False, verbose=True, debug=False
+    )
+
+    for index in range(52):
+        callbacks.on_scheduler_state(SchedulerState(running=1, ready=0, waiting=index, limit=4))
+    for index in range(27):
+        callbacks.on_statement_complete(
+            StatementExecutionTelemetry(
+                query_id=f"query-{index}",
+                status="success",
+                elapsed_seconds=0.1,
+                resource_type="model",
+                resource_name="orders",
+                phase="microbatch",
+            )
+        )
+    callbacks.close()
+
+    output: str = capsys.readouterr().out
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in output
+    absent_fragment: str
+    for absent_fragment in test_case.expected_absent_fragments:
+        assert absent_fragment not in output
+    assert output.count("Scheduler  ") == 51
+    assert output.count("Query  model") == 26
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RuntimeDiagnosticsTestCase(
+            description="terminal scheduler state reports aborted work without frontier wording",
+            expected_fragments=("3 aborted after stop",),
+            expected_absent_fragments=(
+                "DAG frontier constrained",
+                "waiting on dependencies, limit",
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_terminal_scheduler_state_when_reporting_then_output_explains_aborted_work(
+    test_case: RuntimeDiagnosticsTestCase,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
+        plan=PlanOutput(), use_color=False, verbose=True, debug=False
+    )
+
+    callbacks.on_scheduler_state(SchedulerState(running=0, ready=0, waiting=0, limit=4, aborted=3))
+    callbacks.close()
+
+    output: str = capsys.readouterr().out
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in output
+    absent_fragment: str
+    for absent_fragment in test_case.expected_absent_fragments:
+        assert absent_fragment not in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         TruncateNameTestCase(
             description="name shorter than width is returned unchanged",
             name="orders",

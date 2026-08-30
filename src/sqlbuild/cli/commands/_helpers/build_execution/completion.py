@@ -24,6 +24,7 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.cost.models import CostRunRecord
+from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
 from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult
 
 
@@ -68,6 +69,9 @@ def complete_direct_build(
         )
     )
     cost_collection_seconds: float = time.monotonic() - cost_started_at
+    timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
+    if timing_tracker is not None:
+        timing_tracker.cost_collection_seconds = cost_collection_seconds
     write_build_completion_output(
         request=request,
         invocation=invocation,

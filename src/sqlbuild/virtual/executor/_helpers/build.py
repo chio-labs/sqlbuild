@@ -71,6 +71,7 @@ from sqlbuild.compiler.python_nodes.models import (
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.cost.classes.cost_context import CostContext
+from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
@@ -454,6 +455,7 @@ def _execute_leased_virtual_build(
             runtime.project_dir / "target" / "runs" / rewritten.project.run_id / "statements.jsonl"
         ),
         phase="virtual_ingress",
+        on_statement_complete=exec_hooks.on_statement_complete,
     ):
         ingress_result: PythonIngressLoaderExecutorResult | None = _run_ingress_python_nodes(
             runtime=runtime,
@@ -496,6 +498,7 @@ def _execute_leased_virtual_build(
             runtime.project_dir / "target" / "runs" / rewritten.project.run_id / "statements.jsonl"
         ),
         phase="virtual_finalize",
+        on_statement_complete=exec_hooks.on_statement_complete,
     ):
         microbatch_lease_check()
         _persist_successful_virtual_build(
@@ -526,55 +529,65 @@ def _resolve_virtual_build(
     hooks: VirtualBuildHooks,
 ) -> _VirtualBuildResolution:
     compile_start: float = time.monotonic()
-    graph: ProjectGraph = build_project_graph(
-        discovered_inputs=discovered_inputs,
-        adapter=adapter,
-        selected_target=options.planning.selected_target,
-        no_sql_validation=options.planning.no_sql_validation,
-        no_cache=options.planning.no_cache,
-        cli_vars=options.planning.cli_vars,
-        external_sql_reference_resolver=options.planning.external_sql_reference_resolver,
-        on_progress=hooks.on_progress,
-    )
-    compile_seconds: float = time.monotonic() - compile_start
+    try:
+        graph: ProjectGraph = build_project_graph(
+            discovered_inputs=discovered_inputs,
+            adapter=adapter,
+            selected_target=options.planning.selected_target,
+            no_sql_validation=options.planning.no_sql_validation,
+            no_cache=options.planning.no_cache,
+            cli_vars=options.planning.cli_vars,
+            external_sql_reference_resolver=options.planning.external_sql_reference_resolver,
+            on_progress=hooks.on_progress,
+        )
+    finally:
+        compile_seconds: float = time.monotonic() - compile_start
+        timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
+        if timing_tracker is not None:
+            timing_tracker.compile_seconds = compile_seconds
     planning_start: float = time.monotonic()
-    names: VirtualEnvironmentNames = _resolve_virtual_environment_names(
-        discovered_inputs=discovered_inputs,
-        options=options,
-    )
-    config, backend = build_state_runtime(
-        discovered_inputs=discovered_inputs,
-        project_dir=project_dir,
-    )
-    runtime: _VirtualBuildRuntime = _VirtualBuildRuntime(
-        project_dir=project_dir,
-        discovered_inputs=discovered_inputs,
-        adapter=adapter,
-        connection_config=connection_config,
-        options=options,
-        hooks=hooks,
-        backend=backend,
-        config=config,
-        names=names,
-    )
-    reads: _VirtualBuildStateReads = _read_virtual_build_state(runtime=runtime, graph=graph)
-    rewritten: _RewrittenVirtualProject = _rewrite_virtual_project(
-        runtime=runtime, graph=graph, reads=reads
-    )
-    plan: _VirtualBuildPlan = _plan_virtual_build(
-        runtime=runtime,
-        graph=graph,
-        project=rewritten.project,
-        reads=reads,
-        deferred_relations=rewritten.deferred_relations,
-    )
-    python_plan: _VirtualPythonPlan = _prepare_virtual_python_execution(
-        runtime=runtime,
-        graph=graph,
-        project=rewritten.project,
-        plan_output=plan.plan_output,
-        selected_model_names=reads.selected_model_names,
-    )
+    try:
+        names: VirtualEnvironmentNames = _resolve_virtual_environment_names(
+            discovered_inputs=discovered_inputs,
+            options=options,
+        )
+        config, backend = build_state_runtime(
+            discovered_inputs=discovered_inputs,
+            project_dir=project_dir,
+        )
+        runtime: _VirtualBuildRuntime = _VirtualBuildRuntime(
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+            adapter=adapter,
+            connection_config=connection_config,
+            options=options,
+            hooks=hooks,
+            backend=backend,
+            config=config,
+            names=names,
+        )
+        reads: _VirtualBuildStateReads = _read_virtual_build_state(runtime=runtime, graph=graph)
+        rewritten: _RewrittenVirtualProject = _rewrite_virtual_project(
+            runtime=runtime, graph=graph, reads=reads
+        )
+        plan: _VirtualBuildPlan = _plan_virtual_build(
+            runtime=runtime,
+            graph=graph,
+            project=rewritten.project,
+            reads=reads,
+            deferred_relations=rewritten.deferred_relations,
+        )
+        python_plan: _VirtualPythonPlan = _prepare_virtual_python_execution(
+            runtime=runtime,
+            graph=graph,
+            project=rewritten.project,
+            plan_output=plan.plan_output,
+            selected_model_names=reads.selected_model_names,
+        )
+    finally:
+        planning_seconds: float = time.monotonic() - planning_start
+        if timing_tracker is not None:
+            timing_tracker.planning_seconds = planning_seconds
     return _VirtualBuildResolution(
         runtime=runtime,
         graph=graph,
@@ -583,7 +596,7 @@ def _resolve_virtual_build(
         plan=plan,
         python_plan=python_plan,
         compile_seconds=compile_seconds,
-        planning_seconds=time.monotonic() - planning_start,
+        planning_seconds=planning_seconds,
     )
 
 
@@ -1112,12 +1125,17 @@ def _execute_virtual_build_plan(
         on_statement_complete=exec_hooks.on_statement_complete,
     ):
         schema_start: float = time.monotonic()
-        _prepare_virtual_physical_schemas(
-            adapter=runtime.adapter,
-            connection_config=runtime.connection_config,
-            plan_output=plan.executor_plan_output,
-        )
-        virtual_schema_seconds: float = time.monotonic() - schema_start
+        try:
+            _prepare_virtual_physical_schemas(
+                adapter=runtime.adapter,
+                connection_config=runtime.connection_config,
+                plan_output=plan.executor_plan_output,
+            )
+        finally:
+            virtual_schema_seconds: float = time.monotonic() - schema_start
+            timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
+            if timing_tracker is not None:
+                timing_tracker.schema_preparation_seconds = virtual_schema_seconds
     result: BuildExecutionResult = run_build_pipeline(
         plan=plan.executor_plan_output,
         connection_config=runtime.connection_config,

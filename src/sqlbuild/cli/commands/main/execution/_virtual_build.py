@@ -10,8 +10,7 @@ from typing import TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.build_execution.phase_timings import (
-    write_build_phase_timings,
-    write_virtual_build_phase_timings,
+    record_and_write_virtual_build_phase_timings,
 )
 from sqlbuild.cli.commands._helpers.build_python_nodes.python_node_output import (
     write_python_node_results,
@@ -31,7 +30,6 @@ from sqlbuild.cli.commands.classes.virtual_build_project_capture import (
 )
 from sqlbuild.cli.commands.models import (
     BuildCostFinalization,
-    BuildPhaseTimings,
     VirtualBuildCliRequest,
     VirtualBuildExecution,
 )
@@ -49,6 +47,7 @@ from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.cost.classes.run_cost_store import RunCostStore
 from sqlbuild.cost.models import CostRunRecord
 from sqlbuild.cost.types import CostStatus
+from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult
 from sqlbuild.virtual.executor.models import VirtualBuildPipelineResult
@@ -67,9 +66,6 @@ def run_virtual_build(
     """Execute a virtual build and render CLI output."""
 
     build_started_at: datetime = datetime.now(UTC)
-    total_started_at: float = (
-        request.command_started_at if request.command_started_at is not None else time.monotonic()
-    )
     stream: TextIO = progress_stream or (
         sys.stderr if request.debug or request.json_output else sys.stdout
     )
@@ -146,15 +142,9 @@ def run_virtual_build(
             )
         except BaseException:
             pass
-        if request.verbose or request.debug:
-            write_build_phase_timings(
-                stream=stream,
-                timings=BuildPhaseTimings(
-                    cost_collection_seconds=time.monotonic() - exceptional_cost_started_at,
-                    total_seconds=time.monotonic() - total_started_at,
-                ),
-                use_color=request.use_color,
-            )
+        timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
+        if timing_tracker is not None:
+            timing_tracker.cost_collection_seconds = time.monotonic() - exceptional_cost_started_at
         raise
 
 
@@ -261,7 +251,7 @@ def _complete_virtual_build(
         output_stream=stream,
         use_color=request.use_color,
     )
-    write_virtual_build_phase_timings(
+    _ = record_and_write_virtual_build_phase_timings(
         stream=stream,
         request=request,
         execution=execution,

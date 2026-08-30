@@ -29,3 +29,4 @@ class SchedulerDiagnosticsTestCase:
     expected_ready: int
     expected_waiting: int
     expected_limit: int
+    expected_aborted: int = 0

@@ -71,3 +71,12 @@ class WorkerConnectionTestCase:
     connection_count: int
     expected_connection_count: int
     expected_close_attempts: int = 0
+
+
+@dataclass(frozen=True)
+class ConnectionPreparationTimingTestCase:
+    description: str
+    clock_values: tuple[float, ...]
+    expected_connection_seconds: float
+    expected_schema_seconds: float
+    expected_total_seconds: float

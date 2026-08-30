@@ -1,4 +1,4 @@
-"""Debug process resource reporting entrypoint."""
+"""Debug process resource logging helper."""
 
 from __future__ import annotations
 

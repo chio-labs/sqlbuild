@@ -20,6 +20,8 @@ from sqlbuild.cli.commands.models import (
     VirtualBuildExecution,
 )
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
+from sqlbuild.diagnostics.models import PartialBuildPhaseTimings
 from sqlbuild.presentation.classes.cli_document import CliDocument
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.virtual.executor.models import VirtualBuildPipelineResult
@@ -38,6 +40,26 @@ def write_build_phase_timings(
     stream.flush()
 
 
+def write_partial_build_phase_timings(
+    *, stream: TextIO, timings: PartialBuildPhaseTimings, use_color: bool
+) -> None:
+    """Write available exceptional build phase durations."""
+
+    write_build_phase_timings(
+        stream=stream,
+        timings=BuildPhaseTimings(
+            compile_seconds=timings.compile_seconds,
+            planning_seconds=timings.planning_seconds,
+            connection_preparation_seconds=timings.connection_preparation_seconds,
+            schema_preparation_seconds=timings.schema_preparation_seconds,
+            execution_seconds=timings.execution_seconds,
+            cost_collection_seconds=timings.cost_collection_seconds,
+            total_seconds=timings.total_seconds,
+        ),
+        use_color=use_color,
+    )
+
+
 def finalize_no_work_with_timings(
     *,
     request: BuildCommandRequest,
@@ -53,13 +75,17 @@ def finalize_no_work_with_timings(
         invocation=invocation,
         pipeline_result=pipeline_result,
     )
+    cost_collection_seconds: float = time.monotonic() - cost_started_at
+    timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
+    if timing_tracker is not None:
+        timing_tracker.cost_collection_seconds = cost_collection_seconds
     if finalized and (request.verbose or request.debug):
         write_build_phase_timings(
             stream=invocation.progress_stream,
             timings=BuildPhaseTimings(
                 compile_seconds=pipeline_result.compile_seconds,
                 planning_seconds=pipeline_result.planning_seconds,
-                cost_collection_seconds=time.monotonic() - cost_started_at,
+                cost_collection_seconds=cost_collection_seconds,
                 total_seconds=time.monotonic() - command_started_at,
             ),
             use_color=invocation.use_color,
@@ -85,17 +111,10 @@ def finalize_exceptional_with_timings(
         build_started_at=build_started_at,
         error=error,
     )
-    if request.verbose or request.debug:
-        write_build_phase_timings(
-            stream=invocation.progress_stream,
-            timings=BuildPhaseTimings(
-                compile_seconds=pipeline_result.compile_seconds,
-                planning_seconds=pipeline_result.planning_seconds,
-                cost_collection_seconds=time.monotonic() - cost_started_at,
-                total_seconds=time.monotonic() - command_started_at,
-            ),
-            use_color=invocation.use_color,
-        )
+    cost_collection_seconds: float = time.monotonic() - cost_started_at
+    timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
+    if timing_tracker is not None:
+        timing_tracker.cost_collection_seconds = cost_collection_seconds
 
 
 def write_virtual_build_phase_timings(
@@ -129,6 +148,28 @@ def write_virtual_build_phase_timings(
             total_seconds=total_seconds,
         ),
         use_color=request.use_color,
+    )
+
+
+def record_and_write_virtual_build_phase_timings(
+    *,
+    stream: TextIO,
+    request: VirtualBuildCliRequest,
+    execution: VirtualBuildExecution,
+    result: VirtualBuildPipelineResult,
+    cost_collection_seconds: float,
+) -> None:
+    """Record and write completed virtual-build timing diagnostics."""
+
+    timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
+    if timing_tracker is not None:
+        timing_tracker.cost_collection_seconds = cost_collection_seconds
+    write_virtual_build_phase_timings(
+        stream=stream,
+        request=request,
+        execution=execution,
+        result=result,
+        cost_collection_seconds=cost_collection_seconds,
     )
 
 

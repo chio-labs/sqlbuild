@@ -19,6 +19,7 @@ from sqlbuild.cli.commands._helpers.build_execution.outputs import (
 from sqlbuild.cli.commands._helpers.build_execution.phase_timings import (
     finalize_exceptional_with_timings,
     finalize_no_work_with_timings,
+    write_partial_build_phase_timings,
 )
 from sqlbuild.cli.commands._helpers.build_planning.compile_target import write_build_compile_target
 from sqlbuild.cli.commands._helpers.build_planning.defer_clone import (
@@ -44,8 +45,8 @@ from sqlbuild.cli.commands.models import (
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.cost.types import CostStatus
-from sqlbuild.diagnostics.classes.process_resource_tracker import ProcessResourceTracker
-from sqlbuild.diagnostics.main.log_process_resources import log_process_resources
+from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
+from sqlbuild.diagnostics.main.process_resource_reporting import process_resource_reporting
 from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult
 from sqlbuild.provider.main.session import build_provider_session
 
@@ -53,14 +54,21 @@ from sqlbuild.provider.main.session import build_provider_session
 def run_build(request: BuildCommandRequest) -> int:
     """Execute the build command."""
 
-    process_tracker: ProcessResourceTracker | None = (
-        ProcessResourceTracker() if request.debug else None
-    )
-    try:
-        return _run_build(request=request)
-    finally:
-        if process_tracker is not None:
-            log_process_resources(usage=process_tracker.finish())
+    timing_tracker: BuildPhaseTimingTracker = BuildPhaseTimingTracker()
+    with process_resource_reporting(enabled=request.debug), timing_tracker.scope():
+        try:
+            return _run_build(request=request)
+        except BaseException:
+            if request.verbose or request.debug:
+                try:
+                    write_partial_build_phase_timings(
+                        stream=sys.stderr,
+                        timings=timing_tracker.snapshot(),
+                        use_color=False,
+                    )
+                except BaseException:
+                    pass
+            raise
 
 
 def _run_build(*, request: BuildCommandRequest) -> int:

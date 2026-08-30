@@ -20,5 +20,8 @@ def _read_max_rss_bytes() -> int | None:
         import resource
     except ImportError:
         return None
-    max_rss: int = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    try:
+        max_rss: int = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    except (AttributeError, OSError):
+        return None
     return max_rss if sys.platform == _DARWIN_PLATFORM else max_rss * 1024

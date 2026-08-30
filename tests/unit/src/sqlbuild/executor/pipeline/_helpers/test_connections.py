@@ -1,15 +1,24 @@
 from __future__ import annotations
 
 import threading
+from unittest.mock import Mock
 
 import pytest
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.executor.build.models import BuildCallbacks
+from sqlbuild.executor.pipeline._helpers import connections as connections_module
 from sqlbuild.executor.pipeline._helpers.connections import (
     close_connections,
     open_worker_connections,
+    prepare_build_connections,
 )
-from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import WorkerConnectionTestCase
+from sqlbuild.executor.pipeline.models import BuildConnectionPreparation
+from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import (
+    ConnectionPreparationTimingTestCase,
+    WorkerConnectionTestCase,
+)
 
 
 class _ConnectionAdapter(BaseAdapter):
@@ -35,6 +44,45 @@ class _ConnectionAdapter(BaseAdapter):
     def execute(self, connection: object, sql: str) -> object:
         del connection
         return sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ConnectionPreparationTimingTestCase(
+            description="connection and schema intervals are disjoint",
+            clock_values=(0.0, 0.0, 5.0, 5.0, 7.0, 7.0, 10.0, 10.0),
+            expected_connection_seconds=8.0,
+            expected_schema_seconds=2.0,
+            expected_total_seconds=10.0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_connection_and_schema_work_when_preparing_then_phase_intervals_do_not_overlap(
+    test_case: ConnectionPreparationTimingTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monotonic: Mock = Mock(side_effect=test_case.clock_values)
+    monkeypatch.setattr(connections_module.time, "monotonic", monotonic)
+    monkeypatch.setattr(connections_module, "prepare_build_schemas", Mock())
+    monkeypatch.setattr(
+        connections_module, "open_worker_connections", Mock(return_value=(object(),))
+    )
+
+    preparation: BuildConnectionPreparation = prepare_build_connections(
+        plan=PlanOutput(),
+        adapter=Mock(connect=Mock(return_value=object())),
+        connection_config={},
+        connection_count=1,
+        callbacks=BuildCallbacks(on_connection_complete=Mock()),
+    )
+
+    assert preparation.connection_seconds == test_case.expected_connection_seconds
+    assert preparation.schema_seconds == test_case.expected_schema_seconds
+    assert preparation.connection_seconds + (preparation.schema_seconds or 0) <= (
+        test_case.expected_total_seconds
+    )
 
 
 @pytest.mark.parametrize(

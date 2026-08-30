@@ -9,7 +9,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.executor.pipeline._helpers.graph_width import runnable_graph_width
-from sqlbuild.executor.pipeline.main.run import _prepare_build_schemas
+from sqlbuild.executor.pipeline._helpers.schema_preparation import prepare_build_schemas
 from tests.unit.src.sqlbuild.executor.pipeline.main._test_types import (
     BuildSchemaPreflightTestCase,
     RunnableGraphWidthTestCase,
@@ -35,7 +35,7 @@ def test_given_build_plan_when_preparing_schemas_then_all_destination_schemas_ar
 ) -> None:
     adapter: BuildSchemaPreflightAdapter = BuildSchemaPreflightAdapter()
 
-    _prepare_build_schemas(
+    prepare_build_schemas(
         plan=build_schema_preflight_plan(),
         adapter=adapter,
         connection_config={},

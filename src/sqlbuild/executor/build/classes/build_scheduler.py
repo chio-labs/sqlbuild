@@ -438,11 +438,15 @@ class BuildScheduler:
         if callback is None:
             return
         unresolved_count: int = len(self._selected_execution_keys.difference(self._completed_keys))
+        stopped: bool = self._stop and not self._in_flight
         state: SchedulerState = SchedulerState(
             running=len(self._in_flight),
-            ready=len(self._ready),
-            waiting=max(0, unresolved_count - len(self._in_flight) - len(self._ready)),
+            ready=0 if stopped else len(self._ready),
+            waiting=(
+                0 if stopped else max(0, unresolved_count - len(self._in_flight) - len(self._ready))
+            ),
             limit=self._max_concurrency,
+            aborted=unresolved_count if stopped else 0,
         )
         if state == self._last_scheduler_state:
             return
