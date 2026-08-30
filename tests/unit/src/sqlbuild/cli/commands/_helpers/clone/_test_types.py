@@ -31,3 +31,9 @@ class RenderCloneItemLineTestCase:
     item: CloneItemResult
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class CloneConnectionLifecycleTestCase:
+    description: str
+    expected_destination_config: dict[str, object]

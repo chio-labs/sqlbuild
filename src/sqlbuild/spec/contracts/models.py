@@ -58,6 +58,7 @@ class TargetConfig:
     """One named target configuration."""
 
     connection: dict[str, object] = field(default_factory=dict)
+    connection_name: str | None = None
     vars: dict[str, str] = field(default_factory=dict)
     database: str | None = None
     schema: str | None = None
@@ -75,6 +76,7 @@ class LocalTargetConfig:
     """Local developer overrides for one named target."""
 
     connection: dict[str, object] = field(default_factory=dict)
+    connection_name: str | None = None
     vars: dict[str, str] = field(default_factory=dict)
     database: str | None = None
     schema: str | None = None
@@ -220,6 +222,7 @@ class ProjectConfig:
     adapter: str
     default_target: str | None = None
     connection: dict[str, object] = field(default_factory=dict)
+    connections: dict[str, dict[str, object]] = field(default_factory=dict)
     settings: SettingsConfig = field(default_factory=SettingsConfig)
     cost: CostConfig = field(default_factory=CostConfig)
     constants: ConstantsConfig = field(default_factory=ConstantsConfig)
@@ -240,6 +243,7 @@ class LocalConfig:
     target: str | None = None
     adapter: str | None = None
     connection: dict[str, object] = field(default_factory=dict)
+    connections: dict[str, dict[str, object]] = field(default_factory=dict)
     targets: dict[str, LocalTargetConfig] = field(default_factory=dict)
     settings: SettingsConfig = field(default_factory=SettingsConfig)
     setting_overrides: frozenset[str] = field(default_factory=frozenset)

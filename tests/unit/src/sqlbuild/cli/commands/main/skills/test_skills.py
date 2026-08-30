@@ -7,11 +7,14 @@ import pytest
 from sqlbuild.cli.commands._helpers.skills.update import (
     ensure_generated_marker,
     generated_marker,
+    load_packaged_skill_content,
+    maintain_sqlbuild_skills,
     update_sqlbuild_skills,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.models import SkillUpdateResult
+from sqlbuild.cli.commands.models import SkillMaintenanceResult, SkillUpdateResult
 from tests.unit.src.sqlbuild.cli.commands.main.skills._test_types import (
+    SkillMaintenanceTestCase,
     SkillUpdateErrorTestCase,
     SkillUpdateTestCase,
 )
@@ -26,11 +29,10 @@ from tests.unit.src.sqlbuild.cli.commands.main.skills.helpers import (
     "test_case",
     [
         SkillUpdateTestCase(
-            description="writes all local skill targets by default",
+            description="writes portable and Claude skill targets by default",
             expected_written_paths=(
-                Path(".opencode/skills/sqlbuild/SKILL.md"),
-                Path(".claude/skills/sqlbuild/SKILL.md"),
                 Path(".agents/skills/sqlbuild/SKILL.md"),
+                Path(".claude/skills/sqlbuild/SKILL.md"),
             ),
         ),
         SkillUpdateTestCase(
@@ -167,3 +169,84 @@ def test_given_skill_frontmatter_when_adding_generated_marker_then_marker_follow
 
     assert updated_content.startswith("---\nname: sqlbuild\n")
     assert test_case.expected_content_fragment in updated_content
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SkillMaintenanceTestCase(
+            description="configured missing skills emit a non-blocking freshness notice",
+            project_config=(
+                'name = "demo"\nadapter = "duckdb"\n\n[skills]\ntargets = ["agents", "claude"]\n'
+            ),
+            expected_message_fragment="SQLBuild skill files are out of date",
+        ),
+        SkillMaintenanceTestCase(
+            description="configured auto update writes missing generated skills",
+            project_config=(
+                'name = "demo"\nadapter = "duckdb"\n\n[skills]\n'
+                'targets = ["agents", "claude"]\nauto_update = true\n'
+            ),
+            expected_message_fragment="Updated stale SQLBuild skill files",
+            expected_written_paths=(
+                Path(".agents/skills/sqlbuild/SKILL.md"),
+                Path(".claude/skills/sqlbuild/SKILL.md"),
+            ),
+        ),
+        SkillMaintenanceTestCase(
+            description="project without configured or installed skills remains quiet",
+            project_config='name = "demo"\nadapter = "duckdb"\n',
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_project_skill_state_when_maintaining_then_reports_or_updates_owned_files(
+    test_case: SkillMaintenanceTestCase,
+    tmp_path: Path,
+) -> None:
+    prepare_skill_update_project(
+        project_dir=tmp_path,
+        project_config=test_case.project_config,
+        existing_files=test_case.existing_files,
+    )
+
+    result: SkillMaintenanceResult = maintain_sqlbuild_skills(project_dir=tmp_path)
+
+    assert test_case.expected_message_fragment in result.message
+    for relative_path in test_case.expected_written_paths:
+        assert (tmp_path / relative_path).read_text(encoding="utf-8") == ensure_generated_marker(
+            load_packaged_skill_content()
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SkillMaintenanceTestCase(
+            description="custom collision is reported and never automatically overwritten",
+            project_config=(
+                'name = "demo"\nadapter = "duckdb"\n\n[skills]\n'
+                'targets = ["agents"]\nauto_update = true\n'
+            ),
+            existing_files={Path(".agents/skills/sqlbuild/SKILL.md"): "custom instructions\n"},
+            expected_message_fragment="Custom files were not overwritten",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_custom_skill_collision_when_maintaining_then_file_is_not_overwritten(
+    test_case: SkillMaintenanceTestCase,
+    tmp_path: Path,
+) -> None:
+    prepare_skill_update_project(
+        project_dir=tmp_path,
+        project_config=test_case.project_config,
+        existing_files=test_case.existing_files,
+    )
+
+    result: SkillMaintenanceResult = maintain_sqlbuild_skills(project_dir=tmp_path)
+
+    assert test_case.expected_message_fragment in result.message
+    assert (tmp_path / next(iter(test_case.existing_files))).read_text(encoding="utf-8") == next(
+        iter(test_case.existing_files.values())
+    )

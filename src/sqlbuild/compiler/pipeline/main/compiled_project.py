@@ -61,6 +61,7 @@ def build_compiled_project(
     validate_managed_loader_target_isolation(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
+        resolved_connection=resolved_connection,
     )
     no_cache: bool = analysis_selection is not None and analysis_selection.no_cache
     compile_inputs: CompileProjectInputs = build_compile_inputs(

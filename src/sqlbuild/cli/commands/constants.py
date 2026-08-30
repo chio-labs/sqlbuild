@@ -13,7 +13,6 @@ EMPTY_ENV_VALUE: str = ""
 NO_COLOR_OPTION: str = "--no-color"
 DEBUG_OPTION: str = "--debug"
 DBT_INIT_COMMAND: str = "init"
-SKILLS_UPDATE_COMMAND: str = "update"
 SCENARIO_TEST_COMMAND: str = "test"
 SCENARIO_CAPTURE_COMMAND: str = "capture"
 COLUMN_LINEAGE_MODE_VALUES: tuple[str, ...] = tuple(mode.value for mode in ColumnLineageMode)

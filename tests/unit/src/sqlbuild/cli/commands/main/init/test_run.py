@@ -53,7 +53,9 @@ from tests.unit.src.sqlbuild.cli.commands.main.init._test_types import InitScaff
                 "macros/.gitkeep",
                 "audits/.gitkeep",
             ),
-            expected_config_fragment='name = "demo_project"',
+            expected_config_fragment=(
+                '[connections.developer]\ndatabase = "demo_project.duckdb"\n\n[settings]'
+            ),
             expected_stdout_fragments=(
                 "SQLBuild project created",
                 "Project: demo_project",

@@ -142,6 +142,15 @@ def assert_defer_clone_build_case(*, tmp_path: Path, test_case: DeferCloneBuildE
         project_dir=project_dir,
     )
     assert prod_result.returncode == 0, prod_result.stderr or prod_result.stdout
+    project_config_path: Path = project_dir / "sqlbuild_project.toml"
+    project_config_path.write_text(
+        project_config_path.read_text(encoding="utf-8").replace(
+            '[targets.prod]\nschema = "prod"',
+            '[targets.prod]\nschema = "prod"\n\n[targets.prod.connection]\n'
+            'database = "${ENV:SQLBUILD_TEST_UNUSED_DEFER_ORIGIN_DATABASE}"',
+        ),
+        encoding="utf-8",
+    )
     (project_dir / "models" / "upstream.sql").write_text(
         test_case.changed_upstream_sql,
         encoding="utf-8",

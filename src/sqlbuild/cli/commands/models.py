@@ -406,11 +406,9 @@ class CloneInvocation:
 
 @dataclass(frozen=True)
 class CloneConnectionContext:
-    """Origin and destination connection configuration and handles."""
+    """Destination connection configuration and handle for a clone."""
 
-    origin_connection_config: dict[str, object]
     destination_connection_config: dict[str, object]
-    origin_connection: Any
     destination_connection: Any
 
 
@@ -1157,6 +1155,22 @@ class SkillInstallTarget:
 
     name: str
     path: Path
+
+
+@dataclass(frozen=True)
+class SkillSettings:
+    """Project skill installation preferences."""
+
+    targets: tuple[str, ...]
+    auto_update: bool
+    configured: bool
+
+
+@dataclass(frozen=True)
+class SkillMaintenanceResult:
+    """Non-blocking generated-skill maintenance result."""
+
+    message: str = ""
 
 
 @dataclass(frozen=True)

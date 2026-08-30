@@ -203,6 +203,15 @@ class LoadLocalConfigErrorTestCase:
 
 
 @dataclass(frozen=True)
+class LoadNamedConnectionsTestCase:
+    description: str
+    filename: str
+    contents: str
+    expected_connections: dict[str, dict[str, object]]
+    expected_connection_name: str | None
+
+
+@dataclass(frozen=True)
 class DiscoverHookFunctionsTestCase:
     description: str
     repo_files: dict[str, str]

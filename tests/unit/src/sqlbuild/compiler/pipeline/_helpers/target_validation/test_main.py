@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from sqlbuild.adapter.contract.types import BuiltinAdapter
@@ -14,8 +16,9 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledRelationLocation,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
 from sqlbuild.compiler.pipeline._helpers.target_validation import (
+    validate_managed_loader_target_isolation,
     validate_managed_write_schemas,
     validate_named_target_schema_strategy,
     validate_project_targets,
@@ -24,9 +27,11 @@ from sqlbuild.spec.contracts.models import (
     LocalConfig,
     LocalTargetConfig,
     ProjectConfig,
+    SourceEntry,
     TargetConfig,
 )
 from tests.unit.src.sqlbuild.compiler.pipeline._helpers.target_validation._test_types import (
+    ValidateManagedLoaderConnectionTestCase,
     ValidateManagedWriteSchemaTestCase,
     ValidateNamedTargetSchemaTestCase,
     ValidateProjectTargetsTestCase,
@@ -35,6 +40,51 @@ from tests.unit.src.sqlbuild.compiler.pipeline._helpers.target_validation.helper
     ConservativeCustomAdapter,
     build_project,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ValidateManagedLoaderConnectionTestCase(
+            description="resolved destination connection bypasses origin connection interpolation",
+            resolved_connection={"database": "destination"},
+            expected_schemas=("dev_loader", "prod_loader"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_resolved_clone_connection_when_validating_loaders_then_origin_credentials_are_unused(
+    test_case: ValidateManagedLoaderConnectionTestCase,
+) -> None:
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=ProjectConfig(
+            name="test",
+            adapter="postgres",
+            targets={
+                "dev": TargetConfig(schema="dev", loader_schema=test_case.expected_schemas[0]),
+                "prod": TargetConfig(
+                    schema="prod",
+                    loader_schema=test_case.expected_schemas[1],
+                    connection={"password": "${ENV:MISSING_ORIGIN_PASSWORD}"},
+                ),
+            },
+        ),
+        local_config=LocalConfig(),
+        source_files=(
+            DiscoveredSourceFile(
+                file_path=Path("sources/managed.yml"),
+                relative_path=Path("sources/managed.yml"),
+                contents="",
+                source_entries=(SourceEntry(name="managed", managed=True),),
+            ),
+        ),
+    )
+
+    validate_managed_loader_target_isolation(
+        discovered_inputs=discovered_inputs,
+        adapter=PostgresAdapter(),
+        resolved_connection=test_case.resolved_connection,
+    )
 
 
 @pytest.mark.parametrize(
@@ -220,6 +270,20 @@ def test_given_explicit_or_permitted_schema_when_validating_managed_write_then_i
             expected_error_fragment=(
                 "Named target 'dev' must explicitly set schema to a nonblank literal or 'preserve'"
             ),
+        ),
+        ValidateNamedTargetSchemaTestCase(
+            description="named connection schema does not replace target namespace strategy",
+            adapter=PostgresAdapter(),
+            project_config=ProjectConfig(
+                name="test",
+                adapter="postgres",
+                default_target="dev",
+                connections={"developer": {"database": "RACING", "schema": "DEV_USER"}},
+                targets={"dev": TargetConfig(connection_name="developer")},
+            ),
+            local_config=LocalConfig(),
+            selected_target=None,
+            expected_error_fragment="Named target 'dev' must explicitly set schema",
         ),
         ValidateNamedTargetSchemaTestCase(
             description="local override leaves merged named target schema blank",

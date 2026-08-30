@@ -16,7 +16,6 @@ from sqlbuild.cli.commands.constants import (
     SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
     SCENARIO_CLI_MISSING_SUBCOMMAND,
     SCENARIO_TEST_COMMAND,
-    SKILLS_UPDATE_COMMAND,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import (
@@ -472,14 +471,12 @@ def _dispatch_local_command(
             )
         )
     if args.command == CliCommand.SKILLS:
-        if args.skills_command == SKILLS_UPDATE_COMMAND:
-            return handlers.run_skills_update(
-                project_dir=project_dir,
-                global_install=args.skills_global,
-                targets=tuple(args.skills_target),
-                force=args.skills_force,
-            )
-        raise CliUserError("skills requires a subcommand such as 'update'", code="C807")
+        return handlers.run_skills_update(
+            project_dir=project_dir,
+            global_install=args.skills_global,
+            targets=tuple(args.skills_target),
+            force=args.skills_force,
+        )
     if args.command == CliCommand.SCENARIO:
         return _dispatch_scenario_command(
             args=args,

@@ -11,10 +11,17 @@ from sqlbuild.cli.commands._helpers.runtime.connection import (
     resolve_project_connection_config,
     resolve_target_connection_config,
 )
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.models import NormalizedDbtProfileConnection
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, TargetConfig
+from sqlbuild.spec.contracts.models import (
+    LocalConfig,
+    LocalTargetConfig,
+    ProjectConfig,
+    TargetConfig,
+)
 from tests.unit.src.sqlbuild.cli.commands._helpers.runtime._test_types import (
+    NamedConnectionBehaviorTestCase,
     ResolveConnectionConfigWarningTestCase,
     ResolveDbtProfileConnectionConfigTestCase,
     ResolveEnvironmentConnectionConfigTestCase,
@@ -105,6 +112,174 @@ def test_given_adapter_connection_when_resolving_then_emits_expected_warning(
     captured_err: str = capsys.readouterr().err
     assert connection == test_case.expected_connection
     assert captured_err == test_case.expected_warning
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NamedConnectionBehaviorTestCase(
+            description="locked precedence with one interpolation pass",
+            expected_connection={
+                "layer": "local_legacy",
+                "legacy_project": True,
+                "account": "expanded-account",
+                "project_named": True,
+                "local_named": True,
+                "target": True,
+                "local": True,
+                "legacy_local": True,
+            },
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_named_connection_layers_when_resolving_then_uses_locked_precedence_and_expands_once(
+    test_case: NamedConnectionBehaviorTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("NAMED_ACCOUNT", "expanded-account")
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=ProjectConfig(
+            name="demo",
+            adapter="snowflake",
+            default_target="dev",
+            connection={"layer": "project", "legacy_project": True},
+            connections={
+                "developer": {
+                    "layer": "project_named",
+                    "account": "${ENV:NAMED_ACCOUNT}",
+                    "project_named": True,
+                }
+            },
+            targets={
+                "dev": TargetConfig(
+                    connection_name="developer",
+                    connection={"layer": "project_target", "target": True},
+                )
+            },
+        ),
+        local_config=LocalConfig(
+            connections={"developer": {"layer": "local_named", "local_named": True}},
+            targets={"dev": LocalTargetConfig(connection={"layer": "local_target", "local": True})},
+            connection={"layer": "local_legacy", "legacy_local": True},
+        ),
+    )
+
+    connection: dict[str, object] = resolve_project_connection_config(
+        discovered_inputs=discovered_inputs, project_dir=tmp_path
+    )
+
+    assert connection == test_case.expected_connection
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NamedConnectionBehaviorTestCase(
+            description="local-only connection reference",
+            expected_connection={"database": ":memory:", "custom": "kept"},
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_local_only_named_connection_when_resolving_then_it_is_allowed(
+    test_case: NamedConnectionBehaviorTestCase, tmp_path: Path
+) -> None:
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=ProjectConfig(
+            name="demo",
+            adapter="duckdb",
+            default_target="dev",
+            targets={"dev": TargetConfig(connection_name="developer")},
+        ),
+        local_config=LocalConfig(
+            connections={"developer": {"database": ":memory:", "custom": "kept"}}
+        ),
+    )
+
+    connection: dict[str, object] = resolve_project_connection_config(
+        discovered_inputs=discovered_inputs, project_dir=tmp_path
+    )
+
+    assert connection == test_case.expected_connection
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NamedConnectionBehaviorTestCase(
+            description="unknown effective reference",
+            expected_connection={},
+            expected_error_fragment="Unknown connection 'missing'.*connections.missing",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unknown_named_connection_when_resolving_then_it_fails_before_connecting(
+    test_case: NamedConnectionBehaviorTestCase, tmp_path: Path
+) -> None:
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=ProjectConfig(
+            name="demo",
+            adapter="duckdb",
+            default_target="dev",
+            targets={"dev": TargetConfig(connection_name="missing")},
+        ),
+        local_config=LocalConfig(),
+    )
+
+    with pytest.raises(CompileInputError, match=str(test_case.expected_error_fragment)):
+        resolve_project_connection_config(discovered_inputs=discovered_inputs, project_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NamedConnectionBehaviorTestCase(
+            description="named dbt profile route",
+            expected_connection={"account": "acct", "database": "RACING"},
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_named_dbt_profile_connection_when_resolving_then_routes_downstream(
+    test_case: NamedConnectionBehaviorTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=ProjectConfig(
+            name="demo",
+            adapter="snowflake",
+            default_target="dev",
+            connections={"dbt": {"source": "dbt_profile", "profile": "analytics", "target": "dev"}},
+            targets={"dev": TargetConfig(connection_name="dbt")},
+        ),
+        local_config=LocalConfig(),
+    )
+
+    def resolve_raw_dbt_profile_connection(**kwargs: object) -> NormalizedDbtProfileConnection:
+        assert kwargs["raw_config"] == {
+            "source": "dbt_profile",
+            "profile": "analytics",
+            "target": "dev",
+        }
+        return NormalizedDbtProfileConnection(
+            adapter="snowflake", connection={"account": "acct", "database": "RACING"}
+        )
+
+    monkeypatch.setattr(
+        connection_core,
+        "resolve_raw_dbt_profile_connection",
+        resolve_raw_dbt_profile_connection,
+    )
+
+    connection: dict[str, object] = resolve_project_connection_config(
+        discovered_inputs=discovered_inputs, project_dir=tmp_path
+    )
+
+    assert connection == test_case.expected_connection
 
 
 @pytest.mark.parametrize(

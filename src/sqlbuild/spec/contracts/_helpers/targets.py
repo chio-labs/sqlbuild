@@ -50,6 +50,11 @@ def resolve_target_config(
         return project_target
     target_config: TargetConfig = TargetConfig(
         connection={**project_target.connection, **local_target.connection},
+        connection_name=(
+            local_target.connection_name
+            if local_target.connection_name is not None
+            else project_target.connection_name
+        ),
         vars={**project_target.vars, **local_target.vars},
         database=(
             local_target.database if local_target.database is not None else project_target.database

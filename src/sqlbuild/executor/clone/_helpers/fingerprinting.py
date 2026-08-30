@@ -32,7 +32,6 @@ def copy_clone_fingerprints(
     origin_seed_entries: tuple[SeedPlanEntry, ...],
     destination_seed_entries: tuple[SeedPlanEntry, ...],
     adapter: BaseAdapter,
-    origin_connection: Any,
     destination_connection: Any,
     run_id: str,
     query_change_tracking: bool,
@@ -56,8 +55,7 @@ def copy_clone_fingerprints(
         destination_entries=destination_seed_entries,
         successful_names=successful_names,
         adapter=adapter,
-        origin_connection=origin_connection,
-        destination_connection=destination_connection,
+        connection=destination_connection,
         run_id=run_id,
     )
     table_origin_entries: tuple[ModelPlanEntry, ...] = tuple(
@@ -76,8 +74,7 @@ def copy_clone_fingerprints(
         destination_entries=table_destination_entries,
         successful_names=successful_names,
         adapter=adapter,
-        origin_connection=origin_connection,
-        destination_connection=destination_connection,
+        connection=destination_connection,
         run_id=run_id,
     )
 
@@ -89,8 +86,7 @@ def _copy_entry_fingerprints(
     destination_entries: Sequence[ModelPlanEntry | SeedPlanEntry],
     successful_names: frozenset[str],
     adapter: BaseAdapter,
-    origin_connection: Any,
-    destination_connection: Any,
+    connection: Any,
     run_id: str,
 ) -> None:
     origin_by_name: dict[str, ModelPlanEntry | SeedPlanEntry] = {
@@ -103,7 +99,7 @@ def _copy_entry_fingerprints(
         _read_origin_fingerprint_sets(
             origin_entries=origin_entries,
             adapter=adapter,
-            connection=origin_connection,
+            connection=connection,
         )
     )
     name: str
@@ -128,7 +124,7 @@ def _copy_entry_fingerprints(
             ts=datetime.now(tz=UTC),
         )
         write_fingerprint(
-            connection=destination_connection,
+            connection=connection,
             execute=adapter.execute,
             database=destination_entry.destination.database,
             schema=destination_entry.destination.schema,

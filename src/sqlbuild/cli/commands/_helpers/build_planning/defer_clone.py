@@ -10,9 +10,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
-from sqlbuild.cli.commands._helpers.runtime.connection import (
-    resolve_target_connection_config,
-)
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import (
     BuildCommandRequest,
@@ -31,7 +28,11 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.clone_with_options import run_clone_pipeline_with_options
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
-from sqlbuild.compiler.pipeline.models import ClonePipelineOptions, ClonePipelineResult
+from sqlbuild.compiler.pipeline.models import (
+    ClonePipelineConnection,
+    ClonePipelineOptions,
+    ClonePipelineResult,
+)
 from sqlbuild.compiler.planner.main.clone.resolve_clone_boundary import (
     resolve_clone_boundary,
 )
@@ -216,14 +217,6 @@ def run_defer_clone_prephase(
     if on_progress is not None:
         on_progress("Preparing defer clone plan...")
     start: float = time.monotonic()
-    origin_connection: Any = adapter.connect(
-        resolve_target_connection_config(
-            discovered_inputs=discovered_inputs,
-            project_dir=project_dir,
-            target_name=origin_target_name,
-            cli_vars=cli_vars,
-        )
-    )
     destination_connection: Any = adapter.connect(inputs.connection_config)
     try:
         clone_pipeline: ClonePipelineResult = run_clone_pipeline_with_options(
@@ -231,7 +224,10 @@ def run_defer_clone_prephase(
             adapter=adapter,
             origin_target_name=origin_target_name,
             destination_target_name=destination_target_name,
-            destination_connection=destination_connection,
+            destination_connection=ClonePipelineConnection(
+                config=inputs.connection_config,
+                handle=destination_connection,
+            ),
             options=ClonePipelineOptions(
                 no_sql_validation=inputs.no_sql_validation,
                 no_cache=inputs.no_cache,
@@ -260,7 +256,6 @@ def run_defer_clone_prephase(
                     destination_function_entries=clone_pipeline.destination_function_entries,
                     execution_order=clone_pipeline.clone_plan.execution_order,
                     adapter=adapter,
-                    origin_connection=origin_connection,
                     destination_connection=destination_connection,
                     hard_copy=False,
                     run_id=clone_pipeline.destination_project.run_id,
@@ -298,11 +293,9 @@ def run_defer_clone_prephase(
             origin_seed_entries=clone_pipeline.origin_seed_entries,
             destination_seed_entries=clone_pipeline.destination_seed_entries,
             adapter=adapter,
-            origin_connection=origin_connection,
             destination_connection=destination_connection,
             run_id=clone_pipeline.destination_project.run_id,
             query_change_tracking=clone_pipeline.destination_project.settings.query_change_tracking,
         )
     finally:
-        adapter.close(origin_connection)
         adapter.close(destination_connection)
