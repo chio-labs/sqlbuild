@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.65.4](https://github.com/chio-labs/sqlbuild/compare/v0.65.3...v0.65.4) (2026-08-30)
+
+
+### Bug Fixes
+
+* make clone dependency outcomes explicit ([#408](https://github.com/chio-labs/sqlbuild/issues/408)) ([34c54b2](https://github.com/chio-labs/sqlbuild/commit/34c54b26e5185abd1be9f5df336242faaf0459fe))
+
 ## [0.65.3](https://github.com/chio-labs/sqlbuild/compare/v0.65.2...v0.65.3) (2026-08-30)
 
 
