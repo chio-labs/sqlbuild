@@ -8,6 +8,8 @@ from sqlbuild.cli.commands.models import (
     AuditExecutionPreparation,
     AuditInvocation,
 )
+from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
+from sqlbuild.cli.output.main._build_item_execution_event import format_build_item_execution_event
 from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )
@@ -67,34 +69,43 @@ def execute_audit_plan(
 ) -> tuple[AuditExecutionResult, ...]:
     """Execute the audit plan with nested progress reporting."""
 
+    event_writer: ExecutionEventWriter = ExecutionEventWriter()
     on_complete: Callable[[AuditExecutionResult], None] = _build_on_complete(
-        progress=preparation.progress
+        progress=preparation.progress,
+        event_writer=event_writer,
+        pipeline_result=pipeline_result,
     )
-    return run_audit_pipeline(
-        plan=pipeline_result.plan_output,
-        connection_config=invocation.connection_config,
-        adapter=invocation.adapter,
-        on_connection_start=preparation.execution_connection_progress.on_connection_start,
-        on_connection_complete=lambda connection_count, elapsed_seconds: (
-            preparation.execution_connection_progress.on_connection_complete(
-                connection_count=connection_count, elapsed_seconds=elapsed_seconds
-            )
-        ),
-        on_connection_error=lambda connection_count, elapsed_seconds: (
-            preparation.execution_connection_progress.on_connection_error(
-                connection_count=connection_count, elapsed_seconds=elapsed_seconds
-            )
-        ),
-        on_audit_start=lambda entry: preparation.progress.on_item_start(
-            group_name=entry.attached_target_name or "(unattached)",
-            item_name=_audit_display_name_from_entry(entry),
-        ),
-        on_audit_complete=on_complete,
-    )
+    try:
+        return run_audit_pipeline(
+            plan=pipeline_result.plan_output,
+            connection_config=invocation.connection_config,
+            adapter=invocation.adapter,
+            on_connection_start=preparation.execution_connection_progress.on_connection_start,
+            on_connection_complete=lambda connection_count, elapsed_seconds: (
+                preparation.execution_connection_progress.on_connection_complete(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
+            on_connection_error=lambda connection_count, elapsed_seconds: (
+                preparation.execution_connection_progress.on_connection_error(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
+            on_audit_start=lambda entry: preparation.progress.on_item_start(
+                group_name=entry.attached_target_name or "(unattached)",
+                item_name=_audit_display_name_from_entry(entry),
+            ),
+            on_audit_complete=on_complete,
+        )
+    finally:
+        event_writer.close()
 
 
 def _build_on_complete(
-    *, progress: NestedCommandProgressCallbacks
+    *,
+    progress: NestedCommandProgressCallbacks,
+    event_writer: ExecutionEventWriter,
+    pipeline_result: CompilePipelineResult,
 ) -> Callable[[AuditExecutionResult], None]:
     def _on_complete(result: AuditExecutionResult) -> None:
         group_name: str = result.attached_target_name or "(unattached)"
@@ -117,6 +128,13 @@ def _build_on_complete(
             item_name=audit_name,
             status_text=status_text,
             detail=detail,
+        )
+        event_writer.write(
+            format_build_item_execution_event(
+                result=result,
+                plan=pipeline_result.plan_output,
+                command="audit",
+            )
         )
 
     return _on_complete

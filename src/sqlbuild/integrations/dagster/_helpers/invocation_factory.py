@@ -8,7 +8,9 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from sqlbuild.cli.output.constants import EXECUTION_EVENT_PATH_ENV
 from sqlbuild.integrations.dagster._helpers.invocation import (
+    _with_event_output_args,
     _with_json_output_args,
     _with_selected_asset_args,
 )
@@ -41,9 +43,17 @@ def start_sqlbuild_cli_invocation(
         context=context,
         dag=dag,
     )
-    command: tuple[str, ...] = (*tuple(sqb_command), *resolved_args)
+    event_args: tuple[str, ...]
+    event_args, event_jsonl_path = _with_event_output_args(
+        args=resolved_args,
+        context=context,
+        dag=dag,
+    )
+    command: tuple[str, ...] = (*tuple(sqb_command), *event_args)
     process_environment: dict[str, str] = dict(os.environ)
     process_environment["PYTHONUNBUFFERED"] = "1"
+    if event_jsonl_path is not None:
+        process_environment[EXECUTION_EVENT_PATH_ENV] = str(event_jsonl_path)
     process: subprocess.Popen[str] = subprocess.Popen(
         command,
         cwd=project_dir,
@@ -62,4 +72,5 @@ def start_sqlbuild_cli_invocation(
         selection=selection,
         selector_file=selector_file,
         execution_json_path=execution_json_path,
+        event_jsonl_path=event_jsonl_path,
     )

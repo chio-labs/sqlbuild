@@ -14,6 +14,8 @@ from sqlbuild.cli.commands.models import (
     TestExecutionPreparation,
     TestInvocation,
 )
+from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
+from sqlbuild.cli.output.main._build_item_execution_event import format_build_item_execution_event
 from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )
@@ -81,40 +83,49 @@ def execute_test_plan(
 ) -> tuple[SqlTestExecutionResult, ...]:
     """Execute the test plan with nested progress reporting."""
 
+    event_writer: ExecutionEventWriter = ExecutionEventWriter()
     on_complete: Callable[[SqlTestExecutionResult], None] = _build_on_complete(
-        progress=preparation.progress
+        progress=preparation.progress,
+        event_writer=event_writer,
+        pipeline_result=pipeline_result,
     )
-    return run_test_pipeline(
-        plan=pipeline_result.plan_output,
-        connection_config=invocation.connection_config,
-        adapter=invocation.adapter,
-        on_connection_start=preparation.execution_connection_progress.on_connection_start,
-        on_connection_complete=lambda connection_count, elapsed_seconds: (
-            preparation.execution_connection_progress.on_connection_complete(
-                connection_count=connection_count, elapsed_seconds=elapsed_seconds
-            )
-        ),
-        on_connection_error=lambda connection_count, elapsed_seconds: (
-            preparation.execution_connection_progress.on_connection_error(
-                connection_count=connection_count, elapsed_seconds=elapsed_seconds
-            )
-        ),
-        on_progress=preparation.preflight_progress.report_preflight_progress,
-        on_test_start=lambda entry: preparation.progress.on_item_start(
-            group_name=_test_group_name_from_entry(entry),
-            item_name=format_parameterized_test_label(
-                name=entry.name,
-                source_path=entry.source_path,
-                parameter_schema=entry.parameter_schema,
-                parameter_values=entry.parameter_values,
+    try:
+        return run_test_pipeline(
+            plan=pipeline_result.plan_output,
+            connection_config=invocation.connection_config,
+            adapter=invocation.adapter,
+            on_connection_start=preparation.execution_connection_progress.on_connection_start,
+            on_connection_complete=lambda connection_count, elapsed_seconds: (
+                preparation.execution_connection_progress.on_connection_complete(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
             ),
-        ),
-        on_test_complete=on_complete,
-    )
+            on_connection_error=lambda connection_count, elapsed_seconds: (
+                preparation.execution_connection_progress.on_connection_error(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
+            on_progress=preparation.preflight_progress.report_preflight_progress,
+            on_test_start=lambda entry: preparation.progress.on_item_start(
+                group_name=_test_group_name_from_entry(entry),
+                item_name=format_parameterized_test_label(
+                    name=entry.name,
+                    source_path=entry.source_path,
+                    parameter_schema=entry.parameter_schema,
+                    parameter_values=entry.parameter_values,
+                ),
+            ),
+            on_test_complete=on_complete,
+        )
+    finally:
+        event_writer.close()
 
 
 def _build_on_complete(
-    *, progress: NestedCommandProgressCallbacks
+    *,
+    progress: NestedCommandProgressCallbacks,
+    event_writer: ExecutionEventWriter,
+    pipeline_result: CompilePipelineResult,
 ) -> Callable[[SqlTestExecutionResult], None]:
     def _on_complete(result: SqlTestExecutionResult) -> None:
         model_name: str = ""
@@ -135,6 +146,13 @@ def _build_on_complete(
             error_code=result.error_code,
             error_help=result.error_help,
             error_message=result.error_message,
+        )
+        event_writer.write(
+            format_build_item_execution_event(
+                result=result,
+                plan=pipeline_result.plan_output,
+                command="test",
+            )
         )
 
     return _on_complete

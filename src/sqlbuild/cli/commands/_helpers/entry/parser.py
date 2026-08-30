@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from sqlbuild.cli.commands._helpers.entry.errors import build_argument_parser_class
 from sqlbuild.cli.commands._helpers.entry.parser_arguments import (
@@ -173,6 +174,7 @@ def _add_plan_and_build_parsers(
     build_parser.add_argument("--no-audits", dest="run_audits", action="store_false", default=True)
     build_parser.add_argument("--manifest", action="store_true", default=False)
     _ = add_execution_json_output_arg(build_parser)
+    build_parser.add_argument("--event-output", type=Path, default=None, help=argparse.SUPPRESS)
     _ = add_cursor_override_args(build_parser)
     build_load_group: argparse._MutuallyExclusiveGroup = build_parser.add_mutually_exclusive_group()
     build_load_group.add_argument("--load", dest="load_sources", action="store_true", default=None)
@@ -268,6 +270,7 @@ def _add_data_parsers(
     _ = add_vars_args(clone_parser)
     _ = add_dbt_config_args(parser=clone_parser)
     _ = add_execution_json_output_arg(clone_parser)
+    clone_parser.add_argument("--event-output", type=Path, default=None, help=argparse.SUPPRESS)
 
     diff_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DIFF)
     diff_parser.add_argument("target_range", metavar="FROM:TO")

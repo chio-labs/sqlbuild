@@ -239,27 +239,33 @@ def _execute_direct_build(
             pipeline_result=pipeline_result,
             providers=providers,
         )
-        outcome: BuildRunOutcome = execute_build_plan(
-            request=request,
-            invocation=invocation,
-            pipeline_result=pipeline_result,
-            preparation=preparation,
-            providers=providers,
-        )
-        with CostContext.resource_scope(
-            resource_type="run",
-            resource_name=(
-                pipeline_result.project.effective_target_name or invocation.adapter_name
-            ),
-            phase="post_build_checks",
-        ):
-            check_results: tuple[PythonCheckExecutionResult, ...] = run_post_build_python_checks(
+        try:
+            outcome: BuildRunOutcome = execute_build_plan(
                 request=request,
                 invocation=invocation,
                 pipeline_result=pipeline_result,
-                outcome=outcome,
+                preparation=preparation,
                 providers=providers,
             )
+            with CostContext.resource_scope(
+                resource_type="run",
+                resource_name=(
+                    pipeline_result.project.effective_target_name or invocation.adapter_name
+                ),
+                phase="post_build_checks",
+            ):
+                check_results: tuple[PythonCheckExecutionResult, ...] = (
+                    run_post_build_python_checks(
+                        request=request,
+                        invocation=invocation,
+                        pipeline_result=pipeline_result,
+                        outcome=outcome,
+                        providers=providers,
+                        preparation=preparation,
+                    )
+                )
+        finally:
+            preparation.callbacks.close()
     return preparation, outcome, check_results
 
 

@@ -13,12 +13,15 @@ from sqlbuild.integrations.dagster.constants import (
     ASSET_SELECTION_COMMANDS,
     CHECK_METADATA_EXCLUDED_KEYS,
     CHECK_NAME_SEPARATOR_CHARACTER,
+    CLONE_ASSET_EVENT,
     CLONE_COMMAND,
     COMPLETED_EXECUTION_STATUSES,
     DEFAULT_SELECTABLE_NODE_KINDS,
+    EVENT_OUTPUT_FLAG,
     EXPLICIT_SELECTION_FLAGS,
     JSON_OUTPUT_FLAG,
     JSON_OUTPUT_FLAGS,
+    LIVE_EVENT_COMMANDS,
     LOAD_COMMAND,
     LOAD_SELECTABLE_NODE_KINDS,
     LOADER_NODE_KIND,
@@ -30,6 +33,7 @@ from sqlbuild.integrations.dagster.constants import (
     SOURCE_NODE_KIND,
     STDERR_STREAM_NAME,
     SUCCESS_EXECUTION_STATUS,
+    VIRTUAL_ENV_FLAG,
     WARNING_CHECK_SEVERITY,
 )
 
@@ -210,6 +214,34 @@ def _create_execution_json_path() -> Path:
         return Path(handle.name)
 
 
+def _with_event_output_args(
+    *, args: tuple[str, ...], context: Any, dag: Mapping[str, Any] | None
+) -> tuple[tuple[str, ...], Path | None]:
+    if (
+        dag is None
+        or context is None
+        or not args
+        or args[0] not in LIVE_EVENT_COMMANDS
+        or VIRTUAL_ENV_FLAG in args
+        or EVENT_OUTPUT_FLAG in args
+    ):
+        return args, None
+    path: Path = _create_execution_event_path()
+    return args, path
+
+
+def _create_execution_event_path() -> Path:
+    handle: IO[str] = tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        prefix="sqlbuild-dagster-events-",
+        suffix=".jsonl",
+        delete=False,
+    )
+    with handle:
+        return Path(handle.name)
+
+
 def _start_stream_future(
     *,
     executor: ThreadPoolExecutor,
@@ -339,6 +371,7 @@ def _build_results_from_execution_payload(
 ) -> tuple[Any, ...]:
     selected_paths: set[tuple[str, ...]] = _selected_asset_paths(context=context)
     is_clone: bool = str(payload.get("command")) == CLONE_COMMAND
+    is_live_asset_event: bool = str(payload.get("event")) == CLONE_ASSET_EVENT
     if is_clone:
         selected_paths = set()
     nodes_by_name: dict[tuple[str, str], Mapping[str, Any]] = {
@@ -373,7 +406,9 @@ def _build_results_from_execution_payload(
     for node in _sort_nodes_topologically(dag=dag):
         node_id: str = str(node.get("id"))
         execution_asset: Mapping[str, Any] | None = asset_results_by_id.get(node_id)
-        if execution_asset is None and (is_clone or str(node.get("kind")) != SOURCE_NODE_KIND):
+        if execution_asset is None and (
+            is_clone or is_live_asset_event or str(node.get("kind")) != SOURCE_NODE_KIND
+        ):
             continue
         asset_key: Any = dg.AssetKey([str(part) for part in node["asset_key"]])
         if selected_paths and tuple(asset_key.path) not in selected_paths:
