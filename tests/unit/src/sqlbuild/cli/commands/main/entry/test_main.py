@@ -187,7 +187,19 @@ def test_given_compile_command_arguments_when_running_with_dependencies_then_it_
                 "--start-cursor-int",
                 "10",
             ),
-        )
+        ),
+        MainTestCase(
+            description="global debug enables verbose dbt plan output",
+            argv=["--debug", "dbt", "plan", "--select", "orders"],
+            expected_exit_code=13,
+            expected_dbt_args=("--select", "orders", "--verbose"),
+        ),
+        MainTestCase(
+            description="global debug does not duplicate explicit dbt verbose output",
+            argv=["--debug", "dbt", "plan", "--verbose"],
+            expected_exit_code=13,
+            expected_dbt_args=("--verbose",),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -316,6 +328,24 @@ def test_given_dbt_command_without_sqlbuild_project_when_dispatching_then_does_n
             expected_dbt_args=("--select", "tag:nightly", "--start-cursor-int", "10"),
         ),
         MainTestCase(
+            description="displaced SQLBuild debug enables verbose dbt run output",
+            argv=["dbt", "run", "--debug", "--select", "tag:nightly"],
+            expected_exit_code=17,
+            expected_dbt_args=("--select", "tag:nightly", "--verbose"),
+        ),
+        MainTestCase(
+            description="dbt debug argument after separator is preserved verbatim",
+            argv=["dbt", "run", "--", "--debug"],
+            expected_exit_code=17,
+            expected_dbt_args=("--", "--debug"),
+        ),
+        MainTestCase(
+            description="dbt no color argument after separator is preserved verbatim",
+            argv=["dbt", "run", "--", "--no-color"],
+            expected_exit_code=17,
+            expected_dbt_args=("--", "--no-color"),
+        ),
+        MainTestCase(
             description="dispatches dbt build and preserves dbt args",
             argv=[
                 "--project-dir",
@@ -328,6 +358,12 @@ def test_given_dbt_command_without_sqlbuild_project_when_dispatching_then_does_n
             expected_exit_code=19,
             expected_project_dir=Path("/tmp/demo"),
             expected_dbt_args=("--select", "tag:nightly"),
+        ),
+        MainTestCase(
+            description="global debug enables verbose dbt build output",
+            argv=["--debug", "dbt", "build", "--select", "tag:nightly"],
+            expected_exit_code=19,
+            expected_dbt_args=("--select", "tag:nightly", "--verbose"),
         ),
         MainTestCase(
             description="dispatches dbt build with sqb project dir alias",
@@ -415,6 +451,12 @@ def test_given_dbt_command_without_sqlbuild_project_when_dispatching_then_does_n
                 "--profiles-dir",
                 "profiles",
             ),
+        ),
+        MainTestCase(
+            description="global debug does not alter dbt debug subcommand arguments",
+            argv=["--debug", "dbt", "debug", "--no-connection"],
+            expected_exit_code=29,
+            expected_dbt_args=("--no-connection",),
         ),
     ],
     ids=lambda case: case.description,
@@ -2077,6 +2119,7 @@ def test_given_dag_command_arguments_when_running_then_dispatches_expected_handl
             expected_allow_snapshot_schema_change=True,
             expected_no_color=True,
             expected_debug=True,
+            expected_verbose=True,
         ),
         MainTestCase(
             description="passes no load to build handler",
@@ -2148,6 +2191,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
             bool,
             bool,
             bool,
+            bool,
         ]
     ] = []
 
@@ -2165,6 +2209,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
                 request.run_tests,
                 request.run_audits,
                 request.debug,
+                request.verbose,
                 request.changes_only,
                 request.no_cache,
             )
@@ -2190,6 +2235,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
             test_case.expected_run_tests,
             test_case.expected_run_audits,
             test_case.expected_debug,
+            test_case.expected_verbose,
             test_case.expected_changes_only,
             test_case.expected_no_cache,
         )
