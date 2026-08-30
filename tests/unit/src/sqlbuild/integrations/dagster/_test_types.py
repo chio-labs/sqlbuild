@@ -19,6 +19,13 @@ class DagsterAssetSpecTestCase:
 
 
 @dataclass(frozen=True)
+class DagsterDescriptionTestCase:
+    description: str
+    node: dict[str, object]
+    expected_description: str
+
+
+@dataclass(frozen=True)
 class DagsterPythonArtifactCompatibilityTestCase:
     description: str
     expected_asset_keys: tuple[tuple[str, ...], ...]
