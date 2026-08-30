@@ -38,6 +38,7 @@ def finalize_build_cost(finalization: BuildCostFinalization) -> CostRunRecord | 
         try:
             summary: RunCostSummary = finalization.adapter.collect_run_cost(
                 connection_config=finalization.connection_config,
+                target_database=finalization.target_database,
                 run_id=finalization.run_id,
                 started_at=finalization.started_at,
                 completed_at=finalization.completed_at,

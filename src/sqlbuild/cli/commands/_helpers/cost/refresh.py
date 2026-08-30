@@ -9,6 +9,7 @@ from sqlbuild.cli.commands._helpers.runtime.connection import (
 )
 from sqlbuild.cli.commands.constants import COST_HISTORY_SELECTOR, COST_LATEST_SELECTOR
 from sqlbuild.cli.commands.models import CostCommandRequest
+from sqlbuild.compiler.compile.main.effective_target import build_effective_target_config
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.cost.classes.run_cost_store import RunCostStore
@@ -18,6 +19,7 @@ from sqlbuild.cost.types import CostAwareAdapter, CostCapability, CostStatus
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
+from sqlbuild.spec.contracts.models import TargetConfig
 
 _REFRESH_STATUS_RANK: dict[CostStatus, int] = {
     CostStatus.COLLECTION_FAILED: 0,
@@ -45,6 +47,10 @@ def refresh_pending_cost_run(request: CostCommandRequest) -> None:
         }:
             return
         discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+        target_config: TargetConfig | None = build_effective_target_config(
+            discovered_inputs=discovered,
+            selected_target=record.target_name,
+        )
         adapter_name: str = resolve_effective_adapter_name(
             project_config=discovered.project_config,
             local_config=discovered.local_config,
@@ -59,8 +65,15 @@ def refresh_pending_cost_run(request: CostCommandRequest) -> None:
             project_dir=project_dir,
             selected_target=record.target_name,
         )
+        connection_database: object | None = connection_config.get("database")
+        target_database: str | None = (
+            target_config.database
+            if target_config is not None and target_config.database is not None
+            else (None if connection_database is None else str(connection_database))
+        )
         summary: RunCostSummary = adapter.collect_run_cost(
             connection_config=connection_config,
+            target_database=target_database,
             run_id=record.run_id,
             started_at=record.started_at,
             completed_at=record.completed_at,

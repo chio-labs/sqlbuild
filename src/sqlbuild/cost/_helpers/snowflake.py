@@ -52,6 +52,7 @@ _INCOMPLETE_OBSERVATION_REASONS: frozenset[str] = frozenset(
 def collect_snowflake_run_cost(
     *,
     connection: Any,
+    database: str | None = None,
     run_id: str,
     started_at: datetime,
     completed_at: datetime,
@@ -100,6 +101,7 @@ def collect_snowflake_run_cost(
     for attempt in range(attempts):
         observations, observed_query_ids, skipped_reasons, saturated = _query_observations(
             connection=connection,
+            database=database,
             started_at=started_at,
             completed_at=completed_at,
             expected_query_ids=expected_query_ids,
@@ -192,6 +194,7 @@ def collect_snowflake_run_cost(
 def _query_observations(
     *,
     connection: Any,
+    database: str | None = None,
     started_at: datetime,
     completed_at: datetime,
     expected_query_ids: frozenset[str],
@@ -205,6 +208,7 @@ def _query_observations(
 ]:
     open_rows: tuple[tuple[Any, ...], ...] = _query_open_history_rows(
         connection=connection,
+        database=database,
         started_at=started_at - _MAXIMUM_CLOCK_SKEW,
         classification_query_ids=classification_query_ids,
         deadline=deadline,
@@ -213,6 +217,7 @@ def _query_observations(
     if saturated:
         bounded_rows, bounded_saturated = _query_history_rows(
             connection=connection,
+            database=database,
             started_at=started_at - _MAXIMUM_CLOCK_SKEW,
             completed_at=completed_at + _MAXIMUM_CLOCK_SKEW,
             classification_query_ids=classification_query_ids,
@@ -253,6 +258,7 @@ def _is_running_history_row(*, row: tuple[Any, ...]) -> bool:
 def _query_open_history_rows(
     *,
     connection: Any,
+    database: str | None = None,
     started_at: datetime,
     classification_query_ids: frozenset[str],
     deadline: float,
@@ -261,6 +267,7 @@ def _query_open_history_rows(
         raise TimeoutError("Snowflake cost collection deadline exceeded")
     cursor: Any = connection.execute(
         _render_open_query_history_sql(
+            database=database,
             started_at=started_at,
             classification_query_ids=classification_query_ids,
         ),
@@ -277,6 +284,7 @@ def _query_open_history_rows(
 def _query_history_rows(
     *,
     connection: Any,
+    database: str | None = None,
     started_at: datetime,
     completed_at: datetime,
     classification_query_ids: frozenset[str],
@@ -286,6 +294,7 @@ def _query_history_rows(
         raise TimeoutError("Snowflake cost collection deadline exceeded")
     cursor: Any = connection.execute(
         _render_query_history_sql(
+            database=database,
             started_at=started_at,
             completed_at=completed_at,
             classification_query_ids=classification_query_ids,
@@ -305,6 +314,7 @@ def _query_history_rows(
     midpoint: datetime = started_at + (completed_at - started_at) / 2
     left_rows, left_saturated = _query_history_rows(
         connection=connection,
+        database=database,
         started_at=started_at,
         completed_at=midpoint,
         classification_query_ids=classification_query_ids,
@@ -312,6 +322,7 @@ def _query_history_rows(
     )
     right_rows, right_saturated = _query_history_rows(
         connection=connection,
+        database=database,
         started_at=midpoint,
         completed_at=completed_at,
         classification_query_ids=classification_query_ids,
@@ -405,13 +416,18 @@ def _attribute_from_ledger(
 
 
 def _render_query_history_sql(
-    *, started_at: datetime, completed_at: datetime, classification_query_ids: frozenset[str]
+    *,
+    database: str | None = None,
+    started_at: datetime,
+    completed_at: datetime,
+    classification_query_ids: frozenset[str],
 ) -> str:
     start: str = started_at.isoformat()
     end: str = completed_at.isoformat()
     query_text_expression: str = _render_query_text_expression(
         classification_query_ids=classification_query_ids
     )
+    query_history_function: str = _render_query_history_function(database=database)
     return f"""
 SELECT
   QUERY_ID,
@@ -428,7 +444,7 @@ SELECT
   QUERY_TYPE,
   {query_text_expression},
   CURRENT_TIMESTAMP()
-FROM TABLE(INFORMATION_SCHEMA.QUERY_HISTORY(
+FROM TABLE({query_history_function}(
   END_TIME_RANGE_START => TO_TIMESTAMP_LTZ('{start}'),
   END_TIME_RANGE_END => TO_TIMESTAMP_LTZ('{end}'),
   RESULT_LIMIT => {_RESULT_LIMIT}
@@ -438,12 +454,16 @@ ORDER BY START_TIME, QUERY_ID
 
 
 def _render_open_query_history_sql(
-    *, started_at: datetime, classification_query_ids: frozenset[str]
+    *,
+    database: str | None = None,
+    started_at: datetime,
+    classification_query_ids: frozenset[str],
 ) -> str:
     start: str = started_at.isoformat()
     query_text_expression: str = _render_query_text_expression(
         classification_query_ids=classification_query_ids
     )
+    query_history_function: str = _render_query_history_function(database=database)
     return f"""
 SELECT
   QUERY_ID,
@@ -460,12 +480,19 @@ SELECT
   QUERY_TYPE,
   {query_text_expression},
   CURRENT_TIMESTAMP()
-FROM TABLE(INFORMATION_SCHEMA.QUERY_HISTORY(
+FROM TABLE({query_history_function}(
   END_TIME_RANGE_START => TO_TIMESTAMP_LTZ('{start}'),
   RESULT_LIMIT => {_RESULT_LIMIT}
 ))
 ORDER BY START_TIME, QUERY_ID
 """.strip()
+
+
+def _render_query_history_function(*, database: str | None) -> str:
+    if database is None:
+        return "INFORMATION_SCHEMA.QUERY_HISTORY"
+    quoted_database: str = database.upper().replace('"', '""')
+    return f'"{quoted_database}".INFORMATION_SCHEMA.QUERY_HISTORY'
 
 
 def _render_query_text_expression(*, classification_query_ids: frozenset[str]) -> str:

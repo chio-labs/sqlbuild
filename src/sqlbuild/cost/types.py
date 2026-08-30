@@ -35,6 +35,7 @@ class CostAwareAdapter(Protocol):
         self,
         *,
         connection_config: dict[str, object],
+        target_database: str | None,
         run_id: str,
         started_at: datetime,
         completed_at: datetime,
