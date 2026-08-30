@@ -47,9 +47,7 @@ dg: Any = pytest.importorskip("dagster")
                 "path": "models/orders.sql",
                 "sql": "SELECT 1",
             },
-            expected_description=(
-                "Clean orders\n\n**SQLBuild SQL:**\n```sql\nSELECT 1\n```"
-            ),
+            expected_description=("Clean orders\n\n**SQLBuild SQL:**\n```sql\nSELECT 1\n```"),
         ),
         DagsterDescriptionTestCase(
             description="non-SQL asset includes its source path",
