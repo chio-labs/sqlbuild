@@ -37,6 +37,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
 )
 from sqlbuild.cost.classes.cost_context import CostContext
+from sqlbuild.cost.models import StatementExecutionTelemetry
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
@@ -65,6 +66,7 @@ from sqlbuild.executor.build.models import (
     BuildRuntimeParams,
     FunctionExecutionResult,
     NodeCompletion,
+    SchedulerState,
     SeedExecutionResult,
     SourceAuditRunResult,
     SourceLoadPlanEntry,
@@ -181,6 +183,9 @@ class BuildScheduler:
         self._effective_vars: dict[str, object] = runtime.effective_vars or {}
         self._warehouse_relations: dict[str, RelationInfo] = initial_state.warehouse_relations or {}
         self._on_sub_progress: Callable[[str], None] | None = callbacks.on_sub_progress
+        self._on_statement_complete: Callable[[StatementExecutionTelemetry], None] | None = (
+            callbacks.on_statement_complete
+        )
         self._use_color: bool = runtime.use_color
         self._providers: ProviderContainer | None = runtime.providers
         self._python_identity_recorder: PythonIdentityRecorder | None = (
@@ -197,6 +202,7 @@ class BuildScheduler:
         self._microbatch_coordinator_lock = threading.Lock()
         self._ready: deque[CompiledObjectKey] = deque()
         self._stop: bool = False
+        self._last_scheduler_state: SchedulerState | None = None
 
         self._model_results: list[ModelExecutionResult] = []
         self._seed_results: list[SeedExecutionResult] = []
@@ -366,6 +372,7 @@ class BuildScheduler:
 
     def _run_concurrent(self) -> None:
         with ThreadPoolExecutor(max_workers=self._max_concurrency) as pool:
+            self._report_scheduler_state()
             while self._ready or self._in_flight:
                 if self._stop and not self._in_flight:
                     break
@@ -417,12 +424,30 @@ class BuildScheduler:
                     self._in_flight.add(key)
                     pool.submit(self._worker, key)
 
+                self._report_scheduler_state()
                 if not self._in_flight:
                     break
 
                 completion: NodeCompletion = self._completion_queue.get()
                 self._in_flight.discard(completion.key)
                 self._handle_completion(key=completion.key, result=completion.result)
+            self._report_scheduler_state()
+
+    def _report_scheduler_state(self) -> None:
+        callback: Callable[[SchedulerState], None] | None = self._callbacks.on_scheduler_state
+        if callback is None:
+            return
+        unresolved_count: int = len(self._selected_execution_keys.difference(self._completed_keys))
+        state: SchedulerState = SchedulerState(
+            running=len(self._in_flight),
+            ready=len(self._ready),
+            waiting=max(0, unresolved_count - len(self._in_flight) - len(self._ready)),
+            limit=self._max_concurrency,
+        )
+        if state == self._last_scheduler_state:
+            return
+        self._last_scheduler_state = state
+        callback(state)
 
     def _worker(self, key: CompiledObjectKey) -> None:
         run_worker_with_completion(
@@ -470,6 +495,7 @@ class BuildScheduler:
                 resource_type=str(key.resource_type),
                 resource_name=key.name,
                 ledger_path=(self._runtime_dir / "runs" / self._run_id / "statements.jsonl"),
+                on_statement_complete=self._on_statement_complete,
             ):
                 return self._execute_model_node(
                     key=key,
@@ -672,6 +698,7 @@ class BuildScheduler:
             resource_type=str(key.resource_type),
             resource_name=key.name,
             ledger_path=(self._runtime_dir / "runs" / self._run_id / "statements.jsonl"),
+            on_statement_complete=self._on_statement_complete,
         ):
             return self._execute_node_with_cost_context(key=key, connection=connection)
 

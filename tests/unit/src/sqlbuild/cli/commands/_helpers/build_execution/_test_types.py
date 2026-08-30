@@ -18,3 +18,9 @@ class BuildRunContextTestCase:
     selected_python_count: int = 0
     total_source_count: int = 0
     total_task_count: int = 0
+
+
+@dataclass(frozen=True)
+class BuildPhaseTimingsTestCase:
+    description: str
+    expected_output: str

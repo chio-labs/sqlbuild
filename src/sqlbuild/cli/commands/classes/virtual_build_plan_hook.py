@@ -144,4 +144,10 @@ class VirtualBuildPlanHook:
             ),
             on_node_complete=callbacks.on_node_complete,
             on_sub_progress=callbacks.on_sub_progress,
+            on_scheduler_state=(
+                callbacks.on_scheduler_state if self._verbose or self._debug else None
+            ),
+            on_statement_complete=(
+                callbacks.on_statement_complete if self._verbose or self._debug else None
+            ),
         )

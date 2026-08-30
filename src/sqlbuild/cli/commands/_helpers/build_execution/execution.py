@@ -182,6 +182,16 @@ def execute_build_plan(
                     connection_count=connection_count, elapsed_seconds=elapsed_seconds
                 )
             ),
+            on_scheduler_state=(
+                preparation.callbacks.on_scheduler_state
+                if request.verbose or request.debug
+                else None
+            ),
+            on_statement_complete=(
+                preparation.callbacks.on_statement_complete
+                if request.verbose or request.debug
+                else None
+            ),
         ),
         customizations=BuildCustomizations(
             custom_materializations=pipeline_result.custom_materializations,

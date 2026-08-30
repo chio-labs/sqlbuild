@@ -27,9 +27,11 @@ from sqlbuild.cli.progress.models import NestedProgressChildRow
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.python_nodes.types import SkipMode
+from sqlbuild.cost.models import StatementExecutionTelemetry
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
     FunctionExecutionResult,
+    SchedulerState,
     SeedExecutionResult,
 )
 from sqlbuild.executor.build.types import BuildStatus
@@ -52,6 +54,7 @@ from tests.unit.src.sqlbuild.cli.commands.shared._helpers._test_types import (
     BuildProgressSqlTestRowsTestCase,
     ExecutionHeaderTestCase,
     NestedProgressChildRowsTestCase,
+    RuntimeDiagnosticsTestCase,
     TruncateNameTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.shared._helpers.helpers import (
@@ -59,6 +62,51 @@ from tests.unit.src.sqlbuild.cli.commands.shared._helpers.helpers import (
     build_progress_snapshot_plan_output,
     write_spinner_line_and_release,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RuntimeDiagnosticsTestCase(
+            description="reports constrained frontier and query identity without SQL",
+            expected_fragments=(
+                "Scheduler  2 running, 0 ready, 173 waiting on dependencies, limit 5",
+                "DAG frontier constrained",
+                "Query  model orders  phase=materialize  01c-query-id  success  1.25s",
+            ),
+            expected_absent_fragments=("SELECT",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_verbose_runtime_diagnostics_when_reporting_then_writes_concise_raw_output(
+    test_case: RuntimeDiagnosticsTestCase,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
+        plan=PlanOutput(), use_color=False, verbose=True, debug=False
+    )
+
+    callbacks.on_scheduler_state(SchedulerState(running=2, ready=0, waiting=173, limit=5))
+    callbacks.on_statement_complete(
+        StatementExecutionTelemetry(
+            query_id="01c-query-id",
+            status="success",
+            elapsed_seconds=1.25,
+            resource_type="model",
+            resource_name="orders",
+            phase="materialize",
+        )
+    )
+    callbacks.close()
+
+    output: str = capsys.readouterr().out
+    expected_fragment: str
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in output
+    absent_fragment: str
+    for absent_fragment in test_case.expected_absent_fragments:
+        assert absent_fragment not in output
 
 
 @pytest.mark.parametrize(

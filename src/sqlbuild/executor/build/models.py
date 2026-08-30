@@ -19,6 +19,7 @@ from sqlbuild.compiler.planner.models import (
     SourceLoadPlanEntry,
     SqlTestPlanEntry,
 )
+from sqlbuild.cost.models import StatementExecutionTelemetry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.types import BeforeModelMaterializeCallback, BuildStatus
 from sqlbuild.executor.custom.models import MaterializationResult
@@ -32,6 +33,25 @@ from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback, NodeStartCallback
 from sqlbuild.spec.contracts.models import SnapshotsConfig
+
+
+@dataclass(frozen=True)
+class BuildExecutionTimings:
+    """Monotonic phase durations for one build pipeline execution."""
+
+    connection_preparation_seconds: float | None = None
+    schema_preparation_seconds: float | None = None
+    execution_seconds: float | None = None
+
+
+@dataclass(frozen=True)
+class SchedulerState:
+    """Observable concurrent scheduler frontier state."""
+
+    running: int
+    ready: int
+    waiting: int
+    limit: int
 
 
 @dataclass(frozen=True)
@@ -78,6 +98,8 @@ class BuildCallbacks:
     on_connection_complete: ConnectionElapsedCallback | None = None
     on_connection_error: ConnectionElapsedCallback | None = None
     python_identity_recorder: PythonIdentityRecorder | None = None
+    on_scheduler_state: Callable[[SchedulerState], None] | None = None
+    on_statement_complete: Callable[[StatementExecutionTelemetry], None] | None = None
 
 
 @dataclass(frozen=True)
@@ -195,3 +217,4 @@ class BuildExecutionResult:
     failure_count: int = 0
     skipped_count: int = 0
     warning_count: int = 0
+    timings: BuildExecutionTimings = field(default_factory=BuildExecutionTimings)

@@ -19,6 +19,7 @@ from sqlbuild.executor.build.models import (
     BuildCallbacks,
     BuildCustomizations,
     BuildExecutionResult,
+    BuildExecutionTimings,
     BuildInitialState,
     BuildRuntimeParams,
     ExternalSourceLoadResults,
@@ -73,6 +74,7 @@ def run_build_pipeline(
         resource_name=runtime.target,
         ledger_path=runtime.runtime_dir / "runs" / runtime.run_id / "statements.jsonl",
         phase="build",
+        on_statement_complete=(None if callbacks is None else callbacks.on_statement_complete),
     ):
         return _run_build_pipeline(
             plan=plan,
@@ -139,15 +141,18 @@ def _run_build_pipeline(
     if inputs.callbacks.on_connection_start is not None:
         inputs.callbacks.on_connection_start(physical_connection_count)
     start: float = time.monotonic()
+    schema_preparation_seconds: float | None = None
     try:
         logger.debug("open scheduler connection")
         scheduler_connection = adapter.connect(connection_config)
+        schema_start: float = time.monotonic()
         _ = _prepare_build_schemas(
             plan=plan,
             adapter=adapter,
             connection_config=connection_config,
             connection=scheduler_connection,
         )
+        schema_preparation_seconds = time.monotonic() - schema_start
         worker_connections = list(
             open_worker_connections(
                 adapter=adapter,
@@ -173,9 +178,11 @@ def _run_build_pipeline(
         inputs.callbacks.on_connection_complete(
             physical_connection_count, elapsed_seconds=time.monotonic() - start
         )
+    connection_preparation_seconds: float = time.monotonic() - start
     execution_error: BaseException | None = None
     try:
-        return execute_build_plan(
+        execution_start: float = time.monotonic()
+        result: BuildExecutionResult = execute_build_plan(
             plan=plan,
             adapter=adapter,
             connection_config=connection_config,
@@ -185,6 +192,14 @@ def _run_build_pipeline(
             callbacks=inputs.callbacks,
             customizations=inputs.customizations,
             initial_state=merged_initial_state,
+        )
+        return replace(
+            result,
+            timings=BuildExecutionTimings(
+                connection_preparation_seconds=connection_preparation_seconds,
+                schema_preparation_seconds=schema_preparation_seconds,
+                execution_seconds=time.monotonic() - execution_start,
+            ),
         )
     except BaseException as error:
         execution_error = error

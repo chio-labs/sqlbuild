@@ -117,6 +117,7 @@ def run_compile_pipeline(
             project=project,
             options=resolved_options,
             on_progress=on_progress,
+            compile_seconds=time.monotonic() - compile_start,
         )
     finally:
         adapter.close(connection)
@@ -130,6 +131,7 @@ def _build_result(
     project: CompiledProject,
     options: CompilePipelineOptions,
     on_progress: Callable[[str], None] | None = None,
+    compile_seconds: float | None = None,
 ) -> CompilePipelineResult:
     select: tuple[str, ...] = options.select
     exclude: tuple[str, ...] = options.exclude
@@ -168,6 +170,7 @@ def _build_result(
         selected_sql_keys = run_selection.sql_keys
         selected_python_node_names = run_selection.python_node_names
 
+    planning_start: float = time.monotonic()
     plan_output: PlanOutput = build_execution_plan(
         project=project,
         adapter=adapter,
@@ -195,6 +198,7 @@ def _build_result(
         project_config=discovered_inputs.project_config,
         local_config=discovered_inputs.local_config,
     )
+    planning_seconds: float = time.monotonic() - planning_start
     custom_materializations: dict[str, Any] = load_custom_materializations(
         discovered_inputs.materialization_files
     )
@@ -212,6 +216,8 @@ def _build_result(
         custom_materializations=custom_materializations,
         python_node_names=python_outputs.selected_python_node_names,
         python_plan_entries=python_outputs.python_plan_entries,
+        compile_seconds=compile_seconds,
+        planning_seconds=planning_seconds,
     )
 
 

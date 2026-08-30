@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 import threading
 import time
@@ -27,10 +28,12 @@ from sqlbuild.compiler.planner.main.execution.model_execution_annotation import 
 from sqlbuild.compiler.planner.main.execution.model_resource_type import model_resource_type
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
+from sqlbuild.cost.models import StatementExecutionTelemetry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
     FunctionExecutionResult,
+    SchedulerState,
     SeedExecutionResult,
 )
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
@@ -78,6 +81,7 @@ _ACTIVE_SPINNER_FRAMES: tuple[str, ...] = (
     "⠇",
     "⠏",
 )
+_RUNTIME_DIAGNOSTICS_LOGGER: logging.Logger = logging.getLogger("sqlbuild.executor.runtime")
 
 
 class BuildProgressCallbacks:
@@ -205,6 +209,40 @@ class BuildProgressCallbacks:
         self._current_sub_message = message
         if self._is_tty:
             self._write_spinner_line()
+
+    def on_scheduler_state(self, state: SchedulerState) -> None:
+        """Report one deduplicated concurrent scheduler state transition."""
+
+        suffix: str = (
+            "  (DAG frontier constrained)"
+            if state.running < state.limit and state.ready == 0 and state.waiting > 0
+            else ""
+        )
+        self._write_runtime_diagnostic(
+            "Scheduler  "
+            f"{state.running} running, {state.ready} ready, "
+            f"{state.waiting} waiting on dependencies, limit {state.limit}{suffix}"
+        )
+
+    def on_statement_complete(self, telemetry: StatementExecutionTelemetry) -> None:
+        """Report completed Snowflake statement identity without SQL text."""
+
+        query_id: str = telemetry.query_id or "query ID unavailable"
+        self._write_runtime_diagnostic(
+            "Query  "
+            f"{telemetry.resource_type} {telemetry.resource_name}  phase={telemetry.phase}  "
+            f"{query_id}  "
+            f"{telemetry.status}  {telemetry.elapsed_seconds:.2f}s"
+        )
+
+    def _write_runtime_diagnostic(self, message: str) -> None:
+        _RUNTIME_DIAGNOSTICS_LOGGER.debug(message)
+        if self._debug:
+            return
+        with self._write_lock:
+            prefix: str = "\r\033[K" if self._is_tty else ""
+            self._stream.write(f"{prefix}{message}\n")
+            self._stream.flush()
 
     def _write_spinner_line(self) -> None:
         ctr: str = f"{self._counter + 1}/{self._total}".rjust(len(str(self._total)) * 2 + 1)

@@ -82,6 +82,8 @@ class CompilePipelineResult:
     custom_materializations: dict[str, Callable[..., Any]] = field(default_factory=dict)
     python_node_names: frozenset[str] = field(default_factory=frozenset)
     python_plan_entries: tuple[PythonPlanEntry, ...] = field(default_factory=tuple)
+    compile_seconds: float | None = None
+    planning_seconds: float | None = None
 
 
 @dataclass(frozen=True)

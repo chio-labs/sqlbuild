@@ -241,6 +241,8 @@ class _VirtualBuildResolution:
     rewritten: _RewrittenVirtualProject
     plan: _VirtualBuildPlan
     python_plan: _VirtualPythonPlan
+    compile_seconds: float
+    planning_seconds: float
 
 
 @dataclass(frozen=True)
@@ -294,6 +296,8 @@ def resolve_virtual_plan(
         plan_output=resolution.plan.plan_output,
         python_node_names=resolution.python_plan.selected_python_node_names,
         python_plan_entries=resolution.python_plan.plan_entries,
+        compile_seconds=resolution.compile_seconds,
+        planning_seconds=resolution.planning_seconds,
     )
 
 
@@ -371,6 +375,8 @@ def run_virtual_build(
         execution_result=result,
         virtual_environment_name=runtime.names.target_vde_name,
         python_node_results=(*ingress_python_results, *read_side_results),
+        compile_seconds=resolution.compile_seconds,
+        planning_seconds=resolution.planning_seconds,
     )
 
 
@@ -519,6 +525,7 @@ def _resolve_virtual_build(
     options: VirtualBuildOptions,
     hooks: VirtualBuildHooks,
 ) -> _VirtualBuildResolution:
+    compile_start: float = time.monotonic()
     graph: ProjectGraph = build_project_graph(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
@@ -529,6 +536,8 @@ def _resolve_virtual_build(
         external_sql_reference_resolver=options.planning.external_sql_reference_resolver,
         on_progress=hooks.on_progress,
     )
+    compile_seconds: float = time.monotonic() - compile_start
+    planning_start: float = time.monotonic()
     names: VirtualEnvironmentNames = _resolve_virtual_environment_names(
         discovered_inputs=discovered_inputs,
         options=options,
@@ -573,6 +582,8 @@ def _resolve_virtual_build(
         rewritten=rewritten,
         plan=plan,
         python_plan=python_plan,
+        compile_seconds=compile_seconds,
+        planning_seconds=time.monotonic() - planning_start,
     )
 
 
@@ -1098,12 +1109,15 @@ def _execute_virtual_build_plan(
         resource_name=project.effective_target_name or "virtual",
         ledger_path=runtime.project_dir / "target" / "runs" / project.run_id / "statements.jsonl",
         phase="virtual_schema_preparation",
+        on_statement_complete=exec_hooks.on_statement_complete,
     ):
+        schema_start: float = time.monotonic()
         _prepare_virtual_physical_schemas(
             adapter=runtime.adapter,
             connection_config=runtime.connection_config,
             plan_output=plan.executor_plan_output,
         )
+        virtual_schema_seconds: float = time.monotonic() - schema_start
     result: BuildExecutionResult = run_build_pipeline(
         plan=plan.executor_plan_output,
         connection_config=runtime.connection_config,
@@ -1143,6 +1157,8 @@ def _execute_virtual_build_plan(
             on_node_start=exec_hooks.on_node_start,
             on_node_complete=exec_hooks.on_node_complete,
             on_sub_progress=exec_hooks.on_sub_progress,
+            on_scheduler_state=exec_hooks.on_scheduler_state,
+            on_statement_complete=exec_hooks.on_statement_complete,
             before_model_materialize=_build_before_model_materialize(
                 runtime=runtime,
                 reads=reads,
@@ -1181,7 +1197,15 @@ def _execute_virtual_build_plan(
                 if seed_name not in reads.seed_load_names
             ),
         )
-    return result
+    return replace(
+        result,
+        timings=replace(
+            result.timings,
+            schema_preparation_seconds=(
+                virtual_schema_seconds + (result.timings.schema_preparation_seconds or 0.0)
+            ),
+        ),
+    )
 
 
 def _resolve_virtual_microbatch_state(

@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands._helpers.build_execution.phase_timings import (
+    write_build_phase_timings,
+    write_virtual_build_phase_timings,
+)
 from sqlbuild.cli.commands._helpers.build_python_nodes.python_node_output import (
     write_python_node_results,
 )
@@ -26,6 +31,7 @@ from sqlbuild.cli.commands.classes.virtual_build_project_capture import (
 )
 from sqlbuild.cli.commands.models import (
     BuildCostFinalization,
+    BuildPhaseTimings,
     VirtualBuildCliRequest,
     VirtualBuildExecution,
 )
@@ -61,6 +67,9 @@ def run_virtual_build(
     """Execute a virtual build and render CLI output."""
 
     build_started_at: datetime = datetime.now(UTC)
+    total_started_at: float = (
+        request.command_started_at if request.command_started_at is not None else time.monotonic()
+    )
     stream: TextIO = progress_stream or (
         sys.stderr if request.debug or request.json_output else sys.stdout
     )
@@ -112,6 +121,7 @@ def run_virtual_build(
         if compiled_project is None:
             raise
         interrupted: bool = isinstance(error, KeyboardInterrupt)
+        exceptional_cost_started_at: float = time.monotonic()
         try:
             _ = finalize_build_cost(
                 BuildCostFinalization(
@@ -136,6 +146,15 @@ def run_virtual_build(
             )
         except BaseException:
             pass
+        if request.verbose or request.debug:
+            write_build_phase_timings(
+                stream=stream,
+                timings=BuildPhaseTimings(
+                    cost_collection_seconds=time.monotonic() - exceptional_cost_started_at,
+                    total_seconds=time.monotonic() - total_started_at,
+                ),
+                use_color=request.use_color,
+            )
         raise
 
 
@@ -200,6 +219,7 @@ def _complete_virtual_build(
         plan=result.execution_plan,
         python_plan_entries=(),
     )
+    cost_started_at: float = time.monotonic()
     cost_record: CostRunRecord | None = finalize_build_cost(
         BuildCostFinalization(
             project_dir=project_dir,
@@ -220,6 +240,7 @@ def _complete_virtual_build(
             had_executable_work=had_executable_work,
         )
     )
+    cost_collection_seconds: float = time.monotonic() - cost_started_at
     stream.write("\n" + footer + "\n")
     stream.flush()
     write_execution_json_output(
@@ -239,6 +260,13 @@ def _complete_virtual_build(
         record=cost_record,
         output_stream=stream,
         use_color=request.use_color,
+    )
+    write_virtual_build_phase_timings(
+        stream=stream,
+        request=request,
+        execution=execution,
+        result=result,
+        cost_collection_seconds=cost_collection_seconds,
     )
     return exit_code
 

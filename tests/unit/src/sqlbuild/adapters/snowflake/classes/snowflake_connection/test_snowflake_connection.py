@@ -12,6 +12,7 @@ from sqlbuild.adapters.snowflake.classes.snowflake_connection import _SnowflakeC
 from sqlbuild.adapters.snowflake.classes.snowflake_cursor import _SnowflakeCursor
 from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.cost.constants import COST_TELEMETRY_HEALTH
+from sqlbuild.cost.models import StatementExecutionTelemetry
 from tests.unit.src.sqlbuild.adapters.snowflake.classes.snowflake_connection._test_types import (
     CursorAttributeTestCase,
     CursorContextManagerTestCase,
@@ -19,6 +20,7 @@ from tests.unit.src.sqlbuild.adapters.snowflake.classes.snowflake_connection._te
     CursorReturnTestCase,
     QueryTagPolicyTestCase,
     SnowflakeConnectionTestCase,
+    StatementDiagnosticsTestCase,
 )
 from tests.unit.src.sqlbuild.adapters.snowflake.classes.snowflake_connection.helpers import (
     read_ledger,
@@ -119,6 +121,80 @@ class _SubmittedQueryTagErrorCursor(_Cursor):
         self.calls += 1
         self.sfqid = "01c-submitted-query-id"
         raise RuntimeError("submitted QUERY_TAG statement failed")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StatementDiagnosticsTestCase(
+            description="completed statement reports query identity and elapsed time",
+            expected_query_id="01c-query-id",
+            expected_status="success",
+            expected_resource_type="model",
+            expected_resource_name="orders",
+            expected_phase="materialize",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_statement_callback_when_query_completes_then_reports_resource_diagnostics(
+    test_case: StatementDiagnosticsTestCase,
+    tmp_path: Path,
+) -> None:
+    telemetry: list[StatementExecutionTelemetry] = []
+    connection: _SnowflakeConnection = _SnowflakeConnection(_RawConnection(_Cursor()))
+
+    with CostContext.scope(
+        run_id="diagnostic-run",
+        resource_type=test_case.expected_resource_type,
+        resource_name=test_case.expected_resource_name,
+        phase=test_case.expected_phase,
+        ledger_path=tmp_path / "statements.jsonl",
+        on_statement_complete=telemetry.append,
+    ):
+        connection.execute("SELECT 1")
+
+    assert len(telemetry) == 1
+    assert telemetry[0].query_id == test_case.expected_query_id
+    assert telemetry[0].status == test_case.expected_status
+    assert telemetry[0].resource_type == test_case.expected_resource_type
+    assert telemetry[0].resource_name == test_case.expected_resource_name
+    assert telemetry[0].phase == test_case.expected_phase
+    assert telemetry[0].elapsed_seconds >= 0
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeConnectionTestCase(
+            description="diagnostic callback failure does not affect completed query",
+            expected_query_id="01c-query-id",
+            expected_status="success",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_failing_statement_callback_when_query_completes_then_result_is_unchanged(
+    test_case: SnowflakeConnectionTestCase,
+    tmp_path: Path,
+) -> None:
+    cursor: _Cursor = _Cursor()
+    connection: _SnowflakeConnection = _SnowflakeConnection(_RawConnection(cursor))
+
+    def fail_diagnostics(_telemetry: StatementExecutionTelemetry) -> None:
+        raise RuntimeError("diagnostic sink unavailable")
+
+    with CostContext.scope(
+        run_id="diagnostic-failure-run",
+        resource_type="model",
+        resource_name="orders",
+        ledger_path=tmp_path / "statements.jsonl",
+        on_statement_complete=fail_diagnostics,
+    ):
+        result: Any = connection.execute("SELECT 1")
+
+    assert result.raw_cursor is cursor
+    assert cursor.sfqid == test_case.expected_query_id
 
 
 @pytest.mark.parametrize(
