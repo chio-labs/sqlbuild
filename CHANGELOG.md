@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.65.3](https://github.com/chio-labs/sqlbuild/compare/v0.65.2...v0.65.3) (2026-08-30)
+
+
+### Bug Fixes
+
+* stream SQLBuild output to Dagster logs ([#406](https://github.com/chio-labs/sqlbuild/issues/406)) ([df6148a](https://github.com/chio-labs/sqlbuild/commit/df6148a35c362ca2c0f0c101939d0cc1397c1139))
+
 ## [0.65.2](https://github.com/chio-labs/sqlbuild/compare/v0.65.1...v0.65.2) (2026-08-30)
 
 
