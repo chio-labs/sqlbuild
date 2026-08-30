@@ -1052,6 +1052,10 @@ class PostgresStateBackend(StateBackend):
         record: VirtualEnvironmentRecord,
         refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
         leases: tuple[StateLockLease, ...],
+        checkpoint: VirtualEnvironmentCheckpointRecord | None = None,
+        checkpoint_refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...] = (),
+        checkpoint_function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...] = (),
+        checkpoint_seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (),
     ) -> bool:
         with connection.cursor() as cursor:
             cursor.execute("BEGIN")
@@ -1068,6 +1072,11 @@ class PostgresStateBackend(StateBackend):
                     if cursor.fetchone() is None:
                         cursor.execute("ROLLBACK")
                         return False
+                if record.status == VirtualEnvironmentStatus.FINALIZED and checkpoint is None:
+                    raise StateBackendConfigError(
+                        "Finalized conditional virtual environment publication requires "
+                        "a checkpoint"
+                    )
                 self._upsert_virtual_environment_record(cursor=cursor, schema=schema, record=record)
                 self._replace_virtual_environment_node_ref_groups(
                     cursor=cursor,
@@ -1075,6 +1084,15 @@ class PostgresStateBackend(StateBackend):
                     virtual_environment_name=record.virtual_environment_name,
                     refs_by_node_type=refs_by_node_type,
                 )
+                if checkpoint is not None:
+                    self._insert_virtual_environment_checkpoint_rows(
+                        cursor=cursor,
+                        schema=schema,
+                        checkpoint=checkpoint,
+                        refs=checkpoint_refs,
+                        function_refs=checkpoint_function_refs,
+                        seed_refs=checkpoint_seed_refs,
+                    )
                 cursor.execute("COMMIT")
                 return True
             except BaseException:
@@ -1445,58 +1463,68 @@ class PostgresStateBackend(StateBackend):
         with connection.cursor() as cursor:
             cursor.execute("BEGIN")
             try:
-                checkpoint_model_ref_table: str = self._qualified_name(
+                self._insert_virtual_environment_checkpoint_rows(
+                    cursor=cursor,
                     schema=schema,
-                    table=VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
+                    checkpoint=checkpoint,
+                    refs=refs,
+                    function_refs=function_refs,
+                    seed_refs=seed_refs,
                 )
-                checkpoint_seed_ref_table: str = self._qualified_name(
-                    schema=schema,
-                    table=VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
-                )
-                cursor.execute(
-                    "INSERT INTO "
-                    + self._qualified_name(
-                        schema=schema,
-                        table=VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE,
-                    )
-                    + " "
-                    "(checkpoint_id, virtual_environment_name, created_at) "
-                    "VALUES (%s, %s, CURRENT_TIMESTAMP)",
-                    [checkpoint.checkpoint_id, checkpoint.virtual_environment_name],
-                )
-                for ref in refs:
-                    cursor.execute(
-                        "INSERT INTO "
-                        f"{checkpoint_model_ref_table} "
-                        "(checkpoint_id, model_name, version_hash) VALUES (%s, %s, %s)",
-                        [ref.checkpoint_id, ref.model_name, ref.version_hash],
-                    )
-                for function_ref in function_refs:
-                    checkpoint_function_ref_table: str = self._qualified_name(
-                        schema=schema,
-                        table=VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
-                    )
-                    cursor.execute(
-                        "INSERT INTO "
-                        f"{checkpoint_function_ref_table} "
-                        "(checkpoint_id, function_name, version_hash) VALUES (%s, %s, %s)",
-                        [
-                            function_ref.checkpoint_id,
-                            function_ref.function_name,
-                            function_ref.version_hash,
-                        ],
-                    )
-                for seed_ref in seed_refs:
-                    cursor.execute(
-                        "INSERT INTO "
-                        f"{checkpoint_seed_ref_table} "
-                        "(checkpoint_id, seed_name, version_hash) VALUES (%s, %s, %s)",
-                        [seed_ref.checkpoint_id, seed_ref.seed_name, seed_ref.version_hash],
-                    )
                 cursor.execute("COMMIT")
             except BaseException:
                 cursor.execute("ROLLBACK")
                 raise
+
+    def _insert_virtual_environment_checkpoint_rows(
+        self,
+        *,
+        cursor: Any,
+        schema: str,
+        checkpoint: VirtualEnvironmentCheckpointRecord,
+        refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...],
+        function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...],
+        seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...],
+    ) -> None:
+        checkpoint_table: str = self._qualified_name(
+            schema=schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE
+        )
+        model_ref_table: str = self._qualified_name(
+            schema=schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE
+        )
+        function_ref_table: str = self._qualified_name(
+            schema=schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE
+        )
+        seed_ref_table: str = self._qualified_name(
+            schema=schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE
+        )
+        cursor.execute(
+            f"INSERT INTO {checkpoint_table} "
+            "(checkpoint_id, virtual_environment_name, created_at) "
+            "VALUES (%s, %s, CURRENT_TIMESTAMP)",
+            [checkpoint.checkpoint_id, checkpoint.virtual_environment_name],
+        )
+        ref: VirtualEnvironmentCheckpointModelRefRecord
+        for ref in refs:
+            cursor.execute(
+                f"INSERT INTO {model_ref_table} "
+                "(checkpoint_id, model_name, version_hash) VALUES (%s, %s, %s)",
+                [ref.checkpoint_id, ref.model_name, ref.version_hash],
+            )
+        function_ref: VirtualEnvironmentCheckpointFunctionRefRecord
+        for function_ref in function_refs:
+            cursor.execute(
+                f"INSERT INTO {function_ref_table} "
+                "(checkpoint_id, function_name, version_hash) VALUES (%s, %s, %s)",
+                [function_ref.checkpoint_id, function_ref.function_name, function_ref.version_hash],
+            )
+        seed_ref: VirtualEnvironmentCheckpointSeedRefRecord
+        for seed_ref in seed_refs:
+            cursor.execute(
+                f"INSERT INTO {seed_ref_table} "
+                "(checkpoint_id, seed_name, version_hash) VALUES (%s, %s, %s)",
+                [seed_ref.checkpoint_id, seed_ref.seed_name, seed_ref.version_hash],
+            )
 
     def list_virtual_environment_checkpoints(
         self, *, connection: Any, schema: str, virtual_environment_name: str

@@ -334,6 +334,10 @@ class StateBackend(ABC):
         record: VirtualEnvironmentRecord,
         refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
         leases: tuple[StateLockLease, ...],
+        checkpoint: VirtualEnvironmentCheckpointRecord | None = None,
+        checkpoint_refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...] = (),
+        checkpoint_function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...] = (),
+        checkpoint_seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (),
     ) -> bool:
         """Publish a virtual environment only while every supplied lease is active and owned."""
         ...

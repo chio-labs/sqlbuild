@@ -155,8 +155,8 @@ from sqlbuild.virtual.planner.main._targets import (
 )
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.state.classes.microbatch_store import VirtualMicrobatchEventStore
-from sqlbuild.virtual.state.main.checkpoints._checkpoints import (
-    create_finalized_virtual_environment_checkpoint,
+from sqlbuild.virtual.state.main.checkpoints._build_finalized_checkpoint import (
+    build_finalized_virtual_environment_checkpoint,
 )
 from sqlbuild.virtual.state.main.encoding._decode_state_text import decode_state_text
 from sqlbuild.virtual.state.main.encoding._encode_state_text import encode_state_text
@@ -165,6 +165,7 @@ from sqlbuild.virtual.state.main.python_identities._python_node_identity_write i
     try_record_virtual_python_node_identity,
 )
 from sqlbuild.virtual.state.models import (
+    FinalizedVirtualEnvironmentCheckpoint,
     FunctionVersionRecord,
     ModelVersionRecord,
     PhysicalRelationAncestryRecord,
@@ -1746,6 +1747,16 @@ def _persist_successful_virtual_build(
             )
             for seed_name, version_hash in sorted(seeds.final_seed_hashes.items())
         )
+        checkpoint: FinalizedVirtualEnvironmentCheckpoint | None = (
+            build_finalized_virtual_environment_checkpoint(
+                virtual_environment_name=names.target_vde_name,
+                refs=refs,
+                function_refs=function_refs,
+                seed_refs=seed_refs,
+            )
+            if status == VirtualEnvironmentStatus.FINALIZED
+            else None
+        )
         published: bool = (
             runtime.backend.upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
                 connection=state_connection,
@@ -1755,22 +1766,18 @@ def _persist_successful_virtual_build(
                     refs=refs, seed_refs=seed_refs, function_refs=function_refs
                 ),
                 leases=model_version_leases,
+                checkpoint=checkpoint.checkpoint if checkpoint is not None else None,
+                checkpoint_refs=checkpoint.refs if checkpoint is not None else (),
+                checkpoint_function_refs=(
+                    checkpoint.function_refs if checkpoint is not None else ()
+                ),
+                checkpoint_seed_refs=checkpoint.seed_refs if checkpoint is not None else (),
             )
         )
         if not published:
             raise ExecutorInputError(
                 "virtual incremental physical-version lease ownership was lost before "
                 "model refs could be published"
-            )
-        if status == VirtualEnvironmentStatus.FINALIZED and refs:
-            create_finalized_virtual_environment_checkpoint(
-                backend=runtime.backend,
-                connection=state_connection,
-                schema=runtime.config.schema,
-                virtual_environment_name=names.target_vde_name,
-                refs=refs,
-                function_refs=function_refs,
-                seed_refs=seed_refs,
             )
     finally:
         runtime.backend.close(state_connection)

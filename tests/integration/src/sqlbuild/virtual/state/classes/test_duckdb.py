@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -37,6 +39,7 @@ from sqlbuild.virtual.state.models import (
     StateOperationRecord,
     StateSchemaValidationResult,
     VirtualEnvironmentCheckpointFunctionRefRecord,
+    VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
     VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentFunctionRefRecord,
@@ -57,6 +60,7 @@ from sqlbuild.virtual.state.types import (
     VirtualEnvironmentStatus,
 )
 from tests.integration.src.sqlbuild.virtual.state.classes._test_types import (
+    AtomicFinalizedVirtualPublishTestCase,
     ConditionalVirtualRefPublishTestCase,
     DuckDbStateBackendAtomicRefUpdateTestCase,
     DuckDbStateBackendColumnValidationTestCase,
@@ -1165,7 +1169,7 @@ def test_given_lease_ownership_changes_when_publishing_duckdb_refs_then_publish_
     )
     record: VirtualEnvironmentRecord = VirtualEnvironmentRecord(
         virtual_environment_name="dev",
-        status=VirtualEnvironmentStatus.FINALIZED,
+        status=VirtualEnvironmentStatus.ACTIVE,
     )
     refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = (
         VirtualEnvironmentNodeRefRecord(
@@ -1213,6 +1217,138 @@ def test_given_lease_ownership_changes_when_publishing_duckdb_refs_then_publish_
             node_type="model",
         )
         == refs
+    )
+    backend.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AtomicFinalizedVirtualPublishTestCase(
+            description="duckdb checkpoint failure rolls back finalized publication",
+            checkpoint_id="checkpoint-atomic",
+            expected_error_fragment="injected checkpoint failure",
+            expected_checkpoint_count_after_failure=0,
+            expected_checkpoint_count_after_success=1,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_checkpoint_failure_when_conditionally_publishing_duckdb_then_all_rows_roll_back(
+    test_case: AtomicFinalizedVirtualPublishTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    schema: str = "sqlbuild_state"
+    lock_key: str = "model-version:warehouse:orders:version-1"
+    expires_at: datetime = datetime.now() + timedelta(hours=1)
+    backend.initialize(connection=connection, schema=schema, sqlbuild_version="0.0.test")
+    assert backend.acquire_lock(
+        connection=connection,
+        schema=schema,
+        lock_key=lock_key,
+        owner_id="owner",
+        expires_at=expires_at,
+    )
+    lease: StateLockLease = StateLockLease(
+        lock_key=lock_key,
+        owner_id="owner",
+        expires_at=expires_at,
+    )
+    record: VirtualEnvironmentRecord = VirtualEnvironmentRecord(
+        virtual_environment_name="dev",
+        status=VirtualEnvironmentStatus.FINALIZED,
+    )
+    refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = (
+        VirtualEnvironmentNodeRefRecord(
+            virtual_environment_name="dev",
+            node_type="model",
+            node_name="orders",
+            version_hash="version-1",
+        ),
+    )
+    checkpoint: VirtualEnvironmentCheckpointRecord = VirtualEnvironmentCheckpointRecord(
+        checkpoint_id=test_case.checkpoint_id,
+        virtual_environment_name="dev",
+    )
+    checkpoint_refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...] = (
+        VirtualEnvironmentCheckpointModelRefRecord(
+            checkpoint_id=test_case.checkpoint_id,
+            model_name="orders",
+            version_hash="version-1",
+        ),
+    )
+    original_insert: Callable[..., None] = backend._insert_virtual_environment_checkpoint_rows
+
+    def _insert_then_fail(**kwargs: Any) -> None:
+        original_insert(**kwargs)
+        raise RuntimeError(test_case.expected_error_fragment)
+
+    monkeypatch.setattr(backend, "_insert_virtual_environment_checkpoint_rows", _insert_then_fail)
+    with pytest.raises(RuntimeError, match=test_case.expected_error_fragment):
+        backend.upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+            connection=connection,
+            schema=schema,
+            record=record,
+            refs_by_node_type={"model": refs},
+            leases=(lease,),
+            checkpoint=checkpoint,
+            checkpoint_refs=checkpoint_refs,
+        )
+    assert (
+        backend.get_virtual_environment(
+            connection=connection,
+            schema=schema,
+            virtual_environment_name="dev",
+        )
+        is None
+    )
+    assert (
+        backend.get_virtual_environment_node_refs(
+            connection=connection,
+            schema=schema,
+            virtual_environment_name="dev",
+            node_type="model",
+        )
+        == ()
+    )
+    assert (
+        len(
+            backend.list_virtual_environment_checkpoints(
+                connection=connection,
+                schema=schema,
+                virtual_environment_name="dev",
+            )
+        )
+        == test_case.expected_checkpoint_count_after_failure
+    )
+
+    monkeypatch.setattr(backend, "_insert_virtual_environment_checkpoint_rows", original_insert)
+    assert backend.upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+        connection=connection,
+        schema=schema,
+        record=record,
+        refs_by_node_type={"model": refs},
+        leases=(lease,),
+        checkpoint=checkpoint,
+        checkpoint_refs=checkpoint_refs,
+    )
+    checkpoints: tuple[VirtualEnvironmentCheckpointRecord, ...] = (
+        backend.list_virtual_environment_checkpoints(
+            connection=connection,
+            schema=schema,
+            virtual_environment_name="dev",
+        )
+    )
+    assert len(checkpoints) == test_case.expected_checkpoint_count_after_success
+    assert (
+        backend.get_virtual_environment_checkpoint_model_refs(
+            connection=connection,
+            schema=schema,
+            checkpoint_id=test_case.checkpoint_id,
+        )
+        == checkpoint_refs
     )
     backend.close(connection)
 

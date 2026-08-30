@@ -14,6 +14,17 @@ class ConditionalVirtualRefPublishTestCase:
 
 
 @dataclass(frozen=True)
+class AtomicFinalizedVirtualPublishTestCase:
+    """Expected rollback and success behavior for finalized conditional publication."""
+
+    description: str
+    checkpoint_id: str
+    expected_error_fragment: str
+    expected_checkpoint_count_after_failure: int
+    expected_checkpoint_count_after_success: int
+
+
+@dataclass(frozen=True)
 class DuckDbStateBackendLifecycleTestCase:
     description: str
     schema: str

@@ -14,6 +14,17 @@ class PostgresConditionalVirtualRefPublishTestCase:
 
 
 @dataclass(frozen=True)
+class PostgresAtomicFinalizedVirtualPublishTestCase:
+    """Expected rollback and success behavior for finalized conditional publication."""
+
+    description: str
+    checkpoint_id: str
+    expected_error_fragment: str
+    expected_checkpoint_count_after_failure: int
+    expected_checkpoint_count_after_success: int
+
+
+@dataclass(frozen=True)
 class PostgresStateBackendLifecycleTestCase:
     description: str
     sqlbuild_version: str

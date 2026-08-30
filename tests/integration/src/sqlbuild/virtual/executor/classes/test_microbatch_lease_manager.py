@@ -347,7 +347,7 @@ def test_given_concurrent_full_refreshes_when_reference_check_blocks_then_versio
                 schema="sqlbuild_state",
                 record=VirtualEnvironmentRecord(
                     virtual_environment_name="published",
-                    status=VirtualEnvironmentStatus.FINALIZED,
+                    status=VirtualEnvironmentStatus.ACTIVE,
                 ),
                 refs_by_node_type={
                     "model": (

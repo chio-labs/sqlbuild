@@ -1316,53 +1316,14 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, StateBackend):
     ) -> None:
         connection.execute("BEGIN")
         try:
-            checkpoint_model_ref_table: str = self._qualified_name(
+            self._insert_virtual_environment_checkpoint_rows(
+                connection=connection,
                 schema=schema,
-                table=VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
+                checkpoint=checkpoint,
+                refs=refs,
+                function_refs=function_refs,
+                seed_refs=seed_refs,
             )
-            checkpoint_seed_ref_table: str = self._qualified_name(
-                schema=schema,
-                table=VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
-            )
-            connection.execute(
-                "INSERT INTO "
-                f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)}"
-                " "
-                "(checkpoint_id, virtual_environment_name, created_at) "
-                "VALUES (?, ?, CURRENT_TIMESTAMP)",
-                [checkpoint.checkpoint_id, checkpoint.virtual_environment_name],
-            )
-            for ref in refs:
-                connection.execute(
-                    "INSERT INTO "
-                    f"{checkpoint_model_ref_table} "
-                    "(checkpoint_id, model_name, version_hash) VALUES (?, ?, ?)",
-                    [ref.checkpoint_id, ref.model_name, ref.version_hash],
-                )
-            function_ref: VirtualEnvironmentCheckpointFunctionRefRecord
-            for function_ref in function_refs:
-                checkpoint_function_ref_table: str = self._qualified_name(
-                    schema=schema,
-                    table=VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
-                )
-                connection.execute(
-                    "INSERT INTO "
-                    f"{checkpoint_function_ref_table} "
-                    "(checkpoint_id, function_name, version_hash) VALUES (?, ?, ?)",
-                    [
-                        function_ref.checkpoint_id,
-                        function_ref.function_name,
-                        function_ref.version_hash,
-                    ],
-                )
-            seed_ref: VirtualEnvironmentCheckpointSeedRefRecord
-            for seed_ref in seed_refs:
-                connection.execute(
-                    "INSERT INTO "
-                    f"{checkpoint_seed_ref_table} "
-                    "(checkpoint_id, seed_name, version_hash) VALUES (?, ?, ?)",
-                    [seed_ref.checkpoint_id, seed_ref.seed_name, seed_ref.version_hash],
-                )
             connection.execute("COMMIT")
         except BaseException:
             connection.execute("ROLLBACK")
