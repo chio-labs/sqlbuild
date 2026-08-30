@@ -23,6 +23,7 @@ from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterAssetSpecTestCase,
     DagsterConflictingInputTestCase,
     DagsterDecoratorTestCase,
+    DagsterDescriptionTestCase,
     DagsterPythonArtifactCompatibilityTestCase,
     DagsterScenarioCheckDecoratorTestCase,
 )
@@ -32,6 +33,59 @@ from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
 )
 
 dg: Any = pytest.importorskip("dagster")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterDescriptionTestCase(
+            description="authored SQL takes precedence over the source path",
+            node={
+                "kind": "model",
+                "name": "orders",
+                "description": "Clean orders",
+                "path": "models/orders.sql",
+                "sql": "SELECT 1",
+            },
+            expected_description=(
+                "Clean orders\n\n**SQLBuild SQL:**\n```sql\nSELECT 1\n```"
+            ),
+        ),
+        DagsterDescriptionTestCase(
+            description="non-SQL asset includes its source path",
+            node={"kind": "seed", "name": "waffles", "path": "seeds/waffles.csv"},
+            expected_description=(
+                "SQLBuild seed `waffles`.\n\n**Source file:** `seeds/waffles.csv`"
+            ),
+        ),
+        DagsterDescriptionTestCase(
+            description="source path containing backticks remains one code span",
+            node={"kind": "seed", "name": "waffles", "path": "seeds/`waffles`.csv"},
+            expected_description=(
+                "SQLBuild seed `waffles`.\n\n**Source file:** ``seeds/`waffles`.csv``"
+            ),
+        ),
+        DagsterDescriptionTestCase(
+            description="source path whitespace is preserved",
+            node={"kind": "seed", "name": "waffles", "path": " seeds/waffles.csv "},
+            expected_description=(
+                "SQLBuild seed `waffles`.\n\n**Source file:** `  seeds/waffles.csv  `"
+            ),
+        ),
+        DagsterDescriptionTestCase(
+            description="missing source path retains the fallback description",
+            node={"kind": "seed", "name": "waffles"},
+            expected_description="SQLBuild seed `waffles`.",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_node_when_translating_description_then_renders_expected_markdown(
+    test_case: DagsterDescriptionTestCase,
+) -> None:
+    translator: SqlBuildDagsterTranslator = SqlBuildDagsterTranslator()
+
+    assert translator.get_description(test_case.node) == test_case.expected_description
 
 
 @pytest.mark.parametrize(
