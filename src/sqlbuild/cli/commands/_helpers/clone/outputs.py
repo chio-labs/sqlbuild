@@ -13,6 +13,14 @@ from sqlbuild.cli.commands.models import (
     CloneInvocation,
     CloneRunOutcome,
 )
+from sqlbuild.cli.output.main._clone_execution_json import format_clone_execution_json
+from sqlbuild.cli.output.main._write_execution_json_output import write_execution_json_output
+from sqlbuild.compiler.planner.models import (
+    CloneSourcePlanEntry,
+    FunctionPlanEntry,
+    ModelPlanEntry,
+    SeedPlanEntry,
+)
 
 
 def write_clone_execution_header(
@@ -48,6 +56,35 @@ def write_clone_completion_output(*, invocation: CloneInvocation, outcome: Clone
         result=outcome.result,
         elapsed_seconds=outcome.elapsed,
         use_color=invocation.use_color,
+    )
+
+
+def write_clone_execution_json_output(
+    *,
+    request: CloneCommandRequest,
+    preparation: CloneExecutionPreparation,
+    outcome: CloneRunOutcome,
+) -> None:
+    """Write structured direct clone outcomes when requested."""
+
+    entries: tuple[
+        CloneSourcePlanEntry | ModelPlanEntry | SeedPlanEntry | FunctionPlanEntry, ...
+    ] = (
+        *preparation.pipeline_result.destination_source_entries,
+        *preparation.pipeline_result.destination_model_entries,
+        *preparation.pipeline_result.destination_seed_entries,
+        *preparation.pipeline_result.destination_function_entries,
+    )
+    resource_types_by_name: dict[str, str] = {
+        entry.name: str(entry.key.resource_type) for entry in entries
+    }
+    write_execution_json_output(
+        payload=format_clone_execution_json(
+            result=outcome.result,
+            resource_types_by_name=resource_types_by_name,
+        ),
+        json_output=False,
+        json_output_path=request.json_output_path,
     )
 
 

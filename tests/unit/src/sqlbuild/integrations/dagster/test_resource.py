@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from threading import Event
@@ -12,6 +13,8 @@ import pytest
 from sqlbuild.integrations.dagster import SqlBuildCliResource
 from sqlbuild.integrations.dagster.classes.sqlbuild_cli_invocation import SqlBuildCliInvocation
 from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
+    DagsterCliCloneFailureTestCase,
+    DagsterCliCloneStreamTestCase,
     DagsterCliFailureTestCase,
     DagsterCliInvocationTestCase,
     DagsterCliJsonStreamTestCase,
@@ -233,6 +236,136 @@ def test_given_execution_json_when_streaming_then_yields_structured_dagster_even
     assert tuple(result.severity.value for result in check_results) == (
         test_case.expected_check_severities
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterCliCloneStreamTestCase(
+            description="clone execution yields materializations for successful items only",
+            command_stdout=(
+                '{"version": 1, "command": "clone", "status": "success", '
+                '"summary": {"success_count": 2}, '
+                '"assets": [{"kind": "model", "name": "orders", '
+                '"status": "success", "action": "cloned"}, '
+                '{"kind": "seed", "name": "waffle_types", '
+                '"status": "success", "action": "copied"}], "checks": []}'
+            ),
+            expected_asset_keys=(("analytics", "waffle_types"), ("analytics", "orders")),
+            expected_actions=("copied", "cloned"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_clone_execution_json_when_streaming_then_yields_asset_materializations(
+    test_case: DagsterCliCloneStreamTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    context: Any = type(
+        "AggregateCloneContext",
+        (),
+        {"selected_asset_keys": {dg.AssetKey(["aggregate_clone"])}},
+    )()
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_fake_sqb_command(root=tmp_path, stdout=test_case.command_stdout),
+        dag_path=str(write_dagster_test_dag(root=tmp_path)),
+    )
+
+    results: list[Any] = list(
+        resource.cli(args=["clone", "--from", "prod"], context=context).stream()
+    )
+
+    assert all(isinstance(result, dg.AssetMaterialization) for result in results)
+    assert (
+        tuple(tuple(result.asset_key.path) for result in results) == test_case.expected_asset_keys
+    )
+    assert (
+        tuple(result.metadata["action"].value for result in results) == test_case.expected_actions
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterCliCloneFailureTestCase(
+            description="partial clone failure preserves confirmed materializations",
+            command_stdout=(
+                '{"version": 1, "command": "clone", "status": "failed", '
+                '"summary": {"success_count": 1, "failure_count": 1}, '
+                '"assets": [{"kind": "model", "name": "orders", '
+                '"status": "success", "action": "cloned"}, '
+                '{"kind": "model", "name": "customers", '
+                '"status": "failed", "action": "failed"}], "checks": []}'
+            ),
+            expected_materialized_asset_key=("analytics", "orders"),
+            expected_incomplete_assets="model:customers (failed)",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_partial_clone_failure_when_streaming_then_preserves_confirmed_materializations(
+    test_case: DagsterCliCloneFailureTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    context: Any = type("CloneContext", (), {"selected_asset_keys": set()})()
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_fake_sqb_command(
+            root=tmp_path,
+            stdout=test_case.command_stdout,
+            exit_code=1,
+        ),
+        dag_path=str(write_dagster_test_dag(root=tmp_path)),
+    )
+    stream: Iterator[Any] = resource.cli(args=["clone", "--from", "prod"], context=context).stream()
+
+    materialization: Any = next(stream)
+    assert tuple(materialization.asset_key.path) == test_case.expected_materialized_asset_key
+    with pytest.raises(dg.Failure) as exc_info:
+        next(stream)
+
+    incomplete_assets: Any = exc_info.value.metadata["incomplete_assets"]
+    assert incomplete_assets.value == test_case.expected_incomplete_assets
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterCliFailureTestCase(
+            description="clone failure without payload emits no materializations",
+            command_stderr="clone crashed\n",
+            command_exit_code=1,
+            expected_error_fragment="SQLBuild CLI command failed with exit code 1",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_clone_failure_without_payload_when_streaming_then_emits_no_materializations(
+    test_case: DagsterCliFailureTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    context: Any = type("CloneContext", (), {"selected_asset_keys": set()})()
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_fake_sqb_command(
+            root=tmp_path,
+            stderr=test_case.command_stderr,
+            exit_code=test_case.command_exit_code,
+        ),
+        dag_path=str(write_dagster_test_dag(root=tmp_path)),
+    )
+
+    with pytest.raises(dg.Failure) as exc_info:
+        next(resource.cli(args=["clone", "--from", "prod"], context=context).stream())
+
+    assert test_case.expected_error_fragment in str(exc_info.value)
 
 
 @pytest.mark.parametrize(

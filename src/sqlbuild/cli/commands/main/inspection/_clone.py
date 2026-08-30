@@ -12,6 +12,7 @@ from sqlbuild.cli.commands._helpers.clone.outputs import (
     resolve_clone_exit_code,
     write_clone_completion_output,
     write_clone_execution_header,
+    write_clone_execution_json_output,
 )
 from sqlbuild.cli.commands._helpers.clone.planning import prepare_clone_execution
 from sqlbuild.cli.commands._helpers.clone.virtual import execute_virtual_clone
@@ -54,4 +55,9 @@ def run_clone(request: CloneCommandRequest) -> int:
     finally:
         _ = close_clone_targets(invocation=invocation, connection_context=connection_context)
     write_clone_completion_output(invocation=invocation, outcome=outcome)
+    write_clone_execution_json_output(
+        request=request,
+        preparation=preparation,
+        outcome=outcome,
+    )
     return resolve_clone_exit_code(outcome)

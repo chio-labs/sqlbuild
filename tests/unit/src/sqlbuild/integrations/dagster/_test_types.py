@@ -95,6 +95,22 @@ class DagsterCliJsonStreamTestCase:
 
 
 @dataclass(frozen=True)
+class DagsterCliCloneStreamTestCase:
+    description: str
+    command_stdout: str
+    expected_asset_keys: tuple[tuple[str, ...], ...]
+    expected_actions: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DagsterCliCloneFailureTestCase:
+    description: str
+    command_stdout: str
+    expected_materialized_asset_key: tuple[str, ...]
+    expected_incomplete_assets: str
+
+
+@dataclass(frozen=True)
 class DagsterCliFailureTestCase:
     description: str
     command_stderr: str

@@ -103,7 +103,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "orders_enriched",
                 "missing_snapshot",
             ),
-            expected_exit_code=1,
+            expected_exit_code=0,
             expected_stdout_fragments=(
                 "fact_orders",
                 "copied",

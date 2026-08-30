@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import LifeCycleEvent
-from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.planner.models import (
     CloneSourcePlanEntry,
     FunctionPlanEntry,
@@ -41,6 +41,12 @@ class CloneExecutionInput:
     hard_copy: bool
     run_id: str
     query_change_tracking: bool
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = field(
+        default_factory=dict
+    )
+    dependency_locations: dict[CompiledObjectKey, CompiledRelationLocation] = field(
+        default_factory=dict
+    )
     on_item: CloneItemCallback | None = None
 
 
