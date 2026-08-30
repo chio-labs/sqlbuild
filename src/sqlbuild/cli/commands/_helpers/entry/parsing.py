@@ -10,7 +10,6 @@ from pathlib import Path
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.constants import (
     DBT_VERBOSE_OPTIONS,
-    DEBUG_OPTION,
     EMPTY_ENV_VALUE,
     NO_COLOR_OPTION,
     SCOPE_DEFAULT_PAGE_SIZE,
@@ -82,9 +81,6 @@ def parse_cli_invocation(
             for dbt_arg in unknown_args:
                 if dbt_arg == NO_COLOR_OPTION:
                     args.no_color = True
-                    continue
-                if dbt_arg == DEBUG_OPTION:
-                    args.debug = True
                     continue
                 dbt_passthrough_args.append(dbt_arg)
             args.dbt_args = dbt_passthrough_args

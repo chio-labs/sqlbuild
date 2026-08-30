@@ -328,10 +328,16 @@ def test_given_dbt_command_without_sqlbuild_project_when_dispatching_then_does_n
             expected_dbt_args=("--select", "tag:nightly", "--start-cursor-int", "10"),
         ),
         MainTestCase(
-            description="displaced global debug enables verbose dbt run output",
+            description="dbt debug argument remains owned by dbt",
             argv=["dbt", "run", "--debug", "--select", "tag:nightly"],
             expected_exit_code=17,
-            expected_dbt_args=("--select", "tag:nightly", "--verbose"),
+            expected_dbt_args=("--debug", "--select", "tag:nightly"),
+        ),
+        MainTestCase(
+            description="dbt debug argument after separator is preserved verbatim",
+            argv=["dbt", "run", "--", "--debug"],
+            expected_exit_code=17,
+            expected_dbt_args=("--", "--debug"),
         ),
         MainTestCase(
             description="dispatches dbt build and preserves dbt args",
