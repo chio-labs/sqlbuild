@@ -1200,15 +1200,7 @@ def _execute_virtual_build_plan(
                 if seed_name not in reads.seed_load_names
             ),
         )
-    return replace(
-        result,
-        timings=replace(
-            result.timings,
-            schema_preparation_seconds=(
-                virtual_schema_seconds + (result.timings.schema_preparation_seconds or 0.0)
-            ),
-        ),
-    )
+    return result
 
 
 def _resolve_virtual_microbatch_state(
