@@ -9,6 +9,5 @@ DIFF_NUMERIC_PRECISION_TYPES: frozenset[str] = frozenset({"decimal", "numeric"})
 DIFF_UNSUPPORTED_COMPARISON_TYPES: frozenset[str] = frozenset(
     {"geography", "geometry", "hierarchyid", "image", "ntext", "text", "xml"}
 )
-EMPTY_SEED_VALUE: str = ""
 INFORMATION_SCHEMA_NULLABLE_VALUE: str = "YES"
 INTEGER_TYPE_TOKEN: str = "INT"
