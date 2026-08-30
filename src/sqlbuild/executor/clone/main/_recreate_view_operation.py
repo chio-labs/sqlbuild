@@ -17,21 +17,11 @@ def recreate_view_by_names(
     origin_relation: str,
     destination_relation: str,
     view_sql: str,
-    origin_exists: bool,
     adapter: BaseAdapter,
     connection: Any,
 ) -> CloneItemResult:
     """Recreate the destination view from SQL, returning a timed item result."""
 
-    if not origin_exists:
-        return CloneItemResult(
-            name=name,
-            action=CloneAction.WARNING_MISSING_SOURCE,
-            status=CloneStatus.WARNING,
-            message="missing in origin environment",
-            origin_relation=origin_relation,
-            destination_relation=destination_relation,
-        )
     recorder: StatementRecorder = StatementRecorder()
     start: float = time.monotonic()
     try:

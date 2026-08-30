@@ -389,6 +389,7 @@ class CloneCommandRequest:
     exclude: tuple[str, ...] = ()
     verbose: bool = False
     cli_vars: dict[str, object] | None = None
+    json_output_path: Path | None = None
 
 
 @dataclass(frozen=True)

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -16,17 +15,16 @@ from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
     SeedPlanEntry,
 )
-from sqlbuild.compiler.planner.types import MaterializationType
-from sqlbuild.executor.build.models import FunctionExecutionResult
-from sqlbuild.executor.clone._helpers.operations import clone_relation, recreate_view
+from sqlbuild.executor.clone._helpers.execution_items import (
+    execute_clone_function_item,
+    execute_clone_relation_item,
+)
 from sqlbuild.executor.clone.models import (
     CloneExecutionInput,
     CloneExecutionResult,
     CloneItemResult,
 )
-from sqlbuild.executor.clone.types import CloneAction, CloneStatus
-from sqlbuild.executor.functions.main._execute import execute_function
-from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.executor.clone.types import CloneStatus
 
 
 def _ensure_destination_schemas(
@@ -106,7 +104,7 @@ def execute_clone(*, inputs: CloneExecutionInput) -> CloneExecutionResult:
         )
         is not None
     )
-    origin_lookup: RelationLookup = build_relation_lookup(
+    relation_lookup: RelationLookup = build_relation_lookup(
         adapter=inputs.adapter,
         connection=inputs.destination_connection,
         locations=tuple(
@@ -116,67 +114,55 @@ def execute_clone(*, inputs: CloneExecutionInput) -> CloneExecutionResult:
                 origin_entry.destination.name,
             )
             for _, origin_entry in clonable_entries
+        )
+        + tuple(
+            (location.database, location.schema, location.name)
+            for location in inputs.dependency_locations.values()
         ),
     )
+    available_keys: set[CompiledObjectKey] = {
+        key
+        for key, location in inputs.dependency_locations.items()
+        if relation_lookup.exists(
+            database=location.database,
+            schema=location.schema,
+            name=location.name,
+        )
+    }
     origins_by_key: dict[
         CompiledObjectKey, CloneSourcePlanEntry | SeedPlanEntry | ModelPlanEntry
     ] = {destination.key: origin for destination, origin in clonable_entries}
     total: int = len(ordered_destination_entries)
     for index, destination_entry in enumerate(ordered_destination_entries, start=1):
         if isinstance(destination_entry, FunctionPlanEntry):
-            start: float = time.monotonic()
-            recorder: StatementRecorder = StatementRecorder()
-            function_result: FunctionExecutionResult = execute_function(
-                function_entry=destination_entry,
-                adapter=inputs.adapter,
-                connection=inputs.destination_connection,
-                statement_recorder=recorder,
-                run_id=inputs.run_id,
-                query_change_tracking=inputs.query_change_tracking,
-            )
-            succeeded: bool = function_result.status == ExecutionStatus.SUCCESS
-            item_result: CloneItemResult = CloneItemResult(
-                name=destination_entry.name,
-                action=(CloneAction.RECREATED_FUNCTION if succeeded else CloneAction.FAILED),
-                status=(CloneStatus.SUCCESS if succeeded else CloneStatus.FAILED),
-                message=(
-                    "; ".join(function_result.warning_messages)
-                    if succeeded and function_result.warning_messages
-                    else function_result.error_message
-                ),
-                destination_relation=destination_entry.destination.qualified_name,
-                duration_seconds=time.monotonic() - start,
-                executed_statements=function_result.lifecycle_events,
+            item_result: CloneItemResult = execute_clone_function_item(
+                destination_entry=destination_entry,
+                inputs=inputs,
+                available_keys=available_keys,
             )
             results.append(item_result)
             if inputs.on_item is not None:
                 inputs.on_item(index=index, total=total, item=item_result)
+            if item_result.status == CloneStatus.SUCCESS:
+                available_keys.add(destination_entry.key)
+            else:
+                available_keys.discard(destination_entry.key)
             continue
         origin_entry: CloneSourcePlanEntry | SeedPlanEntry | ModelPlanEntry = origins_by_key[
             destination_entry.key
         ]
-        if (
-            isinstance(destination_entry, ModelPlanEntry)
-            and isinstance(origin_entry, ModelPlanEntry)
-            and destination_entry.materialization_type == MaterializationType.VIEW
-        ):
-            item_result: CloneItemResult = recreate_view(
-                destination_entry=destination_entry,
-                origin_entry=origin_entry,
-                adapter=inputs.adapter,
-                destination_connection=inputs.destination_connection,
-                origin_lookup=origin_lookup,
-            )
-        else:
-            item_result = clone_relation(
-                destination_entry=destination_entry,
-                origin_entry=origin_entry,
-                adapter=inputs.adapter,
-                destination_connection=inputs.destination_connection,
-                hard_copy=inputs.hard_copy,
-                origin_lookup=origin_lookup,
-            )
+        item_result = execute_clone_relation_item(
+            destination_entry=destination_entry,
+            origin_entry=origin_entry,
+            inputs=inputs,
+            relation_lookup=relation_lookup,
+            available_keys=available_keys,
+        )
         results.append(item_result)
+        if item_result.status == CloneStatus.SUCCESS:
+            available_keys.add(destination_entry.key)
+        elif item_result.status == CloneStatus.FAILED:
+            available_keys.discard(destination_entry.key)
         if inputs.on_item is not None:
             inputs.on_item(index=index, total=total, item=item_result)
 

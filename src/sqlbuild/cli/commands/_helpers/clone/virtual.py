@@ -15,6 +15,10 @@ from sqlbuild.cli.commands._helpers.runtime.connection import (
     resolve_target_connection_config,
 )
 from sqlbuild.cli.commands.models import CloneCommandRequest, CloneInvocation
+from sqlbuild.cli.output.main._virtual_clone_execution_json import (
+    format_virtual_clone_execution_json,
+)
+from sqlbuild.cli.output.main._write_execution_json_output import write_execution_json_output
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.virtual.executor.main.clone import run_virtual_clone
 from sqlbuild.virtual.executor.models import CloneOptions, VirtualCloneResult
@@ -60,5 +64,10 @@ def execute_virtual_clone(*, request: CloneCommandRequest, invocation: CloneInvo
         result=result,
         use_color=invocation.use_color,
         verbose=request.verbose,
+    )
+    write_execution_json_output(
+        payload=format_virtual_clone_execution_json(result=result),
+        json_output=False,
+        json_output_path=request.json_output_path,
     )
     return 0 if is_virtual_clone_success(result) else 1

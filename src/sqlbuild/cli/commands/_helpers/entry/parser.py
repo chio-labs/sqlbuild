@@ -267,6 +267,7 @@ def _add_data_parsers(
     _ = add_select_args(clone_parser)
     _ = add_vars_args(clone_parser)
     _ = add_dbt_config_args(parser=clone_parser)
+    _ = add_execution_json_output_arg(clone_parser)
 
     diff_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DIFF)
     diff_parser.add_argument("target_range", metavar="FROM:TO")

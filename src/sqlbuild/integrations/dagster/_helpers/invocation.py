@@ -13,6 +13,7 @@ from sqlbuild.integrations.dagster.constants import (
     ASSET_SELECTION_COMMANDS,
     CHECK_METADATA_EXCLUDED_KEYS,
     CHECK_NAME_SEPARATOR_CHARACTER,
+    CLONE_COMMAND,
     COMPLETED_EXECUTION_STATUSES,
     DEFAULT_SELECTABLE_NODE_KINDS,
     EXPLICIT_SELECTION_FLAGS,
@@ -28,6 +29,7 @@ from sqlbuild.integrations.dagster.constants import (
     SELECT_FILE_FLAG,
     SOURCE_NODE_KIND,
     STDERR_STREAM_NAME,
+    SUCCESS_EXECUTION_STATUS,
     WARNING_CHECK_SEVERITY,
 )
 
@@ -336,6 +338,9 @@ def _build_results_from_execution_payload(
     context: Any,
 ) -> tuple[Any, ...]:
     selected_paths: set[tuple[str, ...]] = _selected_asset_paths(context=context)
+    is_clone: bool = str(payload.get("command")) == CLONE_COMMAND
+    if is_clone:
+        selected_paths = set()
     nodes_by_name: dict[tuple[str, str], Mapping[str, Any]] = {
         (str(node.get("kind")), str(node.get("name"))): node for node in dag.get("nodes", ())
     }
@@ -345,7 +350,10 @@ def _build_results_from_execution_payload(
     asset_results_by_id: dict[str, Mapping[str, Any]] = {}
     payload_asset: Mapping[str, Any]
     for payload_asset in payload.get("assets", ()):  # type: ignore[assignment]
-        if str(payload_asset.get("status")) not in COMPLETED_EXECUTION_STATUSES:
+        execution_status: str = str(payload_asset.get("status"))
+        if execution_status not in COMPLETED_EXECUTION_STATUSES:
+            continue
+        if is_clone and execution_status != SUCCESS_EXECUTION_STATUS:
             continue
         node: Mapping[str, Any] | None = nodes_by_name.get(
             (str(payload_asset.get("kind")), str(payload_asset.get("name")))
@@ -365,7 +373,7 @@ def _build_results_from_execution_payload(
     for node in _sort_nodes_topologically(dag=dag):
         node_id: str = str(node.get("id"))
         execution_asset: Mapping[str, Any] | None = asset_results_by_id.get(node_id)
-        if execution_asset is None and str(node.get("kind")) != SOURCE_NODE_KIND:
+        if execution_asset is None and (is_clone or str(node.get("kind")) != SOURCE_NODE_KIND):
             continue
         asset_key: Any = dg.AssetKey([str(part) for part in node["asset_key"]])
         if selected_paths and tuple(asset_key.path) not in selected_paths:
@@ -375,8 +383,9 @@ def _build_results_from_execution_payload(
             if execution_asset is not None
             else {"kind": "source", "name": node.get("name"), "status": "observed"}
         )
+        materialization_type: Any = dg.AssetMaterialization if is_clone else dg.MaterializeResult
         results.append(
-            dg.MaterializeResult(
+            materialization_type(
                 asset_key=asset_key,
                 metadata={
                     "command": " ".join(command),

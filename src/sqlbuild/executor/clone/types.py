@@ -31,4 +31,5 @@ class CloneAction(StrEnum):
     RECREATED_VIEW = "recreated_view"
     RECREATED_FUNCTION = "recreated_function"
     WARNING_MISSING_SOURCE = "warning_missing_source"
+    SKIPPED_MISSING_DEPENDENCY = "skipped_missing_dependency"
     FAILED = "failed"
