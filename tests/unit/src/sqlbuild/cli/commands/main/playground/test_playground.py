@@ -47,6 +47,10 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
             ),
             expected_file_fragments=(
                 (
+                    Path("sqlbuild_project.toml"),
+                    ("[connections.developer]", 'connection = "developer"'),
+                ),
+                (
                     Path("materializations/partition_tracked.py"),
                     ("from sqlbuild.adapter.contract.types import FrameworkType",),
                 ),
@@ -124,6 +128,10 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
             ),
             unexpected_paths=(Path("target"), Path("sqlbuild_local.toml")),
             expected_file_fragments=(
+                (
+                    Path("sqlbuild_project.toml"),
+                    ("[connections.developer]", 'connection = "developer"'),
+                ),
                 (Path("sources/raw.yml"), ("managed: true",)),
                 (
                     Path("loaders/waffle_loaders.py"),
@@ -159,6 +167,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                 (
                     Path("sqlbuild_project.toml"),
                     (
+                        "[connections.developer]",
                         "[settings]",
                         "virtual_environments = true",
                         "[targets.dev.state]",
@@ -210,6 +219,10 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
             ),
             unexpected_paths=(Path("target"), Path("sqlbuild_local.toml")),
             expected_file_fragments=(
+                (
+                    Path("sqlbuild_project.toml"),
+                    ("[connections.developer]", 'connection = "developer"'),
+                ),
                 (
                     Path("tasks/orders.py"),
                     ("def prepare_raw_orders", "SkipMode.SOFT", "def export_window"),

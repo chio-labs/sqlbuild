@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline._helpers.clone import prepare_clone_pipeline
-from sqlbuild.compiler.pipeline.models import ClonePipelineOptions, ClonePipelineResult
+from sqlbuild.compiler.pipeline.models import (
+    ClonePipelineConnection,
+    ClonePipelineOptions,
+    ClonePipelineResult,
+)
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 
 
@@ -21,7 +23,7 @@ def run_clone_pipeline(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     cli_vars: dict[str, object] | None = None,
-    destination_connection: Any,
+    destination_connection: ClonePipelineConnection,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> ClonePipelineResult:
     return prepare_clone_pipeline(

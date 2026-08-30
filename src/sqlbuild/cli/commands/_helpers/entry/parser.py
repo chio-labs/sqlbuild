@@ -581,18 +581,15 @@ def _add_skills_parsers(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
     skills_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.SKILLS)
-    skills_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
-    skills_subparsers = skills_parser.add_subparsers(dest="skills_command")
-    skills_update_parser: argparse.ArgumentParser = skills_subparsers.add_parser("update")
-    skills_update_parser.add_argument("--global", dest="skills_global", action="store_true")
-    skills_update_parser.add_argument(
+    skills_parser.add_argument("--global", dest="skills_global", action="store_true")
+    skills_parser.add_argument(
         "--target",
         dest="skills_target",
         action="append",
         choices=("opencode", "claude", "agents"),
         default=[],
     )
-    skills_update_parser.add_argument("--force", dest="skills_force", action="store_true")
+    skills_parser.add_argument("--force", dest="skills_force", action="store_true")
 
 
 def _add_kata_parser(

@@ -26,7 +26,10 @@ _CONNECTION_IDENTITY_KEYS: frozenset[str] = frozenset(
 
 
 def validate_managed_loader_target_isolation(
-    *, discovered_inputs: DiscoveredProjectInputs, adapter: BaseAdapter
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    resolved_connection: dict[str, object] | None = None,
 ) -> None:
     """Reject managed loader write namespaces shared by multiple targets."""
     managed_sources: tuple[SourceEntry, ...] = _managed_sources(discovered_inputs)
@@ -50,9 +53,13 @@ def validate_managed_loader_target_isolation(
             discovered_inputs=discovered_inputs,
             selected_target=target_name,
         )
-        effective_connection: dict[str, object] = build_effective_connection_config(
-            discovered_inputs=discovered_inputs,
-            selected_target=target_name,
+        effective_connection: dict[str, object] = (
+            resolved_connection
+            if resolved_connection is not None
+            else build_effective_connection_config(
+                discovered_inputs=discovered_inputs,
+                selected_target=target_name,
+            )
         )
         connections_by_target[target_name] = _connection_identity(effective_connection)
         namespaces_by_target[target_name] = frozenset(

@@ -20,3 +20,12 @@ class SkillUpdateErrorTestCase:
     existing_files: dict[Path, str]
     requested_targets: tuple[str, ...]
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class SkillMaintenanceTestCase:
+    description: str
+    project_config: str | None = None
+    existing_files: dict[Path, str] = field(default_factory=dict)
+    expected_message_fragment: str = ""
+    expected_written_paths: tuple[Path, ...] = ()

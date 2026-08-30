@@ -96,6 +96,14 @@ class ClonePipelineOptions:
 
 
 @dataclass(frozen=True)
+class ClonePipelineConnection:
+    """Resolved destination connection used throughout clone compilation and planning."""
+
+    config: dict[str, object]
+    handle: Any
+
+
+@dataclass(frozen=True)
 class ClonePipelineResult:
     """Prepared clone inputs for origin and destination target environments."""
 

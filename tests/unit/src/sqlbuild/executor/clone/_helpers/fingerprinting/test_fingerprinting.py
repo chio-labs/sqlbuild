@@ -49,8 +49,10 @@ def test_given_clone_result_when_copying_fingerprints_then_writes_expected_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     written: list[tuple[str, str, str | None, str | None, str]] = []
+    used_connections: list[object] = []
 
     def read_latest(**kwargs: Any) -> FingerprintSet:
+        used_connections.append(kwargs["connection"])
         schema: str = str(kwargs["schema"])
         return FingerprintSet(
             schema=schema,
@@ -63,6 +65,7 @@ def test_given_clone_result_when_copying_fingerprints_then_writes_expected_rows(
         )
 
     def write_fingerprint(**kwargs: Any) -> None:
+        used_connections.append(kwargs["connection"])
         fingerprint: Fingerprint = kwargs["fingerprint"]
         written.append(
             (
@@ -94,6 +97,7 @@ def test_given_clone_result_when_copying_fingerprints_then_writes_expected_rows(
         )
     )
 
+    destination_connection: object = object()
     copy_clone_fingerprints(
         result=result,
         origin_model_entries=origin_model_entries,
@@ -101,8 +105,7 @@ def test_given_clone_result_when_copying_fingerprints_then_writes_expected_rows(
         origin_seed_entries=origin_seed_entries,
         destination_seed_entries=destination_seed_entries,
         adapter=cast(BaseAdapter, CloneFingerprintAdapter()),
-        origin_connection=object(),
-        destination_connection=object(),
+        destination_connection=destination_connection,
         run_id="clone-run",
         query_change_tracking=True,
     )
@@ -112,6 +115,8 @@ def test_given_clone_result_when_copying_fingerprints_then_writes_expected_rows(
     )
     assert all(target_schema == "dev" for _, _, target_schema, _, _ in written)
     assert all(run_id == "clone-run" for *_, run_id in written)
+    assert bool(used_connections) is bool(test_case.expected_written_identities)
+    assert all(connection is destination_connection for connection in used_connections)
 
 
 @pytest.mark.parametrize(
@@ -168,7 +173,6 @@ def test_given_many_entries_one_schema_when_copying_then_reads_origin_fingerprin
         origin_seed_entries=(),
         destination_seed_entries=(),
         adapter=cast(BaseAdapter, CloneFingerprintAdapter()),
-        origin_connection=object(),
         destination_connection=object(),
         run_id="clone-run",
         query_change_tracking=True,

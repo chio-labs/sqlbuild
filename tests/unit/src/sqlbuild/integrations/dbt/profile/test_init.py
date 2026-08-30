@@ -23,13 +23,16 @@ from tests.unit.src.sqlbuild.integrations.dbt.profile._test_types import (
                 'source = "dbt_profile"',
                 'profile = "analytics"',
                 'target = "dev"',
+                "[connections.dev_dbt_profile]",
                 "[targets.dev]",
+                'connection = "dev_dbt_profile"',
                 'schema = "main"',
             ),
             unexpected_fragments=(
                 "/tmp/secret-profile.duckdb",
                 "[dbt.production_ref]",
                 "generate_schema_name_override",
+                "[targets.dev.connection]",
             ),
         )
     ],

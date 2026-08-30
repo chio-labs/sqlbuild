@@ -75,6 +75,9 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
     adapter: str = _require_str(payload=payload, key="adapter", file_path=file_path)
     default_target: str | None = _optional_str(payload=payload, key="default_target")
     connection: dict[str, object] = _optional_mapping(payload=payload, key="connection")
+    connections: dict[str, dict[str, object]] = _load_connections(
+        payload=payload.get("connections"), file_path=file_path
+    )
     settings: SettingsConfig = _load_settings(payload=payload.get("settings"), file_path=file_path)
     cost: CostConfig = _load_cost(payload=payload.get("cost"), file_path=file_path)
     constants: ConstantsConfig = _load_constants(
@@ -109,6 +112,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         adapter=adapter,
         default_target=default_target,
         connection=connection,
+        connections=connections,
         settings=settings,
         cost=cost,
         constants=constants,
@@ -134,6 +138,9 @@ def load_local_config(*, project_dir: Path) -> LocalConfig:
     target: str | None = _optional_str(payload=payload, key="target")
     adapter: str | None = _optional_str(payload=payload, key="adapter")
     connection: dict[str, object] = _optional_mapping(payload=payload, key="connection")
+    connections: dict[str, dict[str, object]] = _load_connections(
+        payload=payload.get("connections"), file_path=file_path
+    )
     targets: dict[str, LocalTargetConfig] = _load_local_targets(
         payload=payload.get("targets"),
         file_path=file_path,
@@ -152,6 +159,7 @@ def load_local_config(*, project_dir: Path) -> LocalConfig:
         target=target,
         adapter=adapter,
         connection=connection,
+        connections=connections,
         targets=targets,
         settings=settings,
         setting_overrides=setting_overrides,
@@ -553,18 +561,31 @@ def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig
             label=f"targets.{target_name}",
             file_path=file_path,
         )
+        _validate_target_keys(
+            target_mapping=target_mapping, target_name=target_name, file_path=file_path
+        )
         clone_mapping: dict[str, object] = _coerce_mapping(
             payload=target_mapping.get("clone"),
             label=f"targets.{target_name}.clone",
             file_path=file_path,
+        )
+        _validate_clone_keys(
+            clone_mapping=clone_mapping, target_name=target_name, file_path=file_path
         )
         state_mapping: dict[str, object] = _coerce_mapping(
             payload=target_mapping.get("state"),
             label=f"targets.{target_name}.state",
             file_path=file_path,
         )
+        _validate_state_keys(
+            state_mapping=state_mapping, target_name=target_name, file_path=file_path
+        )
+        connection, connection_name = _load_target_connection(
+            target_mapping=target_mapping, target_name=target_name, file_path=file_path
+        )
         targets[target_name] = TargetConfig(
-            connection=_optional_mapping(payload=target_mapping, key="connection"),
+            connection=connection,
+            connection_name=connection_name,
             vars=_load_string_mapping(payload=target_mapping.get("vars"), file_path=file_path),
             database=_optional_str(payload=target_mapping, key="database"),
             schema=_optional_str(payload=target_mapping, key="schema"),
@@ -616,18 +637,31 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
             label=f"targets.{target_name}",
             file_path=file_path,
         )
+        _validate_target_keys(
+            target_mapping=target_mapping, target_name=target_name, file_path=file_path
+        )
         clone_mapping: dict[str, object] = _coerce_mapping(
             payload=target_mapping.get("clone"),
             label=f"targets.{target_name}.clone",
             file_path=file_path,
+        )
+        _validate_clone_keys(
+            clone_mapping=clone_mapping, target_name=target_name, file_path=file_path
         )
         state_mapping: dict[str, object] = _coerce_mapping(
             payload=target_mapping.get("state"),
             label=f"targets.{target_name}.state",
             file_path=file_path,
         )
+        _validate_state_keys(
+            state_mapping=state_mapping, target_name=target_name, file_path=file_path
+        )
+        connection, connection_name = _load_target_connection(
+            target_mapping=target_mapping, target_name=target_name, file_path=file_path
+        )
         targets[target_name] = LocalTargetConfig(
-            connection=_optional_mapping(payload=target_mapping, key="connection"),
+            connection=connection,
+            connection_name=connection_name,
             vars=_load_string_mapping(payload=target_mapping.get("vars"), file_path=file_path),
             database=_optional_str(payload=target_mapping, key="database"),
             schema=_optional_str(payload=target_mapping, key="schema"),
@@ -661,6 +695,84 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
             ),
         )
     return targets
+
+
+def _load_connections(*, payload: object, file_path: Path) -> dict[str, dict[str, object]]:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label="connections", file_path=file_path
+    )
+    connections: dict[str, dict[str, object]] = {}
+    for name, value in mapping.items():
+        if not name.strip():
+            raise ProjectConfigError(f"{file_path} connections contains an empty name")
+        connections[name] = dict(
+            _coerce_mapping(payload=value, label=f"connections.{name}", file_path=file_path)
+        )
+    return connections
+
+
+def _load_target_connection(
+    *, target_mapping: dict[str, object], target_name: str, file_path: Path
+) -> tuple[dict[str, object], str | None]:
+    value: object | None = target_mapping.get("connection")
+    if value is None:
+        return {}, None
+    if isinstance(value, dict):
+        return cast(dict[str, object], value), None
+    if isinstance(value, str) and value.strip():
+        return {}, value.strip()
+    raise ProjectConfigError(
+        f"{file_path} targets.{target_name}.connection must be a non-empty string or mapping"
+    )
+
+
+def _validate_target_keys(
+    *, target_mapping: dict[str, object], target_name: str, file_path: Path
+) -> None:
+    _validate_allowed_keys(
+        mapping=target_mapping,
+        allowed_keys=frozenset(
+            {
+                "connection",
+                "vars",
+                "database",
+                "schema",
+                "loader_schema",
+                "defer_sources_to",
+                "defer_clone_from",
+                "changes_only",
+                "compile_cache",
+                "clone",
+                "state",
+            }
+        ),
+        label=f"targets.{target_name}",
+        file_path=file_path,
+    )
+
+
+def _validate_clone_keys(
+    *, clone_mapping: dict[str, object], target_name: str, file_path: Path
+) -> None:
+    _validate_allowed_keys(
+        mapping=clone_mapping,
+        allowed_keys=frozenset({"allow_as_clone_origin", "allow_as_clone_destination"}),
+        label=f"targets.{target_name}.clone",
+        file_path=file_path,
+    )
+
+
+def _validate_state_keys(
+    *, state_mapping: dict[str, object], target_name: str, file_path: Path
+) -> None:
+    _validate_allowed_keys(
+        mapping=state_mapping,
+        allowed_keys=frozenset(
+            {"backend", "schema", "connection", "allow_reset", "unsuffixed_virtual_env"}
+        ),
+        label=f"targets.{target_name}.state",
+        file_path=file_path,
+    )
 
 
 def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:

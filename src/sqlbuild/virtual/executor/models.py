@@ -343,7 +343,6 @@ class CloneOriginLookup:
 
     model_locations: dict[str, CompiledRelationLocation]
     seed_locations: dict[str, CompiledRelationLocation]
-    origin_database_alias: str | None
     lookup: RelationLookup
 
 

@@ -1,8 +1,13 @@
 name = "loader_waffle_shop"
 adapter = "duckdb"
+default_target = "dev"
 
-[connection]
+[connections.developer]
 database = "loader_waffle_shop.duckdb"
 
 [defaults]
 materialized = "table"
+
+[targets.dev]
+connection = "developer"
+schema = "main"

@@ -190,20 +190,20 @@ def _build_project_toml(
     target_schema: str | None,
     target_database: str | None,
 ) -> str:
-    target_lines: list[str] = [f"[targets.{_quote_key(target_name)}]"]
+    connection_name: str = f"{target_name}_dbt_profile"
+    target_lines: list[str] = [
+        f"[connections.{_quote_key(connection_name)}]",
+        'source = "dbt_profile"',
+        f'profile = "{_escape(profile_name)}"',
+        f'target = "{_escape(target_name)}"',
+        "",
+        f"[targets.{_quote_key(target_name)}]",
+        f'connection = "{_escape(connection_name)}"',
+    ]
     if target_database is not None:
         target_lines.append(f'database = "{_escape(target_database)}"')
     if target_schema is not None:
         target_lines.append(f'schema = "{_escape(target_schema)}"')
-    target_lines.extend(
-        [
-            "",
-            f"[targets.{_quote_key(target_name)}.connection]",
-            'source = "dbt_profile"',
-            f'profile = "{_escape(profile_name)}"',
-            f'target = "{_escape(target_name)}"',
-        ]
-    )
     return (
         f'name = "{_escape(project_name)}"\n'
         f'adapter = "{_escape(adapter)}"\n'

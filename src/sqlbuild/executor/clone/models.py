@@ -37,7 +37,6 @@ class CloneExecutionInput:
     destination_function_entries: tuple[FunctionPlanEntry, ...]
     execution_order: tuple[CompiledObjectKey, ...]
     adapter: BaseAdapter
-    origin_connection: Any
     destination_connection: Any
     hard_copy: bool
     run_id: str

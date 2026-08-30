@@ -20,18 +20,17 @@ from tests.e2e.src.sqlbuild.cli.commands.main.skills.helpers import (
     "test_case",
     [
         SkillsCliTestCase(
-            description="updates all local skill targets by default",
-            argv=["skills", "update"],
+            description="updates portable and Claude skill targets by default",
+            argv=["skills"],
             expected_exit_code=0,
             expected_files=(
-                Path(".opencode/skills/sqlbuild/SKILL.md"),
-                Path(".claude/skills/sqlbuild/SKILL.md"),
                 Path(".agents/skills/sqlbuild/SKILL.md"),
+                Path(".claude/skills/sqlbuild/SKILL.md"),
             ),
         ),
         SkillsCliTestCase(
             description="updates only requested local skill target",
-            argv=["skills", "update", "--target", "opencode"],
+            argv=["skills", "--target", "opencode"],
             expected_exit_code=0,
             expected_files=(Path(".opencode/skills/sqlbuild/SKILL.md"),),
             unexpected_files=(
@@ -68,7 +67,7 @@ def test_given_skills_update_cli_when_running_then_writes_expected_skill_files(
     [
         SkillsCliOverwriteTestCase(
             description="refuses to overwrite custom skill file without force",
-            argv=["skills", "update", "--target", "opencode"],
+            argv=["skills", "--target", "opencode"],
             existing_file=Path(".opencode/skills/sqlbuild/SKILL.md"),
             existing_content="custom project instructions\n",
             expected_exit_code=1,
@@ -76,7 +75,7 @@ def test_given_skills_update_cli_when_running_then_writes_expected_skill_files(
         ),
         SkillsCliOverwriteTestCase(
             description="overwrites custom skill file with force",
-            argv=["skills", "update", "--target", "opencode", "--force"],
+            argv=["skills", "--target", "opencode", "--force"],
             existing_file=Path(".opencode/skills/sqlbuild/SKILL.md"),
             existing_content="custom project instructions\n",
             expected_exit_code=0,

@@ -38,7 +38,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                     schema = "prod"
 
                     [targets.prod.connection]
-                    database = "clone.duckdb"
+                    database = "${ENV:SQLBUILD_TEST_UNUSED_ORIGIN_DATABASE}"
 
                     [targets.prod.clone]
                     allow_as_clone_origin = true
@@ -170,6 +170,98 @@ def test_given_clone_command_when_running_then_managed_relations_sync_as_expecte
     for query, expected_rows in test_case.expected_query_results:
         actual_rows: list[tuple[object, ...]] = query_duckdb(db_path=db_path, sql=query)
         assert tuple(tuple(row) for row in actual_rows) == expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CloneE2ETestCase(
+            description="exact clone ignores invalid origin connection and propagates fingerprint",
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
+                    name = "clone_connection_invariant"
+                    adapter = "duckdb"
+                    default_target = "dev"
+
+                    [connection]
+                    database = "clone.duckdb"
+
+                    [targets.prod]
+                    schema = "prod"
+
+                    [targets.prod.clone]
+                    allow_as_clone_origin = true
+
+                    [targets.dev]
+                    schema = "dev"
+
+                    [targets.dev.clone]
+                    allow_as_clone_destination = true
+                    """
+                ).strip()
+                + "\n",
+                "models/fact_orders.sql": (
+                    "MODEL (materialized table);\n\nSELECT 1 AS order_id, 100 AS amount_cents\n"
+                ),
+            },
+            clone_command=(
+                "--no-color",
+                "clone",
+                "--from",
+                "prod",
+                "--to",
+                "dev",
+                "--select",
+                "fact_orders",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=("fact_orders", "copied", "Completed successfully"),
+            expected_query_results=(
+                ("SELECT order_id, amount_cents FROM dev.fact_orders", ((1, 100),)),
+                (
+                    "SELECT node_type, node_name FROM dev._sqlbuild_fingerprints ",
+                    (("model", "fact_orders"),),
+                ),
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_origin_connection_when_exact_cloning_then_destination_session_is_authoritative(
+    test_case: CloneE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="clone_connection_invariant",
+        repo_files=test_case.repo_files,
+    )
+    prod_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--target", "prod", "--select", "fact_orders"),
+        project_dir=project_dir,
+    )
+    assert prod_result.returncode == 0, prod_result.stdout + prod_result.stderr
+    project_config_path: Path = project_dir / "sqlbuild_project.toml"
+    project_config_path.write_text(
+        project_config_path.read_text(encoding="utf-8").replace(
+            '[targets.prod]\nschema = "prod"',
+            '[targets.prod]\nschema = "prod"\n\n[targets.prod.connection]\n'
+            'database = "${ENV:SQLBUILD_TEST_UNUSED_ORIGIN_DATABASE}"',
+        ),
+        encoding="utf-8",
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.clone_command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout
+    for query, expected_rows in test_case.expected_query_results:
+        assert tuple(query_duckdb(db_path=project_dir / "clone.duckdb", sql=query)) == expected_rows
 
 
 @pytest.mark.parametrize(

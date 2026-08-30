@@ -26,6 +26,7 @@ class FakeCloneAdapter(BaseAdapter):
         self._origin_is_transient = origin_is_transient
         self._origin_names = origin_names
         self.executed_statements: list[str] = []
+        self.used_connections: list[Any] = []
 
     def supports_zero_copy_clone(self) -> bool:
         return self._supports_zero_copy
@@ -38,7 +39,7 @@ class FakeCloneAdapter(BaseAdapter):
         del connection
 
     def execute(self, connection: Any, sql: str) -> None:
-        del connection
+        self.used_connections.append(connection)
         self.executed_statements.append(sql)
 
     def relation_exists(
@@ -60,7 +61,8 @@ class FakeCloneAdapter(BaseAdapter):
         schemas: tuple[str, ...] | None,
         names: tuple[str, ...] | None = None,
     ) -> tuple[RelationInfo, ...]:
-        del connection, database, names
+        self.used_connections.append(connection)
+        del database, names
         relations: list[RelationInfo] = []
         for schema in schemas or ():
             for origin_name in self._origin_names:

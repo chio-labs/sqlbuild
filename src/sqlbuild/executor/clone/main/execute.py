@@ -108,7 +108,7 @@ def execute_clone(*, inputs: CloneExecutionInput) -> CloneExecutionResult:
     )
     origin_lookup: RelationLookup = build_relation_lookup(
         adapter=inputs.adapter,
-        connection=inputs.origin_connection,
+        connection=inputs.destination_connection,
         locations=tuple(
             (
                 origin_entry.destination.database,

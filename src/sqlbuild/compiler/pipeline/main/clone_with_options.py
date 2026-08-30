@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline._helpers.clone import prepare_clone_pipeline
-from sqlbuild.compiler.pipeline.models import ClonePipelineOptions, ClonePipelineResult
+from sqlbuild.compiler.pipeline.models import (
+    ClonePipelineConnection,
+    ClonePipelineOptions,
+    ClonePipelineResult,
+)
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 
 
@@ -17,7 +19,7 @@ def run_clone_pipeline_with_options(
     adapter: BaseAdapter,
     origin_target_name: str,
     destination_target_name: str,
-    destination_connection: Any,
+    destination_connection: ClonePipelineConnection,
     options: ClonePipelineOptions,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> ClonePipelineResult:

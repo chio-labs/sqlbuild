@@ -62,6 +62,7 @@ def test_given_clone_entries_when_executing_then_streams_each_item(
     def _on_item(index: int, *, total: int, item: CloneItemResult) -> None:
         streamed.append((index, total, item.destination_relation, item.status.value))
 
+    destination_connection: object = object()
     result: CloneExecutionResult = execute_clone(
         inputs=CloneExecutionInput(
             source_entries=CloneSourceEntries(),
@@ -72,8 +73,7 @@ def test_given_clone_entries_when_executing_then_streams_each_item(
             destination_function_entries=(),
             execution_order=tuple(entry.key for entry in destination_entries),
             adapter=adapter,
-            origin_connection=object(),
-            destination_connection=object(),
+            destination_connection=destination_connection,
             hard_copy=False,
             run_id="clone-run",
             query_change_tracking=False,
@@ -87,6 +87,8 @@ def test_given_clone_entries_when_executing_then_streams_each_item(
     )
     assert all(status == CloneStatus.SUCCESS.value for *_, status in streamed)
     assert len(result.item_results) == len(test_case.model_names)
+    assert adapter.used_connections
+    assert all(connection is destination_connection for connection in adapter.used_connections)
 
 
 @pytest.mark.parametrize(
@@ -136,7 +138,6 @@ def test_given_interleaved_clone_graph_when_executing_then_uses_plan_order(
             destination_function_entries=(function,),
             execution_order=(destination_table.key, function.key, destination_view.key),
             adapter=adapter,
-            origin_connection=object(),
             destination_connection=object(),
             hard_copy=False,
             run_id="clone-run",
