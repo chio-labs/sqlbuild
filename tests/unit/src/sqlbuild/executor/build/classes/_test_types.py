@@ -19,3 +19,14 @@ class SqlTestAuthoredOrderTestCase:
     description: str
     case_names: tuple[str, ...]
     expected_order: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SchedulerDiagnosticsTestCase:
+    description: str
+    expected_state_count: int
+    expected_running: int
+    expected_ready: int
+    expected_waiting: int
+    expected_limit: int
+    expected_aborted: int = 0

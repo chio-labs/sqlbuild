@@ -31,3 +31,12 @@ class PlanWorkTestCase:
     plan_output: PlanOutput
     python_plan_entries: tuple[PythonPlanEntry, ...]
     expected_has_work: bool
+
+
+@dataclass(frozen=True)
+class PipelinePhaseTimingTestCase:
+    description: str
+    clock_values: tuple[float, ...]
+    expected_compile_seconds: float
+    expected_planning_seconds: float
+    expected_total_seconds: float

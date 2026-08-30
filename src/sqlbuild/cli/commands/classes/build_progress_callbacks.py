@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 import threading
 import time
@@ -27,10 +28,12 @@ from sqlbuild.compiler.planner.main.execution.model_execution_annotation import 
 from sqlbuild.compiler.planner.main.execution.model_resource_type import model_resource_type
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
+from sqlbuild.cost.models import StatementExecutionTelemetry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
     FunctionExecutionResult,
+    SchedulerState,
     SeedExecutionResult,
 )
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
@@ -78,6 +81,9 @@ _ACTIVE_SPINNER_FRAMES: tuple[str, ...] = (
     "⠇",
     "⠏",
 )
+_RUNTIME_DIAGNOSTICS_LOGGER: logging.Logger = logging.getLogger("sqlbuild.executor.runtime")
+_SCHEDULER_DIAGNOSTIC_LIMIT: int = 50
+_QUERY_DIAGNOSTIC_LIMIT: int = 25
 
 
 class BuildProgressCallbacks:
@@ -122,10 +128,17 @@ class BuildProgressCallbacks:
         self._current_sub_message: str = ""
         self._spinner_frame_index: int = 0
         self._write_lock: threading.Lock = threading.Lock()
+        self._runtime_diagnostic_lock: threading.Lock = threading.Lock()
         self._spinner_stop_event: threading.Event | None = None
         self._spinner_thread: threading.Thread | None = None
         self._cursor_hidden: bool = False
         self._event_writer: ExecutionEventWriter = ExecutionEventWriter(path=event_output_path)
+        self._scheduler_diagnostic_count: int = 0
+        self._scheduler_diagnostic_omitted: int = 0
+        self._last_omitted_scheduler_state: SchedulerState | None = None
+        self._query_diagnostic_count: int = 0
+        self._query_diagnostic_omitted: int = 0
+        self._last_omitted_query: StatementExecutionTelemetry | None = None
 
         ctr_width: int = len(str(self._total)) * 2 + 1
         self._prefix_width: int = 2 + ctr_width + 2
@@ -205,6 +218,56 @@ class BuildProgressCallbacks:
         self._current_sub_message = message
         if self._is_tty:
             self._write_spinner_line()
+
+    def on_scheduler_state(self, state: SchedulerState) -> None:
+        """Report one deduplicated concurrent scheduler state transition."""
+
+        with self._runtime_diagnostic_lock:
+            self._scheduler_diagnostic_count += 1
+            if self._scheduler_diagnostic_count > _SCHEDULER_DIAGNOSTIC_LIMIT:
+                self._scheduler_diagnostic_omitted += 1
+                self._last_omitted_scheduler_state = state
+                return
+        self._write_runtime_diagnostic(_scheduler_diagnostic_message(state))
+
+    def on_statement_complete(self, telemetry: StatementExecutionTelemetry) -> None:
+        """Report a bounded sample of completed Snowflake statement identities."""
+
+        with self._runtime_diagnostic_lock:
+            self._query_diagnostic_count += 1
+            if self._query_diagnostic_count > _QUERY_DIAGNOSTIC_LIMIT:
+                self._query_diagnostic_omitted += 1
+                self._last_omitted_query = telemetry
+                return
+        self._write_runtime_diagnostic(_query_diagnostic_message(telemetry))
+
+    def _write_runtime_diagnostic(self, message: str) -> None:
+        _RUNTIME_DIAGNOSTICS_LOGGER.debug(message)
+        if self._debug:
+            return
+        with self._write_lock:
+            prefix: str = "\r\033[K" if self._is_tty else ""
+            self._stream.write(f"{prefix}{message}\n")
+            self._stream.flush()
+
+    def _write_runtime_diagnostic_summaries(self) -> None:
+        with self._runtime_diagnostic_lock:
+            scheduler_omitted: int = self._scheduler_diagnostic_omitted
+            last_scheduler_state: SchedulerState | None = self._last_omitted_scheduler_state
+            query_omitted: int = self._query_diagnostic_omitted
+            last_query: StatementExecutionTelemetry | None = self._last_omitted_query
+        if scheduler_omitted and last_scheduler_state is not None:
+            self._write_runtime_diagnostic(
+                f"Scheduler diagnostics  {scheduler_omitted} transitions omitted "
+                f"after {_SCHEDULER_DIAGNOSTIC_LIMIT}; final state: "
+                f"{_scheduler_diagnostic_message(last_scheduler_state)}"
+            )
+        if query_omitted and last_query is not None:
+            self._write_runtime_diagnostic(
+                f"Query diagnostics  {query_omitted} statements omitted after "
+                f"{_QUERY_DIAGNOSTIC_LIMIT}; final query: "
+                f"{_query_diagnostic_message(last_query)}"
+            )
 
     def _write_spinner_line(self) -> None:
         ctr: str = f"{self._counter + 1}/{self._total}".rjust(len(str(self._total)) * 2 + 1)
@@ -378,6 +441,7 @@ class BuildProgressCallbacks:
     def close(self) -> None:
         """Close the optional structured execution event stream."""
 
+        self._write_runtime_diagnostic_summaries()
         self._event_writer.close()
 
     def _write_model_result(self, *, ctr: str, model_result: ModelExecutionResult) -> None:
@@ -1199,6 +1263,35 @@ def _hook_label_width(hook_results: tuple[HookExecutionResult, ...]) -> int:
         return _HOOK_MIN_LABEL_WIDTH
     longest_label: int = max(len(result.label) for result in hook_results)
     return max(_HOOK_MIN_LABEL_WIDTH, min(longest_label, _HOOK_MAX_LABEL_WIDTH))
+
+
+def _scheduler_diagnostic_message(state: SchedulerState) -> str:
+    if state.aborted:
+        return (
+            "Scheduler  "
+            f"{state.running} running, {state.ready} ready, "
+            f"{state.waiting} waiting on dependencies, {state.aborted} aborted after stop, "
+            f"limit {state.limit}"
+        )
+    suffix: str = (
+        "  (DAG frontier constrained)"
+        if state.running < state.limit and state.ready == 0 and state.waiting > 0
+        else ""
+    )
+    return (
+        "Scheduler  "
+        f"{state.running} running, {state.ready} ready, "
+        f"{state.waiting} waiting on dependencies, limit {state.limit}{suffix}"
+    )
+
+
+def _query_diagnostic_message(telemetry: StatementExecutionTelemetry) -> str:
+    query_id: str = telemetry.query_id or "query ID unavailable"
+    return (
+        "Query  "
+        f"{telemetry.resource_type} {telemetry.resource_name}  phase={telemetry.phase}  "
+        f"{query_id}  {telemetry.status}  {telemetry.elapsed_seconds:.2f}s"
+    )
 
 
 def _format_display_sql(sql: str) -> str:

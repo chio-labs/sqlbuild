@@ -119,59 +119,62 @@ def execute_virtual_build(
             python_plan_entries=python_plan_entries,
         )
 
-    result: VirtualBuildPipelineResult = run_virtual_build_pipeline(
-        project_dir=project_dir,
-        discovered_inputs=discovered_inputs,
-        adapter=adapter,
-        connection_config=connection_config,
-        options=VirtualBuildOptions(
-            planning=VirtualPlanOptions(
-                selected_target=request.selected_target,
-                no_sql_validation=request.no_sql_validation,
-                no_cache=request.no_cache,
-                defer_sources_to=request.defer_sources_to,
-                cursor_overrides=request.cursor_overrides,
-                full_refresh=request.full_refresh,
-                virtual_environment_name=request.virtual_environment_name,
-                include_stale_upstreams=request.include_stale_upstreams,
-                changes_only=request.changes_only,
-                auto_load_sources=request.auto_load_sources,
-                reload_sources=request.reload_sources,
-                include_python=request.include_python,
-                select=request.select,
-                exclude=request.exclude,
-                cli_vars=request.cli_vars,
-                external_sql_reference_resolver=request.external_sql_reference_resolver,
+    try:
+        result: VirtualBuildPipelineResult = run_virtual_build_pipeline(
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+            adapter=adapter,
+            connection_config=connection_config,
+            options=VirtualBuildOptions(
+                planning=VirtualPlanOptions(
+                    selected_target=request.selected_target,
+                    no_sql_validation=request.no_sql_validation,
+                    no_cache=request.no_cache,
+                    defer_sources_to=request.defer_sources_to,
+                    cursor_overrides=request.cursor_overrides,
+                    full_refresh=request.full_refresh,
+                    virtual_environment_name=request.virtual_environment_name,
+                    include_stale_upstreams=request.include_stale_upstreams,
+                    changes_only=request.changes_only,
+                    auto_load_sources=request.auto_load_sources,
+                    reload_sources=request.reload_sources,
+                    include_python=request.include_python,
+                    select=request.select,
+                    exclude=request.exclude,
+                    cli_vars=request.cli_vars,
+                    external_sql_reference_resolver=request.external_sql_reference_resolver,
+                ),
+                seed_only=request.seed_only,
+                fail_fast=request.fail_fast,
+                allow_snapshot_schema_change=request.allow_snapshot_schema_change,
+                concurrency=request.concurrency,
+                run_tests=request.run_tests,
+                run_audits=request.run_audits,
+                snapshots=discovered_inputs.project_config.snapshots,
+                start_cursor_ts=parse_cursor_timestamp(cursor_overrides.start_ts),
+                end_cursor_ts=parse_cursor_timestamp(cursor_overrides.end_ts),
+                start_cursor_int=parse_cursor_integer(cursor_overrides.start_int),
+                end_cursor_int=parse_cursor_integer(cursor_overrides.end_int),
+                providers=request.providers,
             ),
-            seed_only=request.seed_only,
-            fail_fast=request.fail_fast,
-            allow_snapshot_schema_change=request.allow_snapshot_schema_change,
-            concurrency=request.concurrency,
-            run_tests=request.run_tests,
-            run_audits=request.run_audits,
-            snapshots=discovered_inputs.project_config.snapshots,
-            start_cursor_ts=parse_cursor_timestamp(cursor_overrides.start_ts),
-            end_cursor_ts=parse_cursor_timestamp(cursor_overrides.end_ts),
-            start_cursor_int=parse_cursor_integer(cursor_overrides.start_int),
-            end_cursor_int=parse_cursor_integer(cursor_overrides.end_int),
-            providers=request.providers,
-        ),
-        hooks=VirtualBuildHooks(
-            on_plan_ready=handle_plan_ready,
-            on_progress=planning_progress.on_progress,
-            on_connection_start=connection_progress.on_connection_start,
-            on_connection_complete=lambda connection_count, elapsed_seconds: (
-                connection_progress.on_connection_complete(
-                    connection_count=connection_count,
-                    elapsed_seconds=elapsed_seconds,
-                )
+            hooks=VirtualBuildHooks(
+                on_plan_ready=handle_plan_ready,
+                on_progress=planning_progress.on_progress,
+                on_connection_start=connection_progress.on_connection_start,
+                on_connection_complete=lambda connection_count, elapsed_seconds: (
+                    connection_progress.on_connection_complete(
+                        connection_count=connection_count,
+                        elapsed_seconds=elapsed_seconds,
+                    )
+                ),
+                on_connection_error=lambda connection_count, elapsed_seconds: (
+                    connection_progress.on_connection_error(
+                        connection_count=connection_count,
+                        elapsed_seconds=elapsed_seconds,
+                    )
+                ),
             ),
-            on_connection_error=lambda connection_count, elapsed_seconds: (
-                connection_progress.on_connection_error(
-                    connection_count=connection_count,
-                    elapsed_seconds=elapsed_seconds,
-                )
-            ),
-        ),
-    )
+        )
+    finally:
+        _ = plan_hook.close()
     return VirtualBuildExecution(result=result, stream=stream, elapsed=plan_hook.elapsed)

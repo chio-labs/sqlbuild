@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from pathlib import Path
 
-from sqlbuild.cost.models import CostResourceContext
+from sqlbuild.cost.models import CostResourceContext, StatementExecutionTelemetry
 
 _CURRENT: ContextVar[CostResourceContext | None] = ContextVar(
     "sqlbuild_cost_resource_context", default=None
@@ -27,6 +27,7 @@ def cost_resource_context(
     ledger_path: Path | None = None,
     phase: str = "execute",
     attempt: int = 1,
+    on_statement_complete: Callable[[StatementExecutionTelemetry], None] | None = None,
 ) -> Iterator[None]:
     token: Token[CostResourceContext | None] = _CURRENT.set(
         CostResourceContext(
@@ -36,6 +37,7 @@ def cost_resource_context(
             ledger_path=ledger_path,
             phase=phase,
             attempt=attempt,
+            on_statement_complete=on_statement_complete,
         )
     )
     try:

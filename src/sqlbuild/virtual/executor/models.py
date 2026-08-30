@@ -16,7 +16,8 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-from sqlbuild.executor.build.models import BuildExecutionResult
+from sqlbuild.cost.models import StatementExecutionTelemetry
+from sqlbuild.executor.build.models import BuildExecutionResult, SchedulerState
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.runtime.contracts.types import (
@@ -63,6 +64,8 @@ class VirtualBuildExecutionHooks:
     on_node_start: NodeStartCallback | None = None
     on_node_complete: Callable[[object], None] | None = None
     on_sub_progress: Callable[[str], None] | None = None
+    on_scheduler_state: Callable[[SchedulerState], None] | None = None
+    on_statement_complete: Callable[[StatementExecutionTelemetry], None] | None = None
 
 
 @dataclass(frozen=True)
@@ -155,6 +158,8 @@ class VirtualBuildPipelineResult:
     execution_result: BuildExecutionResult
     virtual_environment_name: str
     python_node_results: tuple[PythonNodeExecutionResult, ...] = field(default_factory=tuple)
+    compile_seconds: float | None = None
+    planning_seconds: float | None = None
 
 
 @dataclass(frozen=True)

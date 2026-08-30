@@ -55,6 +55,7 @@ class VirtualBuildPlanHook:
         self._virtual_environment_name = config.virtual_environment_name or "default"
         self._unsuffixed_virtual_environment_name = config.unsuffixed_virtual_environment_name
         self.callbacks: BuildProgressCallbacks | None = None
+        self._closed: bool = False
 
     @property
     def elapsed(self) -> float:
@@ -144,4 +145,23 @@ class VirtualBuildPlanHook:
             ),
             on_node_complete=callbacks.on_node_complete,
             on_sub_progress=callbacks.on_sub_progress,
+            on_scheduler_state=(
+                callbacks.on_scheduler_state if self._verbose or self._debug else None
+            ),
+            on_statement_complete=(
+                callbacks.on_statement_complete if self._verbose or self._debug else None
+            ),
         )
+
+    def close(self) -> None:
+        """Close plan callbacks once without changing the build outcome."""
+
+        if self._closed:
+            return
+        self._closed = True
+        if self.callbacks is None:
+            return
+        try:
+            self.callbacks.close()
+        except BaseException:
+            return
