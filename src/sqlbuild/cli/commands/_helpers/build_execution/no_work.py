@@ -35,6 +35,7 @@ def finalize_no_work_build_if_needed(
             adapter=invocation.adapter,
             connection_config=invocation.connection_config,
             target_name=pipeline_result.project.effective_target_name,
+            target_database=pipeline_result.project.effective_target_database,
             run_id=pipeline_result.project.run_id,
             build_status="success",
             started_at=completed_at,

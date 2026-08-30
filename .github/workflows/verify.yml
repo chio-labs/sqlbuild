@@ -14,7 +14,7 @@ concurrency:
 jobs:
   changes:
     name: Classify verification scope
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     outputs:
       duckdb: ${{ steps.scope.outputs.duckdb }}
       postgres: ${{ steps.scope.outputs.postgres }}
@@ -73,7 +73,7 @@ jobs:
 
   lockfile:
     name: Lockfile consistency
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -119,7 +119,7 @@ jobs:
     name: DuckDB E2E tests
     needs: [changes, lockfile]
     if: needs.changes.outputs.duckdb == 'true'
-    runs-on: blacksmith-32vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 45
     env:
       PYTEST_XDIST_AUTO_NUM_WORKERS: "4"
@@ -194,7 +194,7 @@ jobs:
     name: Verify
     if: always()
     needs: [changes, lockfile, checks, e2e, postgres]
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - name: Confirm all required verification jobs passed
         env:

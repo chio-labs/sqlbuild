@@ -17,7 +17,7 @@ permissions:
 jobs:
   validate:
     name: Pull Request Metadata
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Resolve pull request metadata

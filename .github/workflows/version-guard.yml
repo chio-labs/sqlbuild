@@ -15,7 +15,7 @@ permissions:
 jobs:
   block-1-0:
     name: Block automatic 1.0 releases
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 

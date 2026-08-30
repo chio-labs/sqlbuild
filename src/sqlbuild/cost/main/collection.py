@@ -12,6 +12,7 @@ from sqlbuild.cost.models import RunCostSummary
 def collect_snowflake_cost(
     *,
     connection: Any,
+    database: str | None = None,
     run_id: str,
     started_at: datetime,
     completed_at: datetime,
@@ -23,6 +24,7 @@ def collect_snowflake_cost(
 ) -> RunCostSummary:
     return collect_snowflake_run_cost(
         connection=connection,
+        database=database,
         run_id=run_id,
         started_at=started_at,
         completed_at=completed_at,
