@@ -381,6 +381,14 @@ check-ci:
 	uv run fensu check
 
 
+check-pr-metadata:
+	@test -n "$(PR_TITLE)" || { echo "PR_TITLE is required" >&2; exit 2; }
+	@test -n "$(PR_BODY_FILE)" || { echo "PR_BODY_FILE is required" >&2; exit 2; }
+	uv run python -m scripts.validate_pr_metadata \
+		--title "$(PR_TITLE)" \
+		--body-file "$(PR_BODY_FILE)"
+
+
 verify-ci:
 	uv run ruff format --check .
 	uv run ruff check .
