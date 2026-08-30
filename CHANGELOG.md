@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.65.5](https://github.com/chio-labs/sqlbuild/compare/v0.65.4...v0.65.5) (2026-08-30)
+
+
+### Bug Fixes
+
+* stream SQLBuild execution events live ([#410](https://github.com/chio-labs/sqlbuild/issues/410)) ([b22a47d](https://github.com/chio-labs/sqlbuild/commit/b22a47d4dd446aa6b1c970604d1fe93fc963983e))
+
 ## [0.65.4](https://github.com/chio-labs/sqlbuild/compare/v0.65.3...v0.65.4) (2026-08-30)
 
 
