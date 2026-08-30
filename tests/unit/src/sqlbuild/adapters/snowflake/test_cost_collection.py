@@ -102,6 +102,7 @@ def test_given_telemetry_stage_failure_when_collecting_then_safe_status_is_retur
 
     summary: RunCostSummary = adapter.collect_run_cost(
         connection_config={"login_timeout": 99, "network_timeout": 99},
+        target_database="RACING",
         run_id="run-1",
         started_at=now,
         completed_at=now,

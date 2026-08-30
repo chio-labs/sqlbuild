@@ -70,7 +70,7 @@ class _SequencedConnection:
         RenderQueryHistorySqlTestCase(
             description="bounded query history uses valid table function",
             expected_fragments=(
-                "TABLE(INFORMATION_SCHEMA.QUERY_HISTORY(",
+                'TABLE("RACING".INFORMATION_SCHEMA.QUERY_HISTORY(',
                 "END_TIME_RANGE_START => TO_TIMESTAMP_LTZ('2026-08-23T10:00:00+00:00')",
                 "END_TIME_RANGE_END => TO_TIMESTAMP_LTZ('2026-08-23T10:05:00+00:00')",
                 "RESULT_LIMIT => 10000",
@@ -89,6 +89,7 @@ def test_given_time_range_when_rendering_query_history_then_uses_valid_bounded_t
     test_case: RenderQueryHistorySqlTestCase,
 ) -> None:
     sql: str = _render_query_history_sql(
+        database="racing",
         started_at=datetime(2026, 8, 23, 10, 0, tzinfo=UTC),
         completed_at=datetime(2026, 8, 23, 10, 5, tzinfo=UTC),
         classification_query_ids=frozenset({"q-create"}),
@@ -105,7 +106,7 @@ def test_given_time_range_when_rendering_query_history_then_uses_valid_bounded_t
         RenderQueryHistorySqlTestCase(
             description="open query history includes visible running queries",
             expected_fragments=(
-                "TABLE(INFORMATION_SCHEMA.QUERY_HISTORY(",
+                'TABLE("RACING".INFORMATION_SCHEMA.QUERY_HISTORY(',
                 "END_TIME_RANGE_START => TO_TIMESTAMP_LTZ('2026-08-23T10:00:00+00:00')",
                 "RESULT_LIMIT => 10000",
                 "EXECUTION_STATUS",
@@ -123,6 +124,7 @@ def test_given_start_time_when_rendering_open_history_then_running_queries_are_r
     test_case: RenderQueryHistorySqlTestCase,
 ) -> None:
     sql: str = _render_open_query_history_sql(
+        database="racing",
         started_at=datetime(2026, 8, 23, 10, 0, tzinfo=UTC),
         classification_query_ids=frozenset({"q-create"}),
     )

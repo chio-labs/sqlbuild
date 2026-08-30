@@ -14,7 +14,7 @@ permissions:
 jobs:
   release-tag:
     name: Resolve release tag
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     outputs:
       tag: ${{ steps.release-tag.outputs.tag }}
     steps:
@@ -99,7 +99,7 @@ jobs:
   sdist:
     name: Build sdist
     needs: release-tag
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -129,7 +129,7 @@ jobs:
       - release-tag
       - wheels
       - sdist
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     environment: pypi
     permissions:
       contents: read

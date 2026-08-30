@@ -23,6 +23,7 @@ def build_cost_finalization(
         adapter=adapter,
         connection_config={},
         target_name="dev",
+        target_database="RACING",
         run_id="run-1",
         build_status="success",
         started_at=now,

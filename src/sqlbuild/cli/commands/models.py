@@ -1295,6 +1295,7 @@ class BuildCostFinalization:
     adapter: object
     connection_config: dict[str, object]
     target_name: str | None
+    target_database: str | None
     run_id: str
     build_status: str
     started_at: datetime

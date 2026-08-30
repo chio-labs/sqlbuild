@@ -27,6 +27,7 @@ class _RefreshingCostAdapter:
         return CostCapability.SNOWFLAKE_QUERY_HISTORY
 
     def collect_run_cost(self, **kwargs: Any) -> RunCostSummary:
+        assert kwargs["target_database"] == "RACING"
         return RunCostSummary(
             status=CostStatus.COMPLETE,
             usd_per_credit=kwargs["usd_per_credit"],
@@ -96,7 +97,11 @@ def test_given_pending_run_when_showing_detail_then_persisted_summary_is_refresh
     )
     monkeypatch.setattr(
         "sqlbuild.cli.commands._helpers.cost.refresh.resolve_project_connection_config",
-        lambda **kwargs: {},
+        lambda **kwargs: {"database": "RACING"},
+    )
+    monkeypatch.setattr(
+        "sqlbuild.cli.commands._helpers.cost.refresh.build_effective_target_config",
+        lambda **kwargs: SimpleNamespace(database=None),
     )
     request: CostCommandRequest = CostCommandRequest(
         project_dir=tmp_path,

@@ -105,6 +105,7 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
         self,
         *,
         connection_config: dict[str, object],
+        target_database: str | None,
         run_id: str,
         started_at: datetime,
         completed_at: datetime,
@@ -127,6 +128,7 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
         try:
             summary: RunCostSummary = collect_snowflake_cost(
                 connection=connection,
+                database=target_database,
                 run_id=run_id,
                 started_at=started_at,
                 completed_at=completed_at,
