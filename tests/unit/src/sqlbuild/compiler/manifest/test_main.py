@@ -318,7 +318,7 @@ def test_given_project_when_building_manifest_then_produces_correct_structure(
                     "incremental_strategy": "merge",
                     "unique_key": ["id"],
                     "merge_exclude_columns": ["ingested_at"],
-                    "allow_full_refresh": False,
+                    "full_refresh": False,
                 },
             ),
             plan_entries=(),

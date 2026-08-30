@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +59,7 @@ class _IncrementalModelSpec:
     schema: str
     cursor: str
     ref_names: tuple[str, ...]
+    extra_config: dict[str, object] = field(default_factory=dict)
 
 
 def build_project_with_targets(
@@ -120,6 +121,7 @@ def build_project_with_targets(
                         "cursor": spec.cursor,
                         "incremental_strategy": "delete_insert",
                     }
+                    | spec.extra_config
                 ),
                 destination=CompiledRelationLocation(
                     database=None,

@@ -910,7 +910,6 @@ def _plan_virtual_build(
                     scope=warehouse_result.scope,
                     semantics=reads.semantics,
                     bound_physical_relations=reads.bound_physical_relations,
-                    full_refresh=options.planning.full_refresh,
                 ),
                 inputs=ModelChangesPlanInputs(
                     cursor_overrides=options.planning.cursor_overrides,
@@ -2117,7 +2116,6 @@ def _build_virtual_model_changes(
     scope: PlannerScope,
     semantics: VirtualPlanSemantics,
     bound_physical_relations: dict[str, PhysicalRelationRecord],
-    full_refresh: bool,
 ) -> dict[str, ChangeDetectionResult]:
     changes: dict[str, ChangeDetectionResult] = {}
     model: CompiledModel
@@ -2128,7 +2126,6 @@ def _build_virtual_model_changes(
             model=model,
             semantics=semantics,
             bound_physical_relations=bound_physical_relations,
-            full_refresh=full_refresh,
         )
     return changes
 
@@ -2165,7 +2162,6 @@ def _build_virtual_model_change(
     model: CompiledModel,
     semantics: VirtualPlanSemantics,
     bound_physical_relations: dict[str, PhysicalRelationRecord],
-    full_refresh: bool,
 ) -> ChangeDetectionResult:
     metadata_json: str = semantics.expected_metadata_jsons.get(model.name, "{}")
     previous_metadata_json: str | None = semantics.bound_metadata_jsons.get(model.name)
@@ -2175,15 +2171,6 @@ def _build_virtual_model_change(
     previous_version_hash: str | None = (
         bound_physical_relation.version_hash if bound_physical_relation is not None else None
     )
-    if full_refresh:
-        return ChangeDetectionResult(
-            model_name=model.name,
-            change_kind=ChangeKind.NO_CHANGE,
-            fingerprint_metadata_json=metadata_json,
-            previous_metadata_json=previous_metadata_json,
-            previous_version_hash=previous_version_hash,
-            backfill=BackfillResult(action=BackfillAction.FULL),
-        )
     if bound_physical_relation is None:
         return ChangeDetectionResult(
             model_name=model.name,

@@ -77,6 +77,135 @@ from tests.integration.src.sqlbuild.compiler.planner.main.helpers import (
             expected_ddl_fragments={"orders": "CREATE OR REPLACE TABLE staging.orders AS"},
         ),
         BuildExecutionPlanTestCase(
+            description="unset model full refresh follows absent CLI flag",
+            setup_sql=(),
+            model_locations={"orders": "staging"},
+            model_configs={
+                "orders": {"materialized": "incremental", "incremental_strategy": "append"}
+            },
+            model_queries={"orders": "SELECT 1 AS id"},
+            full_refresh=False,
+            expected_action={"orders": PlanAction.CREATE_TABLE},
+            expected_reason={"orders": PlanReason.FIRST_RUN},
+        ),
+        BuildExecutionPlanTestCase(
+            description="unset model full refresh follows CLI flag",
+            setup_sql=(),
+            model_locations={"orders": "staging"},
+            model_configs={
+                "orders": {"materialized": "incremental", "incremental_strategy": "append"}
+            },
+            model_queries={"orders": "SELECT 1 AS id"},
+            full_refresh=True,
+            expected_action={"orders": PlanAction.CREATE_TABLE},
+            expected_reason={"orders": PlanReason.FULL_REFRESH},
+        ),
+        BuildExecutionPlanTestCase(
+            description="false model full refresh stays incremental without CLI flag",
+            setup_sql=(),
+            model_locations={"orders": "staging"},
+            model_configs={
+                "orders": {
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                    "full_refresh": False,
+                }
+            },
+            model_queries={"orders": "SELECT 1 AS id"},
+            full_refresh=False,
+            expected_action={"orders": PlanAction.CREATE_TABLE},
+            expected_reason={"orders": PlanReason.FIRST_RUN},
+        ),
+        BuildExecutionPlanTestCase(
+            description="false model full refresh opts out of CLI flag",
+            setup_sql=(),
+            model_locations={"orders": "staging"},
+            model_configs={
+                "orders": {
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                    "full_refresh": False,
+                }
+            },
+            model_queries={"orders": "SELECT 1 AS id"},
+            full_refresh=True,
+            expected_action={"orders": PlanAction.CREATE_TABLE},
+            expected_reason={"orders": PlanReason.FIRST_RUN},
+        ),
+        BuildExecutionPlanTestCase(
+            description="true model full refresh forces without CLI flag",
+            setup_sql=(),
+            model_locations={"orders": "staging"},
+            model_configs={
+                "orders": {
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                    "full_refresh": True,
+                }
+            },
+            model_queries={"orders": "SELECT 1 AS id"},
+            full_refresh=False,
+            expected_action={"orders": PlanAction.CREATE_TABLE},
+            expected_reason={"orders": PlanReason.FULL_REFRESH},
+        ),
+        BuildExecutionPlanTestCase(
+            description="true model full refresh remains forced with CLI flag",
+            setup_sql=(),
+            model_locations={"orders": "staging"},
+            model_configs={
+                "orders": {
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                    "full_refresh": True,
+                }
+            },
+            model_queries={"orders": "SELECT 1 AS id"},
+            full_refresh=True,
+            expected_action={"orders": PlanAction.CREATE_TABLE},
+            expected_reason={"orders": PlanReason.FULL_REFRESH},
+        ),
+        BuildExecutionPlanTestCase(
+            description="mixed model full refresh values resolve independently",
+            setup_sql=(),
+            model_locations={
+                "default_orders": "staging",
+                "protected_orders": "staging",
+                "forced_orders": "staging",
+            },
+            model_configs={
+                "default_orders": {
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                },
+                "protected_orders": {
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                    "full_refresh": False,
+                },
+                "forced_orders": {
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                    "full_refresh": True,
+                },
+            },
+            model_queries={
+                "default_orders": "SELECT 1 AS id",
+                "protected_orders": "SELECT 1 AS id",
+                "forced_orders": "SELECT 1 AS id",
+            },
+            full_refresh=True,
+            expected_action={
+                "default_orders": PlanAction.CREATE_TABLE,
+                "protected_orders": PlanAction.CREATE_TABLE,
+                "forced_orders": PlanAction.CREATE_TABLE,
+            },
+            expected_reason={
+                "default_orders": PlanReason.FULL_REFRESH,
+                "protected_orders": PlanReason.FIRST_RUN,
+                "forced_orders": PlanReason.FULL_REFRESH,
+            },
+        ),
+        BuildExecutionPlanTestCase(
             description="view model produces create_view action",
             setup_sql=(),
             model_locations={"orders_view": "staging"},

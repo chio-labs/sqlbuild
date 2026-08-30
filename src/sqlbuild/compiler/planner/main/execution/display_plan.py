@@ -11,6 +11,7 @@ from sqlbuild.compiler.planner._helpers.graph.core import (
     build_execution_upstream_deps,
 )
 from sqlbuild.compiler.planner._helpers.output.strategy import get_materialization_type
+from sqlbuild.compiler.planner._helpers.planning.full_refresh import resolve_model_full_refresh
 from sqlbuild.compiler.planner.models import BackfillResult, ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
@@ -31,6 +32,10 @@ def build_display_only_sqlbuild_plan(
         if model.name not in selected_names:
             continue
         materialization_type: MaterializationType = get_materialization_type(model)
+        effective_full_refresh: bool = resolve_model_full_refresh(
+            model=model,
+            cli_full_refresh=full_refresh,
+        )
         model_entries.append(
             ModelPlanEntry(
                 key=model.key,
@@ -38,7 +43,9 @@ def build_display_only_sqlbuild_plan(
                 relative_path=model.relative_path,
                 materialization_type=materialization_type,
                 action=_display_action(materialization_type),
-                reason=PlanReason.FULL_REFRESH if full_refresh else PlanReason.NO_CHANGE,
+                reason=(
+                    PlanReason.FULL_REFRESH if effective_full_refresh else PlanReason.NO_CHANGE
+                ),
                 destination=model.destination,
                 fingerprint_query_sql=model.query_sql,
                 resolved_sql=model.query_sql,
@@ -49,7 +56,13 @@ def build_display_only_sqlbuild_plan(
                 incremental_mode=_as_optional_string(model.config.values.get("incremental_mode")),
                 cursor_column=_as_optional_string(model.config.values.get("cursor_column")),
                 cursor_type=_as_optional_string(model.config.values.get("cursor_type")),
-                backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+                backfill=BackfillResult(
+                    action=(
+                        BackfillAction.FULL
+                        if effective_full_refresh
+                        else BackfillAction.FORWARD_ONLY
+                    )
+                ),
                 custom_materialization_name=(
                     _as_optional_string(model.config.values.get("materialized"))
                     if materialization_type == MaterializationType.CUSTOM

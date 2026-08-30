@@ -35,6 +35,9 @@ from sqlbuild.compiler.planner._helpers.graph.core import build_execution_upstre
 from sqlbuild.compiler.planner._helpers.graph.loader_dag import (
     build_upstream_intermediate_source_map,
 )
+from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
+    effectively_full_refreshed_model_names,
+)
 from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
@@ -105,7 +108,10 @@ def build_warehouse_snapshot(
         connection=connection,
         execute=adapter.execute,
         selected_keys=scope.selected_keys,
-        full_refresh=full_refresh,
+        full_refresh_model_names=effectively_full_refreshed_model_names(
+            project=project,
+            cli_full_refresh=full_refresh,
+        ),
         on_progress=on_progress,
         deferred_locations=deferred_locations,
     )
@@ -133,6 +139,7 @@ def gather_warehouse_snapshot(
     execute: AdapterExecute[Any, Any],
     selected_keys: frozenset[CompiledObjectKey] | None = None,
     full_refresh: bool = False,
+    full_refresh_model_names: frozenset[str] | None = None,
     on_progress: Callable[[str], None] | None = None,
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
 ) -> WarehouseSnapshot:
@@ -178,18 +185,25 @@ def gather_warehouse_snapshot(
         node_names=_selected_node_names(relevant_keys),
     )
 
-    cursor_snapshots: dict[str, ModelCursorSnapshot] = {}
-    if not full_refresh:
-        cursor_snapshots = _gather_cursor_snapshots(
+    effective_full_refresh_names: frozenset[str] = (
+        full_refresh_model_names
+        if full_refresh_model_names is not None
+        else effectively_full_refreshed_model_names(
             project=project,
-            adapter=adapter,
-            connection=connection,
-            execute=execute,
-            existing_relations=relations,
-            selected_keys=selected_keys,
-            on_progress=on_progress,
-            deferred_locations=deferred_locations,
+            cli_full_refresh=full_refresh,
         )
+    )
+    cursor_snapshots: dict[str, ModelCursorSnapshot] = _gather_cursor_snapshots(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        execute=execute,
+        existing_relations=relations,
+        selected_keys=selected_keys,
+        full_refresh_model_names=effective_full_refresh_names,
+        on_progress=on_progress,
+        deferred_locations=deferred_locations,
+    )
 
     return WarehouseSnapshot(
         existing_relations=relations,
@@ -512,6 +526,7 @@ def _gather_cursor_snapshots(
     execute: AdapterExecute[Any, Any],
     existing_relations: dict[str, RelationInfo],
     selected_keys: frozenset[CompiledObjectKey] | None,
+    full_refresh_model_names: frozenset[str],
     on_progress: Callable[[str], None] | None,
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
 ) -> dict[str, ModelCursorSnapshot]:
@@ -527,6 +542,7 @@ def _gather_cursor_snapshots(
         source_map=source_map,
         existing_relations=existing_relations,
         selected_keys=selected_keys,
+        full_refresh_model_names=full_refresh_model_names,
         deferred_locations=deferred_locations,
     )
     if not cursor_models:
@@ -557,6 +573,7 @@ def _collect_cursor_models(
     source_map: dict[str, CompiledSource],
     existing_relations: dict[str, RelationInfo],
     selected_keys: frozenset[CompiledObjectKey] | None,
+    full_refresh_model_names: frozenset[str],
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
 ) -> list[_CursorModelInfo]:
     """Identify selected incremental models and pre-resolve their cursor metadata."""
@@ -567,6 +584,8 @@ def _collect_cursor_models(
     cursor_models: list[_CursorModelInfo] = []
     model: CompiledModel
     for model in project.models:
+        if model.name in full_refresh_model_names:
+            continue
         if selected_keys is not None:
             model_key: CompiledObjectKey = CompiledObjectKey(
                 resource_type=CompiledResourceType.MODEL, name=model.name
