@@ -94,6 +94,8 @@ class DirectPythonLifecycleState:
             if result.node_name not in previous_names
         )
         if new_results:
+            for result in new_results:
+                self.base_on_node_complete(result)
             write_python_node_results(
                 stream=self.progress_stream,
                 results=new_results,
@@ -110,6 +112,8 @@ class DirectPythonLifecycleState:
             self.read_side_tracker.finalize_unrun_python_nodes()
         )
         if finalized_results:
+            for result in finalized_results:
+                self.base_on_node_complete(result)
             write_python_node_results(
                 stream=self.progress_stream,
                 results=finalized_results,

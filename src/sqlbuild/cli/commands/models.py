@@ -183,6 +183,7 @@ class BuildCommandRequest:
     manifest: bool = False
     json_output: bool = False
     json_output_path: Path | None = None
+    event_output_path: Path | None = None
     no_cache: bool = False
 
 
@@ -390,6 +391,7 @@ class CloneCommandRequest:
     verbose: bool = False
     cli_vars: dict[str, object] | None = None
     json_output_path: Path | None = None
+    event_output_path: Path | None = None
 
 
 @dataclass(frozen=True)

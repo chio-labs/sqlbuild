@@ -402,3 +402,12 @@ class CheckContext(BasePythonNodeContext):
             metadata={} if metadata is None else metadata,
             severity=PythonCheckSeverity.WARN,
         )
+
+
+@dataclass(frozen=True)
+class PythonCheckCallbacks:
+    """Optional logging, identity, and completion callbacks for Python checks."""
+
+    logger: logging.Logger | None = None
+    identity_recorder: PythonIdentityRecorder | None = None
+    on_check_complete: Callable[[PythonCheckExecutionResult], None] | None = None

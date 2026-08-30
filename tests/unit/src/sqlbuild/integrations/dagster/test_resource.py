@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from threading import Event
-from typing import Any
+from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
@@ -18,6 +18,7 @@ from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterCliFailureTestCase,
     DagsterCliInvocationTestCase,
     DagsterCliJsonStreamTestCase,
+    DagsterCliLiveCloneEventTestCase,
     DagsterCliLiveLogTestCase,
     DagsterCliSelectionTestCase,
     DagsterCliStreamTestCase,
@@ -26,6 +27,7 @@ from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
     assert_json_output_file_behavior,
     assert_positional_selector_behavior,
     assert_select_file_selector_behavior,
+    write_blocking_execution_event_command,
     write_blocking_fake_sqb_command,
     write_dagster_test_dag,
     write_fake_sqb_command,
@@ -130,6 +132,43 @@ def test_given_running_sqlbuild_command_when_output_arrives_then_dagster_logs_it
     )
     assert completed_invocation.stderr == "".join(
         f"{line}\n" for line in test_case.expected_stderr_lines
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagsterCliLiveLogTestCase(
+            description="verbose SQL stays in compute stdout instead of Dagster event logs",
+            expected_stdout_lines=("    SELECT * FROM orders",),
+            expected_stderr_lines=(),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_verbose_command_when_streaming_output_then_keeps_sql_out_of_context_log(
+    test_case: DagsterCliLiveLogTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    logger: Mock = Mock()
+    invocation: SqlBuildCliInvocation = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_fake_sqb_command(
+            root=tmp_path,
+            stdout="".join(f"{line}\n" for line in test_case.expected_stdout_lines),
+        ),
+    ).cli(
+        ["build", "--verbose"],
+        context=type("VerboseContext", (), {"log": logger})(),
+        raise_on_error=False,
+    )
+
+    invocation.wait()
+
+    assert invocation.stdout == "".join(f"{line}\n" for line in test_case.expected_stdout_lines)
+    assert not any(
+        call.args and call.args[0] == "SQLBuild: %s" for call in logger.info.call_args_list
     )
 
 
@@ -285,6 +324,143 @@ def test_given_clone_execution_json_when_streaming_then_yields_asset_materializa
     assert (
         tuple(result.metadata["action"].value for result in results) == test_case.expected_actions
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagsterCliLiveCloneEventTestCase(
+            description="completed clone item materializes while subprocess remains blocked",
+            command="clone",
+            command_args=("clone", "--from", "prod"),
+            expected_asset_key=("analytics", "orders"),
+        ),
+        DagsterCliLiveCloneEventTestCase(
+            description="completed build item materializes while subprocess remains blocked",
+            command="build",
+            command_args=("build",),
+            expected_asset_key=("analytics", "orders"),
+            expected_remaining_asset_keys=(("raw", "orders"),),
+        ),
+        DagsterCliLiveCloneEventTestCase(
+            description="partial JSONL writes are buffered until their record is complete",
+            command="build",
+            command_args=("build",),
+            expected_asset_key=("analytics", "orders"),
+            expected_remaining_asset_keys=(("raw", "orders"),),
+        ),
+        DagsterCliLiveCloneEventTestCase(
+            description="run uses the shared live execution event transport",
+            command="run",
+            command_args=("run",),
+            expected_asset_key=("analytics", "orders"),
+            expected_remaining_asset_keys=(("raw", "orders"),),
+        ),
+        DagsterCliLiveCloneEventTestCase(
+            description="test uses the shared live execution event transport",
+            command="test",
+            command_args=("test",),
+            expected_asset_key=("analytics", "orders"),
+            expected_remaining_asset_keys=(("raw", "orders"),),
+        ),
+        DagsterCliLiveCloneEventTestCase(
+            description="check uses the shared live execution event transport",
+            command="check",
+            command_args=("check",),
+            expected_asset_key=("analytics", "orders"),
+            expected_remaining_asset_keys=(("raw", "orders"),),
+        ),
+        DagsterCliLiveCloneEventTestCase(
+            description="audit uses the shared live execution event transport",
+            command="audit",
+            command_args=("audit",),
+            expected_asset_key=("analytics", "orders"),
+            expected_remaining_asset_keys=(("raw", "orders"),),
+        ),
+        DagsterCliLiveCloneEventTestCase(
+            description="seed uses the shared live execution event transport",
+            command="seed",
+            command_args=("seed",),
+            expected_asset_key=("analytics", "orders"),
+            expected_remaining_asset_keys=(("raw", "orders"),),
+        ),
+        DagsterCliLiveCloneEventTestCase(
+            description="load uses the shared live execution event transport",
+            command="load",
+            command_args=("load",),
+            expected_asset_key=("analytics", "orders"),
+            expected_remaining_asset_keys=(("raw", "orders"),),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_running_clone_when_item_completes_then_materializes_before_process_exit(
+    test_case: DagsterCliLiveCloneEventTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    release_path: Path = tmp_path / "release"
+    context: Any = type("AggregateCloneContext", (), {"selected_asset_keys": set()})()
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_blocking_execution_event_command(
+            root=tmp_path,
+            release_path=release_path,
+            command=test_case.command,
+        ),
+        dag_path=str(write_dagster_test_dag(root=tmp_path)),
+    )
+    invocation: SqlBuildCliInvocation = resource.cli(args=test_case.command_args, context=context)
+    stream: Iterator[Any] = invocation.stream()
+
+    materialization: Any = next(stream)
+
+    assert tuple(materialization.asset_key.path) == test_case.expected_asset_key
+    assert invocation.process.poll() is None
+    release_path.touch()
+    remaining_results: list[Any] = list(stream)
+    assert tuple(tuple(result.asset_key.path) for result in remaining_results) == (
+        test_case.expected_remaining_asset_keys
+    )
+    assert invocation.returncode == 0
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagsterCliLiveCloneEventTestCase(
+            description="closing a live event stream terminates its blocked subprocess",
+            command="build",
+            command_args=("build",),
+            expected_asset_key=("analytics", "orders"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_blocked_command_when_live_stream_closes_then_subprocess_terminates(
+    test_case: DagsterCliLiveCloneEventTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    invocation: SqlBuildCliInvocation = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_blocking_execution_event_command(
+            root=tmp_path,
+            release_path=tmp_path / "never-release",
+            command=test_case.command,
+        ),
+        dag_path=str(write_dagster_test_dag(root=tmp_path)),
+    ).cli(
+        args=test_case.command_args,
+        context=type("LiveEventContext", (), {"selected_asset_keys": set()})(),
+    )
+    stream: Generator[Any, None, None] = cast(Generator[Any, None, None], invocation.stream())
+
+    materialization: Any = next(stream)
+    stream.close()
+
+    assert tuple(materialization.asset_key.path) == test_case.expected_asset_key
+    assert invocation.process.wait(timeout=3) is not None
 
 
 @pytest.mark.parametrize(

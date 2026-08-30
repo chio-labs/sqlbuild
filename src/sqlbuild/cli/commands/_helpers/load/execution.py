@@ -15,6 +15,8 @@ from sqlbuild.cli.commands.models import (
     LoadInvocation,
     LoadRunOutcome,
 )
+from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
+from sqlbuild.cli.output.main._build_item_execution_event import format_build_item_execution_event
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import (
@@ -34,6 +36,7 @@ def execute_load_plan(
     """Execute selected source loads."""
 
     start: float = time.monotonic()
+    event_writer: ExecutionEventWriter = ExecutionEventWriter()
     load_progress: LoadProgressReporter = LoadProgressReporter(
         stream=invocation.progress_stream,
         use_color=invocation.use_color,
@@ -48,45 +51,59 @@ def execute_load_plan(
         blank_line_after_complete=True,
         use_color=invocation.use_color,
     )
-    results: tuple[LoadExecutionResult, ...] = run_load_pipeline(
-        sources=invocation.selected_sources,
-        reference_sources=invocation.reference_sources,
-        loader_functions=invocation.discovered_inputs.loader_functions,
-        connection_config=preparation.connection_config,
-        adapter=preparation.adapter,
-        max_concurrency=preparation.effective_concurrency,
-        runtime=LoadRuntimeParams(
-            run_id=preparation.run_id,
-            runtime_dir=invocation.effective_project_dir / "target",
-            target=preparation.target_name,
-            vars=preparation.effective_vars,
-            is_reload=request.reload,
-            start_cursor_ts=parse_cursor_timestamp(preparation.effective_cursor_overrides.start_ts),
-            end_cursor_ts=parse_cursor_timestamp(preparation.effective_cursor_overrides.end_ts),
-            start_cursor_int=parse_cursor_integer(preparation.effective_cursor_overrides.start_int),
-            end_cursor_int=parse_cursor_integer(preparation.effective_cursor_overrides.end_int),
-            use_color=invocation.use_color,
-            providers=preparation.provider_session.providers,
-        ),
-        callbacks=LoadCallbacks(
-            on_load_start=load_progress.on_start,
-            on_load_progress=lambda source, message: load_progress.on_progress(
-                source=source, message=message
+
+    def on_load_complete(result: LoadExecutionResult) -> None:
+        load_progress.on_complete(result)
+        event_writer.write(
+            format_build_item_execution_event(result=result, plan=None, command="load")
+        )
+
+    try:
+        results: tuple[LoadExecutionResult, ...] = run_load_pipeline(
+            sources=invocation.selected_sources,
+            reference_sources=invocation.reference_sources,
+            loader_functions=invocation.discovered_inputs.loader_functions,
+            connection_config=preparation.connection_config,
+            adapter=preparation.adapter,
+            max_concurrency=preparation.effective_concurrency,
+            runtime=LoadRuntimeParams(
+                run_id=preparation.run_id,
+                runtime_dir=invocation.effective_project_dir / "target",
+                target=preparation.target_name,
+                vars=preparation.effective_vars,
+                is_reload=request.reload,
+                start_cursor_ts=parse_cursor_timestamp(
+                    preparation.effective_cursor_overrides.start_ts
+                ),
+                end_cursor_ts=parse_cursor_timestamp(preparation.effective_cursor_overrides.end_ts),
+                start_cursor_int=parse_cursor_integer(
+                    preparation.effective_cursor_overrides.start_int
+                ),
+                end_cursor_int=parse_cursor_integer(preparation.effective_cursor_overrides.end_int),
+                use_color=invocation.use_color,
+                providers=preparation.provider_session.providers,
             ),
-            on_load_complete=load_progress.on_complete,
-            on_connection_start=connection_progress.on_connection_start,
-            on_connection_complete=lambda connection_count, elapsed_seconds: (
-                connection_progress.on_connection_complete(
-                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
-                )
+            callbacks=LoadCallbacks(
+                on_load_start=load_progress.on_start,
+                on_load_progress=lambda source, message: load_progress.on_progress(
+                    source=source, message=message
+                ),
+                on_load_complete=on_load_complete,
+                on_connection_start=connection_progress.on_connection_start,
+                on_connection_complete=lambda connection_count, elapsed_seconds: (
+                    connection_progress.on_connection_complete(
+                        connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                    )
+                ),
+                on_connection_error=lambda connection_count, elapsed_seconds: (
+                    connection_progress.on_connection_error(
+                        connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                    )
+                ),
             ),
-            on_connection_error=lambda connection_count, elapsed_seconds: (
-                connection_progress.on_connection_error(
-                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
-                )
-            ),
-        ),
-    )
+        )
+    finally:
+        event_writer.close()
     return LoadRunOutcome(
         results=results,
         elapsed=time.monotonic() - start,

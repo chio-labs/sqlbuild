@@ -5,10 +5,13 @@ from __future__ import annotations
 import sys
 import threading
 import time
+from pathlib import Path
 
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.cli.commands._helpers.test.sql_progress import format_parameterized_test_label
+from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
+from sqlbuild.cli.output.main._build_item_execution_event import format_build_item_execution_event
 from sqlbuild.cli.progress.main._expectation_detail import format_expectation_detail
 from sqlbuild.cli.progress.main._expectation_name import format_expectation_name
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
@@ -87,7 +90,9 @@ class BuildProgressCallbacks:
         use_color: bool,
         verbose: bool = False,
         debug: bool = False,
+        event_output_path: Path | None = None,
     ) -> None:
+        self._plan: PlanOutput = plan
         self._model_entry_map: dict[str, ModelPlanEntry] = {
             entry.name: entry for entry in plan.model_entries
         }
@@ -120,6 +125,7 @@ class BuildProgressCallbacks:
         self._spinner_stop_event: threading.Event | None = None
         self._spinner_thread: threading.Thread | None = None
         self._cursor_hidden: bool = False
+        self._event_writer: ExecutionEventWriter = ExecutionEventWriter(path=event_output_path)
 
         ctr_width: int = len(str(self._total)) * 2 + 1
         self._prefix_width: int = 2 + ctr_width + 2
@@ -258,6 +264,12 @@ class BuildProgressCallbacks:
         self._cursor_hidden = False
 
     def on_node_complete(self, node_result: object) -> None:
+        try:
+            self._write_node_result(node_result)
+        finally:
+            self._write_execution_event(node_result)
+
+    def _write_node_result(self, node_result: object) -> None:
         if isinstance(node_result, SqlTestExecutionResult):
             if node_result.outcome != SqlTestOutcome.PASS:
                 self._write_failed_test_result(test_result=node_result)
@@ -350,6 +362,23 @@ class BuildProgressCallbacks:
 
         if isinstance(node_result, ModelExecutionResult):
             self._write_model_result(ctr=ctr, model_result=node_result)
+
+    def _write_execution_event(self, node_result: object) -> None:
+        payload: str | None = format_build_item_execution_event(
+            result=node_result,
+            plan=self._plan,
+        )
+        self._event_writer.write(payload)
+
+    def write_execution_event(self, result: object) -> None:
+        """Write one result to the shared structured event channel."""
+
+        self._write_execution_event(result)
+
+    def close(self) -> None:
+        """Close the optional structured execution event stream."""
+
+        self._event_writer.close()
 
     def _write_model_result(self, *, ctr: str, model_result: ModelExecutionResult) -> None:
         plan_entry: ModelPlanEntry | None = self._model_entry_map.get(model_result.model_name)

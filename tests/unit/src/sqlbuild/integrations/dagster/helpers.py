@@ -223,6 +223,124 @@ def write_blocking_fake_sqb_command(*, root: Path, release_path: Path) -> list[s
     return ["python", str(script_path)]
 
 
+def write_blocking_clone_event_command(
+    *, root: Path, release_path: Path, command: str = "clone"
+) -> list[str]:
+    event_payload: str = json.dumps(
+        {
+            "version": 1,
+            "command": command,
+            "event": "asset",
+            "asset": {
+                "kind": "model",
+                "name": "orders",
+                "status": "success",
+                "action": "cloned",
+            },
+        }
+    )
+    script_path: Path = root / "blocking_clone_event.py"
+    script_path.write_text(
+        "\n".join(
+            (
+                "from pathlib import Path",
+                "import os",
+                "import sys",
+                "import time",
+                "event_path = Path(os.environ['SQLBUILD_EXECUTION_EVENT_PATH'])",
+                "event_path.write_text("
+                '    \'{"version": 1, "command": "clone", "event": "asset", \''
+                '    \'{"asset": {"kind": "model", "name": "orders", \''
+                '    \'"status": "success", "action": "cloned"}}}\\n\','
+                "    encoding='utf-8',"
+                ")",
+                f"event_path.write_text({event_payload + chr(10)!r}, encoding='utf-8')",
+                f"release_path = Path({str(release_path)!r})",
+                "while not release_path.exists():",
+                "    time.sleep(0.01)",
+                "json_path = Path(sys.argv[sys.argv.index('--json-output') + 1])",
+                "json_path.write_text("
+                '    \'{"version": 1, "command": "clone", "status": "success", \''
+                '    \'"summary": {"success_count": 1}, "assets": \''
+                '    \'[{"kind": "model", "name": "orders", "status": "success", \''
+                '    \'"action": "cloned"}], "checks": []}\','
+                "    encoding='utf-8',"
+                ")",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return ["python", str(script_path)]
+
+
+def write_blocking_execution_event_command(
+    *, root: Path, release_path: Path, command: str
+) -> list[str]:
+    event_payload: str = (
+        json.dumps(
+            {
+                "version": 1,
+                "command": command,
+                "event": "asset",
+                "asset": {
+                    "kind": "model",
+                    "name": "orders",
+                    "status": "success",
+                    "action": "completed",
+                },
+            }
+        )
+        + "\n"
+    )
+    execution_payload: str = json.dumps(
+        {
+            "version": 1,
+            "command": command,
+            "status": "success",
+            "summary": {"success_count": 1},
+            "assets": [
+                {
+                    "kind": "model",
+                    "name": "orders",
+                    "status": "success",
+                    "action": "completed",
+                }
+            ],
+            "checks": [],
+        }
+    )
+    event_write_lines: tuple[str, ...] = (
+        "with event_path.open('a', encoding='utf-8') as stream:\n"
+        f"    stream.write({event_payload[: len(event_payload) // 2]!r})\n"
+        "    stream.flush()\n"
+        "    time.sleep(0.05)\n"
+        f"    stream.write({event_payload[len(event_payload) // 2 :]!r})\n"
+        "    stream.flush()",
+    )
+    script_path: Path = root / f"blocking_{command}_event.py"
+    script_path.write_text(
+        "\n".join(
+            (
+                "from pathlib import Path",
+                "import os",
+                "import sys",
+                "import time",
+                "event_path = Path(os.environ['SQLBUILD_EXECUTION_EVENT_PATH'])",
+                *event_write_lines,
+                f"release_path = Path({str(release_path)!r})",
+                "while not release_path.exists():",
+                "    time.sleep(0.01)",
+                "json_path = Path(sys.argv[sys.argv.index('--json-output') + 1])",
+                f"json_path.write_text({execution_payload!r}, encoding='utf-8')",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return ["python", str(script_path)]
+
+
 def write_dagster_test_dag(*, root: Path) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     dag_path: Path = root / "sqlbuild_dag.json"

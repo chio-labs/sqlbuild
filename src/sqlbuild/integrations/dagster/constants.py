@@ -14,9 +14,15 @@ LOADER_NODE_KIND: str = "loader"
 VIEW_MATERIALIZATION_TYPE: str = "view"
 
 ASSET_SELECTION_COMMANDS: frozenset[str] = frozenset(
-    {"build", "run", "test", "audit", "seed", "load", "clone"}
+    {"build", "run", "test", "check", "audit", "seed", "load", "clone"}
 )
 CLONE_COMMAND: str = "clone"
+CLONE_ASSET_EVENT: str = "asset"
+CHECK_EVENT: str = "check"
+EVENT_OUTPUT_FLAG: str = "--event-output"
+LIVE_EVENT_COMMANDS: frozenset[str] = ASSET_SELECTION_COMMANDS
+VIRTUAL_ENV_FLAG: str = "--virtual-env"
+VERBOSE_FLAGS: frozenset[str] = frozenset({"--verbose", "-v"})
 EXPLICIT_SELECTION_FLAGS: frozenset[str] = frozenset({"--select", "-s", "--select-file"})
 JSON_OUTPUT_FLAGS: frozenset[str] = frozenset({"--json", "--json-output"})
 JSON_OUTPUT_FLAG: str = "--json-output"
