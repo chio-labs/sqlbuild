@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.65.2](https://github.com/chio-labs/sqlbuild/compare/v0.65.1...v0.65.2) (2026-08-30)
+
+
+### Bug Fixes
+
+* avoid implicit Snowflake role switching ([#404](https://github.com/chio-labs/sqlbuild/issues/404)) ([77d6297](https://github.com/chio-labs/sqlbuild/commit/77d629786ed71d63f0960a338cd22f6ed6030084))
+
 ## [0.65.1](https://github.com/chio-labs/sqlbuild/compare/v0.65.0...v0.65.1) (2026-08-30)
 
 
