@@ -7,14 +7,18 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands._helpers.build_execution.run_context import (
+    write_build_run_context,
+)
 from sqlbuild.cli.commands._helpers.build_planning.full_refresh import (
     enforce_snapshot_full_refresh_policy,
 )
 from sqlbuild.cli.commands._helpers.compile.target_writer import write_compile_target
 from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
-from sqlbuild.cli.commands.models import VirtualBuildPlanHookConfig
+from sqlbuild.cli.commands.models import BuildRunContext, VirtualBuildPlanHookConfig
 from sqlbuild.cli.output.main.plan import format_plan
 from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import PlanOutput
@@ -46,6 +50,10 @@ class VirtualBuildPlanHook:
         self._json_output = config.json_output
         self._execution_command = config.execution_command
         self._concurrency = config.concurrency
+        self._connection_config = config.connection_config
+        self._selector_files = config.selector_files
+        self._virtual_environment_name = config.virtual_environment_name or "default"
+        self._unsuffixed_virtual_environment_name = config.unsuffixed_virtual_environment_name
         self.callbacks: BuildProgressCallbacks | None = None
 
     @property
@@ -57,13 +65,12 @@ class VirtualBuildPlanHook:
     def on_plan_ready(
         self,
         *,
-        project: object,
+        project: CompiledProject,
         plan_output: PlanOutput,
         python_plan_entries: tuple[PythonPlanEntry, ...],
     ) -> VirtualBuildExecutionHooks:
         """Render the plan and return node progress hooks for execution."""
 
-        del project
         plan_text: str = format_plan(
             plan=plan_output,
             full_refresh=self._full_refresh,
@@ -92,15 +99,45 @@ class VirtualBuildPlanHook:
             debug=self._debug or self._json_output,
         )
         self.callbacks = callbacks
-        write_execution_header(
-            stream=self._stream,
-            command=f"sqb {self._execution_command}",
-            target=None,
-            concurrency=self._concurrency
-            if self._concurrency is not None
-            else self._discovered_inputs.project_config.settings.concurrency,
-            use_color=self._use_color,
+        effective_concurrency: int = (
+            self._concurrency if self._concurrency is not None else project.settings.concurrency
         )
+        if self._verbose or self._debug:
+            base_schema: str | None = project.effective_target_schema
+            logical_schema: str | None = base_schema
+            if (
+                base_schema is not None
+                and self._unsuffixed_virtual_environment_name != self._virtual_environment_name
+            ):
+                logical_schema = f"{base_schema}__{self._virtual_environment_name}"
+            physical_schema: str | None = (
+                f"{base_schema}__sqb_physical" if base_schema is not None else None
+            )
+            write_build_run_context(
+                stream=self._stream,
+                context=BuildRunContext(
+                    command=f"sqb {self._execution_command}",
+                    project=project,
+                    plan=plan_output,
+                    discovered_inputs=self._discovered_inputs,
+                    python_plan_entries=python_plan_entries,
+                    connection_config=self._connection_config,
+                    concurrency=effective_concurrency,
+                    full_refresh=self._full_refresh,
+                    selector_files=self._selector_files,
+                    virtual_logical_schema=logical_schema,
+                    virtual_physical_schema=physical_schema,
+                ),
+                use_color=self._use_color,
+            )
+        else:
+            write_execution_header(
+                stream=self._stream,
+                command=f"sqb {self._execution_command}",
+                target=None,
+                concurrency=effective_concurrency,
+                use_color=self._use_color,
+            )
         return VirtualBuildExecutionHooks(
             on_node_start=lambda name, resource_kind: callbacks.on_node_start(
                 name=name, resource_kind=resource_kind

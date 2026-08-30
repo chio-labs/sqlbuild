@@ -7,6 +7,7 @@ from unittest.mock import Mock
 import pytest
 from _pytest.capture import CaptureResult
 
+from sqlbuild.cli.commands._helpers.entry.parsing import read_selector_files
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.main.entrypoint.entry import _main_with_dependencies, main
 from sqlbuild.cli.commands.models import (
@@ -2379,7 +2380,7 @@ def test_given_plan_load_flag_when_running_then_dispatches_expected_argument(
     ],
     ids=lambda case: case.description,
 )
-def test_given_select_file_when_running_then_dispatches_file_selectors(
+def test_given_plan_select_file_when_running_then_dispatches_file_selectors(
     test_case: MainTestCase,
     tmp_path: Path,
 ) -> None:
@@ -2397,6 +2398,52 @@ def test_given_select_file_when_running_then_dispatches_file_selectors(
 
     assert exit_code == test_case.expected_exit_code
     assert received_selects == [test_case.expected_select]
+    assert read_selector_files([str(tmp_path / "selectors.txt")]) == ("customers", "payments")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="passes selectors and file provenance to build handler",
+            argv=["build", "--select", "orders", "--select-file", "selectors.txt"],
+            expected_exit_code=4,
+            expected_select=("orders", "customers", "payments"),
+            expected_selector_count=2,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_build_select_file_when_running_then_dispatches_selectors_and_provenance(
+    test_case: MainTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "selectors.txt").write_text("customers\n\n# ignored\npayments\n", encoding="utf-8")
+    received_values: list[tuple[tuple[str, ...], Path, int]] = []
+
+    def run_build(request: BuildCommandRequest) -> int:
+        received_values.append(
+            (
+                request.select,
+                request.selector_files[0].path,
+                request.selector_files[0].selector_count,
+            )
+        )
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=[*test_case.argv[:4], str(tmp_path / test_case.argv[4])],
+        handlers=build_handlers(run_build=run_build),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received_values == [
+        (
+            test_case.expected_select,
+            tmp_path / "selectors.txt",
+            test_case.expected_selector_count,
+        )
+    ]
 
 
 @pytest.mark.parametrize(

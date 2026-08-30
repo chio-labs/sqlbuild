@@ -4,6 +4,9 @@ from sqlbuild.cli.commands.types import CompileLineageMode, PlaygroundTemplate
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.types import SelectorKind
 
+C0_CONTROL_CODE_LIMIT: int = 32
+C1_CONTROL_CODE_START: int = 127
+C1_CONTROL_CODE_LIMIT: int = 160
 COMPILE_LINEAGE_MODE_VALUES: tuple[str, ...] = tuple(mode.value for mode in CompileLineageMode)
 RICH_LINEAGE_STATUS_MODEL_THRESHOLD: int = 100
 EMPTY_DAG_PATH: str = ""

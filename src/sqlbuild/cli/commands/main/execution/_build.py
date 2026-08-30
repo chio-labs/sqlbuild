@@ -80,6 +80,7 @@ def run_build(request: BuildCommandRequest) -> int:
                     reload_sources=request.reload_sources,
                     include_python=request.include_python,
                     select=request.select,
+                    selector_files=request.selector_files,
                     exclude=request.exclude,
                     fail_fast=request.fail_fast,
                     allow_snapshot_full_refresh=request.allow_snapshot_full_refresh,

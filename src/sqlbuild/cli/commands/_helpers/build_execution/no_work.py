@@ -3,11 +3,15 @@
 from datetime import UTC, datetime
 
 from sqlbuild.cli.commands._helpers.build_execution.outputs import write_no_work_build_json
+from sqlbuild.cli.commands._helpers.build_execution.run_context import (
+    write_build_run_context,
+)
 from sqlbuild.cli.commands._helpers.cost.collection import finalize_build_cost
 from sqlbuild.cli.commands.models import (
     BuildCommandRequest,
     BuildCostFinalization,
     BuildInvocation,
+    BuildRunContext,
 )
 from sqlbuild.compiler.pipeline.main.plan_work import plan_has_executable_work
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
@@ -27,6 +31,27 @@ def finalize_no_work_build_if_needed(
         python_plan_entries=pipeline_result.python_plan_entries,
     ):
         return False
+    if request.verbose or request.debug:
+        effective_concurrency: int = (
+            request.concurrency
+            if request.concurrency is not None
+            else pipeline_result.project.settings.concurrency
+        )
+        write_build_run_context(
+            stream=invocation.progress_stream,
+            context=BuildRunContext(
+                command="sqb build",
+                project=pipeline_result.project,
+                plan=pipeline_result.plan_output,
+                discovered_inputs=invocation.discovered_inputs,
+                python_plan_entries=pipeline_result.python_plan_entries,
+                connection_config=invocation.connection_config,
+                concurrency=effective_concurrency,
+                full_refresh=request.full_refresh,
+                selector_files=request.selector_files,
+            ),
+            use_color=invocation.use_color,
+        )
     completed_at: datetime = datetime.now(UTC)
     cost_record: CostRunRecord | None = finalize_build_cost(
         BuildCostFinalization(

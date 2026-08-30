@@ -62,6 +62,7 @@ class MainTestCase:
     expected_column_lineage_mode: ColumnLineageMode = ColumnLineageMode.RICH
     expected_scenario_selectors: tuple[str, ...] = ()
     expected_select: tuple[str, ...] = ()
+    expected_selector_count: int = 0
     expected_exclude: tuple[str, ...] = ()
     expected_dbt_args: tuple[str, ...] = ()
     expected_skills_global: bool = False
