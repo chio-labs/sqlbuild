@@ -60,11 +60,15 @@ class SqlBuildCliInvocation:
                 executor=executor,
                 source=self.process.stdout,
                 sink=sys.stdout,
+                context=self.context,
+                stream_name="stdout",
             )
             stderr_future: Future[str] | None = _start_stream_future(
                 executor=executor,
                 source=self.process.stderr,
                 sink=sys.stderr,
+                context=self.context,
+                stream_name="stderr",
             )
             self.returncode = self.process.wait()
             self.stdout = stdout_future.result() if stdout_future is not None else ""

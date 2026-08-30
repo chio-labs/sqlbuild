@@ -70,6 +70,13 @@ class DagsterCliInvocationTestCase:
 
 
 @dataclass(frozen=True)
+class DagsterCliLiveLogTestCase:
+    description: str
+    expected_stdout_lines: tuple[str, ...]
+    expected_stderr_lines: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DagsterCliStreamTestCase:
     description: str
     command_stdout: str

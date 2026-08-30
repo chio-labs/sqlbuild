@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
+from threading import Event
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
@@ -12,6 +15,7 @@ from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterCliFailureTestCase,
     DagsterCliInvocationTestCase,
     DagsterCliJsonStreamTestCase,
+    DagsterCliLiveLogTestCase,
     DagsterCliSelectionTestCase,
     DagsterCliStreamTestCase,
 )
@@ -19,6 +23,7 @@ from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
     assert_json_output_file_behavior,
     assert_positional_selector_behavior,
     assert_select_file_selector_behavior,
+    write_blocking_fake_sqb_command,
     write_dagster_test_dag,
     write_fake_sqb_command,
 )
@@ -71,6 +76,58 @@ def test_given_sqlbuild_cli_resource_when_waiting_invocation_then_captures_proce
     assert invocation.is_successful() is test_case.expected_success
     assert invocation.stdout == test_case.expected_stdout
     assert invocation.stderr == test_case.expected_stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterCliLiveLogTestCase(
+            description="unflushed subprocess output reaches Dagster before process completion",
+            expected_stdout_lines=("started without explicit flush", "completed"),
+            expected_stderr_lines=("warning without explicit flush",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_running_sqlbuild_command_when_output_arrives_then_dagster_logs_it_immediately(
+    test_case: DagsterCliLiveLogTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    release_path: Path = tmp_path / "release"
+    first_log_received: Event = Event()
+    logger: Mock = Mock()
+    logger.info.side_effect = lambda *_args: first_log_received.set()
+    context: Any = type("LoggingContext", (), {"log": logger})()
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_blocking_fake_sqb_command(
+            root=tmp_path,
+            release_path=release_path,
+        ),
+    )
+    invocation: SqlBuildCliInvocation = resource.cli(
+        ["build"], context=context, raise_on_error=False
+    )
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        wait_future: Future[SqlBuildCliInvocation] = executor.submit(invocation.wait)
+        assert first_log_received.wait(timeout=3)
+        assert not wait_future.done()
+        release_path.write_text("continue", encoding="utf-8")
+        completed_invocation: SqlBuildCliInvocation = wait_future.result(timeout=3)
+
+    for line in test_case.expected_stdout_lines:
+        logger.info.assert_any_call("SQLBuild: %s", line)
+    for line in test_case.expected_stderr_lines:
+        logger.warning.assert_any_call("SQLBuild: %s", line)
+    assert completed_invocation.stdout == "".join(
+        f"{line}\n" for line in test_case.expected_stdout_lines
+    )
+    assert completed_invocation.stderr == "".join(
+        f"{line}\n" for line in test_case.expected_stderr_lines
+    )
 
 
 @pytest.mark.parametrize(

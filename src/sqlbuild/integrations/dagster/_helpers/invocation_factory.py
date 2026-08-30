@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -41,9 +42,12 @@ def start_sqlbuild_cli_invocation(
         dag=dag,
     )
     command: tuple[str, ...] = (*tuple(sqb_command), *resolved_args)
+    process_environment: dict[str, str] = dict(os.environ)
+    process_environment["PYTHONUNBUFFERED"] = "1"
     process: subprocess.Popen[str] = subprocess.Popen(
         command,
         cwd=project_dir,
+        env=process_environment,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,

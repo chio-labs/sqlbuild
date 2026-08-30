@@ -44,3 +44,4 @@ CHECK_METADATA_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {"passed", "steps", "expected_results", "assertion_results"}
 )
 WARNING_CHECK_SEVERITY: str = "warn"
+STDERR_STREAM_NAME: str = "stderr"
