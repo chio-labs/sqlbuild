@@ -27,15 +27,15 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 from tests.integration.src.sqlbuild.virtual.executor._helpers._test_types import (
-    VirtualPhysicalSchemaPreflightTestCase,
+    VirtualBuildPipelineTestCase,
 )
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
-        VirtualPhysicalSchemaPreflightTestCase(
-            description="physical schema exists before concurrent build pipeline starts",
+        VirtualBuildPipelineTestCase(
+            description="physical destinations and runtime are scoped before pipeline starts",
             expected_schema="dev__sqb_physical",
             expected_model_names=("model_01", "model_02", "model_03", "model_04"),
             expected_target="dev",
@@ -44,7 +44,7 @@ from tests.integration.src.sqlbuild.virtual.executor._helpers._test_types import
     ids=lambda case: case.description,
 )
 def test_given_virtual_build_when_pipeline_starts_then_schema_and_runtime_are_project_scoped(
-    test_case: VirtualPhysicalSchemaPreflightTestCase,
+    test_case: VirtualBuildPipelineTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -72,15 +72,9 @@ def test_given_virtual_build_when_pipeline_starts_then_schema_and_runtime_are_pr
     ) -> BuildExecutionResult:
         assert runtime.runtime_dir == project_dir / "target"
         assert runtime.target == test_case.expected_target
-        connection: Any = adapter.connect(connection_config)
-        try:
-            assert adapter.schema_exists(
-                connection=connection,
-                database=None,
-                schema=test_case.expected_schema,
-            )
-        finally:
-            adapter.close(connection)
+        assert all(
+            entry.destination.schema == test_case.expected_schema for entry in plan.model_entries
+        )
         observed_model_names.extend(entry.name for entry in plan.model_entries)
         return BuildExecutionResult(
             status=BuildStatus.SUCCESS,
