@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.65.0](https://github.com/chio-labs/sqlbuild/compare/v0.64.0...v0.65.0) (2026-08-30)
+
+
+### Features
+
+* separate connections from target namespaces ([#399](https://github.com/chio-labs/sqlbuild/issues/399)) ([99b58f6](https://github.com/chio-labs/sqlbuild/commit/99b58f6eb91648193c6e1ccf10cc2b9429eb032e))
+
 ## [0.64.0](https://github.com/chio-labs/sqlbuild/compare/v0.63.8...v0.64.0) (2026-08-29)
 
 
