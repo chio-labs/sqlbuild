@@ -201,6 +201,28 @@ def write_fake_sqb_command(
     return ["python", str(script_path)]
 
 
+def write_blocking_fake_sqb_command(*, root: Path, release_path: Path) -> list[str]:
+    script_path: Path = root / "blocking_fake_sqb.py"
+    script_path.write_text(
+        "\n".join(
+            (
+                "from pathlib import Path",
+                "import sys",
+                "import time",
+                "sys.stdout.write('started without explicit flush\\n')",
+                "sys.stderr.write('warning without explicit flush\\n')",
+                f"release_path = Path({str(release_path)!r})",
+                "while not release_path.exists():",
+                "    time.sleep(0.01)",
+                "sys.stdout.write('completed\\n')",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return ["python", str(script_path)]
+
+
 def write_dagster_test_dag(*, root: Path) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     dag_path: Path = root / "sqlbuild_dag.json"
