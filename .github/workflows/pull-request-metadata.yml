@@ -17,7 +17,7 @@ permissions:
 jobs:
   validate:
     name: Pull Request Metadata
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Resolve pull request metadata
         env:
@@ -54,7 +54,7 @@ jobs:
               r"(?:chi-[0-9]+-)?[a-z0-9]+(?:-[a-z0-9]+)*$"
           )
           automation_pattern = re.compile(
-              r"^(release-please--|dependabot/|renovate/|github-actions/)"
+              r"^(release-please--|dependabot/|renovate/|github-actions/|blacksmith-migration-)"
           )
           title_pattern = re.compile(
               r"^(feat|fix|perf|refactor|test|docs|build|ci|chore|revert)"

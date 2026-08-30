@@ -14,7 +14,7 @@ permissions:
 jobs:
   release-tag:
     name: Resolve release tag
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       tag: ${{ steps.release-tag.outputs.tag }}
     steps:
@@ -42,19 +42,19 @@ jobs:
       matrix:
         platform:
           - name: linux-x86_64
-            runner: ubuntu-latest
+            runner: blacksmith-4vcpu-ubuntu-2404
             target: x86_64
           - name: linux-aarch64
-            runner: ubuntu-24.04-arm
+            runner: blacksmith-4vcpu-ubuntu-2404-arm
             target: aarch64
           - name: macos-x86_64
-            runner: macos-latest
+            runner: blacksmith-6vcpu-macos-15
             target: x86_64
           - name: macos-arm64
-            runner: macos-latest
+            runner: blacksmith-6vcpu-macos-15
             target: aarch64
           - name: windows-x86_64
-            runner: windows-latest
+            runner: blacksmith-4vcpu-windows-2025
             target: x86_64
     steps:
       - uses: actions/checkout@v4
@@ -99,7 +99,7 @@ jobs:
   sdist:
     name: Build sdist
     needs: release-tag
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
         with:
@@ -129,7 +129,7 @@ jobs:
       - release-tag
       - wheels
       - sdist
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: pypi
     permissions:
       contents: read
