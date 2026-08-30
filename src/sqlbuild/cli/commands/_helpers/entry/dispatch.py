@@ -316,6 +316,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 exclude=tuple(args.exclude),
                 verbose=args.verbose,
                 cli_vars=args.vars,
+                json_output_path=args.json_output,
             )
         )
     if args.command == CliCommand.DIFF:

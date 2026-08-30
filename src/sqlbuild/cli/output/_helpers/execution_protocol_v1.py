@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
@@ -20,6 +21,8 @@ from sqlbuild.executor.build.models import (
     SeedExecutionResult,
 )
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
+from sqlbuild.executor.clone.models import CloneExecutionResult
+from sqlbuild.executor.clone.types import CloneStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import (
     PythonCheckExecutionResult,
@@ -38,6 +41,12 @@ from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
+from sqlbuild.virtual.executor.constants import (
+    VIRTUAL_CLONE_FOUND_ACTIONS,
+    VIRTUAL_CLONE_MISSING_ACTION,
+    VIRTUAL_CLONE_SKIPPED_LOCKED_ACTION,
+)
+from sqlbuild.virtual.executor.models import VirtualCloneResult
 
 _JSON_VERSION: int = 1
 
@@ -200,6 +209,88 @@ def format_load_execution_json(*, results: tuple[LoadExecutionResult, ...]) -> s
             "total_count": len(results),
         },
     )
+
+
+def format_clone_execution_json(
+    *, result: CloneExecutionResult, resource_types_by_name: Mapping[str, str]
+) -> str:
+    """Format direct clone command execution results as JSON."""
+
+    failure_count: int = sum(1 for item in result.item_results if item.status == CloneStatus.FAILED)
+    warning_count: int = sum(
+        1 for item in result.item_results if item.status == CloneStatus.WARNING
+    )
+    return _format_execution_json(
+        command="clone",
+        status=(BuildStatus.SUCCESS.value if failure_count == 0 else BuildStatus.FAILED.value),
+        assets=tuple(
+            _drop_none(
+                {
+                    "kind": resource_types_by_name[item.name],
+                    "name": item.name,
+                    "status": item.status.value,
+                    "action": item.action.value,
+                    "duration_ms": (
+                        round(item.duration_seconds * 1000)
+                        if item.duration_seconds is not None
+                        else None
+                    ),
+                    "origin_relation": item.origin_relation,
+                    "target": item.destination_relation,
+                    "message": item.message,
+                }
+            )
+            for item in result.item_results
+        ),
+        checks=(),
+        summary={
+            "success_count": len(result.item_results) - failure_count - warning_count,
+            "failure_count": failure_count,
+            "warning_count": warning_count,
+            "total_count": len(result.item_results),
+        },
+    )
+
+
+def format_virtual_clone_execution_json(*, result: VirtualCloneResult) -> str:
+    """Format virtual clone command execution results as JSON."""
+
+    return _format_execution_json(
+        command="clone",
+        status=(
+            BuildStatus.SUCCESS.value if result.missing_count == 0 else BuildStatus.FAILED.value
+        ),
+        assets=tuple(
+            _drop_none(
+                {
+                    "kind": item.artifact_type.value,
+                    "name": item.artifact_name,
+                    "status": _virtual_clone_item_status(action=item.action),
+                    "action": item.action,
+                    "version_hash": item.version_hash,
+                    "message": item.message,
+                }
+            )
+            for item in result.item_results
+        ),
+        checks=(),
+        summary={
+            "success_count": result.found_count,
+            "failure_count": result.missing_count,
+            "skipped_count": result.skipped_locked_count,
+            "total_count": result.selected_count,
+        },
+    )
+
+
+def _virtual_clone_item_status(*, action: str) -> str:
+    if action in VIRTUAL_CLONE_FOUND_ACTIONS:
+        return "success"
+    if action == VIRTUAL_CLONE_SKIPPED_LOCKED_ACTION:
+        return "skipped"
+    if action == VIRTUAL_CLONE_MISSING_ACTION:
+        return "warning"
+    return "failed"
 
 
 def format_test_execution_json(*, results: tuple[SqlTestExecutionResult, ...]) -> str:

@@ -25,6 +25,16 @@ class InterleavedCloneGraphTestCase:
 
 
 @dataclass(frozen=True)
+class CloneViewDependencyTestCase:
+    description: str
+    origin_names: tuple[str, ...]
+    expected_actions: tuple[CloneAction, ...]
+    expected_view_statement_count: int
+    expected_view_statement_fragment: str
+    expected_view_message: str | None
+
+
+@dataclass(frozen=True)
 class PrephaseCloneItemRowTestCase:
     description: str
     action: str

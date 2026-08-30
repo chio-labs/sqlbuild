@@ -50,18 +50,12 @@ def recreate_view(
     origin_entry: SeedPlanEntry | ModelPlanEntry,
     adapter: BaseAdapter,
     destination_connection: Any,
-    origin_lookup: RelationLookup,
 ) -> CloneItemResult:
     return recreate_view_by_names(
         name=destination_entry.name,
         origin_relation=qualified_name(adapter=adapter, entry=origin_entry),
         destination_relation=qualified_name(adapter=adapter, entry=destination_entry),
         view_sql=destination_entry.resolved_sql,
-        origin_exists=origin_lookup.exists(
-            database=origin_entry.destination.database,
-            schema=origin_entry.destination.schema,
-            name=origin_entry.destination.name,
-        ),
         adapter=adapter,
         connection=destination_connection,
     )

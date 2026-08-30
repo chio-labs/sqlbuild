@@ -21,6 +21,7 @@ from tests.unit.src.sqlbuild.executor.clone._helpers.helpers import (
 )
 from tests.unit.src.sqlbuild.executor.clone.main._test_types import (
     CloneStreamTestCase,
+    CloneViewDependencyTestCase,
     InterleavedCloneGraphTestCase,
 )
 
@@ -151,3 +152,81 @@ def test_given_interleaved_clone_graph_when_executing_then_uses_plan_order(
     function_statement_index: int = executed_sql.index(test_case.expected_function_statement)
     view_statement_index: int = executed_sql.index(test_case.expected_view_statement_fragment)
     assert function_statement_index < view_statement_index
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CloneViewDependencyTestCase(
+            description="missing origin view with available destination dependency is recreated",
+            origin_names=("orders",),
+            expected_actions=(CloneAction.CLONED, CloneAction.RECREATED_VIEW),
+            expected_view_statement_count=1,
+            expected_view_statement_fragment=(
+                "CREATE OR REPLACE VIEW dev.order_summary AS SELECT * FROM dev.orders"
+            ),
+            expected_view_message=None,
+        ),
+        CloneViewDependencyTestCase(
+            description="view with missing destination dependency is skipped clearly",
+            origin_names=(),
+            expected_actions=(
+                CloneAction.WARNING_MISSING_SOURCE,
+                CloneAction.SKIPPED_MISSING_DEPENDENCY,
+            ),
+            expected_view_statement_count=0,
+            expected_view_statement_fragment="",
+            expected_view_message="missing destination dependencies: dev.orders",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_view_clone_when_checking_destination_dependencies_then_recreates_only_when_ready(
+    test_case: CloneViewDependencyTestCase,
+) -> None:
+    adapter: FakeCloneAdapter = FakeCloneAdapter(
+        supports_zero_copy=True,
+        origin_names=test_case.origin_names,
+    )
+    origin_table: ModelPlanEntry = build_clone_model_entry(schema="prod", name="orders")
+    origin_view: ModelPlanEntry = replace(
+        build_clone_model_entry(schema="prod", name="order_summary"),
+        materialization_type=MaterializationType.VIEW,
+    )
+    destination_table: ModelPlanEntry = build_clone_model_entry(schema="dev", name="orders")
+    destination_view: ModelPlanEntry = replace(
+        build_clone_model_entry(schema="dev", name="order_summary"),
+        materialization_type=MaterializationType.VIEW,
+        resolved_sql="SELECT * FROM dev.orders",
+    )
+
+    result: CloneExecutionResult = execute_clone(
+        inputs=CloneExecutionInput(
+            source_entries=CloneSourceEntries(),
+            origin_model_entries=(origin_table, origin_view),
+            destination_model_entries=(destination_table, destination_view),
+            origin_seed_entries=(),
+            destination_seed_entries=(),
+            destination_function_entries=(),
+            execution_order=(destination_table.key, destination_view.key),
+            adapter=adapter,
+            destination_connection=object(),
+            hard_copy=False,
+            run_id="clone-run",
+            query_change_tracking=False,
+            upstream_deps={destination_view.key: (destination_table.key,)},
+            dependency_locations={
+                destination_table.key: destination_table.destination,
+                destination_view.key: destination_view.destination,
+            },
+        )
+    )
+
+    assert tuple(item.action for item in result.item_results) == test_case.expected_actions
+    executed_sql: str = "\n".join(adapter.executed_statements)
+    view_statement_count: int = sum(
+        statement.startswith("CREATE OR REPLACE VIEW") for statement in adapter.executed_statements
+    )
+    assert view_statement_count == test_case.expected_view_statement_count
+    assert test_case.expected_view_statement_fragment in executed_sql
+    assert result.item_results[-1].message == test_case.expected_view_message

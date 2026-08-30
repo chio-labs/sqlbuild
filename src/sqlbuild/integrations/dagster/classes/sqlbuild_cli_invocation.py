@@ -19,6 +19,7 @@ from sqlbuild.integrations.dagster._helpers.invocation import (
     _log_invocation,
     _start_stream_future,
 )
+from sqlbuild.integrations.dagster.constants import COMPLETED_EXECUTION_STATUSES
 
 
 class SqlBuildCliInvocation:
@@ -108,19 +109,29 @@ class SqlBuildCliInvocation:
         if self.returncode is None or self.returncode == 0:
             return None
         dg: Any = load_dagster()
+        metadata: dict[str, Any] = {
+            "command": " ".join(self.command),
+            "project_dir": str(self.project_dir),
+            "stdout": self.stdout,
+            "stderr": self.stderr,
+            "selection": " ".join(self.selection),
+            "selector_file": self.selector_file_path,
+        }
+        if self.execution_payload is not None:
+            incomplete_assets: list[str] = []
+            for asset in self.execution_payload.get("assets", ()):
+                status: str = str(asset.get("status"))
+                if status in COMPLETED_EXECUTION_STATUSES:
+                    continue
+                incomplete_assets.append(f"{asset.get('kind')}:{asset.get('name')} ({status})")
+            metadata["execution_status"] = str(self.execution_payload.get("status"))
+            metadata["incomplete_assets"] = ", ".join(incomplete_assets)
         return dg.Failure(
             description=(
                 "SQLBuild CLI command failed with exit code "
                 f"{self.returncode}: {' '.join(self.command)}"
             ),
-            metadata={
-                "command": " ".join(self.command),
-                "project_dir": str(self.project_dir),
-                "stdout": self.stdout,
-                "stderr": self.stderr,
-                "selection": " ".join(self.selection),
-                "selector_file": self.selector_file_path,
-            },
+            metadata=metadata,
         )
 
     def get_artifact(self, artifact: str) -> dict[str, Any]:
@@ -154,11 +165,11 @@ class SqlBuildCliInvocation:
                 if error is not None and self.raise_on_error:
                     raise error
                 return
+        error = self.get_error()
+        if error is not None and self.raise_on_error:
+            raise error
         if self.dag is None:
             yield dg.MaterializeResult(metadata={"command": " ".join(self.command)})
-            error = self.get_error()
-            if error is not None and self.raise_on_error:
-                raise error
             return
         yield from _build_results_for_selected_assets(
             dg=dg,
@@ -166,6 +177,3 @@ class SqlBuildCliInvocation:
             command=self.command,
             context=self.context,
         )
-        error = self.get_error()
-        if error is not None and self.raise_on_error:
-            raise error

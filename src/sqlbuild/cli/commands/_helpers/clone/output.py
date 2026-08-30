@@ -118,4 +118,4 @@ def render_clone_output(
 
 
 def is_clone_success(result: CloneExecutionResult) -> bool:
-    return all(item.status == CloneStatus.SUCCESS for item in result.item_results)
+    return all(item.status != CloneStatus.FAILED for item in result.item_results)

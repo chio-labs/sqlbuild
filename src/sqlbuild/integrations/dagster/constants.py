@@ -14,8 +14,9 @@ LOADER_NODE_KIND: str = "loader"
 VIEW_MATERIALIZATION_TYPE: str = "view"
 
 ASSET_SELECTION_COMMANDS: frozenset[str] = frozenset(
-    {"build", "run", "test", "audit", "seed", "load"}
+    {"build", "run", "test", "audit", "seed", "load", "clone"}
 )
+CLONE_COMMAND: str = "clone"
 EXPLICIT_SELECTION_FLAGS: frozenset[str] = frozenset({"--select", "-s", "--select-file"})
 JSON_OUTPUT_FLAGS: frozenset[str] = frozenset({"--json", "--json-output"})
 JSON_OUTPUT_FLAG: str = "--json-output"
