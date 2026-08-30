@@ -94,3 +94,55 @@ def test_given_selector_commands_when_running_cli_then_behavior_matches_expectat
         assert fragment in result.stdout, result.stdout + result.stderr
     for fragment in test_case.expected_stderr_fragments:
         assert fragment in result.stderr, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SelectorSurfaceBuildE2ETestCase(
+            description="verbose selector file reports resolved context without secrets",
+            command=("--no-color", "build", "--verbose"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Execution\n  command      sqb build",
+                "run_id       ",
+                "target       not set",
+                "warehouse    not set",
+                "concurrency  1 configured limit",
+                "full_refresh false",
+                "selected     1 of 17 managed resources",
+                "date vars    1970-01-01 to 2030-12-31",
+                "Selection files",
+                "(1 selector)",
+            ),
+            expected_stderr_fragments=(),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_verbose_build_selector_file_when_running_then_reports_safe_resolved_context(
+    test_case: SelectorSurfaceBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+    selector_file: Path = tmp_path / "dagster-selectors.txt"
+    selector_file.write_text("+stg_customers\n", encoding="utf-8")
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            *test_case.command,
+            "--select-file",
+            str(selector_file),
+            "--vars",
+            '{"start_date":"1970-01-01","end_date":"2030-12-31","api_secret":"never-print-secret"}',
+        ),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    fragment: str
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout
+    assert f"selector_file {selector_file} (1 selector)" in result.stdout
+    assert "never-print-secret" not in result.stdout
+    assert "never-print-secret" not in result.stderr

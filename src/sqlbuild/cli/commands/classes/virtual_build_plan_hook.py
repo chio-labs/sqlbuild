@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands._helpers.build_execution.run_context import write_build_run_context
 from sqlbuild.cli.commands._helpers.build_planning.full_refresh import (
     enforce_snapshot_full_refresh_policy,
 )
@@ -15,6 +16,7 @@ from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgress
 from sqlbuild.cli.commands.models import VirtualBuildPlanHookConfig
 from sqlbuild.cli.output.main.plan import format_plan
 from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import PlanOutput
@@ -46,6 +48,8 @@ class VirtualBuildPlanHook:
         self._json_output = config.json_output
         self._execution_command = config.execution_command
         self._concurrency = config.concurrency
+        self._connection_config = config.connection_config
+        self._selector_files = config.selector_files
         self.callbacks: BuildProgressCallbacks | None = None
 
     @property
@@ -57,13 +61,12 @@ class VirtualBuildPlanHook:
     def on_plan_ready(
         self,
         *,
-        project: object,
+        project: CompiledProject,
         plan_output: PlanOutput,
         python_plan_entries: tuple[PythonPlanEntry, ...],
     ) -> VirtualBuildExecutionHooks:
         """Render the plan and return node progress hooks for execution."""
 
-        del project
         plan_text: str = format_plan(
             plan=plan_output,
             full_refresh=self._full_refresh,
@@ -92,15 +95,31 @@ class VirtualBuildPlanHook:
             debug=self._debug or self._json_output,
         )
         self.callbacks = callbacks
-        write_execution_header(
-            stream=self._stream,
-            command=f"sqb {self._execution_command}",
-            target=None,
-            concurrency=self._concurrency
+        effective_concurrency: int = (
+            self._concurrency
             if self._concurrency is not None
-            else self._discovered_inputs.project_config.settings.concurrency,
-            use_color=self._use_color,
+            else self._discovered_inputs.project_config.settings.concurrency
         )
+        if self._verbose or self._debug:
+            write_build_run_context(
+                stream=self._stream,
+                command=f"sqb {self._execution_command}",
+                project=project,
+                plan=plan_output,
+                connection_config=self._connection_config,
+                concurrency=effective_concurrency,
+                full_refresh=self._full_refresh,
+                selector_files=self._selector_files,
+                use_color=self._use_color,
+            )
+        else:
+            write_execution_header(
+                stream=self._stream,
+                command=f"sqb {self._execution_command}",
+                target=None,
+                concurrency=effective_concurrency,
+                use_color=self._use_color,
+            )
         return VirtualBuildExecutionHooks(
             on_node_start=lambda name, resource_kind: callbacks.on_node_start(
                 name=name, resource_kind=resource_kind

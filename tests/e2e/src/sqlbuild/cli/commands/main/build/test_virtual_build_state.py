@@ -31,7 +31,13 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             description="wide virtual DAG builds with concurrent physical schema setup",
             concurrency=8,
             expected_model_count=8,
-            expected_build_fragments=("Execution  sqb build  (concurrency: 8)",),
+            expected_build_fragments=(
+                "Execution\n  command      sqb build",
+                "target       dev",
+                "schema       dev",
+                "concurrency  8 configured limit",
+                "selected     8 of 8 managed resources",
+            ),
         )
     ],
     ids=lambda case: case.description,
@@ -54,7 +60,13 @@ def test_given_wide_virtual_dag_when_building_concurrently_then_physical_schema_
     assert init_result.returncode == 0, init_result.stderr
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--concurrency", str(test_case.concurrency)),
+        command=(
+            "--no-color",
+            "build",
+            "--verbose",
+            "--concurrency",
+            str(test_case.concurrency),
+        ),
         project_dir=project_dir,
     )
 

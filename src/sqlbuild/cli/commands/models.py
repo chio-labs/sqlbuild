@@ -151,6 +151,22 @@ class AuditExecutionPreparation:
 
 
 @dataclass(frozen=True)
+class SelectorFileSummary:
+    """Non-expanded provenance for one selector file."""
+
+    path: Path
+    selector_count: int
+
+
+@dataclass(frozen=True)
+class SelectorInputs:
+    """Expanded selectors paired with selector-file provenance."""
+
+    selectors: tuple[str, ...]
+    files: tuple[SelectorFileSummary, ...]
+
+
+@dataclass(frozen=True)
 class BuildCommandRequest:
     """CLI inputs for one build command invocation."""
 
@@ -172,6 +188,7 @@ class BuildCommandRequest:
     allow_snapshot_schema_change: bool = False
     concurrency: int | None = None
     select: tuple[str, ...] = ()
+    selector_files: tuple[SelectorFileSummary, ...] = ()
     exclude: tuple[str, ...] = ()
     verbose: bool = False
     debug: bool = False
@@ -285,6 +302,8 @@ class VirtualBuildPlanHookConfig:
     json_output: bool
     execution_command: str
     concurrency: int | None
+    connection_config: dict[str, object] = field(default_factory=dict)
+    selector_files: tuple[SelectorFileSummary, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -304,6 +323,7 @@ class VirtualBuildCliRequest:
     include_python: bool = True
     seed_only: bool = False
     select: tuple[str, ...] = ()
+    selector_files: tuple[SelectorFileSummary, ...] = ()
     exclude: tuple[str, ...] = ()
     fail_fast: bool = False
     allow_snapshot_full_refresh: bool = False

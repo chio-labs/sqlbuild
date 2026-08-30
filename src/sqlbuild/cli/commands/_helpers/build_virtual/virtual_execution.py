@@ -79,6 +79,8 @@ def execute_virtual_build(
             json_output=request.json_output,
             execution_command=request.execution_command,
             concurrency=request.concurrency,
+            connection_config=connection_config,
+            selector_files=request.selector_files,
         ),
     )
     cursor_overrides: CursorOverrides = request.cursor_overrides or CursorOverrides()

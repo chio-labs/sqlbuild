@@ -42,6 +42,7 @@ from sqlbuild.cli.commands.models import (
     ScenarioTestCommandRequest,
     ScopeCommandRequest,
     SeedCommandRequest,
+    SelectorInputs,
     TestCommandRequest,
 )
 from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode
@@ -59,7 +60,8 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
     project_dir: Path | None = None if args.project_dir is None else Path(args.project_dir)
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     _configure_diagnostics(args=args, effective_project_dir=effective_project_dir)
-    select: tuple[str, ...] = (*tuple(args.select), *read_selector_files(args.select_file))
+    selector_inputs: SelectorInputs = read_selector_files(args.select_file)
+    select: tuple[str, ...] = (*tuple(args.select), *selector_inputs.selectors)
     if args.command == CliCommand.COMPILE:
         return handlers.run_compile(
             CompileCommandRequest(
@@ -177,6 +179,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 allow_snapshot_schema_change=args.allow_snapshot_schema_change,
                 concurrency=args.concurrency,
                 select=select,
+                selector_files=selector_inputs.files,
                 exclude=tuple(args.exclude),
                 verbose=args.verbose,
                 debug=args.debug,
