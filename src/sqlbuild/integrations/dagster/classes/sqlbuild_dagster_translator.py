@@ -58,6 +58,9 @@ class SqlBuildDagsterTranslator:
         sql: object = node.get("sql")
         if isinstance(sql, str) and sql.strip():
             return f"{description}\n\n**SQLBuild SQL:**\n```sql\n{sql.strip()}\n```"
+        path: object = node.get("path")
+        if isinstance(path, str) and path:
+            return f"{description}\n\n**Source file:** {_markdown_code_span(path)}"
         return description
 
     def get_check_name(self, check: Mapping[str, Any]) -> str:
@@ -85,6 +88,15 @@ def _normalize_tag_key(value: str) -> str:
 def _normalize_name(value: str) -> str:
     normalized: str = re.sub(r"[^A-Za-z0-9_]+", "_", value).strip("_")
     return normalized or "check"
+
+
+def _markdown_code_span(value: str) -> str:
+    longest_backtick_run: int = max(
+        (len(match.group()) for match in re.finditer(r"`+", value)), default=0
+    )
+    delimiter: str = "`" * (longest_backtick_run + 1)
+    padding: str = " " if value.startswith(("`", " ")) or value.endswith(("`", " ")) else ""
+    return f"{delimiter}{padding}{value}{padding}{delimiter}"
 
 
 def _fallback_description(node: Mapping[str, Any]) -> str:
