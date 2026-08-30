@@ -68,14 +68,16 @@ class SqlBuildCliInvocation:
             stdout_future: Future[str] | None = _start_stream_future(
                 executor=executor,
                 source=self.process.stdout,
-                sink=sys.__stdout__ or sys.stdout,
+                sink=sys.stdout,
+                mirror_sink=sys.__stdout__,
                 context=self._stdout_log_context(),
                 stream_name="stdout",
             )
             stderr_future: Future[str] | None = _start_stream_future(
                 executor=executor,
                 source=self.process.stderr,
-                sink=sys.__stderr__ or sys.stderr,
+                sink=sys.stderr,
+                mirror_sink=sys.__stderr__,
                 context=self.context,
                 stream_name="stderr",
             )
@@ -215,14 +217,16 @@ class SqlBuildCliInvocation:
                 stdout_future: Future[str] | None = _start_stream_future(
                     executor=executor,
                     source=self.process.stdout,
-                    sink=sys.__stdout__ or sys.stdout,
+                    sink=sys.stdout,
+                    mirror_sink=sys.__stdout__,
                     context=self._stdout_log_context(),
                     stream_name="stdout",
                 )
                 stderr_future: Future[str] | None = _start_stream_future(
                     executor=executor,
                     source=self.process.stderr,
-                    sink=sys.__stderr__ or sys.stderr,
+                    sink=sys.stderr,
+                    mirror_sink=sys.__stderr__,
                     context=self.context,
                     stream_name="stderr",
                 )
