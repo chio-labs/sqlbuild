@@ -9,6 +9,7 @@ from pathlib import Path
 
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.constants import (
+    DBT_VERBOSE_OPTIONS,
     DEBUG_OPTION,
     EMPTY_ENV_VALUE,
     NO_COLOR_OPTION,
@@ -19,6 +20,7 @@ from sqlbuild.cli.commands.constants import (
 from sqlbuild.cli.commands.models import ParsedCliInvocation
 from sqlbuild.cli.commands.types import CliCommand
 from sqlbuild.compiler.scopes.types import DeclarationKind
+from sqlbuild.integrations.dbt.types import DbtInteropCommand
 
 _DBT_PASSTHROUGH_SUBCOMMANDS: frozenset[str] = frozenset(
     {
@@ -88,6 +90,14 @@ def parse_cli_invocation(
             args.dbt_args = dbt_passthrough_args
         elif unknown_args:
             parser.error(f"unrecognized arguments: {' '.join(unknown_args)}")
+        args.verbose = args.verbose or args.debug
+        if (
+            args.debug
+            and args.command == CliCommand.DBT
+            and args.dbt_command != DbtInteropCommand.DEBUG
+            and not any(option in args.dbt_args for option in DBT_VERBOSE_OPTIONS)
+        ):
+            args.dbt_args.append("--verbose")
         if args.command in {CliCommand.BUILD, CliCommand.LOAD, CliCommand.SEED}:
             try:
                 args.concurrency = resolve_env_default_concurrency(args.concurrency)

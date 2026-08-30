@@ -48,6 +48,7 @@ class MainTestCase:
     expected_allow_snapshot_schema_change: bool = False
     expected_no_color: bool = False
     expected_debug: bool = False
+    expected_verbose: bool = False
     expected_json: bool = False
     expected_json_output_path: Path | None = None
     expected_run_tests: bool = True

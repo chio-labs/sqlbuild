@@ -33,7 +33,12 @@ def build_cli_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     parser: argparse.ArgumentParser = parser_class(prog="sqb")
     parser.add_argument("--project-dir", "--sqb-project-dir", dest="project_dir", default=None)
     parser.add_argument("--no-color", action="store_true", default=False)
-    parser.add_argument("--debug", action="store_true", default=False)
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        default=False,
+        help="enable verbose output and mirror internal diagnostics to stderr",
+    )
 
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser] = parser.add_subparsers(
         dest="command",
