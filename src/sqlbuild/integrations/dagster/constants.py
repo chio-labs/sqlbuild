@@ -40,6 +40,7 @@ MATERIALIZABLE_NODE_KINDS: frozenset[str] = frozenset(
     {"source", "loader", "seed", "model", "udf", "table_fn"}
 )
 COMPLETED_EXECUTION_STATUSES: frozenset[str] = frozenset({"success", "skipped"})
+SUCCESS_EXECUTION_STATUS: str = "success"
 CHECK_NAME_SEPARATOR_CHARACTER: str = "_"
 CHECK_METADATA_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {"passed", "steps", "expected_results", "assertion_results"}

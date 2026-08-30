@@ -29,6 +29,7 @@ from sqlbuild.integrations.dagster.constants import (
     SELECT_FILE_FLAG,
     SOURCE_NODE_KIND,
     STDERR_STREAM_NAME,
+    SUCCESS_EXECUTION_STATUS,
     WARNING_CHECK_SEVERITY,
 )
 
@@ -349,7 +350,10 @@ def _build_results_from_execution_payload(
     asset_results_by_id: dict[str, Mapping[str, Any]] = {}
     payload_asset: Mapping[str, Any]
     for payload_asset in payload.get("assets", ()):  # type: ignore[assignment]
-        if str(payload_asset.get("status")) not in COMPLETED_EXECUTION_STATUSES:
+        execution_status: str = str(payload_asset.get("status"))
+        if execution_status not in COMPLETED_EXECUTION_STATUSES:
+            continue
+        if is_clone and execution_status != SUCCESS_EXECUTION_STATUS:
             continue
         node: Mapping[str, Any] | None = nodes_by_name.get(
             (str(payload_asset.get("kind")), str(payload_asset.get("name")))
