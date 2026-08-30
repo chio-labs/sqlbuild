@@ -59,6 +59,7 @@ def seed_virtual_physical_version(
     entry: ModelPlanEntry,
     parent_relation: PhysicalRelationRecord | None,
     version_hash: str | None,
+    schema_prepared: bool = False,
 ) -> None:
     """Seed one incremental physical version target before DML execution."""
 
@@ -70,12 +71,13 @@ def seed_virtual_physical_version(
     if parent_relation.version_hash == version_hash:
         return
 
-    adapter.ensure_schema(
-        connection=connection,
-        database=entry.destination.database,
-        schema=entry.destination.schema,
-        statement_recorder=recorder,
-    )
+    if not schema_prepared:
+        adapter.ensure_schema(
+            connection=connection,
+            database=entry.destination.database,
+            schema=entry.destination.schema,
+            statement_recorder=recorder,
+        )
     target: str = resolve_relation_location_qualified_name(
         adapter=adapter, location=entry.destination
     )

@@ -1115,26 +1115,6 @@ def _execute_virtual_build_plan(
     prepare_version_functions: dict[str, Callable[[PrepareVersionContext], None]] = (
         load_custom_prepare_version_functions(runtime.discovered_inputs.materialization_files)
     )
-    with CostContext.scope(
-        run_id=project.run_id,
-        resource_type="run",
-        resource_name=project.effective_target_name or "virtual",
-        ledger_path=runtime.project_dir / "target" / "runs" / project.run_id / "statements.jsonl",
-        phase="virtual_schema_preparation",
-        on_statement_complete=exec_hooks.on_statement_complete,
-    ):
-        schema_start: float = time.monotonic()
-        try:
-            _prepare_virtual_physical_schemas(
-                adapter=runtime.adapter,
-                connection_config=runtime.connection_config,
-                plan_output=plan.executor_plan_output,
-            )
-        finally:
-            virtual_schema_seconds: float = time.monotonic() - schema_start
-            timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
-            if timing_tracker is not None:
-                timing_tracker.schema_preparation_seconds = virtual_schema_seconds
     result: BuildExecutionResult = run_build_pipeline(
         plan=plan.executor_plan_output,
         connection_config=runtime.connection_config,
@@ -1322,6 +1302,7 @@ def _build_before_model_materialize(
                     version_hash=version_hash,
                     prepare_version=prepare_version,
                     run_id=run_id,
+                    schema_prepared=True,
                 )
             else:
                 seed_virtual_physical_version(
@@ -1333,6 +1314,7 @@ def _build_before_model_materialize(
                     entry=entry,
                     parent_relation=parent_relation,
                     version_hash=version_hash,
+                    schema_prepared=True,
                 )
         finally:
             runtime.backend.close(state_connection)
@@ -1428,33 +1410,6 @@ def _load_result_key(*, plan: PlanOutput, result: LoadExecutionResult) -> Compil
     )
 
 
-def _prepare_virtual_physical_schemas(
-    *,
-    adapter: BaseAdapter,
-    connection_config: dict[str, object],
-    plan_output: PlanOutput,
-) -> None:
-    schemas: set[tuple[str | None, str]] = set()
-    for entry in (*plan_output.model_entries, *plan_output.seed_entries):
-        if entry.destination.schema is not None:
-            schemas.add((entry.destination.database, entry.destination.schema))
-    if not schemas:
-        return
-
-    connection: Any = adapter.connect(connection_config)
-    recorder: StatementRecorder = StatementRecorder()
-    try:
-        for database, schema in sorted(schemas, key=lambda item: (item[0] or "", item[1])):
-            adapter.ensure_schema(
-                connection=connection,
-                database=database,
-                schema=schema,
-                statement_recorder=recorder,
-            )
-    finally:
-        adapter.close(connection)
-
-
 def _prepare_custom_virtual_version(
     *,
     runtime: _VirtualBuildRuntime,
@@ -1465,15 +1420,17 @@ def _prepare_custom_virtual_version(
     version_hash: str,
     prepare_version: Callable[[PrepareVersionContext], None],
     run_id: str,
+    schema_prepared: bool = False,
 ) -> None:
     adapter: BaseAdapter = runtime.adapter
     recorder: StatementRecorder = StatementRecorder()
-    adapter.ensure_schema(
-        connection=connection,
-        database=entry.destination.database,
-        schema=entry.destination.schema,
-        statement_recorder=recorder,
-    )
+    if not schema_prepared:
+        adapter.ensure_schema(
+            connection=connection,
+            database=entry.destination.database,
+            schema=entry.destination.schema,
+            statement_recorder=recorder,
+        )
     destination: str = rn.resolve_relation_location_qualified_name(
         adapter=adapter, location=entry.destination
     )

@@ -37,6 +37,7 @@ def execute_function(
     statement_recorder: StatementRecorder,
     run_id: str,
     query_change_tracking: bool,
+    schema_prepared: bool = False,
 ) -> FunctionExecutionResult:
     """Create or replace one SQL function."""
 
@@ -64,12 +65,13 @@ def execute_function(
                 f"Adapter '{type(adapter).__name__}' does not support SQL table functions",
                 code=FUNCTION_TABLE_UNSUPPORTED_CODE,
             )
-        adapter.ensure_schema(
-            connection=connection,
-            database=function_entry.destination.database,
-            schema=function_entry.destination.schema,
-            statement_recorder=statement_recorder,
-        )
+        if not schema_prepared:
+            adapter.ensure_schema(
+                connection=connection,
+                database=function_entry.destination.database,
+                schema=function_entry.destination.schema,
+                statement_recorder=statement_recorder,
+            )
         adapter.create_function(
             connection=connection,
             definition=FunctionDefinition(
@@ -94,6 +96,7 @@ def execute_function(
             query_change_tracking=query_change_tracking,
             warnings=warnings,
             statement_recorder=statement_recorder,
+            schema_prepared=schema_prepared,
         )
         return FunctionExecutionResult(
             function_name=function_entry.name,
@@ -124,6 +127,7 @@ def _try_write_function_fingerprint(
     query_change_tracking: bool,
     warnings: list[str],
     statement_recorder: StatementRecorder,
+    schema_prepared: bool,
 ) -> list[str]:
     if not query_change_tracking:
         return warnings
@@ -141,12 +145,13 @@ def _try_write_function_fingerprint(
         )
         return warnings
     try:
-        adapter.ensure_schema(
-            connection=connection,
-            database=entry.fingerprint_destination.database,
-            schema=fingerprint_schema,
-            statement_recorder=statement_recorder,
-        )
+        if not schema_prepared:
+            adapter.ensure_schema(
+                connection=connection,
+                database=entry.fingerprint_destination.database,
+                schema=fingerprint_schema,
+                statement_recorder=statement_recorder,
+            )
         schema_fp: str = hashlib.sha256(b"").hexdigest()
         fingerprint: Fingerprint = Fingerprint(
             node_type=function_node_type(return_columns=entry.return_columns),

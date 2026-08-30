@@ -747,6 +747,7 @@ class BuildScheduler:
             connection=connection,
             runtime=self._runtime,
             callbacks=self._callbacks,
+            schema_prepared=True,
         )
 
     def _execute_seed_node(self, *, key: CompiledObjectKey, connection: Any) -> SeedExecutionResult:
@@ -784,6 +785,7 @@ class BuildScheduler:
                 statement_recorder=StatementRecorder(),
                 run_id=self._run_id,
                 query_change_tracking=self._query_change_tracking,
+                schema_prepared=True,
             )
         duration: int = int((time.monotonic() - start) * 1000)
         completed_result: SeedExecutionResult = dataclasses.replace(result, duration_ms=duration)
@@ -866,6 +868,7 @@ class BuildScheduler:
             statement_recorder=StatementRecorder(),
             run_id=self._run_id,
             query_change_tracking=self._query_change_tracking,
+            schema_prepared=True,
         )
         duration: int = int((time.monotonic() - start) * 1000)
         return dataclasses.replace(result, duration_ms=duration)
@@ -958,6 +961,7 @@ class BuildScheduler:
                         model_audits=model_audits,
                         run_id=self._run_id,
                         query_change_tracking=self._query_change_tracking,
+                        schema_prepared=True,
                         hook_functions=self._plan.hook_functions,
                         effective_target_name=self._target,
                         effective_vars=self._effective_vars,

@@ -304,6 +304,7 @@ class LoadRuntimeParams:
     use_color: bool = False
     providers: ProviderContainer | None = None
     result_store: Any | None = None
+    schema_prepared: bool = False
 
 
 @dataclass(frozen=True)

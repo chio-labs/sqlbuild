@@ -97,12 +97,13 @@ def execute_snapshot_entry(
 
     try:
         _validate_supported_snapshot(entry)
-        adapter.ensure_schema(
-            connection=connection,
-            database=target_database,
-            schema=target_schema,
-            statement_recorder=statement_recorder,
-        )
+        if not context.schema_prepared:
+            adapter.ensure_schema(
+                connection=connection,
+                database=target_database,
+                schema=target_schema,
+                statement_recorder=statement_recorder,
+            )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
