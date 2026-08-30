@@ -7,6 +7,7 @@ from unittest.mock import Mock
 import pytest
 from _pytest.capture import CaptureResult
 
+from sqlbuild.cli.commands._helpers.entry.parsing import read_selector_files
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.main.entrypoint.entry import _main_with_dependencies, main
 from sqlbuild.cli.commands.models import (
@@ -2397,6 +2398,7 @@ def test_given_plan_select_file_when_running_then_dispatches_file_selectors(
 
     assert exit_code == test_case.expected_exit_code
     assert received_selects == [test_case.expected_select]
+    assert read_selector_files([str(tmp_path / "selectors.txt")]) == ("customers", "payments")
 
 
 @pytest.mark.parametrize(

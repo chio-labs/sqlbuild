@@ -28,6 +28,8 @@ from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
+from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
+from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
 from sqlbuild.virtual.executor.main.build import run_virtual_build as run_virtual_build_pipeline
 from sqlbuild.virtual.executor.models import (
     VirtualBuildExecutionHooks,
@@ -65,6 +67,20 @@ def execute_virtual_build(
         stream=stream,
         use_color=request.use_color,
     )
+    physical_target_name: str | None = resolve_target_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        selected_target=request.selected_target,
+    )
+    unsuffixed_virtual_environment_name: str | None = (
+        resolve_target_config(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+            target_name=physical_target_name,
+        ).state.unsuffixed_virtual_env
+        if physical_target_name is not None
+        else None
+    )
     plan_hook: VirtualBuildPlanHook = VirtualBuildPlanHook(
         stream=stream,
         project_dir=project_dir,
@@ -81,6 +97,10 @@ def execute_virtual_build(
             concurrency=request.concurrency,
             connection_config=connection_config,
             selector_files=request.selector_files,
+            virtual_environment_name=(
+                request.virtual_environment_name or physical_target_name or "default"
+            ),
+            unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
         ),
     )
     cursor_overrides: CursorOverrides = request.cursor_overrides or CursorOverrides()

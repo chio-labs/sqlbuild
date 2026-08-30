@@ -34,9 +34,10 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_build_fragments=(
                 "Execution\n  command      sqb build",
                 "target       dev",
-                "schema       dev",
+                "logical schema dev__dev",
+                "physical schema dev__sqb_physical",
                 "concurrency  8 configured limit",
-                "selected     8 of 8 managed resources",
+                "selected     8 of 8 build resources",
             ),
         )
     ],
@@ -58,15 +59,13 @@ def test_given_wide_virtual_dag_when_building_concurrently_then_physical_schema_
         project_dir=project_dir,
     )
     assert init_result.returncode == 0, init_result.stderr
+    (project_dir / "sqlbuild_local.toml").write_text(
+        f"[settings]\nconcurrency = {test_case.concurrency}\n",
+        encoding="utf-8",
+    )
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=(
-            "--no-color",
-            "build",
-            "--verbose",
-            "--concurrency",
-            str(test_case.concurrency),
-        ),
+        command=("--no-color", "build", "--verbose"),
         project_dir=project_dir,
     )
 

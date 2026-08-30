@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.cli.commands._helpers.build_execution.run_context import write_build_run_context
+from sqlbuild.cli.commands._helpers.build_execution.run_context import (
+    write_build_run_context,
+)
 from sqlbuild.cli.commands._helpers.build_python_nodes.python_lifecycle import (
     prepare_direct_python_lifecycle,
 )
@@ -20,6 +22,7 @@ from sqlbuild.cli.commands.models import (
     BuildCommandRequest,
     BuildExecutionPreparation,
     BuildInvocation,
+    BuildRunContext,
     BuildRunOutcome,
     DirectLifecycleCallbacks,
 )
@@ -64,13 +67,17 @@ def prepare_build_execution(
     if request.verbose or request.debug:
         write_build_run_context(
             stream=invocation.progress_stream,
-            command="sqb build",
-            project=pipeline_result.project,
-            plan=pipeline_result.plan_output,
-            connection_config=invocation.connection_config,
-            concurrency=effective_concurrency,
-            full_refresh=request.full_refresh,
-            selector_files=request.selector_files,
+            context=BuildRunContext(
+                command="sqb build",
+                project=pipeline_result.project,
+                plan=pipeline_result.plan_output,
+                discovered_inputs=invocation.discovered_inputs,
+                python_plan_entries=pipeline_result.python_plan_entries,
+                connection_config=invocation.connection_config,
+                concurrency=effective_concurrency,
+                full_refresh=request.full_refresh,
+                selector_files=request.selector_files,
+            ),
             use_color=invocation.use_color,
         )
     else:

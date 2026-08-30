@@ -56,7 +56,13 @@ def resolve_env_default_concurrency(explicit_concurrency: int | None) -> int | N
     return concurrency
 
 
-def read_selector_files(paths: list[str]) -> SelectorInputs:
+def read_selector_files(paths: list[str]) -> tuple[str, ...]:
+    """Read newline-delimited selectors."""
+
+    return read_selector_file_inputs(paths).selectors
+
+
+def read_selector_file_inputs(paths: list[str]) -> SelectorInputs:
     """Read newline-delimited selectors while retaining file provenance."""
 
     selectors: list[str] = []

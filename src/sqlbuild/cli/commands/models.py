@@ -55,6 +55,7 @@ from sqlbuild.compiler.pipeline.models import (
     ClonePipelineResult,
     CompilePipelineResult,
     ProjectGraph,
+    PythonPlanEntry,
 )
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
@@ -167,6 +168,23 @@ class SelectorInputs:
 
 
 @dataclass(frozen=True)
+class BuildRunContext:
+    """Resolved inputs needed to render one build execution context."""
+
+    command: str
+    project: CompiledProject
+    plan: PlanOutput
+    discovered_inputs: DiscoveredProjectInputs
+    python_plan_entries: tuple[PythonPlanEntry, ...]
+    connection_config: dict[str, object]
+    concurrency: int
+    full_refresh: bool
+    selector_files: tuple[SelectorFileSummary, ...]
+    virtual_logical_schema: str | None = None
+    virtual_physical_schema: str | None = None
+
+
+@dataclass(frozen=True)
 class BuildCommandRequest:
     """CLI inputs for one build command invocation."""
 
@@ -188,7 +206,6 @@ class BuildCommandRequest:
     allow_snapshot_schema_change: bool = False
     concurrency: int | None = None
     select: tuple[str, ...] = ()
-    selector_files: tuple[SelectorFileSummary, ...] = ()
     exclude: tuple[str, ...] = ()
     verbose: bool = False
     debug: bool = False
@@ -202,6 +219,7 @@ class BuildCommandRequest:
     json_output_path: Path | None = None
     event_output_path: Path | None = None
     no_cache: bool = False
+    selector_files: tuple[SelectorFileSummary, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -304,6 +322,8 @@ class VirtualBuildPlanHookConfig:
     concurrency: int | None
     connection_config: dict[str, object] = field(default_factory=dict)
     selector_files: tuple[SelectorFileSummary, ...] = ()
+    virtual_environment_name: str | None = None
+    unsuffixed_virtual_environment_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -323,7 +343,6 @@ class VirtualBuildCliRequest:
     include_python: bool = True
     seed_only: bool = False
     select: tuple[str, ...] = ()
-    selector_files: tuple[SelectorFileSummary, ...] = ()
     exclude: tuple[str, ...] = ()
     fail_fast: bool = False
     allow_snapshot_full_refresh: bool = False
@@ -341,6 +360,7 @@ class VirtualBuildCliRequest:
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
     providers: ProviderContainer | None = None
     no_cache: bool = False
+    selector_files: tuple[SelectorFileSummary, ...] = ()
 
 
 @dataclass(frozen=True)

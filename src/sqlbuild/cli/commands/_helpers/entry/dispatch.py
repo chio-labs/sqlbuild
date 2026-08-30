@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 
 from sqlbuild.cli.commands._helpers.diff.validation import parse_diff_name_range
-from sqlbuild.cli.commands._helpers.entry.parsing import read_selector_files
+from sqlbuild.cli.commands._helpers.entry.parsing import read_selector_file_inputs
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.constants import (
     DBT_INIT_COMMAND,
@@ -60,7 +60,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
     project_dir: Path | None = None if args.project_dir is None else Path(args.project_dir)
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     _configure_diagnostics(args=args, effective_project_dir=effective_project_dir)
-    selector_inputs: SelectorInputs = read_selector_files(args.select_file)
+    selector_inputs: SelectorInputs = read_selector_file_inputs(args.select_file)
     select: tuple[str, ...] = (*tuple(args.select), *selector_inputs.selectors)
     if args.command == CliCommand.COMPILE:
         return handlers.run_compile(
