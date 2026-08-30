@@ -727,6 +727,38 @@ local_only = "present"
             expected_audit_references=(),
         ),
         BuildCompileInputsTestCase(
+            description="preserves default full refresh for templated incremental materialization",
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n'
+                    '[vars]\nmodel_kind = "incremental"\n\n'
+                    '[defaults]\nmaterialized = "${model_kind}"\nfull_refresh = false\n'
+                    'incremental_strategy = "append"\n'
+                ),
+                "models/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None,),
+            expected_model_config_values=(
+                {
+                    "materialized": "incremental",
+                    "full_refresh": False,
+                    "incremental_strategy": "append",
+                },
+            ),
+            expected_model_path_defaults=(None,),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={"model_kind": "incremental"},
+            expected_model_query_sqls=("SELECT 1 AS id",),
+            expected_model_references=((),),
+            expected_audit_references=(),
+        ),
+        BuildCompileInputsTestCase(
             description="maps every supported project default into compile model config",
             repo_files=base_repo_files()
             | {

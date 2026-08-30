@@ -710,11 +710,6 @@ def build_model_config(
         matched_path_default=matched_path_default,
         model_header_values=model_header_values,
     )
-    if (
-        MODEL_FULL_REFRESH_CONFIG_KEY not in model_header_values
-        and layered_values.get("materialized") != MaterializationType.INCREMENTAL
-    ):
-        layered_values.pop(MODEL_FULL_REFRESH_CONFIG_KEY, None)
     validate_model_hook_config(values=layered_values, model_name=model_name)
     raw_hook_values: dict[str, object] = {
         hook_key: layered_values[hook_key]
@@ -766,6 +761,11 @@ def build_model_config(
         run_id=run_id,
     )
     target_resolved_values.update(raw_hook_values)
+    if (
+        MODEL_FULL_REFRESH_CONFIG_KEY not in model_header_values
+        and target_resolved_values.get("materialized") != MaterializationType.INCREMENTAL
+    ):
+        target_resolved_values.pop(MODEL_FULL_REFRESH_CONFIG_KEY, None)
     validate_model_config_has_no_macros(values=target_resolved_values)
     return CompileModelConfig(
         values=target_resolved_values,
