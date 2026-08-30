@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.66.0](https://github.com/chio-labs/sqlbuild/compare/v0.65.6...v0.66.0) (2026-08-30)
+
+
+### Features
+
+* make debug include verbose output ([#414](https://github.com/chio-labs/sqlbuild/issues/414)) ([9a62459](https://github.com/chio-labs/sqlbuild/commit/9a6245941dba3a4f5c53e0f42c7262322ee1c57b))
+
 ## [0.65.6](https://github.com/chio-labs/sqlbuild/compare/v0.65.5...v0.65.6) (2026-08-30)
 
 
