@@ -1476,7 +1476,6 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
             connect_config.setdefault("oauth_enable_refresh_tokens", True)
         elif authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
             connect_config.setdefault("client_store_temporary_credential", True)
-        role: object | None = connect_config.get("role")
         warehouse: object | None = connect_config.get("warehouse")
         database: object | None = connect_config.get("database")
         schema: object | None = connect_config.get("schema")
@@ -1488,7 +1487,6 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
         self._initialize_session(
             connection=connection,
             secondary_roles=secondary_roles,
-            role=role,
             warehouse=warehouse,
             database=database,
             schema=schema,
@@ -2883,18 +2881,14 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
         *,
         connection: _SnowflakeConnection,
         secondary_roles: str,
-        role: object | None,
         warehouse: object | None,
         database: object | None,
         schema: object | None,
     ) -> None:
         statements: list[str] = [f"USE SECONDARY ROLES {secondary_roles}"]
-        normalized_role: str | None = self._normalize_session_value(role)
         normalized_warehouse: str | None = self._normalize_session_value(warehouse)
         normalized_database: str | None = self._normalize_session_value(database)
         normalized_schema: str | None = self._normalize_session_value(schema)
-        if normalized_role is not None:
-            statements.append(f"USE ROLE {normalized_role}")
         if normalized_warehouse is not None:
             statements.append(f"USE WAREHOUSE {normalized_warehouse}")
         if normalized_database is not None:
