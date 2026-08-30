@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.66.1](https://github.com/chio-labs/sqlbuild/compare/v0.66.0...v0.66.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* load empty seed fields as null ([#416](https://github.com/chio-labs/sqlbuild/issues/416)) ([0506f4e](https://github.com/chio-labs/sqlbuild/commit/0506f4e7dd0f813b14e63586510f685ed2a3346b))
+
 ## [0.66.0](https://github.com/chio-labs/sqlbuild/compare/v0.65.6...v0.66.0) (2026-08-30)
 
 
