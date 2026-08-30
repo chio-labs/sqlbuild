@@ -60,3 +60,10 @@ pytest tests/unit/src/sqlbuild/compiler/compile/test_main.py
 - Use concise conventional commit messages, such as `fix: ...`, `feat: ...`, `test: ...`, or `docs: ...`.
 - In pull requests, summarize the behavior change and list the checks you ran.
 - Call out breaking changes, migrations, or compatibility decisions explicitly.
+
+Before creating or editing a pull request, write its description to a file and validate the
+current branch, proposed title, and description locally:
+
+```bash
+make check-pr-metadata PR_TITLE='type: concise summary' PR_BODY_FILE=/path/to/pr-body.md
+```

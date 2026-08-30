@@ -19,6 +19,7 @@ jobs:
     name: Pull Request Metadata
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
+      - uses: actions/checkout@v4
       - name: Resolve pull request metadata
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -35,75 +36,4 @@ jobs:
       - name: Validate branch, title, and description
         env:
           PR_METADATA_PATH: ${{ runner.temp }}/pull-request.json
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          import re
-          import sys
-
-          with open(os.environ["PR_METADATA_PATH"], encoding="utf-8") as metadata_file:
-              payload = json.load(metadata_file)
-          pull_request = payload.get("pull_request", payload)
-          branch = pull_request["head"]["ref"]
-          title = pull_request["title"]
-          body = pull_request.get("body") or ""
-
-          branch_pattern = re.compile(
-              r"^(feat|fix|perf|refactor|test|docs|build|ci|chore|revert)/"
-              r"(?:chi-[0-9]+-)?[a-z0-9]+(?:-[a-z0-9]+)*$"
-          )
-          automation_pattern = re.compile(
-              r"^(release-please--|dependabot/|renovate/|github-actions/|blacksmith-migration-)"
-          )
-          title_pattern = re.compile(
-              r"^(feat|fix|perf|refactor|test|docs|build|ci|chore|revert)"
-              r"(?:\([a-z0-9][a-z0-9-]*\))?!?: [^ ].+$"
-          )
-
-          errors: list[str] = []
-          automated = automation_pattern.match(branch) is not None
-          if not automated and branch_pattern.fullmatch(branch) is None:
-              errors.append(
-                  "Branch must use <type>/<kebab-case> or "
-                  "<type>/chi-<number>-<kebab-case>."
-              )
-          if title_pattern.fullmatch(title) is None:
-              errors.append("PR title must follow Conventional Commits.")
-
-          if not automated:
-              if len(body) > 2_000:
-                  errors.append("PR description must not exceed 2,000 characters.")
-              sections = list(
-                  re.finditer(r"^## (Why|Changes|Verification)\s*$", body, re.MULTILINE)
-              )
-              found = [match.group(1) for match in sections]
-              expected = ["Why", "Changes", "Verification"]
-              if found != expected:
-                  errors.append(
-                      "PR description must contain Why, Changes, and Verification "
-                      "sections in that order."
-                  )
-              else:
-                  for index, match in enumerate(sections):
-                      end = (
-                          sections[index + 1].start()
-                          if index + 1 < len(sections)
-                          else len(body)
-                      )
-                      content = re.sub(
-                          r"<!--.*?-->", "", body[match.end() : end], flags=re.DOTALL
-                      )
-                      if not content.strip():
-                          errors.append(
-                              f"PR description section {match.group(1)} is empty."
-                          )
-
-          if errors:
-              print(f"Invalid pull request metadata for {branch}:", file=sys.stderr)
-              for error in errors:
-                  print(f"- {error}", file=sys.stderr)
-              sys.exit(1)
-
-          print(f"Pull request metadata is valid for {branch}.")
-          PY
+        run: python -m scripts.validate_pr_metadata --metadata-file "${PR_METADATA_PATH}"
