@@ -202,22 +202,25 @@ def test_given_snowflake_adapter_when_getting_inference_profile_then_returns_exp
             expected_session_statements=("USE SECONDARY ROLES ALL",),
         ),
         SnowflakeConnectConfigTestCase(
-            description="disables secondary roles before selecting primary session context",
+            description="programmatic token selects role during authentication without switching it",
             config={
                 "account": "acct",
+                "authenticator": "programmatic_access_token",
+                "token": "secret-token",
                 "role": "DEVELOPER",
                 "warehouse": "DEV_WH",
                 "database": "ANALYTICS",
             },
             expected_connect_kwargs={
                 "account": "acct",
+                "authenticator": "programmatic_access_token",
+                "token": "secret-token",
                 "role": "DEVELOPER",
                 "warehouse": "DEV_WH",
                 "database": "ANALYTICS",
             },
             expected_session_statements=(
                 "USE SECONDARY ROLES NONE",
-                "USE ROLE DEVELOPER",
                 "USE WAREHOUSE DEV_WH",
                 "USE DATABASE ANALYTICS",
             ),
