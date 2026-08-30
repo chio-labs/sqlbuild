@@ -31,6 +31,7 @@ from sqlbuild.virtual.state.models import (
     ReconcileEventRecord,
     SeedVersionRecord,
     SourceFreshnessRecord,
+    StateLockLease,
     StateLockRecord,
     StateOperationEventRecord,
     StateOperationRecord,
@@ -56,6 +57,7 @@ from sqlbuild.virtual.state.types import (
     VirtualEnvironmentStatus,
 )
 from tests.integration.src.sqlbuild.virtual.state.classes._test_types import (
+    ConditionalVirtualRefPublishTestCase,
     DuckDbStateBackendAtomicRefUpdateTestCase,
     DuckDbStateBackendColumnValidationTestCase,
     DuckDbStateBackendConcurrentLockTestCase,
@@ -1108,6 +1110,111 @@ def test_given_duckdb_state_backend_when_atomic_vde_ref_update_fails_then_rolls_
         )
     finally:
         backend.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ConditionalVirtualRefPublishTestCase(
+            description="stale owner cannot publish refs but current owner can",
+            expected_stale_publish=False,
+            expected_owned_publish=True,
+            expected_model_version_hash="version-1",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_lease_ownership_changes_when_publishing_duckdb_refs_then_publish_is_fenced(
+    test_case: ConditionalVirtualRefPublishTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    schema: str = "sqlbuild_state"
+    lock_key: str = "model-version:warehouse:orders:version-1"
+    expires_at: datetime = datetime.now() + timedelta(hours=1)
+    backend.initialize(connection=connection, schema=schema, sqlbuild_version="0.0.test")
+    assert backend.acquire_lock(
+        connection=connection,
+        schema=schema,
+        lock_key=lock_key,
+        owner_id="owner-a",
+        expires_at=expires_at,
+    )
+    stale_lease: StateLockLease = StateLockLease(
+        lock_key=lock_key,
+        owner_id="owner-a",
+        expires_at=expires_at,
+    )
+    assert backend.release_lock(
+        connection=connection,
+        schema=schema,
+        lock_key=lock_key,
+        owner_id="owner-a",
+    )
+    assert backend.acquire_lock(
+        connection=connection,
+        schema=schema,
+        lock_key=lock_key,
+        owner_id="owner-b",
+        expires_at=expires_at,
+    )
+    owned_lease: StateLockLease = StateLockLease(
+        lock_key=lock_key,
+        owner_id="owner-b",
+        expires_at=expires_at,
+    )
+    record: VirtualEnvironmentRecord = VirtualEnvironmentRecord(
+        virtual_environment_name="dev",
+        status=VirtualEnvironmentStatus.FINALIZED,
+    )
+    refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = (
+        VirtualEnvironmentNodeRefRecord(
+            virtual_environment_name="dev",
+            node_type="model",
+            node_name="orders",
+            version_hash=test_case.expected_model_version_hash,
+        ),
+    )
+
+    stale_published: bool = (
+        backend.upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+            connection=connection,
+            schema=schema,
+            record=record,
+            refs_by_node_type={"model": refs},
+            leases=(stale_lease,),
+        )
+    )
+    assert stale_published is test_case.expected_stale_publish
+    assert (
+        backend.get_virtual_environment(
+            connection=connection,
+            schema=schema,
+            virtual_environment_name="dev",
+        )
+        is None
+    )
+
+    owned_published: bool = (
+        backend.upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+            connection=connection,
+            schema=schema,
+            record=record,
+            refs_by_node_type={"model": refs},
+            leases=(owned_lease,),
+        )
+    )
+    assert owned_published is test_case.expected_owned_publish
+    assert (
+        backend.get_virtual_environment_node_refs(
+            connection=connection,
+            schema=schema,
+            virtual_environment_name="dev",
+            node_type="model",
+        )
+        == refs
+    )
+    backend.close(connection)
 
 
 @pytest.mark.parametrize(

@@ -4,6 +4,16 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class ConditionalVirtualRefPublishTestCase:
+    """Expected result when virtual refs are conditionally published under a lease."""
+
+    description: str
+    expected_stale_publish: bool
+    expected_owned_publish: bool
+    expected_model_version_hash: str
+
+
+@dataclass(frozen=True)
 class DuckDbStateBackendLifecycleTestCase:
     description: str
     schema: str

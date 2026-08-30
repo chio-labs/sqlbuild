@@ -22,6 +22,9 @@ from sqlbuild.virtual.state._helpers.state_storage.microbatch_events import (
     read_duckdb_microbatch_scope_history,
 )
 from sqlbuild.virtual.state._helpers.state_storage.validation import build_validation_result
+from sqlbuild.virtual.state.classes._duckdb_conditional_publish import (
+    DuckDbConditionalPublishMixin,
+)
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.constants import (
     CURRENT_STATE_SCHEMA_VERSION,
@@ -98,7 +101,7 @@ from sqlbuild.virtual.state.types import (
 )
 
 
-class DuckDbStateBackend(StateBackend):
+class DuckDbStateBackend(DuckDbConditionalPublishMixin, StateBackend):
     """DuckDB implementation for virtual state."""
 
     def connect(self, config: dict[str, object]) -> Any:

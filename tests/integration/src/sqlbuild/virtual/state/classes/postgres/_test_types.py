@@ -4,6 +4,16 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class PostgresConditionalVirtualRefPublishTestCase:
+    """Expected conditional virtual-ref publication results."""
+
+    description: str
+    expected_stale_publish: bool
+    expected_owned_publish: bool
+    expected_model_version_hash: str
+
+
+@dataclass(frozen=True)
 class PostgresStateBackendLifecycleTestCase:
     description: str
     sqlbuild_version: str

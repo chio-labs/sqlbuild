@@ -72,6 +72,7 @@ from sqlbuild.compiler.python_nodes.models import (
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
@@ -171,6 +172,7 @@ from sqlbuild.virtual.state.models import (
     SeedVersionRecord,
     SourceFreshnessRecord,
     StateBackendConfig,
+    StateLockLease,
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentNodeRefRecord,
@@ -345,11 +347,11 @@ def run_virtual_build(
         schema=runtime.config.schema,
         run_id=rewritten.project.run_id,
     )
-    lease_manager.acquire(
-        entries=plan.executor_plan_output.model_entries,
-        expected_version_hashes=reads.semantics.expected_version_hashes,
-    )
     try:
+        lease_manager.acquire(
+            entries=plan.executor_plan_output.model_entries,
+            expected_version_hashes=reads.semantics.expected_version_hashes,
+        )
         _register_virtual_microbatch_physical_relations(
             runtime=runtime,
             plan_output=plan.executor_plan_output,
@@ -364,6 +366,7 @@ def run_virtual_build(
             python_plan=python_plan,
             exec_hooks=exec_hooks,
             microbatch_lease_check=lease_manager.assert_active,
+            model_version_leases=lease_manager.active_leases,
         )
     finally:
         lease_manager.close()
@@ -440,6 +443,7 @@ def _execute_leased_virtual_build(
     python_plan: _VirtualPythonPlan,
     exec_hooks: VirtualBuildExecutionHooks,
     microbatch_lease_check: Callable[[], None],
+    model_version_leases: tuple[StateLockLease, ...],
 ) -> tuple[
     BuildExecutionResult,
     tuple[PythonNodeExecutionResult, ...],
@@ -507,6 +511,7 @@ def _execute_leased_virtual_build(
             reads=reads,
             plan_output=plan.executor_plan_output,
             result=result,
+            model_version_leases=model_version_leases,
         )
         read_side_results: tuple[PythonNodeExecutionResult, ...] = _run_read_side_python_nodes(
             runtime=runtime,
@@ -1645,6 +1650,7 @@ def _persist_successful_virtual_build(
     reads: _VirtualBuildStateReads,
     plan_output: PlanOutput,
     result: BuildExecutionResult,
+    model_version_leases: tuple[StateLockLease, ...],
 ) -> None:
     semantics: VirtualPlanSemantics = reads.semantics
     names: VirtualEnvironmentNames = runtime.names
@@ -1740,14 +1746,22 @@ def _persist_successful_virtual_build(
             )
             for seed_name, version_hash in sorted(seeds.final_seed_hashes.items())
         )
-        runtime.backend.upsert_virtual_environment_and_replace_node_ref_groups(
-            connection=state_connection,
-            schema=runtime.config.schema,
-            record=virtual_environment_record,
-            refs_by_node_type=_build_node_ref_groups(
-                refs=refs, seed_refs=seed_refs, function_refs=function_refs
-            ),
+        published: bool = (
+            runtime.backend.upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+                connection=state_connection,
+                schema=runtime.config.schema,
+                record=virtual_environment_record,
+                refs_by_node_type=_build_node_ref_groups(
+                    refs=refs, seed_refs=seed_refs, function_refs=function_refs
+                ),
+                leases=model_version_leases,
+            )
         )
+        if not published:
+            raise ExecutorInputError(
+                "virtual incremental physical-version lease ownership was lost before "
+                "model refs could be published"
+            )
         if status == VirtualEnvironmentStatus.FINALIZED and refs:
             create_finalized_virtual_environment_checkpoint(
                 backend=runtime.backend,

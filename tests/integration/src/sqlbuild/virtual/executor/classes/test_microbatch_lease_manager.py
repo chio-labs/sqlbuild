@@ -25,6 +25,7 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
     StateLockRecord,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentNodeRefRecord,
     VirtualEnvironmentRecord,
 )
 from sqlbuild.virtual.state.types import PhysicalArtifactType, VirtualEnvironmentStatus
@@ -276,6 +277,13 @@ def test_given_concurrent_full_refreshes_when_reference_check_blocks_then_versio
         schema="sqlbuild_state",
         run_id="concurrent-b",
     )
+    manager_c: VirtualMicrobatchLeaseManager = VirtualMicrobatchLeaseManager(
+        backend=backend,
+        connection_config=connection_config,
+        warehouse_connection_config={"database": "warehouse.duckdb"},
+        schema="sqlbuild_state",
+        run_id="concurrent-c",
+    )
     entry: ModelPlanEntry = build_virtual_microbatch_lease_entry(
         action=PlanAction.CREATE_TABLE,
         incremental_strategy=test_case.incremental_strategy,
@@ -305,7 +313,69 @@ def test_given_concurrent_full_refreshes_when_reference_check_blocks_then_versio
 
     manager_a.close()
     manager_b.acquire(entries=(entry,), expected_version_hashes={"orders": "F2"})
+    connection = backend.connect(connection_config)
+    try:
+        backend.upsert_physical_relation(
+            connection=connection,
+            schema="sqlbuild_state",
+            record=PhysicalRelationRecord(
+                artifact_type=PhysicalArtifactType.MODEL,
+                artifact_name="orders",
+                version_hash="F2",
+                database_name=None,
+                schema_name="dev__sqb_physical",
+                relation_name="orders__v_f2",
+                relation_type="table",
+            ),
+        )
+    finally:
+        backend.close(connection)
+    publication_fenced: Event = Event()
+    allow_publication: Event = Event()
+    original_record_publish: Callable[..., None] = backend._upsert_virtual_environment_record
+
+    def _blocked_record_publish(**kwargs: Any) -> None:
+        publication_fenced.set()
+        assert allow_publication.wait(timeout=5.0)
+        original_record_publish(**kwargs)
+
+    def _publish_refs() -> bool:
+        publish_connection: Any = backend.connect(connection_config)
+        try:
+            return backend.upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+                connection=publish_connection,
+                schema="sqlbuild_state",
+                record=VirtualEnvironmentRecord(
+                    virtual_environment_name="published",
+                    status=VirtualEnvironmentStatus.FINALIZED,
+                ),
+                refs_by_node_type={
+                    "model": (
+                        VirtualEnvironmentNodeRefRecord(
+                            virtual_environment_name="published",
+                            node_type="model",
+                            node_name="orders",
+                            version_hash="F2",
+                        ),
+                    ),
+                },
+                leases=manager_b.active_leases,
+            )
+        finally:
+            backend.close(publish_connection)
+
+    monkeypatch.setattr(backend, "_upsert_virtual_environment_record", _blocked_record_publish)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        publish_refs: Future[bool] = executor.submit(_publish_refs)
+        assert publication_fenced.wait(timeout=5.0)
+        with pytest.raises(PlannerInputError, match=test_case.expected_conflict_fragment):
+            manager_c.acquire(entries=(entry,), expected_version_hashes={"orders": "F2"})
+        allow_publication.set()
+        assert publish_refs.result(timeout=5.0)
     manager_b.close()
+    with pytest.raises(PlannerInputError, match=test_case.expected_shared_fragment):
+        manager_c.acquire(entries=(entry,), expected_version_hashes={"orders": "F2"})
+    manager_c.close()
     connection = backend.connect(connection_config)
     try:
         remaining_locks: tuple[StateLockRecord, ...] = backend.list_active_locks(

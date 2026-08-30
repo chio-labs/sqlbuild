@@ -133,6 +133,12 @@ class VirtualMicrobatchLeaseManager:
                 "virtual incremental physical-version lease was lost; refusing further target DML"
             )
 
+    @property
+    def active_leases(self) -> tuple[StateLockLease, ...]:
+        """Return the leases that must still be owned when model refs are published."""
+
+        return self._leases
+
     def close(self) -> None:
         self._stop.set()
         if self._thread is not None:

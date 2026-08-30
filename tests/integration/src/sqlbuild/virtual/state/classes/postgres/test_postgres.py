@@ -30,6 +30,7 @@ from sqlbuild.virtual.state.models import (
     ReconcileEventRecord,
     SeedVersionRecord,
     SourceFreshnessRecord,
+    StateLockLease,
     StateLockRecord,
     StateOperationEventRecord,
     StateOperationRecord,
@@ -37,6 +38,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointRecord,
     VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentNodeRefRecord,
     VirtualEnvironmentPythonNodeRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentSeedRefRecord,
@@ -52,6 +54,7 @@ from sqlbuild.virtual.state.types import (
     VirtualEnvironmentStatus,
 )
 from tests.integration.src.sqlbuild.virtual.state.classes.postgres._test_types import (
+    PostgresConditionalVirtualRefPublishTestCase,
     PostgresMicrobatchStateRoundTripTestCase,
     PostgresStateBackendColumnValidationTestCase,
     PostgresStateBackendConcurrentLockTestCase,
@@ -1970,3 +1973,107 @@ def test_given_postgres_state_backend_when_two_connections_acquire_same_lock_the
         assert active_locks[0].owner_id in {test_case.first_owner, test_case.second_owner}
     finally:
         postgres_state_backend.close(second_connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresConditionalVirtualRefPublishTestCase(
+            description="postgres stale owner cannot publish refs but current owner can",
+            expected_stale_publish=False,
+            expected_owned_publish=True,
+            expected_model_version_hash="version-1",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_lease_ownership_changes_when_publishing_postgres_refs_then_publish_is_fenced(
+    test_case: PostgresConditionalVirtualRefPublishTestCase,
+    postgres_state_backend: PostgresStateBackend,
+    postgres_state_connection: Any,
+    postgres_state_schema: str,
+) -> None:
+    postgres_state_backend.initialize(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        sqlbuild_version="0.0.test",
+    )
+    lock_key: str = "model-version:warehouse:orders:version-1"
+    expires_at: datetime = datetime.now() + timedelta(hours=1)
+    assert postgres_state_backend.acquire_lock(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        lock_key=lock_key,
+        owner_id="owner-a",
+        expires_at=expires_at,
+    )
+    stale_lease: StateLockLease = StateLockLease(
+        lock_key=lock_key,
+        owner_id="owner-a",
+        expires_at=expires_at,
+    )
+    assert postgres_state_backend.release_lock(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        lock_key=lock_key,
+        owner_id="owner-a",
+    )
+    assert postgres_state_backend.acquire_lock(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        lock_key=lock_key,
+        owner_id="owner-b",
+        expires_at=expires_at,
+    )
+    owned_lease: StateLockLease = StateLockLease(
+        lock_key=lock_key,
+        owner_id="owner-b",
+        expires_at=expires_at,
+    )
+    record: VirtualEnvironmentRecord = VirtualEnvironmentRecord(
+        virtual_environment_name="dev",
+        status=VirtualEnvironmentStatus.FINALIZED,
+    )
+    refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = (
+        VirtualEnvironmentNodeRefRecord(
+            virtual_environment_name="dev",
+            node_type="model",
+            node_name="orders",
+            version_hash=test_case.expected_model_version_hash,
+        ),
+    )
+
+    stale_published: bool = postgres_state_backend.upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        record=record,
+        refs_by_node_type={"model": refs},
+        leases=(stale_lease,),
+    )
+    assert stale_published is test_case.expected_stale_publish
+    assert (
+        postgres_state_backend.get_virtual_environment(
+            connection=postgres_state_connection,
+            schema=postgres_state_schema,
+            virtual_environment_name="dev",
+        )
+        is None
+    )
+
+    owned_published: bool = postgres_state_backend.upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        record=record,
+        refs_by_node_type={"model": refs},
+        leases=(owned_lease,),
+    )
+    assert owned_published is test_case.expected_owned_publish
+    assert (
+        postgres_state_backend.get_virtual_environment_node_refs(
+            connection=postgres_state_connection,
+            schema=postgres_state_schema,
+            virtual_environment_name="dev",
+            node_type="model",
+        )
+        == refs
+    )

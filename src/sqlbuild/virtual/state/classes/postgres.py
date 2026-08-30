@@ -69,6 +69,7 @@ from sqlbuild.virtual.state.models import (
     SeedVersionRecord,
     SourceFreshnessRecord,
     StateBackupRecord,
+    StateLockLease,
     StateLockRecord,
     StateOperationEventRecord,
     StateOperationRecord,
@@ -1039,6 +1040,43 @@ class PostgresStateBackend(StateBackend):
                     refs_by_node_type=refs_by_node_type,
                 )
                 cursor.execute("COMMIT")
+            except BaseException:
+                cursor.execute("ROLLBACK")
+                raise
+
+    def upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+        self,
+        *,
+        connection: Any,
+        schema: str,
+        record: VirtualEnvironmentRecord,
+        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
+        leases: tuple[StateLockLease, ...],
+    ) -> bool:
+        with connection.cursor() as cursor:
+            cursor.execute("BEGIN")
+            try:
+                lease: StateLockLease
+                for lease in leases:
+                    lock_table: str = self._qualified_name(schema=schema, table=LOCK_TABLE)
+                    cursor.execute(
+                        f"SELECT lock_key FROM {lock_table} "
+                        "WHERE lock_key = %s AND owner_id = %s "
+                        "AND expires_at > CURRENT_TIMESTAMP FOR UPDATE",
+                        [lease.lock_key, lease.owner_id],
+                    )
+                    if cursor.fetchone() is None:
+                        cursor.execute("ROLLBACK")
+                        return False
+                self._upsert_virtual_environment_record(cursor=cursor, schema=schema, record=record)
+                self._replace_virtual_environment_node_ref_groups(
+                    cursor=cursor,
+                    schema=schema,
+                    virtual_environment_name=record.virtual_environment_name,
+                    refs_by_node_type=refs_by_node_type,
+                )
+                cursor.execute("COMMIT")
+                return True
             except BaseException:
                 cursor.execute("ROLLBACK")
                 raise

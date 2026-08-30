@@ -30,6 +30,7 @@ class VirtualConcurrentLeaseTestCase:
     incremental_strategy: str
     incremental_mode: str | None
     expected_conflict_fragment: str = "physical version is already being mutated"
+    expected_shared_fragment: str = "cannot replace a shared physical version"
 
 
 @dataclass(frozen=True)

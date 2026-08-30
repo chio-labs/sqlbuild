@@ -27,6 +27,7 @@ from sqlbuild.virtual.state.models import (
     SeedVersionRecord,
     SourceFreshnessRecord,
     StateBackupRecord,
+    StateLockLease,
     StateLockRecord,
     StateOperationEventRecord,
     StateOperationRecord,
@@ -364,6 +365,17 @@ class FakeStateBackend(StateBackend):
         refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
     ) -> None:
         return None
+
+    def upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        record: VirtualEnvironmentRecord,
+        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
+        leases: tuple[StateLockLease, ...],
+    ) -> bool:
+        return True
 
     def upsert_virtual_environment_node_ref(
         self,
