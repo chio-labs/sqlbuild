@@ -339,7 +339,7 @@ class StateBackend(ABC):
         checkpoint_function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...] = (),
         checkpoint_seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (),
     ) -> bool:
-        """Publish a virtual environment only while every supplied lease is active and owned."""
+        """Validate status/ref/checkpoint input before writes, then publish if leases are owned."""
         ...
 
     @abstractmethod

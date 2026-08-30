@@ -21,7 +21,10 @@ from sqlbuild.microbatches.constants import (
 )
 from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
 from sqlbuild.virtual.state._helpers.state_storage.events import backup_id, event_id
-from sqlbuild.virtual.state._helpers.state_storage.validation import build_validation_result
+from sqlbuild.virtual.state._helpers.state_storage.validation import (
+    build_validation_result,
+    validate_conditional_virtual_environment_publication,
+)
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.constants import (
     CURRENT_STATE_SCHEMA_VERSION,
@@ -1057,6 +1060,14 @@ class PostgresStateBackend(StateBackend):
         checkpoint_function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...] = (),
         checkpoint_seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (),
     ) -> bool:
+        validate_conditional_virtual_environment_publication(
+            record=record,
+            refs_by_node_type=refs_by_node_type,
+            checkpoint=checkpoint,
+            checkpoint_refs=checkpoint_refs,
+            checkpoint_function_refs=checkpoint_function_refs,
+            checkpoint_seed_refs=checkpoint_seed_refs,
+        )
         with connection.cursor() as cursor:
             cursor.execute("BEGIN")
             try:
@@ -1072,11 +1083,6 @@ class PostgresStateBackend(StateBackend):
                     if cursor.fetchone() is None:
                         cursor.execute("ROLLBACK")
                         return False
-                if record.status == VirtualEnvironmentStatus.FINALIZED and checkpoint is None:
-                    raise StateBackendConfigError(
-                        "Finalized conditional virtual environment publication requires "
-                        "a checkpoint"
-                    )
                 self._upsert_virtual_environment_record(cursor=cursor, schema=schema, record=record)
                 self._replace_virtual_environment_node_ref_groups(
                     cursor=cursor,

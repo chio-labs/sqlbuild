@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from sqlbuild.virtual.state._helpers.state_storage.validation import (
+    validate_conditional_virtual_environment_publication,
+)
 from sqlbuild.virtual.state.constants import (
     LOCK_TABLE,
     VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
@@ -11,7 +14,6 @@ from sqlbuild.virtual.state.constants import (
     VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
     VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE,
 )
-from sqlbuild.virtual.state.exceptions import StateBackendConfigError
 from sqlbuild.virtual.state.models import (
     StateLockLease,
     VirtualEnvironmentCheckpointFunctionRefRecord,
@@ -21,7 +23,6 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentNodeRefRecord,
     VirtualEnvironmentRecord,
 )
-from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 
 
 class DuckDbConditionalPublishMixin:
@@ -41,6 +42,14 @@ class DuckDbConditionalPublishMixin:
         checkpoint_seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (),
     ) -> bool:
         backend: Any = cast(Any, self)
+        validate_conditional_virtual_environment_publication(
+            record=record,
+            refs_by_node_type=refs_by_node_type,
+            checkpoint=checkpoint,
+            checkpoint_refs=checkpoint_refs,
+            checkpoint_function_refs=checkpoint_function_refs,
+            checkpoint_seed_refs=checkpoint_seed_refs,
+        )
         connection.execute("BEGIN")
         try:
             lock_table: str = backend._qualified_name(schema=schema, table=LOCK_TABLE)
@@ -55,10 +64,6 @@ class DuckDbConditionalPublishMixin:
                 if owned is None:
                     connection.execute("ROLLBACK")
                     return False
-            if record.status == VirtualEnvironmentStatus.FINALIZED and checkpoint is None:
-                raise StateBackendConfigError(
-                    "Finalized conditional virtual environment publication requires a checkpoint"
-                )
             backend._upsert_virtual_environment_record(
                 connection=connection, schema=schema, record=record
             )

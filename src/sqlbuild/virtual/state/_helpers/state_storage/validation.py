@@ -3,15 +3,27 @@
 from __future__ import annotations
 
 from sqlbuild.virtual.state.constants import STATE_TABLES
+from sqlbuild.virtual.state.exceptions import StateBackendConfigError
 from sqlbuild.virtual.state.models import (
     StateSchemaValidationIssue,
     StateSchemaValidationResult,
+    VirtualEnvironmentCheckpointFunctionRefRecord,
+    VirtualEnvironmentCheckpointModelRefRecord,
+    VirtualEnvironmentCheckpointRecord,
+    VirtualEnvironmentCheckpointSeedRefRecord,
+    VirtualEnvironmentNodeRefRecord,
+    VirtualEnvironmentRecord,
 )
 from sqlbuild.virtual.state.types import (
     StateColumnType,
     StateSchemaValidationIssueKind,
     StateTypeMatcher,
+    VirtualEnvironmentStatus,
 )
+
+_MODEL_NODE_TYPE: str = "model"
+_SEED_NODE_TYPE: str = "seed"
+_FUNCTION_NODE_TYPES: tuple[str, ...] = ("udf", "table_fn")
 
 
 def build_validation_result(
@@ -77,3 +89,136 @@ def build_validation_result(
                         )
                     )
     return StateSchemaValidationResult(issues=tuple(issues))
+
+
+def validate_conditional_virtual_environment_publication(
+    *,
+    record: VirtualEnvironmentRecord,
+    refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
+    checkpoint: VirtualEnvironmentCheckpointRecord | None,
+    checkpoint_refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...],
+    checkpoint_function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...],
+    checkpoint_seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...],
+) -> None:
+    """Validate one conditional environment/ref/checkpoint publication before writes begin."""
+
+    has_checkpoint_payload: bool = checkpoint is not None or bool(
+        checkpoint_refs or checkpoint_function_refs or checkpoint_seed_refs
+    )
+    if record.status == VirtualEnvironmentStatus.FINALIZED and checkpoint is None:
+        raise StateBackendConfigError(
+            "Finalized conditional virtual environment publication requires a checkpoint"
+        )
+    if record.status == VirtualEnvironmentStatus.ACTIVE and has_checkpoint_payload:
+        raise StateBackendConfigError(
+            "Active conditional virtual environment publication forbids checkpoint payloads"
+        )
+    if checkpoint is None:
+        if has_checkpoint_payload:
+            raise StateBackendConfigError("Checkpoint refs require a checkpoint record")
+        _validate_current_ref_groups(record=record, refs_by_node_type=refs_by_node_type)
+        return
+    if checkpoint.virtual_environment_name != record.virtual_environment_name:
+        raise StateBackendConfigError(
+            "Checkpoint virtual_environment_name must match the published environment"
+        )
+
+    _validate_current_ref_groups(record=record, refs_by_node_type=refs_by_node_type)
+    checkpoint_id: str = checkpoint.checkpoint_id
+    _validate_checkpoint_ids(
+        checkpoint_id=checkpoint_id,
+        refs=checkpoint_refs,
+        function_refs=checkpoint_function_refs,
+        seed_refs=checkpoint_seed_refs,
+    )
+    _validate_exact_ref_pairs(
+        label="model",
+        current_pairs=tuple(
+            (ref.node_name, ref.version_hash) for ref in refs_by_node_type.get(_MODEL_NODE_TYPE, ())
+        ),
+        checkpoint_pairs=tuple((ref.model_name, ref.version_hash) for ref in checkpoint_refs),
+    )
+    _validate_exact_ref_pairs(
+        label="function",
+        current_pairs=_current_function_pairs(refs_by_node_type),
+        checkpoint_pairs=tuple(
+            (ref.function_name, ref.version_hash) for ref in checkpoint_function_refs
+        ),
+    )
+    _validate_exact_ref_pairs(
+        label="seed",
+        current_pairs=tuple(
+            (ref.node_name, ref.version_hash) for ref in refs_by_node_type.get(_SEED_NODE_TYPE, ())
+        ),
+        checkpoint_pairs=tuple((ref.seed_name, ref.version_hash) for ref in checkpoint_seed_refs),
+    )
+
+
+def _validate_current_ref_groups(
+    *,
+    record: VirtualEnvironmentRecord,
+    refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
+) -> None:
+    node_type: str
+    refs: tuple[VirtualEnvironmentNodeRefRecord, ...]
+    for node_type, refs in refs_by_node_type.items():
+        identities: list[str] = []
+        ref: VirtualEnvironmentNodeRefRecord
+        for ref in refs:
+            if ref.virtual_environment_name != record.virtual_environment_name:
+                raise StateBackendConfigError(
+                    "Published ref virtual_environment_name must match the environment record"
+                )
+            if ref.node_type != node_type:
+                raise StateBackendConfigError("Published ref node_type must match its ref group")
+            identities.append(ref.node_name)
+        if len(identities) != len(set(identities)):
+            raise StateBackendConfigError(
+                f"Published {node_type} refs contain duplicate identities"
+            )
+
+
+def _current_function_pairs(
+    refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
+) -> tuple[tuple[str, str], ...]:
+    pairs: list[tuple[str, str]] = []
+    node_type: str
+    for node_type in _FUNCTION_NODE_TYPES:
+        ref: VirtualEnvironmentNodeRefRecord
+        for ref in refs_by_node_type.get(node_type, ()):
+            pairs.append((ref.node_name, ref.version_hash))
+    return tuple(pairs)
+
+
+def _validate_checkpoint_ids(
+    *,
+    checkpoint_id: str,
+    refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...],
+    function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...],
+    seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...],
+) -> None:
+    actual_ids: tuple[str, ...] = tuple(
+        ref.checkpoint_id for ref in (*refs, *function_refs, *seed_refs)
+    )
+    if any(actual_id != checkpoint_id for actual_id in actual_ids):
+        raise StateBackendConfigError(
+            "Every checkpoint ref checkpoint_id must match the checkpoint record"
+        )
+
+
+def _validate_exact_ref_pairs(
+    *,
+    label: str,
+    current_pairs: tuple[tuple[str, str], ...],
+    checkpoint_pairs: tuple[tuple[str, str], ...],
+) -> None:
+    current_identities: tuple[str, ...] = tuple(identity for identity, _ in current_pairs)
+    checkpoint_identities: tuple[str, ...] = tuple(identity for identity, _ in checkpoint_pairs)
+    if len(checkpoint_identities) != len(set(checkpoint_identities)):
+        raise StateBackendConfigError(f"Checkpoint {label} refs contain duplicate identities")
+    if len(current_identities) != len(set(current_identities)):
+        raise StateBackendConfigError(f"Published {label} refs contain duplicate identities")
+    if set(current_pairs) != set(checkpoint_pairs):
+        raise StateBackendConfigError(
+            f"Checkpoint {label} refs must exactly match the published {label} refs"
+        )

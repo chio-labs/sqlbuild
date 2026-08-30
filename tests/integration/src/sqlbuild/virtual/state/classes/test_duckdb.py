@@ -61,6 +61,7 @@ from sqlbuild.virtual.state.types import (
 )
 from tests.integration.src.sqlbuild.virtual.state.classes._test_types import (
     AtomicFinalizedVirtualPublishTestCase,
+    ConditionalPublicationPayloadContractTestCase,
     ConditionalVirtualRefPublishTestCase,
     DuckDbStateBackendAtomicRefUpdateTestCase,
     DuckDbStateBackendColumnValidationTestCase,
@@ -84,6 +85,20 @@ from tests.integration.src.sqlbuild.virtual.state.classes._test_types import (
     MicrobatchStateRoundTripTestCase,
 )
 from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
+    ACTIVE_CHECKPOINT_PAYLOAD,
+    ACTIVE_PAYLOAD,
+    CHECKPOINT_DUPLICATE_PAYLOAD,
+    CHECKPOINT_ENVIRONMENT_PAYLOAD,
+    CHECKPOINT_ID_PAYLOAD,
+    FUNCTION_OMISSION_PAYLOAD,
+    MISSING_CHECKPOINT_PAYLOAD,
+    MODEL_VERSION_PAYLOAD,
+    ORPHAN_CHECKPOINT_REFS_PAYLOAD,
+    PUBLISHED_DUPLICATE_PAYLOAD,
+    REF_ENVIRONMENT_PAYLOAD,
+    REF_NODE_TYPE_PAYLOAD,
+    SEED_EXTRA_PAYLOAD,
+    VALID_PAYLOAD,
     fetch_all,
     open_duckdb_state_backend,
 )
@@ -93,6 +108,149 @@ for state_indexes in STATE_TABLE_INDEXES.values():
     for state_index_name in state_indexes:
         EXPECTED_STATE_INDEX_NAMES.append(state_index_name)
 EXPECTED_STATE_INDEX_NAMES.sort()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ConditionalPublicationPayloadContractTestCase(
+            description="duckdb exact finalized payload succeeds",
+            payload=VALID_PAYLOAD,
+            expected_valid=True,
+        ),
+        ConditionalPublicationPayloadContractTestCase(
+            description="duckdb active payload without checkpoint succeeds",
+            payload=ACTIVE_PAYLOAD,
+            expected_valid=True,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_valid_conditional_payload_when_duckdb_publishes_then_contract_succeeds(
+    test_case: ConditionalPublicationPayloadContractTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    backend.initialize(connection=connection, schema="sqb_state", sqlbuild_version="test")
+    assert (
+        backend.upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+            connection=connection,
+            schema="sqb_state",
+            record=test_case.payload.record,
+            refs_by_node_type=test_case.payload.refs_by_node_type,
+            leases=(),
+            checkpoint=test_case.payload.checkpoint,
+            checkpoint_refs=test_case.payload.checkpoint_refs,
+            checkpoint_function_refs=test_case.payload.checkpoint_function_refs,
+            checkpoint_seed_refs=test_case.payload.checkpoint_seed_refs,
+        )
+        is test_case.expected_valid
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ConditionalPublicationPayloadContractTestCase(
+            "duckdb finalized requires checkpoint",
+            MISSING_CHECKPOINT_PAYLOAD,
+            False,
+            "requires a checkpoint",
+        ),
+        ConditionalPublicationPayloadContractTestCase(
+            "duckdb active forbids checkpoint",
+            ACTIVE_CHECKPOINT_PAYLOAD,
+            False,
+            "forbids checkpoint",
+        ),
+        ConditionalPublicationPayloadContractTestCase(
+            "duckdb refs require checkpoint",
+            ORPHAN_CHECKPOINT_REFS_PAYLOAD,
+            False,
+            "refs require a checkpoint",
+        ),
+        ConditionalPublicationPayloadContractTestCase(
+            "duckdb checkpoint environment matches",
+            CHECKPOINT_ENVIRONMENT_PAYLOAD,
+            False,
+            "match the published environment",
+        ),
+        ConditionalPublicationPayloadContractTestCase(
+            "duckdb checkpoint ids match", CHECKPOINT_ID_PAYLOAD, False, "checkpoint_id must match"
+        ),
+        ConditionalPublicationPayloadContractTestCase(
+            "duckdb model refs correspond",
+            MODEL_VERSION_PAYLOAD,
+            False,
+            "model refs must exactly match",
+        ),
+        ConditionalPublicationPayloadContractTestCase(
+            "duckdb function refs have no omissions",
+            FUNCTION_OMISSION_PAYLOAD,
+            False,
+            "function refs must exactly match",
+        ),
+        ConditionalPublicationPayloadContractTestCase(
+            "duckdb seed refs have no extras",
+            SEED_EXTRA_PAYLOAD,
+            False,
+            "seed refs must exactly match",
+        ),
+        ConditionalPublicationPayloadContractTestCase(
+            "duckdb checkpoint refs have no duplicates",
+            CHECKPOINT_DUPLICATE_PAYLOAD,
+            False,
+            "duplicate identities",
+        ),
+        ConditionalPublicationPayloadContractTestCase(
+            "duckdb current refs have no duplicates",
+            PUBLISHED_DUPLICATE_PAYLOAD,
+            False,
+            "duplicate identities",
+        ),
+        ConditionalPublicationPayloadContractTestCase(
+            "duckdb ref environment matches",
+            REF_ENVIRONMENT_PAYLOAD,
+            False,
+            "virtual_environment_name",
+        ),
+        ConditionalPublicationPayloadContractTestCase(
+            "duckdb ref group matches node type",
+            REF_NODE_TYPE_PAYLOAD,
+            False,
+            "node_type must match",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_conditional_payload_when_duckdb_publishes_then_contract_rejects_before_write(
+    test_case: ConditionalPublicationPayloadContractTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    backend.initialize(connection=connection, schema="sqb_state", sqlbuild_version="test")
+    with pytest.raises(StateBackendConfigError, match=test_case.expected_error_fragment or ""):
+        backend.upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+            connection=connection,
+            schema="sqb_state",
+            record=test_case.payload.record,
+            refs_by_node_type=test_case.payload.refs_by_node_type,
+            leases=(),
+            checkpoint=test_case.payload.checkpoint,
+            checkpoint_refs=test_case.payload.checkpoint_refs,
+            checkpoint_function_refs=test_case.payload.checkpoint_function_refs,
+            checkpoint_seed_refs=test_case.payload.checkpoint_seed_refs,
+        )
+
+    assert test_case.expected_valid is False
+    assert (
+        backend.get_virtual_environment(
+            connection=connection,
+            schema="sqb_state",
+            virtual_environment_name=test_case.payload.record.virtual_environment_name,
+        )
+        is None
+    )
 
 
 @pytest.mark.parametrize(

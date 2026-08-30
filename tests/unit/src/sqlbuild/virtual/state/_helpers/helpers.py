@@ -16,6 +16,9 @@ from sqlbuild.microbatches.types import (
     MicrobatchRecordType,
     MicrobatchRunType,
 )
+from sqlbuild.virtual.state._helpers.state_storage.validation import (
+    validate_conditional_virtual_environment_publication,
+)
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
@@ -379,6 +382,14 @@ class FakeStateBackend(StateBackend):
         checkpoint_function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...] = (),
         checkpoint_seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (),
     ) -> bool:
+        validate_conditional_virtual_environment_publication(
+            record=record,
+            refs_by_node_type=refs_by_node_type,
+            checkpoint=checkpoint,
+            checkpoint_refs=checkpoint_refs,
+            checkpoint_function_refs=checkpoint_function_refs,
+            checkpoint_seed_refs=checkpoint_seed_refs,
+        )
         return True
 
     def upsert_virtual_environment_node_ref(
