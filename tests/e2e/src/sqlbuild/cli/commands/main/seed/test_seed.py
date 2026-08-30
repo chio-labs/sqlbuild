@@ -81,6 +81,60 @@ def test_given_waffle_shop_project_when_running_seed_then_seed_data_matches_expe
 @pytest.mark.parametrize(
     "test_case",
     [
+        SeedE2ETestCase(
+            description="empty typed seed fields load as null",
+            expected_exit_code=0,
+            expected_seed_name="nullable_mappings",
+            expected_data=((1, "mapped"), (None, None)),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_empty_typed_seed_fields_when_loading_then_persists_nulls(
+    test_case: SeedE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="nullable_seed_fields",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "nullable_seed_fields"\n'
+                'adapter = "duckdb"\n'
+                'default_target = "dev"\n\n'
+                "[targets.dev]\n"
+                'schema = "main"\n'
+                "[targets.dev.connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "seeds/schema.yml": (
+                "seeds:\n"
+                "  - name: nullable_mappings\n"
+                "    columns:\n"
+                "      - name: mapping_id\n"
+                "        type: INTEGER\n"
+                "      - name: mapping_name\n"
+                "        type: VARCHAR\n"
+            ),
+            "seeds/nullable_mappings.csv": "mapping_id,mapping_name\n1,mapped\n,\n",
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "seed"), project_dir=project_dir
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=f"SELECT mapping_id, mapping_name FROM main.{test_case.expected_seed_name} ORDER BY mapping_id",
+    )
+    assert tuple(tuple(row) for row in rows) == test_case.expected_data
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         VirtualSeedE2ETestCase(
             description="virtual seed command persists VDE seed state",
             expected_seed_rows=((1, 100),),

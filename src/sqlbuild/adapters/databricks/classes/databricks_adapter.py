@@ -21,6 +21,7 @@ from sqlbuild.adapter.contract.classes.microbatch import MicrobatchMixin
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.constants import DIFF_LEFT_SIDE, DIFF_RIGHT_SIDE
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
@@ -2043,7 +2044,7 @@ class DatabricksAdapter(MicrobatchMixin, BaseAdapter):
                     continue
                 rows.append(
                     tuple(
-                        self._normalize_seed_csv_value(
+                        normalize_seed_csv_value(
                             value=row.get(column_name),
                             column_name=column_name,
                             csv_settings=csv_settings,
@@ -2756,22 +2757,6 @@ class DatabricksAdapter(MicrobatchMixin, BaseAdapter):
         if isinstance(value, int):
             return value
         return int(str(value))
-
-    def _normalize_seed_csv_value(
-        self, *, value: str | None, column_name: str, csv_settings: SeedCsvSettings
-    ) -> str | None:
-        if value is None:
-            return None
-        na_values: tuple[object, ...] | dict[str, tuple[object, ...]] | None = (
-            csv_settings.na_values
-        )
-        if isinstance(na_values, dict):
-            column_na_values: tuple[object, ...] = na_values.get(column_name, ())
-            if value in {str(item) for item in column_na_values}:
-                return None
-        if isinstance(na_values, tuple) and value in {str(item) for item in na_values}:
-            return None
-        return value
 
     @staticmethod
     def _snapshot_initial_valid_from_expr(

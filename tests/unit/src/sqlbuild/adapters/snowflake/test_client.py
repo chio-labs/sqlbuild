@@ -1029,6 +1029,11 @@ def test_given_snowflake_query_metadata_when_getting_column_names_then_preserves
             csv_text='id,name\n1,"Liege waffle"\n',
             expected_rows=[("1", "Liege waffle")],
         ),
+        SnowflakeLoadSeedTestCase(
+            description="loads empty seed fields as null",
+            csv_text="id,name\n,\n",
+            expected_rows=[(None, None)],
+        ),
     ],
     ids=lambda case: case.description,
 )

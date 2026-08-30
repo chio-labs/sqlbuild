@@ -12,6 +12,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, ClassVar
 
+from sqlbuild.adapter.contract._helpers.seed_csv import get_seed_csv_null_values
 from sqlbuild.adapter.contract.classes.base_adapter import (
     BaseAdapter,
     _encode_typed_json,
@@ -2437,9 +2438,10 @@ class DuckDbBackedAdapter(BaseAdapter):
         for option_name, option_value in string_options.items():
             if option_value is not None:
                 options.append(f"{option_name}='{self._duckdb_string_literal(option_value)}'")
-        if isinstance(csv_settings.na_values, tuple) and csv_settings.na_values:
+        seed_null_values: tuple[str, ...] = get_seed_csv_null_values(csv_settings)
+        if seed_null_values:
             null_values: str = ", ".join(
-                f"'{self._duckdb_string_literal(str(value))}'" for value in csv_settings.na_values
+                f"'{self._duckdb_string_literal(value)}'" for value in seed_null_values
             )
             options.append(f"nullstr=[{null_values}]")
         if not options:

@@ -36,6 +36,7 @@ from sqlbuild.adapter.contract.constants import (
     QUALIFIED_NAME_SEPARATOR,
 )
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
@@ -1864,7 +1865,7 @@ class PostgresAdapter(MicrobatchMixin, BaseAdapter):
                     continue
                 rows.append(
                     tuple(
-                        self._normalize_seed_csv_value(
+                        normalize_seed_csv_value(
                             value=row.get(col), column_name=col, csv_settings=csv_settings
                         )
                         for col in column_names
@@ -2259,26 +2260,6 @@ class PostgresAdapter(MicrobatchMixin, BaseAdapter):
 
     def normalize_row_diff_numeric_type(self, column_type: str) -> str | None:
         return normalize_numeric_family(type_sql=column_type, dialect=self.sql_analysis_dialect())
-
-    def _normalize_seed_csv_value(
-        self,
-        *,
-        value: str | None,
-        column_name: str,
-        csv_settings: SeedCsvSettings,
-    ) -> str | None:
-        if value is None:
-            return None
-        na_values: tuple[object, ...] | dict[str, tuple[object, ...]] | None = (
-            csv_settings.na_values
-        )
-        if isinstance(na_values, dict):
-            column_na: tuple[object, ...] = na_values.get(column_name, ())
-            if value in {str(item) for item in column_na}:
-                return None
-        if isinstance(na_values, tuple) and value in {str(item) for item in na_values}:
-            return None
-        return value
 
     def render_apply_historical_timestamp_snapshot_changes(
         self,

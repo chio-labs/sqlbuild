@@ -566,6 +566,11 @@ def test_given_composite_keys_and_case_variant_exclusion_when_rendering_merge_th
             csv_text="id,name\n",
             expected_rows=[],
         ),
+        PostgresLoadSeedTestCase(
+            description="loads empty seed fields as null",
+            csv_text="id,name\n,\n",
+            expected_rows=[(None, None)],
+        ),
     ],
     ids=lambda case: case.description,
 )
