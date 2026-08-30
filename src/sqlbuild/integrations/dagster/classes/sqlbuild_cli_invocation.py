@@ -69,6 +69,7 @@ class SqlBuildCliInvocation:
                 executor=executor,
                 source=self.process.stdout,
                 sink=sys.stdout,
+                mirror_sink=sys.__stdout__,
                 context=self._stdout_log_context(),
                 stream_name="stdout",
             )
@@ -76,6 +77,7 @@ class SqlBuildCliInvocation:
                 executor=executor,
                 source=self.process.stderr,
                 sink=sys.stderr,
+                mirror_sink=sys.__stderr__,
                 context=self.context,
                 stream_name="stderr",
             )
@@ -216,6 +218,7 @@ class SqlBuildCliInvocation:
                     executor=executor,
                     source=self.process.stdout,
                     sink=sys.stdout,
+                    mirror_sink=sys.__stdout__,
                     context=self._stdout_log_context(),
                     stream_name="stdout",
                 )
@@ -223,6 +226,7 @@ class SqlBuildCliInvocation:
                     executor=executor,
                     source=self.process.stderr,
                     sink=sys.stderr,
+                    mirror_sink=sys.__stderr__,
                     context=self.context,
                     stream_name="stderr",
                 )

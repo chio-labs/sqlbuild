@@ -97,3 +97,13 @@ class DagsterPythonNodesArtifactE2ETestCase:
     expected_check_names: tuple[str, ...]
     expected_task_group: str
     expected_asset_group: str
+
+
+@dataclass(frozen=True)
+class DagsterComputeLogE2ETestCase:
+    """Test case for multiprocess Dagster compute-log capture."""
+
+    description: str
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_structured_log_fragment: str
+    expected_materialization_fragment: str
