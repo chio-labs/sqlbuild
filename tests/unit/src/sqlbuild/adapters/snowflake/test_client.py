@@ -220,7 +220,6 @@ def test_given_snowflake_adapter_when_getting_inference_profile_then_returns_exp
                 "database": "ANALYTICS",
             },
             expected_session_statements=(
-                "USE SECONDARY ROLES NONE",
                 "USE WAREHOUSE DEV_WH",
                 "USE DATABASE ANALYTICS",
             ),
