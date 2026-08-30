@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.65.1](https://github.com/chio-labs/sqlbuild/compare/v0.65.0...v0.65.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* support restricted Snowflake role sessions ([#402](https://github.com/chio-labs/sqlbuild/issues/402)) ([ce7666b](https://github.com/chio-labs/sqlbuild/commit/ce7666bddbba5b3d48954dadfc6988f4560c1d3c))
+
 ## [0.65.0](https://github.com/chio-labs/sqlbuild/compare/v0.64.0...v0.65.0) (2026-08-30)
 
 
