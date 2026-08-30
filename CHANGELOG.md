@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.66.3](https://github.com/chio-labs/sqlbuild/compare/v0.66.2...v0.66.3) (2026-08-30)
+
+
+### Bug Fixes
+
+* enrich Dagster non-SQL asset descriptions ([#420](https://github.com/chio-labs/sqlbuild/issues/420)) ([b84bc36](https://github.com/chio-labs/sqlbuild/commit/b84bc360a1fdf408dcc786eb8ba24d6bf8dd0608))
+
 ## [0.66.2](https://github.com/chio-labs/sqlbuild/compare/v0.66.1...v0.66.2) (2026-08-30)
 
 
