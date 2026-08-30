@@ -247,6 +247,7 @@ def _start_stream_future(
     executor: ThreadPoolExecutor,
     source: IO[str] | None,
     sink: TextIO,
+    mirror_sink: TextIO | None = None,
     context: Any,
     stream_name: str,
 ) -> Future[str] | None:
@@ -256,12 +257,20 @@ def _start_stream_future(
         _forward_stream,
         source=source,
         sink=sink,
+        mirror_sink=mirror_sink,
         context=context,
         stream_name=stream_name,
     )
 
 
-def _forward_stream(*, source: IO[str], sink: TextIO, context: Any, stream_name: str) -> str:
+def _forward_stream(
+    *,
+    source: IO[str],
+    sink: TextIO,
+    mirror_sink: TextIO | None,
+    context: Any,
+    stream_name: str,
+) -> str:
     captured: list[str] = []
     logger: Any | None = getattr(context, "log", None) if context is not None else None
     try:
@@ -269,6 +278,11 @@ def _forward_stream(*, source: IO[str], sink: TextIO, context: Any, stream_name:
             captured.append(chunk)
             sink.write(chunk)
             sink.flush()
+            if mirror_sink is not None and not _streams_share_file_descriptor(
+                first=sink, second=mirror_sink
+            ):
+                mirror_sink.write(chunk)
+                mirror_sink.flush()
             if logger is None:
                 continue
             line: str = chunk.rstrip("\r\n")
@@ -279,6 +293,15 @@ def _forward_stream(*, source: IO[str], sink: TextIO, context: Any, stream_name:
     finally:
         source.close()
     return "".join(captured)
+
+
+def _streams_share_file_descriptor(*, first: TextIO, second: TextIO) -> bool:
+    if first is second:
+        return True
+    try:
+        return first.fileno() == second.fileno()
+    except (AttributeError, OSError):
+        return False
 
 
 def _write_selector_file(selectors: tuple[str, ...]) -> Path:

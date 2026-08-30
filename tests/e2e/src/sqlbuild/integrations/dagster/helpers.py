@@ -310,3 +310,51 @@ _CHECK_EVALUATION_COLLECTORS: MappingProxyType[
     bool,
     Callable[[defaultdict[AssetKey, dict[str, AssetCheckSeverity]], AssetCheckEvaluation], None],
 ] = MappingProxyType({False: _record_failed_check, True: _ignore_passed_check})
+
+
+def dagster_compute_log_job_source(*, root: Path) -> str:
+    """Return a reconstructable multiprocess Dagster job for compute-log verification."""
+
+    return f"""from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+import dagster as dg
+from sqlbuild.integrations.dagster import SqlBuildCliResource
+
+ROOT = Path({str(root)!r})
+DAG_PATH = ROOT / "sqlbuild_dag.json"
+DAG_PATH.write_text(json.dumps({{
+    "version": 1,
+    "project_name": "stdout_e2e",
+    "nodes": [{{"id": "model:orders", "kind": "model", "name": "orders", "asset_key": ["orders"]}}],
+    "edges": [],
+    "checks": [],
+}}))
+COMMAND = ROOT / "emit_output.py"
+COMMAND.write_text(
+    "import json, os, sys\\n"
+    "from pathlib import Path\\n"
+    "event = {{'version': 1, 'command': 'build', 'event': 'asset', "
+    "'asset': {{'kind': 'model', 'name': 'orders', 'status': 'success'}}}}\\n"
+    "Path(os.environ['SQLBUILD_EXECUTION_EVENT_PATH']).write_text(json.dumps(event) + '\\\\n')\\n"
+    "sys.stdout.write('PROGRESS LINE\\\\n    SELECT * FROM important_table;\\\\n')\\n"
+    "sys.stdout.flush()\\n"
+    "payload = {{'version': 1, 'command': 'build', 'status': 'success', "
+    "'summary': {{'success_count': 1}}, 'assets': [event['asset']], 'checks': []}}\\n"
+    "Path(sys.argv[sys.argv.index('--json-output') + 1]).write_text(json.dumps(payload))\\n"
+)
+
+@dg.multi_asset(specs=[dg.AssetSpec("orders")])
+def sqlbuild_assets(context):
+    resource = SqlBuildCliResource(
+        project_dir=str(ROOT),
+        dag_path=str(DAG_PATH),
+        sqb_command=[sys.executable, str(COMMAND)],
+    )
+    yield from resource.cli(["build", "--verbose"], context=context).stream()
+
+defs = dg.Definitions(assets=[sqlbuild_assets], jobs=[dg.define_asset_job("stdout_capture_job")])
+"""
