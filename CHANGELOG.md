@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.66.5](https://github.com/chio-labs/sqlbuild/compare/v0.66.4...v0.66.5) (2026-08-30)
+
+
+### Bug Fixes
+
+* add bounded build runtime diagnostics ([#425](https://github.com/chio-labs/sqlbuild/issues/425)) ([e7b0714](https://github.com/chio-labs/sqlbuild/commit/e7b0714fd6aeda4512d34e15e171d6fc1761f8e7))
+
 ## [0.66.4](https://github.com/chio-labs/sqlbuild/compare/v0.66.3...v0.66.4) (2026-08-30)
 
 
