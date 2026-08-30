@@ -28,11 +28,6 @@ max_positional_args = 1
 
 [[rule_exceptions]]
 rule = "FFR309"
-path = "src/sqlbuild/adapter/contract/__init__.py"
-reason = "The adapter contract intentionally owns overrideable behavior through its class hierarchy rather than function entrypoints."
-
-[[rule_exceptions]]
-rule = "FFR309"
 path = "src/sqlbuild/adapters/bigquery/__init__.py"
 reason = "The BigQuery backend intentionally owns behavior through its adapter class rather than function entrypoints."
 

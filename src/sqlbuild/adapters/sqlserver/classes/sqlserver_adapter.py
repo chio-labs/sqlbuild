@@ -31,6 +31,7 @@ from sqlbuild.adapter.contract.exceptions import (
     AdapterUserError,
     UnsupportedTypedSqlRenderingError,
 )
+from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
@@ -71,7 +72,6 @@ from sqlbuild.adapters.sqlserver.constants import (
     DIFF_DATETIME_PRECISION_TYPES,
     DIFF_NUMERIC_PRECISION_TYPES,
     DIFF_UNSUPPORTED_COMPARISON_TYPES,
-    EMPTY_SEED_VALUE,
     INFORMATION_SCHEMA_NULLABLE_VALUE,
     INTEGER_TYPE_TOKEN,
 )
@@ -2877,7 +2877,9 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
                     continue
                 rows.append(
                     tuple(
-                        self._normalize_sqlserver_seed_csv_value(row.get(col))
+                        normalize_seed_csv_value(
+                            value=row.get(col), column_name=col, csv_settings=csv_settings
+                        )
                         for col in column_names
                     )
                 )
@@ -2889,8 +2891,3 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
             cursor.executemany(insert_sql, rows)
         finally:
             cursor.close()
-
-    def _normalize_sqlserver_seed_csv_value(self, value: str | None) -> object:
-        if value is None or value == EMPTY_SEED_VALUE:
-            return None
-        return value
