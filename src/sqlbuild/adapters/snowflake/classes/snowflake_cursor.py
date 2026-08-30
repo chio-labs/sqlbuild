@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from types import TracebackType
@@ -13,7 +14,7 @@ from uuid import uuid4
 from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.cost.classes.statement_ledger import StatementLedger
 from sqlbuild.cost.constants import SQLBUILD_QUERY_TAG_APP
-from sqlbuild.cost.models import CostResourceContext
+from sqlbuild.cost.models import CostResourceContext, StatementExecutionTelemetry
 
 _LOGGER: logging.Logger = logging.getLogger("sqlbuild.cost")
 _QUERY_TAG_PARAMETER: str = "QUERY_TAG"
@@ -77,6 +78,7 @@ class _SnowflakeCursor:
         query_tag_injected: bool,
     ) -> Any:
         started_at: datetime = datetime.now(UTC)
+        started_monotonic: float = time.monotonic()
         previous_query_id: str | None = _current_query_id(cursor=self.raw_cursor)
         try:
             result: Any = operation(sql, *args, **kwargs)
@@ -103,6 +105,7 @@ class _SnowflakeCursor:
                         context=context,
                         sql=sql,
                         started_at=started_at,
+                        started_monotonic=started_monotonic,
                         error=retry_error,
                         previous_query_id=previous_query_id,
                         statement_id=statement_id,
@@ -112,6 +115,7 @@ class _SnowflakeCursor:
                     context=context,
                     sql=sql,
                     started_at=started_at,
+                    started_monotonic=started_monotonic,
                     previous_query_id=previous_query_id,
                     statement_id=statement_id,
                 )
@@ -121,6 +125,7 @@ class _SnowflakeCursor:
                     context=context,
                     sql=sql,
                     started_at=started_at,
+                    started_monotonic=started_monotonic,
                     error=error,
                     previous_query_id=previous_query_id,
                     statement_id=statement_id,
@@ -131,6 +136,7 @@ class _SnowflakeCursor:
                 context=context,
                 sql=sql,
                 started_at=started_at,
+                started_monotonic=started_monotonic,
                 previous_query_id=previous_query_id,
                 statement_id=statement_id,
             )
@@ -157,21 +163,31 @@ class _SnowflakeCursor:
         context: CostResourceContext,
         sql: str,
         started_at: datetime,
+        started_monotonic: float,
         error: Exception,
         previous_query_id: str | None,
         statement_id: str,
     ) -> None:
+        completed_at: datetime = datetime.now(UTC)
+        elapsed_seconds: float = time.monotonic() - started_monotonic
+        query_id: str | None = _submitted_query_id(
+            cursor=self.raw_cursor, previous_query_id=previous_query_id
+        )
         StatementLedger.record(
             context=context,
             statement_id=statement_id,
             sql=sql,
-            query_id=_submitted_query_id(
-                cursor=self.raw_cursor, previous_query_id=previous_query_id
-            ),
+            query_id=query_id,
             status="failed",
             started_at=started_at,
-            completed_at=datetime.now(UTC),
+            completed_at=completed_at,
             error=error,
+        )
+        _notify_statement_complete(
+            context=context,
+            query_id=query_id,
+            status="failed",
+            elapsed_seconds=elapsed_seconds,
         )
 
     def _record_success(
@@ -180,19 +196,29 @@ class _SnowflakeCursor:
         context: CostResourceContext,
         sql: str,
         started_at: datetime,
+        started_monotonic: float,
         previous_query_id: str | None,
         statement_id: str,
     ) -> None:
+        completed_at: datetime = datetime.now(UTC)
+        elapsed_seconds: float = time.monotonic() - started_monotonic
+        query_id: str | None = _submitted_query_id(
+            cursor=self.raw_cursor, previous_query_id=previous_query_id
+        )
         StatementLedger.record(
             context=context,
             statement_id=statement_id,
             sql=sql,
-            query_id=_submitted_query_id(
-                cursor=self.raw_cursor, previous_query_id=previous_query_id
-            ),
+            query_id=query_id,
             status="success",
             started_at=started_at,
-            completed_at=datetime.now(UTC),
+            completed_at=completed_at,
+        )
+        _notify_statement_complete(
+            context=context,
+            query_id=query_id,
+            status="success",
+            elapsed_seconds=elapsed_seconds,
         )
 
     def __getattr__(self, name: str) -> Any:
@@ -264,3 +290,28 @@ def _submitted_query_id(*, cursor: Any, previous_query_id: str | None) -> str | 
 def _current_query_id(*, cursor: Any) -> str | None:
     query_id: object = getattr(cursor, "sfqid", None)
     return query_id if isinstance(query_id, str) and query_id else None
+
+
+def _notify_statement_complete(
+    *,
+    context: CostResourceContext,
+    query_id: str | None,
+    status: str,
+    elapsed_seconds: float,
+) -> None:
+    callback: Callable[[StatementExecutionTelemetry], None] | None = context.on_statement_complete
+    if callback is None:
+        return
+    try:
+        callback(
+            StatementExecutionTelemetry(
+                query_id=query_id,
+                status=status,
+                elapsed_seconds=elapsed_seconds,
+                resource_type=context.resource_type,
+                resource_name=context.resource_name,
+                phase=context.phase,
+            )
+        )
+    except BaseException:
+        _LOGGER.exception("Snowflake statement completion diagnostics failed")

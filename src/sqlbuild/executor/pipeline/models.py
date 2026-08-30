@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
@@ -20,3 +21,13 @@ class ResolvedBuildInputs:
     callbacks: BuildCallbacks
     customizations: BuildCustomizations
     initial_state: BuildInitialState
+
+
+@dataclass(frozen=True)
+class BuildConnectionPreparation:
+    """Disjoint connection and schema preparation results."""
+
+    scheduler_connection: Any
+    worker_connections: tuple[Any, ...]
+    connection_seconds: float
+    schema_seconds: float | None

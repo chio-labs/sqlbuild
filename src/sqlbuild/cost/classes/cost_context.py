@@ -1,5 +1,6 @@
 """Run-cost execution context."""
 
+from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 
@@ -7,7 +8,7 @@ from sqlbuild.cost._helpers.context import (
     cost_resource_context,
     current_cost_resource_context,
 )
-from sqlbuild.cost.models import CostResourceContext
+from sqlbuild.cost.models import CostResourceContext, StatementExecutionTelemetry
 
 
 class CostContext:
@@ -24,7 +25,9 @@ class CostContext:
         ledger_path: Path | None = None,
         phase: str = "execute",
         attempt: int = 1,
+        on_statement_complete: Callable[[StatementExecutionTelemetry], None] | None = None,
     ) -> AbstractContextManager[None]:
+        current: CostResourceContext | None = CostContext.current()
         return cost_resource_context(
             run_id=run_id,
             resource_type=resource_type,
@@ -32,6 +35,11 @@ class CostContext:
             ledger_path=ledger_path,
             phase=phase,
             attempt=attempt,
+            on_statement_complete=(
+                on_statement_complete
+                if on_statement_complete is not None
+                else (None if current is None else current.on_statement_complete)
+            ),
         )
 
     @staticmethod
@@ -52,4 +60,5 @@ class CostContext:
             ledger_path=current.ledger_path,
             phase=current.phase if phase is None else phase,
             attempt=attempt,
+            on_statement_complete=current.on_statement_complete,
         )

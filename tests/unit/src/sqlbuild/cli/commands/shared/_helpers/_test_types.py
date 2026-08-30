@@ -149,6 +149,13 @@ class PlanningProgressTestCase:
 
 
 @dataclass(frozen=True)
+class RuntimeDiagnosticsTestCase:
+    description: str
+    expected_fragments: tuple[str, ...]
+    expected_absent_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class PlanningCompletionMessageTestCase:
     description: str
     message: str

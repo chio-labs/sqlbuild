@@ -43,3 +43,13 @@ class QueryTagPolicyTestCase:
     expected_calls: int
     expected_query_id: str | None
     expected_status: str
+
+
+@dataclass(frozen=True)
+class StatementDiagnosticsTestCase:
+    description: str
+    expected_query_id: str
+    expected_status: str
+    expected_resource_type: str
+    expected_resource_name: str
+    expected_phase: str

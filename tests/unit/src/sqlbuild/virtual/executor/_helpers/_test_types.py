@@ -95,3 +95,19 @@ class MissingRollbackSeedRelationTestCase:
     description: str
     final_seed_hashes: dict[str, str]
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class VirtualPhaseTimingTestCase:
+    description: str
+    clock_values: tuple[float, ...]
+    expected_compile_seconds: float
+    expected_planning_seconds: float
+    expected_total_seconds: float
+
+
+@dataclass(frozen=True)
+class VirtualStatementScopeTestCase:
+    description: str
+    expected_phases: tuple[str, ...]
+    expected_callback_count: int

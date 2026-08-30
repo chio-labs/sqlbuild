@@ -309,6 +309,19 @@ class BuildRunOutcome:
 
 
 @dataclass(frozen=True)
+class BuildPhaseTimings:
+    """Final monotonic phase durations for verbose build output."""
+
+    compile_seconds: float | None = None
+    planning_seconds: float | None = None
+    connection_preparation_seconds: float | None = None
+    schema_preparation_seconds: float | None = None
+    execution_seconds: float | None = None
+    cost_collection_seconds: float | None = None
+    total_seconds: float | None = None
+
+
+@dataclass(frozen=True)
 class VirtualBuildPlanHookConfig:
     """Rendering, safety, and header options for the virtual build plan hook."""
 
@@ -361,6 +374,7 @@ class VirtualBuildCliRequest:
     providers: ProviderContainer | None = None
     no_cache: bool = False
     selector_files: tuple[SelectorFileSummary, ...] = ()
+    command_started_at: float | None = None
 
 
 @dataclass(frozen=True)

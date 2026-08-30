@@ -3,22 +3,23 @@
 from __future__ import annotations
 
 import sys
+import time
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.cli.commands._helpers.build_execution.checks import run_post_build_python_checks
+from sqlbuild.cli.commands._helpers.build_execution.completion import complete_direct_build
 from sqlbuild.cli.commands._helpers.build_execution.execution import (
     execute_build_plan,
     prepare_build_execution,
 )
-from sqlbuild.cli.commands._helpers.build_execution.no_work import (
-    finalize_no_work_build_if_needed,
-)
 from sqlbuild.cli.commands._helpers.build_execution.outputs import (
-    resolve_build_exit_code,
-    write_build_completion_output,
     write_build_plan_text,
-    write_build_runtime_targets,
+)
+from sqlbuild.cli.commands._helpers.build_execution.phase_timings import (
+    finalize_exceptional_with_timings,
+    finalize_no_work_with_timings,
+    write_partial_build_phase_timings,
 )
 from sqlbuild.cli.commands._helpers.build_planning.compile_target import write_build_compile_target
 from sqlbuild.cli.commands._helpers.build_planning.defer_clone import (
@@ -31,7 +32,6 @@ from sqlbuild.cli.commands._helpers.build_planning.invocation import resolve_bui
 from sqlbuild.cli.commands._helpers.build_planning.planning import compile_build_plan
 from sqlbuild.cli.commands._helpers.cost.collection import (
     finalize_build_cost,
-    render_build_cost,
 )
 from sqlbuild.cli.commands.main.execution._virtual_build import run_virtual_build
 from sqlbuild.cli.commands.models import (
@@ -44,8 +44,9 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.cost.classes.cost_context import CostContext
-from sqlbuild.cost.models import CostRunRecord
 from sqlbuild.cost.types import CostStatus
+from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
+from sqlbuild.diagnostics.main.process_resource_reporting import process_resource_reporting
 from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult
 from sqlbuild.provider.main.session import build_provider_session
 
@@ -53,6 +54,25 @@ from sqlbuild.provider.main.session import build_provider_session
 def run_build(request: BuildCommandRequest) -> int:
     """Execute the build command."""
 
+    timing_tracker: BuildPhaseTimingTracker = BuildPhaseTimingTracker()
+    with process_resource_reporting(enabled=request.debug), timing_tracker.scope():
+        try:
+            return _run_build(request=request)
+        except BaseException:
+            if request.verbose or request.debug:
+                try:
+                    write_partial_build_phase_timings(
+                        stream=sys.stderr,
+                        timings=timing_tracker.snapshot(),
+                        use_color=False,
+                    )
+                except BaseException:
+                    pass
+            raise
+
+
+def _run_build(*, request: BuildCommandRequest) -> int:
+    command_started_at: float = time.monotonic()
     invocation: BuildInvocation = resolve_build_invocation(request=request)
     provider_session: Any = build_provider_session(
         discovered_providers=invocation.discovered_inputs.providers
@@ -95,6 +115,7 @@ def run_build(request: BuildCommandRequest) -> int:
                     json_output_path=request.json_output_path,
                     use_color=invocation.use_color,
                     providers=provider_session.providers,
+                    command_started_at=command_started_at,
                 ),
             )
         if invocation.effective_defer_clone_from is not None:
@@ -124,10 +145,11 @@ def run_build(request: BuildCommandRequest) -> int:
             invocation=invocation,
             pipeline_result=pipeline_result,
         )
-        if finalize_no_work_build_if_needed(
+        if finalize_no_work_with_timings(
             request=request,
             invocation=invocation,
             pipeline_result=pipeline_result,
+            command_started_at=command_started_at,
         ):
             return 0
         build_started_at: datetime = datetime.now(UTC)
@@ -160,54 +182,25 @@ def run_build(request: BuildCommandRequest) -> int:
                 providers=provider_session.providers,
             )
         except BaseException as error:
-            _ = _finalize_exceptional_direct_cost(
+            _ = finalize_exceptional_with_timings(
+                request=request,
                 invocation=invocation,
                 pipeline_result=pipeline_result,
                 build_started_at=build_started_at,
+                command_started_at=command_started_at,
                 error=error,
             )
             raise
-        build_completed_at: datetime = datetime.now(UTC)
-        exit_code: int = resolve_build_exit_code(outcome=outcome, check_results=check_results)
-        write_build_runtime_targets(
-            invocation=invocation,
-            pipeline_result=pipeline_result,
-            outcome=outcome,
-            check_results=check_results,
-        )
-        cost_record: CostRunRecord | None = finalize_build_cost(
-            BuildCostFinalization(
-                project_dir=invocation.effective_project_dir,
-                adapter_name=invocation.adapter_name,
-                adapter=invocation.adapter,
-                connection_config=invocation.connection_config,
-                target_name=pipeline_result.project.effective_target_name,
-                target_database=pipeline_result.project.effective_target_database,
-                run_id=pipeline_result.project.run_id,
-                build_status="success" if exit_code == 0 else "failed",
-                started_at=build_started_at,
-                completed_at=build_completed_at,
-                config=invocation.discovered_inputs.project_config.cost,
-                output_stream=invocation.progress_stream,
-                use_color=invocation.use_color,
-                render=False,
-            )
-        )
-        write_build_completion_output(
+        return complete_direct_build(
             request=request,
             invocation=invocation,
             pipeline_result=pipeline_result,
             preparation=preparation,
             outcome=outcome,
             check_results=check_results,
-            cost_record=cost_record,
+            build_started_at=build_started_at,
+            command_started_at=command_started_at,
         )
-        _ = render_build_cost(
-            record=cost_record,
-            output_stream=invocation.progress_stream,
-            use_color=invocation.use_color,
-        )
-        return exit_code
     finally:
         provider_session.close()
 
@@ -270,37 +263,3 @@ def _execute_direct_build(
         finally:
             preparation.callbacks.close()
     return preparation, outcome, check_results
-
-
-def _finalize_exceptional_direct_cost(
-    *,
-    invocation: BuildInvocation,
-    pipeline_result: CompilePipelineResult,
-    build_started_at: datetime,
-    error: BaseException,
-) -> None:
-    interrupted: bool = isinstance(error, KeyboardInterrupt)
-    try:
-        _ = finalize_build_cost(
-            BuildCostFinalization(
-                project_dir=invocation.effective_project_dir,
-                adapter_name=invocation.adapter_name,
-                adapter=invocation.adapter,
-                connection_config=invocation.connection_config,
-                target_name=pipeline_result.project.effective_target_name,
-                target_database=pipeline_result.project.effective_target_database,
-                run_id=pipeline_result.project.run_id,
-                build_status="interrupted" if interrupted else "failed",
-                started_at=build_started_at,
-                completed_at=datetime.now(UTC),
-                config=invocation.discovered_inputs.project_config.cost,
-                output_stream=invocation.progress_stream,
-                use_color=invocation.use_color,
-                collect=not interrupted,
-                render=False,
-                cost_status=CostStatus.PARTIAL,
-                cost_message="Build was interrupted before cost collection completed.",
-            )
-        )
-    except BaseException:
-        return

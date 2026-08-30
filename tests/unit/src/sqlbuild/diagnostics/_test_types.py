@@ -19,3 +19,14 @@ class DiagnosticsContextualSqlTestCase:
     sql: str
     context: dict[str, str]
     expected_console_fragment: str
+
+
+@dataclass(frozen=True)
+class ProcessResourceTestCase:
+    description: str
+    monotonic_values: tuple[float, float]
+    resource_values: tuple[tuple[float, float, int | None], ...]
+    expected_wall_seconds: float
+    expected_user_cpu_seconds: float
+    expected_system_cpu_seconds: float
+    expected_max_rss_bytes: int | None

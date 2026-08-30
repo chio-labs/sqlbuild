@@ -38,6 +38,13 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "physical schema dev__sqb_physical",
                 "concurrency  8 configured limit",
                 "selected     8 of 8 build resources",
+                "Scheduler  ",
+                "Phase timings",
+                "connection preparation",
+                "schema preparation",
+                "execution",
+                "cost collection",
+                "total",
             ),
         )
     ],
