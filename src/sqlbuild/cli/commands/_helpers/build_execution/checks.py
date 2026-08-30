@@ -12,6 +12,7 @@ from sqlbuild.cli.commands._helpers.check.core import (
 )
 from sqlbuild.cli.commands.models import (
     BuildCommandRequest,
+    BuildExecutionPreparation,
     BuildInvocation,
     BuildRunOutcome,
 )
@@ -22,6 +23,7 @@ from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.python_nodes.main.checks import execute_python_checks
 from sqlbuild.executor.python_nodes.models import (
+    PythonCheckCallbacks,
     PythonCheckExecutionResult,
     PythonNodeRunState,
     PythonNodeRuntime,
@@ -35,6 +37,7 @@ def run_post_build_python_checks(
     pipeline_result: CompilePipelineResult,
     outcome: BuildRunOutcome,
     providers: Any,
+    preparation: BuildExecutionPreparation,
 ) -> tuple[PythonCheckExecutionResult, ...]:
     """Execute relevant python check functions after a successful build."""
 
@@ -90,6 +93,9 @@ def run_post_build_python_checks(
                 providers=providers,
             ),
             run_state=check_run_state,
+            callbacks=PythonCheckCallbacks(
+                on_check_complete=preparation.callbacks.write_execution_event,
+            ),
         )
     finally:
         invocation.adapter.close(check_connection)

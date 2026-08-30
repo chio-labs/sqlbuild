@@ -11,7 +11,10 @@ from sqlbuild.cli.commands.models import (
     SeedInvocation,
     SeedRunOutcome,
 )
+from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
+from sqlbuild.cli.output.main._build_item_execution_event import format_build_item_execution_event
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
+from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.build.types import ExecutionStatus
 from sqlbuild.executor.pipeline.main.run import run_seed_pipeline
@@ -25,6 +28,7 @@ def execute_seed_plan(
     """Execute compiled seed entries."""
 
     start: float = time.monotonic()
+    event_writer: ExecutionEventWriter = ExecutionEventWriter()
     on_complete: Callable[[SeedExecutionResult], None] = _build_on_complete(
         stream=invocation.progress_stream,
         use_color=invocation.use_color,
@@ -35,6 +39,8 @@ def execute_seed_plan(
             )
         },
         total_count=len(preparation.pipeline_result.plan_output.seed_entries),
+        event_writer=event_writer,
+        plan=preparation.pipeline_result.plan_output,
     )
     execution_connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=invocation.adapter_name,
@@ -42,31 +48,40 @@ def execute_seed_plan(
         blank_line_after_complete=True,
         use_color=invocation.use_color,
     )
-    results: tuple[SeedExecutionResult, ...] = run_seed_pipeline(
-        plan=preparation.pipeline_result.plan_output,
-        connection_config=invocation.connection_config,
-        adapter=invocation.adapter,
-        max_concurrency=preparation.effective_concurrency,
-        run_id=preparation.pipeline_result.project.run_id,
-        query_change_tracking=preparation.pipeline_result.project.settings.query_change_tracking,
-        on_seed_complete=on_complete,
-        on_connection_start=execution_connection_progress.on_connection_start,
-        on_connection_complete=lambda connection_count, elapsed_seconds: (
-            execution_connection_progress.on_connection_complete(
-                connection_count=connection_count, elapsed_seconds=elapsed_seconds
-            )
-        ),
-        on_connection_error=lambda connection_count, elapsed_seconds: (
-            execution_connection_progress.on_connection_error(
-                connection_count=connection_count, elapsed_seconds=elapsed_seconds
-            )
-        ),
-    )
+    try:
+        results: tuple[SeedExecutionResult, ...] = run_seed_pipeline(
+            plan=preparation.pipeline_result.plan_output,
+            connection_config=invocation.connection_config,
+            adapter=invocation.adapter,
+            max_concurrency=preparation.effective_concurrency,
+            run_id=preparation.pipeline_result.project.run_id,
+            query_change_tracking=preparation.pipeline_result.project.settings.query_change_tracking,
+            on_seed_complete=on_complete,
+            on_connection_start=execution_connection_progress.on_connection_start,
+            on_connection_complete=lambda connection_count, elapsed_seconds: (
+                execution_connection_progress.on_connection_complete(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
+            on_connection_error=lambda connection_count, elapsed_seconds: (
+                execution_connection_progress.on_connection_error(
+                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                )
+            ),
+        )
+    finally:
+        event_writer.close()
     return SeedRunOutcome(results=results, elapsed=time.monotonic() - start)
 
 
 def _build_on_complete(
-    *, stream: TextIO, use_color: bool, seed_order: dict[str, int], total_count: int
+    *,
+    stream: TextIO,
+    use_color: bool,
+    seed_order: dict[str, int],
+    total_count: int,
+    event_writer: ExecutionEventWriter,
+    plan: PlanOutput,
 ) -> Callable[[SeedExecutionResult], None]:
     def _on_complete(result: SeedExecutionResult) -> None:
         status_text: str = "OK" if result.status == ExecutionStatus.SUCCESS else "FAIL"
@@ -83,6 +98,9 @@ def _build_on_complete(
         if result.error_message is not None:
             stream.write(f"    {_format_seed_error(result=result, use_color=use_color)}\n")
         stream.flush()
+        event_writer.write(
+            format_build_item_execution_event(result=result, plan=plan, command="seed")
+        )
 
     return _on_complete
 

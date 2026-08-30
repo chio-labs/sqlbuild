@@ -53,6 +53,7 @@ def prepare_build_execution(
         use_color=invocation.use_color,
         verbose=request.verbose,
         debug=request.debug or request.json_output,
+        event_output_path=request.event_output_path,
     )
     effective_concurrency: int = (
         request.concurrency

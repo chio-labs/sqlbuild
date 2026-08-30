@@ -14,6 +14,10 @@ from sqlbuild.cli.commands.models import (
     CloneInvocation,
     CloneRunOutcome,
 )
+from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
+from sqlbuild.cli.output.main._clone_item_execution_event import (
+    format_clone_item_execution_event,
+)
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
@@ -44,35 +48,42 @@ def execute_clone_plan(
     """Execute the direct clone plan and copy fingerprints."""
 
     clone_start: float = time.monotonic()
+    resource_types_by_name: dict[str, str] = _clone_resource_types_by_name(preparation=preparation)
+    event_writer: ExecutionEventWriter = ExecutionEventWriter(path=request.event_output_path)
     on_item: CloneItemCallback = _build_on_clone_item(
         stream=invocation.progress_stream,
         use_color=invocation.use_color,
+        event_writer=event_writer,
+        resource_types_by_name=resource_types_by_name,
     )
-    result: CloneExecutionResult = execute_clone(
-        inputs=CloneExecutionInput(
-            source_entries=CloneSourceEntries(
-                origin=preparation.pipeline_result.origin_source_entries,
-                destination=preparation.pipeline_result.destination_source_entries,
-            ),
-            origin_model_entries=preparation.pipeline_result.origin_model_entries,
-            destination_model_entries=preparation.pipeline_result.destination_model_entries,
-            origin_seed_entries=preparation.pipeline_result.origin_seed_entries,
-            destination_seed_entries=preparation.pipeline_result.destination_seed_entries,
-            destination_function_entries=preparation.pipeline_result.destination_function_entries,
-            execution_order=preparation.pipeline_result.clone_plan.execution_order,
-            adapter=invocation.adapter,
-            destination_connection=connection_context.destination_connection,
-            hard_copy=request.hard_copy,
-            run_id=preparation.pipeline_result.destination_project.run_id,
-            query_change_tracking=preparation.pipeline_result.destination_project.settings.query_change_tracking,
-            upstream_deps=preparation.pipeline_result.clone_plan.upstream_deps,
-            dependency_locations=_clone_dependency_locations(
-                preparation=preparation,
+    try:
+        result: CloneExecutionResult = execute_clone(
+            inputs=CloneExecutionInput(
+                source_entries=CloneSourceEntries(
+                    origin=preparation.pipeline_result.origin_source_entries,
+                    destination=preparation.pipeline_result.destination_source_entries,
+                ),
+                origin_model_entries=preparation.pipeline_result.origin_model_entries,
+                destination_model_entries=preparation.pipeline_result.destination_model_entries,
+                origin_seed_entries=preparation.pipeline_result.origin_seed_entries,
+                destination_seed_entries=preparation.pipeline_result.destination_seed_entries,
+                destination_function_entries=preparation.pipeline_result.destination_function_entries,
+                execution_order=preparation.pipeline_result.clone_plan.execution_order,
                 adapter=invocation.adapter,
-            ),
-            on_item=on_item,
+                destination_connection=connection_context.destination_connection,
+                hard_copy=request.hard_copy,
+                run_id=preparation.pipeline_result.destination_project.run_id,
+                query_change_tracking=preparation.pipeline_result.destination_project.settings.query_change_tracking,
+                upstream_deps=preparation.pipeline_result.clone_plan.upstream_deps,
+                dependency_locations=_clone_dependency_locations(
+                    preparation=preparation,
+                    adapter=invocation.adapter,
+                ),
+                on_item=on_item,
+            )
         )
-    )
+    finally:
+        event_writer.close()
     copy_clone_fingerprints(
         result=result,
         origin_model_entries=preparation.pipeline_result.origin_model_entries,
@@ -125,11 +136,35 @@ def _clone_dependency_locations(
     return locations
 
 
-def _build_on_clone_item(*, stream: TextIO, use_color: bool) -> CloneItemCallback:
+def _clone_resource_types_by_name(*, preparation: CloneExecutionPreparation) -> dict[str, str]:
+    entries: tuple[
+        CloneSourcePlanEntry | ModelPlanEntry | SeedPlanEntry | FunctionPlanEntry, ...
+    ] = (
+        *preparation.pipeline_result.destination_source_entries,
+        *preparation.pipeline_result.destination_model_entries,
+        *preparation.pipeline_result.destination_seed_entries,
+        *preparation.pipeline_result.destination_function_entries,
+    )
+    return {entry.name: str(entry.key.resource_type) for entry in entries}
+
+
+def _build_on_clone_item(
+    *,
+    stream: TextIO,
+    use_color: bool,
+    event_writer: ExecutionEventWriter,
+    resource_types_by_name: dict[str, str],
+) -> CloneItemCallback:
     def _on_clone_item(*, index: int, total: int, item: CloneItemResult) -> None:
         stream.write(
             render_clone_item_line(index=index, total=total, item=item, use_color=use_color) + "\n"
         )
         stream.flush()
+        event_writer.write(
+            format_clone_item_execution_event(
+                item=item,
+                resource_type=resource_types_by_name[item.name],
+            )
+        )
 
     return _on_clone_item

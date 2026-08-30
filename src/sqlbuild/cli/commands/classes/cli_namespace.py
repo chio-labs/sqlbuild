@@ -175,6 +175,7 @@ class CliNamespace:
     hard_copy: bool
     json: bool
     json_output: Path | None
+    event_output: Path | None
     manifest: bool
     dag: str | None
     compile_lineage_mode: CompileLineageMode

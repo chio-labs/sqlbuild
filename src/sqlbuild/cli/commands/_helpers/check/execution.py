@@ -16,6 +16,8 @@ from sqlbuild.cli.commands.models import (
     CheckExecutionPreparation,
     CheckInvocation,
 )
+from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
+from sqlbuild.cli.output.main._build_item_execution_event import format_build_item_execution_event
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
@@ -29,6 +31,7 @@ from sqlbuild.executor.python_nodes.main.checks import execute_python_checks
 from sqlbuild.executor.python_nodes.main.ingress import execute_ingress_python_loader_nodes
 from sqlbuild.executor.python_nodes.models import (
     IngressCallbacks,
+    PythonCheckCallbacks,
     PythonCheckExecutionResult,
     PythonIngressLoaderExecutorResult,
     PythonNodeExecutionResult,
@@ -90,6 +93,7 @@ def execute_check_plan(
     """Execute selected Python checks with their Python dependencies."""
 
     connection: Any = invocation.adapter.connect(invocation.connection_config)
+    event_writer: ExecutionEventWriter = ExecutionEventWriter()
     try:
         ingress_result: PythonIngressLoaderExecutorResult = _execute_check_ingress(
             invocation=invocation,
@@ -130,8 +134,18 @@ def execute_check_plan(
             ),
             run_state=ingress_result.run_state,
             require_upstream_results=False,
+            callbacks=PythonCheckCallbacks(
+                on_check_complete=lambda result: event_writer.write(
+                    format_build_item_execution_event(
+                        result=result,
+                        plan=pipeline_result.plan_output,
+                        command="check",
+                    )
+                )
+            ),
         )
     finally:
+        event_writer.close()
         invocation.adapter.close(connection)
 
 

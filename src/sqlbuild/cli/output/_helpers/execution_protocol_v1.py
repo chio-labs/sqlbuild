@@ -21,7 +21,7 @@ from sqlbuild.executor.build.models import (
     SeedExecutionResult,
 )
 from sqlbuild.executor.build.types import BuildStatus, ExecutionStatus
-from sqlbuild.executor.clone.models import CloneExecutionResult
+from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.clone.types import CloneStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import (
@@ -126,6 +126,59 @@ def format_build_execution_json(
     )
 
 
+def format_build_item_execution_event(
+    *, result: object, plan: PlanOutput | None, command: str = "build"
+) -> str | None:
+    """Format one completed build asset or check as JSON Lines events."""
+
+    assets: tuple[dict[str, object], ...] = ()
+    checks: tuple[dict[str, object], ...] = ()
+    if isinstance(result, ModelExecutionResult):
+        assets = _format_model_assets(results=(result,), plan=plan)
+    elif isinstance(result, SeedExecutionResult):
+        assets = _format_seed_assets(results=(result,), plan=plan)
+    elif isinstance(result, FunctionExecutionResult):
+        assets = _format_function_assets(results=(result,), plan=plan)
+    elif isinstance(result, LoadExecutionResult):
+        assets = _format_load_assets(results=(result,))
+    elif isinstance(result, PythonNodeExecutionResult):
+        assets = _format_python_node_assets(results=(result,))
+    elif isinstance(result, SqlTestExecutionResult):
+        checks = _format_sql_test_checks((result,))
+    elif isinstance(result, AuditExecutionResult):
+        checks = _format_audit_checks((result,))
+    elif isinstance(result, PythonCheckExecutionResult):
+        checks = _format_python_check_results(results=(result,))
+    if isinstance(result, ModelExecutionResult):
+        checks = _format_audit_checks(result.audit_results)
+    if not assets and not checks:
+        return None
+    records: list[str] = []
+    for asset in assets:
+        records.append(
+            json.dumps(
+                {
+                    "version": _JSON_VERSION,
+                    "command": command,
+                    "event": "asset",
+                    "asset": asset,
+                }
+            )
+        )
+    for check in checks:
+        records.append(
+            json.dumps(
+                {
+                    "version": _JSON_VERSION,
+                    "command": command,
+                    "event": "check",
+                    "check": check,
+                }
+            )
+        )
+    return "\n".join(records) + "\n"
+
+
 def format_run_execution_json(
     *,
     result: BuildExecutionResult,
@@ -222,24 +275,9 @@ def format_clone_execution_json(
     )
     return _format_execution_json(
         command="clone",
-        status=(BuildStatus.SUCCESS.value if failure_count == 0 else BuildStatus.FAILED.value),
+        status=BuildStatus.SUCCESS.value if failure_count == 0 else BuildStatus.FAILED.value,
         assets=tuple(
-            _drop_none(
-                {
-                    "kind": resource_types_by_name[item.name],
-                    "name": item.name,
-                    "status": item.status.value,
-                    "action": item.action.value,
-                    "duration_ms": (
-                        round(item.duration_seconds * 1000)
-                        if item.duration_seconds is not None
-                        else None
-                    ),
-                    "origin_relation": item.origin_relation,
-                    "target": item.destination_relation,
-                    "message": item.message,
-                }
-            )
+            _format_clone_asset(item=item, resource_type=resource_types_by_name[item.name])
             for item in result.item_results
         ),
         checks=(),
@@ -249,6 +287,35 @@ def format_clone_execution_json(
             "warning_count": warning_count,
             "total_count": len(result.item_results),
         },
+    )
+
+
+def format_clone_item_execution_event(*, item: CloneItemResult, resource_type: str) -> str:
+    """Format one completed direct-clone item as a JSON Lines event."""
+
+    payload: dict[str, object] = {
+        "version": _JSON_VERSION,
+        "command": "clone",
+        "event": "asset",
+        "asset": _format_clone_asset(item=item, resource_type=resource_type),
+    }
+    return json.dumps(payload) + "\n"
+
+
+def _format_clone_asset(*, item: CloneItemResult, resource_type: str) -> dict[str, object]:
+    return _drop_none(
+        {
+            "kind": resource_type,
+            "name": item.name,
+            "status": item.status.value,
+            "action": item.action.value,
+            "duration_ms": (
+                round(item.duration_seconds * 1000) if item.duration_seconds is not None else None
+            ),
+            "origin_relation": item.origin_relation,
+            "target": item.destination_relation,
+            "message": item.message,
+        }
     )
 
 

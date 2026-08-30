@@ -111,6 +111,15 @@ class DagsterCliCloneFailureTestCase:
 
 
 @dataclass(frozen=True)
+class DagsterCliLiveCloneEventTestCase:
+    description: str
+    command: str
+    command_args: tuple[str, ...]
+    expected_asset_key: tuple[str, ...]
+    expected_remaining_asset_keys: tuple[tuple[str, ...], ...] = ()
+
+
+@dataclass(frozen=True)
 class DagsterCliFailureTestCase:
     description: str
     command_stderr: str

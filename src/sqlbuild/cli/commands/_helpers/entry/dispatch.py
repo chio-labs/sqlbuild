@@ -188,6 +188,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 manifest=args.manifest,
                 json_output=args.json,
                 json_output_path=args.json_output,
+                event_output_path=args.event_output,
             )
         )
     if args.command == CliCommand.FRESHNESS:
@@ -317,6 +318,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 verbose=args.verbose,
                 cli_vars=args.vars,
                 json_output_path=args.json_output,
+                event_output_path=args.event_output,
             )
         )
     if args.command == CliCommand.DIFF:

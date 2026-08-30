@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -23,13 +23,13 @@ from sqlbuild.executor.python_nodes._helpers.fingerprinting import (
 from sqlbuild.executor.python_nodes._helpers.results import normalize_python_check_return
 from sqlbuild.executor.python_nodes.models import (
     CheckContext,
+    PythonCheckCallbacks,
     PythonCheckExecutionResult,
     PythonCheckResult,
     PythonNodeExecutionResult,
     PythonNodeRunState,
     PythonNodeRuntime,
 )
-from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import (
     ProviderContainer,
@@ -48,12 +48,16 @@ def execute_python_check_nodes(
     runtime: PythonNodeRuntime,
     run_state: PythonNodeRunState,
     upstream_load_results_by_loader_name: Mapping[str, LoadExecutionResult] | None = None,
-    logger: logging.Logger | None = None,
-    identity_recorder: PythonIdentityRecorder | None = None,
+    callbacks: PythonCheckCallbacks | None = None,
     require_upstream_results: bool = True,
+    **legacy_callbacks: Any,
 ) -> tuple[PythonCheckExecutionResult, ...]:
     """Execute check nodes after their selected Python dependencies have completed."""
 
+    resolved_callbacks: PythonCheckCallbacks = callbacks or PythonCheckCallbacks(
+        logger=cast("Any", legacy_callbacks.get("logger")),
+        identity_recorder=cast("Any", legacy_callbacks.get("identity_recorder")),
+    )
     adapter: BaseAdapter = runtime.adapter
     connection: Any = runtime.connection
     run_id: str = runtime.run_id
@@ -114,6 +118,8 @@ def execute_python_check_nodes(
                     run_id=run_id,
                 )
             results.append(blocked)
+            if resolved_callbacks.on_check_complete is not None:
+                resolved_callbacks.on_check_complete(blocked)
             continue
         with CostContext.resource_scope(
             resource_type=PythonNodeKind.CHECK.value,
@@ -127,7 +133,8 @@ def execute_python_check_nodes(
                 target=runtime.target,
                 vars=runtime.vars,
                 is_reload=runtime.is_reload,
-                logger=logger or logging.getLogger(f"sqlbuild.check.{check_function.name}"),
+                logger=resolved_callbacks.logger
+                or logging.getLogger(f"sqlbuild.check.{check_function.name}"),
                 statement_recorder=StatementRecorder(),
                 run_state=run_state,
                 result_store=resolved_result_store,
@@ -164,6 +171,8 @@ def execute_python_check_nodes(
                     run_id=run_id,
                 )
                 results.append(error_result)
+                if resolved_callbacks.on_check_complete is not None:
+                    resolved_callbacks.on_check_complete(error_result)
                 continue
             severity: PythonCheckSeverity = check_result.severity or check_function.severity
             result: PythonCheckExecutionResult = PythonCheckExecutionResult(
@@ -179,12 +188,14 @@ def execute_python_check_nodes(
                 run_id=run_id,
             )
             results.append(result)
+            if resolved_callbacks.on_check_complete is not None:
+                resolved_callbacks.on_check_complete(result)
             if not result.failed:
                 identity: PythonNodeIdentity | None = python_graph.nodes_by_name[
                     check_function.name
                 ].identity
-                if identity_recorder is not None:
-                    identity_recorder(identity=identity, _target_name=None)
+                if resolved_callbacks.identity_recorder is not None:
+                    resolved_callbacks.identity_recorder(identity=identity, _target_name=None)
                 else:
                     try_write_python_node_identity_fingerprint(
                         identity=identity,
