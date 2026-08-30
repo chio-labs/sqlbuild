@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.66.4](https://github.com/chio-labs/sqlbuild/compare/v0.66.3...v0.66.4) (2026-08-30)
+
+
+### Bug Fixes
+
+* report resolved build run context ([#423](https://github.com/chio-labs/sqlbuild/issues/423)) ([db0c47b](https://github.com/chio-labs/sqlbuild/commit/db0c47b735de12ffa9fb343c5c9354aab24b9628))
+
 ## [0.66.3](https://github.com/chio-labs/sqlbuild/compare/v0.66.2...v0.66.3) (2026-08-30)
 
 
