@@ -59,6 +59,7 @@ SQL_VALIDATION_CONFIG_KEY: str = "sql_validation"
 GRAPH_SELECTOR_EXPANSION_MARKER: str = "+"
 GRAPH_SELECTOR_PATH_MARKER: str = "~"
 DBT_JSON_OUTPUT_OPTION: str = "--json"
+DBT_PASSTHROUGH_SEPARATOR: str = "--"
 DBT_VERBOSE_OPTIONS: frozenset[str] = frozenset({"--verbose", "-v"})
 DBT_CLI_OUTPUT_OPTIONS: frozenset[str] = frozenset({DBT_JSON_OUTPUT_OPTION, *DBT_VERBOSE_OPTIONS})
 DBT_NO_CONNECTION_OPTION: str = "--no-connection"
