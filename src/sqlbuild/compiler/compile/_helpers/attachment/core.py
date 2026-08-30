@@ -61,6 +61,7 @@ from sqlbuild.compiler.compile._helpers.render.templating import (
 from sqlbuild.compiler.compile.constants import (
     MACRO_CALL_PATTERN,
     MODEL_AUDIT_OVERRIDE_KEYS,
+    MODEL_FULL_REFRESH_CONFIG_KEY,
     MODEL_HEADER_METADATA_KEYS,
     PRESERVE_TARGET_VALUE,
 )
@@ -99,6 +100,7 @@ from sqlbuild.compiler.discovery.models import (
     SqlHookEntry,
 )
 from sqlbuild.compiler.path_defaults.main._select import select_path_default
+from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
@@ -708,6 +710,11 @@ def build_model_config(
         matched_path_default=matched_path_default,
         model_header_values=model_header_values,
     )
+    if (
+        MODEL_FULL_REFRESH_CONFIG_KEY not in model_header_values
+        and layered_values.get("materialized") != MaterializationType.INCREMENTAL
+    ):
+        layered_values.pop(MODEL_FULL_REFRESH_CONFIG_KEY, None)
     validate_model_hook_config(values=layered_values, model_name=model_name)
     raw_hook_values: dict[str, object] = {
         hook_key: layered_values[hook_key]

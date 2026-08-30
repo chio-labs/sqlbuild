@@ -310,7 +310,7 @@ def test_given_project_when_building_manifest_then_produces_correct_structure(
             expected_tags=("core", "nightly"),
         ),
         ManifestModelNodeTestCase(
-            description="protected selective merge exports safety policies",
+            description="false model full refresh is exported",
             model=build_test_model(
                 name="protected_merge",
                 config_values={
@@ -337,6 +337,32 @@ def test_given_project_when_building_manifest_then_produces_correct_structure(
             expected_checksum_name="sha256",
             expected_merge_exclude_columns=["ingested_at"],
             expected_full_refresh=False,
+        ),
+        ManifestModelNodeTestCase(
+            description="true model full refresh is exported",
+            model=build_test_model(
+                name="forced_refresh",
+                config_values={
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                    "full_refresh": True,
+                },
+            ),
+            plan_entries=(),
+            project_name=_PROJECT,
+            expected_unique_id=f"model.{_PROJECT}.forced_refresh",
+            expected_resource_type="model",
+            expected_database=None,
+            expected_schema="public",
+            expected_alias="forced_refresh",
+            expected_fqn=[_PROJECT, "models", "test"],
+            expected_raw_code="SELECT 1",
+            expected_compiled_code="SELECT 1",
+            expected_relation_name="public.forced_refresh",
+            expected_description="",
+            expected_materialized="incremental",
+            expected_checksum_name="sha256",
+            expected_full_refresh=True,
         ),
         ManifestModelNodeTestCase(
             description="named SQL hook exposes definition and preserves authored SQLBuild meta",

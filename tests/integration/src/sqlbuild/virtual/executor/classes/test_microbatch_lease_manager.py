@@ -9,15 +9,24 @@ from typing import Any
 
 import pytest
 
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.types import IncrementalMode, PlanAction
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.virtual.executor.classes import microbatch_lease_manager as lease_manager_module
 from sqlbuild.virtual.executor.classes.microbatch_lease_manager import (
     VirtualMicrobatchLeaseManager,
 )
 from sqlbuild.virtual.state.classes.duckdb import DuckDbStateBackend
-from sqlbuild.virtual.state.models import StateLockRecord
+from sqlbuild.virtual.state.models import (
+    PhysicalRelationRecord,
+    StateLockRecord,
+    VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentRecord,
+)
+from sqlbuild.virtual.state.types import PhysicalArtifactType, VirtualEnvironmentStatus
 from tests.integration.src.sqlbuild.virtual.executor.classes._test_types import (
     VirtualMicrobatchLeaseManagerTestCase,
+    VirtualSharedFullRefreshTestCase,
 )
 from tests.integration.src.sqlbuild.virtual.executor.classes.helpers import (
     build_virtual_microbatch_lease_entry,
@@ -133,6 +142,92 @@ def test_given_renewable_lease_when_owner_is_replaced_then_manager_fences_and_pr
         backend.close(connection)
     assert len(remaining_locks) == 1
     assert remaining_locks[0].owner_id == "replacement-owner"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VirtualSharedFullRefreshTestCase(
+            description="append full refresh rejects shared version",
+            incremental_strategy="append",
+        ),
+        VirtualSharedFullRefreshTestCase(
+            description="delete insert full refresh rejects shared version",
+            incremental_strategy="delete_insert",
+        ),
+        VirtualSharedFullRefreshTestCase(
+            description="merge full refresh rejects shared version",
+            incremental_strategy="merge",
+        ),
+        VirtualSharedFullRefreshTestCase(
+            description="microbatch full refresh rejects shared version",
+            incremental_strategy="delete_insert",
+            incremental_mode=IncrementalMode.MICROBATCH,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_shared_incremental_version_when_full_refresh_then_rejects_immutable_overwrite(
+    test_case: VirtualSharedFullRefreshTestCase,
+    tmp_path: Path,
+) -> None:
+    connection_config: dict[str, object] = {"database": str(tmp_path / "state.duckdb")}
+    backend: DuckDbStateBackend = DuckDbStateBackend()
+    connection: Any = backend.connect(connection_config)
+    backend.initialize(connection=connection, schema="sqlbuild_state", sqlbuild_version="0.0.test")
+    backend.upsert_physical_relation(
+        connection=connection,
+        schema="sqlbuild_state",
+        record=PhysicalRelationRecord(
+            artifact_type=PhysicalArtifactType.MODEL,
+            artifact_name="orders",
+            version_hash="F2",
+            database_name=None,
+            schema_name="dev__sqb_physical",
+            relation_name="orders__v_f2",
+            relation_type="table",
+        ),
+    )
+    backend.upsert_virtual_environment(
+        connection=connection,
+        schema="sqlbuild_state",
+        record=VirtualEnvironmentRecord(
+            virtual_environment_name="shared",
+            status=VirtualEnvironmentStatus.FINALIZED,
+        ),
+    )
+    backend.replace_virtual_environment_model_refs(
+        connection=connection,
+        schema="sqlbuild_state",
+        virtual_environment_name="shared",
+        refs=(
+            VirtualEnvironmentModelRefRecord(
+                virtual_environment_name="shared",
+                model_name="orders",
+                version_hash="F2",
+            ),
+        ),
+    )
+    backend.close(connection)
+    manager: VirtualMicrobatchLeaseManager = VirtualMicrobatchLeaseManager(
+        backend=backend,
+        connection_config=connection_config,
+        warehouse_connection_config={"database": "warehouse.duckdb"},
+        schema="sqlbuild_state",
+        run_id="shared-full-refresh-test",
+    )
+
+    with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):
+        manager.acquire(
+            entries=(
+                build_virtual_microbatch_lease_entry(
+                    action=PlanAction.CREATE_TABLE,
+                    incremental_strategy=test_case.incremental_strategy,
+                    incremental_mode=test_case.incremental_mode,
+                ),
+            ),
+            expected_version_hashes={"orders": "F2"},
+        )
 
 
 if __name__ == "__main__":

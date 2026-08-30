@@ -42,7 +42,10 @@ def build_display_only_sqlbuild_plan(
                 name=model.name,
                 relative_path=model.relative_path,
                 materialization_type=materialization_type,
-                action=_display_action(materialization_type),
+                action=_display_action(
+                    materialization_type=materialization_type,
+                    full_refresh=effective_full_refresh,
+                ),
                 reason=(
                     PlanReason.FULL_REFRESH if effective_full_refresh else PlanReason.NO_CHANGE
                 ),
@@ -82,11 +85,13 @@ def build_display_only_sqlbuild_plan(
     )
 
 
-def _display_action(materialization_type: MaterializationType) -> PlanAction:
+def _display_action(
+    *, materialization_type: MaterializationType, full_refresh: bool = False
+) -> PlanAction:
     if materialization_type == MaterializationType.VIEW:
         return PlanAction.CREATE_VIEW
     if materialization_type == MaterializationType.INCREMENTAL:
-        return PlanAction.INCREMENTAL_APPEND
+        return PlanAction.CREATE_TABLE if full_refresh else PlanAction.INCREMENTAL_APPEND
     if materialization_type == MaterializationType.CUSTOM:
         return PlanAction.CUSTOM
     return PlanAction.CREATE_TABLE
