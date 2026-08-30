@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.66.2](https://github.com/chio-labs/sqlbuild/compare/v0.66.1...v0.66.2) (2026-08-30)
+
+
+### Bug Fixes
+
+* qualify Snowflake cost query history database ([#418](https://github.com/chio-labs/sqlbuild/issues/418)) ([3c748fb](https://github.com/chio-labs/sqlbuild/commit/3c748fba975c7269fbb8fdee06bbcb6cf075d3fd))
+
 ## [0.66.1](https://github.com/chio-labs/sqlbuild/compare/v0.66.0...v0.66.1) (2026-08-30)
 
 
