@@ -58,6 +58,9 @@ class SqlBuildDagsterTranslator:
         sql: object = node.get("sql")
         if isinstance(sql, str) and sql.strip():
             return f"{description}\n\n**SQLBuild SQL:**\n```sql\n{sql.strip()}\n```"
+        path: object = node.get("path")
+        if isinstance(path, str) and path.strip():
+            return f"{description}\n\n**Source file:** `{path.strip()}`"
         return description
 
     def get_check_name(self, check: Mapping[str, Any]) -> str:

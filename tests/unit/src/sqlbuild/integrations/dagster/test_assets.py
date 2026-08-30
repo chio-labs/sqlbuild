@@ -72,7 +72,9 @@ dg: Any = pytest.importorskip("dagster")
                 "**SQLBuild SQL:**",
                 "MODEL (materialized table);",
             ),
-            expected_seed_description=("SQLBuild seed `waffle_types`."),
+            expected_seed_description=(
+                "SQLBuild seed `waffle_types`.\n\n**Source file:** `seeds/waffle_types.csv`"
+            ),
         )
     ],
     ids=lambda case: case.description,
