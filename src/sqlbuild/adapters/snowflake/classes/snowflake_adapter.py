@@ -1479,7 +1479,7 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
         warehouse: object | None = connect_config.get("warehouse")
         database: object | None = connect_config.get("database")
         schema: object | None = connect_config.get("schema")
-        secondary_roles: str = self._normalize_secondary_roles(
+        secondary_roles: str | None = self._normalize_secondary_roles(
             connect_config.pop("secondary_roles", None)
         )
         raw_connection: Any = snowflake.connector.connect(**connect_config)
@@ -2880,12 +2880,14 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
         self,
         *,
         connection: _SnowflakeConnection,
-        secondary_roles: str,
+        secondary_roles: str | None,
         warehouse: object | None,
         database: object | None,
         schema: object | None,
     ) -> None:
-        statements: list[str] = [f"USE SECONDARY ROLES {secondary_roles}"]
+        statements: list[str] = []
+        if secondary_roles is not None:
+            statements.append(f"USE SECONDARY ROLES {secondary_roles}")
         normalized_warehouse: str | None = self._normalize_session_value(warehouse)
         normalized_database: str | None = self._normalize_session_value(database)
         normalized_schema: str | None = self._normalize_session_value(schema)
@@ -2904,9 +2906,9 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
             self.execute(connection=connection, sql=statement)
 
     @staticmethod
-    def _normalize_secondary_roles(value: object | None) -> str:
+    def _normalize_secondary_roles(value: object | None) -> str | None:
         if value is None:
-            return SECONDARY_ROLES_NONE
+            return None
         normalized: str = str(value).strip().upper()
         if normalized not in {SECONDARY_ROLES_ALL, SECONDARY_ROLES_NONE}:
             raise AdapterUserError(
