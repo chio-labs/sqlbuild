@@ -23,10 +23,25 @@ from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 def execute_clone_function_item(
-    *, destination_entry: FunctionPlanEntry, inputs: CloneExecutionInput
+    *,
+    destination_entry: FunctionPlanEntry,
+    inputs: CloneExecutionInput,
+    available_keys: set[CompiledObjectKey],
 ) -> CloneItemResult:
     """Recreate one function and normalize its clone outcome."""
 
+    missing_dependencies: tuple[CompiledObjectKey, ...] = _missing_destination_dependencies(
+        key=destination_entry.key,
+        inputs=inputs,
+        available_keys=available_keys,
+    )
+    if missing_dependencies:
+        return _missing_dependency_result(
+            name=destination_entry.name,
+            destination_relation=destination_entry.destination.qualified_name,
+            missing_dependencies=missing_dependencies,
+            inputs=inputs,
+        )
     start: float = time.monotonic()
     recorder: StatementRecorder = StatementRecorder()
     function_result: FunctionExecutionResult = execute_function(
@@ -76,28 +91,58 @@ def execute_clone_relation_item(
             hard_copy=inputs.hard_copy,
             origin_lookup=relation_lookup,
         )
-    missing_dependencies: tuple[CompiledObjectKey, ...] = tuple(
-        dependency
-        for dependency in inputs.upstream_deps.get(destination_entry.key, ())
-        if dependency in inputs.dependency_locations and dependency not in available_keys
+    missing_dependencies: tuple[CompiledObjectKey, ...] = _missing_destination_dependencies(
+        key=destination_entry.key,
+        inputs=inputs,
+        available_keys=available_keys,
     )
     if missing_dependencies:
-        return CloneItemResult(
+        return _missing_dependency_result(
             name=destination_entry.name,
-            action=CloneAction.SKIPPED_MISSING_DEPENDENCY,
-            status=CloneStatus.WARNING,
-            message="missing destination dependencies: "
-            + ", ".join(
-                inputs.dependency_locations[dependency].qualified_name
-                or inputs.dependency_locations[dependency].name
-                for dependency in missing_dependencies
-            ),
             origin_relation=origin_entry.destination.qualified_name,
             destination_relation=destination_entry.destination.qualified_name,
+            missing_dependencies=missing_dependencies,
+            inputs=inputs,
         )
     return recreate_view(
         destination_entry=destination_entry,
         origin_entry=origin_entry,
         adapter=inputs.adapter,
         destination_connection=inputs.destination_connection,
+    )
+
+
+def _missing_destination_dependencies(
+    *,
+    key: CompiledObjectKey,
+    inputs: CloneExecutionInput,
+    available_keys: set[CompiledObjectKey],
+) -> tuple[CompiledObjectKey, ...]:
+    return tuple(
+        dependency
+        for dependency in inputs.upstream_deps.get(key, ())
+        if dependency in inputs.dependency_locations and dependency not in available_keys
+    )
+
+
+def _missing_dependency_result(
+    *,
+    name: str,
+    destination_relation: str | None,
+    missing_dependencies: tuple[CompiledObjectKey, ...],
+    inputs: CloneExecutionInput,
+    origin_relation: str | None = None,
+) -> CloneItemResult:
+    return CloneItemResult(
+        name=name,
+        action=CloneAction.SKIPPED_MISSING_DEPENDENCY,
+        status=CloneStatus.WARNING,
+        message="missing destination dependencies: "
+        + ", ".join(
+            inputs.dependency_locations[dependency].qualified_name
+            or inputs.dependency_locations[dependency].name
+            for dependency in missing_dependencies
+        ),
+        origin_relation=origin_relation,
+        destination_relation=destination_relation,
     )

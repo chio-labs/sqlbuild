@@ -35,6 +35,14 @@ class CloneViewDependencyTestCase:
 
 
 @dataclass(frozen=True)
+class CloneFunctionDependencyTestCase:
+    description: str
+    expected_actions: tuple[CloneAction, ...]
+    expected_function_statement_count: int
+    expected_function_message: str
+
+
+@dataclass(frozen=True)
 class PrephaseCloneItemRowTestCase:
     description: str
     action: str

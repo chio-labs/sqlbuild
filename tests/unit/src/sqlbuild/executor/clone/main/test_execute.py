@@ -20,6 +20,7 @@ from tests.unit.src.sqlbuild.executor.clone._helpers.helpers import (
     build_clone_model_entry,
 )
 from tests.unit.src.sqlbuild.executor.clone.main._test_types import (
+    CloneFunctionDependencyTestCase,
     CloneStreamTestCase,
     CloneViewDependencyTestCase,
     InterleavedCloneGraphTestCase,
@@ -230,3 +231,56 @@ def test_given_view_clone_when_checking_destination_dependencies_then_recreates_
     assert view_statement_count == test_case.expected_view_statement_count
     assert test_case.expected_view_statement_fragment in executed_sql
     assert result.item_results[-1].message == test_case.expected_view_message
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CloneFunctionDependencyTestCase(
+            description="function with missing destination dependency is skipped clearly",
+            expected_actions=(
+                CloneAction.WARNING_MISSING_SOURCE,
+                CloneAction.SKIPPED_MISSING_DEPENDENCY,
+            ),
+            expected_function_statement_count=0,
+            expected_function_message="missing destination dependencies: dev.orders",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_function_clone_when_dependency_is_missing_then_skips_function_execution(
+    test_case: CloneFunctionDependencyTestCase,
+) -> None:
+    adapter: FakeCloneAdapter = FakeCloneAdapter(supports_zero_copy=True, origin_names=())
+    origin_table: ModelPlanEntry = build_clone_model_entry(schema="prod", name="orders")
+    destination_table: ModelPlanEntry = build_clone_model_entry(schema="dev", name="orders")
+    function: FunctionPlanEntry = build_clone_function_entry(schema="dev", name="order_count")
+
+    result: CloneExecutionResult = execute_clone(
+        inputs=CloneExecutionInput(
+            source_entries=CloneSourceEntries(),
+            origin_model_entries=(origin_table,),
+            destination_model_entries=(destination_table,),
+            origin_seed_entries=(),
+            destination_seed_entries=(),
+            destination_function_entries=(function,),
+            execution_order=(destination_table.key, function.key),
+            adapter=adapter,
+            destination_connection=object(),
+            hard_copy=False,
+            run_id="clone-run",
+            query_change_tracking=False,
+            upstream_deps={function.key: (destination_table.key,)},
+            dependency_locations={
+                destination_table.key: destination_table.destination,
+                function.key: function.destination,
+            },
+        )
+    )
+
+    function_statement_count: int = sum(
+        statement.startswith("CREATE FUNCTION") for statement in adapter.executed_statements
+    )
+    assert tuple(item.action for item in result.item_results) == test_case.expected_actions
+    assert function_statement_count == test_case.expected_function_statement_count
+    assert result.item_results[-1].message == test_case.expected_function_message

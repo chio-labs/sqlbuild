@@ -138,6 +138,7 @@ def execute_clone(*, inputs: CloneExecutionInput) -> CloneExecutionResult:
             item_result: CloneItemResult = execute_clone_function_item(
                 destination_entry=destination_entry,
                 inputs=inputs,
+                available_keys=available_keys,
             )
             results.append(item_result)
             if inputs.on_item is not None:
