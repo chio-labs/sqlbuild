@@ -27,6 +27,7 @@ from sqlbuild.integrations.dagster.constants import (
     SCENARIO_VALUE_FLAGS,
     SELECT_FILE_FLAG,
     SOURCE_NODE_KIND,
+    STDERR_STREAM_NAME,
     WARNING_CHECK_SEVERITY,
 )
 
@@ -208,20 +209,39 @@ def _create_execution_json_path() -> Path:
 
 
 def _start_stream_future(
-    *, executor: ThreadPoolExecutor, source: IO[str] | None, sink: TextIO
+    *,
+    executor: ThreadPoolExecutor,
+    source: IO[str] | None,
+    sink: TextIO,
+    context: Any,
+    stream_name: str,
 ) -> Future[str] | None:
     if source is None:
         return None
-    return executor.submit(_forward_stream, source=source, sink=sink)
+    return executor.submit(
+        _forward_stream,
+        source=source,
+        sink=sink,
+        context=context,
+        stream_name=stream_name,
+    )
 
 
-def _forward_stream(*, source: IO[str], sink: TextIO) -> str:
+def _forward_stream(*, source: IO[str], sink: TextIO, context: Any, stream_name: str) -> str:
     captured: list[str] = []
+    logger: Any | None = getattr(context, "log", None) if context is not None else None
     try:
         for chunk in iter(source.readline, ""):
             captured.append(chunk)
-            sink.write(chunk)
-            sink.flush()
+            if logger is None:
+                sink.write(chunk)
+                sink.flush()
+                continue
+            line: str = chunk.rstrip("\r\n")
+            if stream_name == STDERR_STREAM_NAME:
+                logger.warning("SQLBuild: %s", line)
+            else:
+                logger.info("SQLBuild: %s", line)
     finally:
         source.close()
     return "".join(captured)
