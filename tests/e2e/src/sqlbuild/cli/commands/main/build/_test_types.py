@@ -769,6 +769,15 @@ class SelectorSurfaceBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class BuildRunContextOutputE2ETestCase:
+    """Test case for verbose build context output modes."""
+
+    description: str
+    command: tuple[str, ...]
+    expected_context_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class RuntimeArtifactPreservationBuildE2ETestCase:
     """Test case for runtime artifact preservation behavior."""
 

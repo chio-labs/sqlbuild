@@ -18,7 +18,11 @@ from sqlbuild.cli.commands.constants import (
     SCOPE_GLOBAL_SUMMARY,
     SQLBUILD_CONCURRENCY_ENV_VAR,
 )
-from sqlbuild.cli.commands.models import ParsedCliInvocation
+from sqlbuild.cli.commands.models import (
+    ParsedCliInvocation,
+    SelectorFileSummary,
+    SelectorInputs,
+)
 from sqlbuild.cli.commands.types import CliCommand
 from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
@@ -53,17 +57,27 @@ def resolve_env_default_concurrency(explicit_concurrency: int | None) -> int | N
 
 
 def read_selector_files(paths: list[str]) -> tuple[str, ...]:
-    """Read newline-delimited selector files."""
+    """Read newline-delimited selectors."""
+
+    return read_selector_file_inputs(paths).selectors
+
+
+def read_selector_file_inputs(paths: list[str]) -> SelectorInputs:
+    """Read newline-delimited selectors while retaining file provenance."""
 
     selectors: list[str] = []
+    files: list[SelectorFileSummary] = []
     for raw_path in paths:
         path: Path = Path(raw_path)
+        file_selector_count: int = 0
         for line in path.read_text(encoding="utf-8").splitlines():
             stripped: str = line.strip()
             if not stripped or stripped.startswith("#"):
                 continue
             selectors.append(stripped)
-    return tuple(selectors)
+            file_selector_count += 1
+        files.append(SelectorFileSummary(path=path, selector_count=file_selector_count))
+    return SelectorInputs(selectors=tuple(selectors), files=tuple(files))
 
 
 def parse_cli_invocation(

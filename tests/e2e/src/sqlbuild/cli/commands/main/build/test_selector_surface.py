@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
+    BuildRunContextOutputE2ETestCase,
     SelectorSurfaceBuildE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
@@ -94,3 +96,147 @@ def test_given_selector_commands_when_running_cli_then_behavior_matches_expectat
         assert fragment in result.stdout, result.stdout + result.stderr
     for fragment in test_case.expected_stderr_fragments:
         assert fragment in result.stderr, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SelectorSurfaceBuildE2ETestCase(
+            description="verbose selector file reports resolved context without secrets",
+            command=("--no-color", "build", "--verbose", "--concurrency", "3"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Execution\n  command      sqb build",
+                "run_id       ",
+                "target       not set",
+                "warehouse    not set",
+                "concurrency  3 configured limit",
+                "full_refresh false",
+                "selected     2 of 19 build resources",
+                "date vars    1970-01-01 to 2030-12-31",
+                "Selection files",
+                "(1 selector)",
+            ),
+            expected_stderr_fragments=(),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_verbose_build_selector_file_when_running_then_reports_safe_resolved_context(
+    test_case: SelectorSurfaceBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+    selector_file: Path = tmp_path / "dagster-selectors.txt"
+    selector_file.write_text("+stg_customers\n", encoding="utf-8")
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            *test_case.command,
+            "--select-file",
+            str(selector_file),
+            "--vars",
+            '{"start_date":"1970-01-01","end_date":"2030-12-31","api_secret":"never-print-secret"}',
+        ),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    fragment: str
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout
+    assert f"selector_file {selector_file} (1 selector)" in result.stdout
+    assert "never-print-secret" not in result.stdout
+    assert "never-print-secret" not in result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SelectorSurfaceBuildE2ETestCase(
+            description="direct verbose no-work build reports context once",
+            command=(
+                "--no-color",
+                "build",
+                "--verbose",
+                "--select",
+                "stg_customers",
+                "--exclude",
+                "stg_customers",
+                "--no-python",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "run_id       ",
+                "selected     0 of 19 build resources",
+            ),
+            expected_stderr_fragments=(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_direct_no_work_build_when_verbose_then_reports_context_once(
+    test_case: SelectorSurfaceBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert result.stdout.count("Execution\n") == 1
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildRunContextOutputE2ETestCase(
+            description="json verbose build keeps context off stdout",
+            command=(
+                "--no-color",
+                "build",
+                "--verbose",
+                "--json",
+                "--select",
+                "stg_customers",
+                "--no-python",
+            ),
+            expected_context_fragments=("build resources",),
+        ),
+        BuildRunContextOutputE2ETestCase(
+            description="json debug build keeps context off stdout",
+            command=(
+                "--no-color",
+                "--debug",
+                "build",
+                "--json",
+                "--select",
+                "stg_customers",
+                "--no-python",
+            ),
+            expected_context_fragments=("build resources",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_json_build_output_mode_when_running_then_context_preserves_stdout_contract(
+    test_case: BuildRunContextOutputE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stderr.count("Execution\n") == 1
+    for fragment in test_case.expected_context_fragments:
+        assert fragment in result.stderr
+    payload: object = json.loads(result.stdout)
+    assert isinstance(payload, dict)
+    assert "Execution\n" not in result.stdout
