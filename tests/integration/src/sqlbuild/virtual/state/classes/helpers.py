@@ -67,9 +67,14 @@ MISSING_CHECKPOINT_PAYLOAD: ConditionalPublicationPayload = VALID_PAYLOAD._repla
 ACTIVE_CHECKPOINT_PAYLOAD: ConditionalPublicationPayload = VALID_PAYLOAD._replace(
     record=replace(VALID_PAYLOAD.record, status=VirtualEnvironmentStatus.ACTIVE)
 )
-ORPHAN_CHECKPOINT_REFS_PAYLOAD: ConditionalPublicationPayload = VALID_PAYLOAD._replace(
-    record=replace(VALID_PAYLOAD.record, status=VirtualEnvironmentStatus.FINALIZING),
-    checkpoint=None,
+FINALIZING_CHECKPOINT_PAYLOAD: ConditionalPublicationPayload = VALID_PAYLOAD._replace(
+    record=replace(VALID_PAYLOAD.record, status=VirtualEnvironmentStatus.FINALIZING)
+)
+DETACHED_CHECKPOINT_PAYLOAD: ConditionalPublicationPayload = VALID_PAYLOAD._replace(
+    record=replace(VALID_PAYLOAD.record, status=VirtualEnvironmentStatus.DETACHED)
+)
+FAILED_CHECKPOINT_PAYLOAD: ConditionalPublicationPayload = VALID_PAYLOAD._replace(
+    record=replace(VALID_PAYLOAD.record, status=VirtualEnvironmentStatus.FAILED)
 )
 CHECKPOINT_ENVIRONMENT_PAYLOAD: ConditionalPublicationPayload = VALID_PAYLOAD._replace(
     checkpoint=replace(_CHECKPOINT, virtual_environment_name="other")

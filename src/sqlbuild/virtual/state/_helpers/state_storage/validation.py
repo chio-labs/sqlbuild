@@ -109,13 +109,11 @@ def validate_conditional_virtual_environment_publication(
         raise StateBackendConfigError(
             "Finalized conditional virtual environment publication requires a checkpoint"
         )
-    if record.status == VirtualEnvironmentStatus.ACTIVE and has_checkpoint_payload:
+    if record.status != VirtualEnvironmentStatus.FINALIZED and has_checkpoint_payload:
         raise StateBackendConfigError(
-            "Active conditional virtual environment publication forbids checkpoint payloads"
+            "Conditional checkpoint payload requires finalized virtual environment status"
         )
     if checkpoint is None:
-        if has_checkpoint_payload:
-            raise StateBackendConfigError("Checkpoint refs require a checkpoint record")
         _validate_current_ref_groups(record=record, refs_by_node_type=refs_by_node_type)
         return
     if checkpoint.virtual_environment_name != record.virtual_environment_name:
