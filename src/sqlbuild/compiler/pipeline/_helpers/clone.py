@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompileAnalysisSelection, CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
-from sqlbuild.compiler.pipeline.models import ClonePipelineOptions, ClonePipelineResult
+from sqlbuild.compiler.pipeline.models import (
+    ClonePipelineConnection,
+    ClonePipelineOptions,
+    ClonePipelineResult,
+)
 from sqlbuild.compiler.planner.main.clone._clone import run_clone_planning
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
@@ -21,7 +23,7 @@ def prepare_clone_pipeline(
     adapter: BaseAdapter,
     origin_target_name: str,
     destination_target_name: str,
-    destination_connection: Any,
+    destination_connection: ClonePipelineConnection,
     options: ClonePipelineOptions,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> ClonePipelineResult:
@@ -29,6 +31,7 @@ def prepare_clone_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         target_name=origin_target_name,
+        resolved_connection=destination_connection.config,
         no_sql_validation=options.no_sql_validation,
         no_cache=options.no_cache,
         cli_vars=options.cli_vars,
@@ -38,6 +41,7 @@ def prepare_clone_pipeline(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         target_name=destination_target_name,
+        resolved_connection=destination_connection.config,
         no_sql_validation=options.no_sql_validation,
         no_cache=options.no_cache,
         cli_vars=options.cli_vars,
@@ -58,6 +62,7 @@ def prepare_clone_pipeline(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
             target_name=origin_read_target_name,
+            resolved_connection=destination_connection.config,
             no_sql_validation=options.no_sql_validation,
             no_cache=options.no_cache,
             cli_vars=options.cli_vars,
@@ -71,6 +76,7 @@ def prepare_clone_pipeline(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
             target_name=destination_read_target_name,
+            resolved_connection=destination_connection.config,
             no_sql_validation=options.no_sql_validation,
             no_cache=options.no_cache,
             cli_vars=options.cli_vars,
@@ -91,7 +97,7 @@ def prepare_clone_pipeline(
         select=options.select,
         exclude=options.exclude,
         adapter=adapter,
-        connection=destination_connection,
+        connection=destination_connection.handle,
         origin_project=origin_project,
         origin_source_project=origin_source_project,
         destination_source_project=destination_source_project,
@@ -115,6 +121,7 @@ def _compile_project_for_environment(
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
     target_name: str,
+    resolved_connection: dict[str, object],
     no_sql_validation: bool,
     no_cache: bool,
     cli_vars: dict[str, object] | None,
@@ -124,6 +131,7 @@ def _compile_project_for_environment(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         selected_target=target_name,
+        resolved_connection=resolved_connection,
         no_sql_validation=no_sql_validation,
         analysis_selection=CompileAnalysisSelection(no_cache=no_cache),
         cli_vars=cli_vars,

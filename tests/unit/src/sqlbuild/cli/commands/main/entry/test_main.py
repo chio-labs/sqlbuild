@@ -35,6 +35,7 @@ from sqlbuild.compiler.planner.models import CursorOverrides
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     MainErrorRenderingTestCase,
     MainTestCase,
+    SkillFreshnessNoticeTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.entry.helpers import (
     build_handlers,
@@ -1780,12 +1781,11 @@ def test_given_playground_command_when_running_then_it_dispatches_handler(
     "test_case",
     [
         MainTestCase(
-            description="dispatches skills update through injected handler",
+            description="dispatches skills command through injected handler",
             argv=[
                 "--project-dir",
                 "/tmp/demo",
                 "skills",
-                "update",
                 "--global",
                 "--target",
                 "opencode",
@@ -1802,7 +1802,7 @@ def test_given_playground_command_when_running_then_it_dispatches_handler(
     ],
     ids=lambda case: case.description,
 )
-def test_given_skills_update_command_when_running_then_it_dispatches_handler(
+def test_given_skills_command_when_running_then_it_dispatches_handler(
     test_case: MainTestCase,
 ) -> None:
     received_args: list[tuple[Path | None, bool, tuple[str, ...], bool]] = []
@@ -1830,6 +1830,36 @@ def test_given_skills_update_command_when_running_then_it_dispatches_handler(
             test_case.expected_skills_force,
         )
     ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SkillFreshnessNoticeTestCase(
+            description="stale generated skill notice preserves command result",
+            expected_exit_code=17,
+            expected_stderr_fragment="SQLBuild skill files are out of date",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_stale_configured_skills_when_command_finishes_then_notice_preserves_exit_code(
+    test_case: SkillFreshnessNoticeTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "demo"\nadapter = "duckdb"\n\n[skills]\ntargets = ["agents"]\n',
+        encoding="utf-8",
+    )
+
+    exit_code: int = _main_with_dependencies(
+        argv=["--project-dir", str(tmp_path), "compile"],
+        handlers=build_handlers(run_compile=lambda _request: test_case.expected_exit_code),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert test_case.expected_stderr_fragment in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(

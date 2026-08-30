@@ -115,7 +115,6 @@ _DEFAULT_VALUES: dict[str, object] = {
     "scenario_max_snapshot_total_rows": None,
     "scenario_max_snapshot_bytes": None,
     "scenario_max_snapshot_total_bytes": None,
-    "skills_command": None,
     "skills_global": False,
     "skills_target": [],
     "skills_force": False,
@@ -258,7 +257,6 @@ class CliNamespace:
     scenario_max_snapshot_total_rows: int | None
     scenario_max_snapshot_bytes: int | None
     scenario_max_snapshot_total_bytes: int | None
-    skills_command: str | None
     skills_global: bool
     skills_target: list[str]
     skills_force: bool

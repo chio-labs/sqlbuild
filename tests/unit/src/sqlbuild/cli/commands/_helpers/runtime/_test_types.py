@@ -42,3 +42,10 @@ class ResolveDbtProfileConnectionConfigTestCase:
     raw_config: dict[str, object]
     profile_connection: dict[str, object]
     expected_connection: dict[str, object]
+
+
+@dataclass(frozen=True)
+class NamedConnectionBehaviorTestCase:
+    description: str
+    expected_connection: dict[str, object]
+    expected_error_fragment: str | None = None

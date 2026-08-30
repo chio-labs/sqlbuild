@@ -30,3 +30,10 @@ class ValidateNamedTargetSchemaTestCase:
     local_config: LocalConfig
     selected_target: str | None
     expected_error_fragment: str | None
+
+
+@dataclass(frozen=True)
+class ValidateManagedLoaderConnectionTestCase:
+    description: str
+    resolved_connection: dict[str, object]
+    expected_schemas: tuple[str, ...]

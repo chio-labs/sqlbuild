@@ -16,7 +16,7 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
-from sqlbuild.compiler.pipeline.models import ClonePipelineResult
+from sqlbuild.compiler.pipeline.models import ClonePipelineConnection, ClonePipelineResult
 from sqlbuild.compiler.planner.models import (
     CloneSourcePlanEntry,
     FunctionPlanEntry,
@@ -48,7 +48,10 @@ def prepare_clone_execution(
         select=request.select,
         exclude=request.exclude,
         cli_vars=request.cli_vars,
-        destination_connection=connection_context.destination_connection,
+        destination_connection=ClonePipelineConnection(
+            config=connection_context.destination_connection_config,
+            handle=connection_context.destination_connection,
+        ),
         external_sql_reference_resolver=resolve_external_sql_reference_resolver(
             project_dir=invocation.effective_project_dir,
             discovered_inputs=invocation.discovered_inputs,

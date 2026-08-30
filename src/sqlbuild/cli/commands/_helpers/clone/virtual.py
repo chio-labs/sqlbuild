@@ -35,12 +35,6 @@ def execute_virtual_clone(*, request: CloneCommandRequest, invocation: CloneInvo
         adapter=invocation.adapter,
         origin_target_name=request.origin_target_name,
         destination_target_name=invocation.destination_target_name,
-        origin_connection_config=resolve_target_connection_config(
-            discovered_inputs=invocation.discovered_inputs,
-            project_dir=invocation.effective_project_dir,
-            target_name=request.origin_target_name,
-            cli_vars=request.cli_vars,
-        ),
         destination_connection_config=resolve_target_connection_config(
             discovered_inputs=invocation.discovered_inputs,
             project_dir=invocation.effective_project_dir,

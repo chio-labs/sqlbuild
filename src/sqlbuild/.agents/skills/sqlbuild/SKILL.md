@@ -3,7 +3,7 @@ name: sqlbuild
 description: Use when working with SQLBuild syntax, project structure, configuration, testing, adapters, CLI behavior, SQLBuild docs, or SQLBuild-related code.
 ---
 
-<!-- generated-by: sqlbuild skills update -->
+<!-- generated-by: sqlbuild skills -->
 
 # SQLBuild Skill
 
@@ -320,7 +320,7 @@ SQL models never depend on Python nodes - the only path from Python into SQL is 
 - **Data diffs:** Compare schemas and row-level data between targets (or virtual environments) with `sqb diff prod:dev`.
 
 - **Zero-copy cloning:** Branch targets instantly with `sqb clone` without duplicating data.
-- **Deferred references:** Compile and plan against a production target with `--defer-to` while building in dev.
+- **Deferred references:** Resolve a production namespace with `--defer-to` through the active target's connection while building in dev.
 - **No manifest required:** Clone, diff, and defer work directly against live targets. No `manifest.json` generation, no artifact management, no stale state.
 
 #### Extensibility
@@ -729,7 +729,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Adapters | DuckDB, MotherDuck, Snowflake, BigQuery, Databricks, PostgreSQL, SQL Server | 30+ (community adapters) | DuckDB, Snowflake, BigQuery, Databricks, Spark, Redshift, Postgres, Trino, MySQL |
 | State requirements | Stateless by default | manifest.json + target/ | Requires state store (local database or PostgreSQL for production) |
 | Playground | `sqb playground` | Clone example repo | Example project |
-| AI agent skills | General guidance with `sqb skills update`; policy-derived guidance with `sqb kata skills` | No | No |
+| AI agent skills | General guidance with `sqb skills`; policy-derived guidance with `sqb kata skills` | No | No |
 
 ### Where each tool fits
 
@@ -787,16 +787,20 @@ profiles_dir = "/Users/you/.dbt"
 target_path = "../analytics/target"
 target = "dev"
 
-[targets.dev]
-schema = "analytics"
-
-[targets.dev.connection]
+[connections.dbt_dev]
 source = "dbt_profile"
 profile = "analytics"
 target = "dev"
+
+[targets.dev]
+connection = "dbt_dev"
+database = "ANALYTICS"
+schema = "analytics"
 ```
 
-`source = "dbt_profile"` tells SQLBuild to connect using your dbt profile, so it talks to the same warehouse dbt does.
+`source = "dbt_profile"` on the named connection tells SQLBuild to connect using your dbt
+profile, so it talks to the same warehouse dbt does. The target references that connection and
+remains authoritative for its database and schema.
 
 `sqb dbt build --select path:models/marts` compiles the project, resolves the selection, runs the selected dbt models, then runs any SQLBuild models you have added against the dbt outputs.
 
@@ -1053,7 +1057,7 @@ name = "waffle_shop"
 adapter = "duckdb"
 default_target = "dev"
 
-[connection]
+[connections.local]
 database = "waffle_shop_control.duckdb"
 
 [settings]
@@ -1066,9 +1070,11 @@ materialized = "table"
 collection_rendering = "value_list"
 
 [targets.prod]
+connection = "local"
 schema = "prod"
 
 [targets.dev]
+connection = "local"
 schema = "dev"
 
 [path_defaults."models/staging"]
@@ -1083,61 +1089,89 @@ materialized = "view"
 | `adapter` | Database adapter: `duckdb`, `motherduck`, `snowflake`, `bigquery`, `databricks`, `postgres`, or `sqlserver`. See [Adapters](/concepts/adapters). |
 | `default_target` | Name of the target to build against when none is selected (see [Targets](#targets)). |
 
-#### Connection
+#### Named connections
 
-The `connection` block is passed directly to the adapter. For DuckDB:
+Define reusable connections under `[connections.<name>]`, then reference one by name from
+each target. Connections own endpoint, authentication, and compute settings. Targets own the
+authoritative `database`, `schema`, variables, and operational policy.
 
 ```toml
-[connection]
+[connections.local]
 database = "my_project.duckdb"
-```
-
-Targets can override the connection:
-
-```toml
-[targets.prod]
-schema = "prod"
-
-[targets.prod.connection]
-database = "prod.duckdb"
 
 [targets.dev]
+connection = "local"
 schema = "dev"
-
-[targets.dev.connection]
-database = "dev.duckdb"
 ```
+
+Multiple targets can reuse one connection while keeping separate namespaces and policies:
+
+```toml
+[connections.warehouse]
+account = "my_org-my_account"
+user = "${ENV:SNOWFLAKE_USER}"
+password = "${ENV:SNOWFLAKE_PASSWORD}"
+warehouse = "TRANSFORM_WH"
+
+[targets.prod]
+connection = "warehouse"
+database = "ANALYTICS"
+schema = "PROD"
+
+[targets.dev]
+connection = "warehouse"
+database = "ANALYTICS"
+schema = "DEV_ALICE"
+```
+
+A `database` or `schema` present in a named connection is connection/session metadata only;
+it does not satisfy the mandatory namespace strategy for a named target. Put the target's
+authoritative database and schema on `[targets.<name>]`. SQLBuild validates connection
+references while loading configuration, without opening a warehouse connection, and reports
+an unknown `targets.<name>.connection` name as an offline configuration error.
+
+For migration only, SQLBuild still maps legacy `[connection]` to an implicit connection and
+legacy `[targets.<name>.connection]` blocks to target-specific implicit connections. These
+forms are compatibility syntax, not the canonical format for new or updated projects.
 
 ### Targets
 
-A target is a named build context - the schema, database, or connection you build against (for example `dev` and `prod`). Targets let you build to different places from the same project. Each target can override:
+A target is a named build context - the database and schema you build into, plus execution policy (for example `dev` and `prod`). Each target references a named connection and can configure:
 
 | Field | Description |
 |-------|-------------|
-| `schema` | Schema for all models in this target |
+| `schema` | Schema for all models in this target; required for named targets |
 | `loader_schema` | Default write schema for managed source loaders; falls back to `schema` |
 | `database` | Database for all models in this target |
-| `connection` | Override the base connection config |
+| `connection` | Name from `[connections.<name>]` used for endpoint, authentication, and compute |
 | `vars` | Target-specific project variables |
 | `defer_sources_to` | Target name to read managed source data from (see [Loaders](/concepts/python-nodes/loaders#source-deferral)) |
 | `clone` | Clone policy (see below) |
 
 ```toml
+[connections.warehouse]
+account = "my_org-my_account"
+warehouse = "TRANSFORM_WH"
+
 [targets.prod]
+connection = "warehouse"
+database = "analytics"
 schema = "analytics_prod"
 loader_schema = "raw_prod"
 defer_sources_to = "prod"
 
 [targets.dev]
+connection = "warehouse"
+database = "analytics"
 schema = "analytics_dev"
 loader_schema = "raw_dev"
 defer_sources_to = "prod"
 
 [targets.staging]
+connection = "warehouse"
+database = "analytics"
 schema = "staging"
 
-[targets.staging.connection]
-database = "staging.duckdb"
 ```
 
 Managed loader writes use the active target's `loader_schema`, falling back to its model
@@ -1166,8 +1200,13 @@ their normal target once in the optional local file:
 target = "dev"
 
 [targets.dev]
+connection = "warehouse"
 schema = "dev_alice"
 loader_schema = "raw_alice"
+
+[connections.warehouse]
+user = "alice"
+password = "${ENV:SNOWFLAKE_PASSWORD}"
 ```
 
 Commands then use `dev` automatically. An explicit command such as `sqb build --target prod`
@@ -1197,29 +1236,17 @@ Both policies default to `false`. `sqb clone --from prod --to dev` requires `all
 
 ### Defaults
 
-Project-wide resource defaults. Model header fields can be set here alongside resource-specific seed and function namespaces:
+Project-wide model defaults. Any field you can set in a `MODEL()` header can be set here as a default:
 
 ```toml
 [defaults]
 materialized = "table"
-database = "analytics"
-schema = "models"
-seed_schema = "lookups"
-function_schema = "functions"
 incremental_strategy = "delete_insert"
 replay_on_change = "full"
 tags = ["managed"]
 ```
 
-`database` and `schema` apply to models. Seeds and functions inherit those namespaces for
-backward compatibility, but can use `seed_database` / `seed_schema` and
-`function_database` / `function_schema` for resource-specific defaults. A namespace in a
-seed or function declaration overrides its resource-specific default. A literal target
-`database` or `schema` overrides the physical namespace for every resource, while the
-special target value `preserve` retains each resource's logical namespace.
-
-Model fields apply to all models unless overridden by path defaults or the model's own
-`MODEL()` header.
+These apply to all models unless overridden by path defaults or the model's own `MODEL()` header.
 
 ### Constants
 
@@ -1239,31 +1266,17 @@ This setting does not make unsupported adapter features portable. In particular,
 Per-directory model defaults. Useful for applying different config to different parts of your project:
 
 ```toml
-[path_defaults.staging]
+[path_defaults."models/staging"]
 materialized = "view"
 tags = ["staging"]
 
-[path_defaults.marts]
+[path_defaults."models/marts"]
 materialized = "table"
 tags = ["marts"]
 replay_on_change = "full"
-
-[path_defaults."market/**/staging"]
-materialized = "view"
 ```
 
-Keys are POSIX-style paths relative to `models/`; do not include a leading `models/`. Literal
-keys retain inherited-prefix behavior, so `market/germantote/staging` applies to every model
-below that directory. `*` matches exactly one complete path segment, while `**` matches zero
-or more complete path segments. Thus `market/**/staging` applies below both
-`models/market/staging/` and `models/market/germantote/staging/`. Wildcards must be complete
-segments; partial and character-class globs are not supported.
-
-Literal matches always outrank wildcard matches. Wildcard specificity is compared by the number
-of literal segments, then the number of single-segment `*` wildcards, then by fewer recursive
-`**` wildcards. If equally most-specific wildcard patterns match the same model, discovery fails
-offline with `D007`; declaration order and equal configuration values do not break the tie. Every
-declared literal or glob key must match at least one model path.
+Path matching uses the model's relative file path. A model at `models/staging/stg_orders.sql` matches the `models/staging` path default.
 
 #### Config layering order
 
@@ -1426,12 +1439,14 @@ Configuration for AI agent skill file installation:
 
 ```toml
 [skills]
-targets = ["opencode", "claude"]
+targets = ["agents", "claude"]
+auto_update = false
 ```
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `targets` | all targets | Which agent targets to install skill files for: `opencode`, `claude`, `agents` |
+| `targets` | `["agents", "claude"]` | Agent targets to install. OpenCode consumes `.agents`; use `opencode` only as an explicit override. |
+| `auto_update` | `false` | Refresh stale SQLBuild-owned generated files from the installed package during normal commands; custom collisions are never overwritten. |
 
 See [skills CLI reference](/cli/skills) for usage details.
 
@@ -1447,7 +1462,7 @@ target = "dev"
 schema = "dev_alice"
 loader_schema = "raw_alice"
 
-[targets.dev.connection]
+[connections.local]
 database = "my_local.duckdb"
 
 [settings]
@@ -1462,16 +1477,18 @@ debug_mode = "true"
 |-------|-------------|
 | `target` | Override which target is active for this developer |
 | `adapter` | Override the database adapter (e.g. use DuckDB locally while prod uses Snowflake) |
-| `connection` | Override connection config (merged on top of project + target connection) |
+| `connections` | Override named connection fields; entries merge by connection name |
 | `settings` | Override global settings (only explicitly set fields take effect) |
 | `vars` | Developer-specific variable overrides (merged on top of project + target vars) |
 
-Target blocks support the same local overrides, including `schema`, `loader_schema`,
-`connection`, `vars`, source deferral, and clone policy fields. Unspecified values
-continue to come from `sqlbuild_project.toml`.
+Project and local configuration merge named connections by name and merge their explicitly
+configured fields. Target blocks merge the same way and may override the connection reference,
+`database`, `schema`, `loader_schema`, variables, source deferral, and policy fields. Unspecified
+values continue to come from `sqlbuild_project.toml`; a local reference to an unknown merged
+connection still fails offline during configuration loading.
 
 This replaces the common dbt pattern of switching profiles or setting environment variables
-to change targets. Each developer sets their target, connection, and preferences once in
+to change targets. Each developer sets their target, named connection, and preferences once in
 `sqlbuild_local.toml` and it persists across sessions.
 
 ## Overview
@@ -1601,9 +1618,14 @@ DuckDB is included as a core dependency. No extra installation needed.
 
 ```toml
 adapter = "duckdb"
+default_target = "dev"
 
-[connection]
+[connections.local]
 database = "my_project.duckdb"
+
+[targets.dev]
+connection = "local"
+schema = "dev"
 ```
 
 | Field | Description |
@@ -1616,21 +1638,21 @@ database = "my_project.duckdb"
 ### Extensions and settings
 
 ```toml
-[connection]
+[connections.local]
 database = "my_project.duckdb"
 extensions = ["httpfs", "parquet"]
 
-[connection.settings]
+[connections.local.settings]
 memory_limit = "4GB"
 ```
 
 ### Attaching additional databases
 
 ```toml
-[connection]
+[connections.local]
 database = "my_project.duckdb"
 
-[[connection.attach]]
+[[connections.local.attach]]
 path = "external_data.duckdb"
 alias = "external"
 read_only = true
@@ -1657,10 +1679,16 @@ MotherDuck uses DuckDB's built-in `md:` connection support. No extra installatio
 
 ```toml
 adapter = "motherduck"
+default_target = "dev"
 
-[connection]
+[connections.motherduck]
 database = "my_database"
 token = "your_motherduck_token"
+
+[targets.dev]
+connection = "motherduck"
+database = "my_database"
+schema = "dev"
 ```
 
 | Field | Description |
@@ -1673,32 +1701,31 @@ token = "your_motherduck_token"
 MotherDuck requires an access token. Generate one from the MotherDuck UI and pass it via the connection config or an environment variable:
 
 ```toml
-[connection]
+[connections.motherduck]
 database = "my_database"
 token = "${ENV:MOTHERDUCK_TOKEN}"
 ```
 
-### Per-target connections
+### Shared connections across targets
 
 Use targets to separate production and development databases on MotherDuck:
 
 ```toml
 adapter = "motherduck"
 
-[connection]
+[connections.motherduck]
 token = "${ENV:MOTHERDUCK_TOKEN}"
+database = "my_database"
 
 [targets.prod]
+connection = "motherduck"
+database = "prod_db"
 schema = "prod"
 
-[targets.prod.connection]
-database = "prod_db"
-
 [targets.dev]
-schema = "dev"
-
-[targets.dev.connection]
+connection = "motherduck"
 database = "dev_db"
+schema = "dev"
 ```
 
 ### Local development with DuckDB
@@ -1708,8 +1735,12 @@ Use `sqlbuild_local.toml` to override the adapter for local development against 
 ```toml
 adapter = "duckdb"
 
-[connection]
+[connections.local]
 database = "local_dev.duckdb"
+
+[targets.dev]
+connection = "local"
+schema = "dev"
 ```
 
 This lets you develop and test locally with zero MotherDuck compute cost, then deploy to MotherDuck in production. SQLBuild's [scenario replay](/concepts/scenarios) also runs locally in DuckDB regardless of the production adapter.
@@ -1732,50 +1763,53 @@ uv pip install 'sqlbuild[snowflake]'
 
 ```toml
 adapter = "snowflake"
+default_target = "dev"
 
-[connection]
+[connections.warehouse]
 account = "my_org-my_account"
 user = "my_user"
 password = "my_password"
 role = "TRANSFORM_ROLE"
 warehouse = "TRANSFORM_WH"
+
+[targets.dev]
+connection = "warehouse"
 database = "ANALYTICS"
 schema = "RAW"
 ```
 
-All fields in `connection` are passed directly to `snowflake.connector.connect()`. See the [Snowflake Connector documentation](https://docs.snowflake.com/en/developer-guide/python-connector/python-connector-connect) for all available options, including key-pair authentication, OAuth, and SSO.
+Connection fields are passed directly to `snowflake.connector.connect()`. See the [Snowflake Connector documentation](https://docs.snowflake.com/en/developer-guide/python-connector/python-connector-connect) for all available options, including key-pair authentication, OAuth, and SSO. Put the authoritative database and schema on the target.
 
 ### Session initialization
 
-On connect, SQLBuild runs `USE ROLE`, `USE WAREHOUSE`, `USE DATABASE`, and `USE SCHEMA` statements based on the connection config. These ensure the session context is set correctly regardless of the user's default settings.
+On connect, SQLBuild applies the connection's role and warehouse, then applies the active
+target's authoritative database and schema. These ensure the session context is set correctly
+regardless of the user's default settings.
 
-### Per-target connections
+### Shared connections across targets
 
-Use targets to connect to different Snowflake databases or warehouses:
+Use multiple targets to reuse one Snowflake connection while selecting different authoritative
+databases and schemas:
 
 ```toml
 adapter = "snowflake"
 
-[connection]
+[connections.warehouse]
 account = "my_org-my_account"
 user = "my_user"
 password = "my_password"
+role = "TRANSFORM_ROLE"
+warehouse = "TRANSFORM_WH"
 
 [targets.prod]
+connection = "warehouse"
+database = "PROD_DB"
 schema = "prod"
 
-[targets.prod.connection]
-role = "PROD_ROLE"
-warehouse = "PROD_WH"
-database = "PROD_DB"
-
 [targets.dev]
-schema = "dev"
-
-[targets.dev.connection]
-role = "DEV_ROLE"
-warehouse = "DEV_WH"
+connection = "warehouse"
 database = "DEV_DB"
+schema = "dev"
 ```
 
 ## BigQuery
@@ -1796,10 +1830,16 @@ uv pip install 'sqlbuild[bigquery]'
 
 ```toml
 adapter = "bigquery"
+default_target = "dev"
 
-[connection]
+[connections.gcp]
 project = "my-gcp-project"
 location = "europe-west2"
+
+[targets.dev]
+connection = "gcp"
+database = "my-gcp-project"
+schema = "analytics_dev"
 ```
 
 | Field | Description |
@@ -1817,7 +1857,7 @@ BigQuery supports two authentication methods:
 **Service account file:**
 
 ```toml
-[connection]
+[connections.gcp]
 project = "my-gcp-project"
 credentials_path = "/path/to/service-account.json"
 ```
@@ -1854,12 +1894,16 @@ uv pip install 'sqlbuild[databricks]'
 
 ```toml
 adapter = "databricks"
+default_target = "dev"
 
-[connection]
+[connections.workspace]
 server_hostname = "my-workspace.cloud.databricks.com"
 http_path = "/sql/1.0/warehouses/abc123"
 token = "dapi_my_access_token"
-catalog = "my_catalog"
+
+[targets.dev]
+connection = "workspace"
+database = "my_catalog"
 schema = "my_schema"
 ```
 
@@ -1868,12 +1912,13 @@ schema = "my_schema"
 | `server_hostname` | Databricks workspace hostname (required) |
 | `http_path` | SQL warehouse or cluster HTTP path (required) |
 | `token` | Personal access token (required) |
-| `catalog` | Unity Catalog name (required) |
-| `schema` | Default schema (optional) |
+
+The target's `database` selects the Unity Catalog catalog, and its `schema` selects the schema.
 
 ### Session initialization
 
-On connect, SQLBuild runs `USE CATALOG` and `USE SCHEMA` statements to set the session context.
+On connect, SQLBuild runs `USE CATALOG` and `USE SCHEMA` statements from the active target to set
+the authoritative session namespace.
 
 ## PostgreSQL
 
@@ -1893,13 +1938,19 @@ uv pip install 'sqlbuild[postgres]'
 
 ```toml
 adapter = "postgres"
+default_target = "dev"
 
-[connection]
+[connections.postgres]
 host = "localhost"
 port = 5432
 user = "my_user"
 password = "my_password"
 dbname = "my_database"
+
+[targets.dev]
+connection = "postgres"
+database = "my_database"
+schema = "analytics_dev"
 ```
 
 | Field | Description |
@@ -1910,30 +1961,28 @@ dbname = "my_database"
 | `password` | Database password |
 | `dbname` | Database name |
 
-All fields in `connection` are passed to `psycopg.connect()`. See the [psycopg documentation](https://www.psycopg.org/psycopg3/docs/api/connections.html) for all available options.
+Connection fields are passed to `psycopg.connect()`. See the [psycopg documentation](https://www.psycopg.org/psycopg3/docs/api/connections.html) for all available options. The target remains authoritative for database and schema qualification.
 
-### Per-target connections
+### Shared connections across targets
 
 ```toml
 adapter = "postgres"
 
-[connection]
+[connections.postgres]
 host = "localhost"
 user = "my_user"
 password = "${ENV:PG_PASSWORD}"
-
-[targets.prod]
-schema = "prod"
-
-[targets.prod.connection]
-host = "prod-db.example.com"
 dbname = "analytics"
 
-[targets.dev]
-schema = "dev"
+[targets.prod]
+connection = "postgres"
+database = "analytics"
+schema = "prod"
 
-[targets.dev.connection]
-dbname = "analytics_dev"
+[targets.dev]
+connection = "postgres"
+database = "analytics"
+schema = "dev"
 ```
 
 ## SQL Server
@@ -1954,13 +2003,19 @@ uv pip install 'sqlbuild[sqlserver]'
 
 ```toml
 adapter = "sqlserver"
+default_target = "dev"
 
-[connection]
+[connections.sqlserver]
 host = "localhost"
 port = 1433
 user = "sa"
 password = "my_password"
 database = "my_database"
+
+[targets.dev]
+connection = "sqlserver"
+database = "my_database"
+schema = "analytics_dev"
 ```
 
 | Field | Description |
@@ -1971,7 +2026,7 @@ database = "my_database"
 | `password` | Database password |
 | `database` | Database name (default: `master`). Also accepts `dbname` as an alias. |
 
-All fields in `connection` are passed to `pymssql.connect()`. See the [pymssql documentation](https://pymssql.readthedocs.io/en/stable/ref/pymssql.html) for all available options.
+Connection fields are passed to `pymssql.connect()`. See the [pymssql documentation](https://pymssql.readthedocs.io/en/stable/ref/pymssql.html) for all available options. The target remains authoritative for database and schema qualification.
 
 SQL Server supports schema-only, full-row, and bounded `sqb diff` comparisons.
 
@@ -1987,28 +2042,26 @@ SQL Server has no supported first-class native array expression. Any list or set
 
 See [Collections and Rendering](/concepts/constants/collections-and-rendering#native-array-rendering) for declarations, rendering precedence, and the cross-adapter matrix.
 
-### Per-target connections
+### Shared connections across targets
 
 ```toml
 adapter = "sqlserver"
 
-[connection]
+[connections.sqlserver]
 host = "localhost"
 user = "sa"
 password = "${ENV:MSSQL_PASSWORD}"
-
-[targets.prod]
-schema = "prod"
-
-[targets.prod.connection]
-host = "prod-sql.example.com"
 database = "analytics"
 
-[targets.dev]
-schema = "dev"
+[targets.prod]
+connection = "sqlserver"
+database = "analytics"
+schema = "prod"
 
-[targets.dev.connection]
-database = "analytics_dev"
+[targets.dev]
+connection = "sqlserver"
+database = "analytics"
+schema = "dev"
 ```
 
 ## Sources
@@ -6628,6 +6681,10 @@ SQLBuild can compare schemas and row-level data between two build contexts. This
 
 The mechanics below are identical for both; only what `FROM` and `TO` refer to changes.
 
+In direct mode, each name resolves a configured target, including its named connection and
+authoritative database/schema namespace. Unknown connection references fail during offline
+configuration loading before SQLBuild attempts the comparison.
+
 ```bash
 sqb diff prod:dev --full --select customer_status_snapshot
 ```
@@ -7072,87 +7129,289 @@ and offline: it never connects to the warehouse, moves files, or edits configura
 Use this page for common workflows. See the [`sqb scope` CLI reference](/cli/scope) for every flag,
 filter, text section, and JSON field.
 
-### Inspect a resource
+### Example project
 
-Start with a model, test, scenario, hook, function, audit, source, or declaration identity:
+The examples below use two domains with project-wide currency helpers:
 
-```bash
-sqb scope model:stg_orders
-sqb scope test:orders__completed_only
-sqb scope macro:normalize_order_status
+```text
+project/
+├── macros/
+│   └── currency.py                      add_tax, round_money
+├── models/
+│   ├── commerce/
+│   │   ├── _constants/limits.yml        minimum_order_value
+│   │   ├── _enums/status.yml            order_status
+│   │   ├── _macros/orders.py            formatted_order_total
+│   │   ├── orders.sql
+│   │   └── returns/returns.sql
+│   └── finance/
+│       ├── _enums/status.yml            finance_status
+│       ├── _macros/margin.py            calculate_margin
+│       ├── finance_summary.sql
+│       └── reports/margin_report.sql
+└── tests/
+    └── unit/orders__completed_only.sql
 ```
 
-The report separates what a file can use from what it actually uses:
+`formatted_order_total` composes the project-wide functions through ordinary Python calls:
 
-| Section | What it answers |
-|---------|-----------------|
-| Scope chain | Which exact-local, inherited, and project-wide directories apply? |
-| Available | Which declarations can this file use? |
-| Used declarations | Which declarations does it currently use? |
-| Expected models | Which enums and constants are available through expected model output? |
-| Nearby unavailable | Which nearby declarations are outside its scope? This is opt-in. |
-| Placement | Is each scoped declaration in the right directory? |
+```python
+from macros.currency import add_tax, round_money
 
-### Explain one declaration
-
-Ask why a declaration is available, unavailable, or used:
-
-```bash
-sqb scope model:stg_orders --explain enum:customer_status
-sqb scope test:orders__completed_only --explain constant:order_status
+def formatted_order_total(expression: str) -> str:
+    return round_money(add_tax(expression))
 ```
 
-For a test, the explanation keeps declarations from the test's directory separate from enums and
-constants made available through an expected model.
+`orders.sql` uses the commerce constant and macro. The returns model also uses all three commerce
+declarations, so they are correctly inherited throughout that domain. The two finance models use
+both finance declarations. This gives every scoped declaration a real consumer and valid placement.
 
-### Browse nearby declarations
+### See available and used declarations
 
-Use nearby output when you know the resource but not the declaration name:
+Start with a model, test, scenario, hook, function, audit, source, or authored resource path to
+inspect its directory-derived scope. A declaration identity instead opens its explanation. These
+main sections from a resource report put actual usage beside the complete directory-derived scope:
 
-```bash
-sqb scope model:stg_orders --include-nearby
-sqb scope model:stg_orders --include-nearby --nearby-depth 2
+```console
+$ sqb scope model:orders
+Scope
+  Target: model:orders
+  Resource: model:orders
+  Path: models/commerce/orders.sql
+
+Used (2)
+  ├─ ● constant:minimum_order_value  [constant; inherited; inherited_ancestor; type integer]  models/commerce/_constants/limits.yml:1:1
+  └─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:4:1
+
+Scope chain
+  ├─ local models/commerce (3)
+  ├─ inherited models (0)
+  └─ global global (2)
+
+Available (3 of 5, 2 collapsed)
+  ├─ ● constant:minimum_order_value  [constant; inherited; inherited_ancestor; type integer]  models/commerce/_constants/limits.yml:1:1
+  ├─ ○ enum:order_status  [enum; inherited; inherited_ancestor; members 4; type VARCHAR]  models/commerce/_enums/status.yml:1:1
+  └─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:4:1
+  … 2 globals collapsed; run sqb scope model:orders --globals all
+
+Diagnostics (0)
+  (none)
+Completeness: complete
 ```
 
-Browse declarations by folder when a project contains more than a short list:
+`●` marks a declaration included in `Used`: a direct usage by default, or a followed declaration
+dependency when `--dependency-depth` is nonzero. `○` marks a declaration present in the section but
+not in `Used`. The scope chain shows the model's exact directory, every inherited ancestor, and the
+project-wide tier. Unused project-wide declarations stay collapsed by default so a large global API
+does not hide the local facts.
 
-```bash
-sqb scope model:stg_orders --browse .
-sqb scope model:stg_orders --browse global
-sqb scope model:stg_orders --list global/macros/finance/payments
+### Follow composed dependencies
+
+`Used` is direct by default. Add `--dependency-depth` to follow declarations used by those
+declarations. The expanded `Used` section is:
+
+```console
+$ sqb scope model:orders --used-only --dependency-depth 1
+Used (4)
+  ├─ ● constant:minimum_order_value  [constant; inherited; inherited_ancestor; type integer]  models/commerce/_constants/limits.yml:1:1
+  ├─ ● macro:add_tax  [macro; global; dependency; params 1]  macros/currency.py:1:1
+  ├─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:4:1
+  └─ ● macro:round_money  [macro; global; dependency; params 1]  macros/currency.py:5:1
 ```
 
-Filters for declaration kind, definition path, glob matching, and actual usage can be combined. Use
-pagination for large reports rather than trimming the compiler facts.
+SQLBuild derives these edges from actual Python calls, including nested calls and calls reached
+through private helpers. Merely importing a macro does not make it used. Increase the depth to
+follow longer chains.
 
-### Check a prospective path
+Explain the composed macro to see its direct dependencies, consumers, and required placement. The
+ordinary report appears first; its `Explanation` section is:
 
-Inspect what a resource would see before its file exists:
-
-```bash
-sqb scope --at models/commerce/finance/new_revenue.sql
-sqb scope --at tests/unit/commerce/orders/
+```console
+$ sqb scope model:orders --explain macro:formatted_order_total
+Explanation
+  └─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:4:1
+     Owner: (none)
+     Owning path: models/commerce
+     Consumers: model:orders, model:returns
+     Dependencies: macro:add_tax, macro:round_money
+     Grants: (none)
+     Required scope: inherited
+     Required path: models/commerce
+     Promotion impact: (none)
 ```
 
-Use `--as-path` to evaluate an existing resource from a proposed destination without moving it:
+#### Catch placement that is too broad
 
-```bash
-sqb scope model:stg_orders --as-path models/commerce/staging/stg_orders.sql
+If `returns.sql` stopped using `formatted_order_total`, only `orders.sql` would consume it. The same
+explanation would then show that inherited placement is broader than necessary:
+
+```console
+Explanation
+  └─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:4:1
+     Owner: (none)
+     Owning path: models/commerce
+     Consumers: model:orders
+     Dependencies: macro:add_tax, macro:round_money
+     Grants: (none)
+     Required scope: local
+     Required path: models/commerce
+     Promotion impact: model:orders
+
+Diagnostics (1)
+  ERROR S008 models/commerce/_macros/orders.py: Declaration 'macro:formatted_order_total' is currently inherited at 'models/commerce' (models/commerce/_macros/orders.py); required local at 'models/commerce'. Consumers: model:orders. Move it to 'models/commerce/_local_macros/'
+Completeness: complete
 ```
+
+This is actionable placement guidance, not only a visibility lookup.
+
+### Find declarations outside the scope
+
+Nearby discovery is useful when you know a declaration exists but not why the current resource
+cannot use it. The relevant section is:
+
+```console
+$ sqb scope model:orders --include-nearby
+Nearby unavailable (2 of 2)
+  ├─ ○ enum:finance_status  [enum; inherited; sibling_scope; members 3; type VARCHAR]  models/finance/_enums/status.yml:1:1
+  └─ ○ macro:calculate_margin  [macro; inherited; sibling_scope; params 2]  models/finance/_macros/margin.py:4:1
+```
+
+The declarations are known, but `sibling_scope` means a model in `commerce/` cannot use declarations
+owned by `finance/`. Ask for one complete explanation when you know its identity. After the ordinary
+report, the command adds:
+
+```console
+$ sqb scope model:orders --explain macro:calculate_margin
+Explanation
+  └─ ○ macro:calculate_margin  [macro; inherited; sibling_scope; params 2]  models/finance/_macros/margin.py:4:1
+     Owner: (none)
+     Owning path: models/finance
+     Consumers: model:finance_summary, model:margin_report
+     Dependencies: (none)
+     Grants: (none)
+     Required scope: inherited
+     Required path: models/finance
+     Promotion impact: (none)
+```
+
+An explanation distinguishes a known but inaccessible declaration from an unknown name. It also
+shows whether the declaration is placed more broadly than its real consumers require.
+
+### See test relationship grants
+
+Tests and scenarios can receive public enums and constants through an explicit expected-model
+relationship. That access remains separate from the declarations visible through the test's own
+path. The relevant report sections are:
+
+```console
+$ sqb scope test:orders__completed_only --used-only
+Used (1)
+  └─ ● enum:order_status  [enum; inherited; expected_model through model:orders; members 4; type VARCHAR]  models/commerce/_enums/status.yml:1:1
+
+Relationship grants (1 of 1)
+  └─ ● enum:order_status  [enum; inherited; expected_model through model:orders; members 4; type VARCHAR]  models/commerce/_enums/status.yml:1:1
+```
+
+The `expected_model through model:orders` reason identifies exactly where the additional access came
+from. Expected-model relationships grant public enums and constants, not macros or model-private
+declarations.
 
 ### Preview a resource move
 
-Use `--as-path` to preview moving an existing authored resource such as a model, test, hook, or
-function. The report shows retained, gained, and lost declarations and direct usages the move would
-invalidate:
+Use `--as-path` to see the scope delta before moving an existing model, test, hook, or function. The
+ordinary report is followed by:
 
-```bash
-sqb scope model:stg_orders \
-  --as-path models/marts/orders/stg_orders.sql
+```console
+$ sqb scope model:orders --as-path models/finance/orders.sql
+Move preview
+  Resource: model:orders
+  Destination: models/finance/orders.sql
+  Ownership root: models
+  Retained (2)
+    ├─ ○ macro:add_tax  [macro; global; global; params 1]  macros/currency.py:1:1
+    └─ ○ macro:round_money  [macro; global; global; params 1]  macros/currency.py:5:1
+  Gained (2)
+    ├─ ○ enum:finance_status  [enum; inherited; inherited_ancestor; members 3; type VARCHAR]  models/finance/_enums/status.yml:1:1
+    └─ ○ macro:calculate_margin  [macro; inherited; inherited_ancestor; params 2]  models/finance/_macros/margin.py:4:1
+  Lost (3)
+    ├─ ● constant:minimum_order_value  [constant; inherited; inherited_ancestor; type integer]  models/commerce/_constants/limits.yml:1:1
+    ├─ ○ enum:order_status  [enum; inherited; inherited_ancestor; members 4; type VARCHAR]  models/commerce/_enums/status.yml:1:1
+    └─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:4:1
+  Private retained (0)
+    (none)
+  Relationship retained (0)
+    (none)
+  Invalidated usages (2)
+    - constant:minimum_order_value
+    - macro:formatted_order_total
 ```
 
-The destination must be valid for that resource kind. Scope Explorer does not move the file or
-preview moving declaration files themselves.
+The move would gain finance declarations and lose commerce declarations. More importantly,
+`Invalidated usages` separates the losses that break the model from declarations that happened to
+be available but were never used. The preview does not move or rewrite any file.
+
+### Check a prospective path
+
+Inspect visibility before a resource exists:
+
+```console
+$ sqb scope --at models/commerce/returns/new_return.sql
+Scope
+  Target: models/commerce/returns/new_return.sql
+  Path: models/commerce/returns/new_return.sql
+  Status: prospective
+
+Used (0)
+  (none)
+
+Scope chain
+  ├─ local models/commerce/returns (0)
+  ├─ inherited models/commerce (3)
+  ├─ inherited models (0)
+  └─ global global (2)
+
+Available (3 of 5, 2 collapsed)
+  ├─ ○ constant:minimum_order_value  [constant; inherited; inherited_ancestor; type integer]  models/commerce/_constants/limits.yml:1:1
+  ├─ ○ enum:order_status  [enum; inherited; inherited_ancestor; members 4; type VARCHAR]  models/commerce/_enums/status.yml:1:1
+  └─ ○ macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:4:1
+  … 2 globals collapsed; run sqb scope --at models/commerce/returns/new_return.sql --globals all
+
+Diagnostics (1)
+  ERROR S013 models/commerce/returns/new_return.sql: Runtime usage and relationship facts are unavailable for a prospective path
+Completeness: partial
+```
+
+Visibility is available from the proposed path. Actual usage and expected-model relationships do
+not exist yet, so the command preserves the useful static result while clearly marking it partial.
+
+### Browse large declaration sets
+
+In a larger project, browse returns folder summaries rather than an arbitrary prefix of the
+declaration inventory. The `used` counts are direct usages by this target; browse does not apply
+dependency-depth expansion:
+
+```console
+$ sqb scope model:orders --browse global
+Scope folders
+  Path: global
+
+  ├─ constants/  146 declarations, 18 used, 4 children; constant 146
+     sqb scope model:orders --browse global/constants
+     sqb scope model:orders --list global/constants
+  ├─ enums/  84 declarations, 11 used, 3 children; enum 84
+     sqb scope model:orders --browse global/enums
+     sqb scope model:orders --list global/enums
+  └─ macros/  231 declarations, 27 used, 8 children; macro 231
+     sqb scope model:orders --browse global/macros
+     sqb scope model:orders --list global/macros
+
+Diagnostics (0)
+  (none)
+Completeness: complete
+```
+
+Choose a bounded folder, then use `--list`. Definition-path, kind, glob, and actual-usage filters
+can be combined, and paged sections use stable declaration identities as cursors.
 
 ### Automation
 
@@ -9007,10 +9266,11 @@ default_target = "dev"
 [settings]
 virtual_environments = true
 
-[connection]
+[connections.local]
 database = "warehouse.duckdb"
 
 [targets.dev]
+connection = "local"
 schema = "dev"
 
 [targets.dev.state]
@@ -9642,6 +9902,12 @@ Hydrate physical versions from a source warehouse.
 In virtual mode, `sqb clone` hydrates physical version relations from a source warehouse into the target physical storage layer. It does not copy VDE pointer sets or create logical views - it copies the underlying physical data so that builds and promotions can reference those versions locally.
 
 This is useful for seeding a new target from an existing one, or restoring physical versions that were cleaned up by the janitor.
+
+As in direct mode, `--from` selects an origin namespace and clone-origin policy, not a
+connection. `--to` (or the active target) supplies the only physical connection. The origin
+physical namespace must be readable through that destination connection; SQLBuild never opens
+the origin target connection or transfers data across accounts, servers, or files using a
+second connection.
 
 ### How it works
 
@@ -11054,7 +11320,27 @@ my-project/
 
 Empty directories contain `.gitkeep` files so the scaffold can be committed. Add reusable SQL lifecycle hooks to `hooks/sql/` and decorated Python lifecycle hooks to `hooks/python/`; see [Hooks](/concepts/models/hooks).
 
-The generated project uses DuckDB, creates `dev` and `prod` targets, and defaults models to table materialization. The project name is derived from the current directory name, with hyphens converted to underscores.
+The generated project uses DuckDB, creates a named `local` connection shared by `dev` and
+`prod`, and defaults models to table materialization. Its configuration follows this shape:
+
+```toml
+adapter = "duckdb"
+default_target = "dev"
+
+[connections.local]
+database = "my_project.duckdb"
+
+[targets.dev]
+connection = "local"
+schema = "dev"
+
+[targets.prod]
+connection = "local"
+schema = "prod"
+```
+
+The project name is derived from the current directory name, with hyphens converted to
+underscores.
 
 ## playground
 
@@ -11160,15 +11446,13 @@ Install SQLBuild skill files for AI coding agents.
 
 Install or update SQLBuild skill files so AI coding agents (Claude Code, OpenCode, Cursor, etc.) understand your project's framework, syntax, and conventions.
 
-### sqb skills update
-
 Write the packaged SQLBuild skill file to agent-specific locations in your project.
 
 ```bash
-sqb skills update [flags]
+sqb skills [flags]
 ```
 
-#### Flags
+### Flags
 
 | Flag | Description |
 |------|-------------|
@@ -11176,7 +11460,7 @@ sqb skills update [flags]
 | `--global` | Install to global agent config directories instead of project-local |
 | `--force` | Overwrite existing skill files even if they were not generated by SQLBuild |
 
-#### Targets
+### Targets
 
 Three agent targets are supported:
 
@@ -11186,44 +11470,54 @@ Three agent targets are supported:
 | `claude` | `.claude/skills/sqlbuild/SKILL.md` | `~/.claude/skills/sqlbuild/SKILL.md` |
 | `agents` | `.agents/skills/sqlbuild/SKILL.md` | `~/.agents/skills/sqlbuild/SKILL.md` |
 
-By default, all three targets are installed. Use `--target` to install specific ones:
+By default, SQLBuild installs `agents` and `claude`. OpenCode consumes the shared `.agents`
+skill, while Claude requires its `.claude` copy. The `opencode` target remains available as an
+explicit override for installations that require `.opencode`:
 
 ```bash
-# Install for all targets (default)
-sqb skills update
+# Install the agents and claude targets (default)
+sqb skills
 
 # Install for Claude Code only
-sqb skills update --target claude
+sqb skills --target claude
 
 # Install for OpenCode and Claude
-sqb skills update --target opencode --target claude
+sqb skills --target opencode --target claude
 
 # Install globally
-sqb skills update --global
+sqb skills --global
 ```
 
-#### Overwrite behavior
+### Overwrite behavior
 
-Generated skill files include a marker comment. `sqb skills update` will:
+Generated skill files include an ownership marker. `sqb skills` will:
 
 - Overwrite files it previously generated (safe to rerun)
 - Refuse to overwrite files that were manually created or edited (no marker)
 - Overwrite any file when `--force` is passed
 
-#### Configuration
+Normal project commands append a non-blocking notice when an installed, SQLBuild-owned generated
+skill is stale. The command still runs normally.
+
+### Configuration
 
 Default targets can be set in `sqlbuild_project.toml` so the team shares the same agent config:
 
 ```toml
 [skills]
-targets = ["opencode", "claude"]
+targets = ["agents", "claude"]
+auto_update = true
 ```
 
 CLI `--target` flags override the TOML config.
 
-#### Playground
+Set `auto_update = true` to refresh stale generated skills during normal project commands. Auto
+update reads the skill bundled with the installed SQLBuild package and rewrites only files marked
+as SQLBuild-owned. It never overwrites a custom file or an unowned path collision.
 
-The playground command automatically runs `sqb skills update` after creating the project, so AI agents are ready to use immediately:
+### Playground
+
+The playground command automatically runs `sqb skills` after creating the project, so AI agents are ready to use immediately:
 
 ```bash
 sqb playground waffle-shop
@@ -11233,7 +11527,7 @@ cd waffle-shop
 
 ### Kata policy skills
 
-`sqb skills update` installs general SQLBuild framework guidance. `sqb kata skills` generates
+`sqb skills` installs general SQLBuild framework guidance. `sqb kata skills` generates
 project-specific guidance from the active Kata rules, options, thresholds, naming vocabulary, and
 scoped deviations:
 
@@ -11474,11 +11768,129 @@ The default text report keeps distinct facts in distinct sections:
 
 - **Available** contains declarations visible through the resource's own lexical path.
 - **Used** contains declarations consumed by the resource, including tracked declaration dependencies.
-- **Relationship scope** contains public enums and constants granted to a test or scenario through explicit expected-model relationships.
+- **Relationship grants** contains public enums and constants granted to a test or scenario through explicit expected-model relationships.
 - **Nearby unavailable** is opt-in and explains close declarations that are outside the target's scope.
 - **Scope chain** shows the exact local directory, every inherited ancestor, and the global tier.
 
-Each declaration includes its qualified identity, definition, scope and owning path, visibility reason, and safe type or signature metadata where useful. Placement information includes the narrowest required scope and path, current consumers, and promotion impact when those facts are complete.
+Ordinary text rows show each declaration's qualified identity, definition location, scope, visibility
+reason, and safe type or signature metadata where useful. `--explain` additionally shows its owning
+path, narrowest required placement, current consumers, dependencies, and the consumers affected by
+a placement mismatch. JSON includes the complete structured declaration report.
+
+#### See the whole scope at once
+
+Suppose orders and returns models use an inherited macro, and that macro composes two project-wide
+macros:
+
+```text
+project/
+├── macros/
+│   └── currency.py                 add_tax, round_money
+└── models/
+    └── commerce/
+        ├── _macros/
+        │   └── orders.py           formatted_order_total
+        ├── orders.sql
+        └── returns/
+            └── returns.sql
+```
+
+```python
+# models/commerce/_macros/orders.py
+from macros.currency import add_tax, round_money
+
+def formatted_order_total(expression: str) -> str:
+    return round_money(add_tax(expression))
+```
+
+```sql
+-- models/commerce/orders.sql
+MODEL();
+
+SELECT @formatted_order_total("subtotal") AS total
+```
+
+`returns/returns.sql` calls the same macro, so the declaration must remain available throughout
+`models/commerce/` and its descendants.
+
+The default report puts actual usage next to the complete directory-derived scope. Unused globals
+stay collapsed, so the useful facts remain visible even in a large project:
+
+```console
+$ sqb scope model:orders
+Scope
+  Target: model:orders
+  Resource: model:orders
+  Path: models/commerce/orders.sql
+
+Used (1)
+  └─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:5:1
+
+Scope chain
+  ├─ local models/commerce (1)
+  ├─ inherited models (0)
+  └─ global global (2)
+
+Available (1 of 3, 2 collapsed)
+  └─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:5:1
+  … 2 globals collapsed; run sqb scope model:orders --globals all
+
+Relationship grants (0 of 0)
+  (none)
+
+Nearby unavailable (0 of 0)
+  (none)
+
+Diagnostics (0)
+  (none)
+Completeness: complete
+```
+
+This answers several questions without opening declaration files: what the model actually uses,
+where that declaration came from, which exact-local and inherited directories apply, how many
+project-wide declarations are available, and whether the result is complete.
+
+#### Follow composed macro dependencies
+
+`Used` is direct by default. Add `--dependency-depth` to follow declarations used by those
+declarations. In this example, the model calls `formatted_order_total`, whose Python body calls
+`add_tax` and `round_money`:
+
+```console
+$ sqb scope model:orders --used-only --dependency-depth 1
+Scope
+  Target: model:orders
+  Resource: model:orders
+  Path: models/commerce/orders.sql
+
+Used (3)
+  ├─ ● macro:add_tax  [macro; global; dependency; params 1]  macros/currency.py:1:1
+  ├─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:5:1
+  └─ ● macro:round_money  [macro; global; dependency; params 1]  macros/currency.py:5:1
+```
+
+The remaining report sections follow the `Used` section as usual. The dependency graph comes from
+actual Python calls, including nested calls and calls reached through private helpers. Merely
+importing a macro does not make it used. Increase the depth to follow longer chains.
+
+Explain the composed macro to inspect its direct graph and placement facts:
+
+```console
+$ sqb scope model:orders --explain macro:formatted_order_total
+Explanation
+  └─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:5:1
+     Owner: (none)
+     Owning path: models/commerce
+     Consumers: model:orders, model:returns
+     Dependencies: macro:add_tax, macro:round_money
+     Grants: (none)
+     Required scope: inherited
+     Required path: models/commerce
+     Promotion impact: (none)
+```
+
+The complete command also prints the ordinary report sections above the `Explanation` section.
+Use `--json` when another tool needs the same graph and placement facts as structured data.
 
 Global declarations are an intentional project-wide API and can be numerous. The default `--globals summary` always retains globals used by the target but collapses the unused global inventory with exact counts. Use `--globals used` for only used globals or `--globals all` when a bounded full list is appropriate.
 
@@ -11525,8 +11937,8 @@ sqb scope model:stg_orders --explain enum:customer_status
 
 An explanation distinguishes a known but unavailable declaration from an unknown name. It reports
 where the declaration is defined, why it is or is not available, which files use it, expected-model
-access, required placement, and the impact of broadening its scope. It does not move or rewrite the
-declaration.
+access, required placement, and consumers affected by a placement mismatch. It does not move or
+rewrite the declaration.
 
 `--dependency-depth` is separate from `--nearby-depth`: it follows tracked declaration dependencies from the used section rather than filesystem proximity.
 
@@ -11560,7 +11972,7 @@ The destination must be a valid project-relative file path for that resource kin
 
 ### Folder Browsing
 
-Browse and list are separate so a project with 10,000 or more declarations remains safe to explore. `--browse` returns only direct child declaration folders. Each folder has exact recursive declaration, usage, kind, and nested-folder counts; no arbitrary alphabetical prefix of declarations is printed.
+Browse and list are separate so a project with 10,000 or more declarations remains safe to explore. `--browse` returns only direct child declaration folders. Each folder has exact recursive declaration, usage, and kind counts plus its direct child-folder count; no arbitrary alphabetical prefix of declarations is printed.
 
 Global roots appear in the browse namespace as `global/macros`, `global/constants`, and `global/enums`, regardless of how files are organized recursively beneath the top-level declaration roots.
 
@@ -11580,7 +11992,7 @@ sqb scope model:stg_orders --list global/macros/finance/payments
 
 ### Pagination
 
-Flat lists and report sections use qualified declaration identities as stable lexical cursors, not page numbers. Every paged section reports its total, returned count, completeness, truncation state, and `next_cursor`. Repeat the same command and filters with that identity as `--after`:
+Flat lists and report sections use qualified declaration identities as stable lexical cursors, not page numbers. In canonical JSON, every paged section reports its total, returned count, completeness, truncation state, and `next_cursor`. Repeat the same command and filters with that identity as `--after`:
 
 ```bash
 # First page
@@ -11608,7 +12020,9 @@ sqb scope model:stg_orders \
 
 ### Paths And JSON
 
-`--paths relative` shows normalized project-relative paths. `compact` shortens repeated path context in text output, while `none` omits display paths when identities are sufficient. Paths in stable machine output never expose an absolute workspace root.
+`--paths relative` shows normalized project-relative paths. `compact` shortens repeated path context
+in text output. `none` omits declaration definition locations and replaces structural and header
+paths with `(hidden)`. Paths in stable machine output never expose an absolute workspace root.
 
 `--json` emits the canonical schema rather than serializing the visual tree. The top-level `schema_version` is currently `1`. Reports include the target, scope chain, declaration sections, applied filters, section totals, collapsed and truncated flags, cursors, diagnostics, and aggregate and section-level completeness. Move previews and explanations appear when requested.
 
@@ -11616,7 +12030,9 @@ JSON is deterministically ordered, ASCII, newline-terminated, and byte-stable fo
 
 ### Partial Projects
 
-Scope inspection remains useful while a project is broken. SQLBuild retains valid facts and independently marks discovery, static visibility, runtime usage, expected-model relationships, placement, and promotion impact complete or incomplete. Text and JSON never present a partial section as complete.
+Scope inspection remains useful while a project is broken. SQLBuild retains valid facts and marks
+affected report sections complete or incomplete. Text and JSON never present a partial section as
+complete, and diagnostics identify faults that prevented the missing facts from being indexed.
 
 Diagnostics are stable and include project-relative source locations when available. A partial result, invalid target or cursor, or any error diagnostic produces a nonzero exit status after the available report is written. This lets an editor or agent consume path visibility while still treating incomplete analysis as a failed check.
 
@@ -11996,7 +12412,11 @@ Use `--defer-to` to resolve unselected model references against another target. 
 sqb build --select fact_orders --defer-to prod
 ```
 
-No `manifest.json` is required. Deferred references resolve directly against the live target.
+No `manifest.json` is required. `--defer-to` selects only the namespace used for unselected
+references. SQLBuild resolves those relations through the active target's sole physical
+connection and never opens the deferred target's connection. The deferred namespace must be
+visible and readable through the active connection; deferral is not a cross-account,
+cross-server, or cross-file transfer mechanism.
 
 ### Failure behavior
 
@@ -12614,6 +13034,13 @@ No `manifest.json` generation or artifact management is required. Clone works di
 When `--to` is omitted, the destination is the active target selected by `--target`,
 `sqlbuild_local.toml`, or `default_target`, in that order.
 
+`--from` selects only the origin namespace and its clone-origin policy. `--to`, or the active
+target when it is omitted, selects the sole physical connection used by the operation. The
+origin namespace must therefore be visible and readable through the destination connection.
+SQLBuild never resolves or opens the origin target's connection, including for direct,
+deferred, and virtual clone. Clone cannot perform a cross-account, cross-server, or cross-file
+transfer by opening a second connection.
+
 ### Usage
 
 ```bash
@@ -12677,7 +13104,10 @@ allow_as_clone_origin = true
 allow_as_clone_destination = true
 ```
 
-The origin target must already contain the built relations being cloned. The configured warehouse credentials must be able to read those relations and create relations in the destination. Managed physical sources may bootstrap a destination that has not been built. See [Project Configuration](/concepts/project-configuration) for details.
+The origin target must already contain the built relations being cloned. The destination
+connection's credentials must be able to read the origin namespace and create relations in the
+destination. Managed physical sources may bootstrap a destination that has not been built. See
+[Project Configuration](/concepts/project-configuration) for details.
 
 ## diff
 
@@ -12694,6 +13124,10 @@ sqb diff <FROM>:<TO> <mode> [flags]
 ```
 
 The first argument is a positional `FROM:TO` range. Exactly one mode is required: `--full`, `--schema-only`, or `--bounded <duration>`.
+
+In direct mode, `FROM` and `TO` are configured target names. Each target supplies its named
+connection and authoritative database/schema namespace; invalid connection references are
+reported as offline configuration errors.
 
 Full and bounded row comparisons require the model to define `unique_key`. Bounded mode uses the model's cursor and falls back to a full row comparison when no cursor is configured.
 

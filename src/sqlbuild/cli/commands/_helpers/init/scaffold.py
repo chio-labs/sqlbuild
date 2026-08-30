@@ -49,7 +49,7 @@ def _build_project_toml(*, project_name: str) -> str:
 adapter = "duckdb"
 default_target = "dev"
 
-[connection]
+[connections.developer]
 database = "{project_name}.duckdb"
 
 [settings]
@@ -59,8 +59,10 @@ default_audit_severity = "warn"
 materialized = "table"
 
 [targets.prod]
+connection = "developer"
 schema = "prod"
 
 [targets.dev]
+connection = "developer"
 schema = "dev"
 '''

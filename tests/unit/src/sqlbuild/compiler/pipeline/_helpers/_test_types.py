@@ -37,3 +37,9 @@ class CloneTargetSchemaTestCase:
     origin_schema: str | None
     destination_schema: str | None
     expected_target_name: str
+
+
+@dataclass(frozen=True)
+class CloneConnectionInjectionTestCase:
+    description: str
+    expected_connection: dict[str, object]

@@ -627,6 +627,19 @@ def build_effective_connection(
 
     connection: dict[str, object] = dict(project_config.connection)
     if target_config is not None:
+        connection_name: str | None = target_config.connection_name
+        if connection_name is not None:
+            if (
+                connection_name not in project_config.connections
+                and connection_name not in local_config.connections
+            ):
+                raise CompileInputError(
+                    f"Unknown connection '{connection_name}' selected by target. Define "
+                    f"[connections.{connection_name}] in sqlbuild_project.toml or "
+                    "sqlbuild_local.toml."
+                )
+            connection.update(project_config.connections.get(connection_name, {}))
+            connection.update(local_config.connections.get(connection_name, {}))
         connection.update(target_config.connection)
     connection.update(local_config.connection)
     return cast(
