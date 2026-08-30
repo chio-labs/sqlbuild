@@ -9,7 +9,9 @@ from pathlib import Path
 
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.constants import (
+    DBT_PASSTHROUGH_SEPARATOR,
     DBT_VERBOSE_OPTIONS,
+    DEBUG_OPTION,
     EMPTY_ENV_VALUE,
     NO_COLOR_OPTION,
     SCOPE_DEFAULT_PAGE_SIZE,
@@ -77,10 +79,18 @@ def parse_cli_invocation(
         _, unknown_args = parser.parse_known_args(argv, namespace=args)
         if args.command == CliCommand.DBT and args.dbt_command in _DBT_PASSTHROUGH_SUBCOMMANDS:
             dbt_passthrough_args: list[str] = []
+            dbt_passthrough_started: bool = False
             dbt_arg: str
             for dbt_arg in unknown_args:
+                if dbt_arg == DBT_PASSTHROUGH_SEPARATOR:
+                    dbt_passthrough_started = True
+                    dbt_passthrough_args.append(dbt_arg)
+                    continue
                 if dbt_arg == NO_COLOR_OPTION:
                     args.no_color = True
+                    continue
+                if dbt_arg == DEBUG_OPTION and not dbt_passthrough_started:
+                    args.debug = True
                     continue
                 dbt_passthrough_args.append(dbt_arg)
             args.dbt_args = dbt_passthrough_args
