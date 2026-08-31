@@ -22,6 +22,8 @@ class DetectModelChangesTestCase:
     expected_change_kind: ChangeKind
     expected_backfill_action: BackfillAction
     fingerprint_config_values: dict[str, object] | None = None
+    inferred_columns: tuple[InferredColumn, ...] | None = None
+    fast_lineage_has_star: bool = False
 
 
 @dataclass(frozen=True)
@@ -52,6 +54,7 @@ class DetectSchemaChangesTestCase:
     warehouse_columns: tuple[ColumnInfo, ...]
     type_enforcement: bool
     expected_findings: tuple[SchemaFinding, ...]
+    inferred_schema_complete: bool = True
 
 
 @dataclass(frozen=True)
