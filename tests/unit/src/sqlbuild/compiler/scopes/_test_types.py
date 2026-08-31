@@ -129,6 +129,27 @@ class PlacementValidationCase:
 
 
 @dataclass(frozen=True)
+class DeclarationChainPlacementCase:
+    """One transitive declaration-consumption placement case."""
+
+    description: str
+    declarations: tuple[tuple[str, ScopeKind, str, str], ...]
+    declaration_usages: tuple[tuple[str, str], ...]
+    model_consumers: tuple[tuple[str, tuple[str, ...]], ...]
+    expected_codes: tuple[ScopeDiagnosticCode, ...]
+
+
+@dataclass(frozen=True)
+class DiamondLadderPlacementCase:
+    """One deep diamond-ladder placement traversal-cost regression case."""
+
+    description: str
+    layers: int
+    width: int
+    expected_codes: tuple[ScopeDiagnosticCode, ...]
+
+
+@dataclass(frozen=True)
 class FingerprintMutationCase:
     """One project mutation and whether it changes scope inputs."""
 
