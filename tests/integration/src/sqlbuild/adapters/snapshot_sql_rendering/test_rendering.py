@@ -172,6 +172,7 @@ def test_given_builtin_adapter_when_rendering_snapshot_sql_then_covers_snapshot_
 ) -> None:
     create_initial_sql: str = "\n".join(
         test_case.adapter.render_create_initial_snapshot_destination(
+            table_type="transient",
             destination="target_table",
             origin="source_table",
             snapshot_strategy="timestamp",
@@ -198,6 +199,7 @@ def test_given_builtin_adapter_when_rendering_snapshot_sql_then_covers_snapshot_
     )
     historical_check_initial_sql: str = "\n".join(
         test_case.adapter.render_create_initial_historical_check_snapshot_destination(
+            table_type="transient",
             destination="target_table",
             origin="source_table",
             unique_key=("customer_id",),
@@ -211,6 +213,7 @@ def test_given_builtin_adapter_when_rendering_snapshot_sql_then_covers_snapshot_
     )
     historical_timestamp_initial_sql: str = "\n".join(
         test_case.adapter.render_create_initial_historical_timestamp_snapshot_destination(
+            table_type="transient",
             destination="target_table",
             origin="source_table",
             unique_key=("customer_id",),

@@ -114,6 +114,7 @@ from sqlbuild.microbatches.types import (
     ReplayRequirementState,
     UnaccountedPartitionPolicy,
 )
+from sqlbuild.spec.contracts.types import TableType
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
@@ -2000,6 +2001,7 @@ def _enforce_microbatch_types(
                 staging_schema=targets.target_schema,
                 staging_table=targets.delta_table,
                 declared_columns=declared_columns,
+                table_type=TableType.TRANSIENT,
                 statement_recorder=state.statement_recorder,
             )
     except Exception as exc:

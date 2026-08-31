@@ -63,6 +63,14 @@ class TableTypeConversionTestCase:
 
 
 @dataclass(frozen=True)
+class TableTypeConversionErrorTestCase:
+    description: str
+    relation_snapshots: tuple[tuple[RelationInfo, ...], ...]
+    expected_error_fragment: str
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class BuildSchedulerModelHookTestCase:
     description: str
     hook_raises: bool

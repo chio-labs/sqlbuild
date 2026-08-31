@@ -18,7 +18,7 @@ def enforce_types_staged(
     staging_schema: str | None,
     staging_table: str,
     declared_columns: tuple[ColumnInfo, ...],
-    table_type: str = "transient",
+    table_type: str,
     statement_recorder: StatementRecorder,
 ) -> None:
     """Inspect staging columns and rebuild with casts for declared types."""

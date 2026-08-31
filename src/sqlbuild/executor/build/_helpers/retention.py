@@ -10,9 +10,9 @@ from sqlbuild.adapter.contract.types import RetentionChangePhase, RetentionScope
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import PlanOutput, RetentionPlanEntry, TableTypePlanEntry
 from sqlbuild.compiler.planner.types import RetentionPlanPhase
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.spec.contracts.types import TableType
 
 
@@ -55,12 +55,12 @@ def _apply_table_type_entry(
     )
     target: RelationInfo | None = relations.get(entry.destination.name.lower())
     if target is None:
-        raise PlannerInputError(
+        raise ExecutorInputError(
             f"model '{entry.model_name}': table-type conversion target no longer exists"
         )
     desired_transient: bool = entry.desired_type == TableType.TRANSIENT
     if target.is_transient is None:
-        raise PlannerInputError(
+        raise ExecutorInputError(
             f"model '{entry.model_name}': live table type metadata is unknown; refusing conversion"
         )
     if target.is_transient == desired_transient:
@@ -76,11 +76,11 @@ def _apply_table_type_entry(
         entry=entry, adapter=adapter, connection=connection
     ).get(entry.copy_name.lower())
     if copy_info is None or copy_info.is_transient is None:
-        raise PlannerInputError(
+        raise ExecutorInputError(
             f"model '{entry.model_name}': conversion copy type metadata is unknown"
         )
     if copy_info.is_transient != desired_transient:
-        raise PlannerInputError(
+        raise ExecutorInputError(
             f"model '{entry.model_name}': conversion copy was not created with the desired type"
         )
     adapter.execute(connection=connection, sql=f"ALTER TABLE {destination} SWAP WITH {copy}")
