@@ -36,7 +36,6 @@ from sqlbuild.compiler.planner._helpers.identity.functions import (
 )
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     gather_source_columns,
-    is_permanent_table,
 )
 from sqlbuild.compiler.planner._helpers.output.strategy import get_materialization_type
 from sqlbuild.compiler.planner._helpers.resolve.refs import (
@@ -168,8 +167,6 @@ def build_clone_model_entries(
             fingerprint_query_sql="",
             resolved_sql=resolved_sql,
             logical_ddl="",
-            permanent_table=is_permanent_table(model),
-            archive_retention_days=model.config.archive_retention_days,
         )
     return tuple(entries_by_key[key] for key in plan.execution_order if key in entries_by_key)
 
@@ -312,8 +309,6 @@ def build_origin_model_entries(
                 fingerprint_query_sql="",
                 resolved_sql="",
                 logical_ddl="",
-                permanent_table=is_permanent_table(model),
-                archive_retention_days=model.config.archive_retention_days,
             )
         )
     return tuple(entries)

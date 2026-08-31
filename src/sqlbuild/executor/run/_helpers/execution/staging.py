@@ -21,31 +21,16 @@ def create_staging_relation(
 
     adapter: BaseAdapter = context.adapter
     connection: Any = context.connection
-    if context.entry.permanent_table:
-        adapter.drop(
-            connection=connection,
-            destination=staging_qualified,
-            if_exists=True,
-            statement_recorder=statement_recorder,
-        )
-        statements: tuple[str, ...] = adapter.render_create_permanent_table_as(
-            destination=staging_qualified, sql=resolved_sql
-        )
-        statement_recorder.record_many(statements)
-        statement: str
-        for statement in statements:
-            adapter.execute(connection=connection, sql=statement)
-    else:
-        adapter.drop(
-            connection=connection,
-            destination=staging_qualified,
-            if_exists=True,
-            statement_recorder=statement_recorder,
-        )
-        adapter.create_table_as(
-            connection=connection,
-            destination=staging_qualified,
-            sql=resolved_sql,
-            statement_recorder=statement_recorder,
-        )
+    adapter.drop(
+        connection=connection,
+        destination=staging_qualified,
+        if_exists=True,
+        statement_recorder=statement_recorder,
+    )
+    adapter.create_table_as(
+        connection=connection,
+        destination=staging_qualified,
+        sql=resolved_sql,
+        statement_recorder=statement_recorder,
+    )
     return None

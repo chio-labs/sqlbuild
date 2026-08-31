@@ -16,7 +16,7 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run._helpers.execution.final_audits import run_final_model_audits
 from sqlbuild.executor.run._helpers.execution.hook_phases import run_post_hook_phase
 from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks, render_hooks
-from sqlbuild.executor.run._helpers.execution.promotion import promote_staged_table
+from sqlbuild.executor.run._helpers.execution.promotion import promote_relation_to_destination
 from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
@@ -190,20 +190,6 @@ def execute_table_entry(
             declared_columns=declared_columns,
         )
 
-    if entry.permanent_table:
-        return build_failed_result(
-            entry=entry,
-            phase=ExecutionPhase.STAGING,
-            error=(
-                f"model '{entry.name}': permanent tables require staged promotion mode; "
-                "set table_promotion_mode: staged in sqlbuild_project.toml settings"
-            ),
-            warnings=warnings,
-            audit_results=audit_results,
-            statement_recorder=statement_recorder,
-            hook_results=hook_results,
-        )
-
     if entry.contract_enforced:
         return build_failed_result(
             entry=entry,
@@ -281,7 +267,6 @@ def _staged_lifecycle(
                     staging_table=targets.staging_table,
                     declared_columns=declared_columns,
                     statement_recorder=statement_recorder,
-                    permanent_table=entry.permanent_table,
                 )
         except Exception as exc:
             return build_failed_result(
@@ -349,7 +334,16 @@ def _staged_lifecycle(
 
     try:
         with diagnostics_context(sqlbuild_phase="promote", sqlbuild_action_name="check_existing"):
-            _ = promote_staged_table(context=context, targets=targets, state=state)
+            _ = promote_relation_to_destination(
+                adapter=adapter,
+                connection=connection,
+                origin_relation=staging_qualified,
+                destination_relation=target_qualified,
+                destination_database=targets.target_database,
+                destination_schema=targets.target_schema,
+                destination_name=targets.target_table,
+                statement_recorder=statement_recorder,
+            )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
