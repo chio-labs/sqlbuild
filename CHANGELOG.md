@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.68.0](https://github.com/chio-labs/sqlbuild/compare/v0.67.2...v0.68.0) (2026-08-31)
+
+
+### Features
+
+* add declarative retention and reversible direct cleanup ([#434](https://github.com/chio-labs/sqlbuild/issues/434)) ([2f66df8](https://github.com/chio-labs/sqlbuild/commit/2f66df8c6907f7b8244e6ca0f77f96ab55cc9322))
+
 ## [0.67.2](https://github.com/chio-labs/sqlbuild/compare/v0.67.1...v0.67.2) (2026-08-31)
 
 
