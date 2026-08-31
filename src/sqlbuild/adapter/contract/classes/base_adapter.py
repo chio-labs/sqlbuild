@@ -9,6 +9,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
+from sqlbuild.adapter.contract.classes.retention_adapter import RetentionAdapterMixin
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
 from sqlbuild.adapter.contract.constants import (
@@ -73,7 +74,7 @@ _COLLECTION_SQL_VALUE_KINDS: frozenset[SqlValueKind] = frozenset(
 )
 
 
-class BaseAdapter(StrictAdapter):
+class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     """Adapter base with ANSI SQL defaults."""
 
     adapter_name: ClassVar[str]

@@ -5,6 +5,22 @@ from sqlbuild.compiler.lineage.types import InferredNullability
 
 
 @dataclass(frozen=True)
+class DatabricksRetentionTestCase:
+    description: str
+    desired_days: int
+    observed_row: tuple[object, ...]
+    expected_effective_days: int
+    expected_sql: str
+
+
+@dataclass(frozen=True)
+class DatabricksInvalidRetentionTestCase:
+    description: str
+    observed_row: tuple[object, ...]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class DatabricksMergeExclusionTestCase:
     description: str
     expected_update_assignment: str

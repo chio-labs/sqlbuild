@@ -11,6 +11,13 @@ class BaseAdapterPythonFunctionSupportTestCase:
 
 
 @dataclass(frozen=True)
+class BaseAdapterRetentionSupportTestCase:
+    description: str
+    expected_inspection_error: str
+    expected_render_error: str
+
+
+@dataclass(frozen=True)
 class BaseAdapterExpressionInferenceProfileTestCase:
     description: str
     expected_sql_analysis_dialect: str | None

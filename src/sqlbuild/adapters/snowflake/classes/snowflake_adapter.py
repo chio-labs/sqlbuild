@@ -29,6 +29,9 @@ from sqlbuild.adapter.contract.models import (
     FunctionInfo,
     QueryResult,
     RelationInfo,
+    RenderedRetentionChange,
+    RetentionRequest,
+    RetentionState,
     RowDiffColumnResult,
     RowDiffResult,
     RowDiffSampleCell,
@@ -46,6 +49,8 @@ from sqlbuild.adapter.contract.types import (
     FrameworkType,
     LoaderLogicalType,
     PromotionStrategy,
+    RetentionChangePhase,
+    RetentionScope,
     TablePromotionMode,
 )
 from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
@@ -97,6 +102,71 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
     connection_routing_keys: ClassVar[frozenset[str]] = frozenset(
         {"source", "profile", "target", "project_dir", "profiles_dir"}
     )
+
+    def inspect_retention(self, *, connection: Any, request: RetentionRequest) -> RetentionState:
+        self._validate_relation_retention_request(request=request)
+        clauses: list[str] = ["table_name = %s", "table_schema = %s"]
+        params: list[str] = [
+            self._information_schema_identifier(str(request.name)),
+            self._information_schema_identifier(request.schema),
+        ]
+        if request.database is not None:
+            clauses.append("table_catalog = %s")
+            params.append(self._information_schema_identifier(request.database))
+        cursor: Any = connection.cursor()
+        try:
+            cursor.execute(
+                "SELECT retention_time, is_transient FROM "
+                + self._information_schema_relation(database=request.database, name="tables")
+                + " WHERE "
+                + " AND ".join(clauses),
+                tuple(params),
+            )
+            row: tuple[Any, ...] | None = cursor.fetchone()
+        finally:
+            cursor.close()
+        if row is None:
+            raise AdapterUserError(
+                message=f"Snowflake retention metadata not found for {request.name}"
+            )
+        effective_days: int = int(row[0])
+        is_transient: bool = str(row[1]).upper() == TRUE_METADATA_VALUE
+        return RetentionState(
+            request_id=request.request_id,
+            scope=request.scope,
+            configured_days=None,
+            effective_days=effective_days,
+            relation_kind="TRANSIENT" if is_transient else "PERMANENT",
+            is_transient=is_transient,
+        )
+
+    def render_retention_changes(
+        self, *, request: RetentionRequest
+    ) -> tuple[RenderedRetentionChange, ...]:
+        self._validate_relation_retention_request(request=request)
+        target: str | None = self.render_qualified_name(
+            database=request.database,
+            schema=request.schema,
+            name=str(request.name),
+        )
+        if target is None:
+            raise AdapterUserError(message="Snowflake retention requires a schema and relation")
+        return (
+            RenderedRetentionChange(
+                phase=RetentionChangePhase.ALTER,
+                statements=(
+                    f"ALTER TABLE {target} SET DATA_RETENTION_TIME_IN_DAYS = "
+                    f"{request.desired_days}",
+                ),
+            ),
+        )
+
+    @staticmethod
+    def _validate_relation_retention_request(*, request: RetentionRequest) -> None:
+        if request.scope != RetentionScope.RELATION or request.name is None:
+            raise AdapterUserError(message="Snowflake retention requires relation scope")
+        if request.desired_days < 0:
+            raise AdapterUserError(message="Snowflake retention days must be non-negative")
 
     def cost_capability(self) -> CostCapability:
         return CostCapability.SNOWFLAKE_QUERY_HISTORY

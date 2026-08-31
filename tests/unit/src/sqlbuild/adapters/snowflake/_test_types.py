@@ -7,6 +7,16 @@ from sqlbuild.cost.types import CostStatus
 
 
 @dataclass(frozen=True)
+class SnowflakeRetentionTestCase:
+    description: str
+    desired_days: int
+    observed_row: tuple[object, ...]
+    expected_days: int
+    expected_kind: str
+    expected_sql: str
+
+
+@dataclass(frozen=True)
 class SnowflakeCostCollectionTestCase:
     description: str
     connect_error: bool

@@ -41,6 +41,17 @@ class TablePromotionMode(StrEnum):
     STAGED = "staged"
 
 
+class RetentionScope(StrEnum):
+    RELATION = "relation"
+    NAMESPACE = "namespace"
+
+
+class RetentionChangePhase(StrEnum):
+    PREPARE = "prepare"
+    ALTER = "alter"
+    FINALIZE = "finalize"
+
+
 class RelationType(StrEnum):
     TABLE = "table"
     VIEW = "view"

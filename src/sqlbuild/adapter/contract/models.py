@@ -13,6 +13,8 @@ from sqlbuild.adapter.contract.types import (
     CursorKind,
     FunctionNullabilityRule,
     LifeCycleEventKind,
+    RetentionChangePhase,
+    RetentionScope,
     TypeFamily,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
@@ -139,6 +141,41 @@ class TableFreshnessRequest:
     database: str | None
     schema: str | None
     name: str
+
+
+@dataclass(frozen=True)
+class RetentionRequest:
+    """One identified desired retention setting for a warehouse object."""
+
+    request_id: str
+    scope: RetentionScope
+    database: str | None
+    schema: str
+    desired_days: int
+    name: str | None = None
+
+
+@dataclass(frozen=True)
+class RetentionState:
+    """Typed warehouse retention values observed for one request."""
+
+    request_id: str
+    scope: RetentionScope
+    configured_days: int | None
+    effective_days: int
+    relation_kind: str | None = None
+    is_transient: bool | None = None
+    delta_log_retention_days: int | None = None
+    delta_deleted_file_retention_days: int | None = None
+    max_time_travel_hours: int | None = None
+
+
+@dataclass(frozen=True)
+class RenderedRetentionChange:
+    """One ordered phase of SQL statements for a retention change."""
+
+    phase: RetentionChangePhase
+    statements: tuple[str, ...]
 
 
 @dataclass(frozen=True)
