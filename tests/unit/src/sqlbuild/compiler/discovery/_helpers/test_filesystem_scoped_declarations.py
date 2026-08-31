@@ -26,6 +26,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredConstantFile,
     DiscoveredEnumFile,
     DiscoveredMacroFile,
+    DiscoveredProjectInputs,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DiscoverGlobalDeclarationTestCase,
@@ -33,6 +34,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DiscoveryPathInventoryTestCase,
     InvalidScopedDeclarationRootTestCase,
     OrdinaryDiscoveryExclusionTestCase,
+    OrdinaryFolderTestCase,
     StrictScopedDiscoveryTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
@@ -159,11 +161,24 @@ def test_given_invalid_declaration_root_when_discovering_then_raises(
         discover_macro_files(project_dir=tmp_path)
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        OrdinaryFolderTestCase(
+            description="old local spelling is ordinary",
+            root_relative_path="_local_constants/value.sql",
+            model_relative_path="models/_local_constants/orders.sql",
+            expected_model_relative_paths=("models/_local_constants/orders.sql",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
 def test_given_old_local_spelling_when_discovering_then_directory_has_no_special_meaning(
+    test_case: OrdinaryFolderTestCase,
     tmp_path: Path,
 ) -> None:
-    root_file: Path = tmp_path / "_local_constants/value.sql"
-    model_file: Path = tmp_path / "models/_local_constants/orders.sql"
+    root_file: Path = tmp_path / test_case.root_relative_path
+    model_file: Path = tmp_path / test_case.model_relative_path
     (tmp_path / "sqlbuild_project.toml").write_text(
         'name = "demo"\nadapter = "duckdb"\n', encoding="utf-8"
     )
@@ -172,10 +187,10 @@ def test_given_old_local_spelling_when_discovering_then_directory_has_no_special
     root_file.write_text("arbitrary project file", encoding="utf-8")
     model_file.write_text("MODEL ();\nSELECT 1", encoding="utf-8")
 
-    discovered = discover_project_inputs(project_dir=tmp_path)
+    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
 
-    assert tuple(file.relative_path for file in discovered.model_files) == (
-        Path("models/_local_constants/orders.sql"),
+    assert tuple(file.relative_path for file in discovered.model_files) == tuple(
+        Path(path) for path in test_case.expected_model_relative_paths
     )
     assert discovered.constant_files == ()
 
