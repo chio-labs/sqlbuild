@@ -147,3 +147,14 @@ def build_statement_recorder() -> StatementRecorder:
     """Build a statement recorder for adapter mutation operations."""
 
     return StatementRecorder()
+
+
+class RecordingSnowflakeAdapter(SnowflakeAdapter):
+    """Snowflake adapter recording statements executed through the adapter seam."""
+
+    def __init__(self) -> None:
+        self.statement_recorder = StatementRecorder()
+
+    def execute(self, *, connection: Any, sql: str) -> Any:
+        self.statement_recorder.record(sql)
+        return super().execute(connection=connection, sql=sql)
