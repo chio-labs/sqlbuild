@@ -116,6 +116,22 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
     stream.write(f"{style.title('Janitor preview')}  {rendered_env}\n\n")
     _write_plan_summary(plan=plan, stream=stream, style=style)
 
+    if plan.blocked_schemas:
+        stream.write(f"\n{style.error_strong('Janitor blocked')}\n")
+        stream.write(
+            f"  {style.error('Managed target schemas contain active configured sources.')}\n"
+        )
+        for blocked_schema in plan.blocked_schemas:
+            sources: str = ", ".join(blocked_schema.source_names)
+            stream.write(
+                f"  {style.object_name(blocked_schema.display_name())}  "
+                f"{style.error_muted('active sources: ' + sources)}\n"
+            )
+            for candidate in blocked_schema.suppressed_candidates:
+                suppressed: str = f"suppressed deletion: {candidate.key.display_name()}"
+                stream.write(f"    {style.error_muted(suppressed)}\n")
+        stream.write(f"  {style.error('No janitor actions will be performed.')}\n")
+
     if plan.skipped_schemas:
         stream.write(f"\n{style.success('Skipped schemas')}\n")
         skipped_schema: JanitorSkippedSchema

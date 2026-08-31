@@ -51,9 +51,18 @@ NEW_TIME: datetime = datetime.now(UTC) - timedelta(days=1)
             expected_candidate_names=(),
         ),
         JanitorPlanTestCase(
-            description="schema with active source is skipped",
+            description="direct schema with active source is blocked",
             relation_infos=(relation_info("old_orders", created_at=OLD_TIME),),
             source_schema="analytics",
+            expected_candidate_names=(),
+            expected_blocked_schema_sources=("raw_orders",),
+            expected_suppressed_candidate_names=("old_orders",),
+        ),
+        JanitorPlanTestCase(
+            description="virtual schema with active source remains skipped",
+            relation_infos=(relation_info("old_orders", created_at=OLD_TIME),),
+            source_schema="analytics",
+            direct_mode=False,
             expected_candidate_names=(),
             expected_skipped_schema_sources=("raw_orders",),
         ),
@@ -228,6 +237,7 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
             virtual_state_prune_candidates=test_case.virtual_state_prune_candidates,
         ),
         direct_state_history_versions=test_case.direct_state_history_versions,
+        direct_mode=test_case.direct_mode,
     )
 
     assert tuple(candidate.key.name for candidate in plan.candidates) == (
@@ -247,6 +257,15 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
         for source_name in skipped_schema.source_names:
             skipped_schema_sources.append(source_name)
     assert tuple(skipped_schema_sources) == test_case.expected_skipped_schema_sources
+    blocked_schema_sources: list[str] = []
+    suppressed_candidate_names: list[str] = []
+    for blocked_schema in plan.blocked_schemas:
+        blocked_schema_sources.extend(blocked_schema.source_names)
+        suppressed_candidate_names.extend(
+            candidate.key.name for candidate in blocked_schema.suppressed_candidates
+        )
+    assert tuple(blocked_schema_sources) == test_case.expected_blocked_schema_sources
+    assert tuple(suppressed_candidate_names) == test_case.expected_suppressed_candidate_names
 
 
 @pytest.mark.parametrize(

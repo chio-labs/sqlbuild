@@ -142,6 +142,27 @@ class JanitorSkippedSchema:
 
 
 @dataclass(frozen=True)
+class JanitorBlockedSchema:
+    """One direct-mode target schema blocked because it contains configured sources."""
+
+    database: str | None
+    schema: str | None
+    source_names: tuple[str, ...]
+    suppressed_candidates: tuple[JanitorDeleteCandidate, ...] = field(default_factory=tuple)
+
+    def display_name(self) -> str:
+        """Render a schema display name."""
+
+        if self.database is not None and self.schema is not None:
+            return f"{self.database}.{self.schema}"
+        if self.schema is not None:
+            return self.schema
+        if self.database is not None:
+            return self.database
+        return "<default>"
+
+
+@dataclass(frozen=True)
 class JanitorWarehouseFacts:
     """Desired, discovered, and tracked relation facts for planning."""
 
@@ -208,6 +229,7 @@ class JanitorPlan:
     )
     skipped_relations: tuple[JanitorSkippedRelation, ...] = field(default_factory=tuple)
     skipped_schemas: tuple[JanitorSkippedSchema, ...] = field(default_factory=tuple)
+    blocked_schemas: tuple[JanitorBlockedSchema, ...] = field(default_factory=tuple)
     scanned_schema_count: int = 0
     age_metadata_supported: bool = False
 

@@ -20,6 +20,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.janitor._test_types import (
     JanitorExpiredVirtualEnvironmentE2ETestCase,
     JanitorInvalidConfigE2ETestCase,
     JanitorMicrobatchHistoryProtectionE2ETestCase,
+    JanitorSourceOverlapE2ETestCase,
     JanitorStateCleanupE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.janitor.helpers import (
@@ -151,6 +152,101 @@ def test_given_stale_relations_when_running_janitor_then_it_deletes_only_tracked
     assert "Eligible expired VDEs" not in janitor_result.stdout
     assert "Eligible state backups" not in janitor_result.stdout
     assert "Eligible expired locks" not in janitor_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorSourceOverlapE2ETestCase(
+            description="source in managed schema blocks all direct janitor actions",
+            janitor_command=("--no-color", "janitor", "--auto-approve"),
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "Janitor blocked",
+                "Managed target schemas contain active configured sources.",
+                "main  active sources: raw_events",
+                "suppressed deletion: main.stale_main",
+                "Eligible objects\n  safe.stale_safe",
+                "No janitor actions will be performed.",
+            ),
+            expected_existing_relations=(
+                ("main", "raw_events"),
+                ("main", "stale_main"),
+                ("safe", "stale_safe"),
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_source_in_managed_schema_when_running_direct_janitor_then_blocks_all_actions(
+    test_case: JanitorSourceOverlapE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="janitor_source_overlap",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "janitor_source_overlap"
+                adapter = "duckdb"
+
+                [connection]
+                database = "janitor.duckdb"
+
+                [janitor]
+                enabled = true
+                retention_days = 0
+                delete_tracked_only = false
+
+                [defaults]
+                materialized = "table"
+                """
+            ).strip()
+            + "\n",
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS order_id\n",
+            "models/safe_orders.sql": "MODEL (schema safe,);\n\nSELECT 1 AS order_id\n",
+            "sources/raw.yml": dedent(
+                """
+                sources:
+                  - name: raw_events
+                    schema: main
+                    table: raw_events
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+    db_path: Path = project_dir / "janitor.duckdb"
+    execute_duckdb(
+        db_path=db_path,
+        sql=(
+            "CREATE TABLE raw_events AS SELECT 1 AS id; "
+            "CREATE TABLE stale_main AS SELECT 1 AS id; "
+            "CREATE SCHEMA safe; "
+            "CREATE TABLE safe.stale_safe AS SELECT 1 AS id"
+        ),
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.janitor_command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout
+    for schema_name, relation_name in test_case.expected_existing_relations:
+        assert (
+            query_duckdb(
+                db_path=db_path,
+                sql=(
+                    "SELECT COUNT(*) FROM information_schema.tables "
+                    f"WHERE table_schema = '{schema_name}' AND table_name = '{relation_name}'"
+                ),
+            )[0][0]
+            == 1
+        )
 
 
 @pytest.mark.parametrize(

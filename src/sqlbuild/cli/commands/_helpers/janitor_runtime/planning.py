@@ -179,6 +179,7 @@ def build_janitor_execution_plan(
             ),
         ),
         direct_state_history_versions=settings.direct_state_history_versions,
+        direct_mode=not invocation.discovered_inputs.project_config.settings.virtual_environments,
     )
     status.complete(
         message=f"Inspected warehouse state. ({time.perf_counter() - inspect_start:.2f}s)",

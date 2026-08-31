@@ -15,6 +15,7 @@ class JanitorPlanTestCase:
     description: str
     relation_infos: tuple[RelationInfo, ...]
     source_schema: str | None = None
+    direct_mode: bool = True
     retention_days: int = 7
     direct_state_history_versions: int = 20
     delete_tracked_only: bool = False
@@ -27,6 +28,8 @@ class JanitorPlanTestCase:
     expected_virtual_state_table_names: tuple[str, ...] = field(default_factory=tuple)
     expected_skipped_relation_reasons: tuple[str, ...] = field(default_factory=tuple)
     expected_skipped_schema_sources: tuple[str, ...] = field(default_factory=tuple)
+    expected_blocked_schema_sources: tuple[str, ...] = field(default_factory=tuple)
+    expected_suppressed_candidate_names: tuple[str, ...] = field(default_factory=tuple)
     virtual_state_prune_candidates: tuple[JanitorVirtualStatePruneCandidate, ...] = field(
         default_factory=tuple
     )
