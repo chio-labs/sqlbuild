@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
 from sqlbuild.compiler.scopes.main._get_placement_validated_scope_index import (
     get_placement_validated_scope_index,
 )
+from sqlbuild.compiler.scopes.main._validate_scope_index import validate_scope_index
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
@@ -14,11 +16,13 @@ from sqlbuild.compiler.scopes.models import (
     ResourceIdentity,
     ResourceRecord,
     ScopeCompleteness,
+    ScopeDiagnostic,
     ScopeIndex,
     UsageRecord,
 )
 from sqlbuild.compiler.scopes.types import (
     DeclarationKind,
+    DiagnosticSeverity,
     ResourceKind,
     ScopeDiagnosticCode,
     ScopeKind,
@@ -26,8 +30,78 @@ from sqlbuild.compiler.scopes.types import (
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
     DeclarationChainPlacementCase,
     DiamondLadderPlacementCase,
+    PlacementEnforcementCase,
     PlacementValidationCase,
 )
+from tests.unit.src.sqlbuild.compiler.scopes.helpers import unused_declaration_index
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        PlacementEnforcementCase("placement enforcement enabled", True, DiagnosticSeverity.ERROR),
+        PlacementEnforcementCase(
+            "placement enforcement disabled", False, DiagnosticSeverity.WARNING
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_placement_policy_when_validating_then_diagnostic_severity_matches_policy(
+    test_case: PlacementEnforcementCase,
+) -> None:
+    result: ScopeIndex = unused_declaration_index(enforce_placement=test_case.enforce_placement)
+
+    assert result.diagnostics[0].code is ScopeDiagnosticCode.UNUSED_DECLARATION
+    assert result.diagnostics[0].severity is test_case.expected_severity
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (PlacementEnforcementCase("advisory placement", False, DiagnosticSeverity.WARNING),),
+    ids=lambda case: case.description,
+)
+def test_given_warning_placement_diagnostic_when_validating_then_validation_succeeds(
+    test_case: PlacementEnforcementCase,
+) -> None:
+    index: ScopeIndex = unused_declaration_index(enforce_placement=test_case.enforce_placement)
+
+    validate_scope_index(index=index)
+    assert index.diagnostics[0].severity is test_case.expected_severity
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (PlacementEnforcementCase("enforced placement", True, DiagnosticSeverity.ERROR),),
+    ids=lambda case: case.description,
+)
+def test_given_error_placement_diagnostic_when_validating_then_validation_raises(
+    test_case: PlacementEnforcementCase,
+) -> None:
+    index: ScopeIndex = unused_declaration_index(enforce_placement=test_case.enforce_placement)
+
+    with pytest.raises(ScopeValidationError) as error:
+        validate_scope_index(index=index)
+    assert error.value.diagnostics[0].severity is test_case.expected_severity
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (PlacementEnforcementCase("non-placement error", False, DiagnosticSeverity.ERROR),),
+    ids=lambda case: case.description,
+)
+def test_given_non_placement_error_when_placement_enforcement_disabled_then_validation_raises(
+    test_case: PlacementEnforcementCase,
+) -> None:
+    index: ScopeIndex = unused_declaration_index(enforce_placement=test_case.enforce_placement)
+    non_placement_error: ScopeDiagnostic = ScopeDiagnostic(
+        ScopeDiagnosticCode.DUPLICATE_DECLARATION, "duplicate"
+    )
+
+    with pytest.raises(ScopeValidationError) as error:
+        validate_scope_index(
+            index=ScopeIndex(diagnostics=(*index.diagnostics, non_placement_error))
+        )
+    assert error.value.diagnostics[0].severity is test_case.expected_severity
 
 
 @pytest.mark.parametrize(
