@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.67.0](https://github.com/chio-labs/sqlbuild/compare/v0.66.6...v0.67.0) (2026-08-31)
+
+
+### Features
+
+* enforce declaration and Kata owner layouts ([#428](https://github.com/chio-labs/sqlbuild/issues/428)) ([5bd8286](https://github.com/chio-labs/sqlbuild/commit/5bd8286bbf330d64d51314afe28a82d1d7eaad1c))
+
 ## [0.66.6](https://github.com/chio-labs/sqlbuild/compare/v0.66.5...v0.66.6) (2026-08-31)
 
 
