@@ -29,12 +29,12 @@ _AUDIT_SQL: str = 'AUDIT ();\n\nSELECT * FROM __ref("@model") WHERE NOT (@expres
     "test_case",
     [
         ConcurrentMicrobatchBehaviorE2ETestCase(
-            description="DML success followed by completion write failure converges on retry"
+            description="completion write failure leaves the live target untouched and converges on retry"
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_completion_write_failure_after_dml_when_retried_then_unaccounted_target_progress_recovers(
+def test_given_completion_write_failure_during_rebuild_when_retried_then_live_target_stays_untouched_and_converges(
     test_case: ConcurrentMicrobatchBehaviorE2ETestCase, tmp_path: Path
 ) -> None:
     project_name: str = "microbatch_state_write_failure"
@@ -122,7 +122,7 @@ def test_given_completion_write_failure_after_dml_when_retried_then_unaccounted_
     assert initial.returncode == test_case.expected_exit_code, initial.stdout + initial.stderr
     assert failed.returncode != test_case.expected_exit_code
     assert "simulated completion write failure" in failed.stdout + failed.stderr
-    assert target_after_failed_state_write == [(1, "a"), (2, "b")]
+    assert target_after_failed_state_write == [(1, "a")]
     assert completion_count_after_failure == 0
     assert recovered.returncode == test_case.expected_exit_code, recovered.stdout + recovered.stderr
     assert (
