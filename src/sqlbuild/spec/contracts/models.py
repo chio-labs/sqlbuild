@@ -11,6 +11,9 @@ from sqlbuild.spec.contracts.types import (
     SourceFreshnessStrategy,
     SourceFreshnessValueKind,
     SourceWriteStrategy,
+    TableType,
+    TableTypeDowngradePolicy,
+    TableTypeSource,
     TimeTravelRetentionSource,
 )
 from sqlbuild.sql_values.types import CollectionRendering
@@ -45,6 +48,7 @@ class MaterializationRetentionDefaults:
     """Retention defaults for one built-in materialization."""
 
     time_travel_retention: AuthoredTimeTravelRetention | None = None
+    table_type: TableType | None = None
 
 
 @dataclass(frozen=True)
@@ -69,6 +73,15 @@ class ResolvedTimeTravelRetention:
     desired_days: int | None = None
     unmanaged: bool = True
     source: TimeTravelRetentionSource | None = None
+
+
+@dataclass(frozen=True)
+class ResolvedTableType:
+    """Effective Snowflake table type attached to a compiled model."""
+
+    value: TableType = TableType.TRANSIENT
+    source: TableTypeSource = TableTypeSource.DEFAULT
+    declared: bool = False
 
 
 @dataclass(frozen=True)
@@ -111,6 +124,8 @@ class TargetConfig:
     compile_cache: bool | None = None
     time_travel_retention: AuthoredTimeTravelRetention | None = None
     owns_time_travel_retention_namespace: bool = False
+    default_table_type: TableType | None = None
+    table_type_downgrade: TableTypeDowngradePolicy = TableTypeDowngradePolicy.REQUIRE_CONFIRMATION
 
 
 @dataclass(frozen=True)
@@ -131,6 +146,8 @@ class LocalTargetConfig:
     compile_cache: bool | None = None
     time_travel_retention: AuthoredTimeTravelRetention | None = None
     owns_time_travel_retention_namespace: bool | None = None
+    default_table_type: TableType | None = None
+    table_type_downgrade: TableTypeDowngradePolicy | None = None
 
 
 @dataclass(frozen=True)

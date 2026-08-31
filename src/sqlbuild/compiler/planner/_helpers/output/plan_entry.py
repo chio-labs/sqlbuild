@@ -86,6 +86,7 @@ from sqlbuild.compiler.planner.types import (
 from sqlbuild.compiler.references.main._render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SchemaColumn, SourceEntry
+from sqlbuild.spec.contracts.types import TableType
 
 _MODELS_DIR_PREFIX: str = "models/"
 _IDEMPOTENT_MICROBATCH_STRATEGIES: frozenset[IncrementalStrategy] = frozenset(
@@ -524,17 +525,22 @@ def plan_model_from_change(
         if runtime_owned_cursor_bounds and cursor_column is not None
         else (microbatch_range if microbatch_range else cursor_bounds)
     )
-    logical_ddl: str = _build_logical_ddl_from_adapter(
-        adapter=adapter,
-        action=action,
-        resolved_sql=resolved_sql,
-        destination=model.destination,
-        unique_key=unique_key,
-        merge_exclude_columns=_get_config_string_tuple(model=model, key="merge_exclude_columns"),
-        warehouse_columns=warehouse_columns,
-        cursor_column=cursor_column,
-        cursor_bounds=ddl_cursor_bounds,
-        cursor_type=cursor_type,
+    logical_ddl: str = _render_table_type_ddl(
+        ddl=_build_logical_ddl_from_adapter(
+            adapter=adapter,
+            action=action,
+            resolved_sql=resolved_sql,
+            destination=model.destination,
+            unique_key=unique_key,
+            merge_exclude_columns=_get_config_string_tuple(
+                model=model, key="merge_exclude_columns"
+            ),
+            warehouse_columns=warehouse_columns,
+            cursor_column=cursor_column,
+            cursor_bounds=ddl_cursor_bounds,
+            cursor_type=cursor_type,
+        ),
+        table_type=model.config.table_type.value.value,
     )
 
     entry: ModelPlanEntry = ModelPlanEntry(
@@ -582,6 +588,7 @@ def plan_model_from_change(
         invalidate_hard_deletes=invalidate_hard_deletes,
         snapshot_full_refresh=snapshot_full_refresh,
         snapshot_schema_change=snapshot_schema_change,
+        table_type=model.config.table_type.value.value,
         on_schema_change=on_schema_change,
         type_enforcement=type_enforcement,
         declared_columns=declared_columns,
@@ -942,6 +949,12 @@ def _compute_plan_cursor_bounds(
         is_microbatch=is_microbatch,
         cursor_grain=_get_config_str(model=model, key="cursor_grain"),
     )
+
+
+def _render_table_type_ddl(*, ddl: str, table_type: str) -> str:
+    """Render permanent Snowflake table DDL from the adapter's transient default."""
+
+    return ddl.replace("TRANSIENT TABLE", "TABLE", 1) if table_type == TableType.PERMANENT else ddl
 
 
 def _build_logical_ddl_from_adapter(

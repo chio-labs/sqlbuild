@@ -126,7 +126,7 @@ def test_given_retention_policy_when_planning_then_orders_metadata_safely(
         RetentionPlanningErrorTestCase(
             description="missing Snowflake relation above transient limit",
             desired_days=30,
-            expected_error_fragment="new Snowflake tables are transient",
+            expected_error_fragment="set table_type permanent",
         )
     ],
     ids=lambda case: case.description,

@@ -2088,6 +2088,7 @@ def _apply_microbatch_dml(
                     connection=context.connection,
                     destination=targets.target_qualified,
                     sql=f"SELECT * FROM {targets.delta_qualified}",
+                    config={"table_type": context.entry.table_type},
                     statement_recorder=state.statement_recorder,
                 )
             else:

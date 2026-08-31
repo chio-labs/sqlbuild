@@ -56,6 +56,7 @@ from sqlbuild.executor.run.models import (
 from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SnapshotsConfig
+from sqlbuild.spec.contracts.types import TableType
 
 _DEFAULT_VALID_FROM_COLUMN: str = "valid_from"
 _DEFAULT_VALID_TO_COLUMN: str = "valid_to"
@@ -510,6 +511,10 @@ def _create_initial_snapshot_target(
             valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
             initial_valid_from=entry.initial_valid_from,
+        )
+    if entry.table_type == TableType.PERMANENT:
+        statements = tuple(
+            statement.replace("TRANSIENT TABLE", "TABLE", 1) for statement in statements
         )
     statement_recorder.record_many(statements)
     statement: str

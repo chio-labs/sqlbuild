@@ -5,23 +5,50 @@ from unittest.mock import Mock, call
 import pytest
 
 from sqlbuild.adapter.contract.models import (
+    RelationInfo,
     RenderedRetentionChange,
     RetentionRequest,
     RetentionState,
 )
 from sqlbuild.adapter.contract.types import RetentionChangePhase, RetentionScope
-from sqlbuild.compiler.planner.models import PlanOutput, RetentionPlanEntry
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.models import PlanOutput, RetentionPlanEntry, TableTypePlanEntry
 from sqlbuild.compiler.planner.types import (
     RetentionDirection,
     RetentionPlanPhase,
 )
 from sqlbuild.executor.build._helpers.retention import (
     apply_retention_phase,
+    apply_table_type_conversions,
     reconcile_model_retention,
 )
 from tests.unit.src.sqlbuild.executor.build._helpers._test_types import (
     BuildModelRetentionReconciliationTestCase,
     BuildRetentionPhaseTestCase,
+    TableTypeConversionTestCase,
+)
+
+_TARGET: RelationInfo = RelationInfo(
+    database="warehouse",
+    schema="analytics",
+    name="orders",
+    relation_type="BASE TABLE",
+    is_transient=False,
+)
+_TRANSIENT_TARGET: RelationInfo = RelationInfo(
+    database="warehouse",
+    schema="analytics",
+    name="orders",
+    relation_type="BASE TABLE",
+    is_transient=True,
+)
+_COPY: RelationInfo = RelationInfo(
+    database="warehouse",
+    schema="analytics",
+    name="__sqb_type_swap__orders",
+    relation_type="BASE TABLE",
+    is_transient=False,
 )
 
 
@@ -160,3 +187,122 @@ def test_given_successful_model_when_reconciling_retention_then_defers_decreases
     assert adapter.execute.call_args_list == [
         call(connection=connection, sql=statement) for statement in test_case.expected_statements
     ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TableTypeConversionTestCase(
+            description="undesired target with stale copy recreates before swap",
+            relation_snapshots=(
+                (_TRANSIENT_TARGET, _COPY),
+                (_COPY,),
+            ),
+            expected_statements=(
+                "CREATE OR REPLACE TABLE warehouse.analytics.__sqb_type_swap__orders AS SELECT * "
+                "FROM warehouse.analytics.orders",
+                "ALTER TABLE warehouse.analytics.orders SWAP WITH "
+                "warehouse.analytics.__sqb_type_swap__orders",
+                "DROP TABLE IF EXISTS warehouse.analytics.__sqb_type_swap__orders",
+            ),
+        ),
+        TableTypeConversionTestCase(
+            description="desired target with leftover copy only cleans copy",
+            relation_snapshots=((_TARGET, _COPY),),
+            expected_statements=(
+                "DROP TABLE IF EXISTS warehouse.analytics.__sqb_type_swap__orders",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_recoverable_table_type_state_when_converting_then_uses_inspection_only_recovery(
+    test_case: TableTypeConversionTestCase,
+) -> None:
+    adapter: Mock = Mock()
+    adapter.render_qualified_name.side_effect = lambda *, database, schema, name: ".".join(
+        (database, schema, name)
+    )
+    adapter.list_relations.side_effect = test_case.relation_snapshots
+    connection: object = object()
+    entry: TableTypePlanEntry = TableTypePlanEntry(
+        model_name="orders",
+        destination=CompiledRelationLocation(
+            database="warehouse",
+            schema="analytics",
+            name="orders",
+            qualified_name="warehouse.analytics.orders",
+        ),
+        copy_name="__sqb_type_swap__orders",
+        desired_type="permanent",
+        actual_type="transient",
+        source="model",
+        downgrade=False,
+        downgrade_policy="require_confirmation",
+    )
+
+    apply_table_type_conversions(
+        plan=PlanOutput(table_type_entries=(entry,)), adapter=adapter, connection=connection
+    )
+
+    assert tuple(item.kwargs["sql"] for item in adapter.execute.call_args_list) == (
+        test_case.expected_statements
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TableTypeConversionTestCase(
+            description="unknown live metadata fails before SQL",
+            relation_snapshots=(
+                (
+                    RelationInfo(
+                        database="warehouse",
+                        schema="analytics",
+                        name="orders",
+                        relation_type="BASE TABLE",
+                    ),
+                ),
+            ),
+            expected_statements=(),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unknown_live_table_type_when_converting_then_fails_closed(
+    test_case: TableTypeConversionTestCase,
+) -> None:
+    adapter: Mock = Mock()
+    adapter.render_qualified_name.side_effect = lambda *, database, schema, name: ".".join(
+        (database, schema, name)
+    )
+    adapter.list_relations.side_effect = test_case.relation_snapshots
+    entry: TableTypePlanEntry = TableTypePlanEntry(
+        model_name="orders",
+        destination=CompiledRelationLocation(
+            database="warehouse",
+            schema="analytics",
+            name="orders",
+            qualified_name="warehouse.analytics.orders",
+        ),
+        copy_name="__sqb_type_swap__orders",
+        desired_type="permanent",
+        actual_type=None,
+        source="model",
+        downgrade=False,
+        downgrade_policy="require_confirmation",
+    )
+
+    with pytest.raises(PlannerInputError, match="metadata is unknown"):
+        apply_table_type_conversions(
+            plan=PlanOutput(table_type_entries=(entry,)), adapter=adapter, connection=object()
+        )
+
+    assert tuple(item.kwargs["sql"] for item in adapter.execute.call_args_list) == (
+        test_case.expected_statements
+    )
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-vv"])

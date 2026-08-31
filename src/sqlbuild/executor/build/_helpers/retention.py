@@ -5,10 +5,98 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.models import RenderedRetentionChange, RetentionState
+from sqlbuild.adapter.contract.models import RelationInfo, RenderedRetentionChange, RetentionState
 from sqlbuild.adapter.contract.types import RetentionChangePhase, RetentionScope
-from sqlbuild.compiler.planner.models import PlanOutput, RetentionPlanEntry
+from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
+    resolve_qualified_name_parts,
+)
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.models import PlanOutput, RetentionPlanEntry, TableTypePlanEntry
 from sqlbuild.compiler.planner.types import RetentionPlanPhase
+from sqlbuild.spec.contracts.types import TableType
+
+
+def apply_table_type_conversions(
+    *, plan: PlanOutput, adapter: BaseAdapter, connection: Any
+) -> None:
+    """Recover by inspection: clean desired targets or recreate and swap undesired targets."""
+
+    _apply_table_type_entries(
+        entries=plan.table_type_entries, adapter=adapter, connection=connection
+    )
+
+
+def _apply_table_type_entries(
+    *, entries: tuple[TableTypePlanEntry, ...], adapter: BaseAdapter, connection: Any
+) -> None:
+    if not entries:
+        return
+    _apply_table_type_entry(entry=entries[0], adapter=adapter, connection=connection)
+    _apply_table_type_entries(entries=entries[1:], adapter=adapter, connection=connection)
+
+
+def _apply_table_type_entry(
+    *, entry: TableTypePlanEntry, adapter: BaseAdapter, connection: Any
+) -> None:
+    destination: str = resolve_qualified_name_parts(
+        adapter=adapter,
+        database=entry.destination.database,
+        schema=entry.destination.schema,
+        name=entry.destination.name,
+    )
+    copy: str = resolve_qualified_name_parts(
+        adapter=adapter,
+        database=entry.destination.database,
+        schema=entry.destination.schema,
+        name=entry.copy_name,
+    )
+    relations: dict[str, RelationInfo] = _inspect_table_type_entry(
+        entry=entry, adapter=adapter, connection=connection
+    )
+    target: RelationInfo | None = relations.get(entry.destination.name.lower())
+    if target is None:
+        raise PlannerInputError(
+            f"model '{entry.model_name}': table-type conversion target no longer exists"
+        )
+    desired_transient: bool = entry.desired_type == TableType.TRANSIENT
+    if target.is_transient is None:
+        raise PlannerInputError(
+            f"model '{entry.model_name}': live table type metadata is unknown; refusing conversion"
+        )
+    if target.is_transient == desired_transient:
+        if entry.copy_name.lower() in relations:
+            adapter.execute(connection=connection, sql=f"DROP TABLE IF EXISTS {copy}")
+        return
+    table_kind: str = "TRANSIENT TABLE" if desired_transient else "TABLE"
+    adapter.execute(
+        connection=connection,
+        sql=f"CREATE OR REPLACE {table_kind} {copy} AS SELECT * FROM {destination}",
+    )
+    copy_info: RelationInfo | None = _inspect_table_type_entry(
+        entry=entry, adapter=adapter, connection=connection
+    ).get(entry.copy_name.lower())
+    if copy_info is None or copy_info.is_transient is None:
+        raise PlannerInputError(
+            f"model '{entry.model_name}': conversion copy type metadata is unknown"
+        )
+    if copy_info.is_transient != desired_transient:
+        raise PlannerInputError(
+            f"model '{entry.model_name}': conversion copy was not created with the desired type"
+        )
+    adapter.execute(connection=connection, sql=f"ALTER TABLE {destination} SWAP WITH {copy}")
+    adapter.execute(connection=connection, sql=f"DROP TABLE IF EXISTS {copy}")
+
+
+def _inspect_table_type_entry(
+    *, entry: TableTypePlanEntry, adapter: BaseAdapter, connection: Any
+) -> dict[str, RelationInfo]:
+    relations: tuple[RelationInfo, ...] = adapter.list_relations(
+        connection=connection,
+        database=entry.destination.database,
+        schemas=(entry.destination.schema,) if entry.destination.schema is not None else None,
+        names=(entry.destination.name, entry.copy_name),
+    )
+    return {relation.name.lower(): relation for relation in relations}
 
 
 def apply_retention_phase(

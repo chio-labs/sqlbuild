@@ -86,6 +86,7 @@ from sqlbuild.cost.types import CostCapability, CostStatus
 from sqlbuild.diagnostics.main.log_sql import log_sql
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
+from sqlbuild.spec.contracts.types import TableType
 from sqlbuild.sql_values.models import SqlValue
 
 _EXACT_COLUMN_INSPECTION_LIMIT: int = 32
@@ -626,7 +627,15 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
             self.execute(connection=connection, sql=stmt)
 
     def render_create_table_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
-        return (f"CREATE OR REPLACE TRANSIENT TABLE {destination} AS {sql}",)
+        return self._render_create_table_as_type(
+            destination=destination, sql=sql, table_type="transient"
+        )
+
+    def _render_create_table_as_type(
+        self, *, destination: str, sql: str, table_type: str
+    ) -> tuple[str, ...]:
+        table_kind: str = "TABLE" if table_type == TableType.PERMANENT else "TRANSIENT TABLE"
+        return (f"CREATE OR REPLACE {table_kind} {destination} AS {sql}",)
 
     def render_create_view_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
         return (f"CREATE OR REPLACE VIEW {destination} AS {sql}",)
@@ -764,7 +773,10 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
         config: dict[str, Any] | None = None,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_create_table_as(destination=destination, sql=sql)
+        table_type: str = str((config or {}).get("table_type", "transient"))
+        statements: tuple[str, ...] = self._render_create_table_as_type(
+            destination=destination, sql=sql, table_type=table_type
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:

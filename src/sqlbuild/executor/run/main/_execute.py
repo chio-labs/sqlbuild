@@ -266,6 +266,7 @@ def _staged_lifecycle(
                     staging_schema=targets.target_schema,
                     staging_table=targets.staging_table,
                     declared_columns=declared_columns,
+                    table_type=entry.table_type,
                     statement_recorder=statement_recorder,
                 )
         except Exception as exc:
@@ -435,6 +436,7 @@ def _immediate_lifecycle(
                 connection=connection,
                 destination=target_qualified,
                 sql=state.resolved_sql,
+                config={"table_type": entry.table_type},
                 statement_recorder=statement_recorder,
             )
     except Exception as exc:
