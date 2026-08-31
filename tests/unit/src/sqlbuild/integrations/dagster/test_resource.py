@@ -474,10 +474,17 @@ def test_given_blocked_command_when_live_stream_closes_then_subprocess_terminate
                 '"assets": [{"kind": "model", "name": "orders", '
                 '"status": "success", "action": "cloned"}, '
                 '{"kind": "model", "name": "customers", '
-                '"status": "failed", "action": "failed"}], "checks": []}'
+                '"status": "failed", "action": "failed", "failed_phase": "staging", '
+                '"error_code": "R002", "error_message": "invalid identifier CUSTOMER_ID", '
+                '"staging_relation": "analytics.customers__staging"}], "checks": []}'
             ),
             expected_materialized_asset_key=("analytics", "orders"),
             expected_incomplete_assets="model:customers (failed)",
+            expected_error_fragments=(
+                "model:customers (failed) during staging",
+                "[R002] invalid identifier CUSTOMER_ID",
+                "staging relation: analytics.customers__staging",
+            ),
         )
     ],
     ids=lambda case: case.description,
@@ -507,6 +514,9 @@ def test_given_partial_clone_failure_when_streaming_then_preserves_confirmed_mat
 
     incomplete_assets: Any = exc_info.value.metadata["incomplete_assets"]
     assert incomplete_assets.value == test_case.expected_incomplete_assets
+    assert all(fragment in str(exc_info.value) for fragment in test_case.expected_error_fragments)
+    assert "stdout" not in exc_info.value.metadata
+    assert "stderr" not in exc_info.value.metadata
 
 
 @pytest.mark.parametrize(
@@ -517,6 +527,7 @@ def test_given_partial_clone_failure_when_streaming_then_preserves_confirmed_mat
             command_stderr="clone crashed\n",
             command_exit_code=1,
             expected_error_fragment="SQLBuild CLI command failed with exit code 1",
+            expected_stderr_tail="clone crashed\n",
         )
     ],
     ids=lambda case: case.description,
@@ -549,9 +560,10 @@ def test_given_clone_failure_without_payload_when_streaming_then_emits_no_materi
     [
         DagsterCliFailureTestCase(
             description="wait raises Dagster failure for nonzero command",
-            command_stderr="build failed\n",
+            command_stderr="discarded" * 1_000 + "build failed\n",
             command_exit_code=3,
             expected_error_fragment="SQLBuild CLI command failed with exit code 3",
+            expected_stderr_tail=("discarded" * 1_000 + "build failed\n")[-4_000:],
         )
     ],
     ids=lambda case: case.description,
@@ -575,6 +587,8 @@ def test_given_sqlbuild_cli_resource_when_waiting_failed_invocation_then_raises_
         resource.cli(args=["build"]).wait()
 
     assert test_case.expected_error_fragment in str(error.value)
+    assert error.value.metadata["stderr_tail"].value == test_case.expected_stderr_tail
+    assert "stderr" not in error.value.metadata
 
 
 @pytest.mark.parametrize(

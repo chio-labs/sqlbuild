@@ -27,6 +27,29 @@ from sqlbuild.integrations.dagster.constants import (
     VERBOSE_FLAGS,
 )
 
+_MAX_DIAGNOSTIC_CHARS: int = 4_000
+
+
+def _diagnostic_tail(value: str) -> str:
+    return value[-_MAX_DIAGNOSTIC_CHARS:]
+
+
+def _format_asset_failure(asset: Mapping[str, Any]) -> str:
+    status: str = str(asset.get("status"))
+    lines: list[str] = [f"{asset.get('kind')}:{asset.get('name')} ({status})"]
+    failed_phase: object = asset.get("failed_phase")
+    if failed_phase is not None:
+        lines[0] += f" during {failed_phase}"
+    error_message: object = asset.get("error_message")
+    if error_message is not None:
+        error_code: object = asset.get("error_code")
+        prefix: str = f"[{error_code}] " if error_code is not None else ""
+        lines.append(f"  {prefix}{error_message}")
+    staging_relation: object = asset.get("staging_relation")
+    if staging_relation is not None:
+        lines.append(f"  staging relation: {staging_relation}")
+    return "\n".join(lines)
+
 
 class SqlBuildCliInvocation:
     """A running or completed SQLBuild CLI subprocess."""
@@ -133,27 +156,37 @@ class SqlBuildCliInvocation:
         metadata: dict[str, Any] = {
             "command": " ".join(self.command),
             "project_dir": str(self.project_dir),
-            "stdout": self.stdout,
-            "stderr": self.stderr,
             "selection": " ".join(self.selection),
             "selector_file": self.selector_file_path,
         }
+        description: str = (
+            "SQLBuild CLI command failed with exit code "
+            f"{self.returncode}: {' '.join(self.command)}"
+        )
         if self.execution_payload is not None:
             incomplete_assets: list[str] = []
+            failure_details: list[str] = []
             for asset in self.execution_payload.get("assets", ()):
                 status: str = str(asset.get("status"))
                 if status in COMPLETED_EXECUTION_STATUSES:
                     continue
                 incomplete_assets.append(f"{asset.get('kind')}:{asset.get('name')} ({status})")
+                failure_details.append(_format_asset_failure(asset))
             metadata["execution_status"] = str(self.execution_payload.get("status"))
             metadata["incomplete_assets"] = ", ".join(incomplete_assets)
-        return dg.Failure(
-            description=(
-                "SQLBuild CLI command failed with exit code "
-                f"{self.returncode}: {' '.join(self.command)}"
-            ),
-            metadata=metadata,
-        )
+            if failure_details:
+                description += "\n\nFailures:\n\n" + "\n\n".join(failure_details)
+        else:
+            stdout_tail: str = _diagnostic_tail(self.stdout)
+            stderr_tail: str = _diagnostic_tail(self.stderr)
+            if stdout_tail:
+                metadata["stdout_tail"] = stdout_tail
+            if stderr_tail:
+                metadata["stderr_tail"] = stderr_tail
+            diagnostic: str = stderr_tail.strip() or stdout_tail.strip()
+            if diagnostic:
+                description += f"\n\n{diagnostic}"
+        return dg.Failure(description=description, metadata=metadata)
 
     def get_artifact(self, artifact: str) -> dict[str, Any]:
         """Read one JSON artifact from the SQLBuild project target directory."""
