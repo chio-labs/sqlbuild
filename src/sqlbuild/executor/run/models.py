@@ -207,23 +207,6 @@ class ModelMaterializationContext:
 
 
 @dataclass(frozen=True)
-class PermanentPromotionContext:
-    """Physical names and runtime services for one permanent table promotion."""
-
-    adapter: BaseAdapter
-    connection: Any
-    staging_relation: str
-    staging_name: str
-    destination_relation: str
-    destination_database: str | None
-    destination_schema: str
-    destination_name: str
-    operation_identity: str
-    statement_recorder: StatementRecorder
-    archive_retention_days: int = 7
-
-
-@dataclass(frozen=True)
 class RuntimeCursorSpec:
     """Cursor configuration inputs for runtime-owned bound resolution."""
 

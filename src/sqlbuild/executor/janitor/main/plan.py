@@ -7,7 +7,6 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.executor.janitor._helpers.archives import plan_direct_archive_actions
 from sqlbuild.executor.janitor._helpers.classification import (
     collect_direct_state_prune_candidates,
     gather_janitor_warehouse_facts,
@@ -15,14 +14,11 @@ from sqlbuild.executor.janitor._helpers.classification import (
 from sqlbuild.executor.janitor._helpers.plan import collect_target_schemas
 from sqlbuild.executor.janitor._helpers.schema_planning import classify_target_schemas
 from sqlbuild.executor.janitor.models import (
-    JanitorArchiveCandidate,
-    JanitorArchiveDeleteCandidate,
     JanitorDirectModeSettings,
     JanitorDirectStatePruneCandidate,
     JanitorPlan,
     JanitorRelationScope,
     JanitorSchemaClassification,
-    JanitorSkippedRelation,
     JanitorStateCandidates,
     JanitorWarehouseFacts,
 )
@@ -57,7 +53,6 @@ def build_janitor_plan(
         return JanitorPlan(
             target_name=project.effective_target_name,
             retention_days=retention_days,
-            archive_retention_days=direct.archive_retention_days,
             direct_mode=direct.enabled,
             checkpoint_candidates=state.checkpoint_candidates,
             detached_virtual_environment_candidates=(state.detached_virtual_environment_candidates),
@@ -99,30 +94,11 @@ def build_janitor_plan(
         direct_mode=direct.enabled,
     )
 
-    archive_candidates: tuple[JanitorArchiveCandidate, ...] = ()
-    archive_delete_candidates: tuple[JanitorArchiveDeleteCandidate, ...] = ()
-    skipped_relations: list[JanitorSkippedRelation] = list(schemas.skipped_relations)
-    if direct.enabled and not schemas.blocked_schemas:
-        archive_candidates, archive_delete_candidates, archive_skipped = (
-            plan_direct_archive_actions(
-                candidates=schemas.candidates,
-                facts=facts,
-                adapter=adapter,
-                connection=connection,
-                origin_run_id=project.run_id,
-                archive_retention_days=direct.archive_retention_days,
-                now=now,
-            )
-        )
-        skipped_relations.extend(archive_skipped)
     return JanitorPlan(
         target_name=project.effective_target_name,
         retention_days=retention_days,
-        archive_retention_days=direct.archive_retention_days,
         direct_mode=direct.enabled,
         candidates=schemas.candidates,
-        archive_candidates=archive_candidates,
-        archive_delete_candidates=archive_delete_candidates,
         checkpoint_candidates=state.checkpoint_candidates,
         detached_virtual_environment_candidates=state.detached_virtual_environment_candidates,
         expired_virtual_environment_candidates=state.expired_virtual_environment_candidates,
@@ -130,7 +106,7 @@ def build_janitor_plan(
         expired_lock_candidates=state.expired_lock_candidates,
         virtual_state_prune_candidates=state.virtual_state_prune_candidates,
         direct_state_prune_candidates=direct_state_prune_candidates,
-        skipped_relations=tuple(skipped_relations),
+        skipped_relations=schemas.skipped_relations,
         skipped_schemas=schemas.skipped_schemas,
         blocked_schemas=schemas.blocked_schemas,
         scanned_schema_count=len(target_schemas),

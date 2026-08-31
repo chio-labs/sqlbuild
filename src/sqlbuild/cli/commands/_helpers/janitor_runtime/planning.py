@@ -181,7 +181,6 @@ def build_janitor_execution_plan(
         ),
         direct_settings=JanitorDirectModeSettings(
             enabled=not invocation.discovered_inputs.project_config.settings.virtual_environments,
-            archive_retention_days=settings.archive_retention_days,
             state_history_versions=settings.direct_state_history_versions,
         ),
     )

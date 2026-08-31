@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledProject, CompileModelConfig
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
@@ -21,55 +20,11 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     DirectSourceFreshnessPlanOutputTestCase,
     ExternalBlockedPlanOutputTestCase,
     HookFunctionPlanOutputTestCase,
-    PermanentTablePlanEntryTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner.main.helpers import (
     build_execution_plan_from_kwargs,
 )
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import build_compiled_project_with_models
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        PermanentTablePlanEntryTestCase(
-            description="omitted declaration remains transient",
-            config_values={"materialized": "table"},
-            expected_permanent_table=False,
-        ),
-        PermanentTablePlanEntryTestCase(
-            description="permanent declaration marks permanent table",
-            config_values={"materialized": "table", "table_type": "permanent"},
-            expected_permanent_table=True,
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_table_type_declaration_when_building_plan_then_entry_marks_permanent_table(
-    test_case: PermanentTablePlanEntryTestCase,
-) -> None:
-    project: CompiledProject = build_compiled_project_with_models({"orders": "select 1 as id"})
-    project = replace(
-        project,
-        models=(
-            replace(
-                project.models[0],
-                config=CompileModelConfig(values=test_case.config_values),
-            ),
-        ),
-    )
-    adapter: DuckDbAdapter = DuckDbAdapter()
-    connection: Any = adapter.connect({"database": ":memory:"})
-    try:
-        plan_output: PlanOutput = build_execution_plan_from_kwargs(
-            project=project,
-            adapter=adapter,
-            connection=connection,
-        )
-    finally:
-        adapter.close(connection)
-
-    assert plan_output.model_entries[0].permanent_table is test_case.expected_permanent_table
 
 
 @pytest.mark.parametrize(

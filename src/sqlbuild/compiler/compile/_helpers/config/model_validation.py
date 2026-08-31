@@ -79,8 +79,6 @@ _CUSTOM_MATERIALIZATION_DISALLOWED_KEYS: tuple[str, ...] = (
     "cursor_inputs",
     "lookback",
 )
-_PERMANENT_TABLE_TYPE: str = "permanent"
-_TABLE_TYPE_CONFIG_KEY: str = "table_type"
 
 
 def validate_incremental_config(
@@ -369,21 +367,6 @@ def validate_contract_config(
         )
 
 
-def validate_table_type_config(*, config: CompileModelConfig, model_name: str) -> None:
-    """Validate the optional permanent-table declaration."""
-
-    if _TABLE_TYPE_CONFIG_KEY not in config.values:
-        return
-    table_type: object = config.values[_TABLE_TYPE_CONFIG_KEY]
-    if not isinstance(table_type, str) or table_type != _PERMANENT_TABLE_TYPE:
-        raise CompileInputError(f"model '{model_name}': table_type must be 'permanent'")
-    materialized: str | None = _str(config=config, key="materialized")
-    if materialized != MaterializationType.TABLE:
-        raise CompileInputError(
-            f"model '{model_name}': table_type permanent is only valid for materialized table"
-        )
-
-
 def validate_non_incremental_config(
     *,
     config: CompileModelConfig,
@@ -391,7 +374,6 @@ def validate_non_incremental_config(
 ) -> None:
     """Reject incremental-only config keys on non-incremental models."""
 
-    validate_table_type_config(config=config, model_name=model_name)
     materialized: str | None = _str(config=config, key="materialized")
     if materialized == MaterializationType.INCREMENTAL:
         return

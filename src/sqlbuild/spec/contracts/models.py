@@ -203,7 +203,6 @@ class JanitorConfig:
 
     enabled: bool = False
     retention_days: int = 30
-    archive_retention_days: int = 7
     max_checkpoints: int = 20
     direct_state_history_versions: int = 20
     delete_tracked_only: bool = True

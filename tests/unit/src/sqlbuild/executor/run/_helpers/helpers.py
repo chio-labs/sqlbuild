@@ -20,7 +20,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.run.models import HookContext, PermanentPromotionContext
+from sqlbuild.executor.run.models import HookContext
 
 
 def insert_snapshot_hook_log(ctx: HookContext, phase: str) -> None:
@@ -158,26 +158,6 @@ def build_fingerprint_audit_plan_entry_with_options(
         attached_target_name="orders",
         attached_column_name=attached_column_name,
         always_run=always_run,
-    )
-
-
-def build_permanent_promotion_context(
-    *,
-    adapter: Any,
-    operation_identity: str,
-    statement_recorder: StatementRecorder | None = None,
-) -> PermanentPromotionContext:
-    return PermanentPromotionContext(
-        adapter=adapter,
-        connection=object(),
-        staging_relation="mart.orders__staging",
-        staging_name="orders__staging",
-        destination_relation="mart.orders",
-        destination_database="racing",
-        destination_schema="mart",
-        destination_name="orders",
-        operation_identity=operation_identity,
-        statement_recorder=statement_recorder or StatementRecorder(),
     )
 
 
