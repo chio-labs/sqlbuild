@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import replace
 from pathlib import PurePosixPath
 
@@ -17,6 +18,10 @@ from sqlbuild.compiler.scopes.models import (
     UsageRecord,
 )
 from sqlbuild.compiler.scopes.types import ScopeDiagnosticCode, ScopeKind
+
+type _Anchor = tuple[OwnershipRoot, str]
+type _UsagesByDeclaration = dict[DeclarationIdentity, tuple[UsageRecord, ...]]
+type _AnchorSets = dict[DeclarationIdentity, frozenset[_Anchor]]
 
 _PLACEMENT_CODES: frozenset[ScopeDiagnosticCode] = frozenset(
     {
@@ -40,21 +45,24 @@ def build_placement_validated_index(*, index: ScopeIndex) -> ScopeIndex:
             ),
             completeness=replace(index.completeness, placement=False),
         )
-    usages: dict[DeclarationIdentity, list[UsageRecord]] = {}
-    for usage in index.usages:
-        usages.setdefault(usage.declaration, []).append(usage)
+    usages_by_declaration: _UsagesByDeclaration = _usages_by_declaration(index=index)
+    anchor_sets: _AnchorSets = _anchor_sets(
+        index=index, usages_by_declaration=usages_by_declaration
+    )
 
     diagnostics: list[ScopeDiagnostic] = [
         item for item in index.diagnostics if item.code not in _PLACEMENT_CODES
     ]
     for declaration in index.declarations:
-        declaration_usages: list[UsageRecord] = usages.get(declaration.identity, [])
+        declaration_usages: tuple[UsageRecord, ...] = usages_by_declaration.get(
+            declaration.identity, ()
+        )
         if declaration.scope is ScopeKind.PRIVATE:
-            declaration_usages = [
+            declaration_usages = tuple(
                 usage
                 for usage in declaration_usages
                 if usage.consumer == declaration.identity.owner and usage.through is None
-            ]
+            )
         if not declaration_usages:
             diagnostics.append(
                 _diagnostic(
@@ -68,8 +76,12 @@ def build_placement_validated_index(*, index: ScopeIndex) -> ScopeIndex:
             continue
         if declaration.scope is ScopeKind.PRIVATE:
             continue
-        required: tuple[ScopeKind, str | None, tuple[str, ...]] | None = resolve_required_placement(
-            index=index, declaration=declaration.identity
+        required: tuple[ScopeKind, str | None, tuple[str, ...]] | None = (
+            _required_placement_for_record(
+                record=declaration,
+                usages_by_declaration=usages_by_declaration,
+                anchor_sets=anchor_sets,
+            )
         )
         if required is None:
             continue
@@ -129,45 +141,43 @@ def resolve_required_placement(
     )
     if not records or not index.completeness.runtime_usage:
         return None
-    record: DeclarationRecord = records[0]
+    usages_by_declaration: _UsagesByDeclaration = _usages_by_declaration(index=index)
+    return _required_placement_for_record(
+        record=records[0],
+        usages_by_declaration=usages_by_declaration,
+        anchor_sets=_anchor_sets(index=index, usages_by_declaration=usages_by_declaration),
+    )
+
+
+def _usages_by_declaration(*, index: ScopeIndex) -> _UsagesByDeclaration:
+    usage_lists: dict[DeclarationIdentity, list[UsageRecord]] = {}
+    for usage in index.usages:
+        usage_lists.setdefault(usage.declaration, []).append(usage)
+    return {identity: tuple(usages) for identity, usages in usage_lists.items()}
+
+
+def _required_placement_for_record(
+    *,
+    record: DeclarationRecord,
+    usages_by_declaration: _UsagesByDeclaration,
+    anchor_sets: _AnchorSets,
+) -> tuple[ScopeKind, str | None, tuple[str, ...]] | None:
+    declaration: DeclarationIdentity = record.identity
+    declaration_usages: tuple[UsageRecord, ...] = usages_by_declaration.get(declaration, ())
     if record.scope is ScopeKind.PRIVATE:
         direct_private: tuple[UsageRecord, ...] = tuple(
             usage
-            for usage in index.usages
-            if usage.declaration == declaration
-            and usage.consumer == declaration.owner
-            and usage.through is None
+            for usage in declaration_usages
+            if usage.consumer == declaration.owner and usage.through is None
         )
         return (
             (ScopeKind.PRIVATE, record.owning_path or record.ownership_root.path, ())
             if direct_private
             else None
         )
-    declaration_usages: tuple[UsageRecord, ...] = tuple(
-        usage for usage in index.usages if usage.declaration == declaration
-    )
     if not declaration_usages:
         return None
-    resources: dict[ResourceIdentity, ResourceRecord] = {
-        item.identity: item for item in index.resources
-    }
-    usage_lists: dict[DeclarationIdentity, list[UsageRecord]] = {}
-    for usage in index.usages:
-        usage_lists.setdefault(usage.declaration, []).append(usage)
-    usages_by_declaration: dict[DeclarationIdentity, tuple[UsageRecord, ...]] = {
-        identity: tuple(usages) for identity, usages in usage_lists.items()
-    }
-    anchor_list: list[tuple[OwnershipRoot, str]] = []
-    for usage in declaration_usages:
-        anchor_list.extend(
-            _usage_anchors(
-                usage=usage,
-                resources=resources,
-                usages_by_declaration=usages_by_declaration,
-                visited=frozenset({declaration}),
-            )
-        )
-    anchors: tuple[tuple[OwnershipRoot, str], ...] = tuple(anchor_list)
+    anchors: frozenset[_Anchor] = anchor_sets.get(declaration, frozenset())
     if not anchors:
         return None
     consumers: tuple[str, ...] = tuple(
@@ -182,36 +192,40 @@ def resolve_required_placement(
     return ScopeKind.INHERITED, _lca(paths), consumers
 
 
-def _usage_anchors(
-    *,
-    usage: UsageRecord,
-    resources: dict[ResourceIdentity, ResourceRecord],
-    usages_by_declaration: dict[DeclarationIdentity, tuple[UsageRecord, ...]],
-    visited: frozenset[DeclarationIdentity],
-) -> tuple[tuple[OwnershipRoot, str], ...]:
-    resource_identity: ResourceIdentity | None = usage.through
-    if resource_identity is None and isinstance(usage.consumer, ResourceIdentity):
-        resource_identity = usage.consumer
-    if resource_identity is not None:
-        resource: ResourceRecord | None = resources.get(resource_identity)
-        if resource is None:
-            return ()
-        return ((resource.ownership_root, PurePosixPath(resource.path).parent.as_posix()),)
-    if not isinstance(usage.consumer, DeclarationIdentity):
-        return ()
-    if usage.consumer in visited:
-        return ()
-    anchors: list[tuple[OwnershipRoot, str]] = []
-    for parent_usage in usages_by_declaration.get(usage.consumer, ()):
-        anchors.extend(
-            _usage_anchors(
-                usage=parent_usage,
-                resources=resources,
-                usages_by_declaration=usages_by_declaration,
-                visited=visited | {usage.consumer},
-            )
-        )
-    return tuple(anchors)
+def _anchor_sets(*, index: ScopeIndex, usages_by_declaration: _UsagesByDeclaration) -> _AnchorSets:
+    """Return each declaration's resource anchors reachable through consumer chains."""
+
+    resources: dict[ResourceIdentity, ResourceRecord] = {
+        item.identity: item for item in index.resources
+    }
+    anchors: dict[DeclarationIdentity, set[_Anchor]] = {}
+    dependents: dict[DeclarationIdentity, set[DeclarationIdentity]] = {}
+    for identity, declaration_usages in usages_by_declaration.items():
+        direct: set[_Anchor] = anchors.setdefault(identity, set())
+        for usage in declaration_usages:
+            resource_identity: ResourceIdentity | None = usage.through
+            if resource_identity is None and isinstance(usage.consumer, ResourceIdentity):
+                resource_identity = usage.consumer
+            if resource_identity is not None:
+                resource: ResourceRecord | None = resources.get(resource_identity)
+                if resource is not None:
+                    direct.add(
+                        (resource.ownership_root, PurePosixPath(resource.path).parent.as_posix())
+                    )
+                continue
+            if isinstance(usage.consumer, DeclarationIdentity):
+                dependents.setdefault(usage.consumer, set()).add(identity)
+    pending: deque[DeclarationIdentity] = deque(anchors)
+    while pending:
+        source: DeclarationIdentity = pending.popleft()
+        source_anchors: set[_Anchor] = anchors.get(source, set())
+        for target in dependents.get(source, ()):
+            target_anchors: set[_Anchor] = anchors.setdefault(target, set())
+            if source_anchors <= target_anchors:
+                continue
+            target_anchors |= source_anchors
+            pending.append(target)
+    return {identity: frozenset(items) for identity, items in anchors.items()}
 
 
 def _lca(paths: tuple[str, ...]) -> str:
