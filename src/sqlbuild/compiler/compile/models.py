@@ -149,7 +149,6 @@ class CompileModelConfig:
     time_travel_retention: ResolvedTimeTravelRetention = field(
         default_factory=ResolvedTimeTravelRetention
     )
-    archive_retention_days: int = 7
 
 
 @dataclass(frozen=True)

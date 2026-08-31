@@ -921,14 +921,6 @@ def test_given_version_identity_config_key_when_building_expected_hashes_then_ha
             changed_extra_config={"full_refresh": False},
             expected_hashes_differ=True,
         ),
-        ExpectedVersionHashesTestCase(
-            description="permanent table kind changes model version hash",
-            upstream_query_sql="SELECT 1 AS id",
-            downstream_query_sql="SELECT 1 AS order_id",
-            baseline_extra_config={},
-            changed_extra_config={"table_type": "permanent"},
-            expected_hashes_differ=True,
-        ),
     ],
     ids=lambda case: case.description,
 )

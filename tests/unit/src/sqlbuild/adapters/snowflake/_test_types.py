@@ -17,14 +17,6 @@ class SnowflakeRetentionTestCase:
 
 
 @dataclass(frozen=True)
-class SnowflakePermanentCopyTestCase:
-    description: str
-    destination: str
-    origin: str
-    expected_sql: str
-
-
-@dataclass(frozen=True)
 class SnowflakeCostCollectionTestCase:
     description: str
     connect_error: bool

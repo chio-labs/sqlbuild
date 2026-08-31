@@ -379,7 +379,6 @@ allow_as_clone_destination = true
 [janitor]
 enabled = true
 retention_days = 14
-archive_retention_days = 9
 max_checkpoints = 3
 delete_tracked_only = false
 exclude_patterns = ["partition_*"]
@@ -458,7 +457,6 @@ enabled = true
             },
             expected_janitor_enabled=True,
             expected_retention_days=14,
-            expected_archive_retention_days=9,
             expected_janitor_max_checkpoints=3,
             expected_janitor_delete_tracked_only=False,
             expected_janitor_exclude_patterns=("partition_*",),
@@ -534,7 +532,6 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     } == test_case.expected_targets
     assert config.janitor.enabled is test_case.expected_janitor_enabled
     assert config.janitor.retention_days == test_case.expected_retention_days
-    assert config.janitor.archive_retention_days == test_case.expected_archive_retention_days
     assert config.janitor.max_checkpoints == test_case.expected_janitor_max_checkpoints
     assert config.janitor.delete_tracked_only is test_case.expected_janitor_delete_tracked_only
     assert config.janitor.exclude_patterns == test_case.expected_janitor_exclude_patterns
