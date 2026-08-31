@@ -30,7 +30,9 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
     "test_case",
     [
         ScopePerformanceCase(
-            description="doubling models and inherited macros keeps cold scope scaling bounded",
+            description=(
+                "doubling models and descendant-public macros keeps cold scope scaling bounded"
+            ),
             small_model_count=1_000,
             small_domain_count=10,
             large_model_count=2_000,

@@ -44,7 +44,7 @@ def test_given_enum_typed_contract_when_value_is_invalid_then_build_fails_audit(
                 """
             ).strip()
             + "\n",
-            "enums/fulfillment_method.sql": "ENUM (name fulfillment_method, members [DELIVERY, PICKUP]);\n",
+            "models/_enums/fulfillment_method.sql": "ENUM (name fulfillment_method, members [DELIVERY, PICKUP]);\n",
             "models/orders.sql": dedent(
                 f"""
                 MODEL (

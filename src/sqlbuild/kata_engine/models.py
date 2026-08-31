@@ -177,6 +177,17 @@ class SqlTestPolicyConfig:
 
 
 @dataclass(frozen=True)
+class LayoutConfig:
+    levels: tuple[str, ...] = (
+        "staging",
+        "intermediate/clean",
+        "intermediate/enriched",
+        "mart",
+    )
+    domain_roots: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class KataConfig:
     select: tuple[str, ...] = ()
     ignore: tuple[str, ...] = ()
@@ -194,6 +205,7 @@ class KataConfig:
     cte_name_whitelist: tuple[str, ...] = ()
     cte_name_denylist: tuple[str, ...] = ()
     sql_tests: SqlTestPolicyConfig = field(default_factory=SqlTestPolicyConfig)
+    layout: LayoutConfig = field(default_factory=LayoutConfig)
     cache: KataCacheConfig = field(default_factory=KataCacheConfig)
 
 

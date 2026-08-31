@@ -67,6 +67,27 @@ impl Default for SqlTestPolicyConfig {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
+pub(crate) struct LayoutConfig {
+    pub levels: Vec<String>,
+    pub domain_roots: Vec<String>,
+}
+
+impl Default for LayoutConfig {
+    fn default() -> Self {
+        Self {
+            levels: vec![
+                "staging".into(),
+                "intermediate/clean".into(),
+                "intermediate/enriched".into(),
+                "mart".into(),
+            ],
+            domain_roots: vec![],
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
 pub(crate) struct KataConfig {
     pub select: Vec<String>,
     pub ignore: Vec<String>,
@@ -84,6 +105,7 @@ pub(crate) struct KataConfig {
     pub cte_name_whitelist: Vec<String>,
     pub cte_name_denylist: Vec<String>,
     pub sql_tests: SqlTestPolicyConfig,
+    pub layout: LayoutConfig,
     pub cache: CacheConfig,
 }
 
@@ -106,6 +128,7 @@ impl Default for KataConfig {
             cte_name_whitelist: vec![],
             cte_name_denylist: vec![],
             sql_tests: SqlTestPolicyConfig::default(),
+            layout: LayoutConfig::default(),
             cache: CacheConfig::enabled_by_default(),
         }
     }
@@ -243,6 +266,7 @@ pub(crate) enum ScopeDiagnosticCode {
     S021,
     S022,
     S023,
+    S024,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -313,6 +337,14 @@ pub(crate) struct ScopeDeclaration {
     pub line: u64,
     pub column: u64,
     pub scope: ScopeKind,
+    #[serde(default)]
+    pub role: Option<String>,
+    #[serde(default)]
+    pub visibility: Option<String>,
+    #[serde(default)]
+    pub role_root: Option<String>,
+    #[serde(default)]
+    pub bucket_path: Option<String>,
     pub ownership_root: String,
     pub owning_path: Option<String>,
     pub metadata: ScopeDeclarationMetadata,

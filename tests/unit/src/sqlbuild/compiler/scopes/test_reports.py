@@ -283,6 +283,10 @@ def test_given_declaration_when_explaining_then_metadata_is_typed_and_value_safe
         "item_count": None,
         "nullable": False,
         "render_as": None,
+        "role": "constants",
+        "visibility_label": "project",
+        "role_root": "constants",
+        "bucket_path": None,
     }
     assert test_case.expected_result
 

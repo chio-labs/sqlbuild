@@ -145,7 +145,7 @@ class CacheFaultCase:
 
     description: str
     mutate: Callable[..., None]
-    expected_schema_version: int = 1
+    expected_schema_version: int = 2
 
 
 @dataclass(frozen=True)

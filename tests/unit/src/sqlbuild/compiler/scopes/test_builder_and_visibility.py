@@ -348,8 +348,8 @@ def test_given_public_duplicates_across_scopes_when_building_then_retains_all_an
             (declaration,),
         ),
         DiscoveredEnumFile(
-            Path("models/_enums/status.sql"),
-            Path("models/_enums/status.sql"),
+            Path("models/enums/status.sql"),
+            Path("models/enums/status.sql"),
             "",
             (declaration,),
             ScopeKind.INHERITED,
@@ -357,8 +357,8 @@ def test_given_public_duplicates_across_scopes_when_building_then_retains_all_an
             Path("models"),
         ),
         DiscoveredEnumFile(
-            Path("models/sales/_local_enums/status.sql"),
-            Path("models/sales/_local_enums/status.sql"),
+            Path("models/sales/_enums/status.sql"),
+            Path("models/sales/_enums/status.sql"),
             "",
             (declaration,),
             ScopeKind.LOCAL,
@@ -500,7 +500,7 @@ def test_given_loaded_scoped_macro_when_building_then_metadata_is_safe_and_norma
     def normalize_status(value: object, fallback: str = "unknown") -> str:
         return str(value or fallback)
 
-    path: Path = Path("models/sales/_macros/status.py")
+    path: Path = Path("models/sales/macros/status.py")
     source = "def normalize_status(value, fallback='unknown'):\n    return str(value or fallback)\n"
     index: ScopeIndex = build_scope_index(
         discovered_inputs=discovered_inputs(
@@ -512,7 +512,7 @@ def test_given_loaded_scoped_macro_when_building_then_metadata_is_safe_and_norma
                     ScopeKind.INHERITED,
                     Path("models"),
                     Path("models/sales"),
-                    Path("models/sales/_macros"),
+                    Path("models/sales/macros"),
                 ),
             )
         ),

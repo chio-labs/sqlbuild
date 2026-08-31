@@ -157,7 +157,7 @@ _SCOPED_DECLARATION_DIRECTORIES: frozenset[str] = (
 def _discover_declaration_file_facts(
     *, project_dir: Path, declaration_kind: DeclarationKind | None = None
 ) -> tuple[_DeclarationFileFacts, ...]:
-    for directory_name in sorted(_SCOPED_DECLARATION_DIRECTORIES):
+    for directory_name in sorted(LOCAL_DECLARATION_DIRECTORIES):
         directory_kind, _scope_kind = DECLARATION_DIRECTORY_FACTS[directory_name]
         if (declaration_kind is None or directory_kind is declaration_kind) and (
             project_dir / directory_name
@@ -180,6 +180,7 @@ def _discover_declaration_file_facts(
                     ownership_root=Path(global_directory),
                     declaration_root=declaration_root,
                     owning_path=None,
+                    scope_kind=ScopeKind.GLOBAL,
                 )
             )
 
@@ -219,18 +220,20 @@ def _declaration_files_under_root(
     ownership_root: Path,
     declaration_root: Path,
     owning_path: Path | None,
+    scope_kind: ScopeKind | None = None,
 ) -> list[_DeclarationFileFacts]:
     nested_root: Path
     for nested_root in sorted(
         path
         for path in declaration_root.rglob("*")
-        if path.is_dir() and path.name in DECLARATION_DIRECTORY_FACTS
+        if path.is_dir() and path.name in _SCOPED_DECLARATION_DIRECTORIES
     ):
         relative_nested_root: str = nested_root.relative_to(project_dir).as_posix()
         raise DeclarationParseError(
             f"Declaration root {relative_nested_root}/ is nested inside another declaration tree"
         )
-    declaration_kind, scope_kind = DECLARATION_DIRECTORY_FACTS[declaration_root.name]
+    declaration_kind, default_scope_kind = DECLARATION_DIRECTORY_FACTS[declaration_root.name]
+    effective_scope_kind: ScopeKind = scope_kind or default_scope_kind
     suffix: str = ".py" if declaration_kind is DeclarationKind.MACRO else ".sql"
     results: list[_DeclarationFileFacts] = []
     file_path: Path
@@ -242,7 +245,7 @@ def _declaration_files_under_root(
                 file_path=file_path,
                 relative_path=file_path.relative_to(project_dir),
                 declaration_kind=declaration_kind,
-                scope_kind=scope_kind,
+                scope_kind=effective_scope_kind,
                 ownership_root=ownership_root,
                 owning_path=owning_path,
                 declaration_root=declaration_root.relative_to(project_dir),

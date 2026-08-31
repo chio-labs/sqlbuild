@@ -89,3 +89,11 @@ class SqlTestPolicyGuidanceTestCase:
     description: str
     pipeline_directory: str
     expected_path: str
+
+
+@dataclass(frozen=True)
+class KataLayoutConfigTestCase:
+    description: str
+    source: str
+    expected_levels: tuple[str, ...]
+    expected_thresholds: dict[str, int]

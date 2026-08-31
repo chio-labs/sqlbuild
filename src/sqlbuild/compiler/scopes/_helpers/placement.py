@@ -24,6 +24,7 @@ _PLACEMENT_CODES: frozenset[ScopeDiagnosticCode] = frozenset(
         ScopeDiagnosticCode.LOCAL_NEEDED_BY_DESCENDANT,
         ScopeDiagnosticCode.OVER_BROAD_INHERITED,
         ScopeDiagnosticCode.REQUIRES_GLOBAL_PLACEMENT,
+        ScopeDiagnosticCode.OVER_BROAD_GLOBAL,
     }
 )
 
@@ -65,7 +66,7 @@ def build_placement_validated_index(*, index: ScopeIndex) -> ScopeIndex:
                 )
             )
             continue
-        if declaration.scope in {ScopeKind.GLOBAL, ScopeKind.PRIVATE}:
+        if declaration.scope is ScopeKind.PRIVATE:
             continue
         required: tuple[ScopeKind, str | None, tuple[str, ...]] | None = resolve_required_placement(
             index=index, declaration=declaration.identity
@@ -74,6 +75,8 @@ def build_placement_validated_index(*, index: ScopeIndex) -> ScopeIndex:
             continue
         required_scope, required_path, consumer_labels = required
         consumers: str = ", ".join(consumer_labels)
+        if declaration.scope is required_scope and declaration.owning_path == required_path:
+            continue
         if required_scope is ScopeKind.GLOBAL:
             diagnostics.append(
                 _diagnostic(
@@ -88,12 +91,14 @@ def build_placement_validated_index(*, index: ScopeIndex) -> ScopeIndex:
                 )
             )
             continue
-        if declaration.scope is required_scope and declaration.owning_path == required_path:
-            continue
         code: ScopeDiagnosticCode = (
             ScopeDiagnosticCode.LOCAL_NEEDED_BY_DESCENDANT
             if declaration.scope is ScopeKind.LOCAL
-            else ScopeDiagnosticCode.OVER_BROAD_INHERITED
+            else (
+                ScopeDiagnosticCode.OVER_BROAD_GLOBAL
+                if declaration.scope is ScopeKind.GLOBAL
+                else ScopeDiagnosticCode.OVER_BROAD_INHERITED
+            )
         )
         diagnostics.append(
             _diagnostic(
@@ -143,24 +148,26 @@ def resolve_required_placement(
     )
     if not declaration_usages:
         return None
-    if record.scope is ScopeKind.GLOBAL:
-        return (
-            ScopeKind.GLOBAL,
-            None,
-            tuple(sorted({_consumer_label(usage) for usage in declaration_usages})),
-        )
     resources: dict[ResourceIdentity, ResourceRecord] = {
         item.identity: item for item in index.resources
     }
-    declarations: dict[DeclarationIdentity, DeclarationRecord] = {
-        item.identity: item for item in index.declarations
+    usage_lists: dict[DeclarationIdentity, list[UsageRecord]] = {}
+    for usage in index.usages:
+        usage_lists.setdefault(usage.declaration, []).append(usage)
+    usages_by_declaration: dict[DeclarationIdentity, tuple[UsageRecord, ...]] = {
+        identity: tuple(usages) for identity, usages in usage_lists.items()
     }
-    anchors: tuple[tuple[OwnershipRoot, str], ...] = tuple(
-        anchor
-        for usage in declaration_usages
-        if (anchor := _usage_anchor(usage=usage, resources=resources, declarations=declarations))
-        is not None
-    )
+    anchor_list: list[tuple[OwnershipRoot, str]] = []
+    for usage in declaration_usages:
+        anchor_list.extend(
+            _usage_anchors(
+                usage=usage,
+                resources=resources,
+                usages_by_declaration=usages_by_declaration,
+                visited=frozenset({declaration}),
+            )
+        )
+    anchors: tuple[tuple[OwnershipRoot, str], ...] = tuple(anchor_list)
     if not anchors:
         return None
     consumers: tuple[str, ...] = tuple(
@@ -175,26 +182,36 @@ def resolve_required_placement(
     return ScopeKind.INHERITED, _lca(paths), consumers
 
 
-def _usage_anchor(
+def _usage_anchors(
     *,
     usage: UsageRecord,
     resources: dict[ResourceIdentity, ResourceRecord],
-    declarations: dict[DeclarationIdentity, DeclarationRecord],
-) -> tuple[OwnershipRoot, str] | None:
+    usages_by_declaration: dict[DeclarationIdentity, tuple[UsageRecord, ...]],
+    visited: frozenset[DeclarationIdentity],
+) -> tuple[tuple[OwnershipRoot, str], ...]:
     resource_identity: ResourceIdentity | None = usage.through
     if resource_identity is None and isinstance(usage.consumer, ResourceIdentity):
         resource_identity = usage.consumer
     if resource_identity is not None:
         resource: ResourceRecord | None = resources.get(resource_identity)
         if resource is None:
-            return None
-        return resource.ownership_root, PurePosixPath(resource.path).parent.as_posix()
+            return ()
+        return ((resource.ownership_root, PurePosixPath(resource.path).parent.as_posix()),)
     if not isinstance(usage.consumer, DeclarationIdentity):
-        return None
-    consumer: DeclarationRecord | None = declarations.get(usage.consumer)
-    if consumer is None:
-        return None
-    return consumer.ownership_root, consumer.owning_path or consumer.ownership_root.path
+        return ()
+    if usage.consumer in visited:
+        return ()
+    anchors: list[tuple[OwnershipRoot, str]] = []
+    for parent_usage in usages_by_declaration.get(usage.consumer, ()):
+        anchors.extend(
+            _usage_anchors(
+                usage=parent_usage,
+                resources=resources,
+                usages_by_declaration=usages_by_declaration,
+                visited=visited | {usage.consumer},
+            )
+        )
+    return tuple(anchors)
 
 
 def _lca(paths: tuple[str, ...]) -> str:
@@ -225,14 +242,23 @@ def _message(
     if required_scope is ScopeKind.GLOBAL:
         target: str = f"top-level {declaration.identity.kind.value}s/"
     else:
-        prefix: str = "_local_" if required_scope is ScopeKind.LOCAL else "_"
+        prefix: str = "_" if required_scope is ScopeKind.LOCAL else ""
         target = f"{required_path}/{prefix}{declaration.identity.kind.value}s/"
     return (
         f"Declaration '{format_identity(identity=declaration.identity)}' is currently "
-        f"{declaration.scope.value} at '{current_path}' ({declaration.path}); required "
-        f"{required_scope.value} at '{required_path or 'top-level root'}'. Consumers: "
+        f"{_scope_label(declaration.scope)} at '{current_path}' ({declaration.path}); required "
+        f"{_scope_label(required_scope)} at '{required_path or 'top-level root'}'. Consumers: "
         f"{consumers}. Move it to '{target}'"
     )
+
+
+def _scope_label(scope: ScopeKind) -> str:
+    return {
+        ScopeKind.GLOBAL: "project",
+        ScopeKind.INHERITED: "descendant-public",
+        ScopeKind.LOCAL: "exact-owner-private",
+        ScopeKind.PRIVATE: "model-private",
+    }[scope]
 
 
 def _diagnostic(

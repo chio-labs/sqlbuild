@@ -26,6 +26,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredConstantFile,
     DiscoveredEnumFile,
     DiscoveredMacroFile,
+    DiscoveredProjectInputs,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DiscoverGlobalDeclarationTestCase,
@@ -33,6 +34,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DiscoveryPathInventoryTestCase,
     InvalidScopedDeclarationRootTestCase,
     OrdinaryDiscoveryExclusionTestCase,
+    OrdinaryFolderTestCase,
     StrictScopedDiscoveryTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
@@ -66,8 +68,8 @@ def test_given_declaration_below_authored_root_when_discovering_then_records_bou
         for scope_kind in ("inherited", "local"):
             suffix, contents = declaration_contents(kind=declaration_kind)
             directory_name: str = {
-                "inherited": f"_{declaration_kind}s",
-                "local": f"_local_{declaration_kind}s",
+                "inherited": f"{declaration_kind}s",
+                "local": f"_{declaration_kind}s",
             }[scope_kind]
             relative_root: Path = Path(test_case.authored_root) / "domain" / directory_name
             file_path: Path = tmp_path / relative_root / "organization" / f"z_value{suffix}"
@@ -125,18 +127,13 @@ def test_given_top_level_public_declarations_when_discovering_then_scope_remains
             "top_level_inherited", "_macros/value.py", "must be below a canonical authored root"
         ),
         InvalidScopedDeclarationRootTestCase(
-            "top_level_local",
-            "_local_constants/value.sql",
-            "must be below a canonical authored root",
-        ),
-        InvalidScopedDeclarationRootTestCase(
             "nested_scoped_roots",
-            "models/_macros/organization/_constants/value.sql",
+            "models/macros/organization/_constants/value.sql",
             "nested inside another declaration tree",
         ),
         InvalidScopedDeclarationRootTestCase(
             "scoped_root_below_global_tree",
-            "macros/organization/_local_macros/value.py",
+            "macros/organization/_macros/value.py",
             "nested inside another declaration tree",
         ),
         InvalidScopedDeclarationRootTestCase(
@@ -146,7 +143,7 @@ def test_given_top_level_public_declarations_when_discovering_then_scope_remains
         ),
         InvalidScopedDeclarationRootTestCase(
             "global_root_below_scoped_tree",
-            "models/_macros/organization/enums/value.sql",
+            "models/macros/organization/enums/value.sql",
             "nested inside another declaration tree",
         ),
     ),
@@ -162,6 +159,40 @@ def test_given_invalid_declaration_root_when_discovering_then_raises(
 
     with pytest.raises(DeclarationParseError, match=test_case.expected_error_fragment):
         discover_macro_files(project_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        OrdinaryFolderTestCase(
+            description="old local spelling is ordinary",
+            root_relative_path="_local_constants/value.sql",
+            model_relative_path="models/_local_constants/orders.sql",
+            expected_model_relative_paths=("models/_local_constants/orders.sql",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_old_local_spelling_when_discovering_then_directory_has_no_special_meaning(
+    test_case: OrdinaryFolderTestCase,
+    tmp_path: Path,
+) -> None:
+    root_file: Path = tmp_path / test_case.root_relative_path
+    model_file: Path = tmp_path / test_case.model_relative_path
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "demo"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    root_file.parent.mkdir(parents=True)
+    model_file.parent.mkdir(parents=True)
+    root_file.write_text("arbitrary project file", encoding="utf-8")
+    model_file.write_text("MODEL ();\nSELECT 1", encoding="utf-8")
+
+    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+
+    assert tuple(file.relative_path for file in discovered.model_files) == tuple(
+        Path(path) for path in test_case.expected_model_relative_paths
+    )
+    assert discovered.constant_files == ()
 
 
 @pytest.mark.parametrize(

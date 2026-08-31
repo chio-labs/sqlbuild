@@ -182,11 +182,11 @@ def test_given_inaccessible_scoped_macro_import_when_loading_then_rejects_before
     consumer_source: str = (
         "from pathlib import Path\n"
         "Path(__file__).parents[3].joinpath('executed').touch()\n"
-        "from models.sales._local_macros.shared import shared\n\n"
+        "from models.sales._macros.shared import shared\n\n"
         "def consumer() -> str:\n    return shared()\n"
     )
-    shared_path: Path = tmp_path / "models/sales/_local_macros/shared.py"
-    consumer_path: Path = tmp_path / "models/finance/_macros/consumer.py"
+    shared_path: Path = tmp_path / "models/sales/_macros/shared.py"
+    consumer_path: Path = tmp_path / "models/finance/macros/consumer.py"
     shared_path.parent.mkdir(parents=True)
     consumer_path.parent.mkdir(parents=True)
     shared_path.write_text(shared_source, encoding="utf-8")
@@ -194,21 +194,21 @@ def test_given_inaccessible_scoped_macro_import_when_loading_then_rejects_before
     macro_files: tuple[DiscoveredMacroFile, ...] = (
         DiscoveredMacroFile(
             shared_path,
-            Path("models/sales/_local_macros/shared.py"),
+            Path("models/sales/_macros/shared.py"),
             shared_source,
             ScopeKind.LOCAL,
             Path("models"),
             Path("models/sales"),
-            Path("models/sales/_local_macros"),
+            Path("models/sales/_macros"),
         ),
         DiscoveredMacroFile(
             consumer_path,
-            Path("models/finance/_macros/consumer.py"),
+            Path("models/finance/macros/consumer.py"),
             consumer_source,
             ScopeKind.INHERITED,
             Path("models"),
             Path("models/finance"),
-            Path("models/finance/_macros"),
+            Path("models/finance/macros"),
         ),
     )
 

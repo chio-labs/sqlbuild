@@ -46,6 +46,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestCtes,
     CompileSqlTestInput,
     DeclarationExpansionContext,
+    DeclarationResolutionContext,
     LoadedMacro,
     MacroContext,
 )
@@ -62,8 +63,8 @@ from sqlbuild.compiler.discovery.models import (
     EnumDeclaration,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
-from sqlbuild.compiler.scopes.models import ResourceIdentity
-from sqlbuild.compiler.scopes.types import ResourceKind
+from sqlbuild.compiler.scopes.models import ResourceIdentity, UsageRecord
+from sqlbuild.compiler.scopes.types import ResourceKind, UsageKind
 
 _HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
 _LEGACY_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hook", "post_hook"})
@@ -217,7 +218,7 @@ def build_test_inputs(
                         mode=test_mode,
                         payload=test_payload,
                         declaration_usages=(
-                            declaration_usage_records(
+                            _macro_test_declaration_usages(
                                 sql=parameter_sql,
                                 resource=resource,
                                 declarations=scoped_declarations.declarations,
@@ -233,6 +234,33 @@ def build_test_inputs(
                     )
                 )
     return tuple(test_inputs)
+
+
+def _macro_test_declaration_usages(
+    *,
+    sql: str,
+    resource: ResourceIdentity,
+    declarations: DeclarationResolutionContext,
+) -> tuple[UsageRecord, ...]:
+    usages: tuple[UsageRecord, ...] = declaration_usage_records(
+        sql=sql,
+        resource=resource,
+        declarations=declarations,
+    )
+    return tuple(
+        dict.fromkeys(
+            (
+                *usages,
+                *(
+                    UsageRecord(
+                        resource, declarations.macro_records[name].identity, UsageKind.RUNTIME
+                    )
+                    for name in find_macro_call_names(sql=sql)
+                    if name in declarations.macro_records
+                ),
+            )
+        )
+    )
 
 
 def _build_test_input_payload(

@@ -175,7 +175,7 @@ def scope_index() -> ScopeIndex:
     )
     constant: DeclarationRecord = DeclarationRecord(
         DeclarationIdentity(DeclarationKind.CONSTANT, "minimum_value"),
-        "models/staging/_constants/limits.sql",
+        "models/staging/constants/limits.sql",
         8,
         3,
         ScopeKind.INHERITED,
@@ -222,7 +222,7 @@ def report_scope_lookup(*, extra_globals: int = 0) -> ScopeLookup:
     )
     inherited: DeclarationRecord = DeclarationRecord(
         DeclarationIdentity(DeclarationKind.ENUM, "order_status"),
-        "models/staging/_enums/order_status.sql",
+        "models/staging/enums/order_status.sql",
         1,
         1,
         ScopeKind.INHERITED,

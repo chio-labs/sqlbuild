@@ -1,3 +1,5 @@
+#[path = "tests/test_domain_layout.rs"]
+mod domain_layout;
 #[path = "tests/test_evaluation.rs"]
 mod evaluation;
 #[path = "tests/helpers.rs"]

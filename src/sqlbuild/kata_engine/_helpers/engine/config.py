@@ -9,6 +9,7 @@ from sqlbuild.kata_engine._helpers.engine.native import load_native_config
 from sqlbuild.kata_engine.models import (
     KataCacheConfig,
     KataConfig,
+    LayoutConfig,
     RuleExemption,
     RuleIgnore,
     SelectStarAllow,
@@ -61,6 +62,7 @@ def load_kata_config(project_dir: Path) -> KataConfig:
         cte_name_whitelist=_strings(payload.get("cte_name_whitelist")),
         cte_name_denylist=_strings(payload.get("cte_name_denylist")),
         sql_tests=_sql_tests(payload.get("sql_tests")),
+        layout=_layout(payload.get("layout")),
         cache=_cache(payload.get("cache")),
     )
 
@@ -123,3 +125,14 @@ def _sql_tests(value: object) -> SqlTestPolicyConfig:
         {str(key): item for key, item in value.items()} if isinstance(value, dict) else {}
     )
     return SqlTestPolicyConfig(pipeline_directory=str(table.get("pipeline_directory", "pipelines")))
+
+
+def _layout(value: object) -> LayoutConfig:
+    table: dict[str, object] = (
+        {str(key): item for key, item in value.items()} if isinstance(value, dict) else {}
+    )
+    levels: tuple[str, ...] = _strings(table.get("levels"))
+    return LayoutConfig(
+        levels=levels or LayoutConfig().levels,
+        domain_roots=_strings(table.get("domain_roots")),
+    )

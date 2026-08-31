@@ -36,7 +36,7 @@ def build_chain_test_project_files(*, sql_analysis_enabled: bool) -> dict[str, s
             "  status\n"
             'FROM __ref("stg_orders")'
         ),
-        "macros/test_macros.py": (
+        "models/_macros/test_macros.py": (
             "def mocked_amount() -> str:\n"
             '    return "0"\n\n'
             "def mocked_country() -> str:\n"
