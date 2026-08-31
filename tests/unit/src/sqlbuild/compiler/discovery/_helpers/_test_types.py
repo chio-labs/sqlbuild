@@ -136,6 +136,7 @@ class LoadProjectConfigTestCase:
     expected_auto_load_sources: bool = True
     expected_virtual_environments: bool = False
     expected_changes_only: bool = False
+    expected_enforce_placement: bool = True
 
 
 @dataclass(frozen=True)

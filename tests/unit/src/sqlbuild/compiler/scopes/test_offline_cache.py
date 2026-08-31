@@ -13,7 +13,7 @@ from sqlbuild.compiler.scopes._helpers.cache import scope_index_fingerprint
 from sqlbuild.compiler.scopes.constants import SCOPE_CACHE_DIRECTORY, SCOPE_CACHE_FILENAME
 from sqlbuild.compiler.scopes.main.load_or_build_scope_index import load_or_build_scope_index
 from sqlbuild.compiler.scopes.models import ScopeIndex
-from sqlbuild.compiler.scopes.types import ResourceKind, ScopeDiagnosticCode
+from sqlbuild.compiler.scopes.types import DiagnosticSeverity, ResourceKind, ScopeDiagnosticCode
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
     CacheFaultCase,
     FingerprintMutationCase,
@@ -120,6 +120,13 @@ def test_given_no_cache_when_loading_twice_then_cache_is_bypassed(
             "sqlbuild_project.toml",
             _PROJECT + '\n[constants]\ncollection_rendering = "value_list"\n',
             _PROJECT + '\n[constants]\ncollection_rendering = "array"\n',
+            True,
+        ),
+        FingerprintMutationCase(
+            "scope placement enforcement",
+            "sqlbuild_project.toml",
+            _PROJECT + "\n[scopes]\nenforce_placement = true\n",
+            _PROJECT + "\n[scopes]\nenforce_placement = false\n",
             True,
         ),
         FingerprintMutationCase(
@@ -492,6 +499,41 @@ def test_given_placement_invalid_project_when_loading_then_complete_diagnostics_
     )
 
     assert result is test_case.expected_result
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (OfflineScopeCase("placement policy flip rebuilds cached diagnostic severity"),),
+    ids=lambda case: case.description,
+)
+def test_given_cached_placement_error_when_disabling_enforcement_then_cache_returns_warning(
+    test_case: OfflineScopeCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    project_path: Path = tmp_path / "sqlbuild_project.toml"
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": _PROJECT + "\n[scopes]\nenforce_placement = true\n",
+            "constants/value.sql": "CONSTANT (name value, value 1);",
+            "models/orders.sql": 'MODEL ();\nSELECT @const("value") AS value',
+        },
+    )
+    enforced: ScopeIndex = load_or_build_scope_index(project_dir=tmp_path)
+
+    project_path.write_text(_PROJECT + "\n[scopes]\nenforce_placement = false\n", encoding="utf-8")
+    advisory: ScopeIndex = load_or_build_scope_index(project_dir=tmp_path)
+    severities: tuple[DiagnosticSeverity, DiagnosticSeverity] = (
+        enforced.diagnostics[0].severity,
+        advisory.diagnostics[0].severity,
+    )
+
+    assert severities == (
+        DiagnosticSeverity.ERROR,
+        DiagnosticSeverity.WARNING,
+    )
+    assert test_case.expected_result
 
 
 @pytest.mark.parametrize(

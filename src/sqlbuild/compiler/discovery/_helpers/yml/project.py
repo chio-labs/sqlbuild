@@ -50,6 +50,7 @@ from sqlbuild.spec.contracts.models import (
     ProjectConfig,
     ScenarioConfig,
     ScenarioSnapshotLimitsConfig,
+    ScopesConfig,
     SettingsConfig,
     SnapshotsConfig,
     StateConfig,
@@ -90,6 +91,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         payload=payload.get("connections"), file_path=file_path
     )
     settings: SettingsConfig = _load_settings(payload=payload.get("settings"), file_path=file_path)
+    scopes: ScopesConfig = _load_scopes(payload=payload.get("scopes"), file_path=file_path)
     cost: CostConfig = _load_cost(payload=payload.get("cost"), file_path=file_path)
     constants: ConstantsConfig = _load_constants(
         payload=payload.get("constants"), file_path=file_path
@@ -128,6 +130,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         connection=connection,
         connections=connections,
         settings=settings,
+        scopes=scopes,
         cost=cost,
         constants=constants,
         defaults=defaults,
@@ -347,6 +350,21 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         table_promotion_mode=table_promotion_mode,
         default_audit_severity=default_audit_severity,
         default_audit_run_scope=default_audit_run_scope,
+    )
+
+
+def _load_scopes(*, payload: object, file_path: Path) -> ScopesConfig:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label="scopes", file_path=file_path
+    )
+    _validate_allowed_keys(
+        mapping=mapping,
+        allowed_keys=frozenset({"enforce_placement"}),
+        label="scopes",
+        file_path=file_path,
+    )
+    return ScopesConfig(
+        enforce_placement=_optional_bool(mapping=mapping, key="enforce_placement", default=True)
     )
 
 
