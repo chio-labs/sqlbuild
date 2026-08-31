@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import tomllib
 from dataclasses import fields
 from datetime import date, datetime
@@ -30,7 +31,9 @@ from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.path_defaults.constants import GLOB_SEGMENTS, UNSUPPORTED_GLOB_MARKERS
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.cost.constants import USD_PER_CREDIT_CONFIG_KEY
+from sqlbuild.spec.contracts.constants import TIME_TRAVEL_RETENTION_MATERIALIZATIONS
 from sqlbuild.spec.contracts.models import (
+    AuthoredTimeTravelRetention,
     ClonePolicy,
     ConstantsConfig,
     CostConfig,
@@ -42,6 +45,8 @@ from sqlbuild.spec.contracts.models import (
     LocalDbtConfig,
     LocalStateConfig,
     LocalTargetConfig,
+    MaterializationDefaultsConfig,
+    MaterializationRetentionDefaults,
     ProjectConfig,
     ScenarioConfig,
     ScenarioSnapshotLimitsConfig,
@@ -50,6 +55,7 @@ from sqlbuild.spec.contracts.models import (
     StateConfig,
     TargetConfig,
 )
+from sqlbuild.spec.contracts.types import TimeTravelRetentionValue
 from sqlbuild.sql_values.types import CollectionRendering
 
 _SNAPSHOT_FULL_REFRESH_POLICIES: frozenset[str] = frozenset(
@@ -84,6 +90,9 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         payload=payload.get("constants"), file_path=file_path
     )
     defaults: DefaultsConfig = _load_defaults(payload=payload.get("defaults"), file_path=file_path)
+    materialization_defaults: MaterializationDefaultsConfig = _load_materialization_defaults(
+        payload=payload.get("materialization_defaults"), file_path=file_path
+    )
     path_defaults: dict[str, dict[str, object]] = _load_path_defaults(
         payload=payload.get("path_defaults"),
         file_path=file_path,
@@ -117,6 +126,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         cost=cost,
         constants=constants,
         defaults=defaults,
+        materialization_defaults=materialization_defaults,
         path_defaults=path_defaults,
         vars=vars_map,
         targets=targets,
@@ -548,6 +558,70 @@ def _load_path_defaults(*, payload: object, file_path: Path) -> dict[str, dict[s
     return path_defaults
 
 
+def _load_materialization_defaults(
+    *, payload: object, file_path: Path
+) -> MaterializationDefaultsConfig:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label="materialization_defaults", file_path=file_path
+    )
+    materializations: tuple[str, ...] = TIME_TRAVEL_RETENTION_MATERIALIZATIONS
+    _validate_allowed_keys(
+        mapping=mapping,
+        allowed_keys=frozenset(materializations),
+        label="materialization_defaults",
+        file_path=file_path,
+    )
+    loaded: dict[str, MaterializationRetentionDefaults] = {}
+    for materialization in materializations:
+        materialization_mapping: dict[str, object] = _coerce_mapping(
+            payload=mapping.get(materialization),
+            label=f"materialization_defaults.{materialization}",
+            file_path=file_path,
+        )
+        _validate_allowed_keys(
+            mapping=materialization_mapping,
+            allowed_keys=frozenset({"time_travel_retention"}),
+            label=f"materialization_defaults.{materialization}",
+            file_path=file_path,
+        )
+        loaded[materialization] = MaterializationRetentionDefaults(
+            time_travel_retention=_optional_retention_policy(
+                mapping=materialization_mapping,
+                key="time_travel_retention",
+                label=f"materialization_defaults.{materialization}.time_travel_retention",
+                file_path=file_path,
+                allow_inherit=True,
+            )
+        )
+    return MaterializationDefaultsConfig(**loaded)
+
+
+def _optional_retention_policy(
+    *,
+    mapping: dict[str, object],
+    key: str,
+    label: str,
+    file_path: Path,
+    allow_inherit: bool = False,
+) -> AuthoredTimeTravelRetention | None:
+    value: object | None = mapping.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ProjectConfigError(f"{file_path} {label} must be a whole-day string like '7d'")
+    if allow_inherit and value == TimeTravelRetentionValue.INHERIT:
+        return None
+    if value == TimeTravelRetentionValue.DISABLED:
+        return AuthoredTimeTravelRetention(unmanaged=True)
+    match: re.Match[str] | None = re.fullmatch(r"([0-9]+)d", value)
+    if match is None:
+        allowed_keywords: str = ", 'inherit', or 'disabled'" if allow_inherit else " or 'disabled'"
+        raise ProjectConfigError(
+            f"{file_path} {label} must be a whole-day string like '7d'{allowed_keywords}"
+        )
+    return AuthoredTimeTravelRetention(desired_days=int(match.group(1)))
+
+
 def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig]:
     mapping: dict[str, object] = _coerce_mapping(
         payload=payload, label="targets", file_path=file_path
@@ -594,6 +668,12 @@ def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig
             defer_clone_from=_optional_str(payload=target_mapping, key="defer_clone_from"),
             changes_only=_optional_nullable_bool(mapping=target_mapping, key="changes_only"),
             compile_cache=_optional_nullable_bool(mapping=target_mapping, key="compile_cache"),
+            time_travel_retention=_optional_retention_policy(
+                mapping=target_mapping,
+                key="time_travel_retention",
+                label=f"targets.{target_name}.time_travel_retention",
+                file_path=file_path,
+            ),
             clone=ClonePolicy(
                 allow_as_clone_origin=_optional_bool(
                     mapping=clone_mapping,
@@ -670,6 +750,12 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
             defer_clone_from=_optional_str(payload=target_mapping, key="defer_clone_from"),
             changes_only=_optional_nullable_bool(mapping=target_mapping, key="changes_only"),
             compile_cache=_optional_nullable_bool(mapping=target_mapping, key="compile_cache"),
+            time_travel_retention=_optional_retention_policy(
+                mapping=target_mapping,
+                key="time_travel_retention",
+                label=f"targets.{target_name}.time_travel_retention",
+                file_path=file_path,
+            ),
             clone=LocalClonePolicy(
                 allow_as_clone_origin=_optional_nullable_bool(
                     mapping=clone_mapping,
@@ -742,6 +828,7 @@ def _validate_target_keys(
                 "defer_clone_from",
                 "changes_only",
                 "compile_cache",
+                "time_travel_retention",
                 "clone",
                 "state",
             }
@@ -781,6 +868,9 @@ def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:
     )
     enabled: bool = _optional_bool(mapping=mapping, key="enabled", default=False)
     retention_days: int = _optional_int(mapping=mapping, key="retention_days", default=30)
+    archive_retention_days: int = _optional_int(
+        mapping=mapping, key="archive_retention_days", default=7
+    )
     max_checkpoints: int = _optional_int(mapping=mapping, key="max_checkpoints", default=20)
     direct_state_history_versions: int = _optional_int(
         mapping=mapping,
@@ -801,6 +891,8 @@ def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:
     )
     if retention_days < 0:
         raise ProjectConfigError(f"{file_path} janitor.retention_days must be >= 0")
+    if archive_retention_days < 0:
+        raise ProjectConfigError(f"{file_path} janitor.archive_retention_days must be >= 0")
     if max_checkpoints < 1:
         raise ProjectConfigError(f"{file_path} janitor.max_checkpoints must be >= 1")
     if direct_state_history_versions < 0:
@@ -808,6 +900,7 @@ def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:
     return JanitorConfig(
         enabled=enabled,
         retention_days=retention_days,
+        archive_retention_days=archive_retention_days,
         max_checkpoints=max_checkpoints,
         direct_state_history_versions=direct_state_history_versions,
         delete_tracked_only=delete_tracked_only,

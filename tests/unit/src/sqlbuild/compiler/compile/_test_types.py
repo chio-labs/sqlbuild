@@ -1,5 +1,12 @@
 from dataclasses import dataclass, field
 
+from sqlbuild.spec.contracts.models import (
+    DefaultsConfig,
+    MaterializationDefaultsConfig,
+    TargetConfig,
+)
+from sqlbuild.spec.contracts.types import TimeTravelRetentionSource
+
 
 @dataclass(frozen=True)
 class BuildCompileInputsTestCase:
@@ -74,6 +81,26 @@ class BuildCompileInputsTestCase:
     )
     environment_variables: dict[str, str] = field(default_factory=dict)
     no_sql_validation: bool = False
+
+
+@dataclass(frozen=True)
+class BuildModelRetentionConfigTestCase:
+    description: str
+    defaults: DefaultsConfig
+    model_header_values: dict[str, object]
+    target_config: TargetConfig | None
+    materialization_defaults: MaterializationDefaultsConfig
+    expected_desired_days: int | None
+    expected_unmanaged: bool
+    expected_source: TimeTravelRetentionSource
+
+
+@dataclass(frozen=True)
+class AuthoredRetentionCompileTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_desired_days: int
+    expected_source: TimeTravelRetentionSource
 
 
 @dataclass(frozen=True)

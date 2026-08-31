@@ -33,7 +33,9 @@ from sqlbuild.compiler.compile._helpers.config.model_validation import (
     validate_non_incremental_config,
     validate_placeholder_config,
     validate_snapshot_config,
+    validate_time_travel_retention,
 )
+from sqlbuild.compiler.compile._helpers.config.retention import resolve_time_travel_retention
 from sqlbuild.compiler.compile._helpers.refs.cache import cached_sql_reference_extractor
 from sqlbuild.compiler.compile._helpers.render.arguments import render_parameterized_sql
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
@@ -118,7 +120,9 @@ from sqlbuild.compiler.scopes.types import (
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     LocalConfig,
+    MaterializationDefaultsConfig,
     ProjectConfig,
+    ResolvedTimeTravelRetention,
     SchemaAuditInstance,
     SchemaColumn,
     SchemaModelEntry,
@@ -245,6 +249,7 @@ def _build_model_inputs(
             model_name=model_file.file_path.stem,
             effective_target_name=effective_target_name,
             run_id=run_id,
+            materialization_defaults=discovered_inputs.project_config.materialization_defaults,
         )
         model_schema: ModelSchemaDeclaration | None = _resolve_model_schema(
             values=effective_config.values,
@@ -367,6 +372,9 @@ def _build_model_inputs(
             model_name=model_file.file_path.stem,
             custom_materialization_names=custom_materialization_names,
         )
+        validate_time_travel_retention(
+            config=effective_config, model_name=model_file.file_path.stem
+        )
         validate_placeholder_config(
             config=effective_config,
             model_name=model_file.file_path.stem,
@@ -405,6 +413,7 @@ def _build_model_inputs(
             matched_path_default=effective_config.matched_path_default,
             logical_schema=effective_config.logical_schema,
             logical_database=effective_config.logical_database,
+            time_travel_retention=effective_config.time_travel_retention,
         )
         hook_name: str
         for hook_name in ("pre_hooks", "post_hooks"):
@@ -700,6 +709,7 @@ def build_model_config(
     model_name: str,
     effective_target_name: str | None,
     run_id: str,
+    materialization_defaults: MaterializationDefaultsConfig | None = None,
 ) -> CompileModelConfig:
     """Build the pre-semantic effective model config layers."""
 
@@ -761,6 +771,14 @@ def build_model_config(
         run_id=run_id,
     )
     target_resolved_values.update(raw_hook_values)
+    retention: ResolvedTimeTravelRetention = resolve_time_travel_retention(
+        materialized=target_resolved_values.get("materialized"),
+        model_value=model_header_values.get("time_travel_retention"),
+        materialization_defaults=materialization_defaults or MaterializationDefaultsConfig(),
+        target_config=target_config,
+        model_name=model_name,
+    )
+    target_resolved_values.pop("time_travel_retention", None)
     if (
         MODEL_FULL_REFRESH_CONFIG_KEY not in model_header_values
         and target_resolved_values.get("materialized") != MaterializationType.INCREMENTAL
@@ -772,6 +790,7 @@ def build_model_config(
         matched_path_default=matched_path_default,
         logical_schema=logical_schema,
         logical_database=logical_database,
+        time_travel_retention=retention,
     )
 
 
@@ -1411,6 +1430,7 @@ def strip_model_header_metadata_from_config(config: CompileModelConfig) -> Compi
         matched_path_default=config.matched_path_default,
         logical_schema=config.logical_schema,
         logical_database=config.logical_database,
+        time_travel_retention=config.time_travel_retention,
     )
 
 
@@ -1572,6 +1592,9 @@ def _merge_schema_tags(
     return CompileModelConfig(
         values=merged_values,
         matched_path_default=config.matched_path_default,
+        logical_schema=config.logical_schema,
+        logical_database=config.logical_database,
+        time_travel_retention=config.time_travel_retention,
     )
 
 

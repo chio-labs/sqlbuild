@@ -85,6 +85,11 @@ def resolve_target_config(
             if local_target.compile_cache is not None
             else project_target.compile_cache
         ),
+        time_travel_retention=(
+            local_target.time_travel_retention
+            if local_target.time_travel_retention is not None
+            else project_target.time_travel_retention
+        ),
         clone=_merge_clone_policy(
             project_clone=project_target.clone,
             local_clone=local_target.clone,

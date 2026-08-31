@@ -21,7 +21,11 @@ from sqlbuild.compiler.planner.types import (
     SnapshotSchemaChangePolicy,
     SnapshotStrategy,
 )
-from sqlbuild.spec.contracts.models import SchemaColumn, SettingsConfig
+from sqlbuild.spec.contracts.models import (
+    ResolvedTimeTravelRetention,
+    SchemaColumn,
+    SettingsConfig,
+)
 
 _VALID_STRATEGIES: frozenset[str] = frozenset(s.value for s in IncrementalStrategy)
 _VALID_CURSOR_TYPES: frozenset[str] = frozenset(ct.value for ct in CursorType)
@@ -579,6 +583,29 @@ def validate_custom_materialization_config(
             raise CompileInputError(
                 f"model '{model_name}': {key} is not allowed on custom materializations"
             )
+
+
+def validate_time_travel_retention(*, config: CompileModelConfig, model_name: str) -> None:
+    """Reject managed retention on materializations without physical managed tables."""
+
+    retention: ResolvedTimeTravelRetention = config.time_travel_retention
+    if retention.unmanaged:
+        return
+    materialized: str | None = _str(config=config, key="materialized")
+    if materialized == MaterializationType.VIEW:
+        raise CompileInputError(
+            f"model '{model_name}': managed time_travel_retention is not valid for views; "
+            "set time_travel_retention disabled"
+        )
+    if materialized not in {
+        MaterializationType.TABLE,
+        MaterializationType.INCREMENTAL,
+        MaterializationType.SNAPSHOT,
+    }:
+        raise CompileInputError(
+            f"model '{model_name}': managed time_travel_retention is not supported for "
+            f"materialization '{materialized}'"
+        )
 
 
 def validate_placeholder_config(

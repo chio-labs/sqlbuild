@@ -204,6 +204,22 @@ class LoadProjectConstantsConfigErrorTestCase:
 
 
 @dataclass(frozen=True)
+class LoadRetentionConfigTestCase:
+    description: str
+    project_file_contents: str
+    expected_table_days: int
+    expected_incremental_unmanaged: bool
+    expected_target_days: int
+
+
+@dataclass(frozen=True)
+class LoadRetentionConfigErrorTestCase:
+    description: str
+    project_file_contents: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class LoadLocalConfigErrorTestCase:
     description: str
     local_file_contents: str
