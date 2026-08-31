@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.67.2](https://github.com/chio-labs/sqlbuild/compare/v0.67.1...v0.67.2) (2026-08-31)
+
+
+### Bug Fixes
+
+* resolve placement anchors by fixed point and require explicit declaration scope ([#432](https://github.com/chio-labs/sqlbuild/issues/432)) ([58f4c7e](https://github.com/chio-labs/sqlbuild/commit/58f4c7ef1569ff662372b3c58adc74436090254c))
+
 ## [0.67.1](https://github.com/chio-labs/sqlbuild/compare/v0.67.0...v0.67.1) (2026-08-31)
 
 
