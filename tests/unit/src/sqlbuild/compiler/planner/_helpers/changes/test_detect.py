@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.models import CompiledModel, InferredColumn
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
@@ -161,6 +161,23 @@ _DIFFERENT_HASH: str = "completely_different_hash"
             sql_analysis_enabled=False,
             query_change_tracking=True,
             full_refresh=False,
+            expected_change_kind=ChangeKind.NO_CHANGE,
+            expected_backfill_action=BackfillAction.FORWARD_ONLY,
+        ),
+        DetectModelChangesTestCase(
+            description="does not report passthrough columns removed for unresolved star",
+            model_name="orders",
+            query_sql=_QUERY_SQL,
+            config_values={},
+            schema_columns=(),
+            relation_exists=True,
+            fingerprint_query_hash=_MATCHING_HASH,
+            warehouse_column_names=(("id", "INTEGER"), ("loaded_at", "TIMESTAMP")),
+            sql_analysis_enabled=True,
+            query_change_tracking=True,
+            full_refresh=False,
+            inferred_columns=(InferredColumn(name="loaded_at", type="TIMESTAMP"),),
+            fast_lineage_has_star=True,
             expected_change_kind=ChangeKind.NO_CHANGE,
             expected_backfill_action=BackfillAction.FORWARD_ONLY,
         ),

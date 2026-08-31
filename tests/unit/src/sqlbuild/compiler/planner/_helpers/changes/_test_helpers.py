@@ -48,6 +48,8 @@ def build_model_from_test_case(test_case: DetectModelChangesTestCase) -> Compile
             database=None, schema="staging", name=test_case.model_name, qualified_name=None
         ),
         schema_entry=schema_entry,
+        inferred_columns=test_case.inferred_columns,
+        fast_lineage_has_star=test_case.fast_lineage_has_star,
     )
 
 
