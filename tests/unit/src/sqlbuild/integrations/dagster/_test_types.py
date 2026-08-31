@@ -115,6 +115,7 @@ class DagsterCliCloneFailureTestCase:
     command_stdout: str
     expected_materialized_asset_key: tuple[str, ...]
     expected_incomplete_assets: str
+    expected_error_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -132,6 +133,7 @@ class DagsterCliFailureTestCase:
     command_stderr: str
     command_exit_code: int
     expected_error_fragment: str
+    expected_stderr_tail: str
 
 
 @dataclass(frozen=True)
