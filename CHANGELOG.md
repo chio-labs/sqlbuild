@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.66.6](https://github.com/chio-labs/sqlbuild/compare/v0.66.5...v0.66.6) (2026-08-31)
+
+
+### Bug Fixes
+
+* match dbt model full-refresh semantics ([#422](https://github.com/chio-labs/sqlbuild/issues/422)) ([f5340ce](https://github.com/chio-labs/sqlbuild/commit/f5340ce372260488f056a05256492f863a3b01f2))
+
 ## [0.66.5](https://github.com/chio-labs/sqlbuild/compare/v0.66.4...v0.66.5) (2026-08-30)
 
 
