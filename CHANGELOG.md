@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.71.3](https://github.com/chio-labs/sqlbuild/compare/v0.71.2...v0.71.3) (2026-08-31)
+
+
+### Bug Fixes
+
+* suppress false removals for unresolved stars ([#448](https://github.com/chio-labs/sqlbuild/issues/448)) ([a4955e6](https://github.com/chio-labs/sqlbuild/commit/a4955e6d8c27b8751cde674c60dbf90a3bb52b8b))
+
 ## [0.71.2](https://github.com/chio-labs/sqlbuild/compare/v0.71.1...v0.71.2) (2026-08-31)
 
 
