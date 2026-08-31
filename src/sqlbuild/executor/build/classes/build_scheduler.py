@@ -933,7 +933,10 @@ class BuildScheduler:
             try:
                 if self._before_model_materialize is not None:
                     self._before_model_materialize(entry=model_entry, connection=connection)
-                if model_entry.incremental_mode == IncrementalMode.MICROBATCH:
+                if (
+                    model_entry.incremental_mode == IncrementalMode.MICROBATCH
+                    and model_entry.batch_concurrency > 1
+                ):
                     if self._runtime.microbatch_state_resolver is not None:
                         microbatch_event_store, microbatch_scope = (
                             self._runtime.microbatch_state_resolver(model_entry, connection)

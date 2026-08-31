@@ -42,7 +42,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     ],
     ids=lambda case: case.description,
 )
-def test_given_serial_microbatch_when_building_then_universal_ledger_records_known_and_empty_work(
+def test_given_serial_microbatch_when_building_then_event_table_is_not_created(
     test_case: SerialMicrobatchLedgerE2ETestCase, tmp_path: Path
 ) -> None:
     project_name: str = "serial_microbatch_ledger"
@@ -96,35 +96,9 @@ def test_given_serial_microbatch_when_building_then_universal_ledger_records_kno
         ),
     )[0]
     assert maximum_timestamps[0] == maximum_timestamps[1]
-    assert (
-        int(
-            query_duckdb(
-                db_path=db_path,
-                sql=(
-                    "SELECT COUNT(*) FROM main._sqlbuild_microbatches "
-                    "WHERE record_type = 'partition_completion' "
-                    "AND fingerprint_status = 'known' AND model_version_hash IS NOT NULL"
-                ),
-            )[0][0]
-        )
-        >= test_case.expected_minimum_completion_count
-    )
-    assert (
-        query_duckdb(
-            db_path=db_path,
-            sql=(
-                "SELECT COUNT(*) FROM main._sqlbuild_microbatches "
-                "WHERE record_type = 'partition_completion' AND rows_affected = 0"
-            ),
-        )[0][0]
-        >= 1
-    )
     assert query_duckdb(
         db_path=db_path,
-        sql=(
-            "SELECT COUNT(*) FROM main._sqlbuild_microbatches "
-            "WHERE record_type = 'replay_requirement'"
-        ),
+        sql="SELECT COUNT(*) FROM main._sqlbuild_microbatches",
     ) == [(0,)]
 
 
@@ -315,12 +289,12 @@ def test_given_recreated_target_when_building_then_old_completion_generation_is_
             "sqlbuild_project.toml": direct_microbatch_project_toml(
                 project_name=project_name,
                 database_name="recreated.duckdb",
-                settings_toml="",
+                settings_toml="\n[settings]\nmicrobatch_concurrency = true\n",
             ),
             "sources/raw.yml": raw_events_source_yml(),
             "models/orders.sql": timestamp_microbatch_model_sql(
                 value_expression="payload",
-                batch_concurrency=1,
+                batch_concurrency=2,
                 replay_policy="forward_only",
             ),
         },
