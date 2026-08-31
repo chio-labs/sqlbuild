@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.69.0](https://github.com/chio-labs/sqlbuild/compare/v0.68.0...v0.69.0) (2026-08-31)
+
+
+### Features
+
+* remove archive machinery and make direct janitor report-only ([#436](https://github.com/chio-labs/sqlbuild/issues/436)) ([bee3aa9](https://github.com/chio-labs/sqlbuild/commit/bee3aa98e32d32a0f3efb0a6c27b512ab80d5814))
+
 ## [0.68.0](https://github.com/chio-labs/sqlbuild/compare/v0.67.2...v0.68.0) (2026-08-31)
 
 
