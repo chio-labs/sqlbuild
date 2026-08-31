@@ -10,7 +10,7 @@ from sqlbuild.microbatches.constants import (
     MICROBATCH_GENERATION_WILDCARD,
     VIRTUAL_MICROBATCH_SCOPE_KIND,
 )
-from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
+from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope, MicrobatchWriteResult
 
 
 def append_duckdb_microbatch_event(
@@ -24,6 +24,41 @@ def append_duckdb_microbatch_event(
         f"SELECT {placeholders} WHERE NOT EXISTS "
         f"(SELECT 1 FROM {qualified_table} WHERE event_id = ?)",
         [*MicrobatchEventCodec.values(event), event.event_id],
+    )
+
+
+def append_duckdb_microbatch_events(
+    *, connection: Any, qualified_table: str, events: tuple[MicrobatchEvent, ...]
+) -> MicrobatchWriteResult:
+    """Append idempotent logical events to DuckDB state in one statement."""
+
+    if not events:
+        return MicrobatchWriteResult(total=0, inserted=0, already_existing=0)
+    id_placeholders: str = ", ".join("?" for _ in events)
+    existing_rows: list[tuple[str]] = connection.execute(
+        f"SELECT event_id FROM {qualified_table} WHERE event_id IN ({id_placeholders})",
+        [event.event_id for event in events],
+    ).fetchall()
+    existing_ids: frozenset[str] = frozenset(row[0] for row in existing_rows)
+    missing: tuple[MicrobatchEvent, ...] = tuple(
+        event for event in events if event.event_id not in existing_ids
+    )
+    if missing:
+        row_placeholders: str = "(" + ", ".join("?" for _ in MICROBATCH_COLUMNS) + ")"
+        values_sql: str = ", ".join(row_placeholders for _ in missing)
+        params: list[object | None] = []
+        for event in missing:
+            params.extend(MicrobatchEventCodec.values(event))
+        columns: str = ", ".join(MICROBATCH_COLUMNS)
+        connection.execute(
+            f"INSERT INTO {qualified_table} ({columns}) SELECT {columns} FROM "
+            f"(VALUES {values_sql}) AS incoming ({columns}) WHERE NOT EXISTS "
+            f"(SELECT 1 FROM {qualified_table} existing "
+            "WHERE existing.event_id = incoming.event_id)",
+            params,
+        )
+    return MicrobatchWriteResult(
+        total=len(events), inserted=len(missing), already_existing=len(events) - len(missing)
     )
 
 

@@ -533,6 +533,7 @@ def replay_microbatch_model_sql(*, value_expression: str, replay_policy: str = "
                 raw_events event_time,
               ),
               batch_size 1h,
+              batch_concurrency 2,
               replay_on_change {replay_policy},
             );
 

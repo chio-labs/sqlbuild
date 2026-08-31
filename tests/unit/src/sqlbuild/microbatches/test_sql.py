@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -17,12 +19,19 @@ from sqlbuild.microbatches._helpers.sql import (
     build_read_scope_sql,
 )
 from sqlbuild.microbatches.constants import MICROBATCH_COLUMNS, MICROBATCH_TABLE_NAME
+from sqlbuild.microbatches.main.deterministic_event_id import (
+    deterministic_microbatch_event_id,
+)
 from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
+from sqlbuild.microbatches.types import MicrobatchRecordType
 from tests.unit.src.sqlbuild.microbatches._test_types import (
     MicrobatchDdlAdapterTestCase,
     MicrobatchSqlBehaviorTestCase,
 )
-from tests.unit.src.sqlbuild.microbatches.helpers import completion_for_sql
+from tests.unit.src.sqlbuild.microbatches.helpers import (
+    SCOPE,
+    completion_for_sql,
+)
 
 
 @pytest.mark.parametrize(
@@ -169,3 +178,58 @@ def test_given_wildcard_and_concrete_generations_when_reading_then_filter_is_opt
     assert "physical_generation_id = 'generation-1'" in concrete_sql
     assert wildcard_sql.endswith("ORDER BY created_at, event_id")
     assert len((wildcard_sql, concrete_sql)) == test_case.expected_statement_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MicrobatchSqlBehaviorTestCase(
+            description="deterministic identity", expected_statement_count=4
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_logical_event_identity_when_constructing_ids_then_ids_are_stable_and_distinct(
+    test_case: MicrobatchSqlBehaviorTestCase,
+) -> None:
+    first: str = deterministic_microbatch_event_id(
+        scope=SCOPE,
+        record_type=MicrobatchRecordType.SYNTHETIC_COMPLETION,
+        partition_start="1",
+        partition_end="2",
+        completion_reason="completion_history_missing:synthesize",
+    )
+    independent: str = deterministic_microbatch_event_id(
+        scope=SCOPE,
+        record_type=MicrobatchRecordType.SYNTHETIC_COMPLETION,
+        partition_start="1",
+        partition_end="2",
+        completion_reason="completion_history_missing:synthesize",
+    )
+    distinct: tuple[str, ...] = (
+        first,
+        deterministic_microbatch_event_id(
+            scope=SCOPE,
+            record_type=MicrobatchRecordType.SYNTHETIC_COMPLETION,
+            partition_start="2",
+            partition_end="3",
+            completion_reason="completion_history_missing:synthesize",
+        ),
+        deterministic_microbatch_event_id(
+            scope=SCOPE,
+            record_type=MicrobatchRecordType.SYNTHETIC_COMPLETION,
+            partition_start="1",
+            partition_end="2",
+            completion_reason="completion_history_missing:recover_empty",
+        ),
+        deterministic_microbatch_event_id(
+            scope=replace(SCOPE, physical_generation_id="generation-2"),
+            record_type=MicrobatchRecordType.SYNTHETIC_COMPLETION,
+            partition_start="1",
+            partition_end="2",
+            completion_reason="completion_history_missing:synthesize",
+        ),
+    )
+
+    assert first == independent
+    assert len(set(distinct)) == test_case.expected_statement_count

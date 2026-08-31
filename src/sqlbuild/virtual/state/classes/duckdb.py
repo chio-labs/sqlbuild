@@ -13,10 +13,11 @@ from sqlbuild.executor.node_results.models import (
     NodeResultQuery,
     NodeResultRecord,
 )
-from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
+from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope, MicrobatchWriteResult
 from sqlbuild.virtual.state._helpers.state_storage.events import backup_id, event_id
 from sqlbuild.virtual.state._helpers.state_storage.microbatch_events import (
     append_duckdb_microbatch_event,
+    append_duckdb_microbatch_events,
     read_duckdb_microbatch_model_history,
     read_duckdb_microbatch_retention_history,
     read_duckdb_microbatch_scope_history,
@@ -629,6 +630,15 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, StateBackend):
             connection=connection,
             qualified_table=self._qualified_name(schema=schema, table=MICROBATCH_EVENT_TABLE),
             event=event,
+        )
+
+    def append_microbatch_events(
+        self, *, connection: Any, schema: str, events: tuple[MicrobatchEvent, ...]
+    ) -> MicrobatchWriteResult:
+        return append_duckdb_microbatch_events(
+            connection=connection,
+            qualified_table=self._qualified_name(schema=schema, table=MICROBATCH_EVENT_TABLE),
+            events=events,
         )
 
     def read_microbatch_scope_history(

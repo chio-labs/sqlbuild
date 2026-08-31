@@ -12,7 +12,7 @@ from sqlbuild.executor.node_results.models import (
     NodeResultRecord,
 )
 from sqlbuild.microbatches.exceptions import MicrobatchStateError
-from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
+from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope, MicrobatchWriteResult
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,
@@ -172,6 +172,12 @@ class StateBackend(ABC):
     ) -> None:
         """Append one logical microbatch event to virtual state."""
         raise MicrobatchStateError("virtual state backend does not support microbatch events")
+
+    def append_microbatch_events(
+        self, *, connection: Any, schema: str, events: tuple[MicrobatchEvent, ...]
+    ) -> MicrobatchWriteResult:
+        """Append logical microbatch events to virtual state in bulk."""
+        raise MicrobatchStateError("virtual state backend does not support bulk microbatch events")
 
     def read_microbatch_scope_history(
         self, *, connection: Any, schema: str, scope: MicrobatchScope

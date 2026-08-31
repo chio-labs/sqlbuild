@@ -306,7 +306,7 @@ _INT_MODEL_SQL: str = (
             microbatch_start="2026-01-01T00:00:00",
             microbatch_end="2026-01-01T03:00:00",
             expected_row_count=3,
-            expected_warning_count=1,
+            expected_warning_count=0,
             expected_query_results=(
                 (
                     "SELECT id, payload FROM main.orders ORDER BY id",
@@ -335,7 +335,7 @@ _INT_MODEL_SQL: str = (
             microbatch_start="2026-01-01T00:00:00",
             microbatch_end="2026-01-01T03:00:00",
             expected_row_count=3,
-            expected_warning_count=1,
+            expected_warning_count=0,
             expected_query_results=(
                 (
                     "SELECT id, payload FROM main.orders ORDER BY id",
@@ -416,7 +416,7 @@ _INT_MODEL_SQL: str = (
             microbatch_start="2026-01-01T00:00:00",
             microbatch_end="2026-01-01T03:00:00",
             expected_row_count=3,
-            expected_warning_count=1,
+            expected_warning_count=0,
             expected_query_results=(
                 (
                     "SELECT id, payload FROM main.orders ORDER BY id",

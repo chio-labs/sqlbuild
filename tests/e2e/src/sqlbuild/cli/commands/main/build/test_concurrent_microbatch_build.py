@@ -399,6 +399,7 @@ def test_given_microbatch_history_is_lost_when_reconciling_then_policy_is_applie
                 database = "policy.duckdb"
 
                 [settings]
+                microbatch_concurrency = true
                 microbatch_unaccounted_partition_policy = "{policy}"
                 """
             ).strip()
@@ -425,6 +426,7 @@ def test_given_microbatch_history_is_lost_when_reconciling_then_policy_is_applie
                     raw_events event_time,
                   ),
                   batch_size 1h,
+                  batch_concurrency 2,
                 );
 
                 SELECT id, event_time
@@ -503,6 +505,9 @@ def test_given_bounded_replay_on_change_when_model_changes_then_requirement_is_d
 
                 [connection]
                 database = "replay.duckdb"
+
+                [settings]
+                microbatch_concurrency = true
                 """
             ).strip()
             + "\n",
@@ -599,6 +604,9 @@ def test_given_full_replay_fails_when_retried_then_original_requirement_is_reuse
 
                 [connection]
                 database = "full_replay.duckdb"
+
+                [settings]
+                microbatch_concurrency = true
                 """
             ).strip()
             + "\n",
@@ -686,6 +694,9 @@ def test_given_version_hash_returns_when_replaying_then_new_transition_gets_new_
 
                 [connection]
                 database = "repeated_version.duckdb"
+
+                [settings]
+                microbatch_concurrency = true
                 """
             ).strip()
             + "\n",
@@ -874,6 +885,9 @@ def test_given_no_new_cursor_work_when_history_is_lost_then_reconciliation_still
 
                 [connection]
                 database = "steady_state.duckdb"
+
+                [settings]
+                microbatch_concurrency = true
                 """
             ).strip()
             + "\n",
@@ -899,6 +913,7 @@ def test_given_no_new_cursor_work_when_history_is_lost_then_reconciliation_still
                     raw_events event_time,
                   ),
                   batch_size 1h,
+                  batch_concurrency 2,
                 );
 
                 SELECT id, event_time
