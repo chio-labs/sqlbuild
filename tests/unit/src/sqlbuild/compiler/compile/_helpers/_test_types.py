@@ -244,6 +244,8 @@ class ScopePlacementCompileTestCase:
     files: dict[str, str]
     expected_fragment: str | None = None
     expected_complete: bool = True
+    expected_model_names: tuple[str, ...] = ()
+    expected_diagnostics: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)

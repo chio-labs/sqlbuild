@@ -169,6 +169,13 @@ class SettingsConfig:
 
 
 @dataclass(frozen=True)
+class ScopesConfig:
+    """Declaration scope policy configuration."""
+
+    enforce_placement: bool = True
+
+
+@dataclass(frozen=True)
 class CostConfig:
     """Snowflake compute estimate configuration."""
 
@@ -285,6 +292,7 @@ class ProjectConfig:
     connection: dict[str, object] = field(default_factory=dict)
     connections: dict[str, dict[str, object]] = field(default_factory=dict)
     settings: SettingsConfig = field(default_factory=SettingsConfig)
+    scopes: ScopesConfig = field(default_factory=ScopesConfig)
     cost: CostConfig = field(default_factory=CostConfig)
     constants: ConstantsConfig = field(default_factory=ConstantsConfig)
     defaults: DefaultsConfig = field(default_factory=DefaultsConfig)

@@ -336,6 +336,9 @@ concurrency = 8
 auto_load_sources = false
 changes_only = true
 
+[scopes]
+enforce_placement = false
+
 [defaults]
 materialized = "table"
 seed_database = "seed_db"
@@ -423,6 +426,7 @@ enabled = true
             expected_max_concurrency=8,
             expected_auto_load_sources=False,
             expected_changes_only=True,
+            expected_enforce_placement=False,
             expected_materialized="table",
             expected_row_diff_exclude_columns=("loaded_at",),
             expected_row_diff_tolerances={
@@ -504,6 +508,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.settings.concurrency == test_case.expected_max_concurrency
     assert config.settings.auto_load_sources is test_case.expected_auto_load_sources
     assert config.settings.changes_only is test_case.expected_changes_only
+    assert config.scopes.enforce_placement is test_case.expected_enforce_placement
     assert config.defaults.materialized == test_case.expected_materialized
     assert config.defaults.row_diff_exclude_columns == test_case.expected_row_diff_exclude_columns
     assert config.defaults.row_diff_tolerances == test_case.expected_row_diff_tolerances
@@ -804,6 +809,17 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
 @pytest.mark.parametrize(
     "test_case",
     [
+        LoadProjectConfigErrorTestCase(
+            description="raises when scope placement enforcement is not a boolean",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[scopes]
+enforce_placement = "no"
+""".strip(),
+            expected_error_fragment="Expected 'enforce_placement' to be a boolean when provided",
+        ),
         LoadProjectConfigErrorTestCase(
             description="raises when virtual environments setting is not a boolean",
             project_file_contents="""

@@ -17,7 +17,7 @@ from sqlbuild.compiler.scopes.models import (
     ScopeIndex,
     UsageRecord,
 )
-from sqlbuild.compiler.scopes.types import ScopeDiagnosticCode, ScopeKind
+from sqlbuild.compiler.scopes.types import DiagnosticSeverity, ScopeDiagnosticCode, ScopeKind
 
 type _Anchor = tuple[OwnershipRoot, str]
 type _UsagesByDeclaration = dict[DeclarationIdentity, tuple[UsageRecord, ...]]
@@ -34,7 +34,9 @@ _PLACEMENT_CODES: frozenset[ScopeDiagnosticCode] = frozenset(
 )
 
 
-def build_placement_validated_index(*, index: ScopeIndex) -> ScopeIndex:
+def build_placement_validated_index(
+    *, index: ScopeIndex, enforce_placement: bool = True
+) -> ScopeIndex:
     """Return the index with deterministic unused and exact-placement diagnostics."""
 
     if not index.completeness.runtime_usage:
@@ -68,6 +70,7 @@ def build_placement_validated_index(*, index: ScopeIndex) -> ScopeIndex:
                 _diagnostic(
                     declaration=declaration,
                     code=ScopeDiagnosticCode.UNUSED_DECLARATION,
+                    enforce_placement=enforce_placement,
                     message=f"Unused {declaration.scope.value} declaration "
                     f"'{format_identity(identity=declaration.identity)}' at {declaration.path}; "
                     "remove it or add a genuine runtime use",
@@ -94,6 +97,7 @@ def build_placement_validated_index(*, index: ScopeIndex) -> ScopeIndex:
                 _diagnostic(
                     declaration=declaration,
                     code=ScopeDiagnosticCode.REQUIRES_GLOBAL_PLACEMENT,
+                    enforce_placement=enforce_placement,
                     message=_message(
                         declaration=declaration,
                         required_scope=ScopeKind.GLOBAL,
@@ -116,6 +120,7 @@ def build_placement_validated_index(*, index: ScopeIndex) -> ScopeIndex:
             _diagnostic(
                 declaration=declaration,
                 code=code,
+                enforce_placement=enforce_placement,
                 message=_message(
                     declaration=declaration,
                     required_scope=required_scope,
@@ -276,7 +281,11 @@ def _scope_label(scope: ScopeKind) -> str:
 
 
 def _diagnostic(
-    *, declaration: DeclarationRecord, code: ScopeDiagnosticCode, message: str
+    *,
+    declaration: DeclarationRecord,
+    code: ScopeDiagnosticCode,
+    message: str,
+    enforce_placement: bool,
 ) -> ScopeDiagnostic:
     return ScopeDiagnostic(
         code=code,
@@ -285,6 +294,7 @@ def _diagnostic(
         line=declaration.line,
         column=declaration.column,
         declaration=declaration.identity,
+        severity=(DiagnosticSeverity.ERROR if enforce_placement else DiagnosticSeverity.WARNING),
     )
 
 

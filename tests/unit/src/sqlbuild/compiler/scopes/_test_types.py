@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from sqlbuild.compiler.scopes.models import DeclarationIdentity, ResourceIdentity
 from sqlbuild.compiler.scopes.types import (
+    DiagnosticSeverity,
     InaccessibleReason,
     ResourceKind,
     ScopeDiagnosticCode,
@@ -126,6 +127,15 @@ class PlacementValidationCase:
     consumer_paths: tuple[str, ...]
     expected_codes: tuple[ScopeDiagnosticCode, ...]
     expected_direct_codes: tuple[ScopeDiagnosticCode, ...] = ()
+
+
+@dataclass(frozen=True)
+class PlacementEnforcementCase:
+    """One placement diagnostic enforcement policy case."""
+
+    description: str
+    enforce_placement: bool
+    expected_severity: DiagnosticSeverity
 
 
 @dataclass(frozen=True)

@@ -54,6 +54,25 @@ def prepare_static_dag_project(root: Path) -> Path:
     return project_dir
 
 
+def prepare_advisory_placement_dag_project(root: Path) -> Path:
+    """Create a dag project with an advisory over-broad global declaration."""
+
+    project_dir: Path = prepare_static_dag_project(root)
+    config_path: Path = project_dir / "sqlbuild_project.toml"
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8") + "\n[scopes]\nenforce_placement = false\n",
+        encoding="utf-8",
+    )
+    constants_dir: Path = project_dir / "constants"
+    constants_dir.mkdir()
+    (constants_dir / "value.sql").write_text("CONSTANT (name value, value 1);\n", encoding="utf-8")
+    (project_dir / "models" / "orders.sql").write_text(
+        'MODEL (materialized table);\n\nSELECT @const("value") AS order_id\n',
+        encoding="utf-8",
+    )
+    return project_dir
+
+
 def prepare_python_dag_project(root: Path) -> Path:
     """Create a local project with Python tasks, assets, and checks."""
 

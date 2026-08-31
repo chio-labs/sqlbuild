@@ -12,6 +12,9 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlModelFile,
     EnumDeclaration,
 )
+from sqlbuild.compiler.scopes.main._get_placement_validated_scope_index import (
+    get_placement_validated_scope_index,
+)
 from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.models import (
     ConstantMetadata,
@@ -39,6 +42,30 @@ from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 SCOPE_CACHE_PROJECT: str = 'name = "demo"\nadapter = "duckdb"\n'
 SCOPE_CACHE_MODEL: str = "MODEL();\nSELECT 1 AS id\n"
+
+
+def unused_declaration_index(*, enforce_placement: bool) -> ScopeIndex:
+    """Build an index containing one unused global declaration diagnostic."""
+
+    declaration_identity: DeclarationIdentity = DeclarationIdentity(
+        DeclarationKind.CONSTANT, "limit"
+    )
+    return get_placement_validated_scope_index(
+        index=ScopeIndex(
+            declarations=(
+                DeclarationRecord(
+                    identity=declaration_identity,
+                    path="constants/limit.sql",
+                    line=1,
+                    column=1,
+                    scope=ScopeKind.GLOBAL,
+                    ownership_root=OwnershipRoot("constants"),
+                ),
+            ),
+            completeness=ScopeCompleteness(runtime_usage=True, placement=False),
+        ),
+        enforce_placement=enforce_placement,
+    )
 
 
 def write_scope_cache_project(

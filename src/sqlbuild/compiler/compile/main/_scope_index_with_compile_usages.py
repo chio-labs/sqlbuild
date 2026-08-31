@@ -64,4 +64,7 @@ def scope_index_with_compile_usages(*, inputs: CompileProjectInputs) -> ScopeInd
             promotion_impact=True,
         ),
     )
-    return get_placement_validated_scope_index(index=index)
+    return get_placement_validated_scope_index(
+        index=index,
+        enforce_placement=inputs.project_config.scopes.enforce_placement,
+    )
