@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.71.1](https://github.com/chio-labs/sqlbuild/compare/v0.71.0...v0.71.1) (2026-08-31)
+
+
+### Bug Fixes
+
+* add scopes enforce_placement flag for staged policy adoption ([#442](https://github.com/chio-labs/sqlbuild/issues/442)) ([262922e](https://github.com/chio-labs/sqlbuild/commit/262922e8f1735532b8242897ba725c44522b3b6a))
+
 ## [0.71.0](https://github.com/chio-labs/sqlbuild/compare/v0.70.0...v0.71.0) (2026-08-31)
 
 
