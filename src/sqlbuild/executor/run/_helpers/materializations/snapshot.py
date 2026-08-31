@@ -43,11 +43,17 @@ from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
 )
+from sqlbuild.executor.run._helpers.materializations.full_refresh import (
+    promote_full_refresh_rebuild,
+    relation_exists,
+    resolve_full_refresh_relations,
+)
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run._helpers.validation.contracts import validate_runtime_contract
 from sqlbuild.executor.run.constants import SNAPSHOT_ALL_CHECK_COLUMNS
 from sqlbuild.executor.run.models import (
     FinalAuditRun,
+    FullRefreshRelations,
     HookExecutionResult,
     ModelExecutionResult,
     ModelMaterializationContext,
@@ -66,7 +72,7 @@ _SCHEMA_CHANGE_STRICTNESS: dict[SnapshotSchemaChangePolicy, int] = {
 }
 
 
-def execute_snapshot_entry(
+def execute_snapshot_entry(  # noqa: PLR0915
     *,
     context: ModelMaterializationContext,
     snapshots: SnapshotsConfig | None = None,
@@ -94,6 +100,9 @@ def execute_snapshot_entry(
     audit_results: list[AuditExecutionResult] = []
     hook_results: list[HookExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()
+    full_refresh_relations: FullRefreshRelations | None = _resolve_snapshot_full_refresh_relations(
+        context=context
+    )
 
     try:
         _validate_supported_snapshot(entry)
@@ -124,6 +133,25 @@ def execute_snapshot_entry(
     )
     if pre_hook_exit is not None:
         return pre_hook_exit
+
+    if full_refresh_relations is not None:
+        reconciliation: ModelExecutionResult | bool = _reconcile_snapshot_full_refresh_result(
+            context=context,
+            relations=full_refresh_relations,
+            warnings=warnings,
+            audit_results=audit_results,
+            statement_recorder=statement_recorder,
+        )
+        reconciliation_exit: ModelExecutionResult | None = _snapshot_reconciliation_exit(
+            result=reconciliation,
+            entry=entry,
+            target_qualified=target_qualified,
+            warnings=warnings,
+            hook_results=hook_results,
+            statement_recorder=statement_recorder,
+        )
+        if reconciliation_exit is not None:
+            return reconciliation_exit
 
     try:
         with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_delta"):
@@ -206,59 +234,17 @@ def execute_snapshot_entry(
         )
 
     try:
-        with diagnostics_context(sqlbuild_phase="dml", sqlbuild_action_name="apply_snapshot"):
-            if entry.reason == PlanReason.FULL_REFRESH:
-                adapter.drop(
-                    connection=connection,
-                    destination=target_qualified,
-                    if_exists=True,
-                    statement_recorder=statement_recorder,
-                )
-            target_exists: bool = adapter.relation_exists(
-                connection=connection,
-                database=target_database,
-                schema=target_schema,
-                name=target_table,
-            )
-            if not target_exists:
-                _create_initial_snapshot_target(
-                    adapter=adapter,
-                    connection=connection,
-                    entry=entry,
-                    target_qualified=target_qualified,
-                    delta_qualified=delta_qualified,
-                    delta_columns=delta_columns,
-                    check_columns=check_columns,
-                    statement_recorder=statement_recorder,
-                )
-            else:
-                target_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
-                    connection=connection,
-                    database=target_database,
-                    schema=target_schema,
-                    name=target_table,
-                )
-                _apply_snapshot_schema_change(
-                    adapter=adapter,
-                    connection=connection,
-                    entry=entry,
-                    snapshots=snapshots or SnapshotsConfig(),
-                    target_qualified=target_qualified,
-                    target_columns=target_columns,
-                    delta_columns=delta_columns,
-                    allow_snapshot_schema_change=allow_snapshot_schema_change,
-                    statement_recorder=statement_recorder,
-                )
-                _apply_snapshot_changes(
-                    adapter=adapter,
-                    connection=connection,
-                    entry=entry,
-                    target_qualified=target_qualified,
-                    delta_qualified=delta_qualified,
-                    delta_columns=delta_columns,
-                    check_columns=check_columns,
-                    statement_recorder=statement_recorder,
-                )
+        target_exists: bool = _apply_snapshot_phase(
+            context=context,
+            snapshots=snapshots or SnapshotsConfig(),
+            allow_snapshot_schema_change=allow_snapshot_schema_change,
+            target_qualified=target_qualified,
+            delta_qualified=delta_qualified,
+            delta_columns=delta_columns,
+            check_columns=check_columns,
+            full_refresh_relations=full_refresh_relations,
+            statement_recorder=statement_recorder,
+        )
     except Exception as exc:
         return build_failed_result(
             entry=entry,
@@ -270,7 +256,12 @@ def execute_snapshot_entry(
             statement_recorder=statement_recorder,
         )
 
-    final_audit_run: FinalAuditRun = run_final_scope_audits(context=context)
+    final_audit_run: FinalAuditRun = run_final_scope_audits(
+        context=context,
+        relation_override=(
+            None if full_refresh_relations is None else full_refresh_relations.rebuild_qualified
+        ),
+    )
     audit_results.extend(final_audit_run.results)
 
     if final_audit_run.has_error:
@@ -278,15 +269,29 @@ def execute_snapshot_entry(
             entry=entry,
             phase=ExecutionPhase.AUDIT,
             error=(
-                f"final audit for '{entry.name}' failed after target update "
-                "with severity level: error"
-            ),
+                f"final audit for '{entry.name}' failed before full-refresh promotion "
+                if full_refresh_relations is not None
+                else f"final audit for '{entry.name}' failed after target update "
+            )
+            + ("with severity level: error"),
             staging_relation=delta_qualified,
             promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
         )
+
+    if full_refresh_relations is not None:
+        promotion_failure: ModelExecutionResult | None = _snapshot_promotion_failure(
+            context=context,
+            relations=full_refresh_relations,
+            target_exists=target_exists,
+            warnings=warnings,
+            audit_results=audit_results,
+            statement_recorder=statement_recorder,
+        )
+        if promotion_failure is not None:
+            return promotion_failure
 
     post_hook_outcome: PostHookPhaseOutcome = run_post_hook_phase(
         context=context,
@@ -341,6 +346,227 @@ def execute_snapshot_entry(
         status=ExecutionStatus.SUCCESS,
         promoted_relation=target_qualified,
         audit_results=tuple(audit_results),
+        warning_messages=tuple(warnings),
+        lifecycle_events=statement_recorder.snapshot(),
+        hook_results=tuple(hook_results),
+    )
+
+
+def _reconcile_snapshot_full_refresh(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    database: str | None,
+    schema: str | None,
+    relations: FullRefreshRelations,
+    statement_recorder: StatementRecorder,
+) -> bool:
+    """Finish a target-absent rename before beginning a new replacement build."""
+
+    target_exists: bool = relation_exists(
+        adapter=adapter,
+        connection=connection,
+        database=database,
+        schema=schema,
+        name=relations.target_name,
+    )
+    rebuild_exists: bool = relation_exists(
+        adapter=adapter,
+        connection=connection,
+        database=database,
+        schema=schema,
+        name=relations.rebuild_name,
+    )
+    if not target_exists and rebuild_exists:
+        promote_full_refresh_rebuild(
+            adapter=adapter,
+            connection=connection,
+            relations=relations,
+            target_exists=False,
+            statement_recorder=statement_recorder,
+        )
+        return True
+    return False
+
+
+def _apply_snapshot_phase(
+    *,
+    context: ModelMaterializationContext,
+    snapshots: SnapshotsConfig,
+    allow_snapshot_schema_change: bool,
+    target_qualified: str,
+    delta_qualified: str,
+    delta_columns: tuple[ColumnInfo, ...],
+    check_columns: tuple[str, ...],
+    full_refresh_relations: FullRefreshRelations | None,
+    statement_recorder: StatementRecorder,
+) -> bool:
+    """Apply snapshot DML to a rebuild or live destination."""
+
+    entry: ModelPlanEntry = context.entry
+    with diagnostics_context(sqlbuild_phase="dml", sqlbuild_action_name="apply_snapshot"):
+        if full_refresh_relations is not None:
+            context.adapter.drop(
+                connection=context.connection,
+                destination=full_refresh_relations.rebuild_qualified,
+                if_exists=True,
+                statement_recorder=statement_recorder,
+            )
+            _create_initial_snapshot_target(
+                adapter=context.adapter,
+                connection=context.connection,
+                entry=entry,
+                target_qualified=full_refresh_relations.rebuild_qualified,
+                delta_qualified=delta_qualified,
+                delta_columns=delta_columns,
+                check_columns=check_columns,
+                statement_recorder=statement_recorder,
+            )
+        target_exists: bool = context.adapter.relation_exists(
+            connection=context.connection,
+            database=entry.destination.database,
+            schema=entry.destination.schema,
+            name=entry.destination.name,
+        )
+        if full_refresh_relations is None and not target_exists:
+            _create_initial_snapshot_target(
+                adapter=context.adapter,
+                connection=context.connection,
+                entry=entry,
+                target_qualified=target_qualified,
+                delta_qualified=delta_qualified,
+                delta_columns=delta_columns,
+                check_columns=check_columns,
+                statement_recorder=statement_recorder,
+            )
+        elif full_refresh_relations is None:
+            target_columns: tuple[ColumnInfo, ...] = context.adapter.get_columns(
+                connection=context.connection,
+                database=entry.destination.database,
+                schema=entry.destination.schema,
+                name=entry.destination.name,
+            )
+            _apply_snapshot_schema_change(
+                adapter=context.adapter,
+                connection=context.connection,
+                entry=entry,
+                snapshots=snapshots,
+                target_qualified=target_qualified,
+                target_columns=target_columns,
+                delta_columns=delta_columns,
+                allow_snapshot_schema_change=allow_snapshot_schema_change,
+                statement_recorder=statement_recorder,
+            )
+            _apply_snapshot_changes(
+                adapter=context.adapter,
+                connection=context.connection,
+                entry=entry,
+                target_qualified=target_qualified,
+                delta_qualified=delta_qualified,
+                delta_columns=delta_columns,
+                check_columns=check_columns,
+                statement_recorder=statement_recorder,
+            )
+    return target_exists
+
+
+def _reconcile_snapshot_full_refresh_result(
+    *,
+    context: ModelMaterializationContext,
+    relations: FullRefreshRelations,
+    warnings: list[str],
+    audit_results: list[AuditExecutionResult],
+    statement_recorder: StatementRecorder,
+) -> ModelExecutionResult | bool:
+    """Reconcile a snapshot rename window or return its execution failure."""
+
+    try:
+        return _reconcile_snapshot_full_refresh(
+            adapter=context.adapter,
+            connection=context.connection,
+            database=context.entry.destination.database,
+            schema=context.entry.destination.schema,
+            relations=relations,
+            statement_recorder=statement_recorder,
+        )
+    except Exception as exc:
+        return build_failed_result(
+            entry=context.entry,
+            phase=ExecutionPhase.DML,
+            error=f"failed to reconcile snapshot full-refresh rebuild: {exc}",
+            warnings=warnings,
+            audit_results=audit_results,
+            statement_recorder=statement_recorder,
+        )
+
+
+def _resolve_snapshot_full_refresh_relations(
+    *, context: ModelMaterializationContext
+) -> FullRefreshRelations | None:
+    """Resolve build-aside names only for a snapshot full refresh."""
+
+    if context.entry.reason != PlanReason.FULL_REFRESH:
+        return None
+    return resolve_full_refresh_relations(
+        adapter=context.adapter,
+        database=context.entry.destination.database,
+        schema=context.entry.destination.schema,
+        target_name=context.entry.destination.name,
+    )
+
+
+def _snapshot_promotion_failure(
+    *,
+    context: ModelMaterializationContext,
+    relations: FullRefreshRelations,
+    target_exists: bool,
+    warnings: list[str],
+    audit_results: list[AuditExecutionResult],
+    statement_recorder: StatementRecorder,
+) -> ModelExecutionResult | None:
+    """Promote a snapshot rebuild or return its execution failure."""
+
+    try:
+        promote_full_refresh_rebuild(
+            adapter=context.adapter,
+            connection=context.connection,
+            relations=relations,
+            target_exists=target_exists,
+            statement_recorder=statement_recorder,
+        )
+    except Exception as exc:
+        return build_failed_result(
+            entry=context.entry,
+            phase=ExecutionPhase.DML,
+            error=f"failed to promote snapshot full-refresh rebuild: {exc}",
+            staging_relation=relations.rebuild_qualified,
+            promoted_relation=relations.target_qualified,
+            warnings=warnings,
+            audit_results=audit_results,
+            statement_recorder=statement_recorder,
+        )
+    return None
+
+
+def _snapshot_reconciliation_exit(
+    *,
+    result: ModelExecutionResult | bool,
+    entry: ModelPlanEntry,
+    target_qualified: str,
+    warnings: list[str],
+    hook_results: list[HookExecutionResult],
+    statement_recorder: StatementRecorder,
+) -> ModelExecutionResult | None:
+    """Return the terminal result for snapshot rename recovery when applicable."""
+
+    if isinstance(result, ModelExecutionResult):
+        return result
+    if not result:
+        return None
+    return ModelExecutionResult(
+        model_name=entry.name,
+        status=ExecutionStatus.SUCCESS,
+        promoted_relation=target_qualified,
         warning_messages=tuple(warnings),
         lifecycle_events=statement_recorder.snapshot(),
         hook_results=tuple(hook_results),
