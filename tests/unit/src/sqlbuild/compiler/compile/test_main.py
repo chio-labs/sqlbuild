@@ -23,14 +23,19 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.spec.contracts.exceptions import SpecConfigError
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.models import (
+    AuthoredTimeTravelRetention,
     ClonePolicy,
     DefaultsConfig,
     LocalClonePolicy,
     LocalConfig,
     LocalTargetConfig,
+    MaterializationDefaultsConfig,
+    MaterializationRetentionDefaults,
     ProjectConfig,
+    ResolvedTimeTravelRetention,
     TargetConfig,
 )
+from sqlbuild.spec.contracts.types import TimeTravelRetentionSource
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,
 )
@@ -45,10 +50,12 @@ from tests.unit.src.sqlbuild.compiler.compile._test_helpers import (
     expected_or_actual,
 )
 from tests.unit.src.sqlbuild.compiler.compile._test_types import (
+    AuthoredRetentionCompileTestCase,
     BuildCompileInputsErrorTestCase,
     BuildCompileInputsPythonHookValidationTestCase,
     BuildCompileInputsTestCase,
     BuildModelConfigHooksTestCase,
+    BuildModelRetentionConfigTestCase,
     PreservedFunctionNamespaceTestCase,
     ResolveTargetConfigTestCase,
     SeedRefRegressionTestCase,
@@ -4417,6 +4424,107 @@ def test_given_typed_hook_defaults_when_building_config_then_layers_values(
 
     assert config.values["pre_hooks"] == test_case.expected_pre_hooks
     assert config.values["post_hooks"] == test_case.expected_post_hooks
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildModelRetentionConfigTestCase(
+            description="model duration overrides materialization and target",
+            defaults=DefaultsConfig(materialized="table"),
+            model_header_values={"time_travel_retention": "30d"},
+            target_config=TargetConfig(
+                time_travel_retention=AuthoredTimeTravelRetention(desired_days=7)
+            ),
+            materialization_defaults=MaterializationDefaultsConfig(
+                table=MaterializationRetentionDefaults(
+                    time_travel_retention=AuthoredTimeTravelRetention(desired_days=14)
+                )
+            ),
+            expected_desired_days=30,
+            expected_unmanaged=False,
+            expected_source=TimeTravelRetentionSource.MODEL,
+        ),
+        BuildModelRetentionConfigTestCase(
+            description="model disabled overrides inherited view policy",
+            defaults=DefaultsConfig(materialized="view"),
+            model_header_values={"time_travel_retention": "disabled"},
+            target_config=None,
+            materialization_defaults=MaterializationDefaultsConfig(),
+            expected_desired_days=None,
+            expected_unmanaged=True,
+            expected_source=TimeTravelRetentionSource.MODEL,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_retention_layers_when_building_model_config_then_precedence_is_resolved(
+    test_case: BuildModelRetentionConfigTestCase,
+) -> None:
+    config: CompileModelConfig = build_model_config(
+        defaults=test_case.defaults,
+        path_defaults={},
+        matched_path_default=None,
+        model_header_values=test_case.model_header_values,
+        effective_vars={},
+        target_config=test_case.target_config,
+        model_name="orders",
+        effective_target_name="prod",
+        run_id="run_123",
+        materialization_defaults=test_case.materialization_defaults,
+    )
+
+    assert config.time_travel_retention.desired_days == test_case.expected_desired_days
+    assert config.time_travel_retention.unmanaged is test_case.expected_unmanaged
+    assert config.time_travel_retention.source is test_case.expected_source
+    assert "time_travel_retention" not in config.values
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AuthoredRetentionCompileTestCase(
+            description="model header overrides project retention layers",
+            repo_files={
+                "sqlbuild_project.toml": "\n".join(
+                    (
+                        'name = "demo"',
+                        'adapter = "duckdb"',
+                        'default_target = "prod"',
+                        "[targets.prod]",
+                        'time_travel_retention = "7d"',
+                        "[materialization_defaults.table]",
+                        'time_travel_retention = "14d"',
+                    )
+                ),
+                "models/orders.sql": (
+                    "MODEL (materialized table, time_travel_retention 30d);\n\nSELECT 1 AS id\n"
+                ),
+            },
+            expected_desired_days=30,
+            expected_source=TimeTravelRetentionSource.MODEL,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_authored_retention_header_when_building_inputs_then_typed_policy_is_attached(
+    test_case: AuthoredRetentionCompileTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.repo_files)
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+
+    compile_inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discovered_inputs,
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+    )
+
+    policy: ResolvedTimeTravelRetention = compile_inputs.model_inputs[
+        0
+    ].config.time_travel_retention
+    assert policy.desired_days == test_case.expected_desired_days
+    assert policy.source is test_case.expected_source
 
 
 @pytest.mark.parametrize(

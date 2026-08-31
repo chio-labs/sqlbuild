@@ -4,11 +4,15 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from sqlbuild.archives.constants import ARCHIVE_EVENT_TABLE_NAME
+from sqlbuild.archives.models import ArchiveEvent
+from sqlbuild.archives.types import ArchiveRecordType
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.executor.janitor.main.execute import execute_janitor_plan
 from sqlbuild.executor.janitor.main.plan import build_janitor_plan
 from sqlbuild.executor.janitor.models import (
+    JanitorDirectModeSettings,
     JanitorExecutionResult,
     JanitorPlan,
     JanitorRelationKey,
@@ -18,12 +22,14 @@ from sqlbuild.executor.janitor.models import (
 )
 from sqlbuild.virtual.state.constants import PYTHON_NODE_VERSION_TABLE
 from tests.unit.src.sqlbuild.executor.janitor.main._test_types import (
+    JanitorArchiveRecoveryTestCase,
     JanitorExecuteTestCase,
     JanitorPlanTestCase,
     relation_info,
 )
 from tests.unit.src.sqlbuild.executor.janitor.main.helpers import (
     FakeJanitorAdapter,
+    archive_event_for_test,
     build_project,
 )
 
@@ -51,9 +57,18 @@ NEW_TIME: datetime = datetime.now(UTC) - timedelta(days=1)
             expected_candidate_names=(),
         ),
         JanitorPlanTestCase(
-            description="schema with active source is skipped",
+            description="direct schema with active source is blocked",
             relation_infos=(relation_info("old_orders", created_at=OLD_TIME),),
             source_schema="analytics",
+            expected_candidate_names=(),
+            expected_blocked_schema_sources=("raw_orders",),
+            expected_suppressed_candidate_names=("old_orders",),
+        ),
+        JanitorPlanTestCase(
+            description="virtual schema with active source remains skipped",
+            relation_infos=(relation_info("old_orders", created_at=OLD_TIME),),
+            source_schema="analytics",
+            direct_mode=False,
             expected_candidate_names=(),
             expected_skipped_schema_sources=("raw_orders",),
         ),
@@ -227,7 +242,10 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
         state_candidates=JanitorStateCandidates(
             virtual_state_prune_candidates=test_case.virtual_state_prune_candidates,
         ),
-        direct_state_history_versions=test_case.direct_state_history_versions,
+        direct_settings=JanitorDirectModeSettings(
+            enabled=test_case.direct_mode,
+            state_history_versions=test_case.direct_state_history_versions,
+        ),
     )
 
     assert tuple(candidate.key.name for candidate in plan.candidates) == (
@@ -247,6 +265,15 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
         for source_name in skipped_schema.source_names:
             skipped_schema_sources.append(source_name)
     assert tuple(skipped_schema_sources) == test_case.expected_skipped_schema_sources
+    blocked_schema_sources: list[str] = []
+    suppressed_candidate_names: list[str] = []
+    for blocked_schema in plan.blocked_schemas:
+        blocked_schema_sources.extend(blocked_schema.source_names)
+        suppressed_candidate_names.extend(
+            candidate.key.name for candidate in blocked_schema.suppressed_candidates
+        )
+    assert tuple(blocked_schema_sources) == test_case.expected_blocked_schema_sources
+    assert tuple(suppressed_candidate_names) == test_case.expected_suppressed_candidate_names
 
 
 @pytest.mark.parametrize(
@@ -315,3 +342,186 @@ def test_given_janitor_plan_when_executing_then_drops_expected_relations(
         test_case.expected_pruned_virtual_table_names
     )
     assert tuple(pruned_virtual_table_names) == test_case.expected_pruned_virtual_table_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorPlanTestCase(
+            description="requirement and origin retries same rename",
+            relation_infos=(
+                relation_info(ARCHIVE_EVENT_TABLE_NAME, created_at=OLD_TIME),
+                relation_info("old_orders", created_at=OLD_TIME),
+            ),
+            retention_days=0,
+            expected_candidate_names=("old_orders",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_archive_requirement_and_origin_when_planning_then_retries_same_rename(
+    test_case: JanitorPlanTestCase,
+) -> None:
+    requirement: ArchiveEvent = archive_event_for_test(
+        event_id="requirement",
+        record_type=ArchiveRecordType.REQUIREMENT,
+        source_generation=OLD_TIME.isoformat(),
+    )
+    adapter: FakeJanitorAdapter = FakeJanitorAdapter(
+        relation_infos=test_case.relation_infos,
+        archive_events=(requirement,),
+    )
+
+    plan: JanitorPlan = build_janitor_plan(
+        project=build_project(),
+        adapter=adapter,
+        connection=object(),
+        retention_days=test_case.retention_days,
+        delete_tracked_only=False,
+        direct_settings=JanitorDirectModeSettings(enabled=True, archive_retention_days=0),
+    )
+
+    assert tuple(candidate.origin_key.name for candidate in plan.archive_candidates) == (
+        test_case.expected_candidate_names
+    )
+    assert tuple(candidate.archive_key.name for candidate in plan.archive_candidates) == (
+        requirement.archive_name,
+    )
+    assert plan.archive_candidates[0].rename_required is True
+    assert plan.archive_delete_candidates == ()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorArchiveRecoveryTestCase(
+            description="requirement and archive appends recovery completion",
+            relation_infos=(
+                relation_info(ARCHIVE_EVENT_TABLE_NAME, created_at=OLD_TIME),
+                relation_info(
+                    "__sqb_archive__20260101T000000000000Z__old_orders",
+                    created_at=OLD_TIME,
+                ),
+            ),
+            events=(
+                archive_event_for_test(
+                    event_id="requirement",
+                    record_type=ArchiveRecordType.REQUIREMENT,
+                    source_generation=OLD_TIME.isoformat(),
+                ),
+            ),
+            expected_archive_rename_required=(False,),
+            expected_delete_drop_required=(),
+        ),
+        JanitorArchiveRecoveryTestCase(
+            description="delete requirement and archive retries drop",
+            relation_infos=(
+                relation_info(ARCHIVE_EVENT_TABLE_NAME, created_at=OLD_TIME),
+                relation_info(
+                    "__sqb_archive__20260101T000000000000Z__old_orders",
+                    created_at=OLD_TIME,
+                ),
+            ),
+            events=(
+                archive_event_for_test(
+                    event_id="requirement",
+                    record_type=ArchiveRecordType.REQUIREMENT,
+                    source_generation=OLD_TIME.isoformat(),
+                ),
+                archive_event_for_test(
+                    event_id="completion",
+                    record_type=ArchiveRecordType.COMPLETION,
+                    source_generation=OLD_TIME.isoformat(),
+                    archive_generation=OLD_TIME.isoformat(),
+                    completed_at=datetime(2026, 1, 1, tzinfo=UTC),
+                ),
+                archive_event_for_test(
+                    event_id="delete-requirement",
+                    record_type=ArchiveRecordType.DELETE_REQUIREMENT,
+                    source_generation=OLD_TIME.isoformat(),
+                    archive_generation=OLD_TIME.isoformat(),
+                ),
+            ),
+            expected_archive_rename_required=(),
+            expected_delete_drop_required=(True,),
+        ),
+        JanitorArchiveRecoveryTestCase(
+            description="delete requirement and missing archive appends completion",
+            relation_infos=(relation_info(ARCHIVE_EVENT_TABLE_NAME, created_at=OLD_TIME),),
+            events=(
+                archive_event_for_test(
+                    event_id="requirement",
+                    record_type=ArchiveRecordType.REQUIREMENT,
+                    source_generation=OLD_TIME.isoformat(),
+                ),
+                archive_event_for_test(
+                    event_id="completion",
+                    record_type=ArchiveRecordType.COMPLETION,
+                    source_generation=OLD_TIME.isoformat(),
+                    archive_generation=OLD_TIME.isoformat(),
+                    completed_at=datetime(2026, 1, 1, tzinfo=UTC),
+                ),
+                archive_event_for_test(
+                    event_id="delete-requirement",
+                    record_type=ArchiveRecordType.DELETE_REQUIREMENT,
+                    source_generation=OLD_TIME.isoformat(),
+                    archive_generation=OLD_TIME.isoformat(),
+                ),
+            ),
+            expected_archive_rename_required=(),
+            expected_delete_drop_required=(False,),
+        ),
+        JanitorArchiveRecoveryTestCase(
+            description="archive keeps immutable retention after project setting decreases",
+            relation_infos=(
+                relation_info(ARCHIVE_EVENT_TABLE_NAME, created_at=OLD_TIME),
+                relation_info(
+                    "__sqb_archive__20260101T000000000000Z__old_orders",
+                    created_at=OLD_TIME,
+                ),
+            ),
+            events=(
+                archive_event_for_test(
+                    event_id="requirement",
+                    record_type=ArchiveRecordType.REQUIREMENT,
+                    source_generation=OLD_TIME.isoformat(),
+                    retention_days=30,
+                ),
+                archive_event_for_test(
+                    event_id="completion",
+                    record_type=ArchiveRecordType.COMPLETION,
+                    source_generation=OLD_TIME.isoformat(),
+                    archive_generation=OLD_TIME.isoformat(),
+                    completed_at=datetime.now(UTC) - timedelta(days=10),
+                    retention_days=30,
+                ),
+            ),
+            expected_archive_rename_required=(),
+            expected_delete_drop_required=(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_partial_archive_lifecycle_when_planning_then_reconciles_failure_window(
+    test_case: JanitorArchiveRecoveryTestCase,
+) -> None:
+    adapter: FakeJanitorAdapter = FakeJanitorAdapter(
+        relation_infos=test_case.relation_infos,
+        archive_events=test_case.events,
+    )
+
+    plan: JanitorPlan = build_janitor_plan(
+        project=build_project(),
+        adapter=adapter,
+        connection=object(),
+        retention_days=0,
+        delete_tracked_only=False,
+        direct_settings=JanitorDirectModeSettings(enabled=True, archive_retention_days=0),
+    )
+
+    assert tuple(candidate.rename_required for candidate in plan.archive_candidates) == (
+        test_case.expected_archive_rename_required
+    )
+    assert tuple(candidate.drop_required for candidate in plan.archive_delete_candidates) == (
+        test_case.expected_delete_drop_required
+    )

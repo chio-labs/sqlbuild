@@ -4,10 +4,25 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild.adapter.contract.models import RetentionRequest
+from sqlbuild.adapter.contract.types import RetentionScope
+
+
+def build_retention_request(*, desired_days: int) -> RetentionRequest:
+    return RetentionRequest(
+        request_id="model.results",
+        scope=RetentionScope.RELATION,
+        database="main",
+        schema="mart",
+        name="results",
+        desired_days=desired_days,
+    )
+
 
 class FakeDatabricksMetadataCursor:
     def __init__(self, *, rows: list[tuple[object, ...]] | None = None) -> None:
         self.rows: list[tuple[object, ...]] = rows or []
+        self.description: tuple[tuple[str], ...] = (("format",), ("properties",))
         self.executed_sql: str | None = None
         self.closed: bool = False
 
@@ -16,6 +31,9 @@ class FakeDatabricksMetadataCursor:
 
     def fetchall(self) -> list[tuple[object, ...]]:
         return self.rows
+
+    def fetchone(self) -> tuple[object, ...] | None:
+        return next(iter(self.rows), None)
 
     def close(self) -> None:
         self.closed = True

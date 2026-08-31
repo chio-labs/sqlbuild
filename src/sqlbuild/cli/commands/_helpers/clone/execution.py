@@ -26,6 +26,9 @@ from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
     SeedPlanEntry,
 )
+from sqlbuild.executor.clone.main.build_retention_requests import (
+    build_destination_retention_requests,
+)
 from sqlbuild.executor.clone.main.execute import execute_clone
 from sqlbuild.executor.clone.main.fingerprinting import copy_clone_fingerprints
 from sqlbuild.executor.clone.models import (
@@ -35,6 +38,7 @@ from sqlbuild.executor.clone.models import (
     CloneSourceEntries,
 )
 from sqlbuild.executor.clone.types import CloneItemCallback
+from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -78,6 +82,19 @@ def execute_clone_plan(
                 dependency_locations=_clone_dependency_locations(
                     preparation=preparation,
                     adapter=invocation.adapter,
+                ),
+                destination_retention_requests=build_destination_retention_requests(
+                    project=preparation.pipeline_result.destination_project,
+                    adapter_name=invocation.adapter_name,
+                    selected_model_names=frozenset(
+                        entry.name
+                        for entry in preparation.pipeline_result.destination_model_entries
+                    ),
+                    namespace_owned=resolve_target_config(
+                        project_config=invocation.discovered_inputs.project_config,
+                        local_config=invocation.discovered_inputs.local_config,
+                        target_name=invocation.destination_target_name,
+                    ).owns_time_travel_retention_namespace,
                 ),
                 on_item=on_item,
             )

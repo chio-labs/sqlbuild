@@ -14,6 +14,7 @@ from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, SqlTestMode
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.scopes.models import UsageRecord
 from sqlbuild.compiler.scopes.types import ScopeKind
+from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention
 from sqlbuild.sql_values.models import SqlValue
 
 
@@ -21,6 +22,22 @@ from sqlbuild.sql_values.models import SqlValue
 class AnalysisCacheTestCase:
     description: str
     expected_count: int
+
+
+@dataclass(frozen=True)
+class RetentionValidationErrorTestCase:
+    description: str
+    config_values: dict[str, object]
+    retention: ResolvedTimeTravelRetention
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class RetentionValidationValidTestCase:
+    description: str
+    config_values: dict[str, object]
+    retention: ResolvedTimeTravelRetention
+    expected_unmanaged: bool
 
 
 @dataclass(frozen=True)

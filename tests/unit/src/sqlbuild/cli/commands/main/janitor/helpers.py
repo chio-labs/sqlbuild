@@ -4,6 +4,7 @@ from datetime import datetime
 
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.executor.janitor.models import (
+    JanitorBlockedSchema,
     JanitorCheckpointCandidate,
     JanitorDeleteCandidate,
     JanitorDetachedVirtualEnvironmentCandidate,
@@ -80,6 +81,29 @@ def build_janitor_plan() -> JanitorPlan:
                 schema="dev",
                 source_names=("raw.orders",),
                 skipped_relations=(source_relation,),
+            ),
+        ),
+        blocked_schemas=(
+            JanitorBlockedSchema(
+                database=None,
+                schema="blocked",
+                source_names=("raw.events",),
+                suppressed_candidates=(
+                    JanitorDeleteCandidate(
+                        key=JanitorRelationKey(
+                            database=None,
+                            schema="blocked",
+                            name="old_model",
+                        ),
+                        relation=RelationInfo(
+                            database=None,
+                            schema="blocked",
+                            name="old_model",
+                            relation_type="table",
+                        ),
+                        age_timestamp=None,
+                    ),
+                ),
             ),
         ),
         scanned_schema_count=2,

@@ -106,6 +106,21 @@ class SchemaColumnSource(StrEnum):
     SQLGLOT = "sql_analysis"
 
 
+class RetentionDirection(StrEnum):
+    INCREASE = "increase"
+    DECREASE = "decrease"
+    MIXED = "mixed"
+    MATCH = "match"
+    APPLY_AFTER_CREATE = "apply_after_create"
+
+
+class RetentionPlanPhase(StrEnum):
+    PRE = "pre"
+    POST = "post"
+    AFTER_CREATE = "after_create"
+    NONE = "none"
+
+
 class PlanAction(StrEnum):
     CREATE_VIEW = "create_view"
     CREATE_TABLE = "create_table"

@@ -15,3 +15,4 @@ class DisplayFullRefreshTestCase:
     expected_action: PlanAction
     expected_reason: PlanReason
     expected_full_refresh_heading: bool
+    expected_permanent_table: bool = False

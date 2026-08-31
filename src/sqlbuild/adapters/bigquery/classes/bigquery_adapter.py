@@ -33,6 +33,9 @@ from sqlbuild.adapter.contract.models import (
     FunctionInfo,
     QueryResult,
     RelationInfo,
+    RenderedRetentionChange,
+    RetentionRequest,
+    RetentionState,
     RowDiffColumnResult,
     RowDiffResult,
     RowDiffSampleCell,
@@ -50,6 +53,8 @@ from sqlbuild.adapter.contract.types import (
     FrameworkType,
     LoaderLogicalType,
     PromotionStrategy,
+    RetentionChangePhase,
+    RetentionScope,
     TablePromotionMode,
 )
 from sqlbuild.adapter.relations.main.get_columns_for_relations import (
@@ -108,6 +113,60 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
     adapter_name: ClassVar[str] = BuiltinAdapter.BIGQUERY.value
     sql_analysis_dialect_name: ClassVar[str | None] = "bigquery"
     max_identifier_length: ClassVar[int] = 1024
+
+    def inspect_retention(
+        self, *, connection: _BigQueryConnection, request: RetentionRequest
+    ) -> RetentionState:
+        dataset_id: str = self._retention_dataset_id(request=request)
+        try:
+            dataset: Any = connection.client.get_dataset(dataset_id)
+        except Exception as error:
+            if not self._is_google_not_found(error):
+                raise
+            return RetentionState(
+                request_id=request.request_id,
+                scope=request.scope,
+                configured_days=None,
+                effective_days=7,
+                exists=False,
+                max_time_travel_hours=168,
+            )
+        hours: object | None = getattr(dataset, "max_time_travel_hours", None)
+        if not isinstance(hours, int):
+            raise AdapterUserError(
+                message=f"BigQuery dataset {dataset_id} has no max_time_travel_hours metadata"
+            )
+        return RetentionState(
+            request_id=request.request_id,
+            scope=request.scope,
+            configured_days=hours // 24,
+            effective_days=hours // 24,
+            max_time_travel_hours=hours,
+        )
+
+    def render_retention_changes(
+        self, *, request: RetentionRequest, state: RetentionState | None = None
+    ) -> tuple[RenderedRetentionChange, ...]:
+        del state
+        dataset_id: str = self._retention_dataset_id(request=request)
+        return (
+            RenderedRetentionChange(
+                phase=RetentionChangePhase.ALTER,
+                statements=(
+                    f"ALTER SCHEMA {self._quote_identifier_path(dataset_id)} SET OPTIONS "
+                    f"(max_time_travel_hours = {request.desired_days * 24})",
+                ),
+            ),
+        )
+
+    def _retention_dataset_id(self, *, request: RetentionRequest) -> str:
+        if request.scope != RetentionScope.NAMESPACE or request.name is not None:
+            raise AdapterUserError(message="BigQuery retention requires namespace scope")
+        minimum_days: int = 2
+        maximum_days: int = 7
+        if not minimum_days <= request.desired_days <= maximum_days:
+            raise AdapterUserError(message="BigQuery retention days must be between 2 and 7")
+        return self._build_dataset_id(database=request.database, schema=request.schema)
 
     def render_read_latest_fingerprints_sql(
         self,

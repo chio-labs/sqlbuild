@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
 from sqlbuild.compiler.compile.models import CompiledObjectKey
@@ -19,42 +15,13 @@ from sqlbuild.executor.clone._helpers.execution_items import (
     execute_clone_function_item,
     execute_clone_relation_item,
 )
+from sqlbuild.executor.clone._helpers.lifecycle import finish_clone, prepare_clone_destination
 from sqlbuild.executor.clone.models import (
     CloneExecutionInput,
     CloneExecutionResult,
     CloneItemResult,
 )
 from sqlbuild.executor.clone.types import CloneStatus
-
-
-def _ensure_destination_schemas(
-    *,
-    destination_entries: tuple[
-        CloneSourcePlanEntry | SeedPlanEntry | ModelPlanEntry | FunctionPlanEntry, ...
-    ],
-    adapter: BaseAdapter,
-    destination_connection: Any,
-) -> None:
-    schemas: set[tuple[str | None, str]] = set()
-    entry: CloneSourcePlanEntry | SeedPlanEntry | ModelPlanEntry | FunctionPlanEntry
-    for entry in destination_entries:
-        if entry.destination.schema is not None:
-            schemas.add((entry.destination.database, entry.destination.schema))
-        if (
-            isinstance(entry, FunctionPlanEntry)
-            and entry.fingerprint_destination.schema is not None
-        ):
-            schemas.add(
-                (entry.fingerprint_destination.database, entry.fingerprint_destination.schema)
-            )
-    recorder: StatementRecorder = StatementRecorder()
-    for database, schema in sorted(schemas, key=lambda item: (item[0] or "", item[1])):
-        adapter.ensure_schema(
-            connection=destination_connection,
-            database=database,
-            schema=schema,
-            statement_recorder=recorder,
-        )
 
 
 def execute_clone(*, inputs: CloneExecutionInput) -> CloneExecutionResult:
@@ -76,10 +43,9 @@ def execute_clone(*, inputs: CloneExecutionInput) -> CloneExecutionResult:
         *inputs.destination_model_entries,
         *inputs.destination_function_entries,
     )
-    _ = _ensure_destination_schemas(
+    _ = prepare_clone_destination(
+        inputs=inputs,
         destination_entries=destination_entries,
-        adapter=inputs.adapter,
-        destination_connection=inputs.destination_connection,
     )
 
     destination_entries_by_key: dict[
@@ -173,4 +139,4 @@ def execute_clone(*, inputs: CloneExecutionInput) -> CloneExecutionResult:
         if inputs.on_item is not None:
             inputs.on_item(index=index, total=total, item=item_result)
 
-    return CloneExecutionResult(item_results=tuple(results))
+    return finish_clone(results=results, inputs=inputs)

@@ -50,8 +50,14 @@ def _write_plan_summary(*, plan: JanitorPlan, stream: TextIO, style: CliStyle) -
     _write_count_row(
         stream=stream,
         style=style,
-        label="eligible for deletion",
-        items=plan.candidates,
+        label="eligible for archive" if plan.direct_mode else "eligible for deletion",
+        items=plan.archive_candidates if plan.direct_mode else plan.candidates,
+    )
+    _write_count_row(
+        stream=stream,
+        style=style,
+        label="archives deleted",
+        items=plan.archive_delete_candidates,
     )
     _write_count_row(
         stream=stream,
@@ -116,6 +122,22 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
     stream.write(f"{style.title('Janitor preview')}  {rendered_env}\n\n")
     _write_plan_summary(plan=plan, stream=stream, style=style)
 
+    if plan.blocked_schemas:
+        stream.write(f"\n{style.error_strong('Janitor blocked')}\n")
+        stream.write(
+            f"  {style.error('Managed target schemas contain active configured sources.')}\n"
+        )
+        for blocked_schema in plan.blocked_schemas:
+            sources: str = ", ".join(blocked_schema.source_names)
+            stream.write(
+                f"  {style.object_name(blocked_schema.display_name())}  "
+                f"{style.error_muted('active sources: ' + sources)}\n"
+            )
+            for candidate in blocked_schema.suppressed_candidates:
+                suppressed: str = f"suppressed deletion: {candidate.key.display_name()}"
+                stream.write(f"    {style.error_muted(suppressed)}\n")
+        stream.write(f"  {style.error('No janitor actions will be performed.')}\n")
+
     if plan.skipped_schemas:
         stream.write(f"\n{style.success('Skipped schemas')}\n")
         skipped_schema: JanitorSkippedSchema
@@ -126,11 +148,13 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
                 f"{style.muted('contains active source ' + sources)}\n"
             )
 
-    if plan.candidates:
+    if plan.candidates and not plan.direct_mode:
         stream.write(f"\n{style.success('Eligible objects')}\n")
         candidate: JanitorDeleteCandidate
         for candidate in plan.candidates:
             stream.write(f"  {style.object_name(candidate.key.display_name())}\n")
+
+    _write_direct_archive_actions(plan=plan, stream=stream, style=style)
 
     if plan.checkpoint_candidates:
         stream.write(f"\n{style.success('Eligible checkpoints')}\n")
@@ -205,6 +229,22 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
     stream.write("\n")
 
 
+def _write_direct_archive_actions(*, plan: JanitorPlan, stream: TextIO, style: CliStyle) -> None:
+    if plan.archive_candidates:
+        stream.write(f"\n{style.success('Eligible archives')}\n")
+        for archive_candidate in plan.archive_candidates:
+            stream.write(
+                f"  {style.object_name(archive_candidate.origin_key.display_name())}  "
+                f"{style.muted('-> ' + archive_candidate.archive_key.display_name())}\n"
+            )
+    if plan.archive_delete_candidates:
+        stream.write(f"\n{style.success('Permanent archive deletion')}\n")
+        for archive_delete_candidate in plan.archive_delete_candidates:
+            stream.write(
+                f"  {style.object_name(archive_delete_candidate.archive_key.display_name())}\n"
+            )
+
+
 def confirmation_text(plan: JanitorPlan) -> str:
     """Build the exact confirmation phrase for a janitor plan."""
 
@@ -216,10 +256,13 @@ def confirmation_text(plan: JanitorPlan) -> str:
         + len(plan.expired_lock_candidates)
         + len(plan.direct_state_prune_candidates)
         + len(plan.virtual_state_prune_candidates)
+        + len(plan.archive_candidates)
+        + len(plan.archive_delete_candidates)
     )
     if state_candidate_count == 0:
         return f"delete {len(plan.candidates)} objects from {environment_label(plan)}"
-    deletion_count: int = len(plan.candidates) + state_candidate_count
+    physical_deletion_count: int = 0 if plan.direct_mode else len(plan.candidates)
+    deletion_count: int = physical_deletion_count + state_candidate_count
     return f"delete {deletion_count} items from {environment_label(plan)}"
 
 

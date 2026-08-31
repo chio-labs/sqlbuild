@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -23,6 +24,7 @@ from sqlbuild.compiler.planner._helpers.planning.output_assembly import (
     with_plan_warnings,
 )
 from sqlbuild.compiler.planner._helpers.planning.reconciliation import reconcile_execution_changes
+from sqlbuild.compiler.planner._helpers.planning.retention import plan_retention
 from sqlbuild.compiler.planner._helpers.planning.scope_pruning import prune_planner_execution_scope
 from sqlbuild.compiler.planner._helpers.planning.scopes import resolve_planner_scopes
 from sqlbuild.compiler.planner._helpers.planning.warehouse_state import (
@@ -151,6 +153,12 @@ def build_execution_plan(
         reconciliation=reconciliation,
         entries=entries,
         source_freshness=source_freshness,
+    )
+    plan_output = replace(
+        plan_output,
+        retention_entries=plan_retention(
+            runtime=runtime, warehouse=warehouse, scope=scopes.selected_scope
+        ),
     )
     plan_output = with_plan_warnings(
         runtime=runtime,

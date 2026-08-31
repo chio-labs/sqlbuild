@@ -50,7 +50,13 @@ def resolve_janitor_settings(
     )
     if direct_state_history_versions < 0:
         raise CliUserError("janitor --direct-state-history-versions must be >= 0", code="C502")
+    archive_retention_days: int = (
+        invocation.discovered_inputs.project_config.janitor.archive_retention_days
+    )
+    if archive_retention_days < 0:
+        raise CliUserError("janitor archive_retention_days must be >= 0", code="C503")
     return JanitorSettings(
         retention_days=retention_days,
         direct_state_history_versions=direct_state_history_versions,
+        archive_retention_days=archive_retention_days,
     )

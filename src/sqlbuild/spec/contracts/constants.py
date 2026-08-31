@@ -6,3 +6,8 @@ from sqlbuild.spec.contracts.models import SeedCsvSettings
 
 DEFAULT_SEED_CSV_SETTINGS: SeedCsvSettings = SeedCsvSettings()
 CHANGES_ONLY_SETTING_OVERRIDE_KEY: str = "changes_only"
+TIME_TRAVEL_RETENTION_MATERIALIZATIONS: tuple[str, ...] = (
+    "table",
+    "incremental",
+    "snapshot",
+)

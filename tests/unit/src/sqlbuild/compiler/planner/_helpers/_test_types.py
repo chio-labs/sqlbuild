@@ -788,3 +788,10 @@ class PlannerStaleWarningScopeTestCase:
     selected_model_name: str
     expected_inspected_names: frozenset[str]
     expected_execution_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ClonePermanentTableTestCase:
+    description: str
+    config_values: dict[str, object]
+    expected_permanent_table: bool

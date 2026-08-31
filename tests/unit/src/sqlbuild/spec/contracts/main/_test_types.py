@@ -37,3 +37,12 @@ class EffectiveCollectionRenderingResolutionTestCase:
     project_config: ProjectConfig
     declaration_override: CollectionRendering | None
     expected_collection_rendering: CollectionRendering
+
+
+@dataclass(frozen=True)
+class TargetRetentionResolutionTestCase:
+    description: str
+    project_config: ProjectConfig
+    local_config: LocalConfig
+    target_name: str
+    expected_desired_days: int

@@ -7,6 +7,7 @@ from sqlbuild.spec.contracts.main.resolve_effective_changes_only import (
 )
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.models import (
+    AuthoredTimeTravelRetention,
     LocalConfig,
     LocalStateConfig,
     LocalTargetConfig,
@@ -18,6 +19,7 @@ from sqlbuild.spec.contracts.models import (
 from tests.unit.src.sqlbuild.spec.contracts.main._test_types import (
     EffectiveChangesOnlyResolutionTestCase,
     TargetConfigResolutionTestCase,
+    TargetRetentionResolutionTestCase,
 )
 
 
@@ -194,3 +196,43 @@ def test_given_project_and_local_state_config_when_resolving_then_local_override
     assert target_config.changes_only is test_case.expected_changes_only
     assert target_config.compile_cache is False
     assert target_config.connection_name == test_case.expected_connection_name
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TargetRetentionResolutionTestCase(
+            description="local target duration overrides project target duration",
+            project_config=ProjectConfig(
+                name="demo",
+                adapter="snowflake",
+                targets={
+                    "dev": TargetConfig(
+                        time_travel_retention=AuthoredTimeTravelRetention(desired_days=7)
+                    )
+                },
+            ),
+            local_config=LocalConfig(
+                targets={
+                    "dev": LocalTargetConfig(
+                        time_travel_retention=AuthoredTimeTravelRetention(desired_days=2)
+                    )
+                }
+            ),
+            target_name="dev",
+            expected_desired_days=2,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_local_target_retention_when_resolving_then_it_overrides_project_target(
+    test_case: TargetRetentionResolutionTestCase,
+) -> None:
+    target_config: TargetConfig = resolve_target_config(
+        project_config=test_case.project_config,
+        local_config=test_case.local_config,
+        target_name=test_case.target_name,
+    )
+
+    assert target_config.time_travel_retention is not None
+    assert target_config.time_travel_retention.desired_days == test_case.expected_desired_days

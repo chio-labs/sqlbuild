@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -283,7 +283,16 @@ def test_given_lowercase_schema_when_listing_relations_then_uppercases_filter_bi
     test_case: SnowflakeInformationSchemaFilterTestCase,
 ) -> None:
     cursor: FakeSnowflakeMetadataCursor = FakeSnowflakeMetadataCursor(
-        rows=[("COMMERCE__STG_ORDER", "STAGING", "BASE TABLE", "YES")]
+        rows=[
+            (
+                "COMMERCE__STG_ORDER",
+                "STAGING",
+                "BASE TABLE",
+                "YES",
+                datetime(2026, 8, 1, tzinfo=UTC),
+                datetime(2026, 8, 2, tzinfo=UTC),
+            )
+        ]
     )
     connection: FakeSnowflakeMetadataConnection = FakeSnowflakeMetadataConnection(cursor)
     adapter: SnowflakeAdapter = SnowflakeAdapter()
@@ -302,6 +311,9 @@ def test_given_lowercase_schema_when_listing_relations_then_uppercases_filter_bi
     assert relations[0].schema == "staging"
     assert relations[0].name == "commerce__stg_order"
     assert relations[0].is_transient is True
+    assert relations[0].created_at == datetime(2026, 8, 1, tzinfo=UTC)
+    assert relations[0].last_altered_at == datetime(2026, 8, 2, tzinfo=UTC)
+    assert "created, last_altered" in str(cursor.executed_sql)
 
 
 @pytest.mark.parametrize(

@@ -56,10 +56,23 @@ def is_scenario_artifact_physical_name(name: str) -> bool:
 def fit_scenario_artifact_logical_name(
     *, logical_name: str, fixed_prefix: str, identifier_limit: int
 ) -> str:
+    return fit_artifact_logical_name(
+        logical_name=logical_name,
+        fixed_prefix=fixed_prefix,
+        identifier_limit=identifier_limit,
+        artifact_label="Scenario artifact",
+    )
+
+
+def fit_artifact_logical_name(
+    *, logical_name: str, fixed_prefix: str, identifier_limit: int, artifact_label: str
+) -> str:
+    """Fit a readable logical component with a deterministic hash suffix."""
+
     max_logical_length: int = identifier_limit - len(fixed_prefix)
     if max_logical_length < 1:
         raise SharedInputError(
-            f"Scenario artifact prefix '{fixed_prefix}' does not fit within identifier "
+            f"{artifact_label} prefix '{fixed_prefix}' does not fit within identifier "
             f"limit {identifier_limit}"
         )
     if len(logical_name) <= max_logical_length:
@@ -68,7 +81,7 @@ def fit_scenario_artifact_logical_name(
     suffix_length: int = SCENARIO_SHORTENED_LOGICAL_HASH_LENGTH + 1
     if max_logical_length <= suffix_length:
         raise SharedInputError(
-            f"Scenario artifact name for '{logical_name}' cannot fit within identifier "
+            f"{artifact_label} name for '{logical_name}' cannot fit within identifier "
             f"limit {identifier_limit}"
         )
     logical_hash: str = hashlib.sha256(logical_name.encode("utf-8")).hexdigest()[

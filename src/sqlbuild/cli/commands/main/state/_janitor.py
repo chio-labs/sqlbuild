@@ -63,6 +63,8 @@ def run_janitor(request: JanitorCommandRequest) -> int:
             inspection=inspection,
         )
         write_janitor_plan(invocation=invocation, planning_result=planning_result)
+        if planning_result.plan.blocked_schemas:
+            return 1
         if not janitor_plan_has_work(planning_result):
             return 0
         if not request.auto_approve and not confirm_janitor_plan(planning_result=planning_result):

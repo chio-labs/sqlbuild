@@ -52,6 +52,15 @@ from tests.unit.src.sqlbuild.compiler.planner.main.execution._test_types import 
             expected_reason=PlanReason.FULL_REFRESH,
             expected_full_refresh_heading=True,
         ),
+        DisplayFullRefreshTestCase(
+            description="permanent table type marks a permanent table",
+            config_values={"materialized": "table", "table_type": "permanent"},
+            cli_full_refresh=False,
+            expected_action=PlanAction.CREATE_TABLE,
+            expected_reason=PlanReason.NO_CHANGE,
+            expected_full_refresh_heading=False,
+            expected_permanent_table=True,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -94,6 +103,7 @@ def test_given_incremental_override_when_building_display_plan_then_uses_effecti
     entry: ModelPlanEntry = plan.model_entries[0]
     assert entry.action == test_case.expected_action
     assert entry.reason == test_case.expected_reason
+    assert entry.permanent_table is test_case.expected_permanent_table
     rendered: str = format_plan(
         plan=plan,
         full_refresh=test_case.cli_full_refresh,

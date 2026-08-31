@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.archives.models import ArchiveEvent
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,27 @@ class JanitorDeleteCandidate:
     key: JanitorRelationKey
     relation: RelationInfo
     age_timestamp: datetime | None
+
+
+@dataclass(frozen=True)
+class JanitorArchiveCandidate:
+    """One direct relation archive or completion recovery action."""
+
+    origin_key: JanitorRelationKey
+    archive_key: JanitorRelationKey
+    requirement: ArchiveEvent
+    rename_required: bool = True
+
+
+@dataclass(frozen=True)
+class JanitorArchiveDeleteCandidate:
+    """One event-backed permanent archive deletion or recovery action."""
+
+    archive_key: JanitorRelationKey
+    requirement: ArchiveEvent
+    archive_physical_generation: str | None
+    drop_required: bool = True
+    delete_requirement: ArchiveEvent | None = None
 
 
 @dataclass(frozen=True)
@@ -142,6 +164,27 @@ class JanitorSkippedSchema:
 
 
 @dataclass(frozen=True)
+class JanitorBlockedSchema:
+    """One direct-mode target schema blocked because it contains configured sources."""
+
+    database: str | None
+    schema: str | None
+    source_names: tuple[str, ...]
+    suppressed_candidates: tuple[JanitorDeleteCandidate, ...] = field(default_factory=tuple)
+
+    def display_name(self) -> str:
+        """Render a schema display name."""
+
+        if self.database is not None and self.schema is not None:
+            return f"{self.database}.{self.schema}"
+        if self.schema is not None:
+            return self.schema
+        if self.database is not None:
+            return self.database
+        return "<default>"
+
+
+@dataclass(frozen=True)
 class JanitorWarehouseFacts:
     """Desired, discovered, and tracked relation facts for planning."""
 
@@ -157,6 +200,16 @@ class JanitorRelationClassification:
 
     candidates: tuple[JanitorDeleteCandidate, ...]
     skipped_relations: tuple[JanitorSkippedRelation, ...]
+
+
+@dataclass(frozen=True)
+class JanitorSchemaClassification:
+    """Combined relation decisions across target schemas."""
+
+    candidates: tuple[JanitorDeleteCandidate, ...]
+    skipped_relations: tuple[JanitorSkippedRelation, ...]
+    skipped_schemas: tuple[JanitorSkippedSchema, ...]
+    blocked_schemas: tuple[JanitorBlockedSchema, ...]
 
 
 @dataclass(frozen=True)
@@ -185,12 +238,27 @@ class JanitorRelationScope:
 
 
 @dataclass(frozen=True)
+class JanitorDirectModeSettings:
+    """Direct-mode archive and state-history settings."""
+
+    enabled: bool = False
+    archive_retention_days: int = 7
+    state_history_versions: int = 20
+
+
+@dataclass(frozen=True)
 class JanitorPlan:
     """Complete janitor preview and execution plan."""
 
     target_name: str | None
     retention_days: int
+    archive_retention_days: int = 7
+    direct_mode: bool = False
     candidates: tuple[JanitorDeleteCandidate, ...] = field(default_factory=tuple)
+    archive_candidates: tuple[JanitorArchiveCandidate, ...] = field(default_factory=tuple)
+    archive_delete_candidates: tuple[JanitorArchiveDeleteCandidate, ...] = field(
+        default_factory=tuple
+    )
     checkpoint_candidates: tuple[JanitorCheckpointCandidate, ...] = field(default_factory=tuple)
     detached_virtual_environment_candidates: tuple[
         JanitorDetachedVirtualEnvironmentCandidate, ...
@@ -208,6 +276,7 @@ class JanitorPlan:
     )
     skipped_relations: tuple[JanitorSkippedRelation, ...] = field(default_factory=tuple)
     skipped_schemas: tuple[JanitorSkippedSchema, ...] = field(default_factory=tuple)
+    blocked_schemas: tuple[JanitorBlockedSchema, ...] = field(default_factory=tuple)
     scanned_schema_count: int = 0
     age_metadata_supported: bool = False
 
@@ -217,6 +286,8 @@ class JanitorExecutionResult:
     """Result from deleting janitor candidates."""
 
     deleted: tuple[JanitorDeleteCandidate, ...] = field(default_factory=tuple)
+    archived: tuple[JanitorArchiveCandidate, ...] = field(default_factory=tuple)
+    deleted_archives: tuple[JanitorArchiveDeleteCandidate, ...] = field(default_factory=tuple)
     deleted_checkpoints: tuple[JanitorCheckpointCandidate, ...] = field(default_factory=tuple)
     deleted_detached_virtual_environments: tuple[
         JanitorDetachedVirtualEnvironmentCandidate, ...
