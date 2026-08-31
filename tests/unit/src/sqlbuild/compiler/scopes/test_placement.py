@@ -23,7 +23,11 @@ from sqlbuild.compiler.scopes.types import (
     ScopeDiagnosticCode,
     ScopeKind,
 )
-from tests.unit.src.sqlbuild.compiler.scopes._test_types import PlacementValidationCase
+from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
+    DeclarationChainPlacementCase,
+    DiamondLadderPlacementCase,
+    PlacementValidationCase,
+)
 
 
 @pytest.mark.parametrize(
@@ -132,6 +136,178 @@ def test_given_complete_usage_when_validating_then_exact_placement_is_enforced(
 
     assert tuple(diagnostic.code for diagnostic in result.diagnostics) == test_case.expected_codes
     assert result.completeness.runtime_usage
+    assert result.completeness.placement
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DeclarationChainPlacementCase(
+            description="diamond chain shares an intermediate consumer",
+            declarations=(
+                ("base", ScopeKind.LOCAL, "models/domain", "models/domain/_macros/base.py"),
+                ("left", ScopeKind.LOCAL, "models/domain", "models/domain/_macros/left.py"),
+                ("right", ScopeKind.LOCAL, "models/domain", "models/domain/_macros/right.py"),
+            ),
+            declaration_usages=(("base", "left"), ("base", "right")),
+            model_consumers=(("models/domain/orders.sql", ("left", "right")),),
+            expected_codes=(),
+        ),
+        DeclarationChainPlacementCase(
+            description="cyclic chain still anchors to model consumers",
+            declarations=(
+                ("alpha", ScopeKind.LOCAL, "models/domain", "models/domain/_macros/alpha.py"),
+                ("beta", ScopeKind.LOCAL, "models/domain", "models/domain/_macros/beta.py"),
+            ),
+            declaration_usages=(("alpha", "beta"), ("beta", "alpha")),
+            model_consumers=(("models/domain/orders.sql", ("beta",)),),
+            expected_codes=(),
+        ),
+        DeclarationChainPlacementCase(
+            description="over broad inherited is detected through the chain",
+            declarations=(
+                ("base", ScopeKind.INHERITED, "models/domain", "models/domain/macros/base.py"),
+                ("mid", ScopeKind.LOCAL, "models/domain", "models/domain/_macros/mid.py"),
+            ),
+            declaration_usages=(("base", "mid"),),
+            model_consumers=(("models/domain/orders.sql", ("mid",)),),
+            expected_codes=(ScopeDiagnosticCode.OVER_BROAD_INHERITED,),
+        ),
+        DeclarationChainPlacementCase(
+            description="siblings reuse the shared consumer subtree",
+            declarations=(
+                (
+                    "base_one",
+                    ScopeKind.LOCAL,
+                    "models/domain",
+                    "models/domain/_macros/base_one.py",
+                ),
+                (
+                    "base_two",
+                    ScopeKind.LOCAL,
+                    "models/domain",
+                    "models/domain/_macros/base_two.py",
+                ),
+                ("mid", ScopeKind.LOCAL, "models/domain", "models/domain/_macros/mid.py"),
+            ),
+            declaration_usages=(("base_one", "mid"), ("base_two", "mid")),
+            model_consumers=(("models/domain/orders.sql", ("mid",)),),
+            expected_codes=(),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_declaration_consumption_chains_when_validating_then_anchors_resolve_transitively(
+    test_case: DeclarationChainPlacementCase,
+) -> None:
+    identities: dict[str, DeclarationIdentity] = {
+        name: DeclarationIdentity(DeclarationKind.MACRO, name)
+        for name, _scope, _owning_path, _path in test_case.declarations
+    }
+    declarations: tuple[DeclarationRecord, ...] = tuple(
+        DeclarationRecord(
+            identity=identities[name],
+            path=path,
+            line=1,
+            column=1,
+            scope=scope,
+            ownership_root=OwnershipRoot("models", resource_kind=ResourceKind.MODEL),
+            owning_path=owning_path,
+        )
+        for name, scope, owning_path, path in test_case.declarations
+    )
+    resources: list[ResourceRecord] = []
+    usages: list[UsageRecord] = []
+    for model_path, declaration_names in test_case.model_consumers:
+        model_identity: ResourceIdentity = ResourceIdentity(
+            ResourceKind.MODEL, f"model_{len(resources)}"
+        )
+        resources.append(
+            ResourceRecord(
+                identity=model_identity,
+                path=model_path,
+                ownership_root=OwnershipRoot("models", resource_kind=ResourceKind.MODEL),
+            )
+        )
+        for declaration_name in declaration_names:
+            usages.append(UsageRecord(model_identity, identities[declaration_name]))
+    for declaration_name, consumer_name in test_case.declaration_usages:
+        usages.append(UsageRecord(identities[consumer_name], identities[declaration_name]))
+
+    result: ScopeIndex = get_placement_validated_scope_index(
+        index=ScopeIndex(
+            resources=tuple(resources),
+            declarations=declarations,
+            usages=tuple(usages),
+            completeness=ScopeCompleteness(runtime_usage=True, placement=False),
+        )
+    )
+
+    assert tuple(diagnostic.code for diagnostic in result.diagnostics) == test_case.expected_codes
+    assert result.completeness.placement
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DiamondLadderPlacementCase(
+            description="forty layer ladder", layers=40, width=2, expected_codes=()
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_deep_diamond_ladder_when_validating_then_resolution_completes(
+    test_case: DiamondLadderPlacementCase,
+) -> None:
+    identities: dict[str, DeclarationIdentity] = {}
+    for layer in range(test_case.layers):
+        for position in range(test_case.width):
+            name: str = f"d_{layer}_{position}"
+            identities[name] = DeclarationIdentity(DeclarationKind.MACRO, name)
+    declarations: tuple[DeclarationRecord, ...] = tuple(
+        DeclarationRecord(
+            identity=identity,
+            path=f"models/domain/_macros/{name}.py",
+            line=1,
+            column=1,
+            scope=ScopeKind.LOCAL,
+            ownership_root=OwnershipRoot("models", resource_kind=ResourceKind.MODEL),
+            owning_path="models/domain",
+        )
+        for name, identity in identities.items()
+    )
+    model_identity: ResourceIdentity = ResourceIdentity(ResourceKind.MODEL, "orders")
+    usages: list[UsageRecord] = []
+    for layer in range(test_case.layers - 1):
+        for position in range(test_case.width):
+            for consumer_position in range(test_case.width):
+                usages.append(
+                    UsageRecord(
+                        identities[f"d_{layer + 1}_{consumer_position}"],
+                        identities[f"d_{layer}_{position}"],
+                    )
+                )
+    for position in range(test_case.width):
+        usages.append(
+            UsageRecord(model_identity, identities[f"d_{test_case.layers - 1}_{position}"])
+        )
+
+    result: ScopeIndex = get_placement_validated_scope_index(
+        index=ScopeIndex(
+            resources=(
+                ResourceRecord(
+                    identity=model_identity,
+                    path="models/domain/orders.sql",
+                    ownership_root=OwnershipRoot("models", resource_kind=ResourceKind.MODEL),
+                ),
+            ),
+            declarations=declarations,
+            usages=tuple(usages),
+            completeness=ScopeCompleteness(runtime_usage=True, placement=False),
+        )
+    )
+
+    assert tuple(diagnostic.code for diagnostic in result.diagnostics) == test_case.expected_codes
     assert result.completeness.placement
 
 
