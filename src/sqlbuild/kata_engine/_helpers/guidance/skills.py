@@ -8,6 +8,11 @@ from pathlib import Path
 from sqlbuild.kata_engine._helpers.engine.native import render_native_owned_skill
 from sqlbuild.kata_engine._helpers.engine.ruleset import resolve_ruleset
 from sqlbuild.kata_engine._helpers.guidance.thresholds import format_threshold_lines
+from sqlbuild.kata_engine.constants import (
+    KATA_LAYOUT_RULE_PREFIXES,
+    KATA_LAYOUT_THRESHOLD_RULE_CODES,
+    KATA_THRESHOLD_RULE_PREFIX,
+)
 from sqlbuild.kata_engine.models import KataConfig, KataRule, ResolvedRuleset
 
 
@@ -59,9 +64,18 @@ def render_skills(*, config: KataConfig, project_dir: Path) -> tuple[str, str]:
             )
         for entry in config.select_star_allow:
             body.append(f"- Lone-star allowance `{','.join(entry.paths)}`: {entry.reason}")
-    if any(rule.code.startswith("SQBKX") for rule in rules):
+    if any(
+        rule.code.startswith(KATA_THRESHOLD_RULE_PREFIX)
+        or rule.code in KATA_LAYOUT_THRESHOLD_RULE_CODES
+        for rule in rules
+    ):
         body.extend(("", "## Effective Thresholds", ""))
         body.extend(format_threshold_lines(config=config))
+    if any(rule.code.startswith(KATA_LAYOUT_RULE_PREFIXES) for rule in rules):
+        body.extend(("", "## Owner Layout", ""))
+        body.append(f"- Configured levels: `{', '.join(config.layout.levels)}`")
+        body.append("- Every model owner is a leaf or a branch, never both.")
+        body.append("- Declaration-role buckets organize files without changing visibility.")
     if any(rule.code.startswith("SQBKT") for rule in rules):
         body.extend(("", "## SQL Test Paths", ""))
         body.append("- Unit tests: `tests/unit/`")
@@ -89,6 +103,15 @@ def _rule_example(*, rule: KataRule) -> str:
         "SQBKL001": "stg -> int_clean -> int_enriched -> mart; skipping layers is valid.",
         "SQBKR001": "domain__int_clean__entity or domain__mart_v__entity.",
         "SQBKR401": "MODEL (contract enforced, columns (...)); declare authoritative columns.",
+        "SQBKR501": "domain/level/owner contains models or child owners, never both.",
+        "SQBKR500": "models/<domain>/<configured-level>/model.sql resolves one domain root.",
+        "SQBKR502": "domain/level/subdomain/model.sql at the default depth of one.",
+        "SQBKR503": "barrier_trial and barrier_trial_analysis consolidate under barrier_trial.",
+        "SQBKH301": "_macros/ is flat, or every file uses one concern bucket.",
+        "SQBKH302": "_macros/normalisation/names.py uses one default bucket level.",
+        "SQBKH303": "Keep each flat role or concern bucket within its file cap.",
+        "SQBKH304": "Use temporal/ or scoring/, not utils/ or common/.",
+        "SQBKH305": "Group normalise_horse.py and normalise_person.py under normalise/.",
         "SQBKT001": "Keep unit tests in tests/unit/ and scenarios in tests/scenarios/.",
         "SQBKT002": "test_stg_orders__excludes_cancelled.sql and daily_revenue__minimal.sql.",
         "SQBKT003": "models/staging/stg_orders.sql maps to tests/unit/staging/.",

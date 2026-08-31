@@ -657,7 +657,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | SQL architecture policy | Opt-in Kata rules over compiled models with coded faults, remediations, suppressions, and custom rules | Project conventions through packages and external tooling | Built-in audits and external linting |
 | SQL transpilation | For local E2E replay into DuckDB | No | For cross-dialect model execution |
 | Python macros | `@macro()` syntax | No (Jinja only) | SQLMesh macro syntax |
-| Compiler-enforced declaration scopes | Global, inherited, local, and model-private tiers with offline `sqb scope` inspection | No lexical declaration scopes | No lexical declaration scopes |
+| Compiler-enforced declaration scopes | Project, descendant-public, exact-owner-private, and model-private tiers with offline `sqb scope` inspection | No lexical declaration scopes | No lexical declaration scopes |
 | Jinja support | No (Python macros instead) | Yes (core templating) | Yes |
 
 #### Incremental
@@ -828,7 +828,7 @@ Declared flags are routed to the right place automatically:
 | ---- | --------- | ----- |
 | `--select` / `--exclude` | dbt | dbt resolves selection (see [Selection](/concepts/dbt-compatibility/selection)). |
 | `--vars` | dbt **and** SQLBuild | The same vars feed dbt's compile and SQLBuild's own variable resolution, so both sides see identical values. |
-| `--full-refresh` | dbt **and** SQLBuild | Requests a full rebuild of selected models on both sides; nullable per-model `full_refresh` config can opt out or force it. |
+| `--full-refresh` | dbt **and** SQLBuild | Requests a full rebuild on both sides. dbt and native SQLBuild models independently apply their model-level `full_refresh` setting, including `false` opt-outs. |
 | `--threads` | dbt (`--threads`) and SQLBuild (`--concurrency`) | |
 | `--target` / `--project-dir` / `--profiles-dir` / `--profile` / `--target-path` | dbt | Standard dbt locators. |
 
@@ -3309,7 +3309,7 @@ Table promotion mode is a project setting rather than a `MODEL()` field. Staged 
 | `lookback` | Backward replay extension |
 | `append_cursor_inclusive` | Include (`true`, default) or exclude (`false`) the current append-cursor boundary |
 | `merge_exclude_columns` | Columns left unchanged by matched-row merge updates |
-| `full_refresh` | Nullable full-refresh override: unset follows `--full-refresh`, `false` opts out, and `true` forces a full refresh |
+| `full_refresh` | Optional model execution override: `false` always runs incrementally, `true` always full-refreshes, and omission follows the command |
 | `on_schema_change` | `append_new_columns`, `sync_all_columns`, `ignore`, or `fail` |
 | `replay_on_change` | `forward`, `full`, or `bounded-<duration>` |
 
@@ -4022,8 +4022,8 @@ The same visibility direction applies to scoped macros:
 - A project-wide macro cannot import a narrower macro.
 - A macro cannot import from a sibling or unrelated scope.
 
-See [Declarations and Scopes](/concepts/declaration-scopes) when macros are stored under `_macros/`
-or `_local_macros/`.
+See [Declarations and Scopes](/concepts/declaration-scopes) when macros are stored under `macros/`
+or `_macros/`.
 
 ### Macro output is final SQL
 
@@ -4526,6 +4526,33 @@ GROUP BY customer_id
 ```
 
 `merge` always requires `unique_key`. The cursor controls which upstream rows are scanned; the unique key determines how they're matched against the target.
+
+### Full-refresh overrides
+
+Incremental models can override command-level full-refresh behavior with `full_refresh`:
+
+| Model setting | Normal command | Command with `--full-refresh` |
+|---------------|----------------|-------------------------------|
+| omitted | incremental | full refresh |
+| `full_refresh false` | incremental | incremental |
+| `full_refresh true` | full refresh | full refresh |
+
+Use `full_refresh false` for models that must retain their normal cursor or microbatch execution even when a broader job requests full refresh:
+
+```sql
+MODEL (
+  materialized incremental,
+  incremental_strategy delete_insert,
+  full_refresh false,
+  cursor event_date,
+  cursor_type timestamp,
+  cursor_grain day,
+);
+```
+
+The override is evaluated per model, so one selection can contain incrementally executed opt-outs and full-refreshed models. It controls execution mode rather than acting as a safety rejection: an opted-out model does not abort the rest of the build.
+
+This does not skip initial loading. If the destination relation does not exist, an incremental or microbatch model still builds the history required by its cursor policy. Cloning an existing destination before the build can provide a current watermark and avoid a first-run historical replay.
 
 ### Cursors
 
@@ -6824,8 +6851,8 @@ decide which files can access it. No TOML configuration is required.
 | Scope | Declaration form | Visibility |
 |-------|------------------|------------|
 | Project-wide | `macros/`, `constants/`, `enums/` | Every supported SQL surface |
-| Inherited | `_macros/`, `_constants/`, `_enums/` | Owning path and every descendant |
-| Exact-local | `_local_macros/`, `_local_constants/`, `_local_enums/` | Direct children of one owning path |
+| Descendant-public | Nested `macros/`, `constants/`, `enums/` | Owning path and every descendant |
+| Exact-owner private | Nested `_macros/`, `_constants/`, `_enums/` | Direct children of one owning path |
 | Model-private | Underscore-prefixed constants and enums in `MODEL()` | One model and its inline SQL hooks |
 
 ### Example
@@ -6834,24 +6861,25 @@ The annotation beside each directory shows where its contents are available:
 
 ```text
 models/
-├── _constants/                 inherited throughout models/
+├── constants/                 published throughout models/
 │   └── warehouse.sql
 └── commerce/
-    ├── _macros/                inherited throughout commerce/
+    ├── macros/                published throughout commerce/
     │   └── currency.py
-    ├── _local_enums/           exact commerce/ directory only
+    ├── _enums/                exact commerce/ directory only
     │   └── grain.sql
     ├── orders.sql              sees warehouse, currency, and grain
     ├── finance/
-    │   ├── _macros/            inherited throughout finance/
+    │   ├── macros/            published throughout finance/
     │   │   └── tax.py
     │   └── revenue.sql         sees warehouse, currency, and tax
     └── fulfillment/
         └── shipments.sql       sees warehouse and currency
 ```
 
-An inherited directory applies at its location and below it. An exact-local directory applies only
-to SQL files directly beside it.
+A nested public role applies at its location and below it. An underscored private role applies only
+to SQL files directly beside it. The same unprefixed role name is project-wide only when it is at
+the project root.
 
 | Resource | Visible from the example tree | Not visible |
 |----------|-------------------------------|-------------|
@@ -6866,18 +6894,18 @@ Declarations do not flow upward or sideways into sibling directories.
 | Where the value is needed | Choose | Placement |
 |----------------|--------|-----------|
 | One model only | Model-private | In that model's `MODEL()` header |
-| One exact directory | Exact-local | Beside the consumers |
-| Multiple directories in one resource tree | Inherited | At their lowest common ancestor |
+| One exact directory | Exact-owner private | Beside the consumers in an underscored role |
+| Multiple directories in one resource tree | Descendant-public | At their lowest common ancestor |
 | Different resource trees, such as models and tests | Project-wide | Top-level declaration root |
 
-SQLBuild does not ask you to narrow a project-wide declaration merely because its current users are
-close together. If a declaration is already scoped, SQLBuild checks that it is placed close enough
-to the files that use it.
+SQLBuild computes the lowest common owner of every declaration's runtime consumers. A project-wide
+declaration is valid only when no narrower supported owner contains all consumers. This keeps the
+top-level roles as a genuine project API instead of a neutral dumping ground.
 
 ### Explore the feature
 
     See which declarations a model, test, hook, or function can use.
-    Choose between project-wide, inherited, exact-local, and model-private placement.
+    Choose between project-wide, descendant-public, exact-owner-private, and model-private placement.
     Ask SQLBuild what a file can use and preview how moving it would change that answer.
 
 Learn the features themselves in [Enums](/concepts/enums), [Constants](/concepts/constants), and
@@ -6892,8 +6920,8 @@ See which enums, constants, and macros are available to each SQL file.
 
 For most SQL, the rule is simple:
 
-> A file can use project-wide declarations, declarations inherited from `_.../` directories above
-> it, and declarations in a `_local_.../` directory directly beside it.
+> A file can use project-wide declarations, declarations published from unprefixed role directories
+> above it, and declarations in an underscored role directory directly beside it.
 
 ### Start from the SQL file
 
@@ -6901,12 +6929,12 @@ SQLBuild starts from the file containing the SQL and walks up that file's direct
 
 ```text
 models/
-├── _constants/                 available throughout models/
+├── constants/                 available throughout models/
 │   └── warehouse.sql
 └── commerce/
-    ├── _enums/                 available throughout commerce/
+    ├── enums/                 available throughout commerce/
     │   └── order_status.sql
-    ├── _local_constants/       available directly in commerce/ only
+    ├── _constants/       available directly in commerce/ only
     │   └── minimum_value.sql
     ├── orders.sql
     └── history/
@@ -6920,7 +6948,7 @@ From this tree:
 | `orders.sql` | `warehouse`, `order_status`, and `minimum_value` |
 | `history/archived_orders.sql` | `warehouse` and `order_status` |
 
-`minimum_value` is not available in `history/` because `_local_constants/` applies only to files
+`minimum_value` is not available in `history/` because `_constants/` applies only to files
 directly beside it.
 
 ### Supported resource trees
@@ -6937,10 +6965,10 @@ Scoped declaration directories can be placed below these SQL resource roots:
 | `audits/` | Audits |
 | `sources/` | Inline source expressions |
 
-Each root is a separate tree. For example, `models/_constants/` does not flow into `tests/`. Put a
+Each root is a separate tree. For example, `models/constants/` does not flow into `tests/`. Put a
 declaration in the top-level `constants/`, `enums/`, or `macros/` directory when it must be available
-across different resource trees. A project-root `_constants/`, `_enums/`, or `_macros/` directory is
-invalid.
+across different resource trees. Project-root `_constants/`, `_enums/`, and `_macros/` directories
+are invalid because there is no narrower project owner for them to be private to.
 
 ### Which file controls visibility?
 
@@ -6994,7 +7022,7 @@ A macro file may import another project macro file when the imported macro is av
 importing file's location. The same directory rules apply as they do to SQL.
 
 ```python
-# models/commerce/_macros/orders.py
+# models/commerce/macros/orders.py
 from macros.currency import round_money
 
 def formatted_total(expression: str) -> str:
@@ -7029,7 +7057,7 @@ Macros, enums, and constants use separate namespaces, so these three references 
 
 Source: `concepts/declaration-scopes/placement.mdx`
 
-Choose project-wide, inherited, exact-local, or model-private placement.
+Choose project-wide, descendant-public, exact-owner-private, or model-private placement.
 
 Start with the ordinary project-wide directories unless you have a reason to limit access:
 
@@ -7047,8 +7075,8 @@ folders.
 | Where it is needed | Location |
 |--------------------|----------|
 | One model only | Inside that model's `MODEL()` header, for enums and constants |
-| SQL files directly in one directory | `_local_macros/`, `_local_enums/`, or `_local_constants/` |
-| A directory and its descendants | `_macros/`, `_enums/`, or `_constants/` |
+| SQL files directly in one directory | `_macros/`, `_enums/`, or `_constants/` |
+| A directory and its descendants | `macros/`, `enums/`, or `constants/` |
 | Different trees, such as models and tests | Top-level `macros/`, `enums/`, or `constants/` |
 
 ### One directory
@@ -7058,13 +7086,13 @@ These two models use the same constant and both sit directly in `commerce/`:
 ```text
 models/
 └── commerce/
-    ├── _local_constants/
+    ├── _constants/
     │   └── minimum_value.sql
     ├── orders.sql
     └── customers.sql
 ```
 
-Use `_local_constants/` because no descendant directory needs the value.
+Use `_constants/` because no descendant directory needs the value.
 
 ### One directory tree
 
@@ -7073,7 +7101,7 @@ These models use the same constant across two child directories:
 ```text
 models/
 └── commerce/
-    ├── _constants/
+    ├── constants/
     │   └── reporting_day.sql
     ├── finance/
     │   └── revenue.sql
@@ -7081,7 +7109,7 @@ models/
         └── shipments.sql
 ```
 
-Use `_constants/` in `commerce/` so both child directories inherit it.
+Use `constants/` in `commerce/` so both child directories inherit it.
 
 ### Different resource trees
 
@@ -7097,16 +7125,17 @@ my_project/
     └── scenarios/order_lifecycle.sql
 ```
 
-Top-level placement is also valid when you deliberately want a stable, easy-to-discover project API.
-SQLBuild does not force a used project-wide declaration into a narrower directory.
+Top-level placement is valid when consumers genuinely cross ownership or resource-tree boundaries.
+SQLBuild applies the same lowest-common-owner analysis to globals, so a declaration used only under
+one narrower owner must move into that owner's public or private role.
 
 ### What SQLBuild checks
 
 Every declaration must be used by real compiled SQL. A name appearing only in a comment, quoted
 string, mock identity, or documentation does not count as use.
 
-For declarations already placed in `_.../` or `_local_.../` directories, SQLBuild checks that the
-location matches the files that use them. If not, the error shows:
+For every declaration, including project-wide declarations, SQLBuild checks that the location
+matches the lowest common owner of the files that use it. If not, the error shows:
 
 - Where the declaration is now
 - Which files use it
@@ -7139,14 +7168,14 @@ project/
 │   └── currency.py                      add_tax, round_money
 ├── models/
 │   ├── commerce/
-│   │   ├── _constants/limits.yml        minimum_order_value
-│   │   ├── _enums/status.yml            order_status
-│   │   ├── _macros/orders.py            formatted_order_total
+│   │   ├── constants/limits.yml        minimum_order_value
+│   │   ├── enums/status.yml            order_status
+│   │   ├── macros/orders.py            formatted_order_total
 │   │   ├── orders.sql
 │   │   └── returns/returns.sql
 │   └── finance/
-│       ├── _enums/status.yml            finance_status
-│       ├── _macros/margin.py            calculate_margin
+│       ├── enums/status.yml            finance_status
+│       ├── macros/margin.py            calculate_margin
 │       ├── finance_summary.sql
 │       └── reports/margin_report.sql
 └── tests/
@@ -7180,8 +7209,8 @@ Scope
   Path: models/commerce/orders.sql
 
 Used (2)
-  ├─ ● constant:minimum_order_value  [constant; inherited; inherited_ancestor; type integer]  models/commerce/_constants/limits.yml:1:1
-  └─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:4:1
+  ├─ ● constant:minimum_order_value  [constant; descendant-public; inherited_ancestor; type integer]  models/commerce/constants/limits.yml:1:1
+  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1]  models/commerce/macros/orders.py:4:1
 
 Scope chain
   ├─ local models/commerce (3)
@@ -7189,9 +7218,9 @@ Scope chain
   └─ global global (2)
 
 Available (3 of 5, 2 collapsed)
-  ├─ ● constant:minimum_order_value  [constant; inherited; inherited_ancestor; type integer]  models/commerce/_constants/limits.yml:1:1
-  ├─ ○ enum:order_status  [enum; inherited; inherited_ancestor; members 4; type VARCHAR]  models/commerce/_enums/status.yml:1:1
-  └─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:4:1
+  ├─ ● constant:minimum_order_value  [constant; descendant-public; inherited_ancestor; type integer]  models/commerce/constants/limits.yml:1:1
+  ├─ ○ enum:order_status  [enum; descendant-public; inherited_ancestor; members 4; type VARCHAR]  models/commerce/enums/status.yml:1:1
+  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1]  models/commerce/macros/orders.py:4:1
   … 2 globals collapsed; run sqb scope model:orders --globals all
 
 Diagnostics (0)
@@ -7213,9 +7242,9 @@ declarations. The expanded `Used` section is:
 ```console
 $ sqb scope model:orders --used-only --dependency-depth 1
 Used (4)
-  ├─ ● constant:minimum_order_value  [constant; inherited; inherited_ancestor; type integer]  models/commerce/_constants/limits.yml:1:1
+  ├─ ● constant:minimum_order_value  [constant; descendant-public; inherited_ancestor; type integer]  models/commerce/constants/limits.yml:1:1
   ├─ ● macro:add_tax  [macro; global; dependency; params 1]  macros/currency.py:1:1
-  ├─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:4:1
+  ├─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1]  models/commerce/macros/orders.py:4:1
   └─ ● macro:round_money  [macro; global; dependency; params 1]  macros/currency.py:5:1
 ```
 
@@ -7229,13 +7258,13 @@ ordinary report appears first; its `Explanation` section is:
 ```console
 $ sqb scope model:orders --explain macro:formatted_order_total
 Explanation
-  └─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:4:1
+  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1]  models/commerce/macros/orders.py:4:1
      Owner: (none)
      Owning path: models/commerce
      Consumers: model:orders, model:returns
      Dependencies: macro:add_tax, macro:round_money
      Grants: (none)
-     Required scope: inherited
+     Required scope: descendant-public
      Required path: models/commerce
      Promotion impact: (none)
 ```
@@ -7247,7 +7276,7 @@ explanation would then show that inherited placement is broader than necessary:
 
 ```console
 Explanation
-  └─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:4:1
+  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1]  models/commerce/macros/orders.py:4:1
      Owner: (none)
      Owning path: models/commerce
      Consumers: model:orders
@@ -7258,7 +7287,7 @@ Explanation
      Promotion impact: model:orders
 
 Diagnostics (1)
-  ERROR S008 models/commerce/_macros/orders.py: Declaration 'macro:formatted_order_total' is currently inherited at 'models/commerce' (models/commerce/_macros/orders.py); required local at 'models/commerce'. Consumers: model:orders. Move it to 'models/commerce/_local_macros/'
+  ERROR S008 models/commerce/macros/orders.py: Declaration 'macro:formatted_order_total' is currently descendant-public at 'models/commerce' (models/commerce/macros/orders.py); required exact-owner-private at 'models/commerce'. Consumers: model:orders. Move it to 'models/commerce/_macros/'
 Completeness: complete
 ```
 
@@ -7272,8 +7301,8 @@ cannot use it. The relevant section is:
 ```console
 $ sqb scope model:orders --include-nearby
 Nearby unavailable (2 of 2)
-  ├─ ○ enum:finance_status  [enum; inherited; sibling_scope; members 3; type VARCHAR]  models/finance/_enums/status.yml:1:1
-  └─ ○ macro:calculate_margin  [macro; inherited; sibling_scope; params 2]  models/finance/_macros/margin.py:4:1
+  ├─ ○ enum:finance_status  [enum; descendant-public; sibling_scope; members 3; type VARCHAR]  models/finance/enums/status.yml:1:1
+  └─ ○ macro:calculate_margin  [macro; descendant-public; sibling_scope; params 2]  models/finance/macros/margin.py:4:1
 ```
 
 The declarations are known, but `sibling_scope` means a model in `commerce/` cannot use declarations
@@ -7283,13 +7312,13 @@ report, the command adds:
 ```console
 $ sqb scope model:orders --explain macro:calculate_margin
 Explanation
-  └─ ○ macro:calculate_margin  [macro; inherited; sibling_scope; params 2]  models/finance/_macros/margin.py:4:1
+  └─ ○ macro:calculate_margin  [macro; descendant-public; sibling_scope; params 2]  models/finance/macros/margin.py:4:1
      Owner: (none)
      Owning path: models/finance
      Consumers: model:finance_summary, model:margin_report
      Dependencies: (none)
      Grants: (none)
-     Required scope: inherited
+     Required scope: descendant-public
      Required path: models/finance
      Promotion impact: (none)
 ```
@@ -7306,10 +7335,10 @@ path. The relevant report sections are:
 ```console
 $ sqb scope test:orders__completed_only --used-only
 Used (1)
-  └─ ● enum:order_status  [enum; inherited; expected_model through model:orders; members 4; type VARCHAR]  models/commerce/_enums/status.yml:1:1
+  └─ ● enum:order_status  [enum; descendant-public; expected_model through model:orders; members 4; type VARCHAR]  models/commerce/enums/status.yml:1:1
 
 Relationship grants (1 of 1)
-  └─ ● enum:order_status  [enum; inherited; expected_model through model:orders; members 4; type VARCHAR]  models/commerce/_enums/status.yml:1:1
+  └─ ● enum:order_status  [enum; descendant-public; expected_model through model:orders; members 4; type VARCHAR]  models/commerce/enums/status.yml:1:1
 ```
 
 The `expected_model through model:orders` reason identifies exactly where the additional access came
@@ -7331,12 +7360,12 @@ Move preview
     ├─ ○ macro:add_tax  [macro; global; global; params 1]  macros/currency.py:1:1
     └─ ○ macro:round_money  [macro; global; global; params 1]  macros/currency.py:5:1
   Gained (2)
-    ├─ ○ enum:finance_status  [enum; inherited; inherited_ancestor; members 3; type VARCHAR]  models/finance/_enums/status.yml:1:1
-    └─ ○ macro:calculate_margin  [macro; inherited; inherited_ancestor; params 2]  models/finance/_macros/margin.py:4:1
+    ├─ ○ enum:finance_status  [enum; descendant-public; inherited_ancestor; members 3; type VARCHAR]  models/finance/enums/status.yml:1:1
+    └─ ○ macro:calculate_margin  [macro; descendant-public; inherited_ancestor; params 2]  models/finance/macros/margin.py:4:1
   Lost (3)
-    ├─ ● constant:minimum_order_value  [constant; inherited; inherited_ancestor; type integer]  models/commerce/_constants/limits.yml:1:1
-    ├─ ○ enum:order_status  [enum; inherited; inherited_ancestor; members 4; type VARCHAR]  models/commerce/_enums/status.yml:1:1
-    └─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:4:1
+    ├─ ● constant:minimum_order_value  [constant; descendant-public; inherited_ancestor; type integer]  models/commerce/constants/limits.yml:1:1
+    ├─ ○ enum:order_status  [enum; descendant-public; inherited_ancestor; members 4; type VARCHAR]  models/commerce/enums/status.yml:1:1
+    └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1]  models/commerce/macros/orders.py:4:1
   Private retained (0)
     (none)
   Relationship retained (0)
@@ -7371,9 +7400,9 @@ Scope chain
   └─ global global (2)
 
 Available (3 of 5, 2 collapsed)
-  ├─ ○ constant:minimum_order_value  [constant; inherited; inherited_ancestor; type integer]  models/commerce/_constants/limits.yml:1:1
-  ├─ ○ enum:order_status  [enum; inherited; inherited_ancestor; members 4; type VARCHAR]  models/commerce/_enums/status.yml:1:1
-  └─ ○ macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:4:1
+  ├─ ○ constant:minimum_order_value  [constant; descendant-public; inherited_ancestor; type integer]  models/commerce/constants/limits.yml:1:1
+  ├─ ○ enum:order_status  [enum; descendant-public; inherited_ancestor; members 4; type VARCHAR]  models/commerce/enums/status.yml:1:1
+  └─ ○ macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1]  models/commerce/macros/orders.py:4:1
   … 2 globals collapsed; run sqb scope --at models/commerce/returns/new_return.sql --globals all
 
 Diagnostics (1)
@@ -7512,6 +7541,59 @@ All current built-ins form the standard policy and are enabled by matching prefi
 | `SQBKR201` | Model source suffixes and source dependency names use approved, current tokens |
 | `SQBKR301` | Referenced model identifiers follow Kata model-name grammar |
 | `SQBKR401` | Models declare `contract enforced` |
+| `SQBKR500` | Every model resolves to one configured domain root and level |
+| `SQBKR501` | Every model owner is a leaf or a branch, never both |
+| `SQBKR502` | Ownership paths stay within `max_subdomain_depth` |
+| `SQBKR503` | Compressed underscore-token prefixes do not hide implicit owners |
+
+#### Owner layout
+
+Kata treats warehouse levels as an axis beneath a genuine domain root. Levels are configurable and
+may contain more than one path component:
+
+```toml
+[kata.layout]
+levels = ["staging", "intermediate/clean", "intermediate/enriched", "mart"]
+domain_roots = ["market/betfair", "model/horsenet/ratings"]
+```
+
+`domain_roots` is optional. Without it, Kata infers the complete domain root as every path component
+between `models/` and the configured level. If more than one configured level can interpret a path,
+`SQBKR500` reports every candidate instead of guessing. Add explicit roots for those ambiguous
+trees. Level paths and explicit domain roots must be normalized, unique, and non-overlapping.
+
+The standard owner shapes are:
+
+```text
+models/<domain>/<level>/<model>.sql
+models/<domain>/<level>/<subdomain>/<model>.sql
+```
+
+At every ownership node, direct models make the node a leaf and child owners make it a branch. A
+directory may not contain both. Different branches may terminate at different depths; Kata does not
+require empty ceremonial folders merely to make paths the same length.
+
+`max_subdomain_depth` defaults to one and counts only owners after the configured level. Domain-root
+components, composite-level components, declaration roles, and declaration-role buckets do not
+count. Projects can raise the non-negative threshold explicitly:
+
+```toml
+[kata.thresholds]
+max_subdomain_depth = 2
+```
+
+Kata detects ownership hidden in flattened underscore names with a compressed token trie. Unary
+token chains remain compound terms, so `barrier_trial/` and `barrier_trial_analysis/` identify
+`barrier_trial` rather than `barrier`. Real branch points remain explicit: Salesforce annotation
+export, annotation validation, and events identify an outer `salesforce` owner and an inner
+`annotation` concern. Detection starts with two siblings by default:
+
+```toml
+[kata.thresholds]
+min_shared_owner_prefix_directories = 2
+```
+
+Set this threshold to zero to disable the prefix-family check.
 
 #### Joins
 
@@ -7539,11 +7621,39 @@ These checks use declared contract columns, not inferred output columns.
 | `SQBKH002` | Non-canonical numeric decisions use named constants |
 | `SQBKH101` | Identical enum domains are consolidated |
 | `SQBKH201` | Public enum and constant files live under domain folders |
+| `SQBKH301` | Declaration role containers are flat or fully grouped |
+| `SQBKH302` | Declaration role buckets stay within their configured depth |
+| `SQBKH303` | Flat roles and individual buckets stay within file-count caps |
+| `SQBKH304` | Buckets use specific concern names rather than generic role names |
+| `SQBKH305` | Shared filename prefixes become navigation buckets |
 
 `SQBKH001` requires direct comparisons to `@enum("<enum>").<MEMBER>`. Normalize controlled values
 upstream rather than wrapping either comparison operand. A direct source-side value may be
 normalized in the comparison because the project does not control source casing; the enum member
 must still remain unwrapped.
+
+The declaration-container rules apply to public and private `macros`, `constants`, and `enums`
+roles. A container is either flat or every file is grouped into one level of concern buckets:
+
+```text
+_macros/                       _macros/
+├── normalise_name.py          ├── normalisation/
+└── resolve_match.py           │   └── names.py
+                               └── resolution/
+                                   └── matches.py
+```
+
+Buckets are navigation only. They never change the declaration owner or compiler visibility.
+Generic buckets such as `utils`, `common`, `shared`, and `misc` fault. Defaults are:
+
+```toml
+[kata.thresholds]
+max_role_container_depth = 1
+max_macro_container_files = 10
+max_constant_container_files = 10
+max_enum_container_files = 10
+min_shared_container_prefix_files = 2
+```
 
 #### Tests and coverage
 
@@ -11788,7 +11898,7 @@ project/
 │   └── currency.py                 add_tax, round_money
 └── models/
     └── commerce/
-        ├── _macros/
+        ├── macros/
         │   └── orders.py           formatted_order_total
         ├── orders.sql
         └── returns/
@@ -11796,7 +11906,7 @@ project/
 ```
 
 ```python
-# models/commerce/_macros/orders.py
+# models/commerce/macros/orders.py
 from macros.currency import add_tax, round_money
 
 def formatted_order_total(expression: str) -> str:
@@ -11824,7 +11934,7 @@ Scope
   Path: models/commerce/orders.sql
 
 Used (1)
-  └─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:5:1
+  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1]  models/commerce/macros/orders.py:5:1
 
 Scope chain
   ├─ local models/commerce (1)
@@ -11832,7 +11942,7 @@ Scope chain
   └─ global global (2)
 
 Available (1 of 3, 2 collapsed)
-  └─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:5:1
+  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1]  models/commerce/macros/orders.py:5:1
   … 2 globals collapsed; run sqb scope model:orders --globals all
 
 Relationship grants (0 of 0)
@@ -11847,7 +11957,7 @@ Completeness: complete
 ```
 
 This answers several questions without opening declaration files: what the model actually uses,
-where that declaration came from, which exact-local and inherited directories apply, how many
+where that declaration came from, which exact-owner-private and inherited directories apply, how many
 project-wide declarations are available, and whether the result is complete.
 
 #### Follow composed macro dependencies
@@ -11865,7 +11975,7 @@ Scope
 
 Used (3)
   ├─ ● macro:add_tax  [macro; global; dependency; params 1]  macros/currency.py:1:1
-  ├─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:5:1
+  ├─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1]  models/commerce/macros/orders.py:5:1
   └─ ● macro:round_money  [macro; global; dependency; params 1]  macros/currency.py:5:1
 ```
 
@@ -11878,13 +11988,13 @@ Explain the composed macro to inspect its direct graph and placement facts:
 ```console
 $ sqb scope model:orders --explain macro:formatted_order_total
 Explanation
-  └─ ● macro:formatted_order_total  [macro; inherited; inherited_ancestor; params 1]  models/commerce/_macros/orders.py:5:1
+  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1]  models/commerce/macros/orders.py:5:1
      Owner: (none)
      Owning path: models/commerce
      Consumers: model:orders, model:returns
      Dependencies: macro:add_tax, macro:round_money
      Grants: (none)
-     Required scope: inherited
+     Required scope: descendant-public
      Required path: models/commerce
      Promotion impact: (none)
 ```
@@ -12256,7 +12366,7 @@ sqb --project-dir <path> plan [flags]
 | `--no-python` | Exclude read-side Python tasks and assets from the plan |
 | `--defer-to` | Resolve unselected model references against another target |
 | `--json` | Output the plan as JSON |
-| `--full-refresh` | Plan a full rebuild of selected models unless their model `full_refresh` config is `false` |
+| `--full-refresh` | Plan a full rebuild for selected models unless a model sets `full_refresh false`; `full_refresh true` forces a model without this flag |
 | `--start-cursor-ts` | Override start cursor for timestamp incremental models (ISO format) |
 | `--end-cursor-ts` | Override end cursor for timestamp incremental models (ISO format) |
 | `--start-cursor-int` | Override start cursor for integer incremental models |
@@ -12344,7 +12454,7 @@ sqb --project-dir <path> build [flags]
 | `--no-audits` | Skip audits |
 | `--no-python` | Skip read-side Python tasks and assets (loader-side Python still runs for selected sources) |
 | `--no-sql-validation` | Skip compile-time SQL syntax validation |
-| `--full-refresh` | Drop and rebuild selected models unless their model `full_refresh` config is `false` |
+| `--full-refresh` | Drop and rebuild selected models unless a model sets `full_refresh false`; `full_refresh true` forces a model even without this flag |
 | `--defer-to` | Resolve unselected model references against another target |
 | `--defer-sources-to` | Read managed source data from another target |
 | `--fail-fast` | Stop on first failure and skip remaining nodes |

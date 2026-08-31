@@ -6,6 +6,18 @@ pub(crate) struct NativeEvaluationTestCase {
     pub(crate) expected_faults: Value,
 }
 
+pub(crate) struct DomainLayoutTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) code: &'static str,
+    pub(crate) models: Value,
+    pub(crate) thresholds: Value,
+    pub(crate) layout: Value,
+    pub(crate) scope_index: Value,
+    pub(crate) expected_codes: &'static [&'static str],
+    pub(crate) expected_message_fragments: &'static [&'static str],
+    pub(crate) expected_absent_fragments: &'static [&'static str],
+}
+
 pub(crate) struct ThresholdEvaluationTestCase {
     pub(crate) description: &'static str,
     pub(crate) config: Value,

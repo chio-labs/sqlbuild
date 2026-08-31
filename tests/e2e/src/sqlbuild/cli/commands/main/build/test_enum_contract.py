@@ -44,7 +44,7 @@ def test_given_enum_typed_contract_when_value_is_invalid_then_build_fails_audit(
                 """
             ).strip()
             + "\n",
-            "enums/market_type.sql": "ENUM (name market_type, members [WIN, PLACE]);\n",
+            "models/_enums/market_type.sql": "ENUM (name market_type, members [WIN, PLACE]);\n",
             "models/orders.sql": dedent(
                 f"""
                 MODEL (

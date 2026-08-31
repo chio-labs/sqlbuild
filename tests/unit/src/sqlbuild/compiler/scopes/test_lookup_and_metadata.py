@@ -116,6 +116,11 @@ def test_given_typed_constant_when_projecting_default_metadata_then_value_is_abs
     )
     constant: dict[str, Any] = projection["declarations"][0]
 
+    assert projection["schema_version"] == 2
+    assert constant["role"] == "constants"
+    assert constant["visibility"] == "descendant_public"
+    assert constant["role_root"] == "models/staging/constants"
+    assert constant["bucket_path"] is None
     assert constant["metadata"]["constant"] == {
         "logical_type": "integer",
         "collection_kind": None,

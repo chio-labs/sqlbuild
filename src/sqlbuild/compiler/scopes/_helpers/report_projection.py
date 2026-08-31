@@ -217,6 +217,7 @@ def _declaration_projection(*, record: DeclarationRecord) -> dict[str, JsonValue
             "nullable": record.constant.nullable,
             "render_as": record.constant.render_as,
         }
+    role, visibility, role_root, bucket_path = _declaration_container(record=record)
     return {
         "identity": format_identity(identity=record.identity),
         "kind": record.identity.kind.value,
@@ -230,12 +231,35 @@ def _declaration_projection(*, record: DeclarationRecord) -> dict[str, JsonValue
         "line": record.line,
         "column": record.column,
         "scope": record.scope.value,
+        "role": role,
+        "visibility": visibility,
+        "role_root": role_root,
+        "bucket_path": bucket_path,
         "ownership_root": safe_scope_path(path=record.ownership_root.path),
         "owning_path": (
             safe_scope_path(path=record.owning_path) if record.owning_path is not None else None
         ),
         "metadata": metadata,
     }
+
+
+def _declaration_container(
+    *, record: DeclarationRecord
+) -> tuple[str | None, str, str | None, str | None]:
+    visibility: str = {
+        ScopeKind.GLOBAL: "project",
+        ScopeKind.INHERITED: "descendant_public",
+        ScopeKind.LOCAL: "exact_owner_private",
+        ScopeKind.PRIVATE: "model_private",
+    }[record.scope]
+    if record.scope is ScopeKind.PRIVATE:
+        return None, visibility, None, None
+    role: str = f"{record.identity.kind.value}s"
+    parts: tuple[str, ...] = tuple(safe_scope_path(path=record.path).split("/"))
+    role_index: int = len(record.owning_path.split("/")) if record.owning_path else 0
+    role_root: str = "/".join(parts[: role_index + 1])
+    bucket: str = "/".join(parts[role_index + 1 : -1])
+    return role, visibility, role_root, bucket or None
 
 
 def declaration_report(
@@ -287,6 +311,15 @@ def declaration_report(
                 ("render_as", record.constant.render_as),
             )
         )
+    role, visibility_label, role_root, bucket_path = _declaration_container(record=record)
+    metadata.extend(
+        (
+            ("role", role),
+            ("visibility_label", visibility_label),
+            ("role_root", role_root),
+            ("bucket_path", bucket_path),
+        )
+    )
     grants: tuple[str, ...] = tuple(
         sorted(
             {

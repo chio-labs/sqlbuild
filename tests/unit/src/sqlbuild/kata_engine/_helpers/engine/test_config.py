@@ -6,9 +6,10 @@ import pytest
 
 from sqlbuild.kata_engine.exceptions import KataError
 from sqlbuild.kata_engine.main.load_config import load_kata_config
-from sqlbuild.kata_engine.models import KataConfig, SqlTestPolicyConfig
+from sqlbuild.kata_engine.models import KataConfig, LayoutConfig, SqlTestPolicyConfig
 from tests.unit.src.sqlbuild.kata_engine._helpers.engine._test_types import (
     KataConfigErrorTestCase,
+    KataLayoutConfigTestCase,
     SqlTestPolicyConfigTestCase,
 )
 
@@ -16,6 +17,31 @@ from tests.unit.src.sqlbuild.kata_engine._helpers.engine._test_types import (
 @pytest.mark.parametrize(
     "test_case",
     (
+        KataConfigErrorTestCase(
+            description="empty layout levels",
+            source="[kata.layout]\nlevels = []\n",
+            expected_error_pattern="kata.layout.levels must contain at least one",
+        ),
+        KataConfigErrorTestCase(
+            description="traversing layout level",
+            source='[kata.layout]\nlevels = ["../staging"]\n',
+            expected_error_pattern="must be normalized project-relative paths",
+        ),
+        KataConfigErrorTestCase(
+            description="duplicate layout level",
+            source='[kata.layout]\nlevels = ["staging", "staging"]\n',
+            expected_error_pattern="duplicate kata layout level: staging",
+        ),
+        KataConfigErrorTestCase(
+            description="overlapping layout levels",
+            source=('[kata.layout]\nlevels = ["intermediate", "intermediate/enriched"]\n'),
+            expected_error_pattern="kata.layout.levels entries must not overlap",
+        ),
+        KataConfigErrorTestCase(
+            description="overlapping explicit domain roots",
+            source=('[kata.layout]\ndomain_roots = ["market", "market/betfair"]\n'),
+            expected_error_pattern="kata.layout.domain_roots entries must not overlap",
+        ),
         KataConfigErrorTestCase(
             description="unknown top-level key",
             source='[kata]\nselect = ["SQBKS"]\nseverity = "warn"\n',
@@ -135,3 +161,52 @@ def test_given_pipeline_directory_when_loading_then_returns_typed_relative_confi
     assert config.sql_tests == SqlTestPolicyConfig(
         pipeline_directory=test_case.expected_pipeline_directory
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        KataLayoutConfigTestCase(
+            description="custom levels and thresholds",
+            source=(
+                '[kata.layout]\nlevels = ["raw", "conformed/clean", "reporting"]\n'
+                'domain_roots = ["market/betfair", "model/horsenet/ratings"]\n'
+                "[kata.thresholds]\n"
+                "max_subdomain_depth = 2\n"
+                "min_shared_owner_prefix_directories = 2\n"
+                "max_role_container_depth = 1\n"
+                "max_macro_container_files = 12\n"
+                "max_constant_container_files = 8\n"
+                "max_enum_container_files = 6\n"
+                "min_shared_container_prefix_files = 2\n"
+            ),
+            expected_levels=("raw", "conformed/clean", "reporting"),
+            expected_thresholds={
+                "max_subdomain_depth": 2,
+                "min_shared_owner_prefix_directories": 2,
+                "max_role_container_depth": 1,
+                "max_macro_container_files": 12,
+                "max_constant_container_files": 8,
+                "max_enum_container_files": 6,
+                "min_shared_container_prefix_files": 2,
+            },
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_layout_and_thresholds_when_loading_then_returns_typed_configuration(
+    test_case: KataLayoutConfigTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        test_case.source,
+        encoding="utf-8",
+    )
+
+    config: KataConfig = load_kata_config(project_dir=tmp_path)
+
+    assert config.layout == LayoutConfig(
+        levels=test_case.expected_levels,
+        domain_roots=("market/betfair", "model/horsenet/ratings"),
+    )
+    assert config.thresholds == test_case.expected_thresholds

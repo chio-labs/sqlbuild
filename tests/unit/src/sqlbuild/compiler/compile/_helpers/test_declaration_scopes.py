@@ -64,7 +64,7 @@ sql_validation = false
         ),
         ScopedDeclarationCompileTestCase(
             "inherited declaration",
-            {"models/domain/_constants/value.sql": "CONSTANT (name value, value 2);"},
+            {"models/domain/constants/value.sql": "CONSTANT (name value, value 2);"},
             "models/domain/child/orders.sql",
             'MODEL ();\nSELECT @const("value") AS value\n',
             "SELECT 2 AS value",
@@ -72,8 +72,8 @@ sql_validation = false
         ScopedDeclarationCompileTestCase(
             "all ancestor declarations",
             {
-                "models/domain/_constants/parent.sql": "CONSTANT (name parent_value, value 2);",
-                "models/domain/child/_constants/child.sql": (
+                "models/domain/constants/parent.sql": "CONSTANT (name parent_value, value 2);",
+                "models/domain/child/constants/child.sql": (
                     "CONSTANT (name child_value, value 3);"
                 ),
             },
@@ -83,7 +83,7 @@ sql_validation = false
         ),
         ScopedDeclarationCompileTestCase(
             "local declaration",
-            {"models/domain/_local_constants/value.sql": "CONSTANT (name value, value 4);"},
+            {"models/domain/_constants/value.sql": "CONSTANT (name value, value 4);"},
             "models/domain/orders.sql",
             'MODEL ();\nSELECT @const("value") AS value\n',
             "SELECT 4 AS value",
@@ -309,13 +309,11 @@ def test_given_scoped_declaration_when_compiling_sql_surface_then_uses_authored_
         ExpectedModelDeclarationGrantTestCase(
             description="single model inherited local constant and enum",
             files={
-                "models/domain/_local_constants/inherited.sql": (
+                "models/domain/_constants/inherited.sql": (
                     "CONSTANT (name inherited_value, value 2);"
                 ),
-                "models/domain/_local_constants/local.sql": (
-                    "CONSTANT (name local_value, value 3);"
-                ),
-                "models/domain/_local_enums/state.sql": "ENUM (name state, members [OPEN, CLOSED]);",
+                "models/domain/_constants/local.sql": ("CONSTANT (name local_value, value 3);"),
+                "models/domain/_enums/state.sql": "ENUM (name state, members [OPEN, CLOSED]);",
                 "models/domain/orders.sql": "MODEL ();\nSELECT 1 AS value, 'OPEN' AS state",
                 "tests/unit/check.sql": (
                     "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
@@ -333,9 +331,9 @@ def test_given_scoped_declaration_when_compiling_sql_surface_then_uses_authored_
         ExpectedModelDeclarationGrantTestCase(
             description="multiple expected models deterministic union",
             files={
-                "models/a/_local_constants/a.sql": "CONSTANT (name a_value, value 4);",
+                "models/a/_constants/a.sql": "CONSTANT (name a_value, value 4);",
                 "models/a/a.sql": "MODEL ();\nSELECT 4 AS value",
-                "models/b/_local_constants/b.sql": "CONSTANT (name b_value, value 5);",
+                "models/b/_constants/b.sql": "CONSTANT (name b_value, value 5);",
                 "models/b/b.sql": "MODEL ();\nSELECT 5 AS value",
                 "tests/unit/check.sql": (
                     "TEST ();\nWITH __ref__a AS (SELECT 1 AS value), "
@@ -352,9 +350,9 @@ def test_given_scoped_declaration_when_compiling_sql_surface_then_uses_authored_
         ExpectedModelDeclarationGrantTestCase(
             description="test path visibility remains separate from model grant",
             files={
-                "models/domain/_local_constants/model.sql": "CONSTANT (name model_value, value 6);",
+                "models/domain/_constants/model.sql": "CONSTANT (name model_value, value 6);",
                 "models/domain/orders.sql": "MODEL ();\nSELECT 1 AS value",
-                "tests/unit/_local_constants/test.sql": "CONSTANT (name test_value, value 7);",
+                "tests/unit/_constants/test.sql": "CONSTANT (name test_value, value 7);",
                 "tests/unit/check.sql": (
                     "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
                     "__expected__orders AS (SELECT @const('model_value') + "
@@ -393,7 +391,7 @@ def test_given_scoped_declaration_when_compiling_sql_surface_then_uses_authored_
         ExpectedModelDeclarationGrantTestCase(
             description="scenario expected model grant",
             files={
-                "models/domain/_local_constants/value.sql": "CONSTANT (name scenario_value, value 10);",
+                "models/domain/_constants/value.sql": "CONSTANT (name scenario_value, value 10);",
                 "models/domain/orders.sql": "MODEL ();\nSELECT 1 AS value",
                 "tests/scenarios/check.sql": (
                     "SCENARIO ();\nWITH __ref__orders AS (SELECT 1 AS value), "
@@ -445,9 +443,7 @@ def test_given_expected_models_when_compiling_then_public_declarations_are_grant
         RelationshipUsageTestCase(
             description="expected model provenance is retained",
             files={
-                "models/domain/_local_constants/value.sql": (
-                    "CONSTANT (name model_value, value 6);"
-                ),
+                "models/domain/_constants/value.sql": ("CONSTANT (name model_value, value 6);"),
                 "models/domain/orders.sql": "MODEL ();\nSELECT 1 AS value",
                 "tests/unit/check.sql": (
                     "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
@@ -485,23 +481,16 @@ def test_given_relationship_granted_reference_when_compiling_then_usage_retains_
     "test_case",
     (
         ScopePlacementCompileTestCase(
-            description="used global remains accepted without narrowing",
-            files={
-                "constants/value.sql": "CONSTANT (name value, value 1);",
-                "models/orders.sql": 'MODEL ();\nSELECT @const("value") AS value',
-            },
-        ),
-        ScopePlacementCompileTestCase(
             description="exact local placement is accepted",
             files={
-                "models/domain/_local_constants/value.sql": ("CONSTANT (name value, value 1);"),
+                "models/domain/_constants/value.sql": ("CONSTANT (name value, value 1);"),
                 "models/domain/orders.sql": 'MODEL ();\nSELECT @const("value") AS value',
             },
         ),
         ScopePlacementCompileTestCase(
             description="inherited lowest common ancestor is accepted",
             files={
-                "models/domain/_constants/value.sql": "CONSTANT (name value, value 1);",
+                "models/domain/constants/value.sql": "CONSTANT (name value, value 1);",
                 "models/domain/a/orders.sql": 'MODEL ();\nSELECT @const("value") AS value',
                 "models/domain/b/customers.sql": 'MODEL ();\nSELECT @const("value") AS value',
             },
@@ -530,6 +519,14 @@ def test_given_exact_declaration_placement_when_assembling_then_project_is_accep
     "test_case",
     (
         ScopePlacementCompileTestCase(
+            description="used global with one owner is rejected as over broad",
+            files={
+                "constants/value.sql": "CONSTANT (name value, value 1);",
+                "models/orders.sql": 'MODEL ();\nSELECT @const("value") AS value',
+            },
+            expected_fragment="required exact-owner-private at 'models'",
+        ),
+        ScopePlacementCompileTestCase(
             description="unused global is rejected",
             files={
                 "constants/value.sql": "CONSTANT (name value, value 1);",
@@ -547,10 +544,10 @@ def test_given_exact_declaration_placement_when_assembling_then_project_is_accep
         ScopePlacementCompileTestCase(
             description="inherited declaration used in one directory must be local",
             files={
-                "models/domain/_constants/value.sql": "CONSTANT (name value, value 1);",
+                "models/domain/constants/value.sql": "CONSTANT (name value, value 1);",
                 "models/domain/orders.sql": 'MODEL ();\nSELECT @const("value") AS value',
             },
-            expected_fragment="required local at 'models/domain'",
+            expected_fragment="required exact-owner-private at 'models/domain'",
         ),
     ),
     ids=lambda case: case.description,
@@ -575,7 +572,7 @@ def test_given_invalid_declaration_placement_when_assembling_then_project_is_rej
     (
         ScopedDeclarationCompileTestCase(
             description="inherited enum contract",
-            files={"models/domain/_enums/state.sql": "ENUM (name state, members [OPEN, CLOSED]);"},
+            files={"models/domain/enums/state.sql": "ENUM (name state, members [OPEN, CLOSED]);"},
             model_path="models/domain/child/orders.sql",
             model_sql=(
                 "MODEL (contract enforced, columns (state (type state)));\n"
