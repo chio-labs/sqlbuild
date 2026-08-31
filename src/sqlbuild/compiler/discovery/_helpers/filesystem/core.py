@@ -152,6 +152,8 @@ class _DeclarationFileFacts:
 _SCOPED_DECLARATION_DIRECTORIES: frozenset[str] = (
     INHERITED_DECLARATION_DIRECTORIES | LOCAL_DECLARATION_DIRECTORIES
 )
+
+
 def _discover_declaration_file_facts(
     *, project_dir: Path, declaration_kind: DeclarationKind | None = None
 ) -> tuple[_DeclarationFileFacts, ...]:

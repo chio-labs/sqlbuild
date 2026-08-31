@@ -300,9 +300,7 @@ def test_given_broken_declaration_category_when_loading_then_other_categories_re
         {
             "sqlbuild_project.toml": _PROJECT,
             "models/orders.sql": _MODEL,
-            "models/domain/enums/_enums/broken.sql": (
-                "ENUM (name broken, members [BROKEN]);"
-            ),
+            "models/domain/enums/_enums/broken.sql": ("ENUM (name broken, members [BROKEN]);"),
             "constants/limit.sql": "CONSTANT (name limit, value 1);",
             "macros/identity.py": 'def identity():\n    return "1"\n',
         },

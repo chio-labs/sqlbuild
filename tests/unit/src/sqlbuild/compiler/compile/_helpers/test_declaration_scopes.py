@@ -312,9 +312,7 @@ def test_given_scoped_declaration_when_compiling_sql_surface_then_uses_authored_
                 "models/domain/_constants/inherited.sql": (
                     "CONSTANT (name inherited_value, value 2);"
                 ),
-                "models/domain/_constants/local.sql": (
-                    "CONSTANT (name local_value, value 3);"
-                ),
+                "models/domain/_constants/local.sql": ("CONSTANT (name local_value, value 3);"),
                 "models/domain/_enums/state.sql": "ENUM (name state, members [OPEN, CLOSED]);",
                 "models/domain/orders.sql": "MODEL ();\nSELECT 1 AS value, 'OPEN' AS state",
                 "tests/unit/check.sql": (
@@ -445,9 +443,7 @@ def test_given_expected_models_when_compiling_then_public_declarations_are_grant
         RelationshipUsageTestCase(
             description="expected model provenance is retained",
             files={
-                "models/domain/_constants/value.sql": (
-                    "CONSTANT (name model_value, value 6);"
-                ),
+                "models/domain/_constants/value.sql": ("CONSTANT (name model_value, value 6);"),
                 "models/domain/orders.sql": "MODEL ();\nSELECT 1 AS value",
                 "tests/unit/check.sql": (
                     "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "

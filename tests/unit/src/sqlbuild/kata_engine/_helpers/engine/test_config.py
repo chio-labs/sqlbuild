@@ -34,16 +34,12 @@ from tests.unit.src.sqlbuild.kata_engine._helpers.engine._test_types import (
         ),
         KataConfigErrorTestCase(
             description="overlapping layout levels",
-            source=(
-                '[kata.layout]\nlevels = ["intermediate", "intermediate/enriched"]\n'
-            ),
+            source=('[kata.layout]\nlevels = ["intermediate", "intermediate/enriched"]\n'),
             expected_error_pattern="kata.layout.levels entries must not overlap",
         ),
         KataConfigErrorTestCase(
             description="overlapping explicit domain roots",
-            source=(
-                '[kata.layout]\ndomain_roots = ["market", "market/betfair"]\n'
-            ),
+            source=('[kata.layout]\ndomain_roots = ["market", "market/betfair"]\n'),
             expected_error_pattern="kata.layout.domain_roots entries must not overlap",
         ),
         KataConfigErrorTestCase(

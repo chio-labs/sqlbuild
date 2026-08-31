@@ -8,6 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from time import perf_counter
 
+from sqlbuild.compiler.scopes.constants import SCOPE_CACHE_DIRECTORY, SCOPE_CACHE_FILENAME
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import REPO_ROOT
 
 
@@ -37,7 +38,7 @@ def run_scope_alias(
 def write_scope_performance_project(
     *, project_dir: Path, model_count: int, domain_count: int
 ) -> None:
-    """Write a valid domain-shaped project with inherited macros."""
+    """Write a valid domain-shaped project with descendant-public macros."""
 
     project_dir.mkdir(parents=True)
     (project_dir / "sqlbuild_project.toml").write_text(
@@ -49,7 +50,7 @@ def write_scope_performance_project(
         models_in_domain: int = next_model_index - first_model_index
         root_model_count: int = min(10, models_in_domain)
         domain_dir: Path = project_dir / "models" / f"domain_{domain:03d}"
-        macros_dir: Path = domain_dir / "_macros"
+        macros_dir: Path = domain_dir / "macros"
         macros_dir.mkdir(parents=True)
         macro_source: str = "\n\n".join(
             f"def domain_{domain:03d}_identity_{offset:02d}(expression: str) -> str:\n"
@@ -149,4 +150,4 @@ def median_seconds(values: tuple[float, ...]) -> float:
 def scope_cache_path(*, project_dir: Path) -> Path:
     """Return the persistent Scope Explorer cache path."""
 
-    return project_dir / "target/compile-cache/declaration-scopes-v1/scope-index.json"
+    return project_dir / SCOPE_CACHE_DIRECTORY / SCOPE_CACHE_FILENAME

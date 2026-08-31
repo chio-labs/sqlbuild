@@ -237,9 +237,7 @@ def _explanation_lines(
 ) -> list[str]:
     lines: list[str] = _declaration_lines(declarations=(declaration,), request=request, used=used)
     required_scope: str | None = (
-        _scope_label(declaration.required_scope)
-        if declaration.required_scope is not None
-        else None
+        _scope_label(declaration.required_scope) if declaration.required_scope is not None else None
     )
     facts: tuple[tuple[str, object], ...] = (
         ("Owner", declaration.owner),
