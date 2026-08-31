@@ -11,6 +11,7 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build._helpers.output import aggregate_build_result
 from sqlbuild.executor.build._helpers.retention import (
     apply_retention_phase,
+    apply_table_type_conversions,
     reconcile_retention_after_build,
 )
 from sqlbuild.executor.build.classes.build_scheduler import BuildScheduler
@@ -64,6 +65,7 @@ def execute_build_plan(
         schema_prepared=schema_prepared,
     )
 
+    _ = apply_table_type_conversions(plan=plan, adapter=adapter, connection=scheduler_connection)
     _ = apply_retention_phase(
         plan=plan,
         adapter=adapter,

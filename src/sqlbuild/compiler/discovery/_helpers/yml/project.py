@@ -55,7 +55,12 @@ from sqlbuild.spec.contracts.models import (
     StateConfig,
     TargetConfig,
 )
-from sqlbuild.spec.contracts.types import TimeTravelRetentionValue
+from sqlbuild.spec.contracts.types import (
+    TableType,
+    TableTypeDowngradePolicy,
+    TableTypeValue,
+    TimeTravelRetentionValue,
+)
 from sqlbuild.sql_values.types import CollectionRendering
 
 _SNAPSHOT_FULL_REFRESH_POLICIES: frozenset[str] = frozenset(
@@ -580,7 +585,7 @@ def _load_materialization_defaults(
         )
         _validate_allowed_keys(
             mapping=materialization_mapping,
-            allowed_keys=frozenset({"time_travel_retention"}),
+            allowed_keys=frozenset({"time_travel_retention", "table_type"}),
             label=f"materialization_defaults.{materialization}",
             file_path=file_path,
         )
@@ -591,7 +596,14 @@ def _load_materialization_defaults(
                 label=f"materialization_defaults.{materialization}.time_travel_retention",
                 file_path=file_path,
                 allow_inherit=True,
-            )
+            ),
+            table_type=_optional_table_type(
+                mapping=materialization_mapping,
+                key="table_type",
+                label=f"materialization_defaults.{materialization}.table_type",
+                file_path=file_path,
+                allow_inherit=True,
+            ),
         )
     return MaterializationDefaultsConfig(**loaded)
 
@@ -620,6 +632,40 @@ def _optional_retention_policy(
             f"{file_path} {label} must be a whole-day string like '7d'{allowed_keywords}"
         )
     return AuthoredTimeTravelRetention(desired_days=int(match.group(1)))
+
+
+def _optional_table_type(
+    *,
+    mapping: dict[str, object],
+    key: str,
+    label: str,
+    file_path: Path,
+    allow_inherit: bool = False,
+) -> TableType | None:
+    value: object | None = mapping.get(key)
+    if value is None or allow_inherit and value == TableTypeValue.INHERIT:
+        return None
+    try:
+        return TableType(value)
+    except (TypeError, ValueError) as exc:
+        suffix: str = ", or 'inherit'" if allow_inherit else ""
+        raise ProjectConfigError(
+            f"{file_path} {label} must be 'permanent' or 'transient'{suffix}"
+        ) from exc
+
+
+def _optional_table_type_downgrade_policy(
+    *, mapping: dict[str, object], key: str, label: str, file_path: Path
+) -> TableTypeDowngradePolicy | None:
+    value: object | None = mapping.get(key)
+    if value is None:
+        return None
+    try:
+        return TableTypeDowngradePolicy(value)
+    except (TypeError, ValueError) as exc:
+        raise ProjectConfigError(
+            f"{file_path} {label} must be 'deny', 'require_confirmation', or 'allow'"
+        ) from exc
 
 
 def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig]:
@@ -678,6 +724,21 @@ def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig
                 mapping=target_mapping,
                 key="owns_time_travel_retention_namespace",
                 default=False,
+            ),
+            default_table_type=_optional_table_type(
+                mapping=target_mapping,
+                key="default_table_type",
+                label=f"targets.{target_name}.default_table_type",
+                file_path=file_path,
+            ),
+            table_type_downgrade=(
+                _optional_table_type_downgrade_policy(
+                    mapping=target_mapping,
+                    key="table_type_downgrade",
+                    label=f"targets.{target_name}.table_type_downgrade",
+                    file_path=file_path,
+                )
+                or TableTypeDowngradePolicy.REQUIRE_CONFIRMATION
             ),
             clone=ClonePolicy(
                 allow_as_clone_origin=_optional_bool(
@@ -765,6 +826,18 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
                 mapping=target_mapping,
                 key="owns_time_travel_retention_namespace",
             ),
+            default_table_type=_optional_table_type(
+                mapping=target_mapping,
+                key="default_table_type",
+                label=f"targets.{target_name}.default_table_type",
+                file_path=file_path,
+            ),
+            table_type_downgrade=_optional_table_type_downgrade_policy(
+                mapping=target_mapping,
+                key="table_type_downgrade",
+                label=f"targets.{target_name}.table_type_downgrade",
+                file_path=file_path,
+            ),
             clone=LocalClonePolicy(
                 allow_as_clone_origin=_optional_nullable_bool(
                     mapping=clone_mapping,
@@ -839,6 +912,8 @@ def _validate_target_keys(
                 "compile_cache",
                 "time_travel_retention",
                 "owns_time_travel_retention_namespace",
+                "default_table_type",
+                "table_type_downgrade",
                 "clone",
                 "state",
             }

@@ -57,6 +57,7 @@ _DEFAULT_VALUES: dict[str, object] = {
     "run_tests": True,
     "run_audits": True,
     "allow_snapshot_full_refresh": False,
+    "allow_table_type_downgrade": False,
     "allow_snapshot_schema_change": False,
     "allow_partial_promotion": False,
     "allow_partial_rollback": False,
@@ -200,6 +201,7 @@ class CliNamespace:
     run_tests: bool
     run_audits: bool
     allow_snapshot_full_refresh: bool
+    allow_table_type_downgrade: bool
     allow_snapshot_schema_change: bool
     allow_partial_promotion: bool
     allow_partial_rollback: bool

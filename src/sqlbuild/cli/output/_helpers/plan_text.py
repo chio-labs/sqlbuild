@@ -84,9 +84,18 @@ _SCHEMA_CHANGE_SYMBOLS: dict[SchemaChangeKind, str] = {
 
 
 def _format_retention(*, lines: list[str], plan: PlanOutput) -> list[str]:
-    if not plan.retention_entries:
-        return lines
-    lines.append("Retention")
+    if plan.table_type_entries:
+        lines.append("Table type conversions")
+        for table_type_entry in plan.table_type_entries:
+            actual_type: str = table_type_entry.actual_type or "unknown"
+            lines.append(
+                f"  {table_type_entry.model_name} desired={table_type_entry.desired_type} "
+                f"actual={actual_type} source={table_type_entry.source}"
+            )
+            if table_type_entry.irreversible_warning is not None:
+                lines.append(f"    WARNING: {table_type_entry.irreversible_warning}")
+    if plan.retention_entries:
+        lines.append("Retention")
     for entry in plan.retention_entries:
         scope: str = ".".join(
             part

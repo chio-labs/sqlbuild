@@ -13,6 +13,9 @@ from sqlbuild.cli.commands._helpers.build_execution.run_context import (
 from sqlbuild.cli.commands._helpers.build_planning.full_refresh import (
     enforce_snapshot_full_refresh_policy,
 )
+from sqlbuild.cli.commands._helpers.build_planning.table_type import (
+    enforce_table_type_downgrade_policy,
+)
 from sqlbuild.cli.commands._helpers.compile.target_writer import write_compile_target
 from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
 from sqlbuild.cli.commands.models import BuildRunContext, VirtualBuildPlanHookConfig
@@ -44,6 +47,7 @@ class VirtualBuildPlanHook:
         self._adapter = adapter
         self._full_refresh = config.full_refresh
         self._allow_snapshot_full_refresh = config.allow_snapshot_full_refresh
+        self._allow_table_type_downgrade = config.allow_table_type_downgrade
         self._use_color = config.use_color
         self._verbose = config.verbose
         self._debug = config.debug
@@ -85,6 +89,12 @@ class VirtualBuildPlanHook:
             plan=plan_output,
             snapshots_config=self._discovered_inputs.project_config.snapshots,
             allow_snapshot_full_refresh=self._allow_snapshot_full_refresh,
+            input_stream=sys.stdin,
+            output_stream=sys.stdout,
+        )
+        enforce_table_type_downgrade_policy(
+            plan=plan_output,
+            allow_table_type_downgrade=self._allow_table_type_downgrade,
             input_stream=sys.stdin,
             output_stream=sys.stdout,
         )

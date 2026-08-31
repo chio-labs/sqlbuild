@@ -49,6 +49,7 @@ from sqlbuild.executor.run.models import (
 )
 from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.spec.contracts.types import TableType
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
 
@@ -184,6 +185,7 @@ def execute_incremental_entry(
                     staging_schema=target_schema,
                     staging_table=delta_table,
                     declared_columns=declared_columns,
+                    table_type=TableType.TRANSIENT,
                     statement_recorder=statement_recorder,
                 )
         except Exception as exc:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
+from unittest.mock import patch
 
 import pytest
 
@@ -44,6 +45,7 @@ from tests.unit.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeTableFreshnessBatchTestCase,
     SnowflakeTableFreshnessMetadataErrorTestCase,
     SnowflakeTableFreshnessMetadataTestCase,
+    SnowflakeTableTypeDdlTestCase,
 )
 from tests.unit.src.sqlbuild.adapters.snowflake.helpers import (
     FakeSnowflakeDescribeConnection,
@@ -60,6 +62,77 @@ from tests.unit.src.sqlbuild.adapters.snowflake.helpers import (
     expected_qualified_columns,
     install_fake_snowflake_connector,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeTableTypeDdlTestCase(
+            description="permanent CTAS omits transient keyword",
+            table_type="permanent",
+            expected_prefix="CREATE OR REPLACE TABLE analytics.orders AS",
+        ),
+        SnowflakeTableTypeDdlTestCase(
+            description="transient CTAS includes transient keyword",
+            table_type="transient",
+            expected_prefix="CREATE OR REPLACE TRANSIENT TABLE analytics.orders AS",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_table_type_config_when_creating_table_as_then_renders_expected_kind(
+    test_case: SnowflakeTableTypeDdlTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+    recorder: StatementRecorder = StatementRecorder()
+
+    with patch.object(adapter, "execute") as execute:
+        adapter.create_table_as(
+            connection=object(),
+            destination="analytics.orders",
+            sql="SELECT 1 AS id",
+            config={"table_type": test_case.table_type},
+            statement_recorder=recorder,
+        )
+
+    sql: str = str(execute.call_args.kwargs["sql"])
+    assert sql.startswith(test_case.expected_prefix)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeTableTypeDdlTestCase(
+            description="permanent initial snapshot omits transient keyword",
+            table_type="permanent",
+            expected_prefix="CREATE OR REPLACE TABLE analytics.orders AS",
+        ),
+        SnowflakeTableTypeDdlTestCase(
+            description="transient initial snapshot includes transient keyword",
+            table_type="transient",
+            expected_prefix="CREATE OR REPLACE TRANSIENT TABLE analytics.orders AS",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_table_type_when_rendering_initial_snapshot_then_uses_expected_kind(
+    test_case: SnowflakeTableTypeDdlTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+
+    statements: tuple[str, ...] = adapter.render_create_initial_snapshot_destination(
+        table_type=test_case.table_type,
+        destination="analytics.orders",
+        origin="analytics.orders__delta",
+        snapshot_strategy="timestamp",
+        updated_at_column="updated_at",
+        observed_at_column=None,
+        valid_from_column="valid_from",
+        valid_to_column="valid_to",
+        initial_valid_from=None,
+    )
+
+    assert statements[0].startswith(test_case.expected_prefix)
 
 
 @pytest.mark.parametrize(

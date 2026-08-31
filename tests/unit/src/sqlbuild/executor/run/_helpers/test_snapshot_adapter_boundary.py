@@ -118,6 +118,7 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
     def render_create_initial_historical_timestamp_changes_destination(
         self,
         *,
+        table_type: str,
         destination: str,
         origin: str,
         unique_key: tuple[str, ...],
@@ -127,6 +128,7 @@ class _SnapshotRenderingAdapter(DuckDbAdapter):
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
         del (
+            table_type,
             origin,
             unique_key,
             updated_at_column,

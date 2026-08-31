@@ -727,6 +727,7 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     def render_create_initial_snapshot_destination(
         self,
         *,
+        table_type: str,
         destination: str,
         origin: str,
         snapshot_strategy: str | None,
@@ -899,6 +900,7 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     def render_create_initial_historical_timestamp_snapshot_destination(
         self,
         *,
+        table_type: str,
         destination: str,
         origin: str,
         unique_key: tuple[str, ...],
@@ -924,6 +926,7 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     def render_create_initial_historical_timestamp_changes_destination(
         self,
         *,
+        table_type: str,
         destination: str,
         origin: str,
         unique_key: tuple[str, ...],
@@ -1058,6 +1061,7 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     def render_create_initial_historical_check_snapshot_destination(
         self,
         *,
+        table_type: str,
         destination: str,
         origin: str,
         unique_key: tuple[str, ...],
