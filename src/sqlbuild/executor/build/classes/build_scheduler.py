@@ -134,6 +134,7 @@ class BuildScheduler:
         callbacks: BuildCallbacks,
         customizations: BuildCustomizations,
         initial_state: BuildInitialState,
+        schema_prepared: bool,
     ) -> None:
         if runtime.promotion_mode is None:
             raise ExecutorInputError("build scheduler requires a resolved promotion mode")
@@ -145,6 +146,7 @@ class BuildScheduler:
         self._connection_config: dict[str, object] = connection_config
         self._connections: tuple[Any, ...] = connections
         self._scheduler_connection: Any = scheduler_connection
+        self._schema_prepared: bool = schema_prepared
         self._promotion_mode: TablePromotionMode = runtime.promotion_mode
         self._run_id: str = runtime.run_id
         self._runtime_dir: Path = runtime.runtime_dir
@@ -747,7 +749,7 @@ class BuildScheduler:
             connection=connection,
             runtime=self._runtime,
             callbacks=self._callbacks,
-            schema_prepared=True,
+            schema_prepared=self._schema_prepared,
         )
 
     def _execute_seed_node(self, *, key: CompiledObjectKey, connection: Any) -> SeedExecutionResult:
@@ -785,7 +787,7 @@ class BuildScheduler:
                 statement_recorder=StatementRecorder(),
                 run_id=self._run_id,
                 query_change_tracking=self._query_change_tracking,
-                schema_prepared=True,
+                schema_prepared=self._schema_prepared,
             )
         duration: int = int((time.monotonic() - start) * 1000)
         completed_result: SeedExecutionResult = dataclasses.replace(result, duration_ms=duration)
@@ -868,7 +870,7 @@ class BuildScheduler:
             statement_recorder=StatementRecorder(),
             run_id=self._run_id,
             query_change_tracking=self._query_change_tracking,
-            schema_prepared=True,
+            schema_prepared=self._schema_prepared,
         )
         duration: int = int((time.monotonic() - start) * 1000)
         return dataclasses.replace(result, duration_ms=duration)
@@ -961,7 +963,7 @@ class BuildScheduler:
                         model_audits=model_audits,
                         run_id=self._run_id,
                         query_change_tracking=self._query_change_tracking,
-                        schema_prepared=True,
+                        schema_prepared=self._schema_prepared,
                         hook_functions=self._plan.hook_functions,
                         effective_target_name=self._target,
                         effective_vars=self._effective_vars,
