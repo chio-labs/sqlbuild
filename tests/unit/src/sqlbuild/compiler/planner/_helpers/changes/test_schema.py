@@ -238,6 +238,35 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types impor
                 ),
             ),
         ),
+        DetectSchemaChangesTestCase(
+            description="unresolved star suppresses removed columns but preserves positive findings",
+            yml_columns=(),
+            inferred_columns=(
+                InferredColumn(name="amount", type="FLOAT"),
+                InferredColumn(name="loaded_at", type="TIMESTAMP"),
+            ),
+            warehouse_columns=(
+                ColumnInfo(name="id", type="INTEGER"),
+                ColumnInfo(name="amount", type="INTEGER"),
+            ),
+            type_enforcement=False,
+            inferred_schema_complete=False,
+            expected_findings=(
+                SchemaFinding(
+                    kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
+                    column_name="amount",
+                    source=SchemaColumnSource.SQLGLOT,
+                    expected_type="FLOAT",
+                    actual_type="INTEGER",
+                ),
+                SchemaFinding(
+                    kind=SchemaChangeKind.COLUMN_ADDED,
+                    column_name="loaded_at",
+                    source=SchemaColumnSource.SQLGLOT,
+                    expected_type="TIMESTAMP",
+                ),
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -249,6 +278,7 @@ def test_given_columns_when_detecting_schema_changes_then_returns_expected_findi
         inferred_columns=test_case.inferred_columns,
         warehouse_columns=test_case.warehouse_columns,
         type_enforcement=test_case.type_enforcement,
+        inferred_schema_complete=test_case.inferred_schema_complete,
     )
 
     assert result == test_case.expected_findings

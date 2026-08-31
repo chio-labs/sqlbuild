@@ -208,6 +208,7 @@ def detect_model_changes(
             inferred_columns=inferred_columns,
             warehouse_columns=warehouse_columns,
             type_enforcement=type_enforcement,
+            inferred_schema_complete=not model.fast_lineage_has_star,
         )
         if schema_findings:
             raw_policy = get_config_str(model=model, key="replay_on_change")

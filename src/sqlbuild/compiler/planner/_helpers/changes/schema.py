@@ -15,6 +15,7 @@ def detect_schema_changes(
     inferred_columns: tuple[InferredColumn, ...] | None,
     warehouse_columns: tuple[ColumnInfo, ...],
     type_enforcement: bool,
+    inferred_schema_complete: bool,
 ) -> tuple[SchemaFinding, ...]:
     """Compare yml and inferred columns against warehouse columns and return findings."""
 
@@ -64,18 +65,21 @@ def detect_schema_changes(
         for col_ne in yml_columns:
             seen_names.add(col_ne.name)
 
-    col_name: str
-    col_type: str
-    for col_name, col_type in warehouse_map.items():
-        if col_name not in seen_names:
-            findings.append(
-                SchemaFinding(
-                    kind=SchemaChangeKind.COLUMN_REMOVED,
-                    column_name=col_name,
-                    source=SchemaColumnSource.YML if yml_columns else SchemaColumnSource.SQLGLOT,
-                    actual_type=col_type,
+    if type_enforcement or inferred_schema_complete:
+        col_name: str
+        col_type: str
+        for col_name, col_type in warehouse_map.items():
+            if col_name not in seen_names:
+                findings.append(
+                    SchemaFinding(
+                        kind=SchemaChangeKind.COLUMN_REMOVED,
+                        column_name=col_name,
+                        source=(
+                            SchemaColumnSource.YML if yml_columns else SchemaColumnSource.SQLGLOT
+                        ),
+                        actual_type=col_type,
+                    )
                 )
-            )
 
     return tuple(findings)
 
