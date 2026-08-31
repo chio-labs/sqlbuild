@@ -24,6 +24,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import RetentionDirection, RetentionPlanPhase
 from tests.unit.src.sqlbuild.compiler.planner._helpers.planning._test_types import (
+    PermanentRetentionPlanningTestCase,
     RetentionPlanningErrorTestCase,
     RetentionPlanningTestCase,
 )
@@ -103,6 +104,7 @@ def test_given_retention_policy_when_planning_then_orders_metadata_safely(
         adapter=adapter,
         desired_days=test_case.desired_days,
         existing_relations=_EXISTING_ORDERS,
+        config_values={},
     )
 
     entries: tuple[RetentionPlanEntry, ...] = plan_retention(
@@ -136,6 +138,7 @@ def test_given_missing_snowflake_relation_above_transient_limit_when_planning_th
         adapter=adapter,
         desired_days=test_case.desired_days,
         existing_relations={},
+        config_values={},
     )
 
     with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):
@@ -168,7 +171,65 @@ def test_given_existing_transient_snowflake_relation_above_limit_when_planning_t
         adapter=adapter,
         desired_days=test_case.desired_days,
         existing_relations=_EXISTING_ORDERS,
+        config_values={},
     )
 
     with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):
         plan_retention(runtime=runtime, warehouse=warehouse, scope=scope)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PermanentRetentionPlanningTestCase(
+            description="new explicit permanent table applies retention after creation",
+            existing_relations={},
+            observed_state=None,
+            expected_direction=RetentionDirection.APPLY_AFTER_CREATE,
+            expected_phase=RetentionPlanPhase.AFTER_CREATE,
+            expected_statements=("ALTER RETENTION",),
+        ),
+        PermanentRetentionPlanningTestCase(
+            description="transient target migration defers unsupported retention alter",
+            existing_relations=_EXISTING_ORDERS,
+            observed_state=RetentionState(
+                request_id="orders",
+                scope=RetentionScope.RELATION,
+                configured_days=1,
+                effective_days=1,
+                is_transient=True,
+            ),
+            expected_direction=RetentionDirection.APPLY_AFTER_CREATE,
+            expected_phase=RetentionPlanPhase.AFTER_CREATE,
+            expected_statements=(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_explicit_permanent_table_when_planning_long_retention_then_defers_until_migration(
+    test_case: PermanentRetentionPlanningTestCase,
+) -> None:
+    adapter: Mock = Mock(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
+    adapter.inspect_retention.return_value = test_case.observed_state
+    adapter.render_retention_changes.return_value = (
+        RenderedRetentionChange(
+            phase=RetentionChangePhase.ALTER,
+            statements=("ALTER RETENTION",),
+        ),
+    )
+    runtime, warehouse, scope = build_retention_planner_inputs(
+        adapter=adapter,
+        desired_days=30,
+        existing_relations=test_case.existing_relations,
+        config_values={"table_type": "permanent"},
+    )
+
+    entries: tuple[RetentionPlanEntry, ...] = plan_retention(
+        runtime=runtime,
+        warehouse=warehouse,
+        scope=scope,
+    )
+
+    assert entries[0].direction == test_case.expected_direction
+    assert entries[0].phase == test_case.expected_phase
+    assert entries[0].statements == test_case.expected_statements

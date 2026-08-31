@@ -28,6 +28,7 @@ def build_retention_planner_inputs(
     adapter: Any,
     desired_days: int,
     existing_relations: dict[str, RelationInfo],
+    config_values: dict[str, object],
 ) -> tuple[PlannerRuntime, PlannerWarehouseState, PlannerScope]:
     key: CompiledObjectKey = CompiledObjectKey(
         resource_type=CompiledResourceType.MODEL,
@@ -40,11 +41,12 @@ def build_retention_planner_inputs(
         relative_path=Path("models/orders.sql"),
         query_sql="SELECT 1 AS order_id",
         config=CompileModelConfig(
+            values=config_values,
             time_travel_retention=ResolvedTimeTravelRetention(
                 desired_days=desired_days,
                 unmanaged=False,
                 source=TimeTravelRetentionSource.MODEL,
-            )
+            ),
         ),
         destination=CompiledRelationLocation(
             database="warehouse",

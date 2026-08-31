@@ -10,6 +10,8 @@ class DatabricksRetentionTestCase:
     desired_days: int
     observed_row: tuple[object, ...]
     expected_effective_days: int
+    expected_log_days: int
+    expected_deleted_days: int
     expected_sql: str
 
 

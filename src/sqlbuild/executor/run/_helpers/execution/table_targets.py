@@ -9,7 +9,13 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
+from sqlbuild.compiler.planner.main.scenarios.fit_artifact_logical_name import (
+    fit_artifact_logical_name,
+)
 from sqlbuild.compiler.planner.models import ModelPlanEntry
+from sqlbuild.executor.run._helpers.execution.permanent_promotion import (
+    permanent_model_identity,
+)
 from sqlbuild.executor.run.models import TableTargets
 
 
@@ -19,7 +25,16 @@ def resolve_table_targets(*, adapter: BaseAdapter, entry: ModelPlanEntry) -> Tab
     target_database: str | None = entry.destination.database
     target_schema: str | None = entry.destination.schema
     target_table: str = entry.destination.name
-    staging_table: str = f"{target_table}__staging"
+    if entry.permanent_table:
+        staging_prefix: str = f"{target_table}__staging__"
+        staging_table: str = fit_artifact_logical_name(
+            logical_name=permanent_model_identity(entry)[:16],
+            fixed_prefix=staging_prefix,
+            identifier_limit=adapter.maximum_identifier_length(),
+            artifact_label="Permanent staging",
+        )
+    else:
+        staging_table = f"{target_table}__staging"
     return TableTargets(
         target_qualified=resolve_relation_location_qualified_name(
             adapter=adapter, location=entry.destination

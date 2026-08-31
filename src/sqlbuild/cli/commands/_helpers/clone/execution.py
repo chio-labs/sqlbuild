@@ -86,6 +86,10 @@ def execute_clone_plan(
                 destination_retention_requests=build_destination_retention_requests(
                     project=preparation.pipeline_result.destination_project,
                     adapter_name=invocation.adapter_name,
+                    selected_model_names=frozenset(
+                        entry.name
+                        for entry in preparation.pipeline_result.destination_model_entries
+                    ),
                     namespace_owned=resolve_target_config(
                         project_config=invocation.discovered_inputs.project_config,
                         local_config=invocation.discovered_inputs.local_config,

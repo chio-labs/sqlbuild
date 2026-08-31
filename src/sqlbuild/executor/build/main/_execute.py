@@ -9,7 +9,10 @@ from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.planner.types import RetentionPlanPhase
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build._helpers.output import aggregate_build_result
-from sqlbuild.executor.build._helpers.retention import apply_retention_phase
+from sqlbuild.executor.build._helpers.retention import (
+    apply_retention_phase,
+    reconcile_retention_after_build,
+)
 from sqlbuild.executor.build.classes.build_scheduler import BuildScheduler
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
@@ -95,10 +98,9 @@ def execute_build_plan(
         end_audit_results=end_audit_results,
     )
     if result.status == BuildStatus.SUCCESS:
-        _ = apply_retention_phase(
+        _ = reconcile_retention_after_build(
             plan=plan,
             adapter=adapter,
             connection=scheduler_connection,
-            phase=RetentionPlanPhase.POST,
         )
     return result

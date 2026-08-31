@@ -24,6 +24,7 @@ from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_co
 from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention, TargetConfig
 
 _DECREASE_WARNING: str = "Retention decreases are irreversible once warehouse history expires."
+_PERMANENT_TABLE_TYPE: str = "permanent"
 
 
 def plan_retention(
@@ -73,8 +74,13 @@ def _plan_relation_retention(
         name=model.destination.name,
         desired_days=desired_days,
     )
+    permanent_table: bool = model.config.values.get("table_type") == _PERMANENT_TABLE_TYPE
     if model.name not in warehouse.snapshot.existing_relations:
-        if runtime.adapter.adapter_name == BuiltinAdapter.SNOWFLAKE and desired_days > 1:
+        if (
+            runtime.adapter.adapter_name == BuiltinAdapter.SNOWFLAKE
+            and desired_days > 1
+            and not permanent_table
+        ):
             raise PlannerInputError(
                 f"model '{model.name}': new Snowflake tables are transient and cannot retain "
                 f"time travel for {desired_days} days; configure an explicit permanent-table "
@@ -98,6 +104,17 @@ def _plan_relation_retention(
         connection=runtime.connection, request=request
     )
     if state.is_transient and desired_days > 1:
+        if permanent_table:
+            return (
+                _entry(
+                    request=request,
+                    model_names=(model.name,),
+                    state=state,
+                    source=source,
+                    direction=RetentionDirection.APPLY_AFTER_CREATE,
+                    phase=RetentionPlanPhase.AFTER_CREATE,
+                ),
+            )
         raise PlannerInputError(
             f"model '{model.name}': Snowflake transient tables cannot retain time travel for "
             f"{desired_days} days; use 0d or 1d, or make the table permanent"

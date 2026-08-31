@@ -32,3 +32,10 @@ class CloneNamespaceRetentionPhaseTestCase:
     effective_days: int
     phase: RetentionPlanPhase
     expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CloneRetentionSelectionTestCase:
+    description: str
+    selected_model_names: frozenset[str]
+    expected_request_names: tuple[str, ...]

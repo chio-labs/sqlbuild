@@ -471,6 +471,34 @@ def test_given_archive_requirement_and_origin_when_planning_then_retries_same_re
             expected_archive_rename_required=(),
             expected_delete_drop_required=(False,),
         ),
+        JanitorArchiveRecoveryTestCase(
+            description="archive keeps immutable retention after project setting decreases",
+            relation_infos=(
+                relation_info(ARCHIVE_EVENT_TABLE_NAME, created_at=OLD_TIME),
+                relation_info(
+                    "__sqb_archive__20260101T000000000000Z__old_orders",
+                    created_at=OLD_TIME,
+                ),
+            ),
+            events=(
+                archive_event_for_test(
+                    event_id="requirement",
+                    record_type=ArchiveRecordType.REQUIREMENT,
+                    source_generation=OLD_TIME.isoformat(),
+                    retention_days=30,
+                ),
+                archive_event_for_test(
+                    event_id="completion",
+                    record_type=ArchiveRecordType.COMPLETION,
+                    source_generation=OLD_TIME.isoformat(),
+                    archive_generation=OLD_TIME.isoformat(),
+                    completed_at=datetime.now(UTC) - timedelta(days=10),
+                    retention_days=30,
+                ),
+            ),
+            expected_archive_rename_required=(),
+            expected_delete_drop_required=(),
+        ),
     ],
     ids=lambda case: case.description,
 )

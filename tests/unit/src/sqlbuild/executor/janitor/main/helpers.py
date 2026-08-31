@@ -528,6 +528,7 @@ def archive_event_for_test(
     source_generation: str | None,
     archive_generation: str | None = None,
     completed_at: datetime | None = None,
+    retention_days: int | None = 0,
 ) -> ArchiveEvent:
     requested_at: datetime = datetime(2026, 1, 1, tzinfo=UTC)
     return ArchiveEvent(
@@ -546,6 +547,7 @@ def archive_event_for_test(
         provenance_status=ArchiveProvenanceStatus.KNOWN,
         requested_at=requested_at,
         completed_at=completed_at,
+        retention_days=retention_days,
         created_at=requested_at,
     )
 

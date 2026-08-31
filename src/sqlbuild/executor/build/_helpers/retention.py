@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RenderedRetentionChange, RetentionState
-from sqlbuild.adapter.contract.types import RetentionScope
+from sqlbuild.adapter.contract.types import RetentionChangePhase, RetentionScope
 from sqlbuild.compiler.planner.models import PlanOutput, RetentionPlanEntry
 from sqlbuild.compiler.planner.types import RetentionPlanPhase
 
@@ -49,9 +49,56 @@ def reconcile_model_retention(
         )
         change: RenderedRetentionChange
         for change in changes:
+            if not _safe_before_build_success(entry=entry, state=state, change=change):
+                continue
             _execute_statements(
                 adapter=adapter, connection=connection, statements=change.statements
             )
+
+
+def reconcile_retention_after_build(
+    *, plan: PlanOutput, adapter: BaseAdapter, connection: Any
+) -> None:
+    """Converge all remaining retention drift after the full build succeeds."""
+
+    for entry in plan.retention_entries:
+        if entry.phase == RetentionPlanPhase.NONE:
+            continue
+        state: RetentionState = adapter.inspect_retention(
+            connection=connection,
+            request=entry.request,
+        )
+        if _state_matches(entry=entry, state=state):
+            continue
+        changes: tuple[RenderedRetentionChange, ...] = adapter.render_retention_changes(
+            request=entry.request,
+            state=state,
+        )
+        for change in changes:
+            _execute_statements(
+                adapter=adapter,
+                connection=connection,
+                statements=change.statements,
+            )
+
+
+def _safe_before_build_success(
+    *, entry: RetentionPlanEntry, state: RetentionState, change: RenderedRetentionChange
+) -> bool:
+    if change.phase == RetentionChangePhase.FINALIZE:
+        return False
+    if change.phase == RetentionChangePhase.PREPARE:
+        return True
+    desired_days: int = entry.request.desired_days
+    values: tuple[int, ...] = tuple(
+        value
+        for value in (
+            state.delta_log_retention_days,
+            state.delta_deleted_file_retention_days,
+        )
+        if value is not None
+    ) or (state.effective_days,)
+    return all(value <= desired_days for value in values)
 
 
 def _state_matches(*, entry: RetentionPlanEntry, state: RetentionState) -> bool:

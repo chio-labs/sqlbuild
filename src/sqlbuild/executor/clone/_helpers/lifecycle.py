@@ -49,7 +49,7 @@ def finish_clone(
 ) -> CloneExecutionResult:
     """Apply namespace decreases only after every clone item succeeds."""
 
-    if all(result.status == CloneStatus.SUCCESS for result in results):
+    if results and all(result.status == CloneStatus.SUCCESS for result in results):
         _ = apply_clone_namespace_retention_phase(
             requests=inputs.destination_retention_requests,
             adapter=inputs.adapter,

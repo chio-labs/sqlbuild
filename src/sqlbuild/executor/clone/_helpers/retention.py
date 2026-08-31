@@ -18,32 +18,50 @@ from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention
 
 
 def build_clone_retention_requests(
-    *, project: CompiledProject, adapter_name: str, namespace_owned: bool
+    *,
+    project: CompiledProject,
+    adapter_name: str,
+    namespace_owned: bool,
+    selected_model_names: frozenset[str] | None = None,
 ) -> dict[str, RetentionRequest]:
     """Build requests exclusively from destination compiled model policies."""
 
     requests: dict[str, RetentionRequest] = {}
+    selected_names: frozenset[str] = (
+        frozenset(model.name for model in project.models)
+        if selected_model_names is None
+        else selected_model_names
+    )
+    selected_namespace_scopes: frozenset[tuple[str | None, str]] = frozenset(
+        (model.destination.database, model.destination.schema)
+        for model in project.models
+        if model.name in selected_names and model.destination.schema is not None
+    )
     namespace_values: dict[tuple[str | None, str], int] = {}
     for model in project.models:
         policy: ResolvedTimeTravelRetention = model.config.time_travel_retention
         if policy.unmanaged or policy.desired_days is None or model.destination.schema is None:
             continue
         if adapter_name == BuiltinAdapter.BIGQUERY:
+            scope_key: tuple[str | None, str] = (
+                model.destination.database,
+                model.destination.schema,
+            )
+            if scope_key not in selected_namespace_scopes:
+                continue
             if not namespace_owned:
                 raise ExecutorInputError(
                     "BigQuery clone retention requires destination target "
                     "owns_time_travel_retention_namespace = true"
                 )
-            scope_key: tuple[str | None, str] = (
-                model.destination.database,
-                model.destination.schema,
-            )
             previous: int | None = namespace_values.get(scope_key)
             if previous is not None and previous != policy.desired_days:
                 raise ExecutorInputError(
                     f"BigQuery destination dataset {scope_key} has conflicting retention values"
                 )
             namespace_values[scope_key] = policy.desired_days
+            if model.name not in selected_names:
+                continue
             requests[model.name] = RetentionRequest(
                 request_id=model.name,
                 scope=RetentionScope.NAMESPACE,
@@ -51,6 +69,8 @@ def build_clone_retention_requests(
                 schema=model.destination.schema,
                 desired_days=policy.desired_days,
             )
+            continue
+        if model.name not in selected_names:
             continue
         requests[model.name] = RetentionRequest(
             request_id=model.name,

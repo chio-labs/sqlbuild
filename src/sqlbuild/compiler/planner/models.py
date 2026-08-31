@@ -634,6 +634,7 @@ class ModelPlanEntry:
     fingerprint_query_sql: str
     resolved_sql: str
     logical_ddl: str
+    permanent_table: bool = False
     incremental_strategy: str | None = None
     incremental_mode: str | None = None
     cursor_column: str | None = None

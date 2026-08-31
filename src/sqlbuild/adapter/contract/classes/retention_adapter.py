@@ -30,3 +30,16 @@ class RetentionAdapterMixin:
         raise AdapterUserError(
             message=f"adapter '{self.adapter_name}' does not support retention changes"
         )
+
+    def render_create_permanent_table_from_relation(
+        self, *, destination: str, origin: str
+    ) -> tuple[str, ...]:
+        return self.render_create_permanent_table_as(
+            destination=destination, sql=f"SELECT * FROM {origin}"
+        )
+
+    def render_create_permanent_table_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
+        del destination, sql
+        raise AdapterUserError(
+            message=f"adapter '{self.adapter_name}' does not support permanent-table migration"
+        )

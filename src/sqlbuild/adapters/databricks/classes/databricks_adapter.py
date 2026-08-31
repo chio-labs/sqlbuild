@@ -70,6 +70,8 @@ from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.adapters.databricks.classes.databricks_connection import _DatabricksConnection
 from sqlbuild.adapters.databricks.constants import (
+    DELTA_DEFAULT_DELETED_FILE_RETENTION_DAYS,
+    DELTA_DEFAULT_LOG_RETENTION_DAYS,
     DELTA_RELATION_FORMAT,
     NON_ROW_RESULT_COLUMN_NAMES,
     TABLE_RELATION_METADATA_TYPES,
@@ -121,10 +123,17 @@ class DatabricksAdapter(MicrobatchMixin, BaseAdapter):
             )
         properties: dict[str, object] = self._delta_properties(detail.get("properties"))
         log_days: int = self._parse_delta_retention_days(
-            value=properties.get("delta.logRetentionDuration"), property_name="log"
+            value=properties.get(
+                "delta.logRetentionDuration",
+                f"interval {DELTA_DEFAULT_LOG_RETENTION_DAYS} days",
+            ),
+            property_name="log",
         )
         deleted_days: int = self._parse_delta_retention_days(
-            value=properties.get("delta.deletedFileRetentionDuration"),
+            value=properties.get(
+                "delta.deletedFileRetentionDuration",
+                f"interval {DELTA_DEFAULT_DELETED_FILE_RETENTION_DAYS} days",
+            ),
             property_name="deleted file",
         )
         return RetentionState(
@@ -219,13 +228,28 @@ class DatabricksAdapter(MicrobatchMixin, BaseAdapter):
     @staticmethod
     def _parse_delta_retention_days(*, value: object, property_name: str) -> int:
         match: re.Match[str] | None = re.fullmatch(
-            r"\s*interval\s+(\d+)\s+days?\s*", str(value), flags=re.IGNORECASE
+            r"\s*interval\s+(\d+)\s+(hours?|days?|weeks?)\s*",
+            str(value),
+            flags=re.IGNORECASE,
         )
         if match is None:
             raise AdapterUserError(
                 message=f"Databricks Delta {property_name} retention is missing or unparseable"
             )
-        return int(match.group(1))
+        amount: int = int(match.group(1))
+        unit: str = match.group(2).lower()
+        if unit.startswith("week"):
+            return amount * 7
+        if unit.startswith("hour"):
+            if amount % 24 != 0:
+                raise AdapterUserError(
+                    message=(
+                        f"Databricks Delta {property_name} retention is not a whole-day interval: "
+                        f"{value!r}"
+                    )
+                )
+            return amount // 24
+        return amount
 
     @staticmethod
     def _delta_properties(value: object) -> dict[str, object]:

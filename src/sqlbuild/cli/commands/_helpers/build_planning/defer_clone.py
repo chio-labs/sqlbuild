@@ -267,6 +267,9 @@ def run_defer_clone_prephase(
                     destination_retention_requests=build_destination_retention_requests(
                         project=clone_pipeline.destination_project,
                         adapter_name=adapter.adapter_name,
+                        selected_model_names=frozenset(
+                            entry.name for entry in clone_pipeline.destination_model_entries
+                        ),
                         namespace_owned=resolve_target_config(
                             project_config=discovered_inputs.project_config,
                             local_config=discovered_inputs.local_config,

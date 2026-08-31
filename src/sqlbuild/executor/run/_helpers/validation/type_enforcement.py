@@ -19,6 +19,7 @@ def enforce_types_staged(
     staging_table: str,
     declared_columns: tuple[ColumnInfo, ...],
     statement_recorder: StatementRecorder,
+    permanent_table: bool = False,
 ) -> None:
     """Inspect staging columns and rebuild with casts for declared types."""
 
@@ -59,12 +60,28 @@ def enforce_types_staged(
 
     projection_sql: str = ", ".join(projection_parts)
     enforced_qualified: str = f"{staging_qualified}__enforced"
-    adapter.create_table_as(
-        connection=connection,
-        destination=enforced_qualified,
-        sql=f"SELECT {projection_sql} FROM {staging_qualified}",
-        statement_recorder=statement_recorder,
-    )
+    enforced_sql: str = f"SELECT {projection_sql} FROM {staging_qualified}"
+    if permanent_table:
+        adapter.drop(
+            connection=connection,
+            destination=enforced_qualified,
+            if_exists=True,
+            statement_recorder=statement_recorder,
+        )
+        statements: tuple[str, ...] = adapter.render_create_permanent_table_as(
+            destination=enforced_qualified, sql=enforced_sql
+        )
+        statement_recorder.record_many(statements)
+        statement: str
+        for statement in statements:
+            adapter.execute(connection=connection, sql=statement)
+    else:
+        adapter.create_table_as(
+            connection=connection,
+            destination=enforced_qualified,
+            sql=enforced_sql,
+            statement_recorder=statement_recorder,
+        )
     adapter.drop(
         connection=connection,
         destination=staging_qualified,

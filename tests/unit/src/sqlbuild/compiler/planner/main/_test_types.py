@@ -36,6 +36,13 @@ class ExternalBlockedPlanOutputTestCase:
 
 
 @dataclass(frozen=True)
+class PermanentTablePlanEntryTestCase:
+    description: str
+    config_values: dict[str, object]
+    expected_permanent_table: bool
+
+
+@dataclass(frozen=True)
 class DirectInputBaselineTestCase:
     description: str
     models_by_name: dict[str, str]

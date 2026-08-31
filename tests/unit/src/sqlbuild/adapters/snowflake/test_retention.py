@@ -9,7 +9,10 @@ from sqlbuild.adapter.contract.models import (
 )
 from sqlbuild.adapter.contract.types import RetentionChangePhase, RetentionScope
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from tests.unit.src.sqlbuild.adapters.snowflake._test_types import SnowflakeRetentionTestCase
+from tests.unit.src.sqlbuild.adapters.snowflake._test_types import (
+    SnowflakePermanentCopyTestCase,
+    SnowflakeRetentionTestCase,
+)
 from tests.unit.src.sqlbuild.adapters.snowflake.helpers import (
     FakeSnowflakeMetadataConnection,
     FakeSnowflakeMetadataCursor,
@@ -57,3 +60,31 @@ def test_given_snowflake_relation_when_managing_retention_then_observes_and_rend
     assert changes[0].statements == (test_case.expected_sql,)
     assert cursor.executed_sql is not None
     assert "retention_time, is_transient" in cursor.executed_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakePermanentCopyTestCase(
+            description="permanent migration copy is exclusive",
+            destination="racing.mart.results",
+            origin="racing.mart.__sqb_staging__results",
+            expected_sql=(
+                "CREATE TABLE racing.mart.results AS SELECT * FROM "
+                "racing.mart.__sqb_staging__results"
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_verified_staging_when_rendering_permanent_copy_then_never_replaces(
+    test_case: SnowflakePermanentCopyTestCase,
+) -> None:
+    statements: tuple[str, ...] = SnowflakeAdapter().render_create_permanent_table_from_relation(
+        destination=test_case.destination,
+        origin=test_case.origin,
+    )
+
+    assert statements == (test_case.expected_sql,)
+    assert "OR REPLACE" not in statements[0]
+    assert "TRANSIENT" not in statements[0]

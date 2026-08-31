@@ -31,12 +31,46 @@ from tests.unit.src.sqlbuild.adapters.databricks.helpers import (
                 },
             ),
             expected_effective_days=7,
+            expected_log_days=30,
+            expected_deleted_days=7,
             expected_sql=(
                 "ALTER TABLE `main`.`mart`.`results` SET TBLPROPERTIES "
                 "('delta.logRetentionDuration' = 'interval 14 days', "
                 "'delta.deletedFileRetentionDuration' = 'interval 14 days')"
             ),
-        )
+        ),
+        DatabricksRetentionTestCase(
+            description="Delta defaults are used when properties are omitted",
+            desired_days=14,
+            observed_row=("delta", {}),
+            expected_effective_days=7,
+            expected_log_days=30,
+            expected_deleted_days=7,
+            expected_sql=(
+                "ALTER TABLE `main`.`mart`.`results` SET TBLPROPERTIES "
+                "('delta.logRetentionDuration' = 'interval 14 days', "
+                "'delta.deletedFileRetentionDuration' = 'interval 14 days')"
+            ),
+        ),
+        DatabricksRetentionTestCase(
+            description="Delta week intervals normalize to whole days",
+            desired_days=14,
+            observed_row=(
+                "delta",
+                {
+                    "delta.logRetentionDuration": "interval 4 weeks",
+                    "delta.deletedFileRetentionDuration": "interval 1 week",
+                },
+            ),
+            expected_effective_days=7,
+            expected_log_days=28,
+            expected_deleted_days=7,
+            expected_sql=(
+                "ALTER TABLE `main`.`mart`.`results` SET TBLPROPERTIES "
+                "('delta.logRetentionDuration' = 'interval 14 days', "
+                "'delta.deletedFileRetentionDuration' = 'interval 14 days')"
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -58,8 +92,8 @@ def test_given_delta_relation_when_managing_retention_then_parses_and_renders_pr
     )
 
     assert state.effective_days == test_case.expected_effective_days
-    assert state.delta_log_retention_days == 30
-    assert state.delta_deleted_file_retention_days == 7
+    assert state.delta_log_retention_days == test_case.expected_log_days
+    assert state.delta_deleted_file_retention_days == test_case.expected_deleted_days
     assert cursor.executed_sql == "DESCRIBE DETAIL `main`.`mart`.`results`"
     assert changes[0].statements == (test_case.expected_sql,)
     assert "VACUUM" not in changes[0].statements[0]
@@ -140,6 +174,17 @@ def test_given_independent_delta_values_when_rendering_then_preserves_retention_
                 },
             ),
             expected_error_fragment="unparseable",
+        ),
+        DatabricksInvalidRetentionTestCase(
+            description="sub-day Delta interval is rejected",
+            observed_row=(
+                "delta",
+                {
+                    "delta.logRetentionDuration": "interval 25 hours",
+                    "delta.deletedFileRetentionDuration": "interval 7 days",
+                },
+            ),
+            expected_error_fragment="not a whole-day interval",
         ),
     ],
     ids=lambda case: case.description,

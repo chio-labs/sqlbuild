@@ -162,6 +162,16 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
             ),
         )
 
+    def render_create_permanent_table_from_relation(
+        self, *, destination: str, origin: str
+    ) -> tuple[str, ...]:
+        return self.render_create_permanent_table_as(
+            destination=destination, sql=f"SELECT * FROM {origin}"
+        )
+
+    def render_create_permanent_table_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
+        return (f"CREATE TABLE {destination} AS {sql}",)
+
     @staticmethod
     def _validate_relation_retention_request(*, request: RetentionRequest) -> None:
         if request.scope != RetentionScope.RELATION or request.name is None:
@@ -861,10 +871,9 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
     ) -> None:
         statements: tuple[str, ...] = self.render_swap(left=left, right=right)
         statement_recorder.record_many(statements)
-        with self.transaction(connection):
-            stmt: str
-            for stmt in statements:
-                self.execute(connection=connection, sql=stmt)
+        stmt: str
+        for stmt in statements:
+            self.execute(connection=connection, sql=stmt)
 
     def clone(
         self,
@@ -1653,7 +1662,7 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
         names: tuple[str, ...] | None = None,
     ) -> tuple[Any, ...]:
         query: str = (
-            "SELECT table_name, table_schema, table_type, is_transient "
+            "SELECT table_name, table_schema, table_type, is_transient, created, last_altered "
             f"FROM {self._information_schema_relation(database=database, name='tables')} WHERE 1=1"
         )
         params: list[str] = []
@@ -1685,6 +1694,8 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
                 is_transient=(
                     None if row[3] is None else str(row[3]).upper() == TRUE_METADATA_VALUE
                 ),
+                created_at=None if row[4] is None else row[4],
+                last_altered_at=None if row[5] is None else row[5],
             )
             for row in rows
         )

@@ -76,7 +76,6 @@ def plan_direct_archive_actions(
             physical=physical,
             adapter=adapter,
             connection=connection,
-            archive_retention_days=archive_retention_days,
             now=now,
         )
         if delete_action is not None:
@@ -172,7 +171,6 @@ def _plan_archive_deletion(
     physical: dict[JanitorRelationKey, object],
     adapter: BaseAdapter,
     connection: Any,
-    archive_retention_days: int,
     now: datetime,
 ) -> tuple[JanitorArchiveDeleteCandidate | None, JanitorSkippedRelation | None]:
     completion: ArchiveEvent = cast(ArchiveEvent, projection.completion)
@@ -196,8 +194,13 @@ def _plan_archive_deletion(
             drop_required=archive_exists,
             delete_requirement=projection.delete_requirement,
         ), None
+    if requirement.retention_days is None:
+        return None, JanitorSkippedRelation(
+            key=archive_key,
+            reason="archive requirement has no immutable retention window",
+        )
     completed_at: datetime = _aware(completion.completed_at or completion.requested_at)
-    if completed_at > now - timedelta(days=archive_retention_days):
+    if completed_at > now - timedelta(days=requirement.retention_days):
         return None, None
     if not archive_exists:
         return None, None

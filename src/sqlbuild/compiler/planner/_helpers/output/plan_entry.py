@@ -88,6 +88,7 @@ from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, Sql
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SchemaColumn, SourceEntry
 
 _MODELS_DIR_PREFIX: str = "models/"
+_PERMANENT_TABLE_TYPE: str = "permanent"
 _IDEMPOTENT_MICROBATCH_STRATEGIES: frozenset[IncrementalStrategy] = frozenset(
     (IncrementalStrategy.DELETE_INSERT, IncrementalStrategy.MERGE)
 )
@@ -548,6 +549,7 @@ def plan_model_from_change(
         fingerprint_query_sql=model.query_sql,
         resolved_sql=resolved_sql,
         logical_ddl=logical_ddl,
+        permanent_table=is_permanent_table(model),
         incremental_strategy=incremental_strategy,
         incremental_mode=incremental_mode,
         cursor_column=cursor_column,
@@ -1211,6 +1213,12 @@ def build_model_materializations(
     """Build a name-to-materialization-type lookup from planned model entries."""
 
     return {entry.name: entry.materialization_type for entry in model_entries}
+
+
+def is_permanent_table(model: CompiledModel) -> bool:
+    """Return whether a model explicitly declares a permanent table."""
+
+    return model.config.values.get("table_type") == _PERMANENT_TABLE_TYPE
 
 
 def _get_config_str(*, model: CompiledModel, key: str) -> str | None:

@@ -9,17 +9,20 @@ from sqlbuild.adapter.contract.models import (
     RetentionRequest,
     RetentionState,
 )
-from sqlbuild.adapter.contract.types import RetentionChangePhase, RetentionScope
+from sqlbuild.adapter.contract.types import BuiltinAdapter, RetentionChangePhase, RetentionScope
 from sqlbuild.compiler.planner.types import RetentionPlanPhase
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.clone._helpers.retention import (
     apply_clone_namespace_retention_phase,
     apply_clone_retention,
+    build_clone_retention_requests,
 )
 from tests.unit.src.sqlbuild.executor.clone._helpers._test_types import (
     CloneNamespaceRetentionPhaseTestCase,
+    CloneRetentionSelectionTestCase,
     CloneRetentionTestCase,
 )
+from tests.unit.src.sqlbuild.executor.clone._helpers.helpers import build_clone_retention_project
 
 
 @pytest.mark.parametrize(
@@ -185,3 +188,32 @@ def test_given_namespace_clone_policy_when_applying_phase_then_orders_dataset_ch
     assert adapter.execute.call_args_list == [
         call(connection=connection, sql=statement) for statement in test_case.expected_statements
     ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CloneRetentionSelectionTestCase(
+            description="partial clone manages only selected destination dataset",
+            selected_model_names=frozenset({"orders"}),
+            expected_request_names=("orders",),
+        ),
+        CloneRetentionSelectionTestCase(
+            description="empty clone manages no destination datasets",
+            selected_model_names=frozenset(),
+            expected_request_names=(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_partial_clone_when_building_retention_requests_then_bounds_destination_datasets(
+    test_case: CloneRetentionSelectionTestCase,
+) -> None:
+    requests: dict[str, RetentionRequest] = build_clone_retention_requests(
+        project=build_clone_retention_project(),
+        adapter_name=BuiltinAdapter.BIGQUERY.value,
+        namespace_owned=True,
+        selected_model_names=test_case.selected_model_names,
+    )
+
+    assert tuple(requests) == test_case.expected_request_names

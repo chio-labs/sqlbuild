@@ -6,12 +6,17 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.compile.models import (
+    CompiledModel,
     CompiledObjectKey,
+    CompiledProject,
     CompiledRelationLocation,
+    CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import FunctionPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
+from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention
+from sqlbuild.spec.contracts.types import TimeTravelRetentionSource
 
 
 class FakeCloneAdapter(BaseAdapter):
@@ -143,5 +148,45 @@ def build_clone_function_entry(
             schema=fingerprint_schema or schema,
             name=name,
             qualified_name=f"{fingerprint_schema or schema}.{name}",
+        ),
+    )
+
+
+def build_clone_retention_project() -> CompiledProject:
+    return CompiledProject(
+        run_id="clone-retention-run",
+        effective_target_name="test",
+        effective_connection={},
+        effective_vars={},
+        models=(
+            _build_retention_model(name="orders", schema="analytics"),
+            _build_retention_model(name="customers", schema="customer_mart"),
+        ),
+    )
+
+
+def _build_retention_model(*, name: str, schema: str) -> CompiledModel:
+    key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.MODEL,
+        name=name,
+    )
+    return CompiledModel(
+        key=key,
+        deps=(),
+        name=name,
+        relative_path=Path(f"models/{name}.sql"),
+        query_sql=f"SELECT 1 AS {name}_id",
+        config=CompileModelConfig(
+            time_travel_retention=ResolvedTimeTravelRetention(
+                desired_days=7,
+                unmanaged=False,
+                source=TimeTravelRetentionSource.MODEL,
+            )
+        ),
+        destination=CompiledRelationLocation(
+            database="warehouse",
+            schema=schema,
+            name=name,
+            qualified_name=f"warehouse.{schema}.{name}",
         ),
     )
