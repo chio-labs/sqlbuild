@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.71.0](https://github.com/chio-labs/sqlbuild/compare/v0.70.0...v0.71.0) (2026-08-31)
+
+
+### Features
+
+* rebuild microbatch and snapshot full refresh aside and swap ([#440](https://github.com/chio-labs/sqlbuild/issues/440)) ([69eb2fd](https://github.com/chio-labs/sqlbuild/commit/69eb2fda787c6e3584ea51f8ec5d0553dc215848))
+
 ## [0.70.0](https://github.com/chio-labs/sqlbuild/compare/v0.69.0...v0.70.0) (2026-08-31)
 
 
