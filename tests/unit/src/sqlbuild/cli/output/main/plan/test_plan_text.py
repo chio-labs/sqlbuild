@@ -744,7 +744,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             ),
             full_refresh=True,
             expected_fragments=(
-                "Plan ready  full refresh, 1 selected, 1 source to reload",
+                "Plan ready  1 selected, 1 source to reload",
                 "Sources to reload (1)",
                 "raw_orders",
             ),

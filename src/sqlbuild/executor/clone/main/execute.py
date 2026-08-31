@@ -40,6 +40,13 @@ def _ensure_destination_schemas(
     for entry in destination_entries:
         if entry.destination.schema is not None:
             schemas.add((entry.destination.database, entry.destination.schema))
+        if (
+            isinstance(entry, FunctionPlanEntry)
+            and entry.fingerprint_destination.schema is not None
+        ):
+            schemas.add(
+                (entry.fingerprint_destination.database, entry.fingerprint_destination.schema)
+            )
     recorder: StatementRecorder = StatementRecorder()
     for database, schema in sorted(schemas, key=lambda item: (item[0] or "", item[1])):
         adapter.ensure_schema(

@@ -499,7 +499,7 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
         incremental_strategy=_optional_str(payload=mapping, key="incremental_strategy"),
         incremental_mode=_optional_str(payload=mapping, key="incremental_mode"),
         merge_exclude_columns=merge_exclude_columns,
-        allow_full_refresh=_optional_nullable_bool(mapping=mapping, key="allow_full_refresh"),
+        full_refresh=_optional_nullable_bool(mapping=mapping, key="full_refresh"),
         append_cursor_inclusive=_optional_templated_bool(
             mapping=mapping,
             key="append_cursor_inclusive",

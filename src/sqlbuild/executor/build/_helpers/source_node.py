@@ -34,6 +34,7 @@ def execute_build_source_node(
     connection: Any,
     runtime: BuildRuntimeParams,
     callbacks: BuildCallbacks,
+    schema_prepared: bool = False,
 ) -> LoadExecutionResult:
     """Execute one source-load node from the build scheduler."""
 
@@ -78,6 +79,7 @@ def execute_build_source_node(
             use_color=runtime.use_color,
             providers=runtime.providers,
             result_store=result_store,
+            schema_prepared=schema_prepared,
         ),
         statement_recorder=StatementRecorder(),
         loader_ref_entries=loader_ref_entries,

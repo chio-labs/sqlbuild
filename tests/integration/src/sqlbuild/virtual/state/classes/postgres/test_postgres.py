@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timedelta
 from typing import Any
@@ -30,13 +31,16 @@ from sqlbuild.virtual.state.models import (
     ReconcileEventRecord,
     SeedVersionRecord,
     SourceFreshnessRecord,
+    StateLockLease,
     StateLockRecord,
     StateOperationEventRecord,
     StateOperationRecord,
     StateSchemaValidationResult,
+    VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
     VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentModelRefRecord,
+    VirtualEnvironmentNodeRefRecord,
     VirtualEnvironmentPythonNodeRefRecord,
     VirtualEnvironmentRecord,
     VirtualEnvironmentSeedRefRecord,
@@ -51,7 +55,28 @@ from sqlbuild.virtual.state.types import (
     StateSchemaValidationIssueKind,
     VirtualEnvironmentStatus,
 )
+from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
+    ACTIVE_CHECKPOINT_PAYLOAD,
+    ACTIVE_PAYLOAD,
+    CHECKPOINT_DUPLICATE_PAYLOAD,
+    CHECKPOINT_ENVIRONMENT_PAYLOAD,
+    CHECKPOINT_ID_PAYLOAD,
+    DETACHED_CHECKPOINT_PAYLOAD,
+    FAILED_CHECKPOINT_PAYLOAD,
+    FINALIZING_CHECKPOINT_PAYLOAD,
+    FUNCTION_OMISSION_PAYLOAD,
+    MISSING_CHECKPOINT_PAYLOAD,
+    MODEL_VERSION_PAYLOAD,
+    PUBLISHED_DUPLICATE_PAYLOAD,
+    REF_ENVIRONMENT_PAYLOAD,
+    REF_NODE_TYPE_PAYLOAD,
+    SEED_EXTRA_PAYLOAD,
+    VALID_PAYLOAD,
+)
 from tests.integration.src.sqlbuild.virtual.state.classes.postgres._test_types import (
+    PostgresAtomicFinalizedVirtualPublishTestCase,
+    PostgresConditionalPublicationPayloadContractTestCase,
+    PostgresConditionalVirtualRefPublishTestCase,
     PostgresMicrobatchStateRoundTripTestCase,
     PostgresStateBackendColumnValidationTestCase,
     PostgresStateBackendConcurrentLockTestCase,
@@ -81,6 +106,174 @@ for state_indexes in STATE_TABLE_INDEXES.values():
     for state_index_name in state_indexes:
         EXPECTED_STATE_INDEX_NAMES.append(state_index_name)
 EXPECTED_STATE_INDEX_NAMES.sort()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresConditionalPublicationPayloadContractTestCase(
+            description="postgres exact finalized payload succeeds",
+            payload=VALID_PAYLOAD,
+            expected_valid=True,
+        ),
+        PostgresConditionalPublicationPayloadContractTestCase(
+            description="postgres active payload without checkpoint succeeds",
+            payload=ACTIVE_PAYLOAD,
+            expected_valid=True,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_valid_conditional_payload_when_postgres_publishes_then_contract_succeeds(
+    test_case: PostgresConditionalPublicationPayloadContractTestCase,
+    postgres_state_backend: PostgresStateBackend,
+    postgres_state_connection: Any,
+    postgres_state_schema: str,
+) -> None:
+    postgres_state_backend.initialize(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        sqlbuild_version="test",
+    )
+    assert (
+        postgres_state_backend.upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+            connection=postgres_state_connection,
+            schema=postgres_state_schema,
+            record=test_case.payload.record,
+            refs_by_node_type=test_case.payload.refs_by_node_type,
+            leases=(),
+            checkpoint=test_case.payload.checkpoint,
+            checkpoint_refs=test_case.payload.checkpoint_refs,
+            checkpoint_function_refs=test_case.payload.checkpoint_function_refs,
+            checkpoint_seed_refs=test_case.payload.checkpoint_seed_refs,
+        )
+        is test_case.expected_valid
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresConditionalPublicationPayloadContractTestCase(
+            "postgres finalized requires checkpoint",
+            MISSING_CHECKPOINT_PAYLOAD,
+            False,
+            "requires a checkpoint",
+        ),
+        PostgresConditionalPublicationPayloadContractTestCase(
+            "postgres active forbids complete checkpoint payload",
+            ACTIVE_CHECKPOINT_PAYLOAD,
+            False,
+            "requires finalized virtual environment status",
+        ),
+        PostgresConditionalPublicationPayloadContractTestCase(
+            "postgres finalizing forbids complete checkpoint payload",
+            FINALIZING_CHECKPOINT_PAYLOAD,
+            False,
+            "requires finalized virtual environment status",
+        ),
+        PostgresConditionalPublicationPayloadContractTestCase(
+            "postgres detached forbids complete checkpoint payload",
+            DETACHED_CHECKPOINT_PAYLOAD,
+            False,
+            "requires finalized virtual environment status",
+        ),
+        PostgresConditionalPublicationPayloadContractTestCase(
+            "postgres failed forbids complete checkpoint payload",
+            FAILED_CHECKPOINT_PAYLOAD,
+            False,
+            "requires finalized virtual environment status",
+        ),
+        PostgresConditionalPublicationPayloadContractTestCase(
+            "postgres checkpoint environment matches",
+            CHECKPOINT_ENVIRONMENT_PAYLOAD,
+            False,
+            "match the published environment",
+        ),
+        PostgresConditionalPublicationPayloadContractTestCase(
+            "postgres checkpoint ids match",
+            CHECKPOINT_ID_PAYLOAD,
+            False,
+            "checkpoint_id must match",
+        ),
+        PostgresConditionalPublicationPayloadContractTestCase(
+            "postgres model refs correspond",
+            MODEL_VERSION_PAYLOAD,
+            False,
+            "model refs must exactly match",
+        ),
+        PostgresConditionalPublicationPayloadContractTestCase(
+            "postgres function refs have no omissions",
+            FUNCTION_OMISSION_PAYLOAD,
+            False,
+            "function refs must exactly match",
+        ),
+        PostgresConditionalPublicationPayloadContractTestCase(
+            "postgres seed refs have no extras",
+            SEED_EXTRA_PAYLOAD,
+            False,
+            "seed refs must exactly match",
+        ),
+        PostgresConditionalPublicationPayloadContractTestCase(
+            "postgres checkpoint refs have no duplicates",
+            CHECKPOINT_DUPLICATE_PAYLOAD,
+            False,
+            "duplicate identities",
+        ),
+        PostgresConditionalPublicationPayloadContractTestCase(
+            "postgres current refs have no duplicates",
+            PUBLISHED_DUPLICATE_PAYLOAD,
+            False,
+            "duplicate identities",
+        ),
+        PostgresConditionalPublicationPayloadContractTestCase(
+            "postgres ref environment matches",
+            REF_ENVIRONMENT_PAYLOAD,
+            False,
+            "virtual_environment_name",
+        ),
+        PostgresConditionalPublicationPayloadContractTestCase(
+            "postgres ref group matches node type",
+            REF_NODE_TYPE_PAYLOAD,
+            False,
+            "node_type must match",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_conditional_payload_when_postgres_publishes_then_contract_rejects_before_write(
+    test_case: PostgresConditionalPublicationPayloadContractTestCase,
+    postgres_state_backend: PostgresStateBackend,
+    postgres_state_connection: Any,
+    postgres_state_schema: str,
+) -> None:
+    postgres_state_backend.initialize(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        sqlbuild_version="test",
+    )
+    with pytest.raises(StateBackendConfigError, match=test_case.expected_error_fragment or ""):
+        postgres_state_backend.upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+            connection=postgres_state_connection,
+            schema=postgres_state_schema,
+            record=test_case.payload.record,
+            refs_by_node_type=test_case.payload.refs_by_node_type,
+            leases=(),
+            checkpoint=test_case.payload.checkpoint,
+            checkpoint_refs=test_case.payload.checkpoint_refs,
+            checkpoint_function_refs=test_case.payload.checkpoint_function_refs,
+            checkpoint_seed_refs=test_case.payload.checkpoint_seed_refs,
+        )
+
+    assert test_case.expected_valid is False
+    assert (
+        postgres_state_backend.get_virtual_environment(
+            connection=postgres_state_connection,
+            schema=postgres_state_schema,
+            virtual_environment_name=test_case.payload.record.virtual_environment_name,
+        )
+        is None
+    )
 
 
 @pytest.mark.parametrize(
@@ -1970,3 +2163,252 @@ def test_given_postgres_state_backend_when_two_connections_acquire_same_lock_the
         assert active_locks[0].owner_id in {test_case.first_owner, test_case.second_owner}
     finally:
         postgres_state_backend.close(second_connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresConditionalVirtualRefPublishTestCase(
+            description="postgres stale owner cannot publish refs but current owner can",
+            expected_stale_publish=False,
+            expected_owned_publish=True,
+            expected_model_version_hash="version-1",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_lease_ownership_changes_when_publishing_postgres_refs_then_publish_is_fenced(
+    test_case: PostgresConditionalVirtualRefPublishTestCase,
+    postgres_state_backend: PostgresStateBackend,
+    postgres_state_connection: Any,
+    postgres_state_schema: str,
+) -> None:
+    postgres_state_backend.initialize(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        sqlbuild_version="0.0.test",
+    )
+    lock_key: str = "model-version:warehouse:orders:version-1"
+    expires_at: datetime = datetime.now() + timedelta(hours=1)
+    assert postgres_state_backend.acquire_lock(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        lock_key=lock_key,
+        owner_id="owner-a",
+        expires_at=expires_at,
+    )
+    stale_lease: StateLockLease = StateLockLease(
+        lock_key=lock_key,
+        owner_id="owner-a",
+        expires_at=expires_at,
+    )
+    assert postgres_state_backend.release_lock(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        lock_key=lock_key,
+        owner_id="owner-a",
+    )
+    assert postgres_state_backend.acquire_lock(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        lock_key=lock_key,
+        owner_id="owner-b",
+        expires_at=expires_at,
+    )
+    owned_lease: StateLockLease = StateLockLease(
+        lock_key=lock_key,
+        owner_id="owner-b",
+        expires_at=expires_at,
+    )
+    record: VirtualEnvironmentRecord = VirtualEnvironmentRecord(
+        virtual_environment_name="dev",
+        status=VirtualEnvironmentStatus.ACTIVE,
+    )
+    refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = (
+        VirtualEnvironmentNodeRefRecord(
+            virtual_environment_name="dev",
+            node_type="model",
+            node_name="orders",
+            version_hash=test_case.expected_model_version_hash,
+        ),
+    )
+
+    stale_published: bool = postgres_state_backend.upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        record=record,
+        refs_by_node_type={"model": refs},
+        leases=(stale_lease,),
+    )
+    assert stale_published is test_case.expected_stale_publish
+    assert (
+        postgres_state_backend.get_virtual_environment(
+            connection=postgres_state_connection,
+            schema=postgres_state_schema,
+            virtual_environment_name="dev",
+        )
+        is None
+    )
+
+    owned_published: bool = postgres_state_backend.upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        record=record,
+        refs_by_node_type={"model": refs},
+        leases=(owned_lease,),
+    )
+    assert owned_published is test_case.expected_owned_publish
+    assert (
+        postgres_state_backend.get_virtual_environment_node_refs(
+            connection=postgres_state_connection,
+            schema=postgres_state_schema,
+            virtual_environment_name="dev",
+            node_type="model",
+        )
+        == refs
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresAtomicFinalizedVirtualPublishTestCase(
+            description="postgres checkpoint failure rolls back finalized publication",
+            checkpoint_id="checkpoint-atomic",
+            expected_error_fragment="injected checkpoint failure",
+            expected_checkpoint_count_after_failure=0,
+            expected_checkpoint_count_after_success=1,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_checkpoint_failure_when_conditionally_publishing_postgres_then_all_rows_roll_back(
+    test_case: PostgresAtomicFinalizedVirtualPublishTestCase,
+    postgres_state_backend: PostgresStateBackend,
+    postgres_state_connection: Any,
+    postgres_state_schema: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    postgres_state_backend.initialize(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        sqlbuild_version="0.0.test",
+    )
+    lock_key: str = "model-version:warehouse:orders:version-1"
+    expires_at: datetime = datetime.now() + timedelta(hours=1)
+    assert postgres_state_backend.acquire_lock(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        lock_key=lock_key,
+        owner_id="owner",
+        expires_at=expires_at,
+    )
+    lease: StateLockLease = StateLockLease(
+        lock_key=lock_key,
+        owner_id="owner",
+        expires_at=expires_at,
+    )
+    record: VirtualEnvironmentRecord = VirtualEnvironmentRecord(
+        virtual_environment_name="dev",
+        status=VirtualEnvironmentStatus.FINALIZED,
+    )
+    refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = (
+        VirtualEnvironmentNodeRefRecord(
+            virtual_environment_name="dev",
+            node_type="model",
+            node_name="orders",
+            version_hash="version-1",
+        ),
+    )
+    checkpoint: VirtualEnvironmentCheckpointRecord = VirtualEnvironmentCheckpointRecord(
+        checkpoint_id=test_case.checkpoint_id,
+        virtual_environment_name="dev",
+    )
+    checkpoint_refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...] = (
+        VirtualEnvironmentCheckpointModelRefRecord(
+            checkpoint_id=test_case.checkpoint_id,
+            model_name="orders",
+            version_hash="version-1",
+        ),
+    )
+    original_insert: Callable[..., None] = (
+        postgres_state_backend._insert_virtual_environment_checkpoint_rows
+    )
+
+    def _insert_then_fail(**kwargs: Any) -> None:
+        original_insert(**kwargs)
+        raise RuntimeError(test_case.expected_error_fragment)
+
+    monkeypatch.setattr(
+        postgres_state_backend,
+        "_insert_virtual_environment_checkpoint_rows",
+        _insert_then_fail,
+    )
+    with pytest.raises(RuntimeError, match=test_case.expected_error_fragment):
+        postgres_state_backend.upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+            connection=postgres_state_connection,
+            schema=postgres_state_schema,
+            record=record,
+            refs_by_node_type={"model": refs},
+            leases=(lease,),
+            checkpoint=checkpoint,
+            checkpoint_refs=checkpoint_refs,
+        )
+    assert (
+        postgres_state_backend.get_virtual_environment(
+            connection=postgres_state_connection,
+            schema=postgres_state_schema,
+            virtual_environment_name="dev",
+        )
+        is None
+    )
+    assert (
+        postgres_state_backend.get_virtual_environment_node_refs(
+            connection=postgres_state_connection,
+            schema=postgres_state_schema,
+            virtual_environment_name="dev",
+            node_type="model",
+        )
+        == ()
+    )
+    assert (
+        len(
+            postgres_state_backend.list_virtual_environment_checkpoints(
+                connection=postgres_state_connection,
+                schema=postgres_state_schema,
+                virtual_environment_name="dev",
+            )
+        )
+        == test_case.expected_checkpoint_count_after_failure
+    )
+
+    monkeypatch.setattr(
+        postgres_state_backend,
+        "_insert_virtual_environment_checkpoint_rows",
+        original_insert,
+    )
+    assert postgres_state_backend.upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        record=record,
+        refs_by_node_type={"model": refs},
+        leases=(lease,),
+        checkpoint=checkpoint,
+        checkpoint_refs=checkpoint_refs,
+    )
+    checkpoints: tuple[VirtualEnvironmentCheckpointRecord, ...] = (
+        postgres_state_backend.list_virtual_environment_checkpoints(
+            connection=postgres_state_connection,
+            schema=postgres_state_schema,
+            virtual_environment_name="dev",
+        )
+    )
+    assert len(checkpoints) == test_case.expected_checkpoint_count_after_success
+    assert (
+        postgres_state_backend.get_virtual_environment_checkpoint_model_refs(
+            connection=postgres_state_connection,
+            schema=postgres_state_schema,
+            checkpoint_id=test_case.checkpoint_id,
+        )
+        == checkpoint_refs
+    )

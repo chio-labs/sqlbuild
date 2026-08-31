@@ -25,6 +25,7 @@ def execute_seed(
     statement_recorder: StatementRecorder,
     run_id: str = "",
     query_change_tracking: bool = False,
+    schema_prepared: bool = False,
 ) -> SeedExecutionResult:
     """Load one seed into the warehouse."""
 
@@ -33,12 +34,13 @@ def execute_seed(
         adapter=adapter, location=seed_entry.destination
     )
     try:
-        adapter.ensure_schema(
-            connection=connection,
-            database=seed_entry.destination.database,
-            schema=seed_entry.destination.schema,
-            statement_recorder=statement_recorder,
-        )
+        if not schema_prepared:
+            adapter.ensure_schema(
+                connection=connection,
+                database=seed_entry.destination.database,
+                schema=seed_entry.destination.schema,
+                statement_recorder=statement_recorder,
+            )
         adapter.load_seed(
             connection=connection,
             destination=target_qualified,

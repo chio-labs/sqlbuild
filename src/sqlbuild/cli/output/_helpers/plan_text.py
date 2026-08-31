@@ -102,7 +102,13 @@ def format_plan(
     style: CliStyle = CliStyle(use_color=True)
     resolved_section_header_style: Callable[[str], str] = section_header_style or style.plan_section
 
-    if full_refresh:
+    active_model_entries: tuple[ModelPlanEntry, ...] = tuple(
+        entry for entry in plan.model_entries if entry.action != PlanAction.SKIP
+    )
+    all_active_models_full_refresh: bool = bool(active_model_entries) and all(
+        entry.reason == PlanReason.FULL_REFRESH for entry in active_model_entries
+    )
+    if all_active_models_full_refresh or (full_refresh and not active_model_entries):
         lines = _format_full_refresh(
             lines=lines,
             plan=plan,

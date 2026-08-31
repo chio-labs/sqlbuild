@@ -13,7 +13,12 @@ from sqlbuild.compiler.planner.types import (
 )
 
 
-def build_virtual_microbatch_lease_entry() -> ModelPlanEntry:
+def build_virtual_microbatch_lease_entry(
+    *,
+    action: PlanAction = PlanAction.INCREMENTAL_DELETE_INSERT,
+    incremental_strategy: str = "delete_insert",
+    incremental_mode: str | None = IncrementalMode.MICROBATCH,
+) -> ModelPlanEntry:
     """Build a virtual microbatch entry for lease-manager tests."""
 
     return ModelPlanEntry(
@@ -21,7 +26,7 @@ def build_virtual_microbatch_lease_entry() -> ModelPlanEntry:
         name="orders",
         relative_path=Path("models/orders.sql"),
         materialization_type=MaterializationType.INCREMENTAL,
-        action=PlanAction.INCREMENTAL_DELETE_INSERT,
+        action=action,
         reason=PlanReason.NORMAL_INCREMENTAL,
         destination=CompiledRelationLocation(
             database=None,
@@ -32,6 +37,6 @@ def build_virtual_microbatch_lease_entry() -> ModelPlanEntry:
         fingerprint_query_sql="SELECT 1 AS id",
         resolved_sql="SELECT 1 AS id",
         logical_ddl="",
-        incremental_strategy="delete_insert",
-        incremental_mode=IncrementalMode.MICROBATCH,
+        incremental_strategy=incremental_strategy,
+        incremental_mode=incremental_mode,
     )

@@ -43,6 +43,14 @@ class CloneFunctionDependencyTestCase:
 
 
 @dataclass(frozen=True)
+class CloneSchemaPreparationTestCase:
+    description: str
+    destination_schema: str
+    fingerprint_schema: str
+    expected_schema_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class PrephaseCloneItemRowTestCase:
     description: str
     action: str

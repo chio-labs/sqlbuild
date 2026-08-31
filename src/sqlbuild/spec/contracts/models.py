@@ -136,7 +136,7 @@ class DefaultsConfig:
     incremental_strategy: str | None = None
     incremental_mode: str | None = None
     merge_exclude_columns: tuple[str, ...] = field(default_factory=tuple)
-    allow_full_refresh: bool | None = None
+    full_refresh: bool | None = None
     append_cursor_inclusive: object | None = None
     cursor_start: object | None = None
     lookback: str | None = None

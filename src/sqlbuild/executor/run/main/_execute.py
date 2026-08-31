@@ -126,12 +126,13 @@ def execute_table_entry(
         resolved_sql = substitute_cursor_sentinels(sql=entry.resolved_sql, bounds=runtime_bounds)
 
     try:
-        adapter.ensure_schema(
-            connection=connection,
-            database=targets.target_database,
-            schema=targets.target_schema,
-            statement_recorder=statement_recorder,
-        )
+        if not context.schema_prepared:
+            adapter.ensure_schema(
+                connection=connection,
+                database=targets.target_database,
+                schema=targets.target_schema,
+                statement_recorder=statement_recorder,
+            )
         statement_recorder.record_many(
             render_hooks(hooks=entry.pre_hooks, phase=HookPhase.PRE_HOOKS)
         )

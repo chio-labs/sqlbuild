@@ -5,6 +5,9 @@ from __future__ import annotations
 import time
 
 from sqlbuild.compiler.planner._helpers.output.plan_entry import build_planner_relations_context
+from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
+    effectively_full_refreshed_model_names,
+)
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import gather_warehouse_snapshot
 from sqlbuild.compiler.planner.models import (
     DeferralInputs,
@@ -35,7 +38,10 @@ def gather_planner_warehouse_state(
         connection=runtime.connection,
         execute=runtime.adapter.execute,
         selected_keys=frozenset(scopes.stale_warning_scope.all_keys.values()),
-        full_refresh=overrides.full_refresh,
+        full_refresh_model_names=effectively_full_refreshed_model_names(
+            project=runtime.project,
+            cli_full_refresh=overrides.full_refresh,
+        ),
         on_progress=runtime.on_progress,
         deferred_locations=deferral.deferred_locations,
     )

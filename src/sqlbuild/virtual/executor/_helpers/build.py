@@ -72,6 +72,7 @@ from sqlbuild.compiler.python_nodes.models import (
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
@@ -154,8 +155,8 @@ from sqlbuild.virtual.planner.main._targets import (
 )
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.state.classes.microbatch_store import VirtualMicrobatchEventStore
-from sqlbuild.virtual.state.main.checkpoints._checkpoints import (
-    create_finalized_virtual_environment_checkpoint,
+from sqlbuild.virtual.state.main.checkpoints._build_finalized_checkpoint import (
+    build_finalized_virtual_environment_checkpoint,
 )
 from sqlbuild.virtual.state.main.encoding._decode_state_text import decode_state_text
 from sqlbuild.virtual.state.main.encoding._encode_state_text import encode_state_text
@@ -164,6 +165,7 @@ from sqlbuild.virtual.state.main.python_identities._python_node_identity_write i
     try_record_virtual_python_node_identity,
 )
 from sqlbuild.virtual.state.models import (
+    FinalizedVirtualEnvironmentCheckpoint,
     FunctionVersionRecord,
     ModelVersionRecord,
     PhysicalRelationAncestryRecord,
@@ -171,6 +173,7 @@ from sqlbuild.virtual.state.models import (
     SeedVersionRecord,
     SourceFreshnessRecord,
     StateBackendConfig,
+    StateLockLease,
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentNodeRefRecord,
@@ -345,11 +348,11 @@ def run_virtual_build(
         schema=runtime.config.schema,
         run_id=rewritten.project.run_id,
     )
-    lease_manager.acquire(
-        entries=plan.executor_plan_output.model_entries,
-        expected_version_hashes=reads.semantics.expected_version_hashes,
-    )
     try:
+        lease_manager.acquire(
+            entries=plan.executor_plan_output.model_entries,
+            expected_version_hashes=reads.semantics.expected_version_hashes,
+        )
         _register_virtual_microbatch_physical_relations(
             runtime=runtime,
             plan_output=plan.executor_plan_output,
@@ -364,6 +367,7 @@ def run_virtual_build(
             python_plan=python_plan,
             exec_hooks=exec_hooks,
             microbatch_lease_check=lease_manager.assert_active,
+            model_version_leases=lease_manager.active_leases,
         )
     finally:
         lease_manager.close()
@@ -440,6 +444,7 @@ def _execute_leased_virtual_build(
     python_plan: _VirtualPythonPlan,
     exec_hooks: VirtualBuildExecutionHooks,
     microbatch_lease_check: Callable[[], None],
+    model_version_leases: tuple[StateLockLease, ...],
 ) -> tuple[
     BuildExecutionResult,
     tuple[PythonNodeExecutionResult, ...],
@@ -507,6 +512,7 @@ def _execute_leased_virtual_build(
             reads=reads,
             plan_output=plan.executor_plan_output,
             result=result,
+            model_version_leases=model_version_leases,
         )
         read_side_results: tuple[PythonNodeExecutionResult, ...] = _run_read_side_python_nodes(
             runtime=runtime,
@@ -910,7 +916,6 @@ def _plan_virtual_build(
                     scope=warehouse_result.scope,
                     semantics=reads.semantics,
                     bound_physical_relations=reads.bound_physical_relations,
-                    full_refresh=options.planning.full_refresh,
                 ),
                 inputs=ModelChangesPlanInputs(
                     cursor_overrides=options.planning.cursor_overrides,
@@ -1116,26 +1121,6 @@ def _execute_virtual_build_plan(
     prepare_version_functions: dict[str, Callable[[PrepareVersionContext], None]] = (
         load_custom_prepare_version_functions(runtime.discovered_inputs.materialization_files)
     )
-    with CostContext.scope(
-        run_id=project.run_id,
-        resource_type="run",
-        resource_name=project.effective_target_name or "virtual",
-        ledger_path=runtime.project_dir / "target" / "runs" / project.run_id / "statements.jsonl",
-        phase="virtual_schema_preparation",
-        on_statement_complete=exec_hooks.on_statement_complete,
-    ):
-        schema_start: float = time.monotonic()
-        try:
-            _prepare_virtual_physical_schemas(
-                adapter=runtime.adapter,
-                connection_config=runtime.connection_config,
-                plan_output=plan.executor_plan_output,
-            )
-        finally:
-            virtual_schema_seconds: float = time.monotonic() - schema_start
-            timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
-            if timing_tracker is not None:
-                timing_tracker.schema_preparation_seconds = virtual_schema_seconds
     result: BuildExecutionResult = run_build_pipeline(
         plan=plan.executor_plan_output,
         connection_config=runtime.connection_config,
@@ -1215,15 +1200,7 @@ def _execute_virtual_build_plan(
                 if seed_name not in reads.seed_load_names
             ),
         )
-    return replace(
-        result,
-        timings=replace(
-            result.timings,
-            schema_preparation_seconds=(
-                virtual_schema_seconds + (result.timings.schema_preparation_seconds or 0.0)
-            ),
-        ),
-    )
+    return result
 
 
 def _resolve_virtual_microbatch_state(
@@ -1323,6 +1300,7 @@ def _build_before_model_materialize(
                     version_hash=version_hash,
                     prepare_version=prepare_version,
                     run_id=run_id,
+                    schema_prepared=True,
                 )
             else:
                 seed_virtual_physical_version(
@@ -1334,6 +1312,7 @@ def _build_before_model_materialize(
                     entry=entry,
                     parent_relation=parent_relation,
                     version_hash=version_hash,
+                    schema_prepared=True,
                 )
         finally:
             runtime.backend.close(state_connection)
@@ -1429,33 +1408,6 @@ def _load_result_key(*, plan: PlanOutput, result: LoadExecutionResult) -> Compil
     )
 
 
-def _prepare_virtual_physical_schemas(
-    *,
-    adapter: BaseAdapter,
-    connection_config: dict[str, object],
-    plan_output: PlanOutput,
-) -> None:
-    schemas: set[tuple[str | None, str]] = set()
-    for entry in (*plan_output.model_entries, *plan_output.seed_entries):
-        if entry.destination.schema is not None:
-            schemas.add((entry.destination.database, entry.destination.schema))
-    if not schemas:
-        return
-
-    connection: Any = adapter.connect(connection_config)
-    recorder: StatementRecorder = StatementRecorder()
-    try:
-        for database, schema in sorted(schemas, key=lambda item: (item[0] or "", item[1])):
-            adapter.ensure_schema(
-                connection=connection,
-                database=database,
-                schema=schema,
-                statement_recorder=recorder,
-            )
-    finally:
-        adapter.close(connection)
-
-
 def _prepare_custom_virtual_version(
     *,
     runtime: _VirtualBuildRuntime,
@@ -1466,15 +1418,17 @@ def _prepare_custom_virtual_version(
     version_hash: str,
     prepare_version: Callable[[PrepareVersionContext], None],
     run_id: str,
+    schema_prepared: bool = False,
 ) -> None:
     adapter: BaseAdapter = runtime.adapter
     recorder: StatementRecorder = StatementRecorder()
-    adapter.ensure_schema(
-        connection=connection,
-        database=entry.destination.database,
-        schema=entry.destination.schema,
-        statement_recorder=recorder,
-    )
+    if not schema_prepared:
+        adapter.ensure_schema(
+            connection=connection,
+            database=entry.destination.database,
+            schema=entry.destination.schema,
+            statement_recorder=recorder,
+        )
     destination: str = rn.resolve_relation_location_qualified_name(
         adapter=adapter, location=entry.destination
     )
@@ -1689,6 +1643,7 @@ def _persist_successful_virtual_build(
     reads: _VirtualBuildStateReads,
     plan_output: PlanOutput,
     result: BuildExecutionResult,
+    model_version_leases: tuple[StateLockLease, ...],
 ) -> None:
     semantics: VirtualPlanSemantics = reads.semantics
     names: VirtualEnvironmentNames = runtime.names
@@ -1784,23 +1739,37 @@ def _persist_successful_virtual_build(
             )
             for seed_name, version_hash in sorted(seeds.final_seed_hashes.items())
         )
-        runtime.backend.upsert_virtual_environment_and_replace_node_ref_groups(
-            connection=state_connection,
-            schema=runtime.config.schema,
-            record=virtual_environment_record,
-            refs_by_node_type=_build_node_ref_groups(
-                refs=refs, seed_refs=seed_refs, function_refs=function_refs
-            ),
-        )
-        if status == VirtualEnvironmentStatus.FINALIZED and refs:
-            create_finalized_virtual_environment_checkpoint(
-                backend=runtime.backend,
-                connection=state_connection,
-                schema=runtime.config.schema,
+        checkpoint: FinalizedVirtualEnvironmentCheckpoint | None = (
+            build_finalized_virtual_environment_checkpoint(
                 virtual_environment_name=names.target_vde_name,
                 refs=refs,
                 function_refs=function_refs,
                 seed_refs=seed_refs,
+            )
+            if status == VirtualEnvironmentStatus.FINALIZED
+            else None
+        )
+        published: bool = (
+            runtime.backend.upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+                connection=state_connection,
+                schema=runtime.config.schema,
+                record=virtual_environment_record,
+                refs_by_node_type=_build_node_ref_groups(
+                    refs=refs, seed_refs=seed_refs, function_refs=function_refs
+                ),
+                leases=model_version_leases,
+                checkpoint=checkpoint.checkpoint if checkpoint is not None else None,
+                checkpoint_refs=checkpoint.refs if checkpoint is not None else (),
+                checkpoint_function_refs=(
+                    checkpoint.function_refs if checkpoint is not None else ()
+                ),
+                checkpoint_seed_refs=checkpoint.seed_refs if checkpoint is not None else (),
+            )
+        )
+        if not published:
+            raise ExecutorInputError(
+                "virtual incremental physical-version lease ownership was lost before "
+                "model refs could be published"
             )
     finally:
         runtime.backend.close(state_connection)
@@ -2117,7 +2086,6 @@ def _build_virtual_model_changes(
     scope: PlannerScope,
     semantics: VirtualPlanSemantics,
     bound_physical_relations: dict[str, PhysicalRelationRecord],
-    full_refresh: bool,
 ) -> dict[str, ChangeDetectionResult]:
     changes: dict[str, ChangeDetectionResult] = {}
     model: CompiledModel
@@ -2128,7 +2096,6 @@ def _build_virtual_model_changes(
             model=model,
             semantics=semantics,
             bound_physical_relations=bound_physical_relations,
-            full_refresh=full_refresh,
         )
     return changes
 
@@ -2165,7 +2132,6 @@ def _build_virtual_model_change(
     model: CompiledModel,
     semantics: VirtualPlanSemantics,
     bound_physical_relations: dict[str, PhysicalRelationRecord],
-    full_refresh: bool,
 ) -> ChangeDetectionResult:
     metadata_json: str = semantics.expected_metadata_jsons.get(model.name, "{}")
     previous_metadata_json: str | None = semantics.bound_metadata_jsons.get(model.name)
@@ -2175,15 +2141,6 @@ def _build_virtual_model_change(
     previous_version_hash: str | None = (
         bound_physical_relation.version_hash if bound_physical_relation is not None else None
     )
-    if full_refresh:
-        return ChangeDetectionResult(
-            model_name=model.name,
-            change_kind=ChangeKind.NO_CHANGE,
-            fingerprint_metadata_json=metadata_json,
-            previous_metadata_json=previous_metadata_json,
-            previous_version_hash=previous_version_hash,
-            backfill=BackfillResult(action=BackfillAction.FULL),
-        )
     if bound_physical_relation is None:
         return ChangeDetectionResult(
             model_name=model.name,

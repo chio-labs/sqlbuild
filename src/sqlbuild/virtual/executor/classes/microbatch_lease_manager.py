@@ -11,7 +11,7 @@ from typing import Any
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import ModelPlanEntry
-from sqlbuild.compiler.planner.types import IncrementalMode, PlanAction
+from sqlbuild.compiler.planner.types import IncrementalMode, MaterializationType, PlanAction
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.main.locks._model_version_lock import acquire_model_version_lease
@@ -31,7 +31,7 @@ _LEASE_RENEW_INTERVAL_SECONDS: float = 60.0
 
 
 class VirtualMicrobatchLeaseManager:
-    """Acquire, renew, check, and release one build's physical-version leases."""
+    """Protect shared incremental versions and lease microbatch mutations."""
 
     def __init__(
         self,
@@ -60,26 +60,35 @@ class VirtualMicrobatchLeaseManager:
         entries: tuple[ModelPlanEntry, ...],
         expected_version_hashes: dict[str, str],
     ) -> None:
-        microbatch_entries: tuple[ModelPlanEntry, ...] = tuple(
+        incremental_entries: tuple[ModelPlanEntry, ...] = tuple(
             entry
             for entry in entries
-            if entry.incremental_mode == IncrementalMode.MICROBATCH
+            if entry.materialization_type == MaterializationType.INCREMENTAL
             and entry.action != PlanAction.SKIP
         )
-        if not microbatch_entries:
+        lease_entries: tuple[ModelPlanEntry, ...] = tuple(
+            entry
+            for entry in incremental_entries
+            if entry.incremental_mode == IncrementalMode.MICROBATCH
+            or entry.action == PlanAction.CREATE_TABLE
+        )
+        if not lease_entries:
             return
         connection: Any = self._backend.connect(self._connection_config)
         leases: list[StateLockLease] = []
         try:
-            for entry in microbatch_entries:
+            entries_by_version: dict[tuple[str, str], ModelPlanEntry] = {}
+            for entry in lease_entries:
                 version_hash: str = expected_version_hashes.get(
                     entry.name,
                     entry.fingerprint_version_hash
                     or compute_query_hash(entry.fingerprint_query_sql),
                 )
-                self._reject_shared_full_refresh(
-                    connection=connection, entry=entry, version_hash=version_hash
-                )
+                entries_by_version[(entry.name, version_hash)] = entry
+            entry_key: tuple[str, str]
+            for entry_key in sorted(entries_by_version):
+                entry: ModelPlanEntry = entries_by_version[entry_key]
+                version_hash = entry_key[1]
                 lease: StateLockLease | None = acquire_model_version_lease(
                     backend=self._backend,
                     connection=connection,
@@ -91,16 +100,24 @@ class VirtualMicrobatchLeaseManager:
                 )
                 if lease is None:
                     raise PlannerInputError(
-                        "virtual microbatch physical version is already being mutated: "
+                        "virtual incremental physical version is already being mutated: "
                         f"{entry.name}@{version_hash}"
                     )
                 leases.append(lease)
+            for entry_key in sorted(entries_by_version):
+                self._reject_shared_full_refresh(
+                    connection=connection,
+                    entry=entries_by_version[entry_key],
+                    version_hash=entry_key[1],
+                )
         except BaseException:
             self._release(connection=connection, leases=tuple(leases))
             raise
         finally:
             self._backend.close(connection)
         self._leases = tuple(leases)
+        if not leases:
+            return
         self._thread = threading.Thread(
             target=self._renew_until_stopped,
             name=f"sqlbuild-lease-{self._owner_id}",
@@ -113,8 +130,14 @@ class VirtualMicrobatchLeaseManager:
 
         if self._lost.is_set():
             raise ExecutorInputError(
-                "virtual microbatch physical-version lease was lost; refusing further target DML"
+                "virtual incremental physical-version lease was lost; refusing further target DML"
             )
+
+    @property
+    def active_leases(self) -> tuple[StateLockLease, ...]:
+        """Return the leases that must still be owned when model refs are published."""
+
+        return self._leases
 
     def close(self) -> None:
         self._stop.set()
@@ -178,7 +201,7 @@ class VirtualMicrobatchLeaseManager:
             )
         ):
             raise PlannerInputError(
-                "virtual microbatch full refresh cannot replace a shared physical version: "
+                "virtual incremental full refresh cannot replace a shared physical version: "
                 f"{entry.name}@{version_hash}; change the model definition to create a new "
                 "immutable version"
             )

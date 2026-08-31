@@ -364,12 +364,13 @@ def _prepare_delta_relation(
     connection: Any = context.connection
     runtime_cursor_bounds: CursorBounds | None = None
     resolved_sql: str = entry.resolved_sql
-    adapter.ensure_schema(
-        connection=connection,
-        database=target_database,
-        schema=target_schema,
-        statement_recorder=statement_recorder,
-    )
+    if not context.schema_prepared:
+        adapter.ensure_schema(
+            connection=connection,
+            database=target_database,
+            schema=target_schema,
+            statement_recorder=statement_recorder,
+        )
     if has_model_backed_cursor_inputs(entry.cursor_input_relations):
         if entry.cursor_column is None:
             raise ExecutorInputError("runtime-owned cursor resolution requires cursor_column")

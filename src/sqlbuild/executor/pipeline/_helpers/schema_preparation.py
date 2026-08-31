@@ -23,6 +23,11 @@ def prepare_build_schemas(
     for entry in (*plan.model_entries, *plan.seed_entries, *plan.function_entries):
         if entry.destination.schema is not None:
             schemas.add((entry.destination.database, entry.destination.schema))
+    for entry in plan.function_entries:
+        if entry.fingerprint_destination.schema is not None:
+            schemas.add(
+                (entry.fingerprint_destination.database, entry.fingerprint_destination.schema)
+            )
     for entry in plan.source_load_entries:
         source_entry: SourceEntry | None = plan.source_map.get(entry.name)
         if source_entry is not None and source_entry.schema is not None:

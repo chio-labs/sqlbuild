@@ -190,6 +190,7 @@ class ModelMaterializationContext:
     model_audits: tuple[AuditPlanEntry, ...]
     run_id: str
     query_change_tracking: bool
+    schema_prepared: bool = False
     hook_functions: tuple[DiscoveredHookFunction, ...] = ()
     effective_target_name: str | None = None
     effective_vars: Mapping[str, object] | None = None

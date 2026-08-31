@@ -21,6 +21,7 @@ from tests.unit.src.sqlbuild.executor.clone._helpers.helpers import (
 )
 from tests.unit.src.sqlbuild.executor.clone.main._test_types import (
     CloneFunctionDependencyTestCase,
+    CloneSchemaPreparationTestCase,
     CloneStreamTestCase,
     CloneViewDependencyTestCase,
     InterleavedCloneGraphTestCase,
@@ -153,6 +154,52 @@ def test_given_interleaved_clone_graph_when_executing_then_uses_plan_order(
     function_statement_index: int = executed_sql.index(test_case.expected_function_statement)
     view_statement_index: int = executed_sql.index(test_case.expected_view_statement_fragment)
     assert function_statement_index < view_statement_index
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CloneSchemaPreparationTestCase(
+            description="shared destination and distinct fingerprint schemas are prepared once",
+            destination_schema="dev",
+            fingerprint_schema="state",
+            expected_schema_statements=(
+                "CREATE SCHEMA IF NOT EXISTS dev",
+                "CREATE SCHEMA IF NOT EXISTS state",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_clone_function_when_preparing_schemas_then_each_unique_schema_is_ensured_once(
+    test_case: CloneSchemaPreparationTestCase,
+) -> None:
+    adapter: FakeCloneAdapter = FakeCloneAdapter(supports_zero_copy=True, origin_names=())
+    function: FunctionPlanEntry = build_clone_function_entry(
+        schema=test_case.destination_schema,
+        name="add_one",
+        fingerprint_schema=test_case.fingerprint_schema,
+    )
+
+    result: CloneExecutionResult = execute_clone(
+        inputs=CloneExecutionInput(
+            source_entries=CloneSourceEntries(),
+            origin_model_entries=(),
+            destination_model_entries=(),
+            origin_seed_entries=(),
+            destination_seed_entries=(),
+            destination_function_entries=(function,),
+            execution_order=(function.key,),
+            adapter=adapter,
+            destination_connection=object(),
+            hard_copy=False,
+            run_id="clone-run",
+            query_change_tracking=False,
+        )
+    )
+
+    assert result.item_results[0].status == CloneStatus.SUCCESS
+    assert tuple(adapter.executed_statements[:2]) == test_case.expected_schema_statements
 
 
 @pytest.mark.parametrize(

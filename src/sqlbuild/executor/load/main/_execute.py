@@ -101,12 +101,13 @@ def execute_source_load(
                     on_progress=on_progress,
                 )
             validate_source_write_strategy(source_entry)
-            adapter.ensure_schema(
-                connection=connection,
-                database=source_entry.database,
-                schema=source_entry.schema,
-                statement_recorder=statement_recorder,
-            )
+            if not runtime.schema_prepared:
+                adapter.ensure_schema(
+                    connection=connection,
+                    database=source_entry.database,
+                    schema=source_entry.schema,
+                    statement_recorder=statement_recorder,
+                )
             context: LoaderContext = build_loader_context(
                 source_entry=source_entry,
                 loader_function=loader_function,

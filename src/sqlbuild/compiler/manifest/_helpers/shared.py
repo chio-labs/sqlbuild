@@ -99,7 +99,7 @@ def build_config_dict(values: dict[str, object]) -> dict[str, object]:
         "pre-hook": _dbt_sql_hooks(values.get("pre_hooks")),
         "quoting": {},
         "column_types": {},
-        "full_refresh": values.get("allow_full_refresh"),
+        "full_refresh": values.get("full_refresh"),
         "unique_key": values.get("unique_key"),
         "on_schema_change": values.get("on_schema_change", "ignore"),
         "on_configuration_change": "apply",

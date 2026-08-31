@@ -154,6 +154,7 @@ def _run_build_pipeline(
             callbacks=inputs.callbacks,
             customizations=inputs.customizations,
             initial_state=merged_initial_state,
+            schema_prepared=True,
         )
         execution_seconds: float = time.monotonic() - execution_start
         return replace(

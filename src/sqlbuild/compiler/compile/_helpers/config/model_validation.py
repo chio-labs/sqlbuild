@@ -50,7 +50,7 @@ _INCREMENTAL_ONLY_KEYS: tuple[str, ...] = (
     "replay_on_change",
     "append_cursor_inclusive",
     "merge_exclude_columns",
-    "allow_full_refresh",
+    "full_refresh",
 )
 _SNAPSHOT_DISALLOWED_KEYS: tuple[str, ...] = (
     "incremental_strategy",
@@ -107,7 +107,7 @@ def validate_incremental_config(
     cursor_grain: str | None = _str(config=config, key="cursor_grain")
     replay_on_change: object | None = config.values.get("replay_on_change")
     merge_exclude_columns: object | None = config.values.get("merge_exclude_columns")
-    allow_full_refresh: object | None = config.values.get("allow_full_refresh")
+    full_refresh: object | None = config.values.get("full_refresh")
     if replay_on_change is not None and not isinstance(replay_on_change, str):
         raise CompileInputError(f"model '{model_name}': replay_on_change must be a string")
     if strategy is None:
@@ -178,8 +178,8 @@ def validate_incremental_config(
                 f"model '{model_name}': merge_exclude_columns cannot include unique_key "
                 f"column(s): {', '.join(overlap)}"
             )
-    if allow_full_refresh is not None and not isinstance(allow_full_refresh, bool):
-        raise CompileInputError(f"model '{model_name}': allow_full_refresh must be a boolean")
+    if full_refresh is not None and not isinstance(full_refresh, bool):
+        raise CompileInputError(f"model '{model_name}': full_refresh must be a boolean")
 
     declared_column_names: frozenset[str] | None = _contract_declared_column_names(
         config=config,

@@ -246,6 +246,16 @@ class VirtualEnvironmentCheckpointSeedRefRecord:
 
 
 @dataclass(frozen=True)
+class FinalizedVirtualEnvironmentCheckpoint:
+    """Checkpoint rows written atomically with finalized virtual refs."""
+
+    checkpoint: VirtualEnvironmentCheckpointRecord
+    refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...]
+    function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...]
+    seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...]
+
+
+@dataclass(frozen=True)
 class CheckpointRetentionInspection:
     """Checkpoint retention inspection for janitor planning."""
 

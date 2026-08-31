@@ -74,12 +74,13 @@ def execute_custom_entry(
         statement_recorder=StatementRecorder(),
     )
 
-    adapter.ensure_schema(
-        connection=connection,
-        database=destination_database,
-        schema=destination_schema,
-        statement_recorder=state.statement_recorder,
-    )
+    if not context.schema_prepared:
+        adapter.ensure_schema(
+            connection=connection,
+            database=destination_database,
+            schema=destination_schema,
+            statement_recorder=state.statement_recorder,
+        )
     pre_hook_exit: ModelExecutionResult | None = _run_custom_pre_hooks(
         context=context,
         effective_vars=effective_vars,
