@@ -6,6 +6,7 @@ import ast
 import csv
 import json
 import logging
+import re
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -30,6 +31,9 @@ from sqlbuild.adapter.contract.models import (
     FunctionInfo,
     QueryResult,
     RelationInfo,
+    RenderedRetentionChange,
+    RetentionRequest,
+    RetentionState,
     RowDiffColumnResult,
     RowDiffResult,
     RowDiffSampleCell,
@@ -48,6 +52,8 @@ from sqlbuild.adapter.contract.types import (
     LoaderLogicalType,
     PromotionStrategy,
     RelationType,
+    RetentionChangePhase,
+    RetentionScope,
     TablePromotionMode,
 )
 from sqlbuild.adapter.relations.main.get_columns_for_relations import (
@@ -64,6 +70,9 @@ from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.adapters.databricks.classes.databricks_connection import _DatabricksConnection
 from sqlbuild.adapters.databricks.constants import (
+    DELTA_DEFAULT_DELETED_FILE_RETENTION_DAYS,
+    DELTA_DEFAULT_LOG_RETENTION_DAYS,
+    DELTA_RELATION_FORMAT,
     NON_ROW_RESULT_COLUMN_NAMES,
     TABLE_RELATION_METADATA_TYPES,
 )
@@ -92,6 +101,168 @@ class DatabricksAdapter(MicrobatchMixin, BaseAdapter):
     adapter_name: ClassVar[str] = BuiltinAdapter.DATABRICKS.value
     sql_analysis_dialect_name: ClassVar[str | None] = "databricks"
     max_identifier_length: ClassVar[int] = 255
+
+    def inspect_retention(self, *, connection: Any, request: RetentionRequest) -> RetentionState:
+        target: str = self._retention_relation_target(request=request)
+        cursor: Any = connection.cursor()
+        try:
+            cursor.execute(f"DESCRIBE DETAIL {target}")
+            row: tuple[Any, ...] | None = cursor.fetchone()
+            description: tuple[Any, ...] | None = cursor.description
+        finally:
+            cursor.close()
+        if row is None or description is None:
+            raise AdapterUserError(message="Databricks retention metadata is missing")
+        detail: dict[str, object] = {
+            str(column[0]).lower(): value for column, value in zip(description, row, strict=True)
+        }
+        relation_format: str = str(detail.get("format", "missing"))
+        if relation_format.lower() != DELTA_RELATION_FORMAT:
+            raise AdapterUserError(
+                message=f"Databricks retention requires a Delta relation; found {relation_format}"
+            )
+        properties: dict[str, object] = self._delta_properties(detail.get("properties"))
+        log_days: int = self._parse_delta_retention_days(
+            value=properties.get(
+                "delta.logRetentionDuration",
+                f"interval {DELTA_DEFAULT_LOG_RETENTION_DAYS} days",
+            ),
+            property_name="log",
+        )
+        deleted_days: int = self._parse_delta_retention_days(
+            value=properties.get(
+                "delta.deletedFileRetentionDuration",
+                f"interval {DELTA_DEFAULT_DELETED_FILE_RETENTION_DAYS} days",
+            ),
+            property_name="deleted file",
+        )
+        return RetentionState(
+            request_id=request.request_id,
+            scope=request.scope,
+            configured_days=None,
+            effective_days=min(log_days, deleted_days),
+            relation_kind="DELTA",
+            delta_log_retention_days=log_days,
+            delta_deleted_file_retention_days=deleted_days,
+        )
+
+    def render_retention_changes(
+        self, *, request: RetentionRequest, state: RetentionState | None = None
+    ) -> tuple[RenderedRetentionChange, ...]:
+        target: str = self._retention_relation_target(request=request)
+        days: int = request.desired_days
+        if state is not None:
+            log_days: int = state.delta_log_retention_days or state.effective_days
+            deleted_days: int = state.delta_deleted_file_retention_days or state.effective_days
+            changes: list[RenderedRetentionChange] = []
+            required_log_days: int = max(days, deleted_days)
+            if log_days < required_log_days:
+                changes.append(
+                    self._render_delta_retention_property(
+                        target=target,
+                        property_name="log",
+                        days=required_log_days,
+                        increase=True,
+                    )
+                )
+                log_days = required_log_days
+            if deleted_days < days:
+                changes.append(
+                    self._render_delta_retention_property(
+                        target=target, property_name="deletedFile", days=days, increase=True
+                    )
+                )
+                deleted_days = days
+            if deleted_days > days:
+                changes.append(
+                    self._render_delta_retention_property(
+                        target=target, property_name="deletedFile", days=days, increase=False
+                    )
+                )
+            if log_days > days:
+                changes.append(
+                    self._render_delta_retention_property(
+                        target=target, property_name="log", days=days, increase=False
+                    )
+                )
+            return tuple(changes)
+        return (
+            RenderedRetentionChange(
+                phase=RetentionChangePhase.ALTER,
+                statements=(
+                    f"ALTER TABLE {target} SET TBLPROPERTIES "
+                    f"('delta.logRetentionDuration' = 'interval {days} days', "
+                    f"'delta.deletedFileRetentionDuration' = 'interval {days} days')",
+                ),
+            ),
+        )
+
+    @staticmethod
+    def _render_delta_retention_property(
+        *, target: str, property_name: str, days: int, increase: bool
+    ) -> RenderedRetentionChange:
+        return RenderedRetentionChange(
+            phase=(RetentionChangePhase.PREPARE if increase else RetentionChangePhase.FINALIZE),
+            statements=(
+                f"ALTER TABLE {target} SET TBLPROPERTIES "
+                f"('delta.{property_name}RetentionDuration' = 'interval {days} days')",
+            ),
+        )
+
+    def _retention_relation_target(self, *, request: RetentionRequest) -> str:
+        if request.scope != RetentionScope.RELATION or request.name is None:
+            raise AdapterUserError(message="Databricks retention requires relation scope")
+        if request.desired_days < 0:
+            raise AdapterUserError(message="Databricks retention days must be non-negative")
+        target: str | None = self.render_qualified_name(
+            database=request.database,
+            schema=request.schema,
+            name=request.name,
+        )
+        if target is None:
+            raise AdapterUserError(
+                message="Databricks retention requires catalog, schema, and relation"
+            )
+        return target
+
+    @staticmethod
+    def _parse_delta_retention_days(*, value: object, property_name: str) -> int:
+        match: re.Match[str] | None = re.fullmatch(
+            r"\s*interval\s+(\d+)\s+(hours?|days?|weeks?)\s*",
+            str(value),
+            flags=re.IGNORECASE,
+        )
+        if match is None:
+            raise AdapterUserError(
+                message=f"Databricks Delta {property_name} retention is missing or unparseable"
+            )
+        amount: int = int(match.group(1))
+        unit: str = match.group(2).lower()
+        if unit.startswith("week"):
+            return amount * 7
+        if unit.startswith("hour"):
+            if amount % 24 != 0:
+                raise AdapterUserError(
+                    message=(
+                        f"Databricks Delta {property_name} retention is not a whole-day interval: "
+                        f"{value!r}"
+                    )
+                )
+            return amount // 24
+        return amount
+
+    @staticmethod
+    def _delta_properties(value: object) -> dict[str, object]:
+        if isinstance(value, dict):
+            return {str(key): item for key, item in value.items()}
+        if isinstance(value, str):
+            try:
+                parsed: object = json.loads(value)
+            except json.JSONDecodeError:
+                parsed = ast.literal_eval(value)
+            if isinstance(parsed, dict):
+                return {str(key): item for key, item in parsed.items()}
+        raise AdapterUserError(message="Databricks Delta retention properties are missing")
 
     def render_read_latest_fingerprints_sql(
         self,

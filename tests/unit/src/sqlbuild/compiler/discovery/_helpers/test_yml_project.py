@@ -22,6 +22,8 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     LoadProjectConstantsConfigTestCase,
     LoadProjectCostConfigErrorTestCase,
     LoadProjectCostConfigTestCase,
+    LoadRetentionConfigErrorTestCase,
+    LoadRetentionConfigTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
     write_project_config_test_files,
@@ -191,6 +193,88 @@ def test_given_invalid_constants_config_when_loading_project_then_config_error_i
 @pytest.mark.parametrize(
     "test_case",
     [
+        LoadRetentionConfigTestCase(
+            description="duration and disabled retention policies",
+            project_file_contents="\n".join(
+                (
+                    'name = "demo"',
+                    'adapter = "snowflake"',
+                    "[materialization_defaults.table]",
+                    'time_travel_retention = "14d"',
+                    "[materialization_defaults.incremental]",
+                    'time_travel_retention = "disabled"',
+                    "[targets.prod]",
+                    'time_travel_retention = "7d"',
+                )
+            ),
+            expected_table_days=14,
+            expected_incremental_unmanaged=True,
+            expected_target_days=7,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_retention_config_when_loading_project_then_policies_are_typed(
+    test_case: LoadRetentionConfigTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        test_case.project_file_contents,
+        encoding="utf-8",
+    )
+
+    config: ProjectConfig = load_project_config(project_dir=tmp_path)
+
+    assert config.materialization_defaults.table.time_travel_retention is not None
+    assert (
+        config.materialization_defaults.table.time_travel_retention.desired_days
+        == test_case.expected_table_days
+    )
+    assert config.materialization_defaults.incremental.time_travel_retention is not None
+    assert (
+        config.materialization_defaults.incremental.time_travel_retention.unmanaged
+        is test_case.expected_incremental_unmanaged
+    )
+    assert config.targets["prod"].time_travel_retention is not None
+    assert (
+        config.targets["prod"].time_travel_retention.desired_days == test_case.expected_target_days
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadRetentionConfigErrorTestCase(
+            description="hour retention value",
+            project_file_contents="\n".join(
+                (
+                    'name = "demo"',
+                    'adapter = "snowflake"',
+                    "[materialization_defaults.table]",
+                    'time_travel_retention = "12h"',
+                )
+            ),
+            expected_error_fragment="whole-day string",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_non_day_retention_when_loading_project_then_config_error_is_raised(
+    test_case: LoadRetentionConfigErrorTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        test_case.project_file_contents,
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProjectConfigError, match=test_case.expected_error_fragment):
+        load_project_config(project_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         LoadProjectConfigTestCase(
             description="defaults environment mode to direct when omitted",
             project_file_contents="""
@@ -295,6 +379,7 @@ allow_as_clone_destination = true
 [janitor]
 enabled = true
 retention_days = 14
+archive_retention_days = 9
 max_checkpoints = 3
 delete_tracked_only = false
 exclude_patterns = ["partition_*"]
@@ -373,6 +458,7 @@ enabled = true
             },
             expected_janitor_enabled=True,
             expected_retention_days=14,
+            expected_archive_retention_days=9,
             expected_janitor_max_checkpoints=3,
             expected_janitor_delete_tracked_only=False,
             expected_janitor_exclude_patterns=("partition_*",),
@@ -448,6 +534,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     } == test_case.expected_targets
     assert config.janitor.enabled is test_case.expected_janitor_enabled
     assert config.janitor.retention_days == test_case.expected_retention_days
+    assert config.janitor.archive_retention_days == test_case.expected_archive_retention_days
     assert config.janitor.max_checkpoints == test_case.expected_janitor_max_checkpoints
     assert config.janitor.delete_tracked_only is test_case.expected_janitor_delete_tracked_only
     assert config.janitor.exclude_patterns == test_case.expected_janitor_exclude_patterns

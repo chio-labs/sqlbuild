@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.contract.models import RelationLookup
+from sqlbuild.adapter.contract.models import RelationLookup, RetentionRequest
+from sqlbuild.adapter.contract.types import RetentionScope
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.planner.models import (
     CloneSourcePlanEntry,
@@ -16,6 +18,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.executor.build.models import FunctionExecutionResult
 from sqlbuild.executor.clone._helpers.operations import clone_relation, recreate_view
+from sqlbuild.executor.clone._helpers.retention import apply_clone_retention
 from sqlbuild.executor.clone.models import CloneExecutionInput, CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.executor.functions.main._execute import execute_function
@@ -84,7 +87,7 @@ def execute_clone_relation_item(
         or not isinstance(origin_entry, ModelPlanEntry)
         or destination_entry.materialization_type != MaterializationType.VIEW
     ):
-        return clone_relation(
+        result: CloneItemResult = clone_relation(
             destination_entry=destination_entry,
             origin_entry=origin_entry,
             adapter=inputs.adapter,
@@ -92,6 +95,7 @@ def execute_clone_relation_item(
             hard_copy=inputs.hard_copy,
             origin_lookup=relation_lookup,
         )
+        return _with_destination_retention(result=result, inputs=inputs)
     missing_dependencies: tuple[CompiledObjectKey, ...] = _missing_destination_dependencies(
         key=destination_entry.key,
         inputs=inputs,
@@ -111,6 +115,32 @@ def execute_clone_relation_item(
         adapter=inputs.adapter,
         destination_connection=inputs.destination_connection,
     )
+
+
+def _with_destination_retention(
+    *, result: CloneItemResult, inputs: CloneExecutionInput
+) -> CloneItemResult:
+    request: RetentionRequest | None = inputs.destination_retention_requests.get(result.name)
+    if result.status != CloneStatus.SUCCESS or request is None:
+        return result
+    if request.scope == RetentionScope.NAMESPACE:
+        return result
+    try:
+        statements: tuple[str, ...] = apply_clone_retention(
+            request=request,
+            adapter=inputs.adapter,
+            connection=inputs.destination_connection,
+        )
+    except Exception as error:
+        return replace(
+            result,
+            action=CloneAction.FAILED,
+            status=CloneStatus.FAILED,
+            message=f"destination retention reconciliation failed: {error}",
+        )
+    if not statements:
+        return result
+    return replace(result, message=f"applied destination retention: {'; '.join(statements)}")
 
 
 def _missing_destination_dependencies(

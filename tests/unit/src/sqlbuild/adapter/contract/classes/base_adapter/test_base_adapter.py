@@ -6,7 +6,8 @@ import pytest
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
-from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile, RetentionRequest
+from sqlbuild.adapter.contract.types import RetentionScope
 from sqlbuild.compiler.compile.models import FunctionArgument
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from tests.unit.src.sqlbuild.adapter.contract.classes.base_adapter._test_types import (
@@ -16,6 +17,7 @@ from tests.unit.src.sqlbuild.adapter.contract.classes.base_adapter._test_types i
     BaseAdapterMetadataSqlTestCase,
     BaseAdapterPythonFunctionSupportTestCase,
     BaseAdapterRelationMaxCursorTestCase,
+    BaseAdapterRetentionSupportTestCase,
     BaseAdapterSqlAnalysisDialectTestCase,
 )
 from tests.unit.src.sqlbuild.adapter.contract.classes.base_adapter.helpers import (
@@ -25,6 +27,8 @@ from tests.unit.src.sqlbuild.adapter.contract.classes.base_adapter.helpers impor
 
 
 class ConcreteBaseAdapter(BaseAdapter):
+    adapter_name: ClassVar[str] = "concrete"
+
     def connect(self, config: dict[str, object]) -> object:
         return object()
 
@@ -38,6 +42,36 @@ class ConcreteBaseAdapter(BaseAdapter):
 
 class PostgresLikeBaseAdapter(ConcreteBaseAdapter):
     sql_analysis_dialect_name: ClassVar[str | None] = "postgres"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BaseAdapterRetentionSupportTestCase(
+            description="unsupported retention capability fails clearly",
+            expected_inspection_error="does not support retention inspection",
+            expected_render_error="does not support retention changes",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_base_adapter_when_retention_is_invoked_then_raises_clear_errors(
+    test_case: BaseAdapterRetentionSupportTestCase,
+) -> None:
+    adapter: BaseAdapter = ConcreteBaseAdapter()
+    request: RetentionRequest = RetentionRequest(
+        request_id="model.orders",
+        scope=RetentionScope.RELATION,
+        database=None,
+        schema="main",
+        name="orders",
+        desired_days=7,
+    )
+
+    with pytest.raises(AdapterUserError, match=test_case.expected_inspection_error):
+        adapter.inspect_retention(connection=object(), request=request)
+    with pytest.raises(AdapterUserError, match=test_case.expected_render_error):
+        adapter.render_retention_changes(request=request)
 
 
 @pytest.mark.parametrize(

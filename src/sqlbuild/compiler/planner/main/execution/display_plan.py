@@ -10,6 +10,7 @@ from sqlbuild.compiler.planner._helpers.graph.core import (
     build_downstream_deps,
     build_execution_upstream_deps,
 )
+from sqlbuild.compiler.planner._helpers.output.plan_entry import is_permanent_table
 from sqlbuild.compiler.planner._helpers.output.strategy import get_materialization_type
 from sqlbuild.compiler.planner._helpers.planning.full_refresh import resolve_model_full_refresh
 from sqlbuild.compiler.planner.models import BackfillResult, ModelPlanEntry, PlanOutput
@@ -53,6 +54,8 @@ def build_display_only_sqlbuild_plan(
                 fingerprint_query_sql=model.query_sql,
                 resolved_sql=model.query_sql,
                 logical_ddl="",
+                permanent_table=is_permanent_table(model),
+                archive_retention_days=model.config.archive_retention_days,
                 incremental_strategy=_as_optional_string(
                     model.config.values.get("incremental_strategy")
                 ),

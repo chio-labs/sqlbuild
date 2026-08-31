@@ -6,8 +6,13 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.planner.types import RetentionPlanPhase
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build._helpers.output import aggregate_build_result
+from sqlbuild.executor.build._helpers.retention import (
+    apply_retention_phase,
+    reconcile_retention_after_build,
+)
 from sqlbuild.executor.build.classes.build_scheduler import BuildScheduler
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
@@ -18,6 +23,7 @@ from sqlbuild.executor.build.models import (
     FunctionExecutionResult,
     SeedExecutionResult,
 )
+from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
@@ -58,6 +64,13 @@ def execute_build_plan(
         schema_prepared=schema_prepared,
     )
 
+    _ = apply_retention_phase(
+        plan=plan,
+        adapter=adapter,
+        connection=scheduler_connection,
+        phase=RetentionPlanPhase.PRE,
+    )
+
     model_results: tuple[ModelExecutionResult, ...]
     seed_results: tuple[SeedExecutionResult, ...]
     function_results: tuple[FunctionExecutionResult, ...]
@@ -84,4 +97,10 @@ def execute_build_plan(
         source_audit_results=source_audit_results,
         end_audit_results=end_audit_results,
     )
+    if result.status == BuildStatus.SUCCESS:
+        _ = reconcile_retention_after_build(
+            plan=plan,
+            adapter=adapter,
+            connection=scheduler_connection,
+        )
     return result

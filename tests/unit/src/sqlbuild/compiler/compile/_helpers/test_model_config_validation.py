@@ -13,9 +13,12 @@ from sqlbuild.compiler.compile._helpers.config.model_validation import (
     validate_non_incremental_config,
     validate_placeholder_config,
     validate_snapshot_config,
+    validate_time_travel_retention,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileModelConfig
+from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention
+from sqlbuild.spec.contracts.types import TimeTravelRetentionSource
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ContractConfigErrorTestCase,
     ContractConfigValidTestCase,
@@ -27,9 +30,87 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     NonIncrementalConfigValidTestCase,
     PlaceholderConfigErrorTestCase,
     PlaceholderConfigValidTestCase,
+    RetentionValidationErrorTestCase,
+    RetentionValidationValidTestCase,
     SnapshotConfigErrorTestCase,
     SnapshotConfigValidTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NonIncrementalConfigValidTestCase(
+            description="allows omitted table type declaration",
+            config_values={"materialized": "table"},
+        ),
+        NonIncrementalConfigValidTestCase(
+            description="allows explicit permanent table",
+            config_values={"materialized": "table", "table_type": "permanent"},
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_supported_table_type_config_when_validating_then_passes(
+    test_case: NonIncrementalConfigValidTestCase,
+) -> None:
+    config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
+
+    validate_non_incremental_config(config=config, model_name="test_model")
+
+    assert test_case.expected_valid
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NonIncrementalConfigErrorTestCase(
+            description="rejects non-string table type declaration",
+            config_values={"materialized": "table", "table_type": False},
+            expected_error_fragment="table_type must be 'permanent'",
+        ),
+        NonIncrementalConfigErrorTestCase(
+            description="rejects null table type declaration",
+            config_values={"materialized": "table", "table_type": None},
+            expected_error_fragment="table_type must be 'permanent'",
+        ),
+        NonIncrementalConfigErrorTestCase(
+            description="rejects unsupported table type declaration",
+            config_values={"materialized": "table", "table_type": "transient"},
+            expected_error_fragment="table_type must be 'permanent'",
+        ),
+        NonIncrementalConfigErrorTestCase(
+            description="rejects permanent view",
+            config_values={"materialized": "view", "table_type": "permanent"},
+            expected_error_fragment="only valid for materialized table",
+        ),
+        NonIncrementalConfigErrorTestCase(
+            description="rejects permanent incremental model",
+            config_values={"materialized": "incremental", "table_type": "permanent"},
+            expected_error_fragment="only valid for materialized table",
+        ),
+        NonIncrementalConfigErrorTestCase(
+            description="rejects permanent snapshot",
+            config_values={"materialized": "snapshot", "table_type": "permanent"},
+            expected_error_fragment="only valid for materialized table",
+        ),
+        NonIncrementalConfigErrorTestCase(
+            description="rejects permanent custom materialization",
+            config_values={"materialized": "partitioned", "table_type": "permanent"},
+            expected_error_fragment="only valid for materialized table",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unsupported_table_type_config_when_validating_then_raises(
+    test_case: NonIncrementalConfigErrorTestCase,
+) -> None:
+    config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
+
+    with pytest.raises(CompileInputError) as exc_info:
+        validate_non_incremental_config(config=config, model_name="test_model")
+
+    assert test_case.expected_error_fragment in str(exc_info.value)
 
 
 @pytest.mark.parametrize(
@@ -1155,6 +1236,72 @@ def test_given_invalid_custom_materialization_config_when_validating_then_raises
             model_name="test_model",
             custom_materialization_names=test_case.custom_materialization_names,
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RetentionValidationErrorTestCase(
+            description="managed retention on a view",
+            config_values={"materialized": "view"},
+            retention=ResolvedTimeTravelRetention(
+                desired_days=7,
+                unmanaged=False,
+                source=TimeTravelRetentionSource.TARGET,
+            ),
+            expected_error_fragment="not valid for views",
+        ),
+        RetentionValidationErrorTestCase(
+            description="managed retention on a custom materialization",
+            config_values={"materialized": "partition_tracked"},
+            retention=ResolvedTimeTravelRetention(
+                desired_days=7,
+                unmanaged=False,
+                source=TimeTravelRetentionSource.MATERIALIZATION,
+            ),
+            expected_error_fragment="not supported",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unsupported_managed_retention_when_validating_then_raises(
+    test_case: RetentionValidationErrorTestCase,
+) -> None:
+    config: CompileModelConfig = CompileModelConfig(
+        values=test_case.config_values,
+        time_travel_retention=test_case.retention,
+    )
+
+    with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
+        validate_time_travel_retention(config=config, model_name="test_model")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RetentionValidationValidTestCase(
+            description="disabled retention on a view",
+            config_values={"materialized": "view"},
+            retention=ResolvedTimeTravelRetention(
+                unmanaged=True,
+                source=TimeTravelRetentionSource.MODEL,
+            ),
+            expected_unmanaged=True,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_disabled_retention_when_validating_then_passes(
+    test_case: RetentionValidationValidTestCase,
+) -> None:
+    config: CompileModelConfig = CompileModelConfig(
+        values=test_case.config_values,
+        time_travel_retention=test_case.retention,
+    )
+
+    validate_time_travel_retention(config=config, model_name="test_model")
+
+    assert config.time_travel_retention.unmanaged is test_case.expected_unmanaged
 
 
 @pytest.mark.parametrize(

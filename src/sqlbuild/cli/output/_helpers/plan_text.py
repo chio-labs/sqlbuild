@@ -83,6 +83,28 @@ _SCHEMA_CHANGE_SYMBOLS: dict[SchemaChangeKind, str] = {
 }
 
 
+def _format_retention(*, lines: list[str], plan: PlanOutput) -> list[str]:
+    if not plan.retention_entries:
+        return lines
+    lines.append("Retention")
+    for entry in plan.retention_entries:
+        scope: str = ".".join(
+            part
+            for part in (entry.request.database, entry.request.schema, entry.request.name)
+            if part
+        )
+        actual: str = "missing" if entry.actual_days is None else f"{entry.actual_days}d"
+        effective: str = "missing" if entry.effective_days is None else f"{entry.effective_days}d"
+        lines.append(
+            f"  {scope} desired={entry.request.desired_days}d actual={actual} "
+            f"effective={effective} source={entry.source} direction={entry.direction.value} "
+            f"phase={entry.phase.value}"
+        )
+        if entry.irreversible_warning is not None:
+            lines.append(f"    WARNING: {entry.irreversible_warning}")
+    return lines
+
+
 def format_plan(
     *,
     plan: PlanOutput,
@@ -122,6 +144,7 @@ def format_plan(
             plan=plan,
             include_direct_freshness_diagnostics=(include_direct_freshness_diagnostics),
         )
+        lines = _format_retention(lines=lines, plan=plan)
         result: str = "\n".join(lines)
         return result if use_color else _strip_ansi(result)
 
@@ -172,6 +195,7 @@ def format_plan(
         display_options=resolved_display_options,
         skipped_header_style=style.muted,
     )
+    lines = _format_retention(lines=lines, plan=plan)
 
     lines = _format_python_plan_entries(
         lines=lines,

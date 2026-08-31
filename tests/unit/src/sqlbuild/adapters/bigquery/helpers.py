@@ -4,7 +4,18 @@ from collections.abc import Callable
 from types import MappingProxyType
 from typing import Any
 
-from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.contract.models import ColumnInfo, RetentionRequest
+from sqlbuild.adapter.contract.types import RetentionScope
+
+
+def build_retention_request(*, desired_days: int) -> RetentionRequest:
+    return RetentionRequest(
+        request_id="target.prod",
+        scope=RetentionScope.NAMESPACE,
+        database="racing-prod",
+        schema="mart",
+        desired_days=desired_days,
+    )
 
 
 class StubCursor:
@@ -141,17 +152,24 @@ class FakeBigQueryFailingJob:
         raise self.error
 
 
+class FakeBigQueryDataset:
+    def __init__(self, *, max_time_travel_hours: int) -> None:
+        self.max_time_travel_hours: int = max_time_travel_hours
+
+
 class FakeBigQueryClient:
     def __init__(
         self,
         *,
         rows: FakeBigQueryRows | None = None,
         statement_type: str | None = "SELECT",
+        dataset: object | None = None,
     ) -> None:
         self.rows: FakeBigQueryRows = rows or FakeBigQueryRows(columns=(), rows=())
         self.statement_type: str | None = statement_type
         self.queries: list[tuple[str, str | None]] = []
         self.dataset_ids: list[str] = []
+        self.dataset: object = dataset or object()
 
     def query(self, sql: str, *, location: str | None) -> FakeBigQueryJob | FakeBigQueryFailingJob:
         self.queries.append((sql, location))
@@ -159,7 +177,7 @@ class FakeBigQueryClient:
 
     def get_dataset(self, dataset_id: str) -> object:
         self.dataset_ids.append(dataset_id)
-        return object()
+        return self.dataset
 
 
 class FakeBigQueryFailingClient(FakeBigQueryClient):

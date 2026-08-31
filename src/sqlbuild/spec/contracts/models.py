@@ -11,6 +11,7 @@ from sqlbuild.spec.contracts.types import (
     SourceFreshnessStrategy,
     SourceFreshnessValueKind,
     SourceWriteStrategy,
+    TimeTravelRetentionSource,
 )
 from sqlbuild.sql_values.types import CollectionRendering
 
@@ -29,6 +30,45 @@ class LocalClonePolicy:
 
     allow_as_clone_origin: bool | None = None
     allow_as_clone_destination: bool | None = None
+
+
+@dataclass(frozen=True)
+class AuthoredTimeTravelRetention:
+    """One authored time-travel retention policy."""
+
+    desired_days: int | None = None
+    unmanaged: bool = False
+
+
+@dataclass(frozen=True)
+class MaterializationRetentionDefaults:
+    """Retention defaults for one built-in materialization."""
+
+    time_travel_retention: AuthoredTimeTravelRetention | None = None
+
+
+@dataclass(frozen=True)
+class MaterializationDefaultsConfig:
+    """Project retention defaults by materialization type."""
+
+    table: MaterializationRetentionDefaults = field(
+        default_factory=MaterializationRetentionDefaults
+    )
+    incremental: MaterializationRetentionDefaults = field(
+        default_factory=MaterializationRetentionDefaults
+    )
+    snapshot: MaterializationRetentionDefaults = field(
+        default_factory=MaterializationRetentionDefaults
+    )
+
+
+@dataclass(frozen=True)
+class ResolvedTimeTravelRetention:
+    """Effective retention policy attached to a compiled model."""
+
+    desired_days: int | None = None
+    unmanaged: bool = True
+    source: TimeTravelRetentionSource | None = None
 
 
 @dataclass(frozen=True)
@@ -69,6 +109,8 @@ class TargetConfig:
     clone: ClonePolicy = field(default_factory=ClonePolicy)
     state: StateConfig = field(default_factory=StateConfig)
     compile_cache: bool | None = None
+    time_travel_retention: AuthoredTimeTravelRetention | None = None
+    owns_time_travel_retention_namespace: bool = False
 
 
 @dataclass(frozen=True)
@@ -87,6 +129,8 @@ class LocalTargetConfig:
     clone: LocalClonePolicy = field(default_factory=LocalClonePolicy)
     state: LocalStateConfig = field(default_factory=LocalStateConfig)
     compile_cache: bool | None = None
+    time_travel_retention: AuthoredTimeTravelRetention | None = None
+    owns_time_travel_retention_namespace: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -159,6 +203,7 @@ class JanitorConfig:
 
     enabled: bool = False
     retention_days: int = 30
+    archive_retention_days: int = 7
     max_checkpoints: int = 20
     direct_state_history_versions: int = 20
     delete_tracked_only: bool = True
@@ -227,6 +272,9 @@ class ProjectConfig:
     cost: CostConfig = field(default_factory=CostConfig)
     constants: ConstantsConfig = field(default_factory=ConstantsConfig)
     defaults: DefaultsConfig = field(default_factory=DefaultsConfig)
+    materialization_defaults: MaterializationDefaultsConfig = field(
+        default_factory=MaterializationDefaultsConfig
+    )
     path_defaults: dict[str, dict[str, object]] = field(default_factory=dict)
     vars: dict[str, str] = field(default_factory=dict)
     targets: dict[str, TargetConfig] = field(default_factory=dict)

@@ -29,6 +29,17 @@ class JanitorCleanupE2ETestCase:
 
 
 @dataclass(frozen=True)
+class JanitorSourceOverlapE2ETestCase:
+    """Test case for fail-closed source and managed schema overlap."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    expected_existing_relations: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
 class JanitorMicrobatchHistoryProtectionE2ETestCase:
     """Test case for immutable virtual microbatch history during janitor cleanup."""
 
