@@ -47,8 +47,8 @@ from tests.unit.src.sqlbuild.compiler.compile._test_helpers import base_repo_fil
                     "      - name: code\n        type: VARCHAR\n"
                 ),
                 "seeds/country_codes.csv": "code\nGB\n",
-                "constants/offset.sql": "CONSTANT (name offset, value 2);\n",
-                "enums/state.sql": "ENUM (name state, members [OPEN, CLOSED]);\n",
+                "models/_constants/offset.sql": "CONSTANT (name offset, value 2);\n",
+                "models/_enums/state.sql": "ENUM (name state, members [OPEN, CLOSED]);\n",
                 "functions/sql/add_one.sql": """
 FUNCTION (arguments (value INTEGER), returns INTEGER);
 
@@ -64,7 +64,7 @@ FUNCTION (
 SELECT customer_id
 """.strip()
                 + "\n",
-                "macros/identity.py": (
+                "tests/unit/_macros/identity.py": (
                     "def identity(value):\n    return value\n\n"
                     "def parameterized_fixture(value):\n    return str(value)\n"
                 ),

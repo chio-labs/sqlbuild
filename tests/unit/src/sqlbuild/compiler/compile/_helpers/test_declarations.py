@@ -69,12 +69,14 @@ def test_given_public_and_private_declarations_when_compiling_then_resolves_scop
         tmp_path,
         {
             "sqlbuild_project.toml": _PROJECT_FILE,
-            "enums/market/market.sql": """
+            "models/_enums/market.sql": """
 ENUM (name market_type, members [WIN, PLACE]);
 ENUM (name priority, members (LOW 1, HIGH 3));
 """,
             "constants/market/thresholds.sql": """
 CONSTANT (name min_runners, value 7);
+""",
+            "models/_constants/thresholds.sql": """
 CONSTANT (name source_name, value "O'Brien");
 """,
             "models/orders.sql": """
@@ -393,7 +395,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
     [
         DeclarationFingerprintTestCase(
             description="constant value changes rendered query identity",
-            declaration_path="constants/threshold.sql",
+            declaration_path="models/_constants/threshold.sql",
             initial_declaration="CONSTANT (name threshold, value 7);\n",
             changed_declaration="CONSTANT (name threshold, value 8);\n",
             model_sql='MODEL ();\nSELECT @const("threshold") AS threshold\n',
@@ -402,7 +404,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
         ),
         DeclarationFingerprintTestCase(
             description="list order changes rendered query identity",
-            declaration_path="constants/countries.sql",
+            declaration_path="models/_constants/countries.sql",
             initial_declaration='CONSTANT (name countries, value ["GB", "FR"]);\n',
             changed_declaration='CONSTANT (name countries, value ["FR", "GB"]);\n',
             model_sql='MODEL ();\nSELECT @const("countries") AS countries\n',
@@ -411,7 +413,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
         ),
         DeclarationFingerprintTestCase(
             description="list duplicate changes rendered query identity",
-            declaration_path="constants/countries.sql",
+            declaration_path="models/_constants/countries.sql",
             initial_declaration='CONSTANT (name countries, value ["GB", "FR"]);\n',
             changed_declaration='CONSTANT (name countries, value ["GB", "FR", "FR"]);\n',
             model_sql='MODEL ();\nSELECT @const("countries") AS countries\n',
@@ -420,7 +422,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
         ),
         DeclarationFingerprintTestCase(
             description="set order does not change rendered query identity",
-            declaration_path="constants/countries.sql",
+            declaration_path="models/_constants/countries.sql",
             initial_declaration='CONSTANT (name countries, value {"GB", "FR"});\n',
             changed_declaration='CONSTANT (name countries, value {"FR", "GB"});\n',
             model_sql='MODEL ();\nSELECT @const("countries") AS countries\n',
@@ -429,7 +431,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
         ),
         DeclarationFingerprintTestCase(
             description="object key order does not change rendered query identity",
-            declaration_path="constants/labels.sql",
+            declaration_path="models/_constants/labels.sql",
             initial_declaration=(
                 'CONSTANT (name labels, value (GB "Great Britain", FR "France"));\n'
             ),
@@ -442,7 +444,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
         ),
         DeclarationFingerprintTestCase(
             description="set membership changes rendered query identity",
-            declaration_path="constants/countries.sql",
+            declaration_path="models/_constants/countries.sql",
             initial_declaration='CONSTANT (name countries, value {"GB", "FR"});\n',
             changed_declaration='CONSTANT (name countries, value {"GB", "HK"});\n',
             model_sql='MODEL ();\nSELECT @const("countries") AS countries\n',
@@ -451,7 +453,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
         ),
         DeclarationFingerprintTestCase(
             description="object value changes rendered query identity",
-            declaration_path="constants/labels.sql",
+            declaration_path="models/_constants/labels.sql",
             initial_declaration='CONSTANT (name labels, value (GB "Great Britain"));\n',
             changed_declaration='CONSTANT (name labels, value (GB "Britain"));\n',
             model_sql='MODEL ();\nSELECT @const("labels") AS labels\n',
@@ -460,7 +462,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
         ),
         DeclarationFingerprintTestCase(
             description="collection render mode changes rendered query identity",
-            declaration_path="constants/countries.sql",
+            declaration_path="models/_constants/countries.sql",
             initial_declaration='CONSTANT (name countries, value ["GB", "FR"]);\n',
             changed_declaration=(
                 'CONSTANT (name countries, value ["GB", "FR"], render_as array);\n'
@@ -471,7 +473,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
         ),
         DeclarationFingerprintTestCase(
             description="declaration used by another model does not alter model identity",
-            declaration_path="constants/countries.sql",
+            declaration_path="models/_constants/countries.sql",
             initial_declaration='CONSTANT (name countries, value ["GB", "FR"]);\n',
             changed_declaration='CONSTANT (name countries, value ["GB", "HK"]);\n',
             model_sql="MODEL ();\nSELECT 1 AS value\n",
@@ -483,7 +485,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
         ),
         DeclarationFingerprintTestCase(
             description="enum members change enforced contract identity",
-            declaration_path="enums/state.sql",
+            declaration_path="models/_enums/state.sql",
             initial_declaration="ENUM (name state, members [OPEN]);\n",
             changed_declaration="ENUM (name state, members [OPEN, CLOSED]);\n",
             model_sql="""

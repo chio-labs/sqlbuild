@@ -57,6 +57,7 @@ fn validate_raw(value: &toml::Value) -> Result<(), String> {
         "cte_name_whitelist",
         "cte_name_denylist",
         "sql_tests",
+        "layout",
         "cache",
     ];
     let mut unknown: Vec<String> = table
@@ -95,11 +96,37 @@ fn validate_raw(value: &toml::Value) -> Result<(), String> {
 }
 
 pub(crate) fn validate(config: &KataConfig) -> Result<(), String> {
-    const THRESHOLDS: [&str; 3] = [
+    const THRESHOLDS: [&str; 10] = [
         "min_audits_per_model",
         "min_tests_per_model",
         "min_custom_rule_test_cases",
+        "max_subdomain_depth",
+        "min_shared_owner_prefix_directories",
+        "max_role_container_depth",
+        "max_macro_container_files",
+        "max_constant_container_files",
+        "max_enum_container_files",
+        "min_shared_container_prefix_files",
     ];
+    if config.layout.levels.is_empty() {
+        return Err("kata.layout.levels must contain at least one normalized relative path".into());
+    }
+    let mut levels: std::collections::BTreeSet<&String> = std::collections::BTreeSet::new();
+    for level in &config.layout.levels {
+        validate_relative_path(level, "kata.layout.levels")?;
+        if !levels.insert(level) {
+            return Err(format!("duplicate kata layout level: {level}"));
+        }
+    }
+    validate_non_overlapping_paths(&config.layout.levels, "kata.layout.levels")?;
+    let mut domain_roots: std::collections::BTreeSet<&String> = std::collections::BTreeSet::new();
+    for root in &config.layout.domain_roots {
+        validate_relative_path(root, "kata.layout.domain_roots")?;
+        if !domain_roots.insert(root) {
+            return Err(format!("duplicate kata layout domain root: {root}"));
+        }
+    }
+    validate_non_overlapping_paths(&config.layout.domain_roots, "kata.layout.domain_roots")?;
     let pipeline = Path::new(&config.sql_tests.pipeline_directory);
     if config.sql_tests.pipeline_directory.trim().is_empty()
         || config.sql_tests.pipeline_directory.contains('\\')
@@ -185,6 +212,41 @@ pub(crate) fn validate(config: &KataConfig) -> Result<(), String> {
     for allow in &config.select_star_allow {
         if allow.paths.is_empty() || allow.reason.trim().is_empty() {
             return Err("kata.select_star_allow requires paths and reason".into());
+        }
+    }
+    Ok(())
+}
+
+fn validate_relative_path(value: &str, label: &str) -> Result<(), String> {
+    let path = Path::new(value);
+    if value.trim().is_empty()
+        || value.contains('\\')
+        || value.contains("//")
+        || value.ends_with('/')
+        || value
+            .split('/')
+            .next()
+            .is_some_and(|component| component.ends_with(':'))
+        || path.is_absolute()
+        || path
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        return Err(format!(
+            "{label} entries must be normalized project-relative paths"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_non_overlapping_paths(values: &[String], label: &str) -> Result<(), String> {
+    for (index, left) in values.iter().enumerate() {
+        for right in values.iter().skip(index + 1) {
+            let left_prefix = format!("{left}/");
+            let right_prefix = format!("{right}/");
+            if left.starts_with(&right_prefix) || right.starts_with(&left_prefix) {
+                return Err(format!("{label} entries must not overlap: {left}, {right}"));
+            }
         }
     }
     Ok(())

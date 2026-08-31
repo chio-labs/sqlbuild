@@ -108,6 +108,20 @@ select = ["SQBK"]
 codes select individual rules, and `ignore` removes matching rules. Audit, unit-test, and custom-rule
 test-case minimums each default to one and can be overridden under `[kata.thresholds]`.
 
+Kata also keeps model ownership shallow and explicit. Configured level paths separate warehouse
+layers from domain ownership; every owner is a leaf or a branch, subdomain depth defaults to one,
+and declaration roles remain bounded flat-or-grouped containers:
+
+```toml
+[kata.layout]
+levels = ["staging", "intermediate/clean", "intermediate/enriched", "mart"]
+domain_roots = ["market/betfair", "model/horsenet/ratings"] # optional disambiguation
+
+[kata.thresholds]
+max_subdomain_depth = 1
+min_shared_owner_prefix_directories = 2
+```
+
 Run `sqb kata`, inspect metadata with `sqb kata rule SQBKS101`, and generate agent guidance from
 the same active ruleset with `sqb kata skills`. Use `sqb kata skills --check` in CI to detect stale
 guidance. `--json`, `--select`, and `--exclude` are available for automation and model scoping.

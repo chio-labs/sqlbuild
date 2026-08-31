@@ -23,8 +23,21 @@ macro_rules! rule {
             guidance: None,
             implementation_fingerprint: env!("CARGO_PKG_VERSION").into(),
             enabled_by_default: true,
-            project_wide: matches!($code, "SQBKH101" | "SQBKH201" | "SQBKX201")
-                || $code.starts_with("SQBKT"),
+            project_wide: matches!(
+                $code,
+                "SQBKH101"
+                    | "SQBKH201"
+                    | "SQBKH301"
+                    | "SQBKH302"
+                    | "SQBKH303"
+                    | "SQBKH304"
+                    | "SQBKH305"
+                    | "SQBKR500"
+                    | "SQBKR501"
+                    | "SQBKR502"
+                    | "SQBKR503"
+                    | "SQBKX201"
+            ) || $code.starts_with("SQBKT"),
             custom: false,
         }
     };
@@ -152,6 +165,34 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
             "Declare contract enforced and list the authoritative output columns in MODEL().",
         ),
         rule!(
+            "SQBKR500",
+            "layers",
+            "domain-level-layout",
+            "models must resolve to one configured domain root and level",
+            "Move the model beneath a configured level, or configure an explicit domain root when inference is ambiguous.",
+        ),
+        rule!(
+            "SQBKR501",
+            "layers",
+            "owner-leaf-or-branch",
+            "model owners must be either leaves or branches",
+            "Keep models directly in a leaf owner, or move all direct models into meaningfully named child owners.",
+        ),
+        rule!(
+            "SQBKR502",
+            "layers",
+            "maximum-subdomain-depth",
+            "model ownership must stay within the configured subdomain depth",
+            "Flatten this ownership path, promote part of it into the domain root, or increase max_subdomain_depth explicitly.",
+        ),
+        rule!(
+            "SQBKR503",
+            "layers",
+            "shared-owner-prefix",
+            "sibling owner names must not hide an implicit hierarchy",
+            "Consolidate the shared concern, make the compressed token owner explicit, or rename siblings whose prefix is not ownership.",
+        ),
+        rule!(
             "SQBKJ001",
             "joins",
             "no-comma-join",
@@ -220,6 +261,41 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
             "declaration-domain-placement",
             "public enum and constant files must live under a configured domain folder",
             "Move this declaration beneath enums/<domain>/ or constants/<domain>/.",
+        ),
+        rule!(
+            "SQBKH301",
+            "hygiene",
+            "declaration-container-shape",
+            "declaration role containers must be flat or grouped",
+            "Keep files directly in the role container, or move every file into one level of meaningful concern buckets.",
+        ),
+        rule!(
+            "SQBKH302",
+            "hygiene",
+            "declaration-container-depth",
+            "declaration role buckets must stay within the configured depth",
+            "Flatten nested buckets or increase max_role_container_depth explicitly.",
+        ),
+        rule!(
+            "SQBKH303",
+            "hygiene",
+            "declaration-container-capacity",
+            "declaration role containers and buckets must remain bounded",
+            "Group files by a meaningful concern or increase the declaration-kind file threshold explicitly.",
+        ),
+        rule!(
+            "SQBKH304",
+            "hygiene",
+            "declaration-bucket-name",
+            "declaration role buckets must name a specific concern",
+            "Rename this generic or reserved bucket after the concern it contains.",
+        ),
+        rule!(
+            "SQBKH305",
+            "hygiene",
+            "declaration-container-prefix",
+            "declaration filenames must not hide an obvious navigation bucket",
+            "Group this compressed filename prefix into a scope-neutral concern bucket or rename files whose prefix is not a shared concern.",
         ),
         rule!(
             "SQBKT001",

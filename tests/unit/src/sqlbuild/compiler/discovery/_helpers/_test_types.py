@@ -44,6 +44,14 @@ class OrdinaryDiscoveryExclusionTestCase:
 
 
 @dataclass(frozen=True)
+class OrdinaryFolderTestCase:
+    description: str
+    root_relative_path: str
+    model_relative_path: str
+    expected_model_relative_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DiscoveryPathInventoryTestCase:
     description: str
     files: tuple[str, ...]

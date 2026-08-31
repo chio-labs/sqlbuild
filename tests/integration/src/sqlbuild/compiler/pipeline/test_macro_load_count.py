@@ -25,7 +25,7 @@ _PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabas
 _COUNTING_MACRO_MODULE: str = (
     "from pathlib import Path\n"
     "\n"
-    "_LOG_PATH = Path(__file__).resolve().parent.parent / 'macro_import_log.txt'\n"
+    "_LOG_PATH = Path(__file__).resolve().parents[2] / 'macro_import_log.txt'\n"
     "with _LOG_PATH.open('a', encoding='utf-8') as handle:\n"
     "    handle.write('import\\n')\n"
     "\n"
@@ -42,7 +42,7 @@ _COUNTING_MACRO_MODULE: str = (
             description="user macro modules execute once across compile and manifest generation",
             project_files={
                 "sqlbuild_project.toml": _PROJECT_TOML,
-                "macros/counting.py": _COUNTING_MACRO_MODULE,
+                "models/_macros/counting.py": _COUNTING_MACRO_MODULE,
                 "models/orders.sql": (
                     "MODEL (materialized table);\n\nSELECT 1 AS order_id, @order_tag() AS tag"
                 ),
@@ -85,9 +85,9 @@ def test_given_side_effect_macro_when_compiling_manifest_then_imports_macros_onc
             description="private helper composition reaches scope and manifest dependency",
             project_files={
                 "sqlbuild_project.toml": _PROJECT_TOML,
-                "macros/shared.py": "def shared() -> str:\n    return 'order_id'\n",
-                "macros/orders.py": (
-                    "from macros.shared import shared\n\n"
+                "models/_macros/shared.py": "def shared() -> str:\n    return 'order_id'\n",
+                "models/_macros/orders.py": (
+                    "from models._macros.shared import shared\n\n"
                     "def _helper() -> str:\n    return shared()\n\n"
                     "def order_column() -> str:\n    return _helper()\n"
                 ),
