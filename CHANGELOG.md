@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.67.1](https://github.com/chio-labs/sqlbuild/compare/v0.67.0...v0.67.1) (2026-08-31)
+
+
+### Bug Fixes
+
+* keep Dagster failure metadata concise ([#429](https://github.com/chio-labs/sqlbuild/issues/429)) ([38e7362](https://github.com/chio-labs/sqlbuild/commit/38e736223f1ca3a42c0c8985a5afda4880b729b1))
+
 ## [0.67.0](https://github.com/chio-labs/sqlbuild/compare/v0.66.6...v0.67.0) (2026-08-31)
 
 
