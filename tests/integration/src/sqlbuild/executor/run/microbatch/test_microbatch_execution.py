@@ -156,7 +156,7 @@ _INT_MODEL_SQL: str = (
             ),
         ),
         MicrobatchSuccessTestCase(
-            description="full-refresh microbatch drops target and rebuilds in batches",
+            description="full-refresh microbatch rebuilds aside and swaps after all batches",
             setup_sql=(
                 _TS_SOURCE_SQL,
                 _TS_SOURCE_DATA,
@@ -180,6 +180,10 @@ _INT_MODEL_SQL: str = (
                     "SELECT id, payload FROM main.orders ORDER BY id",
                     ((1, "a"), (2, "b"), (3, "c")),
                 ),
+                (
+                    "SELECT id, payload FROM main.__sqb_prev__orders ORDER BY id",
+                    ((99, "old"),),
+                ),
             ),
         ),
         MicrobatchSuccessTestCase(
@@ -187,6 +191,7 @@ _INT_MODEL_SQL: str = (
             setup_sql=(
                 _TS_SOURCE_SQL,
                 _TS_SOURCE_DATA,
+                "CREATE TABLE main.order_activity (event_hour TIMESTAMP, event_count BIGINT)",
             ),
             model_sql=(
                 "SELECT DATE_TRUNC('hour', event_time) AS event_hour, COUNT(*) AS event_count "
@@ -597,7 +602,7 @@ def test_given_microbatch_model_when_executing_then_succeeds(
             expected_row_count=3,
         ),
         MicrobatchFailureTestCase(
-            description="full-refresh microbatch failure mid-run preserves completed batch data",
+            description="full-refresh microbatch failure keeps live target and rebuild data",
             setup_sql=(
                 "CREATE TABLE main.raw_events (  id INTEGER, event_time TIMESTAMP, payload VARCHAR)",
                 "INSERT INTO main.raw_events VALUES "
@@ -627,6 +632,10 @@ def test_given_microbatch_model_when_executing_then_succeeds(
             expected_query_results=(
                 (
                     "SELECT id, payload FROM main.orders ORDER BY id",
+                    ((99, "old"),),
+                ),
+                (
+                    "SELECT id, payload FROM main.__sqb_rebuild__orders ORDER BY id",
                     ((1, "a"),),
                 ),
             ),
@@ -637,6 +646,7 @@ def test_given_microbatch_model_when_executing_then_succeeds(
             setup_sql=(
                 _TS_SOURCE_SQL,
                 _TS_SOURCE_DATA,
+                "CREATE TABLE main.order_activity (event_hour TIMESTAMP, event_count BIGINT)",
             ),
             model_sql=(
                 "SELECT DATE_TRUNC('hour', event_time) AS event_hour, COUNT(*) AS event_count "

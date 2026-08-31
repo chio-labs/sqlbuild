@@ -39,6 +39,7 @@ from sqlbuild.compiler.planner.types import (
     CursorType,
     IncrementalStrategy,
     OnSchemaChange,
+    PlanReason,
 )
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
@@ -56,6 +57,11 @@ from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
 )
+from sqlbuild.executor.run._helpers.materializations.full_refresh import (
+    promote_full_refresh_rebuild,
+    relation_exists,
+    resolve_full_refresh_relations,
+)
 from sqlbuild.executor.run._helpers.materializations.incremental import (
     _apply_schema_change,
     _execute_dml,
@@ -72,6 +78,7 @@ from sqlbuild.executor.run._helpers.validation.type_enforcement import enforce_t
 from sqlbuild.executor.run.models import (
     BatchWindow,
     FinalAuditRun,
+    FullRefreshRelations,
     MicrobatchAccountingInterval,
     MicrobatchLifecycleState,
     MicrobatchPhaseOutcome,
@@ -184,6 +191,19 @@ def execute_microbatch_entry(
     """Execute one microbatch incremental model through batched delta/DML."""
 
     targets: MicrobatchTargets = _resolve_microbatch_targets(context=context)
+    full_refresh_relations: FullRefreshRelations | None = None
+    if is_full_refresh:
+        full_refresh_relations = resolve_full_refresh_relations(
+            adapter=context.adapter,
+            database=context.entry.destination.database,
+            schema=context.entry.destination.schema,
+            target_name=context.entry.destination.name,
+        )
+        targets = replace(
+            targets,
+            target_table=full_refresh_relations.rebuild_name,
+            target_qualified=full_refresh_relations.rebuild_qualified,
+        )
     state: MicrobatchLifecycleState = MicrobatchLifecycleState(
         warnings=[],
         audit_results=[],
@@ -232,6 +252,14 @@ def execute_microbatch_entry(
     )
     if isinstance(history_context, ModelExecutionResult):
         return history_context
+    if full_refresh_relations is not None:
+        preparation_failure: ModelExecutionResult | None = _prepare_full_refresh_rebuild(
+            context=context,
+            state=state,
+            relations=full_refresh_relations,
+        )
+        if preparation_failure is not None:
+            return preparation_failure
     if history_context.run_type == MicrobatchRunType.REPLAY_ON_CHANGE:
         replay_batches: tuple[BatchWindow, ...] = compute_batch_windows(
             start=history_context.run_start,
@@ -303,16 +331,6 @@ def execute_microbatch_entry(
                 cursor_grain=context.entry.cursor_grain,
             )
         )
-    full_refresh_exit: ModelExecutionResult | None = _drop_target_for_full_refresh(
-        context=context,
-        is_full_refresh=is_full_refresh,
-        target_qualified=targets.target_qualified,
-        warnings=state.warnings,
-        audit_results=state.audit_results,
-        statement_recorder=state.statement_recorder,
-    )
-    if full_refresh_exit is not None:
-        return full_refresh_exit
     batch_outcome: MicrobatchPhaseOutcome = _execute_microbatch_batches(
         context=context,
         declared_columns=declared_columns,
@@ -328,6 +346,7 @@ def execute_microbatch_entry(
         context=context,
         history=history_context,
         batches=batch_plan.batches,
+        physical_target_name=targets.target_table,
     )
     if batch_outcome.failure is not None:
         return replace(
@@ -337,7 +356,12 @@ def execute_microbatch_entry(
             rows_affected=batch_outcome.rows_affected,
             **_microbatch_result_fields(history=history_context, succeeded=False),
         )
-    final_audit_run: FinalAuditRun = run_final_scope_audits(context=context)
+    final_audit_run: FinalAuditRun = run_final_scope_audits(
+        context=context,
+        relation_override=(
+            None if full_refresh_relations is None else full_refresh_relations.rebuild_qualified
+        ),
+    )
     state.audit_results.extend(final_audit_run.results)
     if final_audit_run.has_error:
         return replace(
@@ -345,9 +369,11 @@ def execute_microbatch_entry(
                 entry=context.entry,
                 phase=ExecutionPhase.AUDIT,
                 error=(
-                    f"final audit for '{context.entry.name}' failed after target update "
-                    "with severity level: error"
-                ),
+                    f"final audit for '{context.entry.name}' failed before full-refresh promotion "
+                    if full_refresh_relations is not None
+                    else f"final audit for '{context.entry.name}' failed after target update "
+                )
+                + ("with severity level: error"),
                 promoted_relation=targets.target_qualified,
                 warnings=state.warnings,
                 audit_results=state.audit_results,
@@ -355,6 +381,14 @@ def execute_microbatch_entry(
             ),
             **_microbatch_result_fields(history=history_context, succeeded=True),
         )
+    if full_refresh_relations is not None:
+        promotion_failure: ModelExecutionResult | None = _promote_microbatch_full_refresh(
+            context=context,
+            state=state,
+            relations=full_refresh_relations,
+        )
+        if promotion_failure is not None:
+            return promotion_failure
     post_hook_outcome: PostHookPhaseOutcome = run_post_hook_phase(
         context=context,
         warnings=state.warnings,
@@ -577,6 +611,7 @@ def _execute_microbatch_batches(
         completion_failure: ModelExecutionResult | None = _record_microbatch_completion(
             context=context,
             batch=batch,
+            is_full_refresh=is_full_refresh,
             rows_affected=dml_result if isinstance(dml_result, int) else None,
             history=history_context,
             state=state,
@@ -1056,6 +1091,7 @@ def _record_microbatch_completion(
     *,
     context: ModelMaterializationContext,
     batch: BatchWindow,
+    is_full_refresh: bool,
     rows_affected: int | None,
     history: _MicrobatchHistoryContext,
     state: MicrobatchLifecycleState,
@@ -1064,7 +1100,11 @@ def _record_microbatch_completion(
     now: datetime = datetime.now(tz=UTC)
     recovery_origin: _RecoveryOrigin | None = history.recovery_origins.get((batch.start, batch.end))
     completion_scope: MicrobatchScope = _current_completion_scope(
-        context=context, scope=history.scope
+        context=context,
+        scope=history.scope,
+        physical_target_name=(
+            targets.target_table if is_full_refresh else context.entry.destination.name
+        ),
     )
     event: MicrobatchEvent = MicrobatchEvent(
         event_id=uuid4().hex,
@@ -1145,15 +1185,21 @@ def _expected_model_version_hash(*, context: ModelMaterializationContext) -> str
 
 
 def _current_completion_scope(
-    *, context: ModelMaterializationContext, scope: MicrobatchScope
+    *,
+    context: ModelMaterializationContext,
+    scope: MicrobatchScope,
+    physical_target_name: str | None = None,
 ) -> MicrobatchScope:
-    if scope.physical_generation_id.startswith(MICROBATCH_REPLAY_GENERATION_PREFIX):
+    if (
+        scope.physical_generation_id.startswith(MICROBATCH_REPLAY_GENERATION_PREFIX)
+        or context.entry.reason == PlanReason.FULL_REFRESH
+    ):
         return scope
     generation: str | None = context.adapter.physical_relation_generation(
         connection=context.connection,
         database=context.entry.destination.database,
         schema=context.entry.destination.schema,
-        name=context.entry.destination.name,
+        name=physical_target_name or context.entry.destination.name,
     )
     if generation is None:
         return scope
@@ -1775,13 +1821,16 @@ def _refresh_microbatch_result_history(
     context: ModelMaterializationContext,
     history: _MicrobatchHistoryContext,
     batches: tuple[BatchWindow, ...],
+    physical_target_name: str,
 ) -> _MicrobatchHistoryContext:
     if not batches:
         return history
     expected: tuple[MicrobatchInterval, ...] = tuple(
         MicrobatchInterval(start=batch.start, end=batch.end) for batch in batches
     )
-    current_scope: MicrobatchScope = _current_completion_scope(context=context, scope=history.scope)
+    current_scope: MicrobatchScope = _current_completion_scope(
+        context=context, scope=history.scope, physical_target_name=physical_target_name
+    )
     try:
         events: tuple[MicrobatchEvent, ...] = history.store.read_scope_history(current_scope)
     except Exception:
@@ -2164,35 +2213,93 @@ def _complete_microbatch_batch(
     )
 
 
-def _drop_target_for_full_refresh(
+def _prepare_full_refresh_rebuild(
     *,
     context: ModelMaterializationContext,
-    is_full_refresh: bool,
-    target_qualified: str,
-    warnings: list[str],
-    audit_results: list[AuditExecutionResult],
-    statement_recorder: StatementRecorder,
+    state: MicrobatchLifecycleState,
+    relations: FullRefreshRelations,
 ) -> ModelExecutionResult | None:
-    """Drop the target before a full-refresh run; return a failure result on error."""
+    """Inspect or initialize the deterministic full-refresh rebuild relation."""
 
-    if not is_full_refresh:
-        return None
     try:
-        with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_target"):
+        live_exists: bool = relation_exists(
+            adapter=context.adapter,
+            connection=context.connection,
+            database=context.entry.destination.database,
+            schema=context.entry.destination.schema,
+            name=relations.target_name,
+        )
+        rebuild_exists: bool = relation_exists(
+            adapter=context.adapter,
+            connection=context.connection,
+            database=context.entry.destination.database,
+            schema=context.entry.destination.schema,
+            name=relations.rebuild_name,
+        )
+        if not live_exists and rebuild_exists:
+            context.adapter.rename(
+                connection=context.connection,
+                origin=relations.rebuild_qualified,
+                destination=relations.target_qualified,
+                statement_recorder=state.statement_recorder,
+            )
+        elif not live_exists and context.entry.reason == PlanReason.FULL_REFRESH:
+            raise ExecutorInputError(
+                "full-refresh reconciliation found neither the live target nor its rebuild "
+                f"relation for '{context.entry.name}'"
+            )
+        elif rebuild_exists:
             context.adapter.drop(
                 connection=context.connection,
-                destination=target_qualified,
+                destination=relations.rebuild_qualified,
                 if_exists=True,
-                statement_recorder=statement_recorder,
+                statement_recorder=state.statement_recorder,
             )
     except Exception as exc:
         return build_failed_result(
             entry=context.entry,
             phase=ExecutionPhase.STAGING,
-            error=f"failed to drop target for full-refresh microbatch: {exc}",
-            warnings=warnings,
-            audit_results=audit_results,
-            statement_recorder=statement_recorder,
+            error=str(exc),
+            warnings=state.warnings,
+            audit_results=state.audit_results,
+            statement_recorder=state.statement_recorder,
+        )
+    return None
+
+
+def _promote_microbatch_full_refresh(
+    *,
+    context: ModelMaterializationContext,
+    state: MicrobatchLifecycleState,
+    relations: FullRefreshRelations,
+) -> ModelExecutionResult | None:
+    """Promote a complete rebuild while retaining the outgoing generation."""
+
+    try:
+        live_exists: bool = relation_exists(
+            adapter=context.adapter,
+            connection=context.connection,
+            database=context.entry.destination.database,
+            schema=context.entry.destination.schema,
+            name=relations.target_name,
+        )
+        promote_full_refresh_rebuild(
+            adapter=context.adapter,
+            connection=context.connection,
+            relations=relations,
+            target_exists=live_exists,
+            statement_recorder=state.statement_recorder,
+        )
+    except Exception as exc:
+        return build_failed_result(
+            entry=context.entry,
+            phase=ExecutionPhase.DML,
+            error=f"failed to promote full-refresh rebuild: {exc}",
+            staging_relation=relations.rebuild_qualified,
+            promoted_relation=relations.target_qualified,
+            warnings=state.warnings,
+            audit_results=state.audit_results,
+            statement_recorder=state.statement_recorder,
         )
     return None
 
