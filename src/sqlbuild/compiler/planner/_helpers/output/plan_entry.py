@@ -550,6 +550,7 @@ def plan_model_from_change(
         resolved_sql=resolved_sql,
         logical_ddl=logical_ddl,
         permanent_table=is_permanent_table(model),
+        archive_retention_days=model.config.archive_retention_days,
         incremental_strategy=incremental_strategy,
         incremental_mode=incremental_mode,
         cursor_column=cursor_column,

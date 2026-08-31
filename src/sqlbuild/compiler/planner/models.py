@@ -635,6 +635,7 @@ class ModelPlanEntry:
     resolved_sql: str
     logical_ddl: str
     permanent_table: bool = False
+    archive_retention_days: int = 7
     incremental_strategy: str | None = None
     incremental_mode: str | None = None
     cursor_column: str | None = None

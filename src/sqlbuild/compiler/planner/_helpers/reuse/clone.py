@@ -169,6 +169,7 @@ def build_clone_model_entries(
             resolved_sql=resolved_sql,
             logical_ddl="",
             permanent_table=is_permanent_table(model),
+            archive_retention_days=model.config.archive_retention_days,
         )
     return tuple(entries_by_key[key] for key in plan.execution_order if key in entries_by_key)
 
@@ -312,6 +313,7 @@ def build_origin_model_entries(
                 resolved_sql="",
                 logical_ddl="",
                 permanent_table=is_permanent_table(model),
+                archive_retention_days=model.config.archive_retention_days,
             )
         )
     return tuple(entries)

@@ -239,17 +239,20 @@ def _build_model_inputs(
             model_file=model_file,
             path_defaults=discovered_inputs.project_config.path_defaults,
         )
-        effective_config: CompileModelConfig = build_model_config(
-            defaults=discovered_inputs.project_config.defaults,
-            path_defaults=discovered_inputs.project_config.path_defaults,
-            matched_path_default=matched_path_default,
-            model_header_values=model_file.header_values,
-            effective_vars=effective_vars,
-            target_config=target_config,
-            model_name=model_file.file_path.stem,
-            effective_target_name=effective_target_name,
-            run_id=run_id,
-            materialization_defaults=discovered_inputs.project_config.materialization_defaults,
+        effective_config: CompileModelConfig = replace(
+            build_model_config(
+                defaults=discovered_inputs.project_config.defaults,
+                path_defaults=discovered_inputs.project_config.path_defaults,
+                matched_path_default=matched_path_default,
+                model_header_values=model_file.header_values,
+                effective_vars=effective_vars,
+                target_config=target_config,
+                model_name=model_file.file_path.stem,
+                effective_target_name=effective_target_name,
+                run_id=run_id,
+                materialization_defaults=discovered_inputs.project_config.materialization_defaults,
+            ),
+            archive_retention_days=discovered_inputs.project_config.janitor.archive_retention_days,
         )
         model_schema: ModelSchemaDeclaration | None = _resolve_model_schema(
             values=effective_config.values,
@@ -414,6 +417,7 @@ def _build_model_inputs(
             logical_schema=effective_config.logical_schema,
             logical_database=effective_config.logical_database,
             time_travel_retention=effective_config.time_travel_retention,
+            archive_retention_days=effective_config.archive_retention_days,
         )
         hook_name: str
         for hook_name in ("pre_hooks", "post_hooks"):
@@ -1431,6 +1435,7 @@ def strip_model_header_metadata_from_config(config: CompileModelConfig) -> Compi
         logical_schema=config.logical_schema,
         logical_database=config.logical_database,
         time_travel_retention=config.time_travel_retention,
+        archive_retention_days=config.archive_retention_days,
     )
 
 
@@ -1595,6 +1600,7 @@ def _merge_schema_tags(
         logical_schema=config.logical_schema,
         logical_database=config.logical_database,
         time_travel_retention=config.time_travel_retention,
+        archive_retention_days=config.archive_retention_days,
     )
 
 

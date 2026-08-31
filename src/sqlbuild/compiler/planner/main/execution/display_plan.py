@@ -55,6 +55,7 @@ def build_display_only_sqlbuild_plan(
                 resolved_sql=model.query_sql,
                 logical_ddl="",
                 permanent_table=is_permanent_table(model),
+                archive_retention_days=model.config.archive_retention_days,
                 incremental_strategy=_as_optional_string(
                     model.config.values.get("incremental_strategy")
                 ),

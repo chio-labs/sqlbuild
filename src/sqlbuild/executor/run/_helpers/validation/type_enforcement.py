@@ -7,6 +7,10 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.compiler.planner.main.scenarios.fit_artifact_logical_name import (
+    fit_artifact_logical_name,
+)
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 
 
 def enforce_types_staged(
@@ -59,9 +63,23 @@ def enforce_types_staged(
             projection_parts.append(produced_col_item.name)
 
     projection_sql: str = ", ".join(projection_parts)
-    enforced_qualified: str = f"{staging_qualified}__enforced"
     enforced_sql: str = f"SELECT {projection_sql} FROM {staging_qualified}"
     if permanent_table:
+        enforced_prefix: str = "__sqb_enforced__"
+        fitted_enforced_name: str = fit_artifact_logical_name(
+            logical_name=staging_table,
+            fixed_prefix=enforced_prefix,
+            identifier_limit=adapter.maximum_identifier_length(),
+            artifact_label="Permanent enforced staging",
+        )
+        enforced_table: str = f"{enforced_prefix}{fitted_enforced_name}"
+        enforced_qualified: str | None = adapter.render_qualified_name(
+            database=staging_database,
+            schema=staging_schema,
+            name=enforced_table,
+        )
+        if enforced_qualified is None:
+            raise ExecutorInputError("type enforcement could not qualify its staging relation")
         adapter.drop(
             connection=connection,
             destination=enforced_qualified,
@@ -76,6 +94,7 @@ def enforce_types_staged(
         for statement in statements:
             adapter.execute(connection=connection, sql=statement)
     else:
+        enforced_qualified = f"{staging_qualified}__enforced"
         adapter.create_table_as(
             connection=connection,
             destination=enforced_qualified,

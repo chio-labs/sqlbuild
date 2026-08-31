@@ -233,6 +233,7 @@ class PermanentRequirementTestCase:
     description: str
     source_created_at: datetime
     expected_operation_kind: str
+    expected_retention_days: int
 
 
 @dataclass(frozen=True)
@@ -249,6 +250,19 @@ class PermanentArchiveConflictTestCase:
     description: str
     archive_generation_offset_seconds: int
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class PermanentPersistedConflictTestCase:
+    description: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class PermanentIdentifierFitTestCase:
+    description: str
+    identifier_limit: int
+    expected_prefix: str
 
 
 @dataclass(frozen=True)

@@ -19,6 +19,7 @@ from sqlbuild.archives.main.project_archive_events import project_archive_events
 from sqlbuild.archives.models import ArchiveEvent, ArchiveProjection
 from sqlbuild.archives.types import ArchiveProvenanceStatus, ArchiveRecordType
 from sqlbuild.compiler.planner.models import ModelPlanEntry
+from sqlbuild.executor.run.models import PermanentPromotionContext
 
 _TABLE_TYPE_MIGRATION_OPERATION: str = "table_type_migration"
 
@@ -31,6 +32,7 @@ def build_permanent_promotion_requirement(
     target_schema: str,
     target_name: str,
     operation_identity: str,
+    archive_retention_days: int = 7,
 ) -> ArchiveEvent:
     """Build the deterministic safety-archive requirement for one target generation."""
 
@@ -66,128 +68,64 @@ def build_permanent_promotion_requirement(
         provenance_status=ArchiveProvenanceStatus.KNOWN,
         requested_at=created_at,
         created_at=created_at,
+        retention_days=archive_retention_days,
     )
 
 
-def promote_permanent_relation(
-    *,
-    adapter: BaseAdapter,
-    connection: Any,
-    staging_relation: str,
-    staging_name: str,
-    destination_relation: str,
-    destination_database: str | None,
-    destination_schema: str | None,
-    destination_name: str,
-    operation_identity: str,
-    statement_recorder: StatementRecorder,
-) -> None:
+def promote_permanent_relation(*, promotion: PermanentPromotionContext) -> None:
     """Archive an existing generation and promote an exclusive permanent staging table."""
 
-    if destination_schema is None:
-        raise ArchiveStateError("permanent table promotion requires a destination schema")
-    store: DirectArchiveEventStore = DirectArchiveEventStore(adapter=adapter, connection=connection)
+    store: DirectArchiveEventStore = DirectArchiveEventStore(
+        adapter=promotion.adapter,
+        connection=promotion.connection,
+    )
     history: tuple[ArchiveEvent, ...] = store.read_target_history(
-        database=destination_database,
-        schema=destination_schema,
-        target_name=destination_name,
+        database=promotion.destination_database,
+        schema=promotion.destination_schema,
+        target_name=promotion.destination_name,
     )
     target: RelationInfo | None = _inspect_relation(
-        adapter=adapter,
-        connection=connection,
-        database=destination_database,
-        schema=destination_schema,
-        name=destination_name,
+        adapter=promotion.adapter,
+        connection=promotion.connection,
+        database=promotion.destination_database,
+        schema=promotion.destination_schema,
+        name=promotion.destination_name,
     )
     previous: ArchiveEvent | None = _latest_migration_requirement(history=history)
-    if previous is not None:
-        previous_projection: ArchiveProjection = _projection_from_history(
-            history=history, requirement=previous
-        )
-        previous_archive: RelationInfo | None = _inspect_event_relation(
-            adapter=adapter,
-            connection=connection,
-            event=previous,
-            name=previous.archive_name,
-        )
-        staging: RelationInfo | None = _inspect_relation(
-            adapter=adapter,
-            connection=connection,
-            database=destination_database,
-            schema=destination_schema,
-            name=staging_name,
-        )
-        if (
-            target is not None
-            and target.is_transient is False
-            and previous_projection.completion is not None
-            and previous.origin_run_id == operation_identity
-            and previous_archive is not None
-            and _generation(previous_archive)
-            == previous_projection.completion.archive_physical_generation
-        ):
-            if staging is not None:
-                adapter.drop(
-                    connection=connection,
-                    destination=staging_relation,
-                    if_exists=True,
-                    statement_recorder=statement_recorder,
-                )
-            return
-        if target is None:
-            archive_relation: str | None = adapter.render_qualified_name(
-                database=destination_database,
-                schema=destination_schema,
-                name=previous.archive_name,
-            )
-            if archive_relation is None:
-                raise ArchiveStateError("permanent table promotion could not qualify the archive")
-            _reconcile_archive(
-                adapter=adapter,
-                connection=connection,
-                store=store,
-                requirement=previous,
-                target_relation=destination_relation,
-                archive_relation=archive_relation,
-                statement_recorder=statement_recorder,
-            )
-            _promote_and_verify(
-                adapter=adapter,
-                connection=connection,
-                staging_relation=staging_relation,
-                staging_name=staging_name,
-                destination_relation=destination_relation,
-                destination_database=destination_database,
-                destination_schema=destination_schema,
-                destination_name=destination_name,
-                statement_recorder=statement_recorder,
-            )
-            return
+    if previous is not None and _reconcile_previous_migration(
+        promotion=promotion,
+        store=store,
+        history=history,
+        requirement=previous,
+        target=target,
+    ):
+        return
     if target is None:
         _promote_and_verify(
-            adapter=adapter,
-            connection=connection,
-            staging_relation=staging_relation,
-            staging_name=staging_name,
-            destination_relation=destination_relation,
-            destination_database=destination_database,
-            destination_schema=destination_schema,
-            destination_name=destination_name,
-            statement_recorder=statement_recorder,
+            adapter=promotion.adapter,
+            connection=promotion.connection,
+            staging_relation=promotion.staging_relation,
+            staging_name=promotion.staging_name,
+            destination_relation=promotion.destination_relation,
+            destination_database=promotion.destination_database,
+            destination_schema=promotion.destination_schema,
+            destination_name=promotion.destination_name,
+            statement_recorder=promotion.statement_recorder,
         )
         return
 
     requirement: ArchiveEvent = build_permanent_promotion_requirement(
-        adapter=adapter,
+        adapter=promotion.adapter,
         target=target,
-        target_database=destination_database,
-        target_schema=destination_schema,
-        target_name=destination_name,
-        operation_identity=operation_identity,
+        target_database=promotion.destination_database,
+        target_schema=promotion.destination_schema,
+        target_name=promotion.destination_name,
+        operation_identity=promotion.operation_identity,
+        archive_retention_days=promotion.archive_retention_days,
     )
-    archive_relation: str | None = adapter.render_qualified_name(
-        database=destination_database,
-        schema=destination_schema,
+    archive_relation: str | None = promotion.adapter.render_qualified_name(
+        database=promotion.destination_database,
+        schema=promotion.destination_schema,
         name=requirement.archive_name,
     )
     if archive_relation is None:
@@ -196,25 +134,120 @@ def promote_permanent_relation(
     _enforce_existing_requirement(projection=projection, expected=requirement)
     store.write(requirement)
     _reconcile_archive(
-        adapter=adapter,
-        connection=connection,
+        adapter=promotion.adapter,
+        connection=promotion.connection,
         store=store,
         requirement=requirement,
-        target_relation=destination_relation,
+        target_relation=promotion.destination_relation,
         archive_relation=archive_relation,
-        statement_recorder=statement_recorder,
+        statement_recorder=promotion.statement_recorder,
     )
     _promote_and_verify(
-        adapter=adapter,
-        connection=connection,
-        staging_relation=staging_relation,
-        staging_name=staging_name,
-        destination_relation=destination_relation,
-        destination_database=destination_database,
-        destination_schema=destination_schema,
-        destination_name=destination_name,
-        statement_recorder=statement_recorder,
+        adapter=promotion.adapter,
+        connection=promotion.connection,
+        staging_relation=promotion.staging_relation,
+        staging_name=promotion.staging_name,
+        destination_relation=promotion.destination_relation,
+        destination_database=promotion.destination_database,
+        destination_schema=promotion.destination_schema,
+        destination_name=promotion.destination_name,
+        statement_recorder=promotion.statement_recorder,
     )
+
+
+def _reconcile_previous_migration(
+    *,
+    promotion: PermanentPromotionContext,
+    store: DirectArchiveEventStore,
+    history: tuple[ArchiveEvent, ...],
+    requirement: ArchiveEvent,
+    target: RelationInfo | None,
+) -> bool:
+    projection: ArchiveProjection = _projection_from_history(
+        history=history,
+        requirement=requirement,
+    )
+    archive: RelationInfo | None = _inspect_event_relation(
+        adapter=promotion.adapter,
+        connection=promotion.connection,
+        event=requirement,
+        name=requirement.archive_name,
+    )
+    expected_generation: str | None = requirement.source_physical_generation
+    archive_matches: bool = archive is not None and _generation(archive) == expected_generation
+    if projection.completion is not None:
+        if (
+            not archive_matches
+            or projection.completion.archive_physical_generation != expected_generation
+        ):
+            raise ArchiveStateError("Completed safety archive evidence is missing or conflicting")
+        if target is None:
+            _promote_and_verify(
+                adapter=promotion.adapter,
+                connection=promotion.connection,
+                staging_relation=promotion.staging_relation,
+                staging_name=promotion.staging_name,
+                destination_relation=promotion.destination_relation,
+                destination_database=promotion.destination_database,
+                destination_schema=promotion.destination_schema,
+                destination_name=promotion.destination_name,
+                statement_recorder=promotion.statement_recorder,
+            )
+            return True
+        if requirement.origin_run_id == promotion.operation_identity:
+            if target.is_transient is not False:
+                raise ArchiveStateError("Completed permanent promotion has no permanent target")
+            staging: RelationInfo | None = _inspect_relation(
+                adapter=promotion.adapter,
+                connection=promotion.connection,
+                database=promotion.destination_database,
+                schema=promotion.destination_schema,
+                name=promotion.staging_name,
+            )
+            if staging is not None:
+                promotion.adapter.drop(
+                    connection=promotion.connection,
+                    destination=promotion.staging_relation,
+                    if_exists=True,
+                    statement_recorder=promotion.statement_recorder,
+                )
+            return True
+        if target is not None and _generation(target) == expected_generation:
+            raise ArchiveStateError(
+                "Completed archive and target contain the same source generation"
+            )
+        return False
+
+    if target is not None and _generation(target) != expected_generation:
+        raise ArchiveStateError("Pending migration source generation changed")
+    archive_relation: str | None = promotion.adapter.render_qualified_name(
+        database=promotion.destination_database,
+        schema=promotion.destination_schema,
+        name=requirement.archive_name,
+    )
+    if archive_relation is None:
+        raise ArchiveStateError("permanent table promotion could not qualify the archive")
+    _reconcile_archive(
+        adapter=promotion.adapter,
+        connection=promotion.connection,
+        store=store,
+        requirement=requirement,
+        target_relation=promotion.destination_relation,
+        archive_relation=archive_relation,
+        statement_recorder=promotion.statement_recorder,
+    )
+    _promote_and_verify(
+        adapter=promotion.adapter,
+        connection=promotion.connection,
+        staging_relation=promotion.staging_relation,
+        staging_name=promotion.staging_name,
+        destination_relation=promotion.destination_relation,
+        destination_database=promotion.destination_database,
+        destination_schema=promotion.destination_schema,
+        destination_name=promotion.destination_name,
+        statement_recorder=promotion.statement_recorder,
+    )
+    return True
 
 
 def _reconcile_archive(

@@ -3,24 +3,35 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
+from unittest.mock import Mock
 
 import pytest
 
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.archives.exceptions import ArchiveStateError
 from sqlbuild.archives.models import ArchiveEvent
 from sqlbuild.archives.types import ArchiveRecordType
+from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.executor.run._helpers.execution import permanent_promotion
 from sqlbuild.executor.run._helpers.execution.permanent_promotion import (
     build_permanent_promotion_requirement,
     promote_permanent_relation,
 )
+from sqlbuild.executor.run._helpers.execution.table_targets import resolve_table_targets
+from sqlbuild.executor.run._helpers.validation.type_enforcement import enforce_types_staged
+from sqlbuild.executor.run.models import TableTargets
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
     PermanentArchiveConflictTestCase,
+    PermanentIdentifierFitTestCase,
+    PermanentPersistedConflictTestCase,
     PermanentPromotionTestCase,
     PermanentRequirementTestCase,
+)
+from tests.unit.src.sqlbuild.executor.run._helpers.helpers import (
+    build_permanent_promotion_context,
+    build_result_model_plan_entry,
 )
 
 
@@ -118,6 +129,7 @@ _ARCHIVE_COMPLETED_AT: datetime = _SOURCE_CREATED_AT + timedelta(days=30)
             description="different runtime runs produce byte-equivalent migration requirement",
             source_created_at=_SOURCE_CREATED_AT,
             expected_operation_kind="table_type_migration",
+            expected_retention_days=30,
         )
     ],
     ids=lambda case: case.description,
@@ -140,6 +152,7 @@ def test_given_same_source_generation_when_building_requirement_then_payload_is_
         target_schema="mart",
         target_name="orders",
         operation_identity="model-version-a",
+        archive_retention_days=test_case.expected_retention_days,
     )
     second: ArchiveEvent = build_permanent_promotion_requirement(
         adapter=SnowflakeAdapter(),
@@ -148,6 +161,7 @@ def test_given_same_source_generation_when_building_requirement_then_payload_is_
         target_schema="mart",
         target_name="orders",
         operation_identity="model-version-a",
+        archive_retention_days=test_case.expected_retention_days,
     )
 
     assert first == second
@@ -155,6 +169,7 @@ def test_given_same_source_generation_when_building_requirement_then_payload_is_
     assert first.origin_run_id == "model-version-a"
     assert first.execution_run_id == "model-version-a"
     assert first.operation_kind == test_case.expected_operation_kind
+    assert first.retention_days == test_case.expected_retention_days
 
 
 @pytest.mark.parametrize(
@@ -177,6 +192,13 @@ def test_given_same_source_generation_when_building_requirement_then_payload_is_
             initial_state="renamed",
             operation_identity="model-version-a",
             expected_timeline=("completion", "rename_target"),
+            expected_completion_time=_ARCHIVE_COMPLETED_AT,
+        ),
+        PermanentPromotionTestCase(
+            description="later run resumes requirement written before archive rename",
+            initial_state="required",
+            operation_identity="model-version-b",
+            expected_timeline=("rename_archive", "completion", "rename_target"),
             expected_completion_time=_ARCHIVE_COMPLETED_AT,
         ),
         PermanentPromotionTestCase(
@@ -260,12 +282,14 @@ def test_given_physical_retry_state_when_promoting_permanent_then_reconciles_in_
     }
     relations_by_state: dict[str, dict[str, RelationInfo]] = {
         "existing": {"orders": target, "orders__staging": staging},
+        "required": {"orders": target, "orders__staging": staging},
         "renamed": {requirement.archive_name: archive, "orders__staging": staging},
         "promoted": promoted_relations,
         "missing": {"orders__staging": staging},
     }
     history_by_state: dict[str, list[ArchiveEvent]] = {
         "existing": [],
+        "required": [requirement],
         "renamed": [requirement],
         "promoted": [requirement, completion],
         "missing": [],
@@ -280,16 +304,10 @@ def test_given_physical_retry_state_when_promoting_permanent_then_reconciles_in_
     )
 
     promote_permanent_relation(
-        adapter=cast(Any, adapter),
-        connection=object(),
-        staging_relation="mart.orders__staging",
-        staging_name="orders__staging",
-        destination_relation="mart.orders",
-        destination_database="racing",
-        destination_schema="mart",
-        destination_name="orders",
-        operation_identity=test_case.operation_identity,
-        statement_recorder=StatementRecorder(),
+        promotion=build_permanent_promotion_context(
+            adapter=cast(Any, adapter),
+            operation_identity=test_case.operation_identity,
+        )
     )
 
     assert tuple(timeline) == test_case.expected_timeline
@@ -359,16 +377,156 @@ def test_given_conflicting_archive_state_when_promoting_permanent_then_fails_clo
 
     with pytest.raises(ArchiveStateError) as exc_info:
         promote_permanent_relation(
-            adapter=cast(Any, adapter),
-            connection=object(),
-            staging_relation="mart.orders__staging",
-            staging_name="orders__staging",
-            destination_relation="mart.orders",
-            destination_database="racing",
-            destination_schema="mart",
-            destination_name="orders",
-            operation_identity="model-version-a",
-            statement_recorder=StatementRecorder(),
+            promotion=build_permanent_promotion_context(
+                adapter=cast(Any, adapter),
+                operation_identity="model-version-a",
+            )
         )
 
     assert test_case.expected_error_fragment in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PermanentPersistedConflictTestCase(
+            description="completed lifecycle with missing archive fails closed",
+            expected_error_fragment="evidence is missing or conflicting",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_conflicting_persisted_history_when_promoting_permanent_then_fails_closed(
+    test_case: PermanentPersistedConflictTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    timeline: list[str] = []
+    old_target: RelationInfo = RelationInfo(
+        database="racing",
+        schema="mart",
+        name="orders",
+        relation_type="base table",
+        created_at=_SOURCE_CREATED_AT,
+        last_altered_at=_SOURCE_CREATED_AT,
+        is_transient=True,
+    )
+    requirement: ArchiveEvent = build_permanent_promotion_requirement(
+        adapter=SnowflakeAdapter(),
+        target=old_target,
+        target_database="racing",
+        target_schema="mart",
+        target_name="orders",
+        operation_identity="operation-a",
+    )
+    completion: ArchiveEvent = replace(
+        requirement,
+        event_id=permanent_promotion.build_archive_event_id(
+            requirement_id=requirement.requirement_id,
+            record_type=ArchiveRecordType.COMPLETION,
+        ),
+        record_type=ArchiveRecordType.COMPLETION,
+        archive_physical_generation=requirement.source_physical_generation,
+        completed_at=_ARCHIVE_COMPLETED_AT,
+        created_at=_ARCHIVE_COMPLETED_AT,
+    )
+    promoted: RelationInfo = replace(
+        old_target,
+        created_at=_SOURCE_CREATED_AT + timedelta(days=1),
+        is_transient=False,
+    )
+    staging: RelationInfo = replace(
+        promoted,
+        name="orders__staging",
+        created_at=_SOURCE_CREATED_AT + timedelta(days=2),
+    )
+    adapter: _FakePermanentAdapter = _FakePermanentAdapter(
+        relations={"orders": promoted, "orders__staging": staging},
+        timeline=timeline,
+        archive_completed_at=_ARCHIVE_COMPLETED_AT,
+    )
+    store: _FakeStore = _FakeStore(
+        history=[requirement, completion],
+        timeline=timeline,
+    )
+    monkeypatch.setattr(permanent_promotion, "DirectArchiveEventStore", lambda **kwargs: store)
+
+    with pytest.raises(ArchiveStateError, match=test_case.expected_error_fragment):
+        promote_permanent_relation(
+            promotion=build_permanent_promotion_context(
+                adapter=cast(Any, adapter),
+                operation_identity="operation-a",
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PermanentIdentifierFitTestCase(
+            description="maximum target name leaves room for staging identity",
+            identifier_limit=255,
+            expected_prefix="__sqb_staging__",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_maximum_target_identifier_when_resolving_permanent_staging_then_fits_limit(
+    test_case: PermanentIdentifierFitTestCase,
+) -> None:
+    entry: ModelPlanEntry = replace(
+        build_result_model_plan_entry(),
+        permanent_table=True,
+        destination=replace(
+            build_result_model_plan_entry().destination,
+            name="x" * test_case.identifier_limit,
+            qualified_name=f"mart.{'x' * test_case.identifier_limit}",
+        ),
+    )
+
+    targets: TableTargets = resolve_table_targets(adapter=SnowflakeAdapter(), entry=entry)
+
+    assert targets.staging_table.startswith(test_case.expected_prefix)
+    assert len(targets.staging_table) <= test_case.identifier_limit
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PermanentIdentifierFitTestCase(
+            description="maximum staging name leaves room for enforced artifact",
+            identifier_limit=63,
+            expected_prefix="__sqb_enforced__",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_maximum_staging_identifier_when_enforcing_types_then_fits_enforced_artifact(
+    test_case: PermanentIdentifierFitTestCase,
+) -> None:
+    adapter: Mock = Mock()
+    adapter.get_columns.return_value = (ColumnInfo(name="id", type="TEXT"),)
+    adapter.maximum_identifier_length.return_value = test_case.identifier_limit
+    adapter.render_qualified_name.side_effect = lambda *, database, schema, name: (
+        f"{database}.{schema}.{name}"
+    )
+    adapter.render_create_permanent_table_as.side_effect = lambda *, destination, sql: (
+        f"CREATE TABLE {destination} AS {sql}",
+    )
+    staging_table: str = "x" * test_case.identifier_limit
+
+    enforce_types_staged(
+        adapter=adapter,
+        connection=object(),
+        staging_qualified=f"warehouse.mart.{staging_table}",
+        staging_database="warehouse",
+        staging_schema="mart",
+        staging_table=staging_table,
+        declared_columns=(ColumnInfo(name="id", type="INTEGER"),),
+        statement_recorder=StatementRecorder(),
+        permanent_table=True,
+    )
+
+    destination: str = adapter.render_create_permanent_table_as.call_args.kwargs["destination"]
+    enforced_name: str = destination.rsplit(".", maxsplit=1)[-1]
+    assert enforced_name.startswith(test_case.expected_prefix)
+    assert len(enforced_name) <= test_case.identifier_limit
