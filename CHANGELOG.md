@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.71.2](https://github.com/chio-labs/sqlbuild/compare/v0.71.1...v0.71.2) (2026-08-31)
+
+
+### Bug Fixes
+
+* derive serial microbatch progress from the target cursor ([#444](https://github.com/chio-labs/sqlbuild/issues/444)) ([79eab16](https://github.com/chio-labs/sqlbuild/commit/79eab1660a360963fc997acb53a04922ead93c54))
+
 ## [0.71.1](https://github.com/chio-labs/sqlbuild/compare/v0.71.0...v0.71.1) (2026-08-31)
 
 
