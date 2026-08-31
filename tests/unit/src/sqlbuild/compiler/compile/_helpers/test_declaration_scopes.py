@@ -27,7 +27,11 @@ from sqlbuild.compiler.scopes.models import (
     ResourceIdentity,
     UsageRecord,
 )
-from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, UsageKind
+from sqlbuild.compiler.scopes.types import (
+    DeclarationKind,
+    ResourceKind,
+    UsageKind,
+)
 from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ExpectedModelDeclarationGrantTestCase,
@@ -565,6 +569,45 @@ def test_given_invalid_declaration_placement_when_assembling_then_project_is_rej
 
     with pytest.raises(CompileInputError, match=cast(str, test_case.expected_fragment)):
         _ = assemble_project(inputs=inputs, skip_column_inference=True)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ScopePlacementCompileTestCase(
+            description="over broad global is advisory when placement enforcement is disabled",
+            files={
+                "constants/value.sql": "CONSTANT (name value, value 1);",
+                "models/orders.sql": 'MODEL ();\nSELECT @const("value") AS value',
+            },
+            expected_model_names=("orders",),
+            expected_diagnostics=(("S024", "warning"),),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_disabled_placement_enforcement_when_assembling_then_project_and_warning_are_produced(
+    test_case: ScopePlacementCompileTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    project_file: str = _PROJECT_FILE + "\n[scopes]\nenforce_placement = false\n"
+    write_repo_files(
+        tmp_path,
+        {"sqlbuild_project.toml": project_file} | test_case.files,
+    )
+    inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+
+    compiled: CompiledProject = assemble_project(inputs=inputs, skip_column_inference=True)
+
+    assert tuple(model.name for model in compiled.models) == test_case.expected_model_names
+    assert (
+        tuple(
+            (diagnostic.code.value, diagnostic.severity.value)
+            for diagnostic in compiled.scope_index.diagnostics
+        )
+        == test_case.expected_diagnostics
+    )
 
 
 @pytest.mark.parametrize(

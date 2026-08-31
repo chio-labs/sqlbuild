@@ -27,6 +27,7 @@ SCOPE_PROJECT_CONFIG_KEYS: frozenset[str] = frozenset(
         "default_target",
         "defaults",
         "path_defaults",
+        "scopes",
         "settings",
         "targets",
         "vars",
