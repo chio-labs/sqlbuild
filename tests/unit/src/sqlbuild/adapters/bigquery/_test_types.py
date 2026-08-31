@@ -26,6 +26,14 @@ class BigQueryInvalidRetentionTestCase:
 
 
 @dataclass(frozen=True)
+class BigQueryMissingRetentionDatasetTestCase:
+    description: str
+    desired_days: int
+    expected_effective_days: int
+    expected_exists: bool
+
+
+@dataclass(frozen=True)
 class BigQueryMergeExclusionTestCase:
     description: str
     expected_update_assignment: str

@@ -21,6 +21,16 @@ class DatabricksInvalidRetentionTestCase:
 
 
 @dataclass(frozen=True)
+class DatabricksRetentionOrderingTestCase:
+    description: str
+    desired_days: int
+    log_days: int
+    deleted_days: int
+    expected_phases: tuple[str, ...]
+    expected_property_order: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DatabricksMergeExclusionTestCase:
     description: str
     expected_update_assignment: str

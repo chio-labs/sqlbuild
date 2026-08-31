@@ -24,9 +24,9 @@ class RetentionAdapterMixin:
         )
 
     def render_retention_changes(
-        self, *, request: RetentionRequest
+        self, *, request: RetentionRequest, state: RetentionState | None = None
     ) -> tuple[RenderedRetentionChange, ...]:
-        del request
+        del request, state
         raise AdapterUserError(
             message=f"adapter '{self.adapter_name}' does not support retention changes"
         )

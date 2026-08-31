@@ -46,6 +46,7 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.executor.janitor.main.plan import build_janitor_plan
 from sqlbuild.executor.janitor.models import (
+    JanitorDirectModeSettings,
     JanitorPlan,
     JanitorRelationKey,
     JanitorRelationScope,
@@ -178,8 +179,11 @@ def build_janitor_execution_plan(
                 retention=inspection.state
             ),
         ),
-        direct_state_history_versions=settings.direct_state_history_versions,
-        direct_mode=not invocation.discovered_inputs.project_config.settings.virtual_environments,
+        direct_settings=JanitorDirectModeSettings(
+            enabled=not invocation.discovered_inputs.project_config.settings.virtual_environments,
+            archive_retention_days=settings.archive_retention_days,
+            state_history_versions=settings.direct_state_history_versions,
+        ),
     )
     status.complete(
         message=f"Inspected warehouse state. ({time.perf_counter() - inspect_start:.2f}s)",

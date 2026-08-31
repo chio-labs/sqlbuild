@@ -38,6 +38,8 @@ def janitor_plan_has_work(planning_result: JanitorPlanningResult) -> bool:
     plan: JanitorPlan = planning_result.plan
     return bool(
         plan.candidates
+        or plan.archive_candidates
+        or plan.archive_delete_candidates
         or plan.checkpoint_candidates
         or plan.detached_virtual_environment_candidates
         or plan.expired_virtual_environment_candidates
@@ -60,12 +62,15 @@ def confirm_janitor_plan(*, planning_result: JanitorPlanningResult) -> bool:
         + len(plan.state_backup_candidates)
         + len(plan.expired_lock_candidates)
         + len(plan.virtual_state_prune_candidates)
+        + len(plan.archive_candidates)
+        + len(plan.archive_delete_candidates)
     )
     prune_count: int = len(plan.direct_state_prune_candidates) + len(
         plan.virtual_state_prune_candidates
     )
     if state_candidate_count or prune_count:
-        deletion_count: int = len(plan.candidates) + state_candidate_count + prune_count
+        physical_deletion_count: int = 0 if plan.direct_mode else len(plan.candidates)
+        deletion_count: int = physical_deletion_count + state_candidate_count + prune_count
         sys.stdout.write(
             f"Janitor will delete {deletion_count} items from {environment_label(plan)}.\n"
         )
@@ -111,6 +116,11 @@ def _deleted_message(*, result: JanitorExecutionResult) -> str:
         + len(result.deleted_state_backups)
         + len(result.deleted_expired_locks)
     )
+    if result.archived or result.deleted_archives:
+        return (
+            f"Archived {len(result.archived)} objects and permanently deleted "
+            f"{len(result.deleted_archives)} archives."
+        )
     pruned_state_count: int = len(result.pruned_direct_state) + len(result.pruned_virtual_state)
     non_checkpoint_state_count: int = deleted_state_count - len(result.deleted_checkpoints)
     if non_checkpoint_state_count or pruned_state_count:

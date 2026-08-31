@@ -4486,20 +4486,19 @@ def test_given_retention_layers_when_building_model_config_then_precedence_is_re
         AuthoredRetentionCompileTestCase(
             description="model header overrides project retention layers",
             repo_files={
-                "sqlbuild_project.toml": '\n'.join(
+                "sqlbuild_project.toml": "\n".join(
                     (
                         'name = "demo"',
                         'adapter = "duckdb"',
                         'default_target = "prod"',
-                        '[targets.prod]',
+                        "[targets.prod]",
                         'time_travel_retention = "7d"',
-                        '[materialization_defaults.table]',
+                        "[materialization_defaults.table]",
                         'time_travel_retention = "14d"',
                     )
                 ),
                 "models/orders.sql": (
-                    "MODEL (materialized table, time_travel_retention 30d);"
-                    "\n\nSELECT 1 AS id\n"
+                    "MODEL (materialized table, time_travel_retention 30d);\n\nSELECT 1 AS id\n"
                 ),
             },
             expected_desired_days=30,
@@ -4521,9 +4520,9 @@ def test_given_authored_retention_header_when_building_inputs_then_typed_policy_
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
     )
 
-    policy: ResolvedTimeTravelRetention = (
-        compile_inputs.model_inputs[0].config.time_travel_retention
-    )
+    policy: ResolvedTimeTravelRetention = compile_inputs.model_inputs[
+        0
+    ].config.time_travel_retention
     assert policy.desired_days == test_case.expected_desired_days
     assert policy.source is test_case.expected_source
 

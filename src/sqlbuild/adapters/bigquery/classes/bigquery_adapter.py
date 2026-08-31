@@ -118,7 +118,19 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
         self, *, connection: _BigQueryConnection, request: RetentionRequest
     ) -> RetentionState:
         dataset_id: str = self._retention_dataset_id(request=request)
-        dataset: Any = connection.client.get_dataset(dataset_id)
+        try:
+            dataset: Any = connection.client.get_dataset(dataset_id)
+        except Exception as error:
+            if not self._is_google_not_found(error):
+                raise
+            return RetentionState(
+                request_id=request.request_id,
+                scope=request.scope,
+                configured_days=None,
+                effective_days=7,
+                exists=False,
+                max_time_travel_hours=168,
+            )
         hours: object | None = getattr(dataset, "max_time_travel_hours", None)
         if not isinstance(hours, int):
             raise AdapterUserError(
@@ -133,8 +145,9 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
         )
 
     def render_retention_changes(
-        self, *, request: RetentionRequest
+        self, *, request: RetentionRequest, state: RetentionState | None = None
     ) -> tuple[RenderedRetentionChange, ...]:
+        del state
         dataset_id: str = self._retention_dataset_id(request=request)
         return (
             RenderedRetentionChange(

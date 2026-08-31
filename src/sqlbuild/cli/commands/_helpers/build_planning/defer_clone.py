@@ -42,6 +42,9 @@ from sqlbuild.compiler.planner.main.clone.resolve_skipped_view_chain import (
 from sqlbuild.compiler.planner.main.selection.scope import build_planner_scope
 from sqlbuild.compiler.planner.models import PlannerScope
 from sqlbuild.compiler.planner.types import MaterializationType
+from sqlbuild.executor.clone.main.build_retention_requests import (
+    build_destination_retention_requests,
+)
 from sqlbuild.executor.clone.main.execute import execute_clone
 from sqlbuild.executor.clone.main.fingerprinting import copy_clone_fingerprints
 from sqlbuild.executor.clone.main.run_prephase_clone_stream import run_prephase_clone_stream
@@ -51,6 +54,7 @@ from sqlbuild.executor.clone.models import (
     CloneSourceEntries,
 )
 from sqlbuild.executor.clone.types import CloneStatus
+from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 
 
 def build_defer_clone_boundary_selectors(
@@ -260,6 +264,15 @@ def run_defer_clone_prephase(
                     hard_copy=False,
                     run_id=clone_pipeline.destination_project.run_id,
                     query_change_tracking=clone_pipeline.destination_project.settings.query_change_tracking,
+                    destination_retention_requests=build_destination_retention_requests(
+                        project=clone_pipeline.destination_project,
+                        adapter_name=adapter.adapter_name,
+                        namespace_owned=resolve_target_config(
+                            project_config=discovered_inputs.project_config,
+                            local_config=discovered_inputs.local_config,
+                            target_name=destination_target_name,
+                        ).owns_time_travel_retention_namespace,
+                    ),
                     on_item=on_item,
                 )
             )

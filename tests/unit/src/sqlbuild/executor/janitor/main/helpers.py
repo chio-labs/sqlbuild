@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -18,6 +19,9 @@ from sqlbuild.adapter.contract.models import (
     SchemaDiffResult,
 )
 from sqlbuild.adapter.contract.types import TablePromotionMode
+from sqlbuild.archives.classes.event_codec import ArchiveEventCodec
+from sqlbuild.archives.models import ArchiveEvent
+from sqlbuild.archives.types import ArchiveProvenanceStatus, ArchiveRecordType
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -41,12 +45,14 @@ class FakeJanitorAdapter(BaseAdapter):
         relation_infos: tuple[RelationInfo, ...],
         supports_age_metadata: bool = True,
         tracked_relations: tuple[tuple[str | None, str | None, str], ...] = (),
+        archive_events: tuple[ArchiveEvent, ...] = (),
     ) -> None:
         self.relation_infos: tuple[RelationInfo, ...] = relation_infos
         self.age_metadata_supported: bool = supports_age_metadata
         self.dropped_targets: list[str] = []
         self.executed_sql: list[str] = []
         self.tracked_relations: tuple[tuple[str | None, str | None, str], ...] = tracked_relations
+        self.archive_events: tuple[ArchiveEvent, ...] = archive_events
         self._tracked_rows: tuple[tuple[Any, ...], ...] = tuple(
             (
                 "model",
@@ -124,7 +130,14 @@ class FakeJanitorAdapter(BaseAdapter):
             True: (),
             False: self._tracked_rows,
         }
-        return _FakeResult(rows=rows_by_query_kind["LIMIT 0" in sql])
+        archive_rows: tuple[tuple[Any, ...], ...] = tuple(
+            ArchiveEventCodec.values(event) for event in self.archive_events
+        )
+        selected_rows: tuple[tuple[Any, ...], ...] = {
+            True: archive_rows,
+            False: rows_by_query_kind["LIMIT 0" in sql],
+        }["FROM analytics._sqlbuild_archive_events" in sql]
+        return _FakeResult(rows=selected_rows)
 
     def list_relations(
         self,
@@ -505,6 +518,35 @@ def relation_info_for_test(*, schema: str, name: str) -> RelationInfo:
         relation_type="table",
         created_at=None,
         last_altered_at=None,
+    )
+
+
+def archive_event_for_test(
+    *,
+    record_type: ArchiveRecordType,
+    event_id: str,
+    source_generation: str | None,
+    archive_generation: str | None = None,
+    completed_at: datetime | None = None,
+) -> ArchiveEvent:
+    requested_at: datetime = datetime(2026, 1, 1, tzinfo=UTC)
+    return ArchiveEvent(
+        event_id=event_id,
+        record_type=record_type,
+        requirement_id="archive-requirement",
+        operation_kind="archive",
+        target_database=None,
+        target_schema="analytics",
+        target_name="old_orders",
+        source_physical_generation=source_generation,
+        archive_name="__sqb_archive__20260101T000000000000Z__old_orders",
+        archive_physical_generation=archive_generation,
+        origin_run_id="run-1",
+        execution_run_id="run-1",
+        provenance_status=ArchiveProvenanceStatus.KNOWN,
+        requested_at=requested_at,
+        completed_at=completed_at,
+        created_at=requested_at,
     )
 
 

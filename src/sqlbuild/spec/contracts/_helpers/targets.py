@@ -90,6 +90,11 @@ def resolve_target_config(
             if local_target.time_travel_retention is not None
             else project_target.time_travel_retention
         ),
+        owns_time_travel_retention_namespace=(
+            local_target.owns_time_travel_retention_namespace
+            if local_target.owns_time_travel_retention_namespace is not None
+            else project_target.owns_time_travel_retention_namespace
+        ),
         clone=_merge_clone_policy(
             project_clone=project_target.clone,
             local_clone=local_target.clone,

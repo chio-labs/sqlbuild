@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.archives.models import ArchiveEvent
 from sqlbuild.executor.janitor.models import (
     JanitorRelationKey,
     JanitorVirtualStatePruneCandidate,
@@ -52,6 +53,15 @@ class JanitorExecutionOrderTestCase:
     description: str
     expected_error_fragment: str
     expected_deleted_state_items: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JanitorArchiveRecoveryTestCase:
+    description: str
+    relation_infos: tuple[RelationInfo, ...]
+    events: tuple[ArchiveEvent, ...]
+    expected_archive_rename_required: tuple[bool, ...]
+    expected_delete_drop_required: tuple[bool, ...]
 
 
 def relation_info(

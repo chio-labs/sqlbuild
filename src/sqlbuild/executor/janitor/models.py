@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.archives.models import ArchiveEvent
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,27 @@ class JanitorDeleteCandidate:
     key: JanitorRelationKey
     relation: RelationInfo
     age_timestamp: datetime | None
+
+
+@dataclass(frozen=True)
+class JanitorArchiveCandidate:
+    """One direct relation archive or completion recovery action."""
+
+    origin_key: JanitorRelationKey
+    archive_key: JanitorRelationKey
+    requirement: ArchiveEvent
+    rename_required: bool = True
+
+
+@dataclass(frozen=True)
+class JanitorArchiveDeleteCandidate:
+    """One event-backed permanent archive deletion or recovery action."""
+
+    archive_key: JanitorRelationKey
+    requirement: ArchiveEvent
+    archive_physical_generation: str | None
+    drop_required: bool = True
+    delete_requirement: ArchiveEvent | None = None
 
 
 @dataclass(frozen=True)
@@ -181,6 +203,16 @@ class JanitorRelationClassification:
 
 
 @dataclass(frozen=True)
+class JanitorSchemaClassification:
+    """Combined relation decisions across target schemas."""
+
+    candidates: tuple[JanitorDeleteCandidate, ...]
+    skipped_relations: tuple[JanitorSkippedRelation, ...]
+    skipped_schemas: tuple[JanitorSkippedSchema, ...]
+    blocked_schemas: tuple[JanitorBlockedSchema, ...]
+
+
+@dataclass(frozen=True)
 class JanitorStateCandidates:
     """Precomputed state-side cleanup candidates for one janitor plan."""
 
@@ -206,12 +238,27 @@ class JanitorRelationScope:
 
 
 @dataclass(frozen=True)
+class JanitorDirectModeSettings:
+    """Direct-mode archive and state-history settings."""
+
+    enabled: bool = False
+    archive_retention_days: int = 7
+    state_history_versions: int = 20
+
+
+@dataclass(frozen=True)
 class JanitorPlan:
     """Complete janitor preview and execution plan."""
 
     target_name: str | None
     retention_days: int
+    archive_retention_days: int = 7
+    direct_mode: bool = False
     candidates: tuple[JanitorDeleteCandidate, ...] = field(default_factory=tuple)
+    archive_candidates: tuple[JanitorArchiveCandidate, ...] = field(default_factory=tuple)
+    archive_delete_candidates: tuple[JanitorArchiveDeleteCandidate, ...] = field(
+        default_factory=tuple
+    )
     checkpoint_candidates: tuple[JanitorCheckpointCandidate, ...] = field(default_factory=tuple)
     detached_virtual_environment_candidates: tuple[
         JanitorDetachedVirtualEnvironmentCandidate, ...
@@ -239,6 +286,8 @@ class JanitorExecutionResult:
     """Result from deleting janitor candidates."""
 
     deleted: tuple[JanitorDeleteCandidate, ...] = field(default_factory=tuple)
+    archived: tuple[JanitorArchiveCandidate, ...] = field(default_factory=tuple)
+    deleted_archives: tuple[JanitorArchiveDeleteCandidate, ...] = field(default_factory=tuple)
     deleted_checkpoints: tuple[JanitorCheckpointCandidate, ...] = field(default_factory=tuple)
     deleted_detached_virtual_environments: tuple[
         JanitorDetachedVirtualEnvironmentCandidate, ...

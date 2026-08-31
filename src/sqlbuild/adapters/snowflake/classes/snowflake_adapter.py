@@ -141,8 +141,9 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
         )
 
     def render_retention_changes(
-        self, *, request: RetentionRequest
+        self, *, request: RetentionRequest, state: RetentionState | None = None
     ) -> tuple[RenderedRetentionChange, ...]:
+        del state
         self._validate_relation_retention_request(request=request)
         target: str | None = self.render_qualified_name(
             database=request.database,

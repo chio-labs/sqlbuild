@@ -38,6 +38,24 @@ def format_plan_json(
         _serialize_source_load_entry(e) for e in plan.source_load_entries
     ]
     warnings: list[dict[str, object]] = [_serialize_warning(w) for w in plan.warnings]
+    retention: list[dict[str, object]] = [
+        {
+            "scope": entry.request.scope.value,
+            "database": entry.request.database,
+            "schema": entry.request.schema,
+            "name": entry.request.name,
+            "models": entry.model_names,
+            "desired_days": entry.request.desired_days,
+            "actual_days": entry.actual_days,
+            "effective_days": entry.effective_days,
+            "source": entry.source,
+            "direction": entry.direction.value,
+            "phase": entry.phase.value,
+            "statements": entry.statements,
+            "irreversible_warning": entry.irreversible_warning,
+        }
+        for entry in plan.retention_entries
+    ]
     python_nodes: list[dict[str, object]] = [
         _serialize_python_plan_entry(entry) for entry in python_plan_entries
     ]
@@ -59,6 +77,7 @@ def format_plan_json(
         "python_nodes": python_nodes,
         "providers": providers,
         "warnings": warnings,
+        "retention": retention,
     }
     if plan.metadata:
         result["metadata"] = plan.metadata

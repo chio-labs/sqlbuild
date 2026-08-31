@@ -163,6 +163,7 @@ class RetentionState:
     scope: RetentionScope
     configured_days: int | None
     effective_days: int
+    exists: bool = True
     relation_kind: str | None = None
     is_transient: bool | None = None
     delta_log_retention_days: int | None = None

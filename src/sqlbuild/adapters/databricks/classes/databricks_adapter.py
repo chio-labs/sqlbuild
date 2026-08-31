@@ -138,10 +138,45 @@ class DatabricksAdapter(MicrobatchMixin, BaseAdapter):
         )
 
     def render_retention_changes(
-        self, *, request: RetentionRequest
+        self, *, request: RetentionRequest, state: RetentionState | None = None
     ) -> tuple[RenderedRetentionChange, ...]:
         target: str = self._retention_relation_target(request=request)
         days: int = request.desired_days
+        if state is not None:
+            log_days: int = state.delta_log_retention_days or state.effective_days
+            deleted_days: int = state.delta_deleted_file_retention_days or state.effective_days
+            changes: list[RenderedRetentionChange] = []
+            required_log_days: int = max(days, deleted_days)
+            if log_days < required_log_days:
+                changes.append(
+                    self._render_delta_retention_property(
+                        target=target,
+                        property_name="log",
+                        days=required_log_days,
+                        increase=True,
+                    )
+                )
+                log_days = required_log_days
+            if deleted_days < days:
+                changes.append(
+                    self._render_delta_retention_property(
+                        target=target, property_name="deletedFile", days=days, increase=True
+                    )
+                )
+                deleted_days = days
+            if deleted_days > days:
+                changes.append(
+                    self._render_delta_retention_property(
+                        target=target, property_name="deletedFile", days=days, increase=False
+                    )
+                )
+            if log_days > days:
+                changes.append(
+                    self._render_delta_retention_property(
+                        target=target, property_name="log", days=days, increase=False
+                    )
+                )
+            return tuple(changes)
         return (
             RenderedRetentionChange(
                 phase=RetentionChangePhase.ALTER,
@@ -150,6 +185,18 @@ class DatabricksAdapter(MicrobatchMixin, BaseAdapter):
                     f"('delta.logRetentionDuration' = 'interval {days} days', "
                     f"'delta.deletedFileRetentionDuration' = 'interval {days} days')",
                 ),
+            ),
+        )
+
+    @staticmethod
+    def _render_delta_retention_property(
+        *, target: str, property_name: str, days: int, increase: bool
+    ) -> RenderedRetentionChange:
+        return RenderedRetentionChange(
+            phase=(RetentionChangePhase.PREPARE if increase else RetentionChangePhase.FINALIZE),
+            statements=(
+                f"ALTER TABLE {target} SET TBLPROPERTIES "
+                f"('delta.{property_name}RetentionDuration' = 'interval {days} days')",
             ),
         )
 

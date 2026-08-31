@@ -674,6 +674,11 @@ def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig
                 label=f"targets.{target_name}.time_travel_retention",
                 file_path=file_path,
             ),
+            owns_time_travel_retention_namespace=_optional_bool(
+                mapping=target_mapping,
+                key="owns_time_travel_retention_namespace",
+                default=False,
+            ),
             clone=ClonePolicy(
                 allow_as_clone_origin=_optional_bool(
                     mapping=clone_mapping,
@@ -756,6 +761,10 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
                 label=f"targets.{target_name}.time_travel_retention",
                 file_path=file_path,
             ),
+            owns_time_travel_retention_namespace=_optional_nullable_bool(
+                mapping=target_mapping,
+                key="owns_time_travel_retention_namespace",
+            ),
             clone=LocalClonePolicy(
                 allow_as_clone_origin=_optional_nullable_bool(
                     mapping=clone_mapping,
@@ -829,6 +838,7 @@ def _validate_target_keys(
                 "changes_only",
                 "compile_cache",
                 "time_travel_retention",
+                "owns_time_travel_retention_namespace",
                 "clone",
                 "state",
             }

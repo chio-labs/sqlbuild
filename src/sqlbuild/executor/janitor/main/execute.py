@@ -7,8 +7,14 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.executor.janitor._helpers.archive_execution import (
+    apply_archive_actions,
+    apply_archive_deletions,
+)
 from sqlbuild.executor.janitor._helpers.deletion import apply_janitor_deletions
 from sqlbuild.executor.janitor.models import (
+    JanitorArchiveCandidate,
+    JanitorArchiveDeleteCandidate,
     JanitorCheckpointCandidate,
     JanitorDeleteCandidate,
     JanitorDetachedVirtualEnvironmentCandidate,
@@ -41,8 +47,20 @@ def execute_janitor_plan(
     """Delete all candidates in a janitor plan."""
 
     recorder: StatementRecorder = StatementRecorder()
+    archived: tuple[JanitorArchiveCandidate, ...] = apply_archive_actions(
+        candidates=plan.archive_candidates,
+        adapter=adapter,
+        connection=connection,
+        recorder=recorder,
+    )
+    deleted_archives: tuple[JanitorArchiveDeleteCandidate, ...] = apply_archive_deletions(
+        candidates=plan.archive_delete_candidates,
+        adapter=adapter,
+        connection=connection,
+        recorder=recorder,
+    )
     candidate: JanitorDeleteCandidate
-    for candidate in plan.candidates:
+    for candidate in () if plan.direct_mode else plan.candidates:
         adapter.drop(
             connection=connection,
             destination=candidate.key.display_name(),
@@ -80,7 +98,9 @@ def execute_janitor_plan(
         candidates=plan.virtual_state_prune_candidates, delete=prune_virtual_state
     )
     return JanitorExecutionResult(
-        deleted=plan.candidates,
+        deleted=() if plan.direct_mode else plan.candidates,
+        archived=archived,
+        deleted_archives=deleted_archives,
         deleted_checkpoints=deleted_checkpoints,
         deleted_detached_virtual_environments=deleted_detached_virtual_environments,
         deleted_expired_virtual_environments=deleted_expired_virtual_environments,

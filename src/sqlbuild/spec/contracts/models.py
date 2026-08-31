@@ -110,6 +110,7 @@ class TargetConfig:
     state: StateConfig = field(default_factory=StateConfig)
     compile_cache: bool | None = None
     time_travel_retention: AuthoredTimeTravelRetention | None = None
+    owns_time_travel_retention_namespace: bool = False
 
 
 @dataclass(frozen=True)
@@ -129,6 +130,7 @@ class LocalTargetConfig:
     state: LocalStateConfig = field(default_factory=LocalStateConfig)
     compile_cache: bool | None = None
     time_travel_retention: AuthoredTimeTravelRetention | None = None
+    owns_time_travel_retention_namespace: bool | None = None
 
 
 @dataclass(frozen=True)

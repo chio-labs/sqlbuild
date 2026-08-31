@@ -7,6 +7,7 @@ from sqlbuild.adapter.contract.models import RenderedRetentionChange, RetentionS
 from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
 from tests.unit.src.sqlbuild.adapters.databricks._test_types import (
     DatabricksInvalidRetentionTestCase,
+    DatabricksRetentionOrderingTestCase,
     DatabricksRetentionTestCase,
 )
 from tests.unit.src.sqlbuild.adapters.databricks.helpers import (
@@ -62,6 +63,63 @@ def test_given_delta_relation_when_managing_retention_then_parses_and_renders_pr
     assert cursor.executed_sql == "DESCRIBE DETAIL `main`.`mart`.`results`"
     assert changes[0].statements == (test_case.expected_sql,)
     assert "VACUUM" not in changes[0].statements[0]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksRetentionOrderingTestCase(
+            description="mixed values increase deleted files before decreasing log history",
+            desired_days=14,
+            log_days=30,
+            deleted_days=7,
+            expected_phases=("prepare", "finalize"),
+            expected_property_order=("deletedFileRetentionDuration", "logRetentionDuration"),
+        ),
+        DatabricksRetentionOrderingTestCase(
+            description="decreases lower deleted files before log history",
+            desired_days=7,
+            log_days=30,
+            deleted_days=14,
+            expected_phases=("finalize", "finalize"),
+            expected_property_order=("deletedFileRetentionDuration", "logRetentionDuration"),
+        ),
+        DatabricksRetentionOrderingTestCase(
+            description="repairs an inconsistent warehouse state before decreasing",
+            desired_days=14,
+            log_days=7,
+            deleted_days=30,
+            expected_phases=("prepare", "finalize", "finalize"),
+            expected_property_order=(
+                "logRetentionDuration",
+                "deletedFileRetentionDuration",
+                "logRetentionDuration",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_independent_delta_values_when_rendering_then_preserves_retention_invariant(
+    test_case: DatabricksRetentionOrderingTestCase,
+) -> None:
+    changes: tuple[RenderedRetentionChange, ...] = DatabricksAdapter().render_retention_changes(
+        request=build_retention_request(desired_days=test_case.desired_days),
+        state=RetentionState(
+            request_id="results",
+            scope=build_retention_request(desired_days=test_case.desired_days).scope,
+            configured_days=None,
+            effective_days=min(test_case.log_days, test_case.deleted_days),
+            delta_log_retention_days=test_case.log_days,
+            delta_deleted_file_retention_days=test_case.deleted_days,
+        ),
+    )
+
+    assert tuple(change.phase.value for change in changes) == test_case.expected_phases
+    assert tuple(
+        property_name in change.statements[0]
+        for property_name, change in zip(test_case.expected_property_order, changes, strict=True)
+    ) == tuple(True for _ in test_case.expected_property_order)
+    assert all("VACUUM" not in change.statements[0] for change in changes)
 
 
 @pytest.mark.parametrize(

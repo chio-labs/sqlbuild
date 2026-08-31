@@ -195,15 +195,15 @@ def test_given_invalid_constants_config_when_loading_project_then_config_error_i
     [
         LoadRetentionConfigTestCase(
             description="duration and disabled retention policies",
-            project_file_contents='\n'.join(
+            project_file_contents="\n".join(
                 (
                     'name = "demo"',
                     'adapter = "snowflake"',
-                    '[materialization_defaults.table]',
+                    "[materialization_defaults.table]",
                     'time_travel_retention = "14d"',
-                    '[materialization_defaults.incremental]',
+                    "[materialization_defaults.incremental]",
                     'time_travel_retention = "disabled"',
-                    '[targets.prod]',
+                    "[targets.prod]",
                     'time_travel_retention = "7d"',
                 )
             ),
@@ -237,8 +237,7 @@ def test_given_retention_config_when_loading_project_then_policies_are_typed(
     )
     assert config.targets["prod"].time_travel_retention is not None
     assert (
-        config.targets["prod"].time_travel_retention.desired_days
-        == test_case.expected_target_days
+        config.targets["prod"].time_travel_retention.desired_days == test_case.expected_target_days
     )
 
 
@@ -247,11 +246,11 @@ def test_given_retention_config_when_loading_project_then_policies_are_typed(
     [
         LoadRetentionConfigErrorTestCase(
             description="hour retention value",
-            project_file_contents='\n'.join(
+            project_file_contents="\n".join(
                 (
                     'name = "demo"',
                     'adapter = "snowflake"',
-                    '[materialization_defaults.table]',
+                    "[materialization_defaults.table]",
                     'time_travel_retention = "12h"',
                 )
             ),
@@ -380,6 +379,7 @@ allow_as_clone_destination = true
 [janitor]
 enabled = true
 retention_days = 14
+archive_retention_days = 9
 max_checkpoints = 3
 delete_tracked_only = false
 exclude_patterns = ["partition_*"]
@@ -458,6 +458,7 @@ enabled = true
             },
             expected_janitor_enabled=True,
             expected_retention_days=14,
+            expected_archive_retention_days=9,
             expected_janitor_max_checkpoints=3,
             expected_janitor_delete_tracked_only=False,
             expected_janitor_exclude_patterns=("partition_*",),
@@ -533,6 +534,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     } == test_case.expected_targets
     assert config.janitor.enabled is test_case.expected_janitor_enabled
     assert config.janitor.retention_days == test_case.expected_retention_days
+    assert config.janitor.archive_retention_days == test_case.expected_archive_retention_days
     assert config.janitor.max_checkpoints == test_case.expected_janitor_max_checkpoints
     assert config.janitor.delete_tracked_only is test_case.expected_janitor_delete_tracked_only
     assert config.janitor.exclude_patterns == test_case.expected_janitor_exclude_patterns

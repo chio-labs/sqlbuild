@@ -115,6 +115,7 @@ class LoadProjectConfigTestCase:
     expected_function_database: str | None = None
     expected_function_schema: str | None = None
     expected_janitor_direct_state_history_versions: int = 20
+    expected_archive_retention_days: int = 7
     expected_current_state_full_refresh: str = "deny"
     expected_historical_full_refresh: str = "require_confirmation"
     expected_snapshot_schema_change: str = "append_new_columns"

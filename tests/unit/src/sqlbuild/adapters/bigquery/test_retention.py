@@ -10,11 +10,13 @@ from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.bigquery.classes.bigquery_connection import _BigQueryConnection
 from tests.unit.src.sqlbuild.adapters.bigquery._test_types import (
     BigQueryInvalidRetentionTestCase,
+    BigQueryMissingRetentionDatasetTestCase,
     BigQueryRetentionTestCase,
 )
 from tests.unit.src.sqlbuild.adapters.bigquery.helpers import (
     FakeBigQueryClient,
     FakeBigQueryDataset,
+    FakeBigQueryMissingDatasetClient,
     build_retention_request,
 )
 
@@ -75,3 +77,32 @@ def test_given_out_of_range_days_when_rendering_bigquery_retention_then_raises_c
         BigQueryAdapter().render_retention_changes(
             request=build_retention_request(desired_days=test_case.desired_days)
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryMissingRetentionDatasetTestCase(
+            description="missing managed dataset uses creation default before pre-write alteration",
+            desired_days=5,
+            expected_effective_days=7,
+            expected_exists=False,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_missing_bigquery_dataset_when_inspecting_retention_then_returns_creation_state(
+    test_case: BigQueryMissingRetentionDatasetTestCase,
+) -> None:
+    connection: _BigQueryConnection = _BigQueryConnection(
+        client=FakeBigQueryMissingDatasetClient(),
+        location=None,
+    )
+
+    state: RetentionState = BigQueryAdapter().inspect_retention(
+        connection=connection,
+        request=build_retention_request(desired_days=test_case.desired_days),
+    )
+
+    assert state.effective_days == test_case.expected_effective_days
+    assert state.exists is test_case.expected_exists

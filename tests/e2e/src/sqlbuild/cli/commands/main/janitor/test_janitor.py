@@ -86,14 +86,14 @@ def test_given_default_config_when_running_janitor_then_it_reports_disabled(
             janitor_command=("janitor", "--auto-approve"),
             expected_exit_code=0,
             expected_stdout_fragments=(
-                "eligible for deletion  1",
+                "eligible for archive   1",
                 "objects skipped        4",
                 "main.janitor_tracked_extra",
                 "main.janitor_untracked_extra  relation is not tracked by SQLBuild",
                 "main.partition_state  relation matches exclude pattern 'partition_*'",
                 "main._sqlbuild_fingerprints  relation matches exclude pattern",
                 "main._sqlbuild_microbatches  relation matches exclude pattern",
-                "Deleted 1 objects, deleted 0 state items, and pruned 1 direct state tables.",
+                "Archived 1 objects and permanently deleted 0 archives.",
             ),
             expected_existing_tables=(
                 "orders",
@@ -118,6 +118,7 @@ def test_given_stale_relations_when_running_janitor_then_it_deletes_only_tracked
             """
               enabled = true
               retention_days = 0
+              archive_retention_days = 0
               exclude_patterns = ["partition_*"]
             """
         ),
@@ -153,6 +154,17 @@ def test_given_stale_relations_when_running_janitor_then_it_deletes_only_tracked
     assert "Eligible state backups" not in janitor_result.stdout
     assert "Eligible expired locks" not in janitor_result.stdout
 
+    archive_deletion_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.janitor_command,
+        project_dir=project_dir,
+    )
+
+    assert archive_deletion_result.returncode == test_case.expected_exit_code
+    assert "archives deleted       1" in archive_deletion_result.stdout
+    assert "Archived 0 objects and permanently deleted 1 archives." in (
+        archive_deletion_result.stdout
+    )
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -166,7 +178,6 @@ def test_given_stale_relations_when_running_janitor_then_it_deletes_only_tracked
                 "Managed target schemas contain active configured sources.",
                 "main  active sources: raw_events",
                 "suppressed deletion: main.stale_main",
-                "Eligible objects\n  safe.stale_safe",
                 "No janitor actions will be performed.",
             ),
             expected_existing_relations=(
@@ -356,12 +367,12 @@ def test_given_virtual_microbatch_history_when_running_janitor_then_events_remai
             janitor_command=("janitor", "--auto-approve"),
             expected_exit_code=0,
             expected_stdout_fragments=(
-                "eligible for deletion  2",
+                "eligible for archive   2",
                 "objects skipped        2",
                 "main.__sqb_a13f09c2e7b8__model__daily_revenue",
                 "main.__sqb_a13f09c2e7b8__source__raw_orders",
                 "main.__sqb_a13f09c2e7b__model__daily_revenue  relation is not tracked by SQLBuild",
-                "Deleted 2 objects, deleted 0 state items, and pruned 1 direct state tables.",
+                "Archived 2 objects and permanently deleted 0 archives.",
             ),
             expected_existing_tables=(
                 "orders",

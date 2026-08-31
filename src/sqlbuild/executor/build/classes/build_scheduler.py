@@ -45,6 +45,7 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build._helpers.blocking import downstream_blocked_keys
 from sqlbuild.executor.build._helpers.end_audits import run_end_audits
 from sqlbuild.executor.build._helpers.indexes import build_execution_indexes
+from sqlbuild.executor.build._helpers.retention import reconcile_model_retention
 from sqlbuild.executor.build._helpers.scheduler import (
     _build_worker_failure_completion,
     _build_worker_success_completion,
@@ -994,6 +995,13 @@ class BuildScheduler:
                     warehouse_relations=self._warehouse_relations,
                     on_progress=self._on_sub_progress,
                 )
+                if result.status == ExecutionStatus.SUCCESS:
+                    reconcile_model_retention(
+                        plan=self._plan,
+                        adapter=self._adapter,
+                        connection=connection,
+                        model_name=model_entry.name,
+                    )
             except Exception as error:
                 result = ModelExecutionResult(
                     model_name=model_entry.name,

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
+from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RetentionRequest
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
@@ -40,6 +40,8 @@ from sqlbuild.compiler.planner.types import (
     OnSchemaChange,
     PlanAction,
     PlanReason,
+    RetentionDirection,
+    RetentionPlanPhase,
     RunDespiteUnchangedMode,
     ScenarioArtifactKind,
     SchemaActionKind,
@@ -595,6 +597,21 @@ class PlanWarning:
 
 
 @dataclass(frozen=True)
+class RetentionPlanEntry:
+    """Warehouse retention work independent of model identity actions."""
+
+    request: RetentionRequest
+    model_names: tuple[str, ...]
+    actual_days: int | None
+    effective_days: int | None
+    source: str
+    direction: RetentionDirection
+    phase: RetentionPlanPhase
+    statements: tuple[str, ...] = field(default_factory=tuple)
+    irreversible_warning: str | None = None
+
+
+@dataclass(frozen=True)
 class PlanOutputExtras:
     """Optional supplemental seed fingerprints for plan output assembly."""
 
@@ -939,6 +956,7 @@ class PlanOutput:
     test_entries: tuple[SqlTestPlanEntry, ...] = field(default_factory=tuple)
     selected_keys: frozenset[CompiledObjectKey] = field(default_factory=frozenset)
     warnings: tuple[PlanWarning, ...] = field(default_factory=tuple)
+    retention_entries: tuple[RetentionPlanEntry, ...] = field(default_factory=tuple)
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = field(
         default_factory=dict
     )
