@@ -77,6 +77,176 @@ from tests.integration.src.sqlbuild.compiler.planner.main.helpers import (
             expected_ddl_fragments={"orders": "CREATE OR REPLACE TABLE staging.orders AS"},
         ),
         BuildExecutionPlanTestCase(
+            description="unset model full refresh follows absent CLI flag",
+            setup_sql=("CREATE TABLE staging.orders AS SELECT 1 AS id",),
+            model_locations={"orders": "staging"},
+            model_configs={
+                "orders": {"materialized": "incremental", "incremental_strategy": "append"}
+            },
+            model_queries={"orders": "SELECT 1 AS id"},
+            full_refresh=False,
+            expected_action={"orders": PlanAction.INCREMENTAL_APPEND},
+            expected_reason={"orders": PlanReason.NORMAL_INCREMENTAL},
+        ),
+        BuildExecutionPlanTestCase(
+            description="unset model full refresh follows CLI flag",
+            setup_sql=("CREATE TABLE staging.orders AS SELECT 1 AS id",),
+            model_locations={"orders": "staging"},
+            model_configs={
+                "orders": {"materialized": "incremental", "incremental_strategy": "append"}
+            },
+            model_queries={"orders": "SELECT 1 AS id"},
+            full_refresh=True,
+            expected_action={"orders": PlanAction.CREATE_TABLE},
+            expected_reason={"orders": PlanReason.FULL_REFRESH},
+        ),
+        BuildExecutionPlanTestCase(
+            description="false model full refresh stays incremental without CLI flag",
+            setup_sql=("CREATE TABLE staging.orders AS SELECT 1 AS id",),
+            model_locations={"orders": "staging"},
+            model_configs={
+                "orders": {
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                    "full_refresh": False,
+                }
+            },
+            model_queries={"orders": "SELECT 1 AS id"},
+            full_refresh=False,
+            expected_action={"orders": PlanAction.INCREMENTAL_APPEND},
+            expected_reason={"orders": PlanReason.NORMAL_INCREMENTAL},
+        ),
+        BuildExecutionPlanTestCase(
+            description="false model full refresh opts out of CLI flag",
+            setup_sql=("CREATE TABLE staging.orders AS SELECT 1 AS id",),
+            model_locations={"orders": "staging"},
+            model_configs={
+                "orders": {
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                    "full_refresh": False,
+                }
+            },
+            model_queries={"orders": "SELECT 1 AS id"},
+            full_refresh=True,
+            expected_action={"orders": PlanAction.INCREMENTAL_APPEND},
+            expected_reason={"orders": PlanReason.NORMAL_INCREMENTAL},
+        ),
+        BuildExecutionPlanTestCase(
+            description="true model full refresh forces without CLI flag",
+            setup_sql=("CREATE TABLE staging.orders AS SELECT 1 AS id",),
+            model_locations={"orders": "staging"},
+            model_configs={
+                "orders": {
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                    "full_refresh": True,
+                }
+            },
+            model_queries={"orders": "SELECT 1 AS id"},
+            full_refresh=False,
+            expected_action={"orders": PlanAction.CREATE_TABLE},
+            expected_reason={"orders": PlanReason.FULL_REFRESH},
+        ),
+        BuildExecutionPlanTestCase(
+            description="true model full refresh remains forced with CLI flag",
+            setup_sql=("CREATE TABLE staging.orders AS SELECT 1 AS id",),
+            model_locations={"orders": "staging"},
+            model_configs={
+                "orders": {
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                    "full_refresh": True,
+                }
+            },
+            model_queries={"orders": "SELECT 1 AS id"},
+            full_refresh=True,
+            expected_action={"orders": PlanAction.CREATE_TABLE},
+            expected_reason={"orders": PlanReason.FULL_REFRESH},
+        ),
+        BuildExecutionPlanTestCase(
+            description="mixed model full refresh values resolve independently",
+            setup_sql=(
+                "CREATE TABLE staging.default_orders AS SELECT 1 AS id",
+                "CREATE TABLE staging.protected_orders AS SELECT 1 AS id",
+                "CREATE TABLE staging.forced_orders AS SELECT 1 AS id",
+            ),
+            model_locations={
+                "default_orders": "staging",
+                "protected_orders": "staging",
+                "forced_orders": "staging",
+            },
+            model_configs={
+                "default_orders": {
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                },
+                "protected_orders": {
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                    "full_refresh": False,
+                },
+                "forced_orders": {
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                    "full_refresh": True,
+                },
+            },
+            model_queries={
+                "default_orders": "SELECT 1 AS id",
+                "protected_orders": "SELECT 1 AS id",
+                "forced_orders": "SELECT 1 AS id",
+            },
+            full_refresh=True,
+            expected_action={
+                "default_orders": PlanAction.CREATE_TABLE,
+                "protected_orders": PlanAction.INCREMENTAL_APPEND,
+                "forced_orders": PlanAction.CREATE_TABLE,
+            },
+            expected_reason={
+                "default_orders": PlanReason.FULL_REFRESH,
+                "protected_orders": PlanReason.NORMAL_INCREMENTAL,
+                "forced_orders": PlanReason.FULL_REFRESH,
+            },
+        ),
+        BuildExecutionPlanTestCase(
+            description="forced upstream refresh does not cascade into opted out downstream",
+            setup_sql=(
+                "CREATE TABLE staging.upstream_orders AS SELECT 1 AS id",
+                "CREATE TABLE staging.downstream_orders AS SELECT 1 AS id",
+            ),
+            model_locations={
+                "upstream_orders": "staging",
+                "downstream_orders": "staging",
+            },
+            model_configs={
+                "upstream_orders": {
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                    "full_refresh": True,
+                },
+                "downstream_orders": {
+                    "materialized": "incremental",
+                    "incremental_strategy": "append",
+                    "full_refresh": False,
+                },
+            },
+            model_queries={
+                "upstream_orders": "SELECT 1 AS id",
+                "downstream_orders": "SELECT 1 AS id",
+            },
+            model_deps={"downstream_orders": ("upstream_orders",)},
+            full_refresh=True,
+            expected_action={
+                "upstream_orders": PlanAction.CREATE_TABLE,
+                "downstream_orders": PlanAction.INCREMENTAL_APPEND,
+            },
+            expected_reason={
+                "upstream_orders": PlanReason.FULL_REFRESH,
+                "downstream_orders": PlanReason.NORMAL_INCREMENTAL,
+            },
+        ),
+        BuildExecutionPlanTestCase(
             description="view model produces create_view action",
             setup_sql=(),
             model_locations={"orders_view": "staging"},

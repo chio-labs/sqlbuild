@@ -29,6 +29,7 @@ from sqlbuild.compiler.planner._helpers.output.strategy import (
     resolve_model_plan_action,
     resolve_schema_actions,
 )
+from sqlbuild.compiler.planner._helpers.planning.full_refresh import resolve_model_full_refresh
 from sqlbuild.compiler.planner._helpers.resolve.cursor import (
     compute_cursor_bounds,
 )
@@ -260,6 +261,10 @@ def build_plan_entries(
         )
         entry: ModelPlanEntry
         entry_warnings: tuple[PlanWarning, ...]
+        effective_full_refresh: bool = resolve_model_full_refresh(
+            model=model,
+            cli_full_refresh=full_refresh,
+        )
         entry, entry_warnings = plan_model_from_change(
             model=model,
             snapshot=snapshot,
@@ -274,7 +279,7 @@ def build_plan_entries(
                 star_exclude_keyword=relations.star_exclude_keyword,
             ),
             sql_analysis_enabled=project.settings.sql_analysis,
-            full_refresh=full_refresh,
+            full_refresh=effective_full_refresh,
             cursor_overrides=CursorOverridePair(
                 start_cursor_override=resolved_start,
                 end_cursor_override=resolved_end,
@@ -376,7 +381,9 @@ def plan_model_from_change(
     models_by_name: dict[str, CompiledModel] = context.models_by_name
     start_cursor_override: str | None = cursor_overrides.start_cursor_override
     end_cursor_override: str | None = cursor_overrides.end_cursor_override
-    backfill: BackfillResult = change_result.backfill
+    backfill: BackfillResult = (
+        BackfillResult(action=BackfillAction.FULL) if full_refresh else change_result.backfill
+    )
     suppress_runtime_cursor_bounds: bool = (
         backfill_override is not None and backfill_override.action == BackfillAction.FULL
     )
@@ -564,7 +571,6 @@ def plan_model_from_change(
         end_cursor_override=end_cursor_override,
         unique_key=unique_key,
         merge_exclude_columns=_get_config_string_tuple(model=model, key="merge_exclude_columns"),
-        allow_full_refresh=_get_config_optional_bool(model=model, key="allow_full_refresh"),
         snapshot_strategy=snapshot_strategy,
         updated_at_column=updated_at_column,
         check_columns=check_columns,

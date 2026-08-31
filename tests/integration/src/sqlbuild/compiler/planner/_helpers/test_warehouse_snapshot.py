@@ -370,6 +370,25 @@ def test_given_sources_when_gathering_source_columns_then_filters_metadata_names
             expected_progress_calls=0,
         ),
         GatherCursorSnapshotTestCase(
+            description="gathers cursor bounds when model opts out of full refresh",
+            setup_sql=(
+                "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+                "INSERT INTO staging.raw_orders VALUES (1, '2024-02-01')",
+            ),
+            selected_keys=frozenset({_SELECTED_KEY}),
+            full_refresh=True,
+            expected_cursor_model_names=frozenset({"fact_orders"}),
+            model_extra_config={"full_refresh": False},
+            expected_cursor_snapshots={
+                "fact_orders": ModelCursorSnapshot(
+                    target_max=None,
+                    upstream_mins=("2024-02-01 00:00:00",),
+                    upstream_maxes=("2024-02-01 00:00:00",),
+                ),
+            },
+            expected_progress_calls=2,
+        ),
+        GatherCursorSnapshotTestCase(
             description="skips unselected incremental models",
             setup_sql=(
                 "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
@@ -400,7 +419,15 @@ def test_given_incremental_models_when_gathering_cursor_snapshots_then_returns_e
 
     project: CompiledProject = build_project_with_targets(
         model_locations={"raw_orders": "staging"},
-        incremental_models=(_INCREMENTAL_MODEL,),
+        incremental_models=(
+            _IncrementalModelSpec(
+                name=_INCREMENTAL_MODEL.name,
+                schema=_INCREMENTAL_MODEL.schema,
+                cursor=_INCREMENTAL_MODEL.cursor,
+                ref_names=_INCREMENTAL_MODEL.ref_names,
+                extra_config=test_case.model_extra_config,
+            ),
+        ),
     )
     snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
         project=project,

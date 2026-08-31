@@ -34,6 +34,7 @@ def execute_build_plan(
     callbacks: BuildCallbacks | None = None,
     customizations: BuildCustomizations | None = None,
     initial_state: BuildInitialState | None = None,
+    schema_prepared: bool = False,
 ) -> BuildExecutionResult:
     """Execute a full build plan using the DAG scheduler."""
 
@@ -54,6 +55,7 @@ def execute_build_plan(
         callbacks=resolved_callbacks,
         customizations=resolved_customizations,
         initial_state=resolved_initial_state,
+        schema_prepared=schema_prepared,
     )
 
     model_results: tuple[ModelExecutionResult, ...]

@@ -102,7 +102,7 @@ def build_schema_preflight_plan() -> PlanOutput:
                 returns="BOOLEAN",
                 body_sql="amount > 100",
                 fingerprint_query_sql="amount > 100",
-                fingerprint_destination=_location(schema="analytics", name="is_large_order"),
+                fingerprint_destination=_location(schema="state", name="is_large_order"),
                 language=FunctionLanguage.SQL,
             ),
         ),

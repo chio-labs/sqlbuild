@@ -2,6 +2,41 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
+    ConditionalPublicationPayload,
+)
+
+
+@dataclass(frozen=True)
+class PostgresConditionalVirtualRefPublishTestCase:
+    """Expected conditional virtual-ref publication results."""
+
+    description: str
+    expected_stale_publish: bool
+    expected_owned_publish: bool
+    expected_model_version_hash: str
+
+
+@dataclass(frozen=True)
+class PostgresAtomicFinalizedVirtualPublishTestCase:
+    """Expected rollback and success behavior for finalized conditional publication."""
+
+    description: str
+    checkpoint_id: str
+    expected_error_fragment: str
+    expected_checkpoint_count_after_failure: int
+    expected_checkpoint_count_after_success: int
+
+
+@dataclass(frozen=True)
+class PostgresConditionalPublicationPayloadContractTestCase:
+    """One payload and its expected PostgreSQL conditional publication outcome."""
+
+    description: str
+    payload: ConditionalPublicationPayload
+    expected_valid: bool
+    expected_error_fragment: str | None = None
+
 
 @dataclass(frozen=True)
 class PostgresStateBackendLifecycleTestCase:

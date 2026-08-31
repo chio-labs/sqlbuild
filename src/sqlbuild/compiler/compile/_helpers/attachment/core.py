@@ -61,6 +61,7 @@ from sqlbuild.compiler.compile._helpers.render.templating import (
 from sqlbuild.compiler.compile.constants import (
     MACRO_CALL_PATTERN,
     MODEL_AUDIT_OVERRIDE_KEYS,
+    MODEL_FULL_REFRESH_CONFIG_KEY,
     MODEL_HEADER_METADATA_KEYS,
     PRESERVE_TARGET_VALUE,
 )
@@ -99,6 +100,7 @@ from sqlbuild.compiler.discovery.models import (
     SqlHookEntry,
 )
 from sqlbuild.compiler.path_defaults.main._select import select_path_default
+from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
@@ -759,6 +761,11 @@ def build_model_config(
         run_id=run_id,
     )
     target_resolved_values.update(raw_hook_values)
+    if (
+        MODEL_FULL_REFRESH_CONFIG_KEY not in model_header_values
+        and target_resolved_values.get("materialized") != MaterializationType.INCREMENTAL
+    ):
+        target_resolved_values.pop(MODEL_FULL_REFRESH_CONFIG_KEY, None)
     validate_model_config_has_no_macros(values=target_resolved_values)
     return CompileModelConfig(
         values=target_resolved_values,
@@ -1807,8 +1814,8 @@ def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
         values["incremental_mode"] = defaults.incremental_mode
     if defaults.merge_exclude_columns:
         values["merge_exclude_columns"] = defaults.merge_exclude_columns
-    if defaults.allow_full_refresh is not None:
-        values["allow_full_refresh"] = defaults.allow_full_refresh
+    if defaults.full_refresh is not None:
+        values["full_refresh"] = defaults.full_refresh
     if defaults.append_cursor_inclusive is not None:
         values["append_cursor_inclusive"] = defaults.append_cursor_inclusive
     if defaults.cursor_start is not None:

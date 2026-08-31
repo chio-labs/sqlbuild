@@ -23,6 +23,7 @@ from sqlbuild.virtual.state.models import (
     SeedVersionRecord,
     SourceFreshnessRecord,
     StateBackupRecord,
+    StateLockLease,
     StateLockRecord,
     StateOperationEventRecord,
     StateOperationRecord,
@@ -322,6 +323,23 @@ class StateBackend(ABC):
         refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
     ) -> None:
         """Upsert a virtual environment and replace multiple ref groups atomically."""
+        ...
+
+    @abstractmethod
+    def upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+        self,
+        *,
+        connection: Any,
+        schema: str,
+        record: VirtualEnvironmentRecord,
+        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
+        leases: tuple[StateLockLease, ...],
+        checkpoint: VirtualEnvironmentCheckpointRecord | None = None,
+        checkpoint_refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...] = (),
+        checkpoint_function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...] = (),
+        checkpoint_seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (),
+    ) -> bool:
+        """Validate status/ref/checkpoint input before writes, then publish if leases are owned."""
         ...
 
     @abstractmethod

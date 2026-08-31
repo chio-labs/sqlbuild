@@ -120,7 +120,9 @@ def build_clone_model_entry(*, schema: str, name: str) -> ModelPlanEntry:
     )
 
 
-def build_clone_function_entry(*, schema: str, name: str) -> FunctionPlanEntry:
+def build_clone_function_entry(
+    *, schema: str, name: str, fingerprint_schema: str | None = None
+) -> FunctionPlanEntry:
     destination: CompiledRelationLocation = CompiledRelationLocation(
         database=None,
         schema=schema,
@@ -136,5 +138,10 @@ def build_clone_function_entry(*, schema: str, name: str) -> FunctionPlanEntry:
         returns="INTEGER",
         body_sql="1",
         fingerprint_query_sql="body=1",
-        fingerprint_destination=destination,
+        fingerprint_destination=CompiledRelationLocation(
+            database=None,
+            schema=fingerprint_schema or schema,
+            name=name,
+            qualified_name=f"{fingerprint_schema or schema}.{name}",
+        ),
     )

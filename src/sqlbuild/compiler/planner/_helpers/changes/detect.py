@@ -80,7 +80,7 @@ def detect_changes(
             snapshot=snapshot,
             sql_analysis_enabled=project.settings.sql_analysis,
             query_change_tracking=project.settings.query_change_tracking,
-            full_refresh=full_refresh,
+            full_refresh=False,
             function_local_hashes=function_local_hashes,
             hook_version_hashes=hook_version_hashes,
             expected_version_hash=(expected_version_hashes or {}).get(model.name),
@@ -105,6 +105,8 @@ def detect_changes(
             query_change_tracking=project.settings.query_change_tracking,
             full_refresh=full_refresh,
         )
+        if full_refresh:
+            function_backfill = BackfillResult(action=BackfillAction.FORWARD_ONLY)
         function_changes[function.name] = FunctionChangeResult(
             fingerprint_sql=fingerprint_sql,
             reason=function_reason,

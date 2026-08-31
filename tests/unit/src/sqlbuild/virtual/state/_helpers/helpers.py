@@ -16,6 +16,9 @@ from sqlbuild.microbatches.types import (
     MicrobatchRecordType,
     MicrobatchRunType,
 )
+from sqlbuild.virtual.state._helpers.state_storage.validation import (
+    validate_conditional_virtual_environment_publication,
+)
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
@@ -27,6 +30,7 @@ from sqlbuild.virtual.state.models import (
     SeedVersionRecord,
     SourceFreshnessRecord,
     StateBackupRecord,
+    StateLockLease,
     StateLockRecord,
     StateOperationEventRecord,
     StateOperationRecord,
@@ -364,6 +368,29 @@ class FakeStateBackend(StateBackend):
         refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
     ) -> None:
         return None
+
+    def upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+        self,
+        connection: Any,
+        *,
+        schema: str,
+        record: VirtualEnvironmentRecord,
+        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
+        leases: tuple[StateLockLease, ...],
+        checkpoint: VirtualEnvironmentCheckpointRecord | None = None,
+        checkpoint_refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...] = (),
+        checkpoint_function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...] = (),
+        checkpoint_seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (),
+    ) -> bool:
+        validate_conditional_virtual_environment_publication(
+            record=record,
+            refs_by_node_type=refs_by_node_type,
+            checkpoint=checkpoint,
+            checkpoint_refs=checkpoint_refs,
+            checkpoint_function_refs=checkpoint_function_refs,
+            checkpoint_seed_refs=checkpoint_seed_refs,
+        )
+        return True
 
     def upsert_virtual_environment_node_ref(
         self,

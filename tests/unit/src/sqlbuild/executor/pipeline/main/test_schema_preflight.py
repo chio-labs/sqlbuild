@@ -24,8 +24,13 @@ from tests.unit.src.sqlbuild.executor.pipeline.main.helpers import (
     "test_case",
     [
         BuildSchemaPreflightTestCase(
-            description="prepares model seed source and function schemas once",
-            expected_schemas=((None, "analytics"), (None, "dev"), (None, "raw")),
+            description="prepares resource and function fingerprint schemas once",
+            expected_schemas=(
+                (None, "analytics"),
+                (None, "dev"),
+                (None, "raw"),
+                (None, "state"),
+            ),
         )
     ],
     ids=lambda case: case.description,

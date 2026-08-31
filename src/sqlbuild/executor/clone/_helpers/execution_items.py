@@ -51,6 +51,7 @@ def execute_clone_function_item(
         statement_recorder=recorder,
         run_id=inputs.run_id,
         query_change_tracking=inputs.query_change_tracking,
+        schema_prepared=True,
     )
     succeeded: bool = function_result.status == ExecutionStatus.SUCCESS
     return CloneItemResult(

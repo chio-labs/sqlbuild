@@ -828,7 +828,7 @@ Declared flags are routed to the right place automatically:
 | ---- | --------- | ----- |
 | `--select` / `--exclude` | dbt | dbt resolves selection (see [Selection](/concepts/dbt-compatibility/selection)). |
 | `--vars` | dbt **and** SQLBuild | The same vars feed dbt's compile and SQLBuild's own variable resolution, so both sides see identical values. |
-| `--full-refresh` | dbt **and** SQLBuild | Forces a full rebuild of selected models on both sides. |
+| `--full-refresh` | dbt **and** SQLBuild | Requests a full rebuild of selected models on both sides; nullable per-model `full_refresh` config can opt out or force it. |
 | `--threads` | dbt (`--threads`) and SQLBuild (`--concurrency`) | |
 | `--target` / `--project-dir` / `--profiles-dir` / `--profile` / `--target-path` | dbt | Standard dbt locators. |
 
@@ -3309,7 +3309,7 @@ Table promotion mode is a project setting rather than a `MODEL()` field. Staged 
 | `lookback` | Backward replay extension |
 | `append_cursor_inclusive` | Include (`true`, default) or exclude (`false`) the current append-cursor boundary |
 | `merge_exclude_columns` | Columns left unchanged by matched-row merge updates |
-| `allow_full_refresh` | Allow or deny explicit full refresh for this incremental model |
+| `full_refresh` | Nullable full-refresh override: unset follows `--full-refresh`, `false` opts out, and `true` forces a full refresh |
 | `on_schema_change` | `append_new_columns`, `sync_all_columns`, `ignore`, or `fail` |
 | `replay_on_change` | `forward`, `full`, or `bounded-<duration>` |
 
@@ -12256,7 +12256,7 @@ sqb --project-dir <path> plan [flags]
 | `--no-python` | Exclude read-side Python tasks and assets from the plan |
 | `--defer-to` | Resolve unselected model references against another target |
 | `--json` | Output the plan as JSON |
-| `--full-refresh` | Plan a full rebuild of all selected models |
+| `--full-refresh` | Plan a full rebuild of selected models unless their model `full_refresh` config is `false` |
 | `--start-cursor-ts` | Override start cursor for timestamp incremental models (ISO format) |
 | `--end-cursor-ts` | Override end cursor for timestamp incremental models (ISO format) |
 | `--start-cursor-int` | Override start cursor for integer incremental models |
@@ -12344,7 +12344,7 @@ sqb --project-dir <path> build [flags]
 | `--no-audits` | Skip audits |
 | `--no-python` | Skip read-side Python tasks and assets (loader-side Python still runs for selected sources) |
 | `--no-sql-validation` | Skip compile-time SQL syntax validation |
-| `--full-refresh` | Drop and rebuild all selected models from scratch |
+| `--full-refresh` | Drop and rebuild selected models unless their model `full_refresh` config is `false` |
 | `--defer-to` | Resolve unselected model references against another target |
 | `--defer-sources-to` | Read managed source data from another target |
 | `--fail-fast` | Stop on first failure and skip remaining nodes |

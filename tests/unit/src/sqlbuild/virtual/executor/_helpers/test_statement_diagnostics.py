@@ -84,6 +84,7 @@ def test_given_virtual_statement_callback_when_executing_then_all_outer_scopes_p
         python_plan=Mock(),
         exec_hooks=VirtualBuildExecutionHooks(on_statement_complete=callback),
         microbatch_lease_check=Mock(),
+        model_version_leases=(),
     )
 
     assert tuple(observed_phases) == test_case.expected_phases
@@ -96,26 +97,20 @@ def test_given_virtual_statement_callback_when_executing_then_all_outer_scopes_p
     "test_case",
     [
         VirtualStatementScopeTestCase(
-            description="schema and threaded build callbacks receive statement diagnostics",
-            expected_phases=("virtual_schema_preparation", "build"),
-            expected_callback_count=2,
+            description="build pipeline receives statement diagnostics",
+            expected_phases=("build",),
+            expected_callback_count=1,
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_virtual_execution_callback_when_preparing_then_schema_and_workers_receive_it(
+def test_given_virtual_execution_callback_when_building_then_pipeline_receives_it(
     test_case: VirtualStatementScopeTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     callback: Mock = Mock()
     observed_phases: list[str] = []
     observed_callbacks: list[object] = []
-
-    def capture_schema(**_kwargs: object) -> None:
-        context: CostResourceContext | None = CostContext.current()
-        assert context is not None
-        observed_phases.append(context.phase)
-        observed_callbacks.append(context.on_statement_complete)
 
     def capture_build(**kwargs: object) -> BuildExecutionResult:
         callbacks: BuildCallbacks = cast(BuildCallbacks, kwargs["callbacks"])
@@ -127,7 +122,6 @@ def test_given_virtual_execution_callback_when_preparing_then_schema_and_workers
     monkeypatch.setattr(
         virtual_build_module, "load_custom_prepare_version_functions", Mock(return_value={})
     )
-    monkeypatch.setattr(virtual_build_module, "_prepare_virtual_physical_schemas", capture_schema)
     monkeypatch.setattr(virtual_build_module, "run_build_pipeline", capture_build)
     project: CompiledProject = CompiledProject(
         run_id="execution-scope-run",

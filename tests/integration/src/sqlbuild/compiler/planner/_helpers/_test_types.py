@@ -37,6 +37,7 @@ class GatherCursorSnapshotTestCase:
     selected_keys: frozenset[CompiledObjectKey] | None
     full_refresh: bool
     expected_cursor_model_names: frozenset[str]
+    model_extra_config: dict[str, object] = field(default_factory=dict)
     expected_cursor_snapshots: dict[str, ModelCursorSnapshot] = field(default_factory=dict)
     expected_progress_calls: int = 0
     deferred_locations: dict[str, CompiledRelationLocation] | None = None

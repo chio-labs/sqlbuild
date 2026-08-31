@@ -634,7 +634,6 @@ class ModelPlanEntry:
     end_cursor_override: str | None = None
     unique_key: tuple[str, ...] = field(default_factory=tuple)
     merge_exclude_columns: tuple[str, ...] = field(default_factory=tuple)
-    allow_full_refresh: bool | None = None
     snapshot_strategy: str | None = None
     updated_at_column: str | None = None
     check_columns: tuple[str, ...] = field(default_factory=tuple)
