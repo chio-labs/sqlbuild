@@ -8,6 +8,7 @@ import pytest
 
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from tests.integration.src.sqlbuild.adapters.snowflake.helpers import (
+    RecordingSnowflakeAdapter,
     build_snowflake_connection_config,
     build_unique_schema_name,
 )
@@ -52,3 +53,27 @@ def connection(
     finally:
         adapter.execute(connection=conn, sql=f"DROP SCHEMA IF EXISTS {schema_target} CASCADE")
         adapter.close(conn)
+
+
+@pytest.fixture
+def recording_adapter() -> RecordingSnowflakeAdapter:
+    return RecordingSnowflakeAdapter()
+
+
+@pytest.fixture
+def recording_connection(
+    recording_adapter: RecordingSnowflakeAdapter,
+    snowflake_database: str,
+    snowflake_schema: str,
+) -> Iterator[Any]:
+    config: dict[str, object] = build_snowflake_connection_config(schema=snowflake_schema)
+    schema_target: str = f"{snowflake_database}.{snowflake_schema}"
+    conn: Any = recording_adapter.connect(config)
+    recording_adapter.execute(connection=conn, sql=f"CREATE SCHEMA IF NOT EXISTS {schema_target}")
+    try:
+        yield conn
+    finally:
+        recording_adapter.execute(
+            connection=conn, sql=f"DROP SCHEMA IF EXISTS {schema_target} CASCADE"
+        )
+        recording_adapter.close(conn)

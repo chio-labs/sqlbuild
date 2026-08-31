@@ -10,6 +10,7 @@ from sqlbuild.adapter.contract.models import (
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.cost.types import CostStatus
+from sqlbuild.spec.contracts.types import TableType
 
 
 @dataclass(frozen=True)
@@ -95,6 +96,17 @@ class SnowflakeTableFreshnessMetadataTestCase:
     expected_value_kind: str
     expected_supports_metadata: bool
     expected_data_version_type: type[datetime]
+
+
+@dataclass(frozen=True)
+class SnowflakeTableTypeConversionTestCase:
+    description: str
+    initial_type: TableType
+    initial_table_kind: str
+    desired_type: TableType
+    downgrade: bool
+    expected_is_transient: bool
+    expected_conversion_statement_count: int
 
 
 @dataclass(frozen=True)
