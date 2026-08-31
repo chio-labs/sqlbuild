@@ -292,6 +292,18 @@ class MicrobatchTargets:
 
 
 @dataclass(frozen=True)
+class FullRefreshRelations:
+    """Deterministic live, rebuild, and previous relation names."""
+
+    target_name: str
+    target_qualified: str
+    rebuild_name: str
+    rebuild_qualified: str
+    previous_name: str
+    previous_qualified: str
+
+
+@dataclass(frozen=True)
 class MicrobatchLifecycleState:
     """In-flight accumulators for one microbatch lifecycle."""
 

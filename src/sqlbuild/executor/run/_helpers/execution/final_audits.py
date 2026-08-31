@@ -66,11 +66,15 @@ def run_final_model_audits(
     return FinalAuditRun(results=tuple(results), has_error=has_error)
 
 
-def run_final_scope_audits(*, context: ModelMaterializationContext) -> FinalAuditRun:
+def run_final_scope_audits(
+    *, context: ModelMaterializationContext, relation_override: str | None = None
+) -> FinalAuditRun:
     """Run all model audits at FINAL scope against promoted relations."""
 
     return run_final_model_audits(
-        relation_overrides=None,
+        relation_overrides=(
+            None if relation_override is None else {context.entry.name: relation_override}
+        ),
         model_audits=context.model_audits,
         reuse_origin_fingerprint=None,
         adapter=context.adapter,
