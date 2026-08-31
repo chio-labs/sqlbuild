@@ -466,6 +466,7 @@ def _create_initial_snapshot_target(
         if entry.historical_input == HistoricalInput.CHANGES:
             statements: tuple[str, ...] = (
                 adapter.render_create_initial_historical_timestamp_changes_destination(
+                    table_type=entry.table_type,
                     destination=target_qualified,
                     origin=delta_qualified,
                     unique_key=entry.unique_key,
@@ -477,6 +478,7 @@ def _create_initial_snapshot_target(
             )
         else:
             statements = adapter.render_create_initial_historical_timestamp_snapshot_destination(
+                table_type=entry.table_type,
                 destination=target_qualified,
                 origin=delta_qualified,
                 unique_key=entry.unique_key,
@@ -490,6 +492,7 @@ def _create_initial_snapshot_target(
     elif entry.snapshot_strategy == SnapshotStrategy.CHECK and entry.observed_at_column is not None:
         output_columns: tuple[str, ...] = tuple(column.name for column in delta_columns)
         statements = adapter.render_create_initial_historical_check_snapshot_destination(
+            table_type=entry.table_type,
             destination=target_qualified,
             origin=delta_qualified,
             unique_key=entry.unique_key,
@@ -502,6 +505,7 @@ def _create_initial_snapshot_target(
         )
     else:
         statements = adapter.render_create_initial_snapshot_destination(
+            table_type=entry.table_type,
             destination=target_qualified,
             origin=delta_qualified,
             snapshot_strategy=entry.snapshot_strategy,

@@ -31,6 +31,7 @@ def create_staging_relation(
         connection=connection,
         destination=staging_qualified,
         sql=resolved_sql,
+        config={"table_type": context.entry.table_type},
         statement_recorder=statement_recorder,
     )
     return None

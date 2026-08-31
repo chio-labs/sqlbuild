@@ -17,6 +17,13 @@ class SnowflakeRetentionTestCase:
 
 
 @dataclass(frozen=True)
+class SnowflakeTableTypeDdlTestCase:
+    description: str
+    table_type: str
+    expected_prefix: str
+
+
+@dataclass(frozen=True)
 class SnowflakeCostCollectionTestCase:
     description: str
     connect_error: bool

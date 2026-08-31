@@ -95,6 +95,16 @@ def resolve_target_config(
             if local_target.owns_time_travel_retention_namespace is not None
             else project_target.owns_time_travel_retention_namespace
         ),
+        default_table_type=(
+            local_target.default_table_type
+            if local_target.default_table_type is not None
+            else project_target.default_table_type
+        ),
+        table_type_downgrade=(
+            local_target.table_type_downgrade
+            if local_target.table_type_downgrade is not None
+            else project_target.table_type_downgrade
+        ),
         clone=_merge_clone_policy(
             project_clone=project_target.clone,
             local_clone=local_target.clone,

@@ -56,6 +56,19 @@ def format_plan_json(
         }
         for entry in plan.retention_entries
     ]
+    table_type_conversions: list[dict[str, object]] = [
+        {
+            "kind": "table_type_conversion",
+            "model": entry.model_name,
+            "desired_type": entry.desired_type,
+            "actual_type": entry.actual_type,
+            "source": entry.source,
+            "downgrade": entry.downgrade,
+            "downgrade_policy": entry.downgrade_policy,
+            "irreversible_warning": entry.irreversible_warning,
+        }
+        for entry in plan.table_type_entries
+    ]
     python_nodes: list[dict[str, object]] = [
         _serialize_python_plan_entry(entry) for entry in python_plan_entries
     ]
@@ -78,6 +91,7 @@ def format_plan_json(
         "providers": providers,
         "warnings": warnings,
         "retention": retention,
+        "table_type_conversions": table_type_conversions,
     }
     if plan.metadata:
         result["metadata"] = plan.metadata

@@ -19,8 +19,17 @@ from sqlbuild.compiler.planner.models import (
     PlannerWarehouseState,
     WarehouseSnapshot,
 )
-from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention
-from sqlbuild.spec.contracts.types import TimeTravelRetentionSource
+from sqlbuild.spec.contracts.models import (
+    LocalConfig,
+    ProjectConfig,
+    ResolvedTableType,
+    ResolvedTimeTravelRetention,
+    TargetConfig,
+)
+from sqlbuild.spec.contracts.types import (
+    TableTypeDowngradePolicy,
+    TimeTravelRetentionSource,
+)
 
 
 def build_retention_planner_inputs(
@@ -29,6 +38,8 @@ def build_retention_planner_inputs(
     desired_days: int,
     existing_relations: dict[str, RelationInfo],
     config_values: dict[str, object],
+    table_type: ResolvedTableType | None = None,
+    table_type_downgrade: TableTypeDowngradePolicy = TableTypeDowngradePolicy.REQUIRE_CONFIRMATION,
 ) -> tuple[PlannerRuntime, PlannerWarehouseState, PlannerScope]:
     key: CompiledObjectKey = CompiledObjectKey(
         resource_type=CompiledResourceType.MODEL,
@@ -47,6 +58,7 @@ def build_retention_planner_inputs(
                 unmanaged=False,
                 source=TimeTravelRetentionSource.MODEL,
             ),
+            table_type=table_type or ResolvedTableType(),
         ),
         destination=CompiledRelationLocation(
             database="warehouse",
@@ -84,7 +96,17 @@ def build_retention_planner_inputs(
         ),
     )
     return (
-        PlannerRuntime(project=project, adapter=adapter, connection=object()),
+        PlannerRuntime(
+            project=project,
+            adapter=adapter,
+            connection=object(),
+            project_config=ProjectConfig(
+                name="test",
+                adapter=str(adapter.adapter_name),
+                targets={"test": TargetConfig(table_type_downgrade=table_type_downgrade)},
+            ),
+            local_config=LocalConfig(),
+        ),
         warehouse,
         scope,
     )

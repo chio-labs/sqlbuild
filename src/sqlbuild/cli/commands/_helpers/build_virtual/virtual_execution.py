@@ -89,6 +89,7 @@ def execute_virtual_build(
         config=VirtualBuildPlanHookConfig(
             full_refresh=request.full_refresh,
             allow_snapshot_full_refresh=request.allow_snapshot_full_refresh,
+            allow_table_type_downgrade=request.allow_table_type_downgrade,
             use_color=request.use_color,
             verbose=request.verbose,
             debug=request.debug,

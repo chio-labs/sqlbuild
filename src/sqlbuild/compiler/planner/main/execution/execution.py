@@ -24,7 +24,7 @@ from sqlbuild.compiler.planner._helpers.planning.output_assembly import (
     with_plan_warnings,
 )
 from sqlbuild.compiler.planner._helpers.planning.reconciliation import reconcile_execution_changes
-from sqlbuild.compiler.planner._helpers.planning.retention import plan_retention
+from sqlbuild.compiler.planner._helpers.planning.retention import plan_retention, plan_table_types
 from sqlbuild.compiler.planner._helpers.planning.scope_pruning import prune_planner_execution_scope
 from sqlbuild.compiler.planner._helpers.planning.scopes import resolve_planner_scopes
 from sqlbuild.compiler.planner._helpers.planning.warehouse_state import (
@@ -156,6 +156,9 @@ def build_execution_plan(
     )
     plan_output = replace(
         plan_output,
+        table_type_entries=plan_table_types(
+            runtime=runtime, warehouse=warehouse, scope=scopes.selected_scope
+        ),
         retention_entries=plan_retention(
             runtime=runtime, warehouse=warehouse, scope=scopes.selected_scope
         ),

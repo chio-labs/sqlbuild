@@ -57,6 +57,7 @@ from sqlbuild.compiler.scopes.models import (
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,
+    ResolvedTableType,
     ResolvedTimeTravelRetention,
     ScenarioConfig,
     SchemaModelEntry,
@@ -149,6 +150,7 @@ class CompileModelConfig:
     time_travel_retention: ResolvedTimeTravelRetention = field(
         default_factory=ResolvedTimeTravelRetention
     )
+    table_type: ResolvedTableType = field(default_factory=ResolvedTableType)
 
 
 @dataclass(frozen=True)

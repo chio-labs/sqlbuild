@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.contract.types import RetentionChangePhase
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.types import RetentionPlanPhase
@@ -51,6 +52,21 @@ class BuildModelRetentionReconciliationTestCase:
     desired_days: int
     effective_days: int
     change_phase: RetentionChangePhase
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TableTypeConversionTestCase:
+    description: str
+    relation_snapshots: tuple[tuple[RelationInfo, ...], ...]
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TableTypeConversionErrorTestCase:
+    description: str
+    relation_snapshots: tuple[tuple[RelationInfo, ...], ...]
+    expected_error_fragment: str
     expected_statements: tuple[str, ...]
 
 

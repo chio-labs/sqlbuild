@@ -64,6 +64,7 @@ def test_given_snapshot_adapter_methods_when_executing_rendered_sql_then_updates
     )
     statement: str
     for statement in adapter.render_create_initial_snapshot_destination(
+        table_type="transient",
         destination="main.initial_custom_target",
         origin="main.initial_custom_source",
         snapshot_strategy="timestamp",
@@ -192,6 +193,7 @@ def test_given_snapshot_adapter_methods_when_executing_rendered_sql_then_updates
         "TIMESTAMP '2024-01-04' AS observed_at"
     )
     for statement in adapter.render_create_initial_historical_timestamp_snapshot_destination(
+        table_type="transient",
         destination="main.hist_ts_target",
         origin="main.hist_ts_source",
         unique_key=("customer_id",),
@@ -246,6 +248,7 @@ def test_given_snapshot_adapter_methods_when_executing_rendered_sql_then_updates
         "UNION ALL SELECT 2 AS customer_id, 'basic' AS plan, TIMESTAMP '2024-01-02' AS observed_at"
     )
     for statement in adapter.render_create_initial_historical_check_snapshot_destination(
+        table_type="transient",
         destination="main.hist_check_target",
         origin="main.hist_check_source",
         unique_key=("customer_id",),

@@ -612,6 +612,21 @@ class RetentionPlanEntry:
 
 
 @dataclass(frozen=True)
+class TableTypePlanEntry:
+    """Snowflake table-type work independent of model identity actions."""
+
+    model_name: str
+    destination: CompiledRelationLocation
+    copy_name: str
+    desired_type: str
+    actual_type: str | None
+    source: str
+    downgrade: bool
+    downgrade_policy: str
+    irreversible_warning: str | None = None
+
+
+@dataclass(frozen=True)
 class PlanOutputExtras:
     """Optional supplemental seed fingerprints for plan output assembly."""
 
@@ -662,6 +677,7 @@ class ModelPlanEntry:
     invalidate_hard_deletes: bool = False
     snapshot_full_refresh: str | None = None
     snapshot_schema_change: str | None = None
+    table_type: str = "transient"
     on_schema_change: OnSchemaChange | None = None
     type_enforcement: bool = False
     declared_columns: tuple[ColumnInfo, ...] = field(default_factory=tuple)
@@ -957,6 +973,7 @@ class PlanOutput:
     selected_keys: frozenset[CompiledObjectKey] = field(default_factory=frozenset)
     warnings: tuple[PlanWarning, ...] = field(default_factory=tuple)
     retention_entries: tuple[RetentionPlanEntry, ...] = field(default_factory=tuple)
+    table_type_entries: tuple[TableTypePlanEntry, ...] = field(default_factory=tuple)
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = field(
         default_factory=dict
     )

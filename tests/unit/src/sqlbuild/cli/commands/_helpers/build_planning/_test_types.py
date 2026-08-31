@@ -15,3 +15,15 @@ class SnapshotFullRefreshPolicyTestCase:
     expected_output: str = ""
     input_text: str = ""
     input_is_tty: bool = False
+
+
+@dataclass(frozen=True)
+class TableTypeDowngradePolicyTestCase:
+    description: str
+    plan_output: PlanOutput
+    allow_table_type_downgrade: bool
+    expected_error_fragment: str | None = None
+    expected_help_fragment: str = ""
+    expected_output: str = ""
+    input_text: str = ""
+    input_is_tty: bool = False

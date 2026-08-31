@@ -608,6 +608,32 @@ def validate_time_travel_retention(*, config: CompileModelConfig, model_name: st
         )
 
 
+def validate_table_type(*, config: CompileModelConfig, model_name: str) -> None:
+    """Reject declared table type on materializations without managed tables."""
+
+    if not config.table_type.declared:
+        return
+    materialized: str | None = _str(config=config, key="materialized")
+    if materialized == MaterializationType.VIEW:
+        raise CompileInputError(f"model '{model_name}': table_type is not valid for views")
+    if materialized not in {
+        MaterializationType.TABLE,
+        MaterializationType.INCREMENTAL,
+        MaterializationType.SNAPSHOT,
+    }:
+        raise CompileInputError(
+            f"model '{model_name}': table_type is not supported for materialization "
+            f"'{materialized}'"
+        )
+
+
+def validate_storage_policies(*, config: CompileModelConfig, model_name: str) -> None:
+    """Validate retention and table-type materialization applicability."""
+
+    validate_time_travel_retention(config=config, model_name=model_name)
+    validate_table_type(config=config, model_name=model_name)
+
+
 def validate_placeholder_config(
     *,
     config: CompileModelConfig,

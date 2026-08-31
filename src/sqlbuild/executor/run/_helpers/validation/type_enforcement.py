@@ -18,6 +18,7 @@ def enforce_types_staged(
     staging_schema: str | None,
     staging_table: str,
     declared_columns: tuple[ColumnInfo, ...],
+    table_type: str,
     statement_recorder: StatementRecorder,
 ) -> None:
     """Inspect staging columns and rebuild with casts for declared types."""
@@ -63,6 +64,7 @@ def enforce_types_staged(
         connection=connection,
         destination=enforced_qualified,
         sql=f"SELECT {projection_sql} FROM {staging_qualified}",
+        config={"table_type": table_type},
         statement_recorder=statement_recorder,
     )
     adapter.drop(

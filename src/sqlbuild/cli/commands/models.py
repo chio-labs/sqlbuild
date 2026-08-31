@@ -203,6 +203,7 @@ class BuildCommandRequest:
     reload_sources: bool = False
     include_python: bool = True
     allow_snapshot_full_refresh: bool = False
+    allow_table_type_downgrade: bool = False
     allow_snapshot_schema_change: bool = False
     concurrency: int | None = None
     select: tuple[str, ...] = ()
@@ -327,6 +328,7 @@ class VirtualBuildPlanHookConfig:
 
     full_refresh: bool
     allow_snapshot_full_refresh: bool
+    allow_table_type_downgrade: bool
     use_color: bool
     verbose: bool
     debug: bool
@@ -359,6 +361,7 @@ class VirtualBuildCliRequest:
     exclude: tuple[str, ...] = ()
     fail_fast: bool = False
     allow_snapshot_full_refresh: bool = False
+    allow_table_type_downgrade: bool = False
     allow_snapshot_schema_change: bool = False
     concurrency: int | None = None
     verbose: bool = False

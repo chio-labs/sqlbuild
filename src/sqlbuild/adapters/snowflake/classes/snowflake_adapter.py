@@ -86,6 +86,7 @@ from sqlbuild.cost.types import CostCapability, CostStatus
 from sqlbuild.diagnostics.main.log_sql import log_sql
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
+from sqlbuild.spec.contracts.types import TableType
 from sqlbuild.sql_values.models import SqlValue
 
 _EXACT_COLUMN_INSPECTION_LIMIT: int = 32
@@ -626,7 +627,15 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
             self.execute(connection=connection, sql=stmt)
 
     def render_create_table_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
-        return (f"CREATE OR REPLACE TRANSIENT TABLE {destination} AS {sql}",)
+        return self._render_create_table_as_type(
+            destination=destination, sql=sql, table_type="transient"
+        )
+
+    def _render_create_table_as_type(
+        self, *, destination: str, sql: str, table_type: str
+    ) -> tuple[str, ...]:
+        table_kind: str = "TABLE" if table_type == TableType.PERMANENT else "TRANSIENT TABLE"
+        return (f"CREATE OR REPLACE {table_kind} {destination} AS {sql}",)
 
     def render_create_view_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
         return (f"CREATE OR REPLACE VIEW {destination} AS {sql}",)
@@ -764,7 +773,10 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
         config: dict[str, Any] | None = None,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_create_table_as(destination=destination, sql=sql)
+        table_type: str = str((config or {}).get("table_type", "transient"))
+        statements: tuple[str, ...] = self._render_create_table_as_type(
+            destination=destination, sql=sql, table_type=table_type
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:
@@ -1119,6 +1131,7 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
     def render_create_initial_snapshot_destination(
         self,
         *,
+        table_type: str,
         destination: str,
         origin: str,
         snapshot_strategy: str | None,
@@ -1137,8 +1150,9 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
             source_alias=None,
             current_timestamp=current_timestamp,
         )
-        return self.render_create_table_as(
+        return self._render_create_table_as_type(
             destination=destination,
+            table_type=table_type,
             sql=(
                 f"SELECT *, {valid_from_expr} AS {valid_from_column}, "
                 f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {origin}"
@@ -1215,6 +1229,7 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
     def render_create_initial_historical_timestamp_snapshot_destination(
         self,
         *,
+        table_type: str,
         destination: str,
         origin: str,
         unique_key: tuple[str, ...],
@@ -1235,11 +1250,14 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
             output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        return self.render_create_table_as(destination=destination, sql=historical_sql)
+        return self._render_create_table_as_type(
+            destination=destination, sql=historical_sql, table_type=table_type
+        )
 
     def render_create_initial_historical_timestamp_changes_destination(
         self,
         *,
+        table_type: str,
         destination: str,
         origin: str,
         unique_key: tuple[str, ...],
@@ -1256,7 +1274,9 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
             valid_to_column=valid_to_column,
             output_columns=output_columns,
         )
-        return self.render_create_table_as(destination=destination, sql=historical_sql)
+        return self._render_create_table_as_type(
+            destination=destination, sql=historical_sql, table_type=table_type
+        )
 
     def render_apply_historical_timestamp_snapshot_changes(
         self,
@@ -1440,6 +1460,7 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
     def render_create_initial_historical_check_snapshot_destination(
         self,
         *,
+        table_type: str,
         destination: str,
         origin: str,
         unique_key: tuple[str, ...],
@@ -1460,7 +1481,9 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
             output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        return self.render_create_table_as(destination=destination, sql=historical_sql)
+        return self._render_create_table_as_type(
+            destination=destination, sql=historical_sql, table_type=table_type
+        )
 
     def render_apply_historical_check_snapshot_changes(
         self,
