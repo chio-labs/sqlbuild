@@ -200,12 +200,7 @@ def verify_success_state(
         "SELECT COUNT(*) FROM information_schema.tables "
         "WHERE table_schema = 'main' AND table_name = '_sqlbuild_microbatches'"
     ).fetchone()[0]
-    assert state_table_count == 1
-    completion_count: int = connection.execute(
-        "SELECT COUNT(*) FROM main._sqlbuild_microbatches "
-        "WHERE record_type = 'partition_completion'"
-    ).fetchone()[0]
-    assert completion_count >= (result.batch_count or 0)
+    assert state_table_count == 0
 
     query: str
     expected_rows: tuple[tuple[object, ...], ...]

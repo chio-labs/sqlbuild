@@ -6,7 +6,11 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
+    from sqlbuild.microbatches.models import (
+        MicrobatchEvent,
+        MicrobatchScope,
+        MicrobatchWriteResult,
+    )
 
 
 class MicrobatchRecordType(StrEnum):
@@ -48,6 +52,8 @@ class MicrobatchEventStore(Protocol):
     """Mode-independent append/read contract used by the shared executor."""
 
     def write(self, event: MicrobatchEvent) -> None: ...
+
+    def write_many(self, events: tuple[MicrobatchEvent, ...]) -> MicrobatchWriteResult: ...
 
     def read_scope_history(self, scope: MicrobatchScope) -> tuple[MicrobatchEvent, ...]: ...
 

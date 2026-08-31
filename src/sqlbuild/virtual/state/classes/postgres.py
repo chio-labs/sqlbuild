@@ -19,7 +19,7 @@ from sqlbuild.microbatches.constants import (
     MICROBATCH_GENERATION_WILDCARD,
     VIRTUAL_MICROBATCH_SCOPE_KIND,
 )
-from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
+from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope, MicrobatchWriteResult
 from sqlbuild.virtual.state._helpers.state_storage.events import backup_id, event_id
 from sqlbuild.virtual.state._helpers.state_storage.validation import (
     build_validation_result,
@@ -678,6 +678,40 @@ class PostgresStateBackend(StateBackend):
                 "WHERE event_id = %s)",
                 [*MicrobatchEventCodec.values(event), event.event_id],
             )
+
+    def append_microbatch_events(
+        self, *, connection: Any, schema: str, events: tuple[MicrobatchEvent, ...]
+    ) -> MicrobatchWriteResult:
+        if not events:
+            return MicrobatchWriteResult(total=0, inserted=0, already_existing=0)
+        table: str = self._qualified_name(schema=schema, table=MICROBATCH_EVENT_TABLE)
+        id_placeholders: str = ", ".join("%s" for _ in events)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"SELECT event_id FROM {table} WHERE event_id IN ({id_placeholders})",
+                [event.event_id for event in events],
+            )
+            existing_ids: frozenset[str] = frozenset(str(row[0]) for row in cursor.fetchall())
+            missing: tuple[MicrobatchEvent, ...] = tuple(
+                event for event in events if event.event_id not in existing_ids
+            )
+            if missing:
+                row_placeholders: str = "(" + ", ".join("%s" for _ in MICROBATCH_COLUMNS) + ")"
+                values_sql: str = ", ".join(row_placeholders for _ in missing)
+                columns: str = ", ".join(MICROBATCH_COLUMNS)
+                params: list[object | None] = []
+                for event in missing:
+                    params.extend(MicrobatchEventCodec.values(event))
+                cursor.execute(
+                    f"INSERT INTO {table} ({columns}) SELECT {columns} FROM "
+                    f"(VALUES {values_sql}) AS incoming ({columns}) WHERE NOT EXISTS "
+                    f"(SELECT 1 FROM {table} existing "
+                    "WHERE existing.event_id = incoming.event_id)",
+                    params,
+                )
+        return MicrobatchWriteResult(
+            total=len(events), inserted=len(missing), already_existing=len(events) - len(missing)
+        )
 
     def read_microbatch_scope_history(
         self, *, connection: Any, schema: str, scope: MicrobatchScope

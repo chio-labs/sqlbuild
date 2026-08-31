@@ -71,7 +71,8 @@ def test_given_completion_write_failure_during_rebuild_when_retried_then_live_ta
                 "        if (os.environ.get('SQLBUILD_FAIL_COMPLETION_WRITE') == '1' "
                 "and 'INSERT INTO main._sqlbuild_microbatches' in sql "
                 "and \"'partition_completion'\" in sql "
-                "and \"'2026-01-01T01:00:00', '2026-01-01T02:00:00'\" in sql):\n"
+                "and \"'2026-01-01T01:00:00'\" in sql "
+                "and \"'2026-01-01T02:00:00'\" in sql):\n"
                 "            raise RuntimeError('simulated completion write failure')\n"
                 "        return super().execute(connection=connection, sql=sql)\n"
             ),

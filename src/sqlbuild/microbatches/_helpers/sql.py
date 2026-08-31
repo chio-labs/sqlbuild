@@ -58,6 +58,64 @@ def build_insert_sql(
     )
 
 
+def build_insert_many_sql(
+    *, events: tuple[MicrobatchEvent, ...], render_qualified_name: Callable[..., str | None]
+) -> str:
+    """Build one guarded set-based insert for events in the same state table."""
+
+    if not events:
+        raise MicrobatchStateError("bulk microbatch event insert requires at least one event")
+    first: MicrobatchEvent = events[0]
+    table: str = _qualified_table(
+        database=first.scope.target_database,
+        schema=_required_schema(first.scope),
+        render_qualified_name=render_qualified_name,
+    )
+    selections: list[str] = []
+    for index, event in enumerate(events):
+        values: tuple[object | None, ...] = MicrobatchEventCodec.values(event)
+        aliases: str = (
+            ""
+            if index > 0
+            else " "
+            + ", ".join(
+                f"{_literal(value)} AS {column}"
+                for column, value in zip(MICROBATCH_COLUMNS, values, strict=True)
+            )
+        )
+        selections.append(
+            f"SELECT {', '.join(_literal(value) for value in values)}"
+            if index > 0
+            else f"SELECT{aliases}"
+        )
+    columns: str = ", ".join(MICROBATCH_COLUMNS)
+    return (
+        f"INSERT INTO {table} ({columns}) SELECT {columns} FROM "
+        f"({' UNION ALL '.join(selections)}) AS incoming "
+        f"WHERE NOT EXISTS (SELECT 1 FROM {table} AS existing "
+        "WHERE existing.event_id = incoming.event_id)"
+    )
+
+
+def build_existing_event_ids_sql(
+    *, events: tuple[MicrobatchEvent, ...], render_qualified_name: Callable[..., str | None]
+) -> str:
+    """Build one lookup for event IDs already present before a bulk insert."""
+
+    if not events:
+        raise MicrobatchStateError("microbatch event lookup requires at least one event")
+    first: MicrobatchEvent = events[0]
+    table: str = _qualified_table(
+        database=first.scope.target_database,
+        schema=_required_schema(first.scope),
+        render_qualified_name=render_qualified_name,
+    )
+    return (
+        f"SELECT event_id FROM {table} WHERE event_id IN "
+        f"({', '.join(_literal(event.event_id) for event in events)})"
+    )
+
+
 def build_read_scope_sql(
     *, scope: MicrobatchScope, render_qualified_name: Callable[..., str | None]
 ) -> str:

@@ -69,6 +69,15 @@ class MicrobatchEvent:
 
 
 @dataclass(frozen=True)
+class MicrobatchWriteResult:
+    """Counts from one idempotent bulk event publication."""
+
+    total: int
+    inserted: int
+    already_existing: int
+
+
+@dataclass(frozen=True)
 class MicrobatchInterval:
     """Canonical half-open cursor interval."""
 
