@@ -88,7 +88,6 @@ from sqlbuild.compiler.scopes.constants import (
     GLOBAL_DECLARATION_DIRECTORIES,
     INHERITED_DECLARATION_DIRECTORIES,
     LOCAL_DECLARATION_DIRECTORIES,
-    REMOVED_LOCAL_DECLARATION_DIRECTORIES,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
 from sqlbuild.provider.exceptions import ProviderInputError
@@ -153,18 +152,9 @@ class _DeclarationFileFacts:
 _SCOPED_DECLARATION_DIRECTORIES: frozenset[str] = (
     INHERITED_DECLARATION_DIRECTORIES | LOCAL_DECLARATION_DIRECTORIES
 )
-_ALL_DECLARATION_DIRECTORIES: frozenset[str] = (
-    _SCOPED_DECLARATION_DIRECTORIES | REMOVED_LOCAL_DECLARATION_DIRECTORIES
-)
-
-
 def _discover_declaration_file_facts(
     *, project_dir: Path, declaration_kind: DeclarationKind | None = None
 ) -> tuple[_DeclarationFileFacts, ...]:
-    removed_directory: str
-    for removed_directory in sorted(REMOVED_LOCAL_DECLARATION_DIRECTORIES):
-        if (project_dir / removed_directory).is_dir():
-            raise DeclarationParseError(_removed_declaration_directory_message(removed_directory))
     for directory_name in sorted(LOCAL_DECLARATION_DIRECTORIES):
         directory_kind, _scope_kind = DECLARATION_DIRECTORY_FACTS[directory_name]
         if (declaration_kind is None or directory_kind is declaration_kind) and (
@@ -199,12 +189,6 @@ def _discover_declaration_file_facts(
             continue
         directory: Path
         for directory in sorted(path for path in authored_root.rglob("*") if path.is_dir()):
-            if directory.name in REMOVED_LOCAL_DECLARATION_DIRECTORIES:
-                raise DeclarationParseError(
-                    _removed_declaration_directory_message(
-                        directory.relative_to(project_dir).as_posix()
-                    )
-                )
             if directory.name not in _SCOPED_DECLARATION_DIRECTORIES:
                 continue
             directory_kind, _scope_kind = DECLARATION_DIRECTORY_FACTS[directory.name]
@@ -212,7 +196,7 @@ def _discover_declaration_file_facts(
                 continue
             relative_directory: Path = directory.relative_to(project_dir)
             descendants: tuple[str, ...] = relative_directory.parts[len(root_components) :]
-            if any(part in _ALL_DECLARATION_DIRECTORIES for part in descendants[:-1]):
+            if any(part in _SCOPED_DECLARATION_DIRECTORIES for part in descendants[:-1]):
                 raise DeclarationParseError(
                     f"Declaration root {relative_directory.as_posix()}/ is nested inside another "
                     "declaration tree"
@@ -240,7 +224,7 @@ def _declaration_files_under_root(
     for nested_root in sorted(
         path
         for path in declaration_root.rglob("*")
-        if path.is_dir() and path.name in _ALL_DECLARATION_DIRECTORIES
+        if path.is_dir() and path.name in _SCOPED_DECLARATION_DIRECTORIES
     ):
         relative_nested_root: str = nested_root.relative_to(project_dir).as_posix()
         raise DeclarationParseError(
@@ -266,12 +250,6 @@ def _declaration_files_under_root(
             )
         )
     return results
-
-
-def _removed_declaration_directory_message(path: str) -> str:
-    name: str = Path(path).name
-    replacement: str = name.removeprefix("_local_")
-    return f"Declaration root {path}/ has been replaced by _{replacement}/"
 
 
 def _is_in_scoped_declaration_tree(*, file_path: Path, project_dir: Path) -> bool:

@@ -61,9 +61,6 @@ DECLARATION_KIND_VALUES: frozenset[str] = frozenset(item.value for item in Decla
 GLOBAL_DECLARATION_DIRECTORIES: frozenset[str] = frozenset({"macros", "enums", "constants"})
 INHERITED_DECLARATION_DIRECTORIES: frozenset[str] = GLOBAL_DECLARATION_DIRECTORIES
 LOCAL_DECLARATION_DIRECTORIES: frozenset[str] = frozenset({"_macros", "_enums", "_constants"})
-REMOVED_LOCAL_DECLARATION_DIRECTORIES: frozenset[str] = frozenset(
-    {"_local_macros", "_local_enums", "_local_constants"}
-)
 DECLARATION_DIRECTORY_FACTS: dict[str, tuple[DeclarationKind, ScopeKind]] = {
     "macros": (DeclarationKind.MACRO, ScopeKind.INHERITED),
     "enums": (DeclarationKind.ENUM, ScopeKind.INHERITED),

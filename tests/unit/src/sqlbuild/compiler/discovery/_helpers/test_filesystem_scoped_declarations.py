@@ -125,11 +125,6 @@ def test_given_top_level_public_declarations_when_discovering_then_scope_remains
             "top_level_inherited", "_macros/value.py", "must be below a canonical authored root"
         ),
         InvalidScopedDeclarationRootTestCase(
-            "removed_local_name",
-            "_local_constants/value.sql",
-            "has been replaced by _constants/",
-        ),
-        InvalidScopedDeclarationRootTestCase(
             "nested_scoped_roots",
             "models/macros/organization/_constants/value.sql",
             "nested inside another declaration tree",
@@ -162,6 +157,27 @@ def test_given_invalid_declaration_root_when_discovering_then_raises(
 
     with pytest.raises(DeclarationParseError, match=test_case.expected_error_fragment):
         discover_macro_files(project_dir=tmp_path)
+
+
+def test_given_old_local_spelling_when_discovering_then_directory_has_no_special_meaning(
+    tmp_path: Path,
+) -> None:
+    root_file: Path = tmp_path / "_local_constants/value.sql"
+    model_file: Path = tmp_path / "models/_local_constants/orders.sql"
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "demo"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    root_file.parent.mkdir(parents=True)
+    model_file.parent.mkdir(parents=True)
+    root_file.write_text("arbitrary project file", encoding="utf-8")
+    model_file.write_text("MODEL ();\nSELECT 1", encoding="utf-8")
+
+    discovered = discover_project_inputs(project_dir=tmp_path)
+
+    assert tuple(file.relative_path for file in discovered.model_files) == (
+        Path("models/_local_constants/orders.sql"),
+    )
+    assert discovered.constant_files == ()
 
 
 @pytest.mark.parametrize(
