@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.70.0](https://github.com/chio-labs/sqlbuild/compare/v0.69.0...v0.70.0) (2026-08-31)
+
+
+### Features
+
+* manage Snowflake table type declaratively with copy-swap conversion ([#438](https://github.com/chio-labs/sqlbuild/issues/438)) ([8b1db2f](https://github.com/chio-labs/sqlbuild/commit/8b1db2f1739c1469ec20cc38c499706fdd467153))
+
 ## [0.69.0](https://github.com/chio-labs/sqlbuild/compare/v0.68.0...v0.69.0) (2026-08-31)
 
 
