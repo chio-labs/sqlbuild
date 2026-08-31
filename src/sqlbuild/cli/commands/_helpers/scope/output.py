@@ -68,7 +68,8 @@ def _render_report(*, report: ScopeReport, request: ScopeCommandRequest) -> str:
         for index, entry in enumerate(report.scope_chain):
             connector: str = "└─" if index == len(report.scope_chain) - 1 else "├─"
             lines.append(
-                f"  {connector} {entry.kind} {_path(value=entry.path, mode=request.paths)} "
+                f"  {connector} {_scope_label(entry.kind)} "
+                f"{_path(value=entry.path, mode=request.paths)} "
                 f"({entry.declaration_count})"
             )
     else:
@@ -174,7 +175,7 @@ def _declaration_lines(
     for index, declaration in enumerate(declarations):
         connector: str = "└─" if index == len(declarations) - 1 else "├─"
         marker: str = "●" if declaration.identity in used else "○"
-        details: list[str] = [declaration.kind, declaration.scope]
+        details: list[str] = [declaration.kind, _scope_label(declaration.scope)]
         if declaration.visibility is not None:
             provenance: str = declaration.visibility.reason
             if declaration.visibility.through is not None:
@@ -192,6 +193,15 @@ def _declaration_lines(
             )
         lines.append(line)
     return lines
+
+
+def _scope_label(scope: str) -> str:
+    return {
+        "global": "project",
+        "inherited": "descendant-public",
+        "local": "exact-owner-private",
+        "private": "model-private",
+    }.get(scope, scope)
 
 
 def _metadata_parts(declaration: DeclarationReport) -> list[str]:
@@ -213,6 +223,12 @@ def _metadata_parts(declaration: DeclarationReport) -> list[str]:
     if isinstance(collection, str):
         item_count: object = metadata.get("item_count")
         parts.append(f"{collection} {item_count}" if isinstance(item_count, int) else collection)
+    role_root: object = metadata.get("role_root")
+    if isinstance(role_root, str):
+        parts.append(f"role {role_root}")
+    bucket_path: object = metadata.get("bucket_path")
+    if isinstance(bucket_path, str):
+        parts.append(f"bucket {bucket_path} (navigation only)")
     return parts
 
 
@@ -220,13 +236,18 @@ def _explanation_lines(
     *, declaration: DeclarationReport, request: ScopeCommandRequest, used: frozenset[str]
 ) -> list[str]:
     lines: list[str] = _declaration_lines(declarations=(declaration,), request=request, used=used)
+    required_scope: str | None = (
+        _scope_label(declaration.required_scope)
+        if declaration.required_scope is not None
+        else None
+    )
     facts: tuple[tuple[str, object], ...] = (
         ("Owner", declaration.owner),
         ("Owning path", declaration.owning_path),
         ("Consumers", declaration.consumers),
         ("Dependencies", declaration.dependencies),
         ("Grants", declaration.grants),
-        ("Required scope", declaration.required_scope),
+        ("Required scope", required_scope),
         ("Required path", declaration.required_path),
         ("Promotion impact", declaration.promotion_impact),
     )

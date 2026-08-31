@@ -300,7 +300,7 @@ def test_given_broken_declaration_category_when_loading_then_other_categories_re
         {
             "sqlbuild_project.toml": _PROJECT,
             "models/orders.sql": _MODEL,
-            "models/domain/_enums/_local_enums/broken.sql": (
+            "models/domain/enums/_enums/broken.sql": (
                 "ENUM (name broken, members [BROKEN]);"
             ),
             "constants/limit.sql": "CONSTANT (name limit, value 1);",
@@ -336,9 +336,9 @@ def test_given_broken_declaration_category_when_loading_then_other_categories_re
         TolerantMacroInventoryCase(
             description="scope-invalid macro import is omitted with diagnostic",
             files={
-                "models/sales/_local_macros/shared.py": ("def shared():\n    return 'shared'\n"),
-                "models/finance/_macros/consumer.py": (
-                    "from models.sales._local_macros.shared import shared\n\n"
+                "models/sales/_macros/shared.py": ("def shared():\n    return 'shared'\n"),
+                "models/finance/macros/consumer.py": (
+                    "from models.sales._macros.shared import shared\n\n"
                     "def consumer():\n    return shared()\n"
                 ),
                 "macros/broken.py": "def broken(:\n    return 'broken'\n",
@@ -483,7 +483,7 @@ def test_given_placement_invalid_project_when_loading_then_complete_diagnostics_
         tmp_path,
         {
             "sqlbuild_project.toml": _PROJECT,
-            "models/domain/_constants/value.sql": "CONSTANT (name value, value 1);",
+            "models/domain/constants/value.sql": "CONSTANT (name value, value 1);",
             "models/domain/orders.sql": 'MODEL ();\nSELECT @const("value") AS value',
         },
     )

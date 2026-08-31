@@ -44,7 +44,7 @@ HEADER: str = 'MODEL (\n  materialized table,\n  description "ok"\n);\n'
             description="lint expansion uses inherited declaration visibility",
             project_files={
                 "sqlbuild_project.toml": PROJECT_TOML,
-                "models/domain/_constants/value.sql": "CONSTANT (name value, value 9);\n",
+                "models/domain/constants/value.sql": "CONSTANT (name value, value 9);\n",
                 "models/domain/child/demo.sql": f'{HEADER}SELECT @const("value") AS value\n',
             },
             model_path="models/domain/child/demo.sql",

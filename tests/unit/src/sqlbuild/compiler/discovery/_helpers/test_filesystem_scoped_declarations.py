@@ -66,8 +66,8 @@ def test_given_declaration_below_authored_root_when_discovering_then_records_bou
         for scope_kind in ("inherited", "local"):
             suffix, contents = declaration_contents(kind=declaration_kind)
             directory_name: str = {
-                "inherited": f"_{declaration_kind}s",
-                "local": f"_local_{declaration_kind}s",
+                "inherited": f"{declaration_kind}s",
+                "local": f"_{declaration_kind}s",
             }[scope_kind]
             relative_root: Path = Path(test_case.authored_root) / "domain" / directory_name
             file_path: Path = tmp_path / relative_root / "organization" / f"z_value{suffix}"
@@ -125,18 +125,18 @@ def test_given_top_level_public_declarations_when_discovering_then_scope_remains
             "top_level_inherited", "_macros/value.py", "must be below a canonical authored root"
         ),
         InvalidScopedDeclarationRootTestCase(
-            "top_level_local",
+            "removed_local_name",
             "_local_constants/value.sql",
-            "must be below a canonical authored root",
+            "has been replaced by _constants/",
         ),
         InvalidScopedDeclarationRootTestCase(
             "nested_scoped_roots",
-            "models/_macros/organization/_constants/value.sql",
+            "models/macros/organization/_constants/value.sql",
             "nested inside another declaration tree",
         ),
         InvalidScopedDeclarationRootTestCase(
             "scoped_root_below_global_tree",
-            "macros/organization/_local_macros/value.py",
+            "macros/organization/_macros/value.py",
             "nested inside another declaration tree",
         ),
         InvalidScopedDeclarationRootTestCase(
@@ -146,7 +146,7 @@ def test_given_top_level_public_declarations_when_discovering_then_scope_remains
         ),
         InvalidScopedDeclarationRootTestCase(
             "global_root_below_scoped_tree",
-            "models/_macros/organization/enums/value.sql",
+            "models/macros/organization/enums/value.sql",
             "nested inside another declaration tree",
         ),
     ),

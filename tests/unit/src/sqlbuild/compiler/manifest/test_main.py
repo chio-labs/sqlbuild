@@ -689,7 +689,7 @@ def test_given_deps_when_building_manifest_then_parent_map_correct(
             expected_name="my_macro",
             expected_resource_type="macro",
             expected_macro_sql="def my_macro(): return 'SELECT 1'",
-            expected_path="models/sales/_macros/helpers.py",
+            expected_path="models/sales/macros/helpers.py",
             expected_visibility="inherited",
             expected_scope_path="models/sales",
             expected_dependencies=("base_macro",),

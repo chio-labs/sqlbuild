@@ -119,6 +119,7 @@ class ScopeDiagnosticCode(StrEnum):
     MACRO_PARSE_ERROR = "S021"
     RELATIONSHIP_PARSE_ERROR = "S022"
     CONFIG_PARSE_ERROR = "S023"
+    OVER_BROAD_GLOBAL = "S024"
 
 
 class CompletenessSection(StrEnum):

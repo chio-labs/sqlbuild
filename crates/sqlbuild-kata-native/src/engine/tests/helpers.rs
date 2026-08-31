@@ -18,6 +18,79 @@ pub(crate) fn request(project_dir: &TempDir, config: &Value) -> String {
     .to_string()
 }
 
+pub(crate) fn model(path: &str) -> Value {
+    json!({
+        "name": "race__mart__example",
+        "relative_path": path,
+        "query_sql": "SELECT 1",
+        "authored_sql": "SELECT 1"
+    })
+}
+
+pub(crate) fn domain_layout_evaluation(
+    project_dir: &TempDir,
+    code: &str,
+    models: Value,
+    thresholds: Value,
+    layout: Value,
+    scope_index: Value,
+) -> Result<Value, String> {
+    let request = json!({
+        "version": 1,
+        "project_dir": project_dir.path(),
+        "config": {
+            "select": [code],
+            "thresholds": thresholds,
+            "layout": layout,
+            "cache": {"enabled": false}
+        },
+        "models": models,
+        "scope_index": scope_index
+    });
+    serde_json::from_str(&evaluate_json(&request.to_string())?).map_err(|error| error.to_string())
+}
+
+pub(crate) fn scope_with_macros(paths: &[String]) -> Value {
+    let mut scope = scope_index();
+    scope["declarations"] = Value::Array(
+        paths
+            .iter()
+            .enumerate()
+            .map(|(index, path)| {
+                let relative = path.trim_start_matches("models/race/_macros/");
+                let bucket_path = std::path::Path::new(relative)
+                    .parent()
+                    .and_then(std::path::Path::to_str)
+                    .filter(|value| !value.is_empty());
+                json!({
+                    "identity": format!("macro:item_{index}"),
+                    "kind": "macro",
+                    "name": format!("item_{index}"),
+                    "owner": null,
+                    "path": path,
+                    "line": 1,
+                    "column": 1,
+                    "scope": "local",
+                    "role": "macros",
+                    "visibility": "exact_owner_private",
+                    "role_root": "models/race/_macros",
+                    "bucket_path": bucket_path,
+                    "ownership_root": "models",
+                    "owning_path": "models/race",
+                    "metadata": {"macro": {
+                        "parameters": [],
+                        "dependencies": [],
+                        "source_digest": format!("digest_{index}")
+                    }}
+                })
+            })
+            .collect(),
+    );
+    scope["usages"] = json!([]);
+    scope["visibility"] = json!([]);
+    scope
+}
+
 pub(crate) fn threshold_request(
     project_dir: &TempDir,
     config: &Value,
@@ -43,7 +116,7 @@ pub(crate) fn threshold_request(
 
 pub(crate) fn scope_index() -> Value {
     json!({
-        "schema_version": 1,
+        "schema_version": 2,
         "ownership_roots": [{"path": "models", "resource_kind": "model"}],
         "resources": [{
             "identity": "model:orders",
@@ -62,6 +135,10 @@ pub(crate) fn scope_index() -> Value {
             "line": 1,
             "column": 1,
             "scope": "global",
+            "role": "enums",
+            "visibility": "project",
+            "role_root": "enums",
+            "bucket_path": null,
             "ownership_root": "enums",
             "owning_path": null,
             "metadata": {"enum": {
@@ -77,6 +154,10 @@ pub(crate) fn scope_index() -> Value {
             "line": 1,
             "column": 1,
             "scope": "global",
+            "role": "macros",
+            "visibility": "project",
+            "role_root": "macros",
+            "bucket_path": null,
             "ownership_root": "macros",
             "owning_path": null,
             "metadata": {"macro": {

@@ -6,10 +6,10 @@ from pathlib import Path
 
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
 
-SCOPE_METADATA_SCHEMA_VERSION: int = 1
-SCOPE_CACHE_SCHEMA_VERSION: int = 1
-SCOPE_FINGERPRINT_ALGORITHM_VERSION: int = 1
-SCOPE_CACHE_DIRECTORY: Path = Path("target/compile-cache/declaration-scopes-v1")
+SCOPE_METADATA_SCHEMA_VERSION: int = 2
+SCOPE_CACHE_SCHEMA_VERSION: int = 2
+SCOPE_FINGERPRINT_ALGORITHM_VERSION: int = 2
+SCOPE_CACHE_DIRECTORY: Path = Path("target/compile-cache/declaration-scopes-v2")
 SCOPE_CACHE_FILENAME: str = "scope-index.json"
 SCOPE_CACHE_MAX_BYTES: int = 16 * 1024 * 1024
 SCOPE_SOURCE_SUFFIXES: frozenset[str] = frozenset({".sql", ".yml", ".yaml", ".py"})
@@ -59,18 +59,16 @@ KIND_COUNTS_FIELD: str = "kind_counts"
 DECLARATION_KIND_VALUES: frozenset[str] = frozenset(item.value for item in DeclarationKind)
 
 GLOBAL_DECLARATION_DIRECTORIES: frozenset[str] = frozenset({"macros", "enums", "constants"})
-INHERITED_DECLARATION_DIRECTORIES: frozenset[str] = frozenset({"_macros", "_enums", "_constants"})
-LOCAL_DECLARATION_DIRECTORIES: frozenset[str] = frozenset(
+INHERITED_DECLARATION_DIRECTORIES: frozenset[str] = GLOBAL_DECLARATION_DIRECTORIES
+LOCAL_DECLARATION_DIRECTORIES: frozenset[str] = frozenset({"_macros", "_enums", "_constants"})
+REMOVED_LOCAL_DECLARATION_DIRECTORIES: frozenset[str] = frozenset(
     {"_local_macros", "_local_enums", "_local_constants"}
 )
 DECLARATION_DIRECTORY_FACTS: dict[str, tuple[DeclarationKind, ScopeKind]] = {
-    "macros": (DeclarationKind.MACRO, ScopeKind.GLOBAL),
-    "enums": (DeclarationKind.ENUM, ScopeKind.GLOBAL),
-    "constants": (DeclarationKind.CONSTANT, ScopeKind.GLOBAL),
-    "_macros": (DeclarationKind.MACRO, ScopeKind.INHERITED),
-    "_enums": (DeclarationKind.ENUM, ScopeKind.INHERITED),
-    "_constants": (DeclarationKind.CONSTANT, ScopeKind.INHERITED),
-    "_local_macros": (DeclarationKind.MACRO, ScopeKind.LOCAL),
-    "_local_enums": (DeclarationKind.ENUM, ScopeKind.LOCAL),
-    "_local_constants": (DeclarationKind.CONSTANT, ScopeKind.LOCAL),
+    "macros": (DeclarationKind.MACRO, ScopeKind.INHERITED),
+    "enums": (DeclarationKind.ENUM, ScopeKind.INHERITED),
+    "constants": (DeclarationKind.CONSTANT, ScopeKind.INHERITED),
+    "_macros": (DeclarationKind.MACRO, ScopeKind.LOCAL),
+    "_enums": (DeclarationKind.ENUM, ScopeKind.LOCAL),
+    "_constants": (DeclarationKind.CONSTANT, ScopeKind.LOCAL),
 }

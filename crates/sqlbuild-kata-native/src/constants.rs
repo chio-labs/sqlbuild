@@ -1,5 +1,5 @@
 pub(crate) const API_VERSION: u32 = 1;
-pub(crate) const SCOPE_METADATA_SCHEMA_VERSION: u32 = 1;
+pub(crate) const SCOPE_METADATA_SCHEMA_VERSION: u32 = 2;
 pub(crate) const BUILT_IN_RULE_NAMESPACE: &str = "SQBK";
 pub(crate) const PIPELINE_SUBJECT: &str = "pipeline";
 pub(crate) const GENERIC_TEST_NAME: &str = "test";

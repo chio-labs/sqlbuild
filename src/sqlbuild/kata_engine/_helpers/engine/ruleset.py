@@ -79,6 +79,7 @@ def resolve_ruleset(*, config: KataConfig, project_dir: Path) -> ResolvedRuleset
         "cte_name_whitelist": config.cte_name_whitelist,
         "cte_name_denylist": config.cte_name_denylist,
         "sql_tests": config.sql_tests,
+        "layout": config.layout,
         "exceptions": config.rule_exceptions,
         "ignores": config.rule_ignores,
     }
