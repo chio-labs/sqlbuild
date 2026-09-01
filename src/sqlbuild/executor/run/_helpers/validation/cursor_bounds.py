@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from functools import partial
 from typing import Any, cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -16,6 +17,7 @@ from sqlbuild.compiler.planner.models import CursorBounds, CursorInputRelation, 
 from sqlbuild.compiler.planner.types import BackfillAction, CursorGrain, CursorType
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run.models import RuntimeCursorSpec
+from sqlbuild.executor.run.types import WatermarkResolver
 
 _TIMESTAMP_GRAIN_ORDER: dict[str, int] = {
     CursorGrain.SECOND: 0,
@@ -68,6 +70,7 @@ def resolve_runtime_cursor_bounds(
     target_name: str,
     spec: RuntimeCursorSpec,
     on_progress: Callable[[str], None] | None = None,
+    watermark_resolver: WatermarkResolver | None = None,
 ) -> CursorBounds | None:
     """Resolve concrete runtime cursor bounds from target and upstream relations."""
 
@@ -110,6 +113,7 @@ def resolve_runtime_cursor_bounds(
             query_index=input_index,
             total=len(physical_inputs),
             on_progress=on_progress,
+            watermark_resolver=watermark_resolver,
         )
         if maximum is None or (read_minimum and minimum is None):
             return None
@@ -118,13 +122,24 @@ def resolve_runtime_cursor_bounds(
         upstream_maxes.append(maximum)
     if not upstream_maxes:
         return None
-    upstream_min_raw: object | None = min(upstream_mins) if upstream_mins else None
-    upstream_max_raw: object = min(upstream_maxes)
-
     effective_grain: str | None = resolve_effective_timestamp_grain(
         cursor_type=cursor_type,
         downstream_grain=spec.cursor_grain,
         cursor_input_relations=spec.cursor_input_relations,
+    )
+    upstream_min_raw: object | None = (
+        _minimum_bound_raw(
+            values=upstream_mins,
+            cursor_type=cursor_type,
+            effective_grain=effective_grain,
+        )
+        if upstream_mins
+        else None
+    )
+    upstream_max_raw: object = _minimum_bound_raw(
+        values=upstream_maxes,
+        cursor_type=cursor_type,
+        effective_grain=effective_grain,
     )
     if cursor_type == CursorType.TIMESTAMP and effective_grain is not None:
         start_raw: object | None = (
@@ -182,8 +197,43 @@ def _query_watermark_raw(
     query_index: int,
     total: int,
     on_progress: Callable[[str], None] | None,
+    watermark_resolver: WatermarkResolver | None,
 ) -> tuple[object | None, object | None]:
-    """Read one physical watermark relation with an optimizer-friendly statement."""
+    """Resolve one physical watermark through the optional run-scoped cache."""
+
+    query: Callable[[], tuple[object | None, object | None]] = partial(
+        _execute_watermark_query,
+        adapter=adapter,
+        connection=connection,
+        relation=relation,
+        cursor_column=cursor_column,
+        read_minimum=read_minimum,
+        query_index=query_index,
+        total=total,
+        on_progress=on_progress,
+    )
+    if watermark_resolver is None:
+        return query()
+    return watermark_resolver.resolve(
+        relation=relation,
+        cursor_column=cursor_column,
+        read_minimum=read_minimum,
+        query=query,
+    )
+
+
+def _execute_watermark_query(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    relation: str,
+    cursor_column: str,
+    read_minimum: bool,
+    query_index: int,
+    total: int,
+    on_progress: Callable[[str], None] | None,
+) -> tuple[object | None, object | None]:
+    """Execute one optimizer-friendly physical watermark statement."""
 
     bounds: str = "min,max" if read_minimum else "max"
     identity: str = f"({query_index}/{total}): {relation}.{cursor_column} [{bounds}]"
@@ -210,6 +260,32 @@ def _query_watermark_raw(
     if read_minimum:
         return row[0], row[1]
     return None, row[0]
+
+
+def _minimum_bound_raw(
+    *, values: list[object], cursor_type: str | None, effective_grain: str | None
+) -> object:
+    """Choose a conservative minimum across compatible raw watermark values."""
+
+    if cursor_type != CursorType.TIMESTAMP:
+        return min(values)
+    grain: str = effective_grain or CursorGrain.SECOND
+    return min(values, key=lambda value: _timestamp_comparison_key(value=value, grain=grain))
+
+
+def _timestamp_comparison_key(*, value: object, grain: str) -> datetime:
+    """Normalize DATE and TIMESTAMP values to one grain-aware comparison domain."""
+
+    floored: object = _floor_timestamp_bound(value=value, grain=grain)
+    if _is_plain_date(floored):
+        return datetime.combine(cast(date, floored), datetime.min.time())
+    if isinstance(floored, datetime):
+        if floored.tzinfo is not None:
+            return floored.astimezone(UTC).replace(tzinfo=None)
+        return floored
+    raise ExecutorInputError(
+        f"runtime timestamp watermark returned incompatible value type '{type(value).__name__}'"
+    )
 
 
 def resolve_effective_timestamp_grain(

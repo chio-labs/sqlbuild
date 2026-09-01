@@ -6,17 +6,20 @@ import pytest
 
 from sqlbuild.compiler.planner._helpers.warehouse import snapshot as snapshot_module
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import (
+    _assemble_cursor_snapshots,
     _build_cursor_queries,
     _CursorModelInfo,
     _execute_cursor_queries,
     _PhysicalCursorQuery,
     _UpstreamCursorInfo,
 )
+from sqlbuild.compiler.planner.models import ModelCursorSnapshot
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CursorFetchFailureTestCase,
     CursorQueryFailureTestCase,
     CursorQueryGroupingTestCase,
     CursorQueryShapeTestCase,
+    CursorSnapshotAvailabilityTestCase,
 )
 
 
@@ -340,6 +343,83 @@ def test_given_fetch_failure_when_executing_then_reports_failure_and_continues(
     assert results == test_case.expected_results
     assert len(execute.sql) == 2
     assert tuple(progress) == test_case.expected_progress
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CursorSnapshotAvailabilityTestCase(
+            description="existing target still requires every watermark maximum",
+            target_tag="model__target__max",
+            target_relation="analytics.model",
+            results={
+                "model__target__max": "2024-01-15",
+                "model__good__min": "2024-01-01",
+                "model__good__max": "2024-02-01",
+                "model__bad__min": "2024-01-01",
+            },
+            expected_available=False,
+            expected_unavailable_tags=("model__bad__max",),
+        ),
+        CursorSnapshotAvailabilityTestCase(
+            description="first build requires every watermark minimum",
+            target_tag=None,
+            target_relation=None,
+            results={
+                "model__good__min": "2024-01-01",
+                "model__good__max": "2024-02-01",
+                "model__bad__max": "2024-02-01",
+            },
+            expected_available=False,
+            expected_unavailable_tags=("model__bad__min",),
+        ),
+        CursorSnapshotAvailabilityTestCase(
+            description="complete physical results resolve all declared watermarks",
+            target_tag=None,
+            target_relation=None,
+            results={
+                "model__good__min": "2024-01-01",
+                "model__good__max": "2024-02-01",
+                "model__bad__min": "2024-01-02",
+                "model__bad__max": "2024-02-02",
+            },
+            expected_available=True,
+            expected_unavailable_tags=(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_partial_watermark_results_when_assembling_then_model_snapshot_fails_closed(
+    test_case: CursorSnapshotAvailabilityTestCase,
+) -> None:
+    info: _CursorModelInfo = _CursorModelInfo(
+        model_name="model",
+        target_tag=test_case.target_tag,
+        target_relation=test_case.target_relation,
+        cursor_column="event_time",
+        upstreams=(
+            _UpstreamCursorInfo(
+                tag_min="model__good__min",
+                tag_max="model__good__max",
+                relation="raw.good",
+                cursor_column="event_time",
+            ),
+            _UpstreamCursorInfo(
+                tag_min="model__bad__min",
+                tag_max="model__bad__max",
+                relation="raw.bad",
+                cursor_column="event_time",
+            ),
+        ),
+    )
+
+    snapshot: ModelCursorSnapshot = _assemble_cursor_snapshots(
+        cursor_models=[info], results=test_case.results
+    )["model"]
+
+    assert snapshot.watermarks_available is test_case.expected_available
+    assert snapshot.expected_watermark_count == 2
+    assert snapshot.unavailable_watermark_tags == test_case.expected_unavailable_tags
 
 
 if __name__ == "__main__":

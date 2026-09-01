@@ -390,6 +390,14 @@ def plan_model_from_change(
     suppress_runtime_cursor_bounds: bool = (
         backfill_override is not None and backfill_override.action == BackfillAction.FULL
     )
+    cursor_column: str | None = _get_config_str(model=model, key="cursor")
+    validate_source_cursor_input_columns(
+        model=model,
+        cursor_column=cursor_column,
+        models_by_name=models_by_name,
+        source_map=context.source_map,
+        source_warehouse_columns=context.source_warehouse_columns,
+    )
 
     resolved_sql: str = resolve_model_sql(
         adapter=adapter,
@@ -437,7 +445,6 @@ def plan_model_from_change(
 
     pre_hooks: object = model.config.values.get("pre_hooks")
     post_hooks: object = model.config.values.get("post_hooks")
-    cursor_column: str | None = _get_config_str(model=model, key="cursor")
     cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
     cursor_grain: str | None = _get_config_str(model=model, key="cursor_grain")
     cursor_start: str | None = _get_cursor_start(model)
@@ -452,13 +459,6 @@ def plan_model_from_change(
             source_map=context.source_map,
             cursor_column=cursor_column,
         )
-    validate_source_cursor_input_columns(
-        model=model,
-        cursor_column=cursor_column,
-        models_by_name=models_by_name,
-        source_map=context.source_map,
-        source_warehouse_columns=context.source_warehouse_columns,
-    )
     runtime_owned_cursor_bounds: bool = _has_model_backed_cursor_watermarks(cursor_input_relations)
     cursor_bounds: CursorBounds | None = _compute_plan_cursor_bounds(
         model=model,

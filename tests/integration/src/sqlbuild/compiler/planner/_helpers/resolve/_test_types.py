@@ -29,3 +29,10 @@ class ResolveSourceTestCase:
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
     expected_row_count: int
     expected_column_types: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ResolveWatermarkFailureTestCase:
+    description: str
+    unavailable_tags: tuple[str, ...]
+    expected_error_fragment: str

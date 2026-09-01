@@ -11,11 +11,13 @@ from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledRelationLocation,
 )
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import ModelCursorSnapshot, WarehouseSnapshot
 from sqlbuild.spec.contracts.models import SourceColumnEntry, SourceEntry
 from tests.integration.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     ResolveAndExecuteTestCase,
     ResolveSourceTestCase,
+    ResolveWatermarkFailureTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.planner._helpers.resolve.helpers import (
     _ResolveResult,
@@ -167,6 +169,130 @@ def test_given_incremental_source_when_resolving_and_executing_then_returns_curs
     expected_type: str
     for col_name, expected_type in test_case.expected_column_types.items():
         assert result.column_types[col_name] == expected_type
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ResolveAndExecuteTestCase(
+            description="view filter remains distinct from physical watermark relation",
+            setup_sql=(
+                "CREATE TABLE staging.raw_orders (event_id INTEGER, event_time TIMESTAMP)",
+                "INSERT INTO staging.raw_orders VALUES "
+                "(1, '2024-01-01'), (2, '2024-01-15'), (3, '2024-03-01')",
+                "CREATE VIEW staging.orders_view AS SELECT * FROM staging.raw_orders",
+            ),
+            query_sql='SELECT event_id, event_time FROM __ref("orders_view")',
+            model_config={
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "event_time",
+                "cursor_filter_inputs": {"orders_view": "event_time"},
+                "cursor_watermark_inputs": {"raw_orders": "event_time"},
+            },
+            ref_names=("orders_view",),
+            expected_row_count=1,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_view_filter_and_physical_watermark_when_resolving_then_filters_only_view(
+    test_case: ResolveAndExecuteTestCase,
+    connection: Any,
+) -> None:
+    statement: str
+    for statement in test_case.setup_sql:
+        connection.execute(statement)
+    model: CompiledModel = build_model(
+        name="fact_events",
+        query_sql=test_case.query_sql,
+        config=test_case.model_config,
+        ref_names=test_case.ref_names,
+    )
+    snapshot: WarehouseSnapshot = WarehouseSnapshot(
+        cursor_snapshots={
+            "fact_events": ModelCursorSnapshot(
+                target_max="2024-01-10 00:00:00",
+                upstream_mins=("2024-01-01 00:00:00",),
+                upstream_maxes=("2024-02-01 00:00:00",),
+                expected_watermark_count=1,
+            )
+        }
+    )
+
+    result: _ResolveResult = resolve_and_execute(
+        model=model,
+        snapshot=snapshot,
+        model_locations={
+            "orders_view": CompiledRelationLocation(
+                database=None,
+                schema="staging",
+                name="orders_view",
+                qualified_name="staging.orders_view",
+            )
+        },
+        source_map={
+            "raw_orders": SourceEntry(name="raw_orders", schema="staging", table="raw_orders")
+        },
+        source_warehouse_columns={},
+        connection=connection,
+    )
+
+    assert len(result.rows) == test_case.expected_row_count
+    assert "staging.orders_view" in result.resolved_sql
+    assert "WHERE event_time" in result.resolved_sql
+    assert "staging.raw_orders" not in result.resolved_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ResolveWatermarkFailureTestCase(
+            description="partial planning watermark results fail before SQL execution",
+            unavailable_tags=("fact_events__raw_events__max",),
+            expected_error_fragment="required cursor watermark bounds are unavailable",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unavailable_planning_watermark_when_resolving_then_fails_closed(
+    test_case: ResolveWatermarkFailureTestCase,
+    connection: Any,
+) -> None:
+    model: CompiledModel = build_model(
+        name="fact_events",
+        query_sql='SELECT event_id, event_time FROM __source("raw_events")',
+        config={
+            "materialized": "incremental",
+            "incremental_strategy": "delete_insert",
+            "cursor": "event_time",
+            "cursor_filter_inputs": {"raw_events": "event_time"},
+        },
+        ref_names=(),
+    )
+    snapshot: WarehouseSnapshot = WarehouseSnapshot(
+        cursor_snapshots={
+            "fact_events": ModelCursorSnapshot(
+                target_max="2024-01-15 00:00:00",
+                upstream_mins=("2024-01-01 00:00:00",),
+                upstream_maxes=(),
+                expected_watermark_count=1,
+                unavailable_watermark_tags=test_case.unavailable_tags,
+            )
+        }
+    )
+
+    with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):
+        resolve_and_execute(
+            model=model,
+            snapshot=snapshot,
+            model_locations={},
+            source_map={
+                "raw_events": SourceEntry(name="raw_events", schema="staging", table="raw_events")
+            },
+            source_warehouse_columns={},
+            connection=connection,
+        )
 
 
 @pytest.mark.parametrize(

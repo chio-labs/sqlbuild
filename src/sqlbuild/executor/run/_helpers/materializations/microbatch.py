@@ -2567,6 +2567,7 @@ def _plan_microbatch_windows(
                     read_destination_cursor=not is_full_refresh,
                 ),
                 on_progress=on_progress,
+                watermark_resolver=context.watermark_resolver,
             )
         except Exception as exc:
             return _MicrobatchPlan(

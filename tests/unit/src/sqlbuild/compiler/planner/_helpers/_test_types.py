@@ -294,6 +294,16 @@ class WatermarkLineageTestCase:
 
 
 @dataclass(frozen=True)
+class CursorSnapshotAvailabilityTestCase:
+    description: str
+    target_tag: str | None
+    target_relation: str | None
+    results: dict[str, str]
+    expected_available: bool
+    expected_unavailable_tags: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class BuildDownstreamDepsTestCase:
     description: str
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]

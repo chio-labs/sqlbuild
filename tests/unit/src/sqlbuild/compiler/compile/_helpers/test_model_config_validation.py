@@ -415,6 +415,55 @@ def test_given_valid_config_when_validating_then_passes(
             expected_error_fragment="deprecated name for cursor_filter_inputs",
         ),
         IncrementalConfigErrorTestCase(
+            description="empty legacy filter alias is rejected",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "event_time",
+                "cursor_type": "timestamp",
+                "cursor_grain": "second",
+                "cursor_inputs": {},
+            },
+            ref_count=1,
+            expected_error_fragment="cursor_inputs must not be empty",
+        ),
+        IncrementalConfigErrorTestCase(
+            description="empty new filter inputs are rejected",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "event_time",
+                "cursor_type": "timestamp",
+                "cursor_grain": "second",
+                "cursor_filter_inputs": {},
+            },
+            ref_count=1,
+            expected_error_fragment="cursor_filter_inputs must not be empty",
+        ),
+        IncrementalConfigErrorTestCase(
+            description="empty watermark inputs are rejected",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "event_time",
+                "cursor_type": "timestamp",
+                "cursor_grain": "second",
+                "cursor_filter_inputs": {"orders": "event_time"},
+                "cursor_watermark_inputs": {},
+            },
+            ref_count=1,
+            expected_error_fragment="cursor_watermark_inputs must not be empty",
+        ),
+        IncrementalConfigErrorTestCase(
+            description="table model cursor filter declaration is rejected before planning",
+            config_values={
+                "materialized": "table",
+                "cursor_filter_inputs": {"orders": "event_time"},
+            },
+            ref_count=1,
+            expected_error_fragment="requires cursor-based incremental materialization",
+        ),
+        IncrementalConfigErrorTestCase(
             description="multi-input with cursor but no cursor_inputs raises",
             config_values={
                 "materialized": "incremental",

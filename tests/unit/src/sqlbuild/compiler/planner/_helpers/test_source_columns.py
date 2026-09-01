@@ -8,14 +8,20 @@ import pytest
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
+    _build_cursor_input_relations,
     build_planner_relations_context,
     gather_source_columns,
     validate_source_cursor_input_columns,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import PlannerRelationsContext, PlannerScope
+from sqlbuild.compiler.planner.models import (
+    CursorInputRelation,
+    PlannerRelationsContext,
+    PlannerScope,
+)
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
@@ -380,6 +386,46 @@ def test_given_valid_cursor_input_source_columns_when_validating_then_passes(
         source_warehouse_columns=source_warehouse_columns,
     )
 
+    assert test_case.expected_valid is True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        WatermarkLineageTestCase(
+            description="direct view filter resolves transitive physical source watermark",
+            watermark_name="raw_orders",
+            watermark_column="loaded_at",
+            expected_valid=True,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_view_filter_and_transitive_watermark_when_planning_then_relation_is_physical(
+    test_case: WatermarkLineageTestCase,
+) -> None:
+    model: CompiledModel
+    models_by_name: dict[str, CompiledModel]
+    model, models_by_name = build_transitive_watermark_models(
+        watermark_name=test_case.watermark_name,
+        watermark_column=test_case.watermark_column,
+    )
+    view_model: CompiledModel = models_by_name["orders_view"]
+
+    relations: tuple[CursorInputRelation, ...] = _build_cursor_input_relations(
+        model=model,
+        adapter=DuckDbAdapter(),
+        model_locations={view_model.name: view_model.destination},
+        models_by_name=models_by_name,
+        seed_locations={},
+        source_map={"raw_orders": SourceEntry(name="raw_orders", schema="raw", table="raw_orders")},
+        cursor_column="event_time",
+    )
+
+    assert len(relations) == 1
+    assert relations[0].relation == "raw.raw_orders"
+    assert relations[0].cursor_column == "loaded_at"
+    assert "orders_view" not in relations[0].relation
     assert test_case.expected_valid is True
 
 

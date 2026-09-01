@@ -6,6 +6,8 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from sqlbuild.executor.run.models import BatchWindow, MicrobatchPhaseOutcome
 
 
@@ -25,6 +27,19 @@ class MicrobatchBatchRunner(Protocol):
         execute: MicrobatchBatchExecutor,
         /,
     ) -> tuple[MicrobatchPhaseOutcome, ...]: ...
+
+
+class WatermarkResolver(Protocol):
+    """Share one physical watermark read within a build run."""
+
+    def resolve(
+        self,
+        *,
+        relation: str,
+        cursor_column: str,
+        read_minimum: bool,
+        query: Callable[[], tuple[object | None, object | None]],
+    ) -> tuple[object | None, object | None]: ...
 
 
 class ExecutionPhase(StrEnum):

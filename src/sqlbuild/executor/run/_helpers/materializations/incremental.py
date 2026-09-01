@@ -384,6 +384,7 @@ def _prepare_delta_relation(
             target_schema=target_schema,
             target_name=target_table,
             spec=build_runtime_cursor_spec(entry=entry),
+            watermark_resolver=context.watermark_resolver,
         )
         if runtime_cursor_bounds is None:
             raise ExecutorInputError(

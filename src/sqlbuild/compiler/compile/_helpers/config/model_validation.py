@@ -96,6 +96,18 @@ def validate_incremental_config(
     """Validate incremental model config rules after layering."""
 
     materialized: str | None = _str(config=config, key="materialized")
+    if materialized in {MaterializationType.TABLE, MaterializationType.VIEW}:
+        cursor_field: str
+        for cursor_field in (
+            "cursor_inputs",
+            "cursor_filter_inputs",
+            "cursor_watermark_inputs",
+        ):
+            if config.values.get(cursor_field) is not None:
+                raise CompileInputError(
+                    f"model '{model_name}': {cursor_field} requires cursor-based incremental "
+                    "materialization"
+                )
     if materialized != MaterializationType.INCREMENTAL:
         return
 
@@ -296,6 +308,8 @@ def _validate_cursor_input_map(*, model_name: str, config_field: str, value: obj
 
     if not isinstance(value, dict):
         raise CompileInputError(f"model '{model_name}': {config_field} must be a relation map")
+    if not value:
+        raise CompileInputError(f"model '{model_name}': {config_field} must not be empty")
     relation_name: object
     cursor_column: object
     for relation_name, cursor_column in value.items():

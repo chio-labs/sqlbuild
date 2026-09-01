@@ -155,6 +155,13 @@ class RuntimeWatermarkStatementTestCase:
 
 
 @dataclass(frozen=True)
+class MixedTemporalWatermarkTestCase:
+    description: str
+    expected_start: str
+    expected_end: str
+
+
+@dataclass(frozen=True)
 class RuntimeCursorPolicyTestCase:
     description: str
     expected_bounds: object

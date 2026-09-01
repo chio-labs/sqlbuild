@@ -18,6 +18,7 @@ from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
 from sqlbuild.executor.run.models import RuntimeCursorSpec
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
     CursorSentinelSubstitutionErrorTestCase,
+    MixedTemporalWatermarkTestCase,
     RuntimeCursorEndBoundTestCase,
     RuntimeCursorOverrideTestCase,
     RuntimeCursorPolicyTestCase,
@@ -180,6 +181,60 @@ def test_given_multiple_physical_watermarks_when_resolving_then_reads_standalone
     assert "UNION ALL" not in " ".join(adapter.statements)
     assert tuple(adapter.statements) == test_case.expected_statements
     assert bounds == test_case.expected_bounds
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MixedTemporalWatermarkTestCase(
+            description="date and timestamp watermarks compare at common coarsest grain",
+            expected_start="2024-01-01",
+            expected_end="2024-02-02T00:00:00",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_date_and_timestamp_watermarks_when_resolving_then_normalizes_comparison(
+    test_case: MixedTemporalWatermarkTestCase,
+) -> None:
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
+    connection.execute("CREATE TABLE date_watermark (cursor_value DATE)")
+    connection.execute("INSERT INTO date_watermark VALUES ('2024-01-01'), ('2024-02-02')")
+    connection.execute("CREATE TABLE timestamp_watermark (cursor_value TIMESTAMP)")
+    connection.execute(
+        "INSERT INTO timestamp_watermark VALUES ('2024-01-01 12:00:00'), ('2024-02-01 23:00:00')"
+    )
+
+    bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
+        adapter=cast(BaseAdapter, FakeCursorAdapter()),
+        connection=connection,
+        target_relation="target_data",
+        target_database=None,
+        target_schema=None,
+        target_name="target_data",
+        spec=RuntimeCursorSpec(
+            cursor_column="cursor_value",
+            cursor_type=CursorType.TIMESTAMP,
+            cursor_grain=CursorGrain.HOUR,
+            cursor_start=None,
+            cursor_input_relations=(
+                CursorInputRelation(
+                    relation="date_watermark",
+                    cursor_column="cursor_value",
+                    cursor_grain=CursorGrain.DAY,
+                ),
+                CursorInputRelation(
+                    relation="timestamp_watermark",
+                    cursor_column="cursor_value",
+                    cursor_grain=CursorGrain.HOUR,
+                ),
+            ),
+        ),
+    )
+
+    assert bounds is not None
+    assert bounds.start == test_case.expected_start
+    assert bounds.end == test_case.expected_end
 
 
 @pytest.mark.parametrize(

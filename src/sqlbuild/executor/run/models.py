@@ -21,6 +21,7 @@ from sqlbuild.executor.run.types import (
     ExecutionPhase,
     HookPhase,
     MicrobatchBatchRunner,
+    WatermarkResolver,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.microbatches.models import MicrobatchScope
@@ -204,6 +205,7 @@ class ModelMaterializationContext:
     microbatch_lease_check: Callable[[], None] | None = None
     microbatch_global_concurrency: int = 1
     microbatch_batch_runner: MicrobatchBatchRunner | None = None
+    watermark_resolver: WatermarkResolver | None = None
 
 
 @dataclass(frozen=True)

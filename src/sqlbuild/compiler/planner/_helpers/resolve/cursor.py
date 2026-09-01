@@ -30,6 +30,8 @@ def compute_cursor_bounds(
 
     if is_microbatch:
         return CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL)
+    if not cursor_snapshot.watermarks_available:
+        return None
 
     raw_end: str | None = _compute_raw_end(cursor_snapshot)
     if raw_end is None:

@@ -48,7 +48,7 @@ from sqlbuild.compiler.planner.models import (
     WarehouseFingerprints,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import MaterializationType
+from sqlbuild.compiler.planner.types import ContractPolicy, MaterializationType
 from sqlbuild.compiler.references.main._render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
@@ -624,6 +624,13 @@ def _collect_cursor_models(
                 input_name=input_name,
                 model_map=model_map,
             )
+            _validate_watermark_contract_column(
+                model=model,
+                ref=ref,
+                cursor_column=upstream_cursor_col,
+                model_map=model_map,
+                source_map=source_map,
+            )
             upstream_relation: str | None = _resolve_upstream_qualified_name(
                 ref=ref,
                 adapter=adapter,
@@ -801,19 +808,26 @@ def _assemble_cursor_snapshots(
 
         upstream_mins: list[str] = []
         upstream_maxes: list[str] = []
+        unavailable_watermark_tags: list[str] = []
         upstream: _UpstreamCursorInfo
         for upstream in info.upstreams:
             min_val: str | None = results.get(upstream.tag_min)
             max_val: str | None = results.get(upstream.tag_max)
             if min_val is not None:
                 upstream_mins.append(min_val)
+            elif target_max is None:
+                unavailable_watermark_tags.append(upstream.tag_min)
             if max_val is not None:
                 upstream_maxes.append(max_val)
+            else:
+                unavailable_watermark_tags.append(upstream.tag_max)
 
         snapshots[info.model_name] = ModelCursorSnapshot(
             target_max=target_max,
             upstream_mins=tuple(upstream_mins),
             upstream_maxes=tuple(upstream_maxes),
+            expected_watermark_count=len(info.upstreams),
+            unavailable_watermark_tags=tuple(unavailable_watermark_tags),
         )
 
     return snapshots
@@ -872,6 +886,47 @@ def _resolve_lineage_reference(
     raise PlannerInputError(
         f"model '{model.name}': cursor_watermark_inputs references '{input_name}', but it is "
         "not in the model's upstream lineage",
+        code="S302",
+    )
+
+
+def _validate_watermark_contract_column(
+    *,
+    model: CompiledModel,
+    ref: CompileSqlReference,
+    cursor_column: str,
+    model_map: dict[str, CompiledModel],
+    source_map: dict[str, CompiledSource],
+) -> None:
+    """Validate reliable watermark column contracts before warehouse inspection."""
+
+    declared_names: tuple[str, ...] = ()
+    if ref.ref_kind == SqlReferenceKind.REF:
+        upstream_model: CompiledModel | None = model_map.get(ref.ref_name)
+        if (
+            upstream_model is None
+            or upstream_model.config.values.get("contract") != ContractPolicy.ENFORCED
+        ):
+            return
+        if upstream_model.schema_entry is not None:
+            declared_names = tuple(column.name for column in upstream_model.schema_entry.columns)
+    elif ref.ref_kind == SqlReferenceKind.SOURCE:
+        upstream_source: CompiledSource | None = source_map.get(ref.ref_name)
+        if (
+            upstream_source is None
+            or upstream_source.source_entry.contract != ContractPolicy.ENFORCED
+        ):
+            return
+        declared_names = tuple(column.name for column in upstream_source.source_entry.columns)
+    else:
+        return
+    if cursor_column.lower() in {name.lower() for name in declared_names}:
+        return
+    declared_display: str = ", ".join(declared_names) or "none"
+    raise PlannerInputError(
+        f"model '{model.name}': cursor_watermark_inputs references '{ref.ref_name}' column "
+        f"'{cursor_column}', but its enforced contract does not expose the column. "
+        f"Declared contract columns: {declared_display}",
         code="S302",
     )
 

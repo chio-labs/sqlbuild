@@ -103,6 +103,7 @@ def execute_table_entry(
                 target_schema=targets.target_schema,
                 target_name=targets.target_table,
                 spec=build_runtime_cursor_spec(entry=entry),
+                watermark_resolver=context.watermark_resolver,
             )
         except Exception as exc:
             return build_failed_result(

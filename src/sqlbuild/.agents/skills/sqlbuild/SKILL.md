@@ -4634,14 +4634,15 @@ WHERE ordered_at >= __cursor_start()
 
 In microbatch mode, the intrinsics resolve to each batch's concrete bounds. A microbatch full refresh discovers its range from current inputs while ignoring the old destination watermark.
 
-##### Listed inputs bound the window; unlisted inputs do not
+##### Filtering and watermark membership are independent
 
-Only the inputs you list in `cursor_watermark_inputs` bound the replay window; when omitted, it defaults to `cursor_filter_inputs`. This is an explicit choice, and it has two consequences worth understanding:
+`cursor_filter_inputs` exclusively controls which direct model reads receive cursor predicates. `cursor_watermark_inputs` exclusively controls which authoritative upstream relations bound the replay window; when omitted, it defaults to `cursor_filter_inputs`.
 
-- **Listed inputs** drive the window. Their new data advances the `MAX`, which is what tells SQLBuild how far to reprocess and which rows of the target to rewrite.
-- **Unlisted inputs are read in full.** SQLBuild does not add a cursor filter to them, and they do not bound the window. This is correct for lookup or dimension tables that have no meaningful cursor column: you do not list them, and SQLBuild reads them whole rather than trying to filter on a column that may not exist.
+- A relation listed only in `cursor_filter_inputs` is filtered but does not determine availability when explicit watermark inputs are configured.
+- A relation listed only in `cursor_watermark_inputs` determines availability but is not added to model SQL and does not receive a predicate.
+- A direct input absent from `cursor_filter_inputs` is read without an automatic cursor predicate, regardless of watermark membership.
 
-The implication for `delete_insert` and `merge`: the target rows that get rewritten are the ones whose cursor falls inside the window derived from the listed inputs. If an unlisted input changes in a way that should affect target rows outside that window, those rows are not rewritten on a normal incremental run. List every input whose new data should drive reprocessing; leave unlisted only the inputs you intend to read in full.
+For `delete_insert` and `merge`, target rows are rewritten within the window derived from watermark inputs. Configure filter membership according to which direct reads need that window, and watermark membership according to which upstream relations authoritatively prove that the window is available.
 
 To capture changes that fall outside the normal forward window, see [Lookback](#lookback) for late-arriving data and [Replay on change](#replay-on-change) for model changes.
 

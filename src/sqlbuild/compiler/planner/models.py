@@ -189,6 +189,14 @@ class ModelCursorSnapshot:
     target_max: str | None
     upstream_mins: tuple[str, ...]
     upstream_maxes: tuple[str, ...]
+    expected_watermark_count: int = field(default=0, compare=False)
+    unavailable_watermark_tags: tuple[str, ...] = ()
+
+    @property
+    def watermarks_available(self) -> bool:
+        """Return whether every required physical watermark value was available."""
+
+        return not self.unavailable_watermark_tags
 
 
 @dataclass(frozen=True)

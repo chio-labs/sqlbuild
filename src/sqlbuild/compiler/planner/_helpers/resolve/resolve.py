@@ -222,6 +222,31 @@ def _compute_model_cursor_bounds(
     if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
         return None
 
+    cursor_snapshot: ModelCursorSnapshot | None = snapshot.cursor_snapshots.get(model.name)
+    runtime_owned: bool = has_model_backed_cursor_watermarks(
+        model=model,
+        model_locations=model_locations,
+        seed_locations=seed_locations,
+        cursor_watermark_inputs=resolve_cursor_input_roles(model=model).watermark_inputs,
+    )
+    has_bounded_overrides: bool = (
+        start_cursor_override is not None and end_cursor_override is not None
+    )
+    if (
+        not full_refresh
+        and not suppress_runtime_cursor_bounds
+        and not runtime_owned
+        and not has_bounded_overrides
+        and cursor_snapshot is not None
+        and not cursor_snapshot.watermarks_available
+    ):
+        unavailable: str = ", ".join(cursor_snapshot.unavailable_watermark_tags)
+        raise PlannerInputError(
+            f"model '{model.name}': required cursor watermark bounds are unavailable: "
+            f"{unavailable}",
+            code="S302",
+        )
+
     incremental_mode: str | None = get_config_str(model=model, key="incremental_mode")
     is_microbatch: bool = incremental_mode == IncrementalMode.MICROBATCH
     if is_microbatch:
@@ -230,14 +255,8 @@ def _compute_model_cursor_bounds(
     if full_refresh or suppress_runtime_cursor_bounds:
         return None
 
-    if has_model_backed_cursor_watermarks(
-        model=model,
-        model_locations=model_locations,
-        seed_locations=seed_locations,
-        cursor_watermark_inputs=resolve_cursor_input_roles(model=model).watermark_inputs,
-    ):
+    if runtime_owned:
         return CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL)
-    cursor_snapshot: ModelCursorSnapshot | None = snapshot.cursor_snapshots.get(model.name)
     if cursor_snapshot is None:
         return None
 
