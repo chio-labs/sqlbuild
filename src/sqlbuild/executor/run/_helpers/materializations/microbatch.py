@@ -67,7 +67,8 @@ from sqlbuild.executor.run._helpers.materializations.incremental import (
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     build_runtime_cursor_spec,
-    has_model_backed_cursor_watermarks,
+    has_authoritative_cursor_override,
+    has_runtime_owned_cursor_watermarks,
     resolve_effective_timestamp_grain,
     resolve_runtime_cursor_bounds,
     substitute_cursor_sentinels,
@@ -2537,10 +2538,13 @@ def _plan_microbatch_windows(
     entry: ModelPlanEntry = context.entry
     adapter: BaseAdapter = context.adapter
     connection: Any = context.connection
-    runtime_owned_cursor_bounds: bool = has_model_backed_cursor_watermarks(
+    runtime_owned_cursor_bounds: bool = has_runtime_owned_cursor_watermarks(
         entry.cursor_input_relations
     )
-    runtime_discovery: bool = runtime_owned_cursor_bounds or is_full_refresh
+    has_authoritative_override: bool = has_authoritative_cursor_override(entry=entry)
+    runtime_discovery: bool = not has_authoritative_override and (
+        runtime_owned_cursor_bounds or is_full_refresh
+    )
     microbatch_range: CursorBounds | None = entry.microbatch_range
     if runtime_discovery:
         if entry.cursor_column is None:

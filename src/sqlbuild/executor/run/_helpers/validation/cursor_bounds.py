@@ -12,6 +12,9 @@ from typing import Any, cast
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
+from sqlbuild.compiler.planner.main.execution.bounded_cursor_override import (
+    resolve_bounded_cursor_override,
+)
 from sqlbuild.compiler.planner.main.execution.cursor_replay_policy import apply_cursor_replay_policy
 from sqlbuild.compiler.planner.models import CursorBounds, CursorInputRelation, ModelPlanEntry
 from sqlbuild.compiler.planner.types import BackfillAction, CursorGrain, CursorType
@@ -29,12 +32,18 @@ _TIMESTAMP_GRAIN_ORDER: dict[str, int] = {
 }
 
 
-def has_model_backed_cursor_watermarks(
+def has_runtime_owned_cursor_watermarks(
     cursor_input_relations: tuple[CursorInputRelation, ...],
 ) -> bool:
-    """Return whether any cursor input relation is backed by another model."""
+    """Return whether any cursor input is produced by this invocation."""
 
     return any(relation.is_runtime_owned for relation in cursor_input_relations)
+
+
+def has_authoritative_cursor_override(*, entry: ModelPlanEntry) -> bool:
+    """Return whether complete operator bounds supersede runtime discovery."""
+
+    return entry.start_cursor_override is not None and entry.end_cursor_override is not None
 
 
 def build_runtime_cursor_spec(
@@ -75,6 +84,14 @@ def resolve_runtime_cursor_bounds(
     """Resolve concrete runtime cursor bounds from target and upstream relations."""
 
     cursor_type: str | None = spec.cursor_type
+    bounded_override: CursorBounds | None = resolve_bounded_cursor_override(
+        start_cursor_override=spec.start_cursor_override,
+        end_cursor_override=spec.end_cursor_override,
+        cursor_type=cursor_type,
+        cursor_grain=spec.cursor_grain,
+    )
+    if bounded_override is not None:
+        return bounded_override
     physical_inputs: tuple[tuple[str, str], ...] = tuple(
         sorted(
             {

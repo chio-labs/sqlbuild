@@ -468,7 +468,9 @@ def plan_model_from_change(
             cursor_column=cursor_column,
             runtime_cursor_producer_names=context.runtime_cursor_producer_names,
         )
-    runtime_owned_cursor_bounds: bool = _has_model_backed_cursor_watermarks(cursor_input_relations)
+    runtime_owned_cursor_bounds: bool = _has_runtime_owned_cursor_watermarks(
+        cursor_input_relations
+    ) and not (start_cursor_override is not None and end_cursor_override is not None)
     cursor_bounds: CursorBounds | None = _compute_plan_cursor_bounds(
         model=model,
         snapshot=snapshot,
@@ -863,10 +865,18 @@ def _compute_microbatch_range(
     incremental_mode: str | None = _get_config_str(model=model, key="incremental_mode")
     if incremental_mode != IncrementalMode.MICROBATCH:
         return None
-    if runtime_owned_cursor_bounds:
-        return None
     cursor_column: str | None = _get_config_str(model=model, key="cursor")
     if cursor_column is None:
+        return None
+    bounded_override: CursorBounds | None = resolve_bounded_cursor_override(
+        start_cursor_override=start_cursor_override,
+        end_cursor_override=end_cursor_override,
+        cursor_type=_get_config_str(model=model, key="cursor_type"),
+        cursor_grain=_get_config_str(model=model, key="cursor_grain"),
+    )
+    if bounded_override is not None:
+        return bounded_override
+    if runtime_owned_cursor_bounds:
         return None
     cursor_snapshot: ModelCursorSnapshot | None = snapshot.cursor_snapshots.get(model.name)
     if cursor_snapshot is None:
@@ -922,10 +932,6 @@ def _compute_plan_cursor_bounds(
     cursor_column: str | None = _get_config_str(model=model, key="cursor")
     if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
         return None
-    if runtime_owned_cursor_bounds:
-        return None
-    if full_refresh:
-        return None
     bounded_override: CursorBounds | None = resolve_bounded_cursor_override(
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
@@ -934,6 +940,10 @@ def _compute_plan_cursor_bounds(
     )
     if bounded_override is not None:
         return bounded_override
+    if runtime_owned_cursor_bounds:
+        return None
+    if full_refresh:
+        return None
 
     cursor_snapshot: ModelCursorSnapshot | None = snapshot.cursor_snapshots.get(model.name)
     if cursor_snapshot is None:
@@ -1210,10 +1220,10 @@ def _model_declared_column_names(model: CompiledModel) -> tuple[str, ...]:
     return tuple(column.name for column in model.schema_entry.columns)
 
 
-def _has_model_backed_cursor_watermarks(
+def _has_runtime_owned_cursor_watermarks(
     cursor_input_relations: tuple[CursorInputRelation, ...],
 ) -> bool:
-    """Return whether any cursor input relation is backed by another model."""
+    """Return whether any cursor input is produced by this invocation."""
 
     return any(relation.is_runtime_owned for relation in cursor_input_relations)
 

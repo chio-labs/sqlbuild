@@ -87,6 +87,16 @@ class RuntimeCursorOverrideTestCase:
 
 
 @dataclass(frozen=True)
+class AuthoritativeRuntimeCursorOverrideTestCase:
+    description: str
+    cursor_type: str
+    cursor_grain: str | None
+    start_cursor_override: str
+    end_cursor_override: str
+    expected_bounds: object
+
+
+@dataclass(frozen=True)
 class RuntimeExistingTargetOverrideTestCase:
     description: str
     upstream_min: object

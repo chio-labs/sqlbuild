@@ -27,6 +27,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
+    CursorRuntimeOwnershipTestCase,
     KnownSourceColumnsReuseTestCase,
     MultiDatabaseSourceColumnsTestCase,
     RuntimeCursorProducerNamesTestCase,
@@ -663,6 +664,79 @@ def test_given_selected_relations_when_classifying_runtime_watermarks_then_only_
     )
 
     assert names == test_case.expected_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CursorRuntimeOwnershipTestCase(
+            description="selected model",
+            is_model_backed=True,
+            is_runtime_produced=True,
+            expected_runtime_owned=True,
+        ),
+        CursorRuntimeOwnershipTestCase(
+            description="unselected model",
+            is_model_backed=True,
+            is_runtime_produced=False,
+            expected_runtime_owned=False,
+        ),
+        CursorRuntimeOwnershipTestCase(
+            description="deferred model",
+            is_model_backed=True,
+            is_runtime_produced=False,
+            expected_runtime_owned=False,
+        ),
+        CursorRuntimeOwnershipTestCase(
+            description="selected seed",
+            is_model_backed=False,
+            is_runtime_produced=True,
+            expected_runtime_owned=True,
+        ),
+        CursorRuntimeOwnershipTestCase(
+            description="unselected seed",
+            is_model_backed=False,
+            is_runtime_produced=False,
+            expected_runtime_owned=False,
+        ),
+        CursorRuntimeOwnershipTestCase(
+            description="deferred seed",
+            is_model_backed=False,
+            is_runtime_produced=False,
+            expected_runtime_owned=False,
+        ),
+        CursorRuntimeOwnershipTestCase(
+            description="selected managed loader",
+            is_model_backed=False,
+            is_runtime_produced=True,
+            expected_runtime_owned=True,
+        ),
+        CursorRuntimeOwnershipTestCase(
+            description="unselected managed loader",
+            is_model_backed=False,
+            is_runtime_produced=False,
+            expected_runtime_owned=False,
+        ),
+        CursorRuntimeOwnershipTestCase(
+            description="static source",
+            is_model_backed=False,
+            is_runtime_produced=False,
+            expected_runtime_owned=False,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cursor_relation_metadata_when_checking_runtime_ownership_then_only_produced_owns(
+    test_case: CursorRuntimeOwnershipTestCase,
+) -> None:
+    relation: CursorInputRelation = CursorInputRelation(
+        relation="warehouse.input",
+        cursor_column="event_time",
+        is_model_backed=test_case.is_model_backed,
+        is_runtime_produced=test_case.is_runtime_produced,
+    )
+
+    assert relation.is_runtime_owned is test_case.expected_runtime_owned
 
 
 if __name__ == "__main__":

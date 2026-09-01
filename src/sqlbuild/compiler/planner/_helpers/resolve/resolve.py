@@ -21,9 +21,6 @@ from sqlbuild.compiler.planner._helpers.resolve.config import (
     get_config_str,
 )
 from sqlbuild.compiler.planner._helpers.resolve.cursor import compute_cursor_bounds
-from sqlbuild.compiler.planner._helpers.resolve.cursor_watermarks import (
-    has_model_backed_cursor_watermarks,
-)
 from sqlbuild.compiler.planner._helpers.resolve.refs import (
     resolve_dbt_ref_references,
     resolve_ref_references,
@@ -81,8 +78,6 @@ def resolve_model_sql(
         full_refresh=full_refresh,
         start_cursor_override=cursor_overrides.start_cursor_override,
         end_cursor_override=cursor_overrides.end_cursor_override,
-        model_locations=model_locations,
-        seed_locations=seed_locations,
         runtime_cursor_producer_names=context.runtime_cursor_producer_names,
         suppress_runtime_cursor_bounds=suppress_runtime_cursor_bounds,
     )
@@ -214,8 +209,6 @@ def _compute_model_cursor_bounds(
     full_refresh: bool,
     start_cursor_override: str | None,
     end_cursor_override: str | None,
-    model_locations: dict[str, CompiledRelationLocation],
-    seed_locations: dict[str, CompiledRelationLocation],
     runtime_cursor_producer_names: frozenset[str],
     suppress_runtime_cursor_bounds: bool,
 ) -> CursorBounds | None:
@@ -242,12 +235,7 @@ def _compute_model_cursor_bounds(
         return bounded_override
 
     cursor_snapshot: ModelCursorSnapshot | None = snapshot.cursor_snapshots.get(model.name)
-    runtime_owned: bool = has_model_backed_cursor_watermarks(
-        model=model,
-        model_locations=model_locations,
-        seed_locations=seed_locations,
-        cursor_watermark_inputs=resolve_cursor_input_roles(model=model).watermark_inputs,
-    ) or bool(
+    runtime_owned: bool = bool(
         set(resolve_cursor_input_roles(model=model).watermark_inputs)
         & runtime_cursor_producer_names
     )

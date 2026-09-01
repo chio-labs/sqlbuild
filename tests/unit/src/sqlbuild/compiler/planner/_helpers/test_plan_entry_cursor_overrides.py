@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -13,7 +14,10 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner._helpers.output.plan_entry import _compute_plan_cursor_bounds
+from sqlbuild.compiler.planner._helpers.output.plan_entry import (
+    _compute_microbatch_range,
+    _compute_plan_cursor_bounds,
+)
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CursorBounds,
@@ -22,6 +26,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import BackfillAction
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
+    AuthoritativeCursorOverrideTestCase,
     PlanEntryCursorGrainTestCase,
     PlanEntryCursorOverrideTestCase,
 )
@@ -75,10 +80,112 @@ def test_given_explicit_cursor_overrides_without_snapshot_when_planning_then_use
         full_refresh=False,
         start_cursor_override=test_case.start_cursor_override,
         end_cursor_override=test_case.end_cursor_override,
-        runtime_owned_cursor_bounds=False,
+        runtime_owned_cursor_bounds=True,
     )
 
     assert bounds == test_case.expected_bounds
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AuthoritativeCursorOverrideTestCase(
+            description="timestamp hour override controls normal and microbatch ranges",
+            cursor_type="timestamp",
+            cursor_grain="hour",
+            batch_size="1h",
+            start_override="2026-01-02T10:00:00",
+            end_override="2026-01-02T12:00:00",
+            expected_bounds=CursorBounds(start="2026-01-02T10:00:00", end="2026-01-02T13:00:00"),
+        ),
+        AuthoritativeCursorOverrideTestCase(
+            description="plain date day override controls normal and microbatch ranges",
+            cursor_type="timestamp",
+            cursor_grain="day",
+            batch_size="1d",
+            start_override="2026-01-02",
+            end_override="2026-01-04",
+            expected_bounds=CursorBounds(start="2026-01-02", end="2026-01-05"),
+        ),
+        AuthoritativeCursorOverrideTestCase(
+            description="integer override controls normal and microbatch ranges",
+            cursor_type="integer",
+            cursor_grain=None,
+            batch_size="5",
+            start_override="10",
+            end_override="20",
+            expected_bounds=CursorBounds(start="10", end="21"),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_runtime_owned_missing_snapshot_when_overrides_complete_then_all_ranges_match(
+    test_case: AuthoritativeCursorOverrideTestCase,
+) -> None:
+    model: CompiledModel = CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
+        deps=(),
+        name="orders",
+        relative_path=Path("models/orders.sql"),
+        query_sql="SELECT 1",
+        references=(),
+        config=CompileModelConfig(
+            values={
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "cursor_value",
+                "cursor_type": test_case.cursor_type,
+                "cursor_grain": test_case.cursor_grain,
+            }
+        ),
+        destination=CompiledRelationLocation(
+            database=None,
+            schema="analytics",
+            name="orders",
+            qualified_name="analytics.orders",
+        ),
+    )
+    snapshot: WarehouseSnapshot = WarehouseSnapshot(
+        cursor_snapshots={
+            "orders": ModelCursorSnapshot(
+                target_max=None,
+                upstream_mins=(),
+                upstream_maxes=(),
+                unavailable_watermark_tags=("orders__producer__max",),
+            )
+        }
+    )
+
+    microbatch_model: CompiledModel = replace(
+        model,
+        config=CompileModelConfig(
+            values={
+                **model.config.values,
+                "incremental_mode": "microbatch",
+                "batch_size": test_case.batch_size,
+            }
+        ),
+    )
+    plan_bounds: CursorBounds | None = _compute_plan_cursor_bounds(
+        model=model,
+        snapshot=snapshot,
+        backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+        full_refresh=False,
+        start_cursor_override=test_case.start_override,
+        end_cursor_override=test_case.end_override,
+        runtime_owned_cursor_bounds=True,
+    )
+    microbatch_range: CursorBounds | None = _compute_microbatch_range(
+        model=microbatch_model,
+        snapshot=snapshot,
+        backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+        start_cursor_override=test_case.start_override,
+        end_cursor_override=test_case.end_override,
+        runtime_owned_cursor_bounds=True,
+    )
+
+    assert plan_bounds == test_case.expected_bounds
+    assert microbatch_range == test_case.expected_bounds
 
 
 @pytest.mark.parametrize(

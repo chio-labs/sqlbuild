@@ -320,6 +320,14 @@ class RuntimeCursorProducerNamesTestCase:
 
 
 @dataclass(frozen=True)
+class CursorRuntimeOwnershipTestCase:
+    description: str
+    is_model_backed: bool
+    is_runtime_produced: bool
+    expected_runtime_owned: bool
+
+
+@dataclass(frozen=True)
 class BuildDownstreamDepsTestCase:
     description: str
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
@@ -742,6 +750,17 @@ class PlanEntryCursorOverrideTestCase:
     description: str
     start_cursor_override: str
     end_cursor_override: str
+    expected_bounds: CursorBounds
+
+
+@dataclass(frozen=True)
+class AuthoritativeCursorOverrideTestCase:
+    description: str
+    cursor_type: str
+    cursor_grain: str | None
+    batch_size: str
+    start_override: str
+    end_override: str
     expected_bounds: CursorBounds
 
 

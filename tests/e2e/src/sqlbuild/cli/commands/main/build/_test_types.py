@@ -52,6 +52,15 @@ class SeedWatermarkBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class LoaderWatermarkBuildE2ETestCase:
+    description: str
+    initial_maximum: int
+    changed_maximum: int
+    expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_changed_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class EnumContractBuildE2ETestCase:
     """Test case for enum-backed contract enforcement."""
 

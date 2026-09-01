@@ -320,7 +320,7 @@ class CursorInputRelation:
     def is_runtime_owned(self) -> bool:
         """Return whether bounds must be discovered after scheduled upstream execution."""
 
-        return self.is_model_backed or self.is_runtime_produced
+        return self.is_runtime_produced
 
 
 @dataclass(frozen=True)

@@ -17,6 +17,7 @@ from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
 )
 from sqlbuild.executor.run.models import RuntimeCursorSpec
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
+    AuthoritativeRuntimeCursorOverrideTestCase,
     CursorSentinelSubstitutionErrorTestCase,
     MixedTemporalWatermarkTestCase,
     RuntimeCursorEndBoundTestCase,
@@ -415,7 +416,7 @@ def test_given_cursor_overrides_when_resolving_runtime_bounds_then_clamps_to_req
             start_cursor_override="2014-01-01",
             end_cursor_override="2014-03-30",
             warehouse_column_type="DATE",
-            expected_bounds=CursorBounds(start="2014-01-01T00:00:00", end="2014-03-31"),
+            expected_bounds=CursorBounds(start="2014-01-01", end="2014-03-31"),
         ),
     ],
     ids=lambda case: case.description,
@@ -684,6 +685,68 @@ def test_given_full_refresh_runtime_discovery_when_resolving_then_ignores_old_ta
                 CursorInputRelation(relation="upstream_data", cursor_column="cursor_value"),
             ),
             read_destination_cursor=test_case.read_destination_cursor,
+        ),
+    )
+
+    assert bounds == test_case.expected_bounds
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AuthoritativeRuntimeCursorOverrideTestCase(
+            description="timestamp override returns without runtime watermark SQL",
+            cursor_type=CursorType.TIMESTAMP,
+            cursor_grain=CursorGrain.HOUR,
+            start_cursor_override="2026-01-02T10:00:00",
+            end_cursor_override="2026-01-02T12:00:00",
+            expected_bounds=CursorBounds(start="2026-01-02T10:00:00", end="2026-01-02T13:00:00"),
+        ),
+        AuthoritativeRuntimeCursorOverrideTestCase(
+            description="date override returns without runtime watermark SQL",
+            cursor_type=CursorType.TIMESTAMP,
+            cursor_grain=CursorGrain.DAY,
+            start_cursor_override="2026-01-02",
+            end_cursor_override="2026-01-04",
+            expected_bounds=CursorBounds(start="2026-01-02", end="2026-01-05"),
+        ),
+        AuthoritativeRuntimeCursorOverrideTestCase(
+            description="integer override returns without runtime watermark SQL",
+            cursor_type=CursorType.INTEGER,
+            cursor_grain=None,
+            start_cursor_override="10",
+            end_cursor_override="20",
+            expected_bounds=CursorBounds(start="10", end="21"),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_complete_override_when_runtime_resolution_invoked_then_returns_without_sql(
+    test_case: AuthoritativeRuntimeCursorOverrideTestCase,
+) -> None:
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
+
+    bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
+        adapter=cast(BaseAdapter, FakeCursorAdapter()),
+        connection=connection,
+        target_relation="missing_target",
+        target_database=None,
+        target_schema=None,
+        target_name="missing_target",
+        spec=RuntimeCursorSpec(
+            cursor_column="cursor_value",
+            cursor_type=test_case.cursor_type,
+            cursor_grain=test_case.cursor_grain,
+            cursor_start=None,
+            cursor_input_relations=(
+                CursorInputRelation(
+                    relation="missing_runtime_input",
+                    cursor_column="cursor_value",
+                    is_runtime_produced=True,
+                ),
+            ),
+            start_cursor_override=test_case.start_cursor_override,
+            end_cursor_override=test_case.end_cursor_override,
         ),
     )
 

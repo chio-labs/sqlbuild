@@ -44,6 +44,8 @@ class IncrementalSuccessTestCase:
     expected_column_names: tuple[str, ...] = field(default_factory=tuple)
     expected_delta_cleaned: bool = True
     hook_functions: tuple[object, ...] = field(default_factory=tuple)
+    start_cursor_override: str | None = None
+    end_cursor_override: str | None = None
 
 
 @dataclass(frozen=True)
@@ -83,6 +85,8 @@ class IncrementalFailureTestCase:
         default_factory=tuple
     )
     hook_functions: tuple[object, ...] = field(default_factory=tuple)
+    start_cursor_override: str | None = None
+    end_cursor_override: str | None = None
 
 
 @dataclass(frozen=True)
