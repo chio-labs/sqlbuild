@@ -10,6 +10,7 @@ from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
 )
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import gather_warehouse_snapshot
 from sqlbuild.compiler.planner.models import (
+    CursorSnapshotScope,
     DeferralInputs,
     PlannerOverrides,
     PlannerRelationsContext,
@@ -44,7 +45,10 @@ def gather_planner_warehouse_state(
         ),
         on_progress=runtime.on_progress,
         deferred_locations=deferral.deferred_locations,
-        runtime_producer_keys=scopes.selected_scope.selected_keys,
+        cursor_scope=CursorSnapshotScope(
+            model_keys=scopes.selected_scope.selected_keys,
+            runtime_producer_keys=scopes.selected_scope.selected_keys,
+        ),
     )
     inspection_relations: PlannerRelationsContext = build_planner_relations_context(
         project=runtime.project,

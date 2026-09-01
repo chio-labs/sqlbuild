@@ -334,6 +334,14 @@ class WarehouseFingerprints:
 
 
 @dataclass(frozen=True)
+class CursorSnapshotScope:
+    """Execution selection used for cursor validation and runtime producer resolution."""
+
+    model_keys: frozenset[CompiledObjectKey]
+    runtime_producer_keys: frozenset[CompiledObjectKey]
+
+
+@dataclass(frozen=True)
 class WarehouseSnapshot:
     """Frozen point-in-time picture of warehouse state for planning."""
 
