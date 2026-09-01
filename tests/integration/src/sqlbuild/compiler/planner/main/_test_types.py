@@ -67,3 +67,9 @@ class SourceCursorInputPlanErrorTestCase:
     cursor_column: str
     cursor_input_column: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class TableTypePlanAssemblyTestCase:
+    description: str
+    expected_entry_names: tuple[str, ...]
