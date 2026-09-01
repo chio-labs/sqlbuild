@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.71.4](https://github.com/chio-labs/sqlbuild/compare/v0.71.3...v0.71.4) (2026-09-01)
+
+
+### Documentation
+
+* refresh declaration scope guidance ([#450](https://github.com/chio-labs/sqlbuild/issues/450)) ([8499c6e](https://github.com/chio-labs/sqlbuild/commit/8499c6e52f07e30ddc6cdee023935f24fe4c548d))
+
 ## [0.71.3](https://github.com/chio-labs/sqlbuild/compare/v0.71.2...v0.71.3) (2026-08-31)
 
 
