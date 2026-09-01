@@ -54,18 +54,17 @@ from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.spec.contracts.models import SourceEntry
 
-_CURSOR_BATCH_SIZE: int = 100
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
 
 
 @dataclass(frozen=True)
-class _CursorQuery:
-    """One MIN or MAX query to execute against a relation."""
+class _PhysicalCursorQuery:
+    """One physical relation and cursor column to inspect."""
 
-    tag: str
     relation: str
     cursor_column: str
-    aggregate: str
+    min_tags: tuple[str, ...]
+    max_tags: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -548,18 +547,20 @@ def _gather_cursor_snapshots(
     if not cursor_models:
         return {}
 
-    queries: list[_CursorQuery] = _build_cursor_queries(cursor_models)
+    queries: list[_PhysicalCursorQuery] = _build_cursor_queries(cursor_models)
     cursor_start: float = time.monotonic()
-    results: dict[str, str] = _execute_cursor_queries_batched(
+    results: dict[str, str] = _execute_cursor_queries(
         queries=queries,
         connection=connection,
         execute=execute,
         on_progress=on_progress,
     )
     if on_progress is not None:
-        total: int = len(queries)
+        logical_total: int = sum(len(query.min_tags) + len(query.max_tags) for query in queries)
+        physical_total: int = len(queries)
         on_progress(
-            f"Gathered cursor bounds ({total}/{total}). ({time.monotonic() - cursor_start:.2f}s)"
+            f"Gathered cursor bounds ({len(results)}/{logical_total} logical values; "
+            f"{physical_total} physical relation reads). ({time.monotonic() - cursor_start:.2f}s)"
         )
 
     return _assemble_cursor_snapshots(cursor_models=cursor_models, results=results)
@@ -654,119 +655,129 @@ def _collect_cursor_models(
     return cursor_models
 
 
-def _build_cursor_queries(cursor_models: list[_CursorModelInfo]) -> list[_CursorQuery]:
-    """Build the full list of MIN/MAX queries from cursor model metadata."""
+def _build_cursor_queries(cursor_models: list[_CursorModelInfo]) -> list[_PhysicalCursorQuery]:
+    """Group logical cursor requests by physical relation and column."""
 
-    queries: list[_CursorQuery] = []
+    grouped_tags: dict[tuple[str, str], tuple[list[str], list[str]]] = {}
     info: _CursorModelInfo
     for info in cursor_models:
         if info.target_tag is not None and info.target_relation is not None:
-            queries.append(
-                _CursorQuery(
-                    tag=info.target_tag,
-                    relation=info.target_relation,
-                    cursor_column=info.cursor_column,
-                    aggregate="MAX",
-                )
-            )
+            target_key: tuple[str, str] = (info.target_relation, info.cursor_column)
+            target_tags: tuple[list[str], list[str]] = grouped_tags.setdefault(target_key, ([], []))
+            if info.target_tag not in target_tags[1]:
+                target_tags[1].append(info.target_tag)
         upstream: _UpstreamCursorInfo
         for upstream in info.upstreams:
-            queries.append(
-                _CursorQuery(
-                    tag=upstream.tag_min,
-                    relation=upstream.relation,
-                    cursor_column=upstream.cursor_column,
-                    aggregate="MIN",
-                )
+            upstream_key: tuple[str, str] = (upstream.relation, upstream.cursor_column)
+            upstream_tags: tuple[list[str], list[str]] = grouped_tags.setdefault(
+                upstream_key, ([], [])
             )
-            queries.append(
-                _CursorQuery(
-                    tag=upstream.tag_max,
-                    relation=upstream.relation,
-                    cursor_column=upstream.cursor_column,
-                    aggregate="MAX",
-                )
-            )
+            if upstream.tag_min not in upstream_tags[0]:
+                upstream_tags[0].append(upstream.tag_min)
+            if upstream.tag_max not in upstream_tags[1]:
+                upstream_tags[1].append(upstream.tag_max)
 
-    return queries
+    return [
+        _PhysicalCursorQuery(
+            relation=relation,
+            cursor_column=cursor_column,
+            min_tags=tuple(tags[0]),
+            max_tags=tuple(tags[1]),
+        )
+        for (relation, cursor_column), tags in grouped_tags.items()
+    ]
 
 
-def _execute_cursor_queries_batched(
+def _execute_cursor_queries(
     *,
-    queries: list[_CursorQuery],
+    queries: list[_PhysicalCursorQuery],
     connection: Any,
     execute: AdapterExecute[Any, Any],
     on_progress: Callable[[str], None] | None,
 ) -> dict[str, str]:
-    """Execute cursor queries in UNION ALL batches and return tag -> value results."""
+    """Execute standalone physical cursor queries and fan values out to logical tags."""
 
     results: dict[str, str] = {}
     total: int = len(queries)
-    completed: int = 0
-
-    batch_start: int = 0
-    while batch_start < total:
-        batch_end: int = min(batch_start + _CURSOR_BATCH_SIZE, total)
-        batch: list[_CursorQuery] = queries[batch_start:batch_end]
-
-        batch_results: dict[str, str] = _execute_cursor_batch(
-            batch=batch, connection=connection, execute=execute
+    query_index: int
+    query: _PhysicalCursorQuery
+    for query_index, query in enumerate(queries, start=1):
+        query_results: dict[str, str] = _execute_cursor_query(
+            query=query,
+            query_index=query_index,
+            total=total,
+            connection=connection,
+            execute=execute,
+            on_progress=on_progress,
         )
-        results.update(batch_results)
-
-        completed = batch_end
-        if on_progress is not None:
-            on_progress(f"Gathering cursor bounds ({completed}/{total})...")
-
-        batch_start = batch_end
+        results.update(query_results)
 
     return results
 
 
-def _execute_cursor_batch(
+def _execute_cursor_query(
     *,
-    batch: list[_CursorQuery],
+    query: _PhysicalCursorQuery,
+    query_index: int,
+    total: int,
     connection: Any,
     execute: AdapterExecute[Any, Any],
+    on_progress: Callable[[str], None] | None,
 ) -> dict[str, str]:
-    """Execute one batch of cursor queries as a UNION ALL and return tag -> value."""
+    """Execute one physical cursor query and fan out its returned values."""
 
-    if len(batch) == 1:
-        query: _CursorQuery = batch[0]
-        sql: str = (
-            f"SELECT '{query.tag}' AS _tag, "
-            f"CAST({query.aggregate}({query.cursor_column}) AS VARCHAR) AS _val "
-            f"FROM {query.relation}"
-        )
-    else:
-        parts: list[str] = []
-        q: _CursorQuery
-        for q in batch:
-            parts.append(
-                f"SELECT '{q.tag}' AS _tag, "
-                f"CAST({q.aggregate}({q.cursor_column}) AS VARCHAR) AS _val "
-                f"FROM {q.relation}"
-            )
-        sql = " UNION ALL ".join(parts)
+    bounds: str = ",".join(("min",) if query.min_tags else ())
+    if query.max_tags:
+        bounds = f"{bounds},max" if bounds else "max"
+    identity: str = f"({query_index}/{total}): {query.relation}.{query.cursor_column} [{bounds}]"
+    select_parts: list[str] = []
+    if query.min_tags:
+        select_parts.append(f"CAST(MIN({query.cursor_column}) AS VARCHAR) AS _min")
+    if query.max_tags:
+        select_parts.append(f"CAST(MAX({query.cursor_column}) AS VARCHAR) AS _max")
+    sql: str = f"SELECT {', '.join(select_parts)} FROM {query.relation}"
+    if on_progress is not None:
+        on_progress(f"Inspecting cursor bounds {identity}...")
 
+    query_start: float = time.monotonic()
     try:
         result: Any = execute(connection=connection, sql=sql)
     except Exception as error:
+        elapsed: float = time.monotonic() - query_start
+        if on_progress is not None:
+            on_progress(f"Failed cursor bounds {identity} ({elapsed:.2f}s): {error}")
         log_debug_event(
             logger=_DEBUG_LOGGER,
-            message="cursor bounds batch query failed; treating batch as unavailable",
-            sqlbuild_batch_tags=", ".join(query.tag for query in batch),
+            message="cursor bounds physical query failed; treating relation as unavailable",
+            sqlbuild_relation=query.relation,
+            sqlbuild_cursor_column=query.cursor_column,
+            sqlbuild_bounds=bounds,
+            sqlbuild_elapsed_seconds=f"{elapsed:.2f}",
             sqlbuild_error=str(error),
         )
         return {}
+    elapsed = time.monotonic() - query_start
+    if on_progress is not None:
+        on_progress(f"Inspected cursor bounds {identity} ({elapsed:.2f}s)")
     rows: list[Any] = result.fetchall()
+    if not rows:
+        return {}
     output: dict[str, str] = {}
-    row: Any
-    for row in rows:
-        tag: str = str(row[0])
-        val: str | None = row[1]
-        if val is not None:
-            output[tag] = str(val)
+    row: Any = rows[0]
+    value_index: int = 0
+    if query.min_tags:
+        min_value: Any = row[value_index]
+        if min_value is not None:
+            min_tag: str
+            for min_tag in query.min_tags:
+                output[min_tag] = str(min_value)
+        value_index += 1
+    if query.max_tags:
+        max_value: Any = row[value_index]
+        if max_value is not None:
+            max_tag: str
+            for max_tag in query.max_tags:
+                output[max_tag] = str(max_value)
     return output
 
 
