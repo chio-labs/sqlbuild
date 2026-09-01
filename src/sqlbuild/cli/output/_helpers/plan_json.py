@@ -123,12 +123,26 @@ def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
     if entry.incremental_mode is not None:
         model["incremental_mode"] = entry.incremental_mode
     if entry.incremental_mode == IncrementalMode.MICROBATCH:
-        model["microbatch_state"] = {
+        microbatch_state: dict[str, object] = {
             "completion_tracking": "universal",
             "batch_concurrency": entry.batch_concurrency,
             "unaccounted_partition_policy": entry.unaccounted_partition_policy,
             "reconciliation": "runtime",
         }
+        if entry.microbatch_limit is not None:
+            microbatch_state.update(
+                {
+                    "limit": entry.microbatch_limit,
+                    "count": entry.microbatch_limit_count,
+                    "action": (
+                        entry.microbatch_limit_action.value
+                        if entry.microbatch_limit_action is not None
+                        else None
+                    ),
+                    "warning": entry.microbatch_limit_warning,
+                }
+            )
+        model["microbatch_state"] = microbatch_state
     if entry.cursor_column is not None:
         model["cursor_column"] = entry.cursor_column
     if entry.cursor_type is not None:

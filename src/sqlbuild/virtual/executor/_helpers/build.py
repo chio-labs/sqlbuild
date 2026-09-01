@@ -927,6 +927,7 @@ def _plan_virtual_build(
                     seed_version_hashes=reads.semantics.expected_seed_version_hashes,
                     seed_metadata_jsons=reads.semantics.seed_identity_metadata_jsons,
                     seed_plan_reasons=reads.semantics.seed_plan_reasons,
+                    max_microbatches=options.planning.max_microbatches,
                 ),
             )
         finally:

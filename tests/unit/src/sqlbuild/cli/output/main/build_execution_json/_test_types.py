@@ -34,3 +34,9 @@ class ExecutionJsonCostTestCase:
     description: str
     expected_run_id: str
     expected_cost: dict[str, object]
+
+
+@dataclass(frozen=True)
+class ExecutionJsonMicrobatchLimitTestCase:
+    description: str
+    expected_microbatch: dict[str, object]

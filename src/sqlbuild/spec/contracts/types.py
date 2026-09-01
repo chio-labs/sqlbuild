@@ -21,6 +21,13 @@ class FutureCursorAction(StrEnum):
     ERROR = "error"
 
 
+class MicrobatchLimitAction(StrEnum):
+    """Response when one model plans more than the configured batch limit."""
+
+    ERROR = "error"
+    WARN = "warn"
+
+
 class SourceFreshnessStrategy(StrEnum):
     ADAPTER = "adapter"
     COLUMN = "column"

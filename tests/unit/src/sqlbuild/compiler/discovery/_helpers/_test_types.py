@@ -21,6 +21,21 @@ class FutureCursorConfigErrorTestCase:
 
 
 @dataclass(frozen=True)
+class MicrobatchLimitConfigTestCase:
+    description: str
+    limits_toml: str
+    expected_max_batches: int | None
+    expected_action: str
+
+
+@dataclass(frozen=True)
+class MicrobatchLimitConfigErrorTestCase:
+    description: str
+    limits_toml: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class DiscoverMacroFilesTestCase:
     description: str
     files: dict[str, str]

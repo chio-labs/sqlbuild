@@ -25,6 +25,7 @@ from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterCliStreamTestCase,
     DagsterFutureCursorMetadataTestCase,
     DagsterLiveFailureLoggingTestCase,
+    DagsterMicrobatchLimitMetadataTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
     assert_json_output_file_behavior,
@@ -342,6 +343,127 @@ def test_given_future_cursor_execution_metadata_when_streaming_then_dagster_reta
     materialization: Any = results[0]
     assert materialization.metadata["future_cursor_safety"] == safety
     assert materialization.metadata["future_cursor_safety"]["action"] == test_case.expected_action
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterMicrobatchLimitMetadataTestCase(
+            description="microbatch limit metadata",
+            execution_status="success",
+            expected_microbatch={
+                "run_type": "normal",
+                "limit": 2,
+                "count": 3,
+                "action": "warn",
+                "warning": "MICROBATCH LIMIT EXCEEDED",
+            },
+        ),
+        DagsterMicrobatchLimitMetadataTestCase(
+            description="warn limit metadata after skipped pre-hook",
+            execution_status="skipped",
+            expected_microbatch={
+                "run_type": "normal",
+                "limit": 2,
+                "count": 3,
+                "action": "warn",
+                "warning": "MICROBATCH LIMIT EXCEEDED",
+            },
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_microbatch_limit_execution_metadata_when_streaming_then_dagster_retains_structure(
+    test_case: DagsterMicrobatchLimitMetadataTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    stdout: str = json.dumps(
+        {
+            "version": 1,
+            "command": "build",
+            "status": "success",
+            "summary": {},
+            "assets": [
+                {
+                    "kind": "model",
+                    "name": "orders",
+                    "status": test_case.execution_status,
+                    "microbatch": test_case.expected_microbatch,
+                }
+            ],
+            "checks": [],
+        }
+    )
+    context: Any = type(
+        "SelectedAssetContext",
+        (),
+        {"selected_asset_keys": {dg.AssetKey(["analytics", "orders"])}},
+    )()
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_fake_sqb_command(root=tmp_path, stdout=stdout),
+        dag_path=str(write_dagster_test_dag(root=tmp_path)),
+    )
+
+    results: list[Any] = list(resource.cli(args=["build"], context=context).stream())
+
+    materialization: Any = results[0]
+    assert materialization.metadata["microbatch"] == test_case.expected_microbatch
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterMicrobatchLimitMetadataTestCase(
+            description="warn limit metadata after failed pre-hook",
+            execution_status="failed",
+            expected_microbatch={
+                "run_type": "normal",
+                "limit": 2,
+                "count": 3,
+                "action": "warn",
+                "warning": "MICROBATCH LIMIT EXCEEDED",
+            },
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_warn_limit_metadata_when_cli_fails_then_dagster_failure_retains_evidence(
+    test_case: DagsterMicrobatchLimitMetadataTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    stdout: str = json.dumps(
+        {
+            "version": 1,
+            "command": "build",
+            "status": "failed",
+            "summary": {},
+            "assets": [
+                {
+                    "kind": "model",
+                    "name": "orders",
+                    "status": test_case.execution_status,
+                    "failed_phase": "pre_hook",
+                    "microbatch": test_case.expected_microbatch,
+                }
+            ],
+            "checks": [],
+        }
+    )
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_fake_sqb_command(root=tmp_path, stdout=stdout, exit_code=1),
+        dag_path=str(write_dagster_test_dag(root=tmp_path)),
+    )
+
+    with pytest.raises(dg.Failure) as exc_info:
+        list(resource.cli(args=["build"]).stream())
+
+    assert exc_info.value.metadata["microbatch_limits"].value == {
+        "orders": test_case.expected_microbatch
+    }
 
 
 @pytest.mark.parametrize(

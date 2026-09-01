@@ -7,6 +7,7 @@ from sqlbuild.compiler.planner.types import OnSchemaChange
 from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import FutureCursorsConfig
+from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,10 @@ class MicrobatchSuccessTestCase:
     future_cursor_config: FutureCursorsConfig | None = None
     invocation_time: datetime | None = None
     expected_has_future_cursor_safety: bool = False
+    microbatch_limit: int | None = None
+    microbatch_limit_action: MicrobatchLimitAction | None = None
+    expected_microbatch_limit_count: int | None = None
+    expected_microbatch_limit_warning: bool = False
 
 
 @dataclass(frozen=True)
@@ -111,3 +116,7 @@ class MicrobatchFailureTestCase:
     future_cursor_config: FutureCursorsConfig | None = None
     invocation_time: datetime | None = None
     expected_has_future_cursor_safety: bool = False
+    microbatch_limit: int | None = None
+    microbatch_limit_action: MicrobatchLimitAction | None = None
+    expected_microbatch_limit_count: int | None = None
+    expected_microbatch_limit_warning: bool = False

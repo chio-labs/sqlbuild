@@ -510,7 +510,7 @@ def _format_model_assets(
 def _format_microbatch_result(result: ModelExecutionResult) -> dict[str, object] | None:
     if result.microbatch_run_type is None:
         return None
-    return {
+    microbatch: dict[str, object] = {
         "run_type": result.microbatch_run_type,
         "batch_count": result.batch_count,
         "batch_size": result.batch_size,
@@ -541,6 +541,20 @@ def _format_microbatch_result(result: ModelExecutionResult) -> dict[str, object]
             for interval in result.microbatch_accounting_intervals
         ],
     }
+    if result.microbatch_limit is not None:
+        microbatch.update(
+            {
+                "limit": result.microbatch_limit,
+                "count": result.microbatch_limit_count,
+                "action": (
+                    result.microbatch_limit_action.value
+                    if result.microbatch_limit_action is not None
+                    else None
+                ),
+                "warning": result.microbatch_limit_warning,
+            }
+        )
+    return microbatch
 
 
 def _format_seed_assets(

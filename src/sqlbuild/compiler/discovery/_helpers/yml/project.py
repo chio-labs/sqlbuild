@@ -49,6 +49,8 @@ from sqlbuild.spec.contracts.models import (
     LocalTargetConfig,
     MaterializationDefaultsConfig,
     MaterializationRetentionDefaults,
+    MicrobatchesConfig,
+    MicrobatchLimitsConfig,
     ProjectConfig,
     ScenarioConfig,
     ScenarioSnapshotLimitsConfig,
@@ -60,6 +62,7 @@ from sqlbuild.spec.contracts.models import (
 )
 from sqlbuild.spec.contracts.types import (
     FutureCursorAction,
+    MicrobatchLimitAction,
     TableType,
     TableTypeDowngradePolicy,
     TableTypeValue,
@@ -78,6 +81,7 @@ _DEFAULT_HISTORICAL_SNAPSHOT_FULL_REFRESH: str = "require_confirmation"
 _DEFAULT_SNAPSHOT_SCHEMA_CHANGE: str = "append_new_columns"
 _DEFAULT_WILDCARD_CHECK_SNAPSHOT_SCHEMA_CHANGE: str = "require_confirmation"
 _BATCH_CONCURRENCY_CONFIG_KEY: str = "batch_concurrency"
+_MAX_BATCHES_CONFIG_KEY: str = "max_batches"
 _CURSOR_DURATION_PATTERN: re.Pattern[str] = re.compile(
     r"^(?=.*[1-9])(?:(\d+)y)?(?:(\d+)mo)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$"
 )
@@ -103,6 +107,9 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         payload=payload.get("constants"), file_path=file_path
     )
     cursors: CursorsConfig = _load_cursors(payload=payload.get("cursors"), file_path=file_path)
+    microbatches: MicrobatchesConfig = _load_microbatches(
+        payload=payload.get("microbatches"), file_path=file_path
+    )
     defaults: DefaultsConfig = _load_defaults(payload=payload.get("defaults"), file_path=file_path)
     materialization_defaults: MaterializationDefaultsConfig = _load_materialization_defaults(
         payload=payload.get("materialization_defaults"), file_path=file_path
@@ -141,6 +148,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         cost=cost,
         constants=constants,
         cursors=cursors,
+        microbatches=microbatches,
         defaults=defaults,
         materialization_defaults=materialization_defaults,
         path_defaults=path_defaults,
@@ -391,6 +399,40 @@ def _load_cursors(*, payload: object, file_path: Path) -> CursorsConfig:
     except ValueError:
         raise ProjectConfigError("cursors.future.action must be one of: cap, error") from None
     return CursorsConfig(future=FutureCursorsConfig(max_distance=max_distance, action=action))
+
+
+def _load_microbatches(*, payload: object, file_path: Path) -> MicrobatchesConfig:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label="microbatches", file_path=file_path
+    )
+    _validate_allowed_keys(
+        mapping=mapping,
+        allowed_keys=frozenset({"limits"}),
+        label="microbatches",
+        file_path=file_path,
+    )
+    limits: dict[str, object] = _coerce_mapping(
+        payload=mapping.get("limits"), label="microbatches.limits", file_path=file_path
+    )
+    _validate_allowed_keys(
+        mapping=limits,
+        allowed_keys=frozenset({_MAX_BATCHES_CONFIG_KEY, "action"}),
+        label="microbatches.limits",
+        file_path=file_path,
+    )
+    max_batches: int | None = None
+    if _MAX_BATCHES_CONFIG_KEY in limits:
+        if isinstance(limits[_MAX_BATCHES_CONFIG_KEY], bool):
+            raise ProjectConfigError("microbatches.limits.max_batches must be a positive integer")
+        max_batches = _optional_int(mapping=limits, key=_MAX_BATCHES_CONFIG_KEY, default=0)
+        if max_batches < 1:
+            raise ProjectConfigError("microbatches.limits.max_batches must be a positive integer")
+    raw_action: str = _optional_str(payload=limits, key="action") or MicrobatchLimitAction.ERROR
+    try:
+        action: MicrobatchLimitAction = MicrobatchLimitAction(raw_action)
+    except ValueError:
+        raise ProjectConfigError("microbatches.limits.action must be one of: error, warn") from None
+    return MicrobatchesConfig(limits=MicrobatchLimitsConfig(max_batches=max_batches, action=action))
 
 
 def _load_scopes(*, payload: object, file_path: Path) -> ScopesConfig:

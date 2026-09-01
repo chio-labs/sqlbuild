@@ -220,6 +220,7 @@ class BuildCommandRequest:
     json_output_path: Path | None = None
     event_output_path: Path | None = None
     no_cache: bool = False
+    max_microbatches: int | None = None
     selector_files: tuple[SelectorFileSummary, ...] = ()
 
 
@@ -377,6 +378,7 @@ class VirtualBuildCliRequest:
     providers: ProviderContainer | None = None
     no_cache: bool = False
     selector_files: tuple[SelectorFileSummary, ...] = ()
+    max_microbatches: int | None = None
     command_started_at: float | None = None
 
 
@@ -1015,6 +1017,7 @@ class PlanCommandRequest:
     include_stale_upstreams: bool = False
     changes_only: bool = False
     no_cache: bool = False
+    max_microbatches: int | None = None
 
 
 @dataclass(frozen=True)

@@ -70,6 +70,20 @@ def build_planner_entry_results(
                 else None
             ),
             invocation_time=runtime.invocation_time,
+            max_microbatches=(
+                overrides.max_microbatches
+                if overrides.max_microbatches is not None
+                else (
+                    runtime.project_config.microbatches.limits.max_batches
+                    if runtime.project_config is not None
+                    else None
+                )
+            ),
+            microbatch_limit_action=(
+                runtime.project_config.microbatches.limits.action
+                if runtime.project_config is not None
+                else PlanEntryBuildInputs().microbatch_limit_action
+            ),
         ),
     )
     return PlannerEntryResults(

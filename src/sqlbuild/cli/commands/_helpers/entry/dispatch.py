@@ -143,6 +143,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 cli_vars=args.vars,
                 include_stale_upstreams=args.include_stale_upstreams,
                 changes_only=args.changes_only,
+                max_microbatches=args.max_microbatches,
             )
         )
     if args.command == CliCommand.DBT:
@@ -193,6 +194,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 json_output=args.json,
                 json_output_path=args.json_output,
                 event_output_path=args.event_output,
+                max_microbatches=args.max_microbatches,
             )
         )
     if args.command == CliCommand.FRESHNESS:

@@ -54,6 +54,7 @@ def compile_plan_pipeline(
                 exclude=request.exclude,
                 cli_vars=request.cli_vars,
                 external_sql_reference_resolver=external_sql_reference_resolver,
+                max_microbatches=request.max_microbatches,
             ),
             hooks=ConnectionHooks(
                 on_progress=invocation.planning_progress.on_progress,
@@ -96,6 +97,7 @@ def compile_plan_pipeline(
             cli_vars=request.cli_vars,
             external_sql_reference_resolver=external_sql_reference_resolver,
             resolve_python_run_selectors=request.include_python,
+            max_microbatches=request.max_microbatches,
         ),
         hooks=ConnectionHooks(
             on_progress=invocation.planning_progress.on_progress,

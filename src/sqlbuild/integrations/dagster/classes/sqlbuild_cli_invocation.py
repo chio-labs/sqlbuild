@@ -167,14 +167,20 @@ class SqlBuildCliInvocation:
         if self.execution_payload is not None:
             incomplete_assets: list[str] = []
             failure_details: list[str] = []
+            microbatch_limits: dict[str, object] = {}
             for asset in self.execution_payload.get("assets", ()):
                 status: str = str(asset.get("status"))
                 if status in COMPLETED_EXECUTION_STATUSES:
                     continue
                 incomplete_assets.append(f"{asset.get('kind')}:{asset.get('name')} ({status})")
                 failure_details.append(_format_asset_failure(asset))
+                microbatch: object | None = asset.get("microbatch")
+                if isinstance(microbatch, dict) and microbatch.get("limit") is not None:
+                    microbatch_limits[str(asset.get("name"))] = microbatch
             metadata["execution_status"] = str(self.execution_payload.get("status"))
             metadata["incomplete_assets"] = ", ".join(incomplete_assets)
+            if microbatch_limits:
+                metadata["microbatch_limits"] = microbatch_limits
             if failure_details:
                 description += "\n\nFailures:\n\n" + "\n\n".join(failure_details)
         else:
@@ -212,6 +218,7 @@ class SqlBuildCliInvocation:
             if execution_payload is None:
                 execution_payload = _load_execution_payload(self.stdout)
             if execution_payload is not None:
+                self.execution_payload = execution_payload
                 yield from _build_results_from_execution_payload(
                     dg=dg,
                     dag=self.dag,

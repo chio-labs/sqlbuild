@@ -108,6 +108,13 @@ class DagsterFutureCursorMetadataTestCase:
 
 
 @dataclass(frozen=True)
+class DagsterMicrobatchLimitMetadataTestCase:
+    description: str
+    execution_status: str
+    expected_microbatch: dict[str, object]
+
+
+@dataclass(frozen=True)
 class DagsterLiveFailureLoggingTestCase:
     description: str
     expected_phase: str

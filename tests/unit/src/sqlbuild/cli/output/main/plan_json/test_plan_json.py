@@ -30,7 +30,7 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonNodeKind,
     PythonRunPhase,
 )
-from sqlbuild.spec.contracts.types import FutureCursorAction
+from sqlbuild.spec.contracts.types import FutureCursorAction, MicrobatchLimitAction
 from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
     build_discovered_provider_usage,
     build_model_entry,
@@ -43,7 +43,53 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
 from tests.unit.src.sqlbuild.cli.output.main.plan_json._test_types import (
     FutureCursorPlanJsonTestCase,
     JsonOutputTestCase,
+    MicrobatchLimitPlanJsonTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MicrobatchLimitPlanJsonTestCase(
+            description="microbatch limit decision is preserved",
+            expected_limit=2,
+            expected_count=3,
+            expected_action="warn",
+            expected_warning="MICROBATCH LIMIT EXCEEDED",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_microbatch_limit_decision_when_formatting_plan_json_then_metadata_is_preserved(
+    test_case: MicrobatchLimitPlanJsonTestCase,
+) -> None:
+    warning: str = test_case.expected_warning
+    plan: PlanOutput = build_plan_output(
+        model_entries=(
+            build_model_entry(
+                name="events",
+                incremental_mode="microbatch",
+                microbatch_limit=test_case.expected_limit,
+                microbatch_limit_count=test_case.expected_count,
+                microbatch_limit_action=MicrobatchLimitAction.WARN,
+                microbatch_limit_warning=warning,
+            ),
+        )
+    )
+
+    payload: dict[str, object] = json.loads(format_plan_json(plan=plan))
+    microbatch: Any = payload["models"][0]["microbatch_state"]  # type: ignore[index]
+
+    assert microbatch == {
+        "completion_tracking": "universal",
+        "batch_concurrency": 1,
+        "unaccounted_partition_policy": None,
+        "reconciliation": "runtime",
+        "limit": test_case.expected_limit,
+        "count": test_case.expected_count,
+        "action": test_case.expected_action,
+        "warning": test_case.expected_warning,
+    }
 
 
 @pytest.mark.parametrize(
