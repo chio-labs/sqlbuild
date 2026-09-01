@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.72.1](https://github.com/chio-labs/sqlbuild/compare/v0.72.0...v0.72.1) (2026-09-01)
+
+
+### Bug Fixes
+
+* scope cursor validation to selected models ([#458](https://github.com/chio-labs/sqlbuild/issues/458)) ([bb0c99a](https://github.com/chio-labs/sqlbuild/commit/bb0c99aa6bac6fc263b30c6a745757461e97169f))
+
 ## [0.72.0](https://github.com/chio-labs/sqlbuild/compare/v0.71.6...v0.72.0) (2026-09-01)
 
 
