@@ -64,6 +64,12 @@ def build_planner_entry_results(
                 else frozenset()
             ),
             external_blocked_model_names=frozenset(overrides.external_blocked_model_names),
+            future_cursor_config=(
+                runtime.project_config.cursors.future
+                if runtime.project_config is not None
+                else None
+            ),
+            invocation_time=runtime.invocation_time,
         ),
     )
     return PlannerEntryResults(

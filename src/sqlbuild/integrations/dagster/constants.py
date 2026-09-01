@@ -47,6 +47,7 @@ MATERIALIZABLE_NODE_KINDS: frozenset[str] = frozenset(
 )
 COMPLETED_EXECUTION_STATUSES: frozenset[str] = frozenset({"success", "skipped"})
 SUCCESS_EXECUTION_STATUS: str = "success"
+FAILED_EXECUTION_STATUS: str = "failed"
 CHECK_NAME_SEPARATOR_CHARACTER: str = "_"
 CHECK_METADATA_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {"passed", "steps", "expected_results", "assertion_results"}

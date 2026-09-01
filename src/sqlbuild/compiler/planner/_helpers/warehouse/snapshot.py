@@ -42,6 +42,7 @@ from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
 from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
+    CursorInputEvidence,
     CursorSnapshotScope,
     MissingUpstream,
     ModelCursorSnapshot,
@@ -830,6 +831,7 @@ def _assemble_cursor_snapshots(
 
         upstream_mins: list[str] = []
         upstream_maxes: list[str] = []
+        input_evidence: list[CursorInputEvidence] = []
         unavailable_watermark_tags: list[str] = []
         upstream: _UpstreamCursorInfo
         for upstream in info.upstreams:
@@ -841,6 +843,14 @@ def _assemble_cursor_snapshots(
                 unavailable_watermark_tags.append(upstream.tag_min)
             if max_val is not None:
                 upstream_maxes.append(max_val)
+                input_evidence.append(
+                    CursorInputEvidence(
+                        relation=upstream.relation,
+                        cursor_column=upstream.cursor_column,
+                        minimum=min_val,
+                        maximum=max_val,
+                    )
+                )
             else:
                 unavailable_watermark_tags.append(upstream.tag_max)
 
@@ -848,6 +858,7 @@ def _assemble_cursor_snapshots(
             target_max=target_max,
             upstream_mins=tuple(upstream_mins),
             upstream_maxes=tuple(upstream_maxes),
+            input_evidence=tuple(input_evidence),
             expected_watermark_count=len(info.upstreams),
             unavailable_watermark_tags=tuple(unavailable_watermark_tags),
         )

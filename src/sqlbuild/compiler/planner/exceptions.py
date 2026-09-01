@@ -13,3 +13,7 @@ class PlannerInputError(ValueError):
         self.message = message
         self.code = code if code is not None else self.code
         self.help = help
+
+
+class FutureCursorSafetyError(PlannerInputError):
+    """Raised when an effective cursor exceeds the configured future limit."""

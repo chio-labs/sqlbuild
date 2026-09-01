@@ -1,10 +1,12 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.planner.types import OnSchemaChange
 from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.spec.contracts.models import FutureCursorsConfig
 
 
 @dataclass(frozen=True)
@@ -63,6 +65,9 @@ class MicrobatchSuccessTestCase:
     expected_batch_count: int | None = None
     start_cursor_override: str | None = None
     end_cursor_override: str | None = None
+    future_cursor_config: FutureCursorsConfig | None = None
+    invocation_time: datetime | None = None
+    expected_has_future_cursor_safety: bool = False
 
 
 @dataclass(frozen=True)
@@ -103,3 +108,6 @@ class MicrobatchFailureTestCase:
     hook_functions: tuple[object, ...] = field(default_factory=tuple)
     start_cursor_override: str | None = None
     end_cursor_override: str | None = None
+    future_cursor_config: FutureCursorsConfig | None = None
+    invocation_time: datetime | None = None
+    expected_has_future_cursor_safety: bool = False
