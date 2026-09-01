@@ -1,9 +1,12 @@
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlbuild.compiler.planner.models import (
+    CursorBounds,
     SelectionStalenessGraph,
     SelectionStalenessWarning,
 )
+from sqlbuild.spec.contracts.models import FutureCursorsConfig
 
 
 @dataclass(frozen=True)
@@ -130,3 +133,17 @@ class EffectiveMicrobatchBatchSizeTestCase:
     batch_size: str
     effective_grain: str
     expected_batch_size: str
+
+
+@dataclass(frozen=True)
+class FutureCursorSafetyTestCase:
+    description: str
+    bounds: CursorBounds
+    config: FutureCursorsConfig
+    invocation_time: datetime
+    cursor_grain: str
+    has_complete_override: bool
+    expected_start: str
+    expected_end: str
+    expected_has_safety: bool
+    expected_error_fragment: str | None = None

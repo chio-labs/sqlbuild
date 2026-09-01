@@ -253,6 +253,41 @@ def build_project_from_source_cursor_input_test_case(
     )
 
 
+def build_future_cursor_project() -> CompiledProject:
+    """Build one timestamp incremental source project for future safety tests."""
+
+    case: SourceCursorInputPlanErrorTestCase = SourceCursorInputPlanErrorTestCase(
+        description="future cursor",
+        setup_sql=(),
+        model_name="events_incremental",
+        source_name="raw_events",
+        source_schema="raw",
+        source_table="events",
+        cursor_column="occurred_at",
+        cursor_input_column="occurred_at",
+        expected_error_fragment="",
+    )
+    project: CompiledProject = build_project_from_source_cursor_input_test_case(case)
+    model: CompiledModel = project.models[0]
+    return replace(
+        project,
+        models=(
+            replace(
+                model,
+                config=replace(
+                    model.config,
+                    values={
+                        **model.config.values,
+                        "cursor_type": "timestamp",
+                        "cursor_grain": "day",
+                        "incremental_strategy": "delete_insert",
+                    },
+                ),
+            ),
+        ),
+    )
+
+
 def write_previous_function_fingerprints(
     *,
     test_case: BuildExecutionPlanTestCase,

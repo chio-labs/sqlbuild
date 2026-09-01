@@ -7,11 +7,13 @@ import json
 from typing import cast
 
 from sqlbuild.cli.output._helpers.cursor_plan import build_cursor_plan_details
+from sqlbuild.cli.output._helpers.future_cursor_safety import serialize_future_cursor_safety
 from sqlbuild.cli.output.models import CursorPlanDetails
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
     FunctionPlanEntry,
+    FutureCursorSafetyEvidence,
     ModelPlanEntry,
     PlanOutput,
     PlanProviderUsage,
@@ -136,6 +138,16 @@ def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
             "start": entry.cursor_bounds.start,
             "end": entry.cursor_bounds.end,
         }
+    future_safety: FutureCursorSafetyEvidence | None = (
+        entry.microbatch_range.future_safety
+        if entry.microbatch_range is not None and entry.microbatch_range.future_safety is not None
+        else (entry.cursor_bounds.future_safety if entry.cursor_bounds is not None else None)
+    )
+    serialized_future_safety: dict[str, object] | None = serialize_future_cursor_safety(
+        future_safety
+    )
+    if serialized_future_safety is not None:
+        model["future_cursor_safety"] = serialized_future_safety
     cursor_details: CursorPlanDetails | None = build_cursor_plan_details(entry=entry)
     if cursor_details is not None:
         model["cursor"] = _serialize_cursor_details(details=cursor_details)

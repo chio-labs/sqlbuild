@@ -24,6 +24,7 @@ from sqlbuild.integrations.dagster.constants import (
     CHECK_EVENT,
     CLONE_ASSET_EVENT,
     COMPLETED_EXECUTION_STATUSES,
+    FAILED_EXECUTION_STATUS,
     VERBOSE_FLAGS,
 )
 
@@ -239,6 +240,7 @@ class SqlBuildCliInvocation:
         dg: Any = load_dagster()
         emitted_asset_keys: set[tuple[str, ...]] = set()
         emitted_check_keys: set[tuple[tuple[str, ...], str]] = set()
+        logged_failed_assets: set[tuple[str, str]] = set()
         event_path: Path | None = self.event_jsonl_path
         dag: Mapping[str, Any] | None = self.dag
         if event_path is None or dag is None:
@@ -269,6 +271,7 @@ class SqlBuildCliInvocation:
                             dg=dg,
                             dag=dag,
                             event_stream=event_stream,
+                            logged_failed_assets=logged_failed_assets,
                         ):
                             if isinstance(result, dg.AssetCheckResult):
                                 check_key: tuple[tuple[str, ...], str] = (
@@ -327,6 +330,7 @@ class SqlBuildCliInvocation:
         dg: Any,
         dag: Mapping[str, Any],
         event_stream: IO[str],
+        logged_failed_assets: set[tuple[str, str]],
     ) -> Iterator[Any]:
         pending: str = ""
         while True:
@@ -336,18 +340,33 @@ class SqlBuildCliInvocation:
                 lines: list[str] = pending.split("\n")
                 pending = lines.pop()
                 for line in lines:
-                    yield from self._results_from_live_event_line(dg=dg, dag=dag, line=line)
+                    yield from self._results_from_live_event_line(
+                        dg=dg,
+                        dag=dag,
+                        line=line,
+                        logged_failed_assets=logged_failed_assets,
+                    )
                 continue
             if self.process.poll() is not None:
                 final_chunk: str = event_stream.read()
                 pending += final_chunk
                 for line in pending.splitlines():
-                    yield from self._results_from_live_event_line(dg=dg, dag=dag, line=line)
+                    yield from self._results_from_live_event_line(
+                        dg=dg,
+                        dag=dag,
+                        line=line,
+                        logged_failed_assets=logged_failed_assets,
+                    )
                 return
             time.sleep(0.01)
 
     def _results_from_live_event_line(
-        self, *, dg: Any, dag: Mapping[str, Any], line: str
+        self,
+        *,
+        dg: Any,
+        dag: Mapping[str, Any],
+        line: str,
+        logged_failed_assets: set[tuple[str, str]],
     ) -> Iterator[Any]:
         if line:
             event: Any
@@ -364,6 +383,11 @@ class SqlBuildCliInvocation:
             check: object = event.get("check")
             if not isinstance(asset, Mapping) and not isinstance(check, Mapping):
                 return
+            if isinstance(asset, Mapping):
+                _ = self._log_live_asset_failure(
+                    asset=asset,
+                    logged_failed_assets=logged_failed_assets,
+                )
             payload: Mapping[str, Any] = {
                 "version": event.get("version"),
                 "command": event.get("command"),
@@ -378,3 +402,47 @@ class SqlBuildCliInvocation:
                 command=self.command,
                 context=self.context,
             )
+
+    def _log_live_asset_failure(
+        self,
+        *,
+        asset: Mapping[str, Any],
+        logged_failed_assets: set[tuple[str, str]],
+    ) -> set[tuple[str, str]]:
+        if str(asset.get("status")) != FAILED_EXECUTION_STATUS:
+            return logged_failed_assets
+        asset_kind: str = str(asset.get("kind"))
+        asset_name: str = str(asset.get("name"))
+        asset_identity: tuple[str, str] = (asset_kind, asset_name)
+        if asset_identity in logged_failed_assets:
+            return logged_failed_assets
+        logged_failed_assets.add(asset_identity)
+        logger: Any = getattr(self.context, "log", None) if self.context is not None else None
+        if logger is None:
+            return logged_failed_assets
+        asset_label: str = f"{asset_kind}:{asset_name}"
+        phase: str = str(asset.get("failed_phase") or "unknown")
+        code: str = str(asset.get("error_code") or "unknown")
+        message: str = str(asset.get("error_message") or "Unknown SQLBuild asset failure")
+        metadata: dict[str, Any] = {
+            "sqlbuild_asset": asset_label,
+            "sqlbuild_asset_kind": asset_kind,
+            "sqlbuild_asset_name": asset_name,
+            "sqlbuild_phase": phase,
+            "sqlbuild_error_code": code,
+            "sqlbuild_error_message": message,
+            "sqlbuild_command": " ".join(self.command),
+        }
+        for key in ("target", "staging_relation", "duration_ms", "error_help"):
+            value: object = asset.get(key)
+            if value is not None:
+                metadata[f"sqlbuild_{key}"] = value
+        logger.error(
+            "SQLBuild asset failed: asset=%s phase=%s code=%s message=%s",
+            asset_label,
+            phase,
+            code,
+            message,
+            extra=metadata,
+        )
+        return logged_failed_assets

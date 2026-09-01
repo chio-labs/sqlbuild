@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -11,7 +12,13 @@ from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecord
 from sqlbuild.adapter.contract.models import LifeCycleEvent, QueryResult
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
-from sqlbuild.compiler.planner.models import AuditPlanEntry, CursorInputRelation, ModelPlanEntry
+from sqlbuild.compiler.planner.models import (
+    AuditPlanEntry,
+    CursorBounds,
+    CursorInputRelation,
+    FutureCursorSafetyEvidence,
+    ModelPlanEntry,
+)
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import MaterializationResult
@@ -27,7 +34,7 @@ from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.microbatches.models import MicrobatchScope
 from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
-from sqlbuild.spec.contracts.models import SourceEntry
+from sqlbuild.spec.contracts.models import FutureCursorsConfig, SourceEntry
 
 
 @dataclass(frozen=True)
@@ -118,6 +125,7 @@ class ModelExecutionResult:
     cursor_range_end: str | None = None
     cursor_type: str | None = None
     cursor_grain: str | None = None
+    future_cursor_safety: FutureCursorSafetyEvidence | None = None
     audit_results: tuple[AuditExecutionResult, ...] = field(default_factory=tuple)
     warning_messages: tuple[str, ...] = field(default_factory=tuple)
     lifecycle_events: tuple[LifeCycleEvent, ...] = field(default_factory=tuple)
@@ -222,6 +230,8 @@ class RuntimeCursorSpec:
     lookback: str | None = None
     backfill_duration: str | None = None
     read_destination_cursor: bool = True
+    future_cursor_config: FutureCursorsConfig | None = None
+    invocation_time: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -332,6 +342,16 @@ class MicrobatchPhaseOutcome:
     failure: ModelExecutionResult | None = None
     completed_batches: int = 0
     rows_affected: int | None = None
+
+
+@dataclass(frozen=True)
+class TableCursorResolution:
+    """Runtime cursor outcome resolved before table pre-hooks."""
+
+    resolved_sql: str
+    bounds: CursorBounds | None
+    warning: str | None = None
+    error: str | None = None
 
 
 @dataclass(frozen=True)

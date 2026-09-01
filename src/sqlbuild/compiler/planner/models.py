@@ -7,7 +7,7 @@ import re
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, ClassVar
@@ -54,8 +54,14 @@ from sqlbuild.compiler.source_freshness.models import (
     DirectSourceFreshnessPlanningResult,
 )
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SeedCsvSettings, SourceEntry
-from sqlbuild.spec.contracts.types import SourceWriteStrategy
+from sqlbuild.spec.contracts.models import (
+    FutureCursorsConfig,
+    LocalConfig,
+    ProjectConfig,
+    SeedCsvSettings,
+    SourceEntry,
+)
+from sqlbuild.spec.contracts.types import FutureCursorAction, SourceWriteStrategy
 from sqlbuild.sql_values.models import SqlValue
 
 
@@ -189,6 +195,7 @@ class ModelCursorSnapshot:
     target_max: str | None
     upstream_mins: tuple[str, ...]
     upstream_maxes: tuple[str, ...]
+    input_evidence: tuple[CursorInputEvidence, ...] = field(default=(), compare=False)
     expected_watermark_count: int = field(default=0, compare=False)
     unavailable_watermark_tags: tuple[str, ...] = ()
 
@@ -205,6 +212,37 @@ class CursorBounds:
 
     start: str
     end: str
+    future_safety: FutureCursorSafetyEvidence | None = None
+
+
+@dataclass(frozen=True)
+class CursorInputEvidence:
+    """Observed bounds for one physical cursor input."""
+
+    relation: str
+    cursor_column: str
+    minimum: str | None
+    maximum: str
+
+
+@dataclass(frozen=True)
+class FutureCursorSafetyEvidence:
+    """Structured evidence for one applied future-cursor cap."""
+
+    action: FutureCursorAction
+    max_distance: str
+    invocation_time: str
+    discovered_start: str
+    discovered_end: str
+    applied_start: str
+    applied_end: str
+    maximum_allowed_start: str
+    maximum_allowed_end: str
+    future_start_detected: bool
+    future_end_detected: bool
+    determining_relation: str | None
+    determining_cursor_column: str | None
+    inputs: tuple[CursorInputEvidence, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -508,6 +546,8 @@ class ModelPlanContext:
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
     star_exclude_keyword: str
     runtime_cursor_producer_names: frozenset[str] = frozenset()
+    future_cursor_config: FutureCursorsConfig | None = None
+    invocation_time: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -544,6 +584,8 @@ class PlanEntryBuildInputs:
     external_blocked_model_names: frozenset[str] = frozenset()
     start_cursor_override: str | None = None
     end_cursor_override: str | None = None
+    future_cursor_config: FutureCursorsConfig | None = None
+    invocation_time: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -688,6 +730,8 @@ class ModelPlanEntry:
     microbatch_range: CursorBounds | None = None
     start_cursor_override: str | None = None
     end_cursor_override: str | None = None
+    future_cursor_config: FutureCursorsConfig | None = None
+    invocation_time: datetime | None = None
     unique_key: tuple[str, ...] = field(default_factory=tuple)
     merge_exclude_columns: tuple[str, ...] = field(default_factory=tuple)
     snapshot_strategy: str | None = None
@@ -1063,6 +1107,7 @@ class PlannerRuntime:
     project_config: ProjectConfig | None = None
     local_config: LocalConfig | None = None
     on_progress: Callable[[str], None] | None = None
+    invocation_time: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass(frozen=True)

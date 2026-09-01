@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import pytest
 
@@ -11,7 +12,11 @@ from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
     CascadeCause,
     CascadeResult,
+    CursorBounds,
+    CursorInputEvidence,
     CursorInputRelation,
+    FutureCursorSafetyEvidence,
+    PlanOutput,
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
@@ -25,6 +30,7 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonNodeKind,
     PythonRunPhase,
 )
+from sqlbuild.spec.contracts.types import FutureCursorAction
 from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
     build_discovered_provider_usage,
     build_model_entry,
@@ -34,7 +40,72 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
     build_source_load_entry,
     build_warning,
 )
-from tests.unit.src.sqlbuild.cli.output.main.plan_json._test_types import JsonOutputTestCase
+from tests.unit.src.sqlbuild.cli.output.main.plan_json._test_types import (
+    FutureCursorPlanJsonTestCase,
+    JsonOutputTestCase,
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [FutureCursorPlanJsonTestCase("future cursor plan structure", "cap")],
+    ids=lambda case: case.description,
+)
+def test_given_future_cursor_cap_when_formatting_plan_json_then_structured_bounds_are_exposed(
+    test_case: FutureCursorPlanJsonTestCase,
+) -> None:
+    evidence: FutureCursorSafetyEvidence = FutureCursorSafetyEvidence(
+        action=FutureCursorAction.CAP,
+        max_distance="1d",
+        invocation_time="2026-09-01T12:00:00+00:00",
+        discovered_start="2500-01-01",
+        discovered_end="2500-01-02",
+        applied_start="2500-01-01",
+        applied_end="2026-09-03",
+        maximum_allowed_start="2026-09-02",
+        maximum_allowed_end="2026-09-03",
+        future_start_detected=True,
+        future_end_detected=True,
+        determining_relation="raw.events",
+        determining_cursor_column="occurred_at",
+        inputs=(
+            CursorInputEvidence(
+                relation="raw.events",
+                cursor_column="occurred_at",
+                minimum="2026-01-01",
+                maximum="2500-01-01",
+            ),
+        ),
+    )
+    plan: PlanOutput = build_plan_output(
+        model_entries=(
+            build_model_entry(
+                name="events",
+                cursor_bounds=CursorBounds(
+                    start="2500-01-01",
+                    end="2026-09-03",
+                    future_safety=evidence,
+                ),
+            ),
+        )
+    )
+
+    payload: dict[str, object] = json.loads(format_plan_json(plan=plan))
+    model: Any = payload["models"][0]
+
+    assert model["future_cursor_safety"]["action"] == test_case.expected_action
+    assert model["future_cursor_safety"]["discovered_bounds"] == {
+        "start": "2500-01-01",
+        "end": "2500-01-02",
+    }
+    assert model["future_cursor_safety"]["applied_bounds"] == {
+        "start": "2500-01-01",
+        "end": "2026-09-03",
+    }
+    assert model["future_cursor_safety"]["determining_input"] == {
+        "relation": "raw.events",
+        "cursor_column": "occurred_at",
+    }
 
 
 @pytest.mark.parametrize(

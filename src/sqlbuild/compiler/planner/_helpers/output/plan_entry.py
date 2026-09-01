@@ -55,10 +55,13 @@ from sqlbuild.compiler.planner.constants import (
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.changes._model_changes import detect_model_changes
+from sqlbuild.compiler.planner.main.execution.future_cursor_safety import apply_future_cursor_safety
+from sqlbuild.compiler.planner.main.execution.future_cursor_warning import future_cursor_cap_warning
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,
     CursorBounds,
+    CursorInputEvidence,
     CursorInputRelation,
     CursorOverridePair,
     CursorOverrides,
@@ -92,7 +95,13 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.compiler.references.main._render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SchemaColumn, SourceEntry
+from sqlbuild.spec.contracts.models import (
+    FutureCursorsConfig,
+    LocalConfig,
+    ProjectConfig,
+    SchemaColumn,
+    SourceEntry,
+)
 from sqlbuild.spec.contracts.types import TableType
 
 _MODELS_DIR_PREFIX: str = "models/"
@@ -290,6 +299,8 @@ def build_plan_entries(
                 source_warehouse_columns=relations.source_warehouse_columns,
                 star_exclude_keyword=relations.star_exclude_keyword,
                 runtime_cursor_producer_names=runtime_cursor_producer_names,
+                future_cursor_config=inputs.future_cursor_config,
+                invocation_time=inputs.invocation_time,
             ),
             sql_analysis_enabled=project.settings.sql_analysis,
             full_refresh=effective_full_refresh,
@@ -391,7 +402,6 @@ def plan_model_from_change(
     if backfill_override is not None:
         change_result = replace(change_result, backfill=backfill_override)
 
-    models_by_name: dict[str, CompiledModel] = context.models_by_name
     start_cursor_override: str | None = cursor_overrides.start_cursor_override
     end_cursor_override: str | None = cursor_overrides.end_cursor_override
     backfill: BackfillResult = (
@@ -404,7 +414,7 @@ def plan_model_from_change(
     validate_source_cursor_input_columns(
         model=model,
         cursor_column=cursor_column,
-        models_by_name=models_by_name,
+        models_by_name=context.models_by_name,
         source_map=context.source_map,
         source_warehouse_columns=context.source_warehouse_columns,
     )
@@ -464,7 +474,7 @@ def plan_model_from_change(
             model=model,
             adapter=adapter,
             model_locations=context.model_locations,
-            models_by_name=models_by_name,
+            models_by_name=context.models_by_name,
             seed_locations=context.seed_locations,
             source_map=context.source_map,
             cursor_column=cursor_column,
@@ -481,6 +491,8 @@ def plan_model_from_change(
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
         runtime_owned_cursor_bounds=runtime_owned_cursor_bounds,
+        future_cursor_config=context.future_cursor_config,
+        invocation_time=context.invocation_time,
     )
 
     cursor_type_warning: PlanWarning | None = check_cursor_type_consistency(
@@ -516,6 +528,14 @@ def plan_model_from_change(
         end_cursor_override=end_cursor_override,
         runtime_owned_cursor_bounds=runtime_owned_cursor_bounds,
         cursor_input_relations=cursor_input_relations,
+        future_cursor_config=context.future_cursor_config,
+        invocation_time=context.invocation_time,
+    )
+
+    warnings = _append_future_cap_warning(
+        warnings=warnings,
+        model_name=model.name,
+        bounds=microbatch_range or cursor_bounds,
     )
 
     fingerprint: Fingerprint | None = snapshot.fingerprints.models.get(model.name)
@@ -591,6 +611,8 @@ def plan_model_from_change(
         microbatch_range=microbatch_range,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
+        future_cursor_config=context.future_cursor_config,
+        invocation_time=context.invocation_time,
         unique_key=unique_key,
         merge_exclude_columns=_get_config_string_tuple(model=model, key="merge_exclude_columns"),
         snapshot_strategy=snapshot_strategy,
@@ -860,6 +882,8 @@ def _compute_microbatch_range(
     end_cursor_override: str | None,
     runtime_owned_cursor_bounds: bool,
     cursor_input_relations: tuple[CursorInputRelation, ...],
+    future_cursor_config: FutureCursorsConfig | None = None,
+    invocation_time: datetime | None = None,
 ) -> CursorBounds | None:
     """Compute the real overall cursor range for microbatch batch splitting."""
 
@@ -906,7 +930,7 @@ def _compute_microbatch_range(
     if backfill.action == BackfillAction.BOUNDED:
         backfill_duration = backfill.duration
 
-    return compute_cursor_bounds(
+    bounds: CursorBounds | None = compute_cursor_bounds(
         cursor_snapshot=cursor_snapshot,
         cursor_type=cursor_type,
         cursor_start=cursor_start,
@@ -916,6 +940,16 @@ def _compute_microbatch_range(
         end_cursor_override=end_cursor_override,
         cursor_grain=effective_grain,
         is_microbatch=False,
+    )
+    return _apply_future_safety(
+        bounds=bounds,
+        cursor_type=cursor_type,
+        cursor_grain=effective_grain,
+        start_cursor_override=start_cursor_override,
+        end_cursor_override=end_cursor_override,
+        future_cursor_config=future_cursor_config,
+        invocation_time=invocation_time,
+        input_evidence=cursor_snapshot.input_evidence,
     )
 
 
@@ -943,6 +977,8 @@ def _compute_plan_cursor_bounds(
     start_cursor_override: str | None,
     end_cursor_override: str | None,
     runtime_owned_cursor_bounds: bool,
+    future_cursor_config: FutureCursorsConfig | None = None,
+    invocation_time: datetime | None = None,
 ) -> CursorBounds | None:
     """Compute cursor bounds for inclusion on the plan entry."""
 
@@ -976,16 +1012,73 @@ def _compute_plan_cursor_bounds(
     if backfill.action == BackfillAction.BOUNDED:
         backfill_duration = backfill.duration
 
-    return compute_cursor_bounds(
+    cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
+    cursor_grain: str | None = _get_config_str(model=model, key="cursor_grain")
+    bounds: CursorBounds | None = compute_cursor_bounds(
         cursor_snapshot=cursor_snapshot,
-        cursor_type=_get_config_str(model=model, key="cursor_type"),
+        cursor_type=cursor_type,
         cursor_start=cursor_start,
         lookback=lookback,
         backfill_duration=backfill_duration,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
         is_microbatch=is_microbatch,
-        cursor_grain=_get_config_str(model=model, key="cursor_grain"),
+        cursor_grain=cursor_grain,
+    )
+    return _apply_future_safety(
+        bounds=bounds,
+        cursor_type=cursor_type,
+        cursor_grain=cursor_grain,
+        start_cursor_override=start_cursor_override,
+        end_cursor_override=end_cursor_override,
+        future_cursor_config=future_cursor_config,
+        invocation_time=invocation_time,
+        input_evidence=cursor_snapshot.input_evidence,
+    )
+
+
+def _apply_future_safety(
+    *,
+    bounds: CursorBounds | None,
+    cursor_type: str | None,
+    cursor_grain: str | None,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+    future_cursor_config: FutureCursorsConfig | None,
+    invocation_time: datetime | None,
+    input_evidence: tuple[CursorInputEvidence, ...],
+) -> CursorBounds | None:
+    if bounds is None:
+        return None
+    if bounds.end == MICROBATCH_END_SENTINEL:
+        return bounds
+    return apply_future_cursor_safety(
+        bounds=bounds,
+        cursor_type=cursor_type,
+        cursor_grain=cursor_grain,
+        config=future_cursor_config,
+        invocation_time=invocation_time,
+        has_complete_override=(
+            start_cursor_override is not None and end_cursor_override is not None
+        ),
+        input_evidence=input_evidence,
+    )
+
+
+def _append_future_cap_warning(
+    *, warnings: tuple[PlanWarning, ...], model_name: str, bounds: CursorBounds | None
+) -> tuple[PlanWarning, ...]:
+    message: str | None = future_cursor_cap_warning(bounds)
+    if message is None:
+        return warnings
+    return (
+        *warnings,
+        PlanWarning(
+            model_name=model_name,
+            severity=WarningSeverity.WARNING,
+            code="FUTURE_CURSOR_CAPPED",
+            message=message,
+        ),
     )
 
 

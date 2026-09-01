@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,8 @@ from sqlbuild.compiler.planner.constants import (
 from sqlbuild.compiler.planner.types import OnSchemaChange
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.run.types import ExecutionPhase
+from sqlbuild.spec.contracts.models import FutureCursorsConfig
+from sqlbuild.spec.contracts.types import FutureCursorAction
 from tests.integration.src.sqlbuild.executor.run.microbatch._test_types import (
     MicrobatchFailureTestCase,
     MicrobatchSuccessTestCase,
@@ -476,6 +479,71 @@ def test_given_microbatch_model_when_executing_then_succeeds(
 @pytest.mark.parametrize(
     "test_case",
     [
+        MicrobatchFailureTestCase(
+            description="runtime cap evidence survives pre-hook failure",
+            setup_sql=(
+                "CREATE TABLE main.future_input (id INTEGER, event_time TIMESTAMP)",
+                "INSERT INTO main.future_input VALUES (1, '2500-01-01')",
+                "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP)",
+            ),
+            model_sql=(
+                "SELECT * FROM main.future_input "
+                f"WHERE event_time >= '{MICROBATCH_START_SENTINEL}' "
+                f"AND event_time < '{MICROBATCH_END_SENTINEL}'"
+            ),
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="delete_insert",
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            cursor_grain="second",
+            batch_size="1h",
+            microbatch_start="2026-01-01T00:00:00",
+            microbatch_end="2026-01-01T01:00:00",
+            use_plan_microbatch_range=False,
+            cursor_input_relations=(("main.future_input", "event_time"),),
+            cursor_inputs_model_backed=True,
+            pre_hook=[SqlHookEntry(statement="SELECT * FROM missing_pre_hook_table")],
+            future_cursor_config=FutureCursorsConfig("2d", FutureCursorAction.CAP),
+            invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
+            expected_failed_phase=ExecutionPhase.PRE_HOOK,
+            expected_error_fragment="missing_pre_hook_table",
+            expected_row_count=0,
+            expected_has_future_cursor_safety=True,
+        ),
+        MicrobatchFailureTestCase(
+            description="runtime error blocks microbatch pre-hook side effects",
+            setup_sql=(
+                "CREATE TABLE main.future_input (id INTEGER, event_time TIMESTAMP)",
+                "INSERT INTO main.future_input VALUES (1, '2500-01-01')",
+                "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP)",
+                "CREATE TABLE main.hook_log (phase VARCHAR)",
+            ),
+            model_sql=(
+                "SELECT * FROM main.future_input "
+                f"WHERE event_time >= '{MICROBATCH_START_SENTINEL}' "
+                f"AND event_time < '{MICROBATCH_END_SENTINEL}'"
+            ),
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="delete_insert",
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            cursor_grain="second",
+            batch_size="1h",
+            microbatch_start="2026-01-01T00:00:00",
+            microbatch_end="2026-01-01T01:00:00",
+            use_plan_microbatch_range=False,
+            cursor_input_relations=(("main.future_input", "event_time"),),
+            cursor_inputs_model_backed=True,
+            pre_hook=[SqlHookEntry(statement="INSERT INTO main.hook_log VALUES ('pre')")],
+            future_cursor_config=FutureCursorsConfig("2d", FutureCursorAction.ERROR),
+            invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
+            expected_failed_phase=ExecutionPhase.STAGING,
+            expected_error_fragment="future cursor safety limit exceeded",
+            expected_row_count=0,
+            expected_query_results=(("SELECT * FROM main.hook_log", ()),),
+        ),
         MicrobatchFailureTestCase(
             description="pre_hook failure blocks all batches",
             setup_sql=(

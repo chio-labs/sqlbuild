@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
@@ -32,6 +34,7 @@ from sqlbuild.compiler.planner._helpers.resolve.sources import (
 )
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.main.execution.future_cursor_safety import apply_future_cursor_safety
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CursorBounds,
@@ -45,7 +48,7 @@ from sqlbuild.compiler.references.main.assert_no_unresolved_sql_markers import (
     assert_no_unresolved_sql_markers,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-from sqlbuild.spec.contracts.models import SourceEntry
+from sqlbuild.spec.contracts.models import FutureCursorsConfig, SourceEntry
 
 
 def resolve_model_sql(
@@ -80,6 +83,8 @@ def resolve_model_sql(
         end_cursor_override=cursor_overrides.end_cursor_override,
         runtime_cursor_producer_names=context.runtime_cursor_producer_names,
         suppress_runtime_cursor_bounds=suppress_runtime_cursor_bounds,
+        future_cursor_config=context.future_cursor_config,
+        invocation_time=context.invocation_time,
     )
 
     cursor_roles: CursorInputRoles = resolve_cursor_input_roles(model=model)
@@ -211,6 +216,8 @@ def _compute_model_cursor_bounds(
     end_cursor_override: str | None,
     runtime_cursor_producer_names: frozenset[str],
     suppress_runtime_cursor_bounds: bool,
+    future_cursor_config: FutureCursorsConfig | None,
+    invocation_time: datetime | None,
 ) -> CursorBounds | None:
     """Compute cursor bounds for a model if it is incremental with a cursor."""
 
@@ -267,7 +274,7 @@ def _compute_model_cursor_bounds(
     if backfill.action == BackfillAction.BOUNDED:
         backfill_duration = backfill.duration
 
-    return compute_cursor_bounds(
+    bounds: CursorBounds | None = compute_cursor_bounds(
         cursor_snapshot=cursor_snapshot,
         cursor_type=get_config_str(model=model, key="cursor_type"),
         cursor_start=cursor_start,
@@ -277,4 +284,17 @@ def _compute_model_cursor_bounds(
         end_cursor_override=end_cursor_override,
         is_microbatch=is_microbatch,
         cursor_grain=get_config_str(model=model, key="cursor_grain"),
+    )
+    if bounds is None:
+        return None
+    return apply_future_cursor_safety(
+        bounds=bounds,
+        cursor_type=get_config_str(model=model, key="cursor_type"),
+        cursor_grain=get_config_str(model=model, key="cursor_grain"),
+        config=future_cursor_config,
+        invocation_time=invocation_time,
+        has_complete_override=(
+            start_cursor_override is not None and end_cursor_override is not None
+        ),
+        input_evidence=cursor_snapshot.input_evidence,
     )

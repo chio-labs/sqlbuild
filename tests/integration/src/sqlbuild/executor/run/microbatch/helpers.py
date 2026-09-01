@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -199,6 +200,7 @@ def verify_success_state(
     assert actual_count == test_case.expected_row_count
     assert len(result.audit_results) == test_case.expected_audit_count
     assert len(result.warning_messages) == test_case.expected_warning_count
+    assert (result.future_cursor_safety is not None) is test_case.expected_has_future_cursor_safety
     state_table_count: int = connection.execute(
         "SELECT COUNT(*) FROM information_schema.tables "
         "WHERE table_schema = 'main' AND table_name = '_sqlbuild_microbatches'"
@@ -247,6 +249,7 @@ def verify_failure_state(
     """Verify result fields and warehouse state for a failed microbatch execution."""
 
     assert result.failed_phase == test_case.expected_failed_phase
+    assert (result.future_cursor_safety is not None) is test_case.expected_has_future_cursor_safety
     assert len(result.audit_results) == test_case.expected_audit_count
 
     assert (test_case.expected_error_fragment or "") in (result.error_message or "")
@@ -287,6 +290,11 @@ def _execute_test(
         connection.execute(sql)
 
     entry: ModelPlanEntry = build_microbatch_plan_entry(test_case=test_case)
+    entry = replace(
+        entry,
+        future_cursor_config=test_case.future_cursor_config,
+        invocation_time=test_case.invocation_time,
+    )
     model_audits: tuple[AuditPlanEntry, ...] = _build_model_audits(test_case)
     target_qualified: str = _build_target_qualified(
         target_schema=test_case.target_schema, target_name=test_case.target_name

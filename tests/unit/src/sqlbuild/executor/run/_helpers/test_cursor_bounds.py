@@ -8,6 +8,7 @@ import duckdb
 import pytest
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.planner.exceptions import FutureCursorSafetyError
 from sqlbuild.compiler.planner.models import CursorBounds, CursorInputRelation
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
@@ -16,6 +17,8 @@ from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     substitute_cursor_sentinels,
 )
 from sqlbuild.executor.run.models import RuntimeCursorSpec
+from sqlbuild.spec.contracts.models import FutureCursorsConfig
+from sqlbuild.spec.contracts.types import FutureCursorAction
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
     AuthoritativeRuntimeCursorOverrideTestCase,
     CursorSentinelSubstitutionErrorTestCase,
@@ -25,6 +28,7 @@ from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
     RuntimeCursorPolicyTestCase,
     RuntimeCursorStartTestCase,
     RuntimeExistingTargetOverrideTestCase,
+    RuntimeFutureCursorTestCase,
     RuntimeTargetMaxTestCase,
     RuntimeTargetProbeFailureTestCase,
     RuntimeWatermarkStatementTestCase,
@@ -33,6 +37,138 @@ from tests.unit.src.sqlbuild.executor.run._helpers.helpers import (
     FakeCursorAdapter,
     RecordingCursorAdapter,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RuntimeFutureCursorTestCase("runtime cap", "2026-09-01T00:00:00", "2026-09-03T12:00:01")],
+    ids=lambda case: case.description,
+)
+def test_given_future_runtime_watermark_when_resolving_then_cap_uses_invocation_clock(
+    test_case: RuntimeFutureCursorTestCase,
+) -> None:
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
+    connection.execute("CREATE TABLE upstream_data (cursor_value TIMESTAMP)")
+    connection.execute(
+        "INSERT INTO upstream_data VALUES (TIMESTAMP '2026-09-01'), (TIMESTAMP '2030-01-01')"
+    )
+
+    bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
+        adapter=cast(BaseAdapter, FakeCursorAdapter()),
+        connection=connection,
+        target_relation="target_data",
+        target_database=None,
+        target_schema=None,
+        target_name="target_data",
+        spec=RuntimeCursorSpec(
+            cursor_column="cursor_value",
+            cursor_type=CursorType.TIMESTAMP,
+            cursor_grain=CursorGrain.SECOND,
+            cursor_start=None,
+            cursor_input_relations=(
+                CursorInputRelation(relation="upstream_data", cursor_column="cursor_value"),
+            ),
+            future_cursor_config=FutureCursorsConfig("2d", FutureCursorAction.CAP),
+            invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
+        ),
+    )
+
+    assert bounds is not None
+    assert bounds.start == test_case.expected_start
+    assert bounds.end == test_case.expected_end
+    assert bounds.future_safety is not None
+    assert bounds.future_safety.discovered_end == "2030-01-01T00:00:01"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RuntimeFutureCursorTestCase("runtime error", "", "", "future cursor safety limit exceeded")],
+    ids=lambda case: case.description,
+)
+def test_given_future_runtime_watermark_and_error_policy_when_resolving_then_fails_closed(
+    test_case: RuntimeFutureCursorTestCase,
+) -> None:
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
+    connection.execute("CREATE TABLE upstream_data (cursor_value TIMESTAMP)")
+    connection.execute("INSERT INTO upstream_data VALUES (TIMESTAMP '2026-09-01')")
+    connection.execute("CREATE TABLE target_data (cursor_value TIMESTAMP)")
+    connection.execute("INSERT INTO target_data VALUES (TIMESTAMP '2500-01-01')")
+
+    with pytest.raises(FutureCursorSafetyError, match=test_case.expected_error_fragment):
+        resolve_runtime_cursor_bounds(
+            adapter=cast(BaseAdapter, FakeCursorAdapter(target_relation_exists=True)),
+            connection=connection,
+            target_relation="target_data",
+            target_database=None,
+            target_schema=None,
+            target_name="target_data",
+            spec=RuntimeCursorSpec(
+                cursor_column="cursor_value",
+                cursor_type=CursorType.TIMESTAMP,
+                cursor_grain=CursorGrain.SECOND,
+                cursor_start=None,
+                cursor_input_relations=(
+                    CursorInputRelation(relation="upstream_data", cursor_column="cursor_value"),
+                ),
+                future_cursor_config=FutureCursorsConfig("2d", FutureCursorAction.ERROR),
+                invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
+            ),
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RuntimeFutureCursorTestCase(
+            "future target evidence",
+            "2500-01-01T00:00:00",
+            "2026-09-01T00:00:01",
+            expected_determining_relation="input_a",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_future_target_and_multiple_inputs_when_capping_then_start_and_input_evidence_are_preserved(
+    test_case: RuntimeFutureCursorTestCase,
+) -> None:
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
+    connection.execute("CREATE TABLE target_data (cursor_value TIMESTAMP)")
+    connection.execute("INSERT INTO target_data VALUES (TIMESTAMP '2500-01-01')")
+    connection.execute("CREATE TABLE input_a (cursor_value TIMESTAMP)")
+    connection.execute("INSERT INTO input_a VALUES (TIMESTAMP '2026-09-01')")
+    connection.execute("CREATE TABLE input_b (cursor_value TIMESTAMP)")
+    connection.execute("INSERT INTO input_b VALUES (TIMESTAMP '2026-09-02')")
+
+    bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
+        adapter=cast(BaseAdapter, FakeCursorAdapter(target_relation_exists=True)),
+        connection=connection,
+        target_relation="target_data",
+        target_database=None,
+        target_schema=None,
+        target_name="target_data",
+        spec=RuntimeCursorSpec(
+            cursor_column="cursor_value",
+            cursor_type=CursorType.TIMESTAMP,
+            cursor_grain=CursorGrain.SECOND,
+            cursor_start=None,
+            cursor_input_relations=(
+                CursorInputRelation(relation="input_b", cursor_column="cursor_value"),
+                CursorInputRelation(relation="input_a", cursor_column="cursor_value"),
+            ),
+            future_cursor_config=FutureCursorsConfig("2d", FutureCursorAction.CAP),
+            invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
+        ),
+    )
+
+    assert bounds is not None
+    assert bounds.start == test_case.expected_start
+    assert bounds.end == test_case.expected_end
+    assert bounds.future_safety is not None
+    assert bounds.future_safety.determining_relation == test_case.expected_determining_relation
+    assert tuple(item.relation for item in bounds.future_safety.inputs) == (
+        "input_a",
+        "input_b",
+    )
 
 
 @pytest.mark.parametrize(
@@ -718,6 +854,14 @@ def test_given_full_refresh_runtime_discovery_when_resolving_then_ignores_old_ta
             end_cursor_override="20",
             expected_bounds=CursorBounds(start="10", end="21"),
         ),
+        AuthoritativeRuntimeCursorOverrideTestCase(
+            description="future timestamp override bypasses configured safety",
+            cursor_type=CursorType.TIMESTAMP,
+            cursor_grain=CursorGrain.DAY,
+            start_cursor_override="2500-01-01",
+            end_cursor_override="2500-01-04",
+            expected_bounds=CursorBounds(start="2500-01-01", end="2500-01-05"),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -747,6 +891,8 @@ def test_given_complete_override_when_runtime_resolution_invoked_then_returns_wi
             ),
             start_cursor_override=test_case.start_cursor_override,
             end_cursor_override=test_case.end_cursor_override,
+            future_cursor_config=FutureCursorsConfig("2d", FutureCursorAction.ERROR),
+            invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
         ),
     )
 

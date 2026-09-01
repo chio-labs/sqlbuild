@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -9,13 +10,15 @@ from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecord
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.models import CursorBounds, ModelPlanEntry
+from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run._helpers.execution.final_audits import run_final_model_audits
-from sqlbuild.executor.run._helpers.execution.hook_phases import run_post_hook_phase
-from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks, render_hooks
+from sqlbuild.executor.run._helpers.execution.hook_phases import (
+    run_post_hook_phase,
+    run_pre_hook_phase,
+)
 from sqlbuild.executor.run._helpers.execution.promotion import promote_relation_to_destination
 from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
@@ -35,30 +38,27 @@ from sqlbuild.executor.run._helpers.materializations.microbatch import (
 from sqlbuild.executor.run._helpers.materializations.snapshot import (
     execute_snapshot_entry as execute_snapshot_entry,
 )
+from sqlbuild.executor.run._helpers.materializations.table_cursor import (
+    resolve_table_cursor,
+    result_with_cursor_safety,
+)
 from sqlbuild.executor.run._helpers.materializations.view import (
     execute_view_entry as execute_view_entry,
 )
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run._helpers.validation.contracts import validate_runtime_contract
-from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
-    build_runtime_cursor_spec,
-    has_authoritative_cursor_override,
-    has_runtime_owned_cursor_watermarks,
-    resolve_runtime_cursor_bounds,
-    substitute_cursor_sentinels,
-)
 from sqlbuild.executor.run._helpers.validation.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.models import (
     FinalAuditRun,
     HookExecutionResult,
-    HookRunContext,
     ModelExecutionResult,
     ModelMaterializationContext,
     PostHookPhaseOutcome,
+    TableCursorResolution,
     TableLifecycleState,
     TableTargets,
 )
-from sqlbuild.executor.run.types import ExecutionPhase, HookPhase
+from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
@@ -79,55 +79,27 @@ def execute_table_entry(
     audit_results: list[AuditExecutionResult] = []
     hook_results: list[HookExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()
-    runtime_owned_cursor_bounds: bool = (
-        not is_full_refresh
-        and not has_authoritative_cursor_override(entry=entry)
-        and has_runtime_owned_cursor_watermarks(entry.cursor_input_relations)
-    )
-    resolved_sql: str = entry.resolved_sql
-
-    if runtime_owned_cursor_bounds:
-        if entry.cursor_column is None:
-            return build_failed_result(
-                entry=entry,
-                phase=ExecutionPhase.STAGING,
-                error="runtime-owned cursor resolution requires cursor_column",
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
-            )
-        try:
-            runtime_bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
-                adapter=adapter,
-                connection=connection,
-                target_relation=targets.target_qualified,
-                target_database=targets.target_database,
-                target_schema=targets.target_schema,
-                target_name=targets.target_table,
-                spec=build_runtime_cursor_spec(entry=entry),
-                watermark_resolver=context.watermark_resolver,
-            )
-        except Exception as exc:
-            return build_failed_result(
-                entry=entry,
-                phase=ExecutionPhase.STAGING,
-                error=f"failed to resolve runtime cursor bounds: {exc}",
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
-            )
-        if runtime_bounds is None:
-            return build_failed_result(
-                entry=entry,
-                phase=ExecutionPhase.STAGING,
-                error=f"runtime cursor bounds could not be resolved for '{entry.name}'",
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-            )
-        resolved_sql = substitute_cursor_sentinels(sql=entry.resolved_sql, bounds=runtime_bounds)
+    try:
+        cursor_resolution: TableCursorResolution = resolve_table_cursor(
+            context=context,
+            targets=targets,
+            is_full_refresh=is_full_refresh,
+        )
+    except Exception as exc:
+        return build_failed_result(
+            entry=entry,
+            phase=ExecutionPhase.STAGING,
+            error=f"failed to resolve runtime cursor bounds: {exc}",
+            warnings=warnings,
+            audit_results=audit_results,
+            statement_recorder=statement_recorder,
+            hook_results=hook_results,
+        )
+    if cursor_resolution.bounds is not None:
+        entry = replace(entry, cursor_bounds=cursor_resolution.bounds)
+        context = replace(context, entry=entry)
+    if cursor_resolution.warning is not None:
+        warnings.append(cursor_resolution.warning)
 
     try:
         if not context.schema_prepared:
@@ -136,36 +108,6 @@ def execute_table_entry(
                 database=targets.target_database,
                 schema=targets.target_schema,
                 statement_recorder=statement_recorder,
-            )
-        statement_recorder.record_many(
-            render_hooks(hooks=entry.pre_hooks, phase=HookPhase.PRE_HOOKS)
-        )
-        with diagnostics_context(sqlbuild_phase="pre_hook", sqlbuild_action_name="run"):
-            pre_hook_skipped: bool = execute_hooks(
-                connection=connection,
-                adapter=adapter,
-                hooks=entry.pre_hooks,
-                phase=HookPhase.PRE_HOOKS,
-                hook_functions=context.hook_functions,
-                hook_results=hook_results,
-                hook_run=HookRunContext(
-                    model_name=entry.name,
-                    destination=entry.destination,
-                    run_id=context.run_id,
-                    target=context.effective_target_name,
-                    effective_vars=context.effective_vars,
-                    statement_recorder=statement_recorder,
-                    providers=context.providers,
-                    python_identity_recorder=context.python_identity_recorder,
-                ),
-            )
-        if pre_hook_skipped:
-            return build_skipped_result(
-                entry=entry,
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-                hook_results=hook_results,
             )
     except Exception as exc:
         return build_failed_result(
@@ -177,22 +119,32 @@ def execute_table_entry(
             statement_recorder=statement_recorder,
             hook_results=hook_results,
         )
+    pre_hook_exit: ModelExecutionResult | None = run_pre_hook_phase(
+        context=context,
+        warnings=warnings,
+        audit_results=audit_results,
+        hook_results=hook_results,
+        statement_recorder=statement_recorder,
+    )
+    if pre_hook_exit is not None:
+        return pre_hook_exit
 
     state: TableLifecycleState = TableLifecycleState(
         warnings=warnings,
         audit_results=audit_results,
         statement_recorder=statement_recorder,
         hook_results=hook_results,
-        resolved_sql=resolved_sql,
+        resolved_sql=cursor_resolution.resolved_sql,
     )
 
     if promotion_mode == TablePromotionMode.STAGED:
-        return _staged_lifecycle(
+        result: ModelExecutionResult = _staged_lifecycle(
             context=context,
             targets=targets,
             state=state,
             declared_columns=declared_columns,
         )
+        return result_with_cursor_safety(result=result, entry=entry)
 
     if entry.contract_enforced:
         return build_failed_result(
@@ -209,12 +161,13 @@ def execute_table_entry(
             hook_results=hook_results,
         )
 
-    return _immediate_lifecycle(
+    result = _immediate_lifecycle(
         context=context,
         targets=targets,
         state=state,
         declared_columns=declared_columns,
     )
+    return result_with_cursor_safety(result=result, entry=entry)
 
 
 def _staged_lifecycle(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from collections.abc import Generator, Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -22,12 +23,15 @@ from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterCliLiveLogTestCase,
     DagsterCliSelectionTestCase,
     DagsterCliStreamTestCase,
+    DagsterFutureCursorMetadataTestCase,
+    DagsterLiveFailureLoggingTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
     assert_json_output_file_behavior,
     assert_positional_selector_behavior,
     assert_select_file_selector_behavior,
     write_blocking_execution_event_command,
+    write_blocking_failed_execution_event_command,
     write_blocking_fake_sqb_command,
     write_dagster_test_dag,
     write_fake_sqb_command,
@@ -279,6 +283,69 @@ def test_given_execution_json_when_streaming_then_yields_structured_dagster_even
 
 @pytest.mark.parametrize(
     "test_case",
+    [DagsterFutureCursorMetadataTestCase("future cursor metadata", "cap")],
+    ids=lambda case: case.description,
+)
+def test_given_future_cursor_execution_metadata_when_streaming_then_dagster_retains_structure(
+    test_case: DagsterFutureCursorMetadataTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    safety: dict[str, object] = {
+        "action": "cap",
+        "max_distance": "2d",
+        "discovered_bounds": {"start": "2500-01-01", "end": "2500-01-02"},
+        "applied_bounds": {"start": "2500-01-01", "end": "2026-09-04"},
+        "determining_input": {
+            "relation": "raw.events",
+            "cursor_column": "occurred_at",
+        },
+        "inputs": [
+            {
+                "relation": "raw.events",
+                "cursor_column": "occurred_at",
+                "minimum": None,
+                "maximum": "2500-01-01",
+            }
+        ],
+    }
+    stdout: str = json.dumps(
+        {
+            "version": 1,
+            "command": "build",
+            "status": "success",
+            "summary": {},
+            "assets": [
+                {
+                    "kind": "model",
+                    "name": "orders",
+                    "status": "success",
+                    "future_cursor_safety": safety,
+                }
+            ],
+            "checks": [],
+        }
+    )
+    context: Any = type(
+        "SelectedAssetContext",
+        (),
+        {"selected_asset_keys": {dg.AssetKey(["analytics", "orders"])}},
+    )()
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_fake_sqb_command(root=tmp_path, stdout=stdout),
+        dag_path=str(write_dagster_test_dag(root=tmp_path)),
+    )
+
+    results: list[Any] = list(resource.cli(args=["build"], context=context).stream())
+
+    materialization: Any = results[0]
+    assert materialization.metadata["future_cursor_safety"] == safety
+    assert materialization.metadata["future_cursor_safety"]["action"] == test_case.expected_action
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [
         DagsterCliCloneStreamTestCase(
             description="clone execution yields materializations for successful items only",
@@ -423,6 +490,69 @@ def test_given_running_clone_when_item_completes_then_materializes_before_proces
         test_case.expected_remaining_asset_keys
     )
     assert invocation.returncode == 0
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterLiveFailureLoggingTestCase(
+            "live failed asset logging", "staging", "R002", "invalid identifier CUSTOMER_ID"
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_live_failed_asset_when_event_arrives_then_logs_error_before_process_exit(
+    test_case: DagsterLiveFailureLoggingTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    release_path: Path = tmp_path / "release"
+    error_received: Event = Event()
+    logger: Mock = Mock()
+    logger.error.side_effect = lambda *_args, **_kwargs: error_received.set()
+    context: Any = type(
+        "FailedAssetContext",
+        (),
+        {"log": logger, "selected_asset_keys": set()},
+    )()
+    invocation: SqlBuildCliInvocation = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_blocking_failed_execution_event_command(
+            root=tmp_path,
+            release_path=release_path,
+        ),
+        dag_path=str(write_dagster_test_dag(root=tmp_path)),
+    ).cli(args=["build"], context=context, raise_on_error=False)
+    expected_command: str = " ".join(invocation.command)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        stream_future: Future[list[Any]] = executor.submit(lambda: list(invocation.stream()))
+        assert error_received.wait(timeout=3)
+        assert not stream_future.done()
+        release_path.touch()
+        stream_future.result(timeout=3)
+
+    logger.error.assert_called_once()
+    log_call: Any = logger.error.call_args
+    assert log_call.args == (
+        "SQLBuild asset failed: asset=%s phase=%s code=%s message=%s",
+        "model:customers",
+        test_case.expected_phase,
+        test_case.expected_error_code,
+        test_case.expected_error_message,
+    )
+    assert log_call.kwargs["extra"] == {
+        "sqlbuild_asset": "model:customers",
+        "sqlbuild_asset_kind": "model",
+        "sqlbuild_asset_name": "customers",
+        "sqlbuild_phase": "staging",
+        "sqlbuild_error_code": "R002",
+        "sqlbuild_error_message": "invalid identifier CUSTOMER_ID",
+        "sqlbuild_command": expected_command,
+        "sqlbuild_staging_relation": "analytics.customers__staging",
+        "sqlbuild_duration_ms": 123,
+        "sqlbuild_error_help": "Check the projected columns.",
+    }
 
 
 @pytest.mark.parametrize(

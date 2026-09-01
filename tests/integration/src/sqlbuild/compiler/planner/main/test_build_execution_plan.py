@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
+    CursorBounds,
     ModelPlanEntry,
     PlanOutput,
     PlanWarning,
@@ -24,20 +25,25 @@ from sqlbuild.compiler.planner.types import (
     WarningSeverity,
 )
 from sqlbuild.spec.contracts.models import (
+    CursorsConfig,
+    FutureCursorsConfig,
     LocalConfig,
     ProjectConfig,
     ResolvedTableType,
     TargetConfig,
 )
-from sqlbuild.spec.contracts.types import TableType, TableTypeSource
+from sqlbuild.spec.contracts.types import FutureCursorAction, TableType, TableTypeSource
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     BuildExecutionPlanTestCase,
     FormatPlanIntegrationTestCase,
+    FutureCursorPlannerErrorTestCase,
+    FutureCursorPlannerTestCase,
     SourceCursorInputPlanErrorTestCase,
     TableTypePlanAssemblyTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.planner.main.helpers import (
     build_execution_plan_from_kwargs,
+    build_future_cursor_project,
     build_project_from_format_test_case,
     build_project_from_source_cursor_input_test_case,
     build_project_from_test_case,
@@ -926,3 +932,91 @@ def test_given_real_plan_when_formatting_then_contains_expected_fragments(
         assert fragment in result, f"Expected '{fragment}' in output:\n{result}"
     for fragment in test_case.unexpected_format_fragments:
         assert fragment not in result, f"Did not expect '{fragment}' in output:\n{result}"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FutureCursorPlannerTestCase(
+            description="timestamp upstream is capped during real planning",
+            warehouse_type="TIMESTAMP",
+            minimum="2026-01-01 00:00:00",
+            maximum="2500-01-01 00:00:00",
+            expected_relation="raw.events",
+        ),
+        FutureCursorPlannerTestCase(
+            description="date upstream is capped during real planning",
+            warehouse_type="DATE",
+            minimum="2026-01-01",
+            maximum="2500-01-01",
+            expected_relation="raw.events",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_future_upstream_when_building_real_plan_then_cap_has_structured_evidence(
+    test_case: FutureCursorPlannerTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    project: CompiledProject = build_future_cursor_project()
+    connection.execute("CREATE SCHEMA IF NOT EXISTS raw")
+    connection.execute("CREATE SCHEMA IF NOT EXISTS staging")
+    connection.execute(f"CREATE TABLE raw.events (occurred_at {test_case.warehouse_type})")
+    connection.execute(
+        "INSERT INTO raw.events VALUES (CAST(? AS "
+        f"{test_case.warehouse_type})), (CAST(? AS {test_case.warehouse_type}))",
+        [test_case.minimum, test_case.maximum],
+    )
+
+    plan: PlanOutput = build_execution_plan_from_kwargs(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        project_config=ProjectConfig(
+            name="future_cursor",
+            adapter="duckdb",
+            cursors=CursorsConfig(future=FutureCursorsConfig("1d", FutureCursorAction.CAP)),
+        ),
+    )
+
+    bounds: CursorBounds | None = plan.model_entries[0].cursor_bounds
+    assert bounds is not None
+    assert bounds.future_safety is not None
+    assert bounds.future_safety.action == "cap"
+    assert bounds.future_safety.inputs[0].relation == test_case.expected_relation
+    assert bounds.future_safety.inputs[0].cursor_column == "occurred_at"
+    assert bounds.future_safety.determining_relation == "raw.events"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FutureCursorPlannerErrorTestCase(
+            "future planner error", "future cursor safety limit exceeded"
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_future_upstream_and_error_policy_when_building_real_plan_then_fails_closed(
+    test_case: FutureCursorPlannerErrorTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    project: CompiledProject = build_future_cursor_project()
+    connection.execute("CREATE SCHEMA IF NOT EXISTS raw")
+    connection.execute("CREATE SCHEMA IF NOT EXISTS staging")
+    connection.execute("CREATE TABLE raw.events (occurred_at TIMESTAMP)")
+    connection.execute("INSERT INTO raw.events VALUES (TIMESTAMP '2500-01-01')")
+
+    with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):
+        build_execution_plan_from_kwargs(
+            project=project,
+            adapter=adapter,
+            connection=connection,
+            project_config=ProjectConfig(
+                name="future_cursor",
+                adapter="duckdb",
+                cursors=CursorsConfig(future=FutureCursorsConfig("1d", FutureCursorAction.ERROR)),
+            ),
+        )

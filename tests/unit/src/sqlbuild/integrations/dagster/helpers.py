@@ -341,6 +341,58 @@ def write_blocking_execution_event_command(
     return ["python", str(script_path)]
 
 
+def write_blocking_failed_execution_event_command(*, root: Path, release_path: Path) -> list[str]:
+    asset: dict[str, object] = {
+        "kind": "model",
+        "name": "customers",
+        "status": "failed",
+        "failed_phase": "staging",
+        "error_code": "R002",
+        "error_message": "invalid identifier CUSTOMER_ID",
+        "error_help": "Check the projected columns.",
+        "staging_relation": "analytics.customers__staging",
+        "duration_ms": 123,
+    }
+    event_payload: str = json.dumps(
+        {"version": 1, "command": "build", "event": "asset", "asset": asset}
+    )
+    execution_payload: str = json.dumps(
+        {
+            "version": 1,
+            "command": "build",
+            "status": "failed",
+            "summary": {"failure_count": 1},
+            "assets": [asset],
+            "checks": [],
+        }
+    )
+    script_path: Path = root / "blocking_failed_build_event.py"
+    script_path.write_text(
+        "\n".join(
+            (
+                "from pathlib import Path",
+                "import os",
+                "import sys",
+                "import time",
+                "event_path = Path(os.environ['SQLBUILD_EXECUTION_EVENT_PATH'])",
+                "with event_path.open('a', encoding='utf-8') as stream:",
+                f"    stream.write({event_payload + chr(10)!r})",
+                f"    stream.write({event_payload + chr(10)!r})",
+                "    stream.flush()",
+                f"release_path = Path({str(release_path)!r})",
+                "while not release_path.exists():",
+                "    time.sleep(0.01)",
+                "json_path = Path(sys.argv[sys.argv.index('--json-output') + 1])",
+                f"json_path.write_text({execution_payload!r}, encoding='utf-8')",
+                "raise SystemExit(1)",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return ["python", str(script_path)]
+
+
 def write_dagster_test_dag(*, root: Path) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     dag_path: Path = root / "sqlbuild_dag.json"

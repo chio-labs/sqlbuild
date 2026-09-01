@@ -16,7 +16,13 @@ from sqlbuild.compiler.planner.main.execution.bounded_cursor_override import (
     resolve_bounded_cursor_override,
 )
 from sqlbuild.compiler.planner.main.execution.cursor_replay_policy import apply_cursor_replay_policy
-from sqlbuild.compiler.planner.models import CursorBounds, CursorInputRelation, ModelPlanEntry
+from sqlbuild.compiler.planner.main.execution.future_cursor_safety import apply_future_cursor_safety
+from sqlbuild.compiler.planner.models import (
+    CursorBounds,
+    CursorInputEvidence,
+    CursorInputRelation,
+    ModelPlanEntry,
+)
 from sqlbuild.compiler.planner.types import BackfillAction, CursorGrain, CursorType
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run.models import RuntimeCursorSpec
@@ -66,6 +72,8 @@ def build_runtime_cursor_spec(
             entry.backfill.duration if entry.backfill.action == BackfillAction.BOUNDED else None
         ),
         read_destination_cursor=read_destination_cursor,
+        future_cursor_config=entry.future_cursor_config,
+        invocation_time=entry.invocation_time,
     )
 
 
@@ -118,6 +126,7 @@ def resolve_runtime_cursor_bounds(
     read_minimum: bool = target_max_raw is None
     upstream_mins: list[object] = []
     upstream_maxes: list[object] = []
+    input_evidence: list[CursorInputEvidence] = []
     input_index: int
     physical_input: tuple[str, str]
     for input_index, physical_input in enumerate(physical_inputs, start=1):
@@ -137,6 +146,20 @@ def resolve_runtime_cursor_bounds(
         if minimum is not None:
             upstream_mins.append(minimum)
         upstream_maxes.append(maximum)
+        normalized_maximum: str | None = _normalize_bound(value=maximum, is_end=False)
+        if normalized_maximum is not None:
+            input_evidence.append(
+                CursorInputEvidence(
+                    relation=physical_input[0],
+                    cursor_column=physical_input[1],
+                    minimum=(
+                        _normalize_bound(value=minimum, is_end=False)
+                        if minimum is not None
+                        else None
+                    ),
+                    maximum=normalized_maximum,
+                )
+            )
     if not upstream_maxes:
         return None
     effective_grain: str | None = resolve_effective_timestamp_grain(
@@ -201,7 +224,17 @@ def resolve_runtime_cursor_bounds(
         backfill_duration=spec.backfill_duration,
         has_start_override=spec.start_cursor_override is not None,
     )
-    return CursorBounds(start=start, end=end)
+    return apply_future_cursor_safety(
+        bounds=CursorBounds(start=start, end=end),
+        cursor_type=cursor_type,
+        cursor_grain=effective_grain,
+        config=spec.future_cursor_config,
+        invocation_time=spec.invocation_time,
+        has_complete_override=(
+            spec.start_cursor_override is not None and spec.end_cursor_override is not None
+        ),
+        input_evidence=tuple(input_evidence),
+    )
 
 
 def _query_watermark_raw(

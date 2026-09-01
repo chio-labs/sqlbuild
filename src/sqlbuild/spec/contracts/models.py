@@ -8,6 +8,7 @@ from pathlib import Path
 
 from sqlbuild.cost.constants import DEFAULT_USD_PER_CREDIT
 from sqlbuild.spec.contracts.types import (
+    FutureCursorAction,
     SourceFreshnessStrategy,
     SourceFreshnessValueKind,
     SourceWriteStrategy,
@@ -191,6 +192,21 @@ class ConstantsConfig:
 
 
 @dataclass(frozen=True)
+class FutureCursorsConfig:
+    """Safety policy for automatically discovered future cursor watermarks."""
+
+    max_distance: str | None = None
+    action: FutureCursorAction = FutureCursorAction.ERROR
+
+
+@dataclass(frozen=True)
+class CursorsConfig:
+    """Project-wide cursor safety configuration."""
+
+    future: FutureCursorsConfig = field(default_factory=FutureCursorsConfig)
+
+
+@dataclass(frozen=True)
 class DefaultsConfig:
     """Project-wide resource defaults."""
 
@@ -295,6 +311,7 @@ class ProjectConfig:
     scopes: ScopesConfig = field(default_factory=ScopesConfig)
     cost: CostConfig = field(default_factory=CostConfig)
     constants: ConstantsConfig = field(default_factory=ConstantsConfig)
+    cursors: CursorsConfig = field(default_factory=CursorsConfig)
     defaults: DefaultsConfig = field(default_factory=DefaultsConfig)
     materialization_defaults: MaterializationDefaultsConfig = field(
         default_factory=MaterializationDefaultsConfig

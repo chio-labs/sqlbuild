@@ -13,6 +13,10 @@ from sqlbuild.cli.output._helpers.execution_protocol_v1 import (
     _format_sql_test_checks,
 )
 from sqlbuild.compiler.discovery.models import SqlTestParameterDeclaration
+from sqlbuild.compiler.planner.models import (
+    CursorInputEvidence,
+    FutureCursorSafetyEvidence,
+)
 from sqlbuild.executor.run.models import (
     MicrobatchAccountingInterval,
     ModelExecutionResult,
@@ -20,9 +24,11 @@ from sqlbuild.executor.run.models import (
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.spec.contracts.types import FutureCursorAction
 from sqlbuild.sql_values.models import SqlLogicalType, SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 from tests.unit.src.sqlbuild.cli.output._helpers._test_types import (
+    FutureCursorExecutionProtocolTestCase,
     MicrobatchExecutionProtocolTestCase,
     SqlTestCaseExecutionProtocolTestCase,
 )
@@ -101,6 +107,78 @@ def test_given_microbatch_result_when_formatting_json_then_interval_provenance_i
                 "model_version_hash": None,
                 "completion_type": None,
                 "event_id": None,
+            }
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [FutureCursorExecutionProtocolTestCase("structured future cursor evidence", "cap")],
+    ids=lambda case: case.description,
+)
+def test_given_future_cursor_cap_when_formatting_execution_json_then_structured_evidence_is_exposed(
+    test_case: FutureCursorExecutionProtocolTestCase,
+) -> None:
+    evidence: FutureCursorSafetyEvidence = FutureCursorSafetyEvidence(
+        action=FutureCursorAction.CAP,
+        max_distance="2d",
+        invocation_time="2026-09-01T12:00:00+00:00",
+        discovered_start="2500-01-01T00:00:00",
+        discovered_end="2500-01-01T00:00:01",
+        applied_start="2500-01-01T00:00:00",
+        applied_end="2026-09-03T12:00:00",
+        maximum_allowed_start="2026-09-03T12:00:00",
+        maximum_allowed_end="2026-09-03T12:00:01",
+        future_start_detected=True,
+        future_end_detected=True,
+        determining_relation="raw.events",
+        determining_cursor_column="occurred_at",
+        inputs=(
+            CursorInputEvidence(
+                relation="raw.events",
+                cursor_column="occurred_at",
+                minimum=None,
+                maximum="2500-01-01T00:00:00",
+            ),
+        ),
+    )
+    result: ModelExecutionResult = ModelExecutionResult(
+        model_name="orders",
+        status=ExecutionStatus.SUCCESS,
+        future_cursor_safety=evidence,
+    )
+
+    asset: dict[str, object] = _format_model_assets(results=(result,), plan=None)[0]
+
+    assert asset["future_cursor_safety"] == {
+        "action": test_case.expected_action,
+        "max_distance": "2d",
+        "invocation_time": "2026-09-01T12:00:00+00:00",
+        "discovered_bounds": {
+            "start": "2500-01-01T00:00:00",
+            "end": "2500-01-01T00:00:01",
+        },
+        "applied_bounds": {
+            "start": "2500-01-01T00:00:00",
+            "end": "2026-09-03T12:00:00",
+        },
+        "maximum_allowed_bounds": {
+            "start": "2026-09-03T12:00:00",
+            "end": "2026-09-03T12:00:01",
+        },
+        "future_start_detected": True,
+        "future_end_detected": True,
+        "determining_input": {
+            "relation": "raw.events",
+            "cursor_column": "occurred_at",
+        },
+        "inputs": [
+            {
+                "relation": "raw.events",
+                "cursor_column": "occurred_at",
+                "minimum": None,
+                "maximum": "2500-01-01T00:00:00",
             }
         ],
     }

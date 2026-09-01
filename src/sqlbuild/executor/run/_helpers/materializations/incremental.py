@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -14,6 +14,7 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
+from sqlbuild.compiler.planner.main.execution.future_cursor_warning import future_cursor_cap_warning
 from sqlbuild.compiler.planner.models import CursorBounds, ModelPlanEntry
 from sqlbuild.compiler.planner.types import IncrementalStrategy, OnSchemaChange
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
@@ -86,17 +87,32 @@ def execute_incremental_entry(
         schema=target_schema,
         name=delta_table,
     )
-    seed_table: str = f"{target_table}__reuse_seed"
-    seed_qualified: str = resolve_qualified_name_parts(
-        adapter=adapter,
-        database=target_database,
-        schema=target_schema,
-        name=seed_table,
-    )
     warnings: list[str] = []
     audit_results: list[AuditExecutionResult] = []
     hook_results: list[HookExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()
+
+    try:
+        preparation: _DeltaPreparation = _resolve_incremental_cursor_bounds(
+            context=context,
+            target_database=target_database,
+            target_schema=target_schema,
+            target_table=target_table,
+            target_qualified=target_qualified,
+        )
+    except Exception as exc:
+        return build_failed_result(
+            entry=entry,
+            phase=ExecutionPhase.STAGING,
+            error=str(exc),
+            warnings=warnings,
+            audit_results=audit_results,
+            statement_recorder=statement_recorder,
+            hook_results=hook_results,
+        )
+    context = _context_with_runtime_cursor(context=context, preparation=preparation)
+    entry = context.entry
+    warnings.extend(_future_cursor_warnings(entry.cursor_bounds))
 
     pre_hook_exit: ModelExecutionResult | None = run_pre_hook_phase(
         context=context,
@@ -109,14 +125,12 @@ def execute_incremental_entry(
         return pre_hook_exit
 
     try:
-        preparation: _DeltaPreparation = _prepare_delta_relation(
+        _prepare_delta_relation(
             context=context,
             target_database=target_database,
             target_schema=target_schema,
-            target_table=target_table,
-            target_qualified=target_qualified,
-            seed_qualified=seed_qualified,
             delta_qualified=delta_qualified,
+            preparation=preparation,
             statement_recorder=statement_recorder,
         )
     except Exception as exc:
@@ -342,6 +356,13 @@ def execute_incremental_entry(
         model_name=entry.name,
         status=ExecutionStatus.SUCCESS,
         promoted_relation=target_qualified,
+        cursor_range_start=cursor_start,
+        cursor_range_end=cursor_end,
+        cursor_type=entry.cursor_type,
+        cursor_grain=entry.cursor_grain,
+        future_cursor_safety=(
+            effective_bounds.future_safety if effective_bounds is not None else None
+        ),
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
         lifecycle_events=statement_recorder.snapshot(),
@@ -354,47 +375,20 @@ def _prepare_delta_relation(
     context: ModelMaterializationContext,
     target_database: str | None,
     target_schema: str | None,
-    target_table: str,
-    target_qualified: str,
-    seed_qualified: str,
     delta_qualified: str,
+    preparation: _DeltaPreparation,
     statement_recorder: StatementRecorder,
-) -> _DeltaPreparation:
-    """Seed reuse, resolve runtime cursors, and create the delta relation."""
+) -> None:
+    """Create the delta relation after cursor safety has resolved."""
 
-    entry: ModelPlanEntry = context.entry
     adapter: BaseAdapter = context.adapter
     connection: Any = context.connection
-    runtime_cursor_bounds: CursorBounds | None = None
-    resolved_sql: str = entry.resolved_sql
     if not context.schema_prepared:
         adapter.ensure_schema(
             connection=connection,
             database=target_database,
             schema=target_schema,
             statement_recorder=statement_recorder,
-        )
-    if has_runtime_owned_cursor_watermarks(
-        entry.cursor_input_relations
-    ) and not has_authoritative_cursor_override(entry=entry):
-        if entry.cursor_column is None:
-            raise ExecutorInputError("runtime-owned cursor resolution requires cursor_column")
-        runtime_cursor_bounds = resolve_runtime_cursor_bounds(
-            adapter=adapter,
-            connection=connection,
-            target_relation=target_qualified,
-            target_database=target_database,
-            target_schema=target_schema,
-            target_name=target_table,
-            spec=build_runtime_cursor_spec(entry=entry),
-            watermark_resolver=context.watermark_resolver,
-        )
-        if runtime_cursor_bounds is None:
-            raise ExecutorInputError(
-                f"runtime cursor bounds could not be resolved for '{entry.name}'"
-            )
-        resolved_sql = substitute_cursor_sentinels(
-            sql=entry.resolved_sql, bounds=runtime_cursor_bounds
         )
     with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_delta"):
         adapter.drop(
@@ -406,13 +400,62 @@ def _prepare_delta_relation(
         adapter.create_table_as(
             connection=connection,
             destination=delta_qualified,
-            sql=resolved_sql,
+            sql=preparation.resolved_sql,
             statement_recorder=statement_recorder,
         )
+
+
+def _resolve_incremental_cursor_bounds(
+    *,
+    context: ModelMaterializationContext,
+    target_database: str | None,
+    target_schema: str | None,
+    target_table: str,
+    target_qualified: str,
+) -> _DeltaPreparation:
+    """Resolve runtime cursor policy before pre-hook execution."""
+
+    entry: ModelPlanEntry = context.entry
+    if not has_runtime_owned_cursor_watermarks(
+        entry.cursor_input_relations
+    ) or has_authoritative_cursor_override(entry=entry):
+        return _DeltaPreparation(resolved_sql=entry.resolved_sql, runtime_cursor_bounds=None)
+    if entry.cursor_column is None:
+        raise ExecutorInputError("runtime-owned cursor resolution requires cursor_column")
+    runtime_cursor_bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
+        adapter=context.adapter,
+        connection=context.connection,
+        target_relation=target_qualified,
+        target_database=target_database,
+        target_schema=target_schema,
+        target_name=target_table,
+        spec=build_runtime_cursor_spec(entry=entry),
+        watermark_resolver=context.watermark_resolver,
+    )
+    if runtime_cursor_bounds is None:
+        raise ExecutorInputError(f"runtime cursor bounds could not be resolved for '{entry.name}'")
     return _DeltaPreparation(
-        resolved_sql=resolved_sql,
+        resolved_sql=substitute_cursor_sentinels(
+            sql=entry.resolved_sql, bounds=runtime_cursor_bounds
+        ),
         runtime_cursor_bounds=runtime_cursor_bounds,
     )
+
+
+def _context_with_runtime_cursor(
+    *, context: ModelMaterializationContext, preparation: _DeltaPreparation
+) -> ModelMaterializationContext:
+    if preparation.runtime_cursor_bounds is None:
+        return context
+    return replace(
+        context,
+        entry=replace(context.entry, cursor_bounds=preparation.runtime_cursor_bounds),
+    )
+
+
+def _future_cursor_warnings(bounds: CursorBounds | None) -> list[str]:
+    warning: str | None = future_cursor_cap_warning(bounds)
+    return [warning] if warning is not None else []
 
 
 def _apply_schema_change(
