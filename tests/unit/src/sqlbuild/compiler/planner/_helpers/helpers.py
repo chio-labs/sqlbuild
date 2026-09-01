@@ -904,6 +904,8 @@ def build_transitive_watermark_models(
         query_sql='SELECT * FROM __source("raw_orders")',
         references=(CompileSqlReference(ref_kind=SqlReferenceKind.SOURCE, ref_name="raw_orders"),),
         config=CompileModelConfig(values={"materialized": "view"}),
+        inferred_columns=(),
+        fast_lineage_has_star=True,
         destination=CompiledRelationLocation(
             database=None,
             schema="staging",

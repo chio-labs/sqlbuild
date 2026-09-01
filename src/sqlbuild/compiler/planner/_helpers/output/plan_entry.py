@@ -1146,9 +1146,12 @@ def validate_source_cursor_input_columns(
             declared_names: tuple[str, ...] = (
                 _model_declared_column_names(upstream_model)
                 if has_enforced_contract
-                else tuple(column.name for column in (upstream_model.inferred_columns or ()))
+                else tuple(column.name for column in upstream_model.inferred_columns or ())
             )
-            if not has_enforced_contract and upstream_model.inferred_columns is None:
+            has_reliable_inferred_output: bool = bool(upstream_model.inferred_columns) and not (
+                upstream_model.fast_lineage_has_star
+            )
+            if not has_enforced_contract and not has_reliable_inferred_output:
                 continue
             if input_cursor_column.lower() in {name.lower() for name in declared_names}:
                 continue

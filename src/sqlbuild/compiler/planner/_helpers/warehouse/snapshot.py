@@ -910,7 +910,7 @@ def _validate_watermark_contract_column(
                 declared_names = tuple(
                     column.name for column in upstream_model.schema_entry.columns
                 )
-        elif upstream_model.inferred_columns is not None:
+        elif upstream_model.inferred_columns and not upstream_model.fast_lineage_has_star:
             declared_names = tuple(column.name for column in upstream_model.inferred_columns)
         else:
             return
