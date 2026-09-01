@@ -61,6 +61,8 @@ class MicrobatchSuccessTestCase:
     hook_functions: tuple[object, ...] = field(default_factory=tuple)
     on_progress: Callable[[str], None] | None = None
     expected_batch_count: int | None = None
+    start_cursor_override: str | None = None
+    end_cursor_override: str | None = None
 
 
 @dataclass(frozen=True)
@@ -99,3 +101,5 @@ class MicrobatchFailureTestCase:
     )
     expected_delta_retained: bool = False
     hook_functions: tuple[object, ...] = field(default_factory=tuple)
+    start_cursor_override: str | None = None
+    end_cursor_override: str | None = None

@@ -4,7 +4,7 @@ MODEL (
   cursor activity_hour,
   cursor_type timestamp,
   cursor_grain hour,
-  cursor_inputs (
+  cursor_filter_inputs (
     fact_orders ordered_at,
   ),
   incremental_mode microbatch,

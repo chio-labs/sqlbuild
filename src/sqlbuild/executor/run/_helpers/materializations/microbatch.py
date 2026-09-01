@@ -28,7 +28,6 @@ from sqlbuild.compiler.planner.main.execution.effective_microbatch_batch_size im
 from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
-    CursorInputRelation,
     Duration,
     ModelPlanEntry,
 )
@@ -68,7 +67,8 @@ from sqlbuild.executor.run._helpers.materializations.incremental import (
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     build_runtime_cursor_spec,
-    has_model_backed_cursor_inputs,
+    has_authoritative_cursor_override,
+    has_runtime_owned_cursor_watermarks,
     resolve_effective_timestamp_grain,
     resolve_runtime_cursor_bounds,
     substitute_cursor_sentinels,
@@ -246,6 +246,7 @@ def execute_microbatch_entry(  # noqa: PLR0915
         warnings=state.warnings,
         audit_results=state.audit_results,
         statement_recorder=state.statement_recorder,
+        on_progress=on_progress,
     )
     if batch_plan.early_exit is not None:
         return batch_plan.early_exit
@@ -2530,14 +2531,20 @@ def _plan_microbatch_windows(
     warnings: list[str],
     audit_results: list[AuditExecutionResult],
     statement_recorder: StatementRecorder,
+    on_progress: Callable[[str], None] | None,
 ) -> _MicrobatchPlan:
     """Resolve the microbatch cursor range and compute batch windows."""
 
     entry: ModelPlanEntry = context.entry
     adapter: BaseAdapter = context.adapter
     connection: Any = context.connection
-    runtime_owned_cursor_bounds: bool = has_model_backed_cursor_inputs(entry.cursor_input_relations)
-    runtime_discovery: bool = runtime_owned_cursor_bounds or is_full_refresh
+    runtime_owned_cursor_bounds: bool = has_runtime_owned_cursor_watermarks(
+        entry.cursor_input_relations
+    )
+    has_authoritative_override: bool = has_authoritative_cursor_override(entry=entry)
+    runtime_discovery: bool = not has_authoritative_override and (
+        runtime_owned_cursor_bounds or is_full_refresh
+    )
     microbatch_range: CursorBounds | None = entry.microbatch_range
     if runtime_discovery:
         if entry.cursor_column is None:
@@ -2563,6 +2570,8 @@ def _plan_microbatch_windows(
                     entry=entry,
                     read_destination_cursor=not is_full_refresh,
                 ),
+                on_progress=on_progress,
+                watermark_resolver=context.watermark_resolver,
             )
         except Exception as exc:
             return _MicrobatchPlan(
@@ -2701,60 +2710,6 @@ def _substitute_sentinels(
     )
 
 
-def _advance_discovered_end_bound(*, raw_max: Any) -> str:
-    """Step the discovered end bound past MAX(cursor) so the final value is included."""
-
-    if isinstance(raw_max, datetime):
-        return (raw_max + timedelta(seconds=1)).isoformat()
-    if isinstance(raw_max, date):
-        return (raw_max + timedelta(days=1)).isoformat()
-    if isinstance(raw_max, (int, Decimal)):
-        return str(int(raw_max) + 1)
-    raise ExecutorInputError(
-        f"microbatch cursor discovery returned an unsupported cursor type "
-        f"'{type(raw_max).__name__}'; the end bound cannot be advanced safely, so the "
-        "newest cursor value would be dropped from every run"
-    )
-
-
-def _discover_cursor_range(
-    *,
-    adapter: BaseAdapter,
-    connection: Any,
-    cursor_type: str | None,
-    cursor_start: str | None,
-    cursor_input_relations: tuple[CursorInputRelation, ...],
-) -> CursorBounds | None:
-    """Discover MIN/MAX cursor range from cursor-bearing input relations."""
-
-    if not cursor_input_relations:
-        return None
-    parts: list[str] = []
-    cursor_input: CursorInputRelation
-    for cursor_input in cursor_input_relations:
-        parts.append(
-            f"SELECT MIN({cursor_input.cursor_column}) AS _min, "
-            f"MAX({cursor_input.cursor_column}) AS _max FROM {cursor_input.relation}"
-        )
-    discovery_sql: str = "SELECT MIN(_min), MIN(_max) FROM (" + " UNION ALL ".join(parts) + ")"
-    cursor: Any = adapter.execute(connection=connection, sql=discovery_sql)
-    row: Any = cursor.fetchone()
-    if row is None or row[0] is None or row[1] is None:
-        return None
-    raw_min: Any = row[0]
-    raw_max: Any = row[1]
-    min_val: str = raw_min.isoformat() if isinstance(raw_min, datetime) else str(raw_min)
-    max_val: str = _advance_discovered_end_bound(raw_max=raw_max)
-    if cursor_start is not None:
-        if cursor_type == CursorType.TIMESTAMP:
-            start_dt: datetime = datetime.fromisoformat(min_val)
-            floor_dt: datetime = datetime.fromisoformat(cursor_start)
-            min_val = max(start_dt, floor_dt).isoformat()
-        elif cursor_type == CursorType.INTEGER:
-            min_val = str(max(int(min_val), int(cursor_start)))
-    return CursorBounds(start=min_val, end=max_val)
-
-
 def _validate_cursor_output_columns(
     *,
     entry: ModelPlanEntry,
@@ -2772,7 +2727,7 @@ def _validate_cursor_output_columns(
         return
     raise ExecutorInputError(
         f"microbatch cursor column '{cursor_column}' is not produced by model output; "
-        "use cursor_inputs for upstream cursor columns and set cursor to the target output "
+        "use cursor_filter_inputs for upstream cursor columns and set cursor to the target output "
         "cursor column"
     )
 

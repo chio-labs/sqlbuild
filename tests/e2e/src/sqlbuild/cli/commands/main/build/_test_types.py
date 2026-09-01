@@ -43,6 +43,24 @@ class ReusableModelSchemaBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SeedWatermarkBuildE2ETestCase:
+    description: str
+    initial_seed: str
+    changed_seed: str
+    expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_changed_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class LoaderWatermarkBuildE2ETestCase:
+    description: str
+    initial_maximum: int
+    changed_maximum: int
+    expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_changed_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class EnumContractBuildE2ETestCase:
     """Test case for enum-backed contract enforcement."""
 
@@ -735,6 +753,8 @@ class CliFailureBuildE2ETestCase:
     command: tuple[str, ...]
     expected_exit_code: int
     expected_stderr_fragments: tuple[str, ...]
+    verification_sql: str | None = None
+    expected_verification_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
     expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
     pre_commands: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
 

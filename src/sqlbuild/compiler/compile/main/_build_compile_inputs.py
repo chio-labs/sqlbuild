@@ -29,6 +29,7 @@ from sqlbuild.compiler.compile._helpers.attachment.sql_tests import (
     build_test_inputs,
 )
 from sqlbuild.compiler.compile._helpers.attachment.target import build_compile_target_context
+from sqlbuild.compiler.compile._helpers.config.deprecation import build_cursor_alias_diagnostics
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_public_declaration_indexes,
     build_public_model_schema_index,
@@ -182,6 +183,7 @@ def build_compile_inputs(
     generic_audit_definitions, diagnostics = build_builtin_audit_resolution(
         project_audit_definitions
     )
+    diagnostics = (*diagnostics, *model_build.diagnostics)
     audit_inputs: tuple[CompileAuditInput, ...] = build_audit_inputs(
         discovered_inputs=discovered_inputs,
         effective_settings=effective_settings,
@@ -299,4 +301,5 @@ def _build_models_with_declarations(
             public_enums=declarations.enums,
             public_constants=declarations.constants,
         ),
+        diagnostics=build_cursor_alias_diagnostics(model_inputs=model_inputs),
     )

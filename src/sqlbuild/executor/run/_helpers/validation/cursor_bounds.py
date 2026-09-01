@@ -2,18 +2,25 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+import time
+from collections.abc import Callable
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from functools import partial
 from typing import Any, cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
+from sqlbuild.compiler.planner.main.execution.bounded_cursor_override import (
+    resolve_bounded_cursor_override,
+)
 from sqlbuild.compiler.planner.main.execution.cursor_replay_policy import apply_cursor_replay_policy
 from sqlbuild.compiler.planner.models import CursorBounds, CursorInputRelation, ModelPlanEntry
 from sqlbuild.compiler.planner.types import BackfillAction, CursorGrain, CursorType
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run.models import RuntimeCursorSpec
+from sqlbuild.executor.run.types import WatermarkResolver
 
 _TIMESTAMP_GRAIN_ORDER: dict[str, int] = {
     CursorGrain.SECOND: 0,
@@ -25,12 +32,18 @@ _TIMESTAMP_GRAIN_ORDER: dict[str, int] = {
 }
 
 
-def has_model_backed_cursor_inputs(
+def has_runtime_owned_cursor_watermarks(
     cursor_input_relations: tuple[CursorInputRelation, ...],
 ) -> bool:
-    """Return whether any cursor input relation is backed by another model."""
+    """Return whether any cursor input is produced by this invocation."""
 
-    return any(relation.is_model_backed for relation in cursor_input_relations)
+    return any(relation.is_runtime_owned for relation in cursor_input_relations)
+
+
+def has_authoritative_cursor_override(*, entry: ModelPlanEntry) -> bool:
+    """Return whether complete operator bounds supersede runtime discovery."""
+
+    return entry.start_cursor_override is not None and entry.end_cursor_override is not None
 
 
 def build_runtime_cursor_spec(
@@ -65,18 +78,29 @@ def resolve_runtime_cursor_bounds(
     target_schema: str | None,
     target_name: str,
     spec: RuntimeCursorSpec,
+    on_progress: Callable[[str], None] | None = None,
+    watermark_resolver: WatermarkResolver | None = None,
 ) -> CursorBounds | None:
     """Resolve concrete runtime cursor bounds from target and upstream relations."""
 
     cursor_type: str | None = spec.cursor_type
-    upstream_parts: list[str] = []
-    cursor_input: CursorInputRelation
-    for cursor_input in spec.cursor_input_relations:
-        upstream_parts.append(
-            f"SELECT MIN({cursor_input.cursor_column}) AS _min, "
-            f"MAX({cursor_input.cursor_column}) AS _max FROM {cursor_input.relation}"
+    bounded_override: CursorBounds | None = resolve_bounded_cursor_override(
+        start_cursor_override=spec.start_cursor_override,
+        end_cursor_override=spec.end_cursor_override,
+        cursor_type=cursor_type,
+        cursor_grain=spec.cursor_grain,
+    )
+    if bounded_override is not None:
+        return bounded_override
+    physical_inputs: tuple[tuple[str, str], ...] = tuple(
+        sorted(
+            {
+                (cursor_input.relation, cursor_input.cursor_column)
+                for cursor_input in spec.cursor_input_relations
+            }
         )
-    if not upstream_parts:
+    )
+    if not physical_inputs:
         return None
 
     target_max_raw: object | None = None
@@ -91,24 +115,53 @@ def resolve_runtime_cursor_bounds(
             cursor_column=spec.cursor_column,
         )
 
-    derived_alias: str = " AS __cursor_bounds" if adapter.requires_derived_table_aliases() else ""
-    sql: str = (
-        "SELECT MIN(_min), CASE WHEN COUNT(*) = COUNT(_max) THEN MIN(_max) END FROM ("
-        + " UNION ALL ".join(upstream_parts)
-        + f"){derived_alias}"
-    )
-    cursor: Any = adapter.execute(connection=connection, sql=sql)
-    row: Any = cursor.fetchone()
-    if row is None or row[1] is None:
+    read_minimum: bool = target_max_raw is None
+    upstream_mins: list[object] = []
+    upstream_maxes: list[object] = []
+    input_index: int
+    physical_input: tuple[str, str]
+    for input_index, physical_input in enumerate(physical_inputs, start=1):
+        minimum, maximum = _query_watermark_raw(
+            adapter=adapter,
+            connection=connection,
+            relation=physical_input[0],
+            cursor_column=physical_input[1],
+            read_minimum=read_minimum,
+            query_index=input_index,
+            total=len(physical_inputs),
+            on_progress=on_progress,
+            watermark_resolver=watermark_resolver,
+        )
+        if maximum is None or (read_minimum and minimum is None):
+            return None
+        if minimum is not None:
+            upstream_mins.append(minimum)
+        upstream_maxes.append(maximum)
+    if not upstream_maxes:
         return None
-
     effective_grain: str | None = resolve_effective_timestamp_grain(
         cursor_type=cursor_type,
         downstream_grain=spec.cursor_grain,
         cursor_input_relations=spec.cursor_input_relations,
     )
+    upstream_min_raw: object | None = (
+        _minimum_bound_raw(
+            values=upstream_mins,
+            cursor_type=cursor_type,
+            effective_grain=effective_grain,
+        )
+        if upstream_mins
+        else None
+    )
+    upstream_max_raw: object = _minimum_bound_raw(
+        values=upstream_maxes,
+        cursor_type=cursor_type,
+        effective_grain=effective_grain,
+    )
     if cursor_type == CursorType.TIMESTAMP and effective_grain is not None:
-        start_raw: object | None = target_max_raw if target_max_raw is not None else row[0]
+        start_raw: object | None = (
+            target_max_raw if target_max_raw is not None else upstream_min_raw
+        )
         if start_raw is None:
             return None
         start: str | None = _normalize_bound(
@@ -116,7 +169,7 @@ def resolve_runtime_cursor_bounds(
         )
         end: str | None = _normalize_bound(
             value=_increment_timestamp_bound(
-                value=_floor_timestamp_bound(value=row[1], grain=effective_grain),
+                value=_floor_timestamp_bound(value=upstream_max_raw, grain=effective_grain),
                 grain=effective_grain,
             ),
             is_end=False,
@@ -125,9 +178,9 @@ def resolve_runtime_cursor_bounds(
         start: str | None = (
             _normalize_bound(value=target_max_raw, is_end=False)
             if target_max_raw is not None
-            else _normalize_bound(value=row[0], is_end=False)
+            else _normalize_bound(value=upstream_min_raw, is_end=False)
         )
-        end: str | None = _normalize_bound(value=row[1], is_end=True)
+        end: str | None = _normalize_bound(value=upstream_max_raw, is_end=True)
     if start is None or end is None:
         return None
     if spec.end_cursor_override is not None:
@@ -149,6 +202,107 @@ def resolve_runtime_cursor_bounds(
         has_start_override=spec.start_cursor_override is not None,
     )
     return CursorBounds(start=start, end=end)
+
+
+def _query_watermark_raw(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    relation: str,
+    cursor_column: str,
+    read_minimum: bool,
+    query_index: int,
+    total: int,
+    on_progress: Callable[[str], None] | None,
+    watermark_resolver: WatermarkResolver | None,
+) -> tuple[object | None, object | None]:
+    """Resolve one physical watermark through the optional run-scoped cache."""
+
+    query: Callable[[], tuple[object | None, object | None]] = partial(
+        _execute_watermark_query,
+        adapter=adapter,
+        connection=connection,
+        relation=relation,
+        cursor_column=cursor_column,
+        read_minimum=read_minimum,
+        query_index=query_index,
+        total=total,
+        on_progress=on_progress,
+    )
+    if watermark_resolver is None:
+        return query()
+    return watermark_resolver.resolve(
+        relation=relation,
+        cursor_column=cursor_column,
+        read_minimum=read_minimum,
+        query=query,
+    )
+
+
+def _execute_watermark_query(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    relation: str,
+    cursor_column: str,
+    read_minimum: bool,
+    query_index: int,
+    total: int,
+    on_progress: Callable[[str], None] | None,
+) -> tuple[object | None, object | None]:
+    """Execute one optimizer-friendly physical watermark statement."""
+
+    bounds: str = "min,max" if read_minimum else "max"
+    identity: str = f"({query_index}/{total}): {relation}.{cursor_column} [{bounds}]"
+    select_sql: str = (
+        f"MIN({cursor_column}), MAX({cursor_column})" if read_minimum else f"MAX({cursor_column})"
+    )
+    sql: str = f"SELECT {select_sql} FROM {relation}"
+    if on_progress is not None:
+        on_progress(f"Inspecting runtime cursor watermark {identity}...")
+    query_start: float = time.monotonic()
+    try:
+        cursor: Any = adapter.execute(connection=connection, sql=sql)
+        row: Any = cursor.fetchone()
+    except Exception as error:
+        elapsed: float = time.monotonic() - query_start
+        if on_progress is not None:
+            on_progress(f"Failed runtime cursor watermark {identity} ({elapsed:.2f}s): {error}")
+        raise
+    elapsed = time.monotonic() - query_start
+    if on_progress is not None:
+        on_progress(f"Inspected runtime cursor watermark {identity} ({elapsed:.2f}s)")
+    if row is None:
+        return None, None
+    if read_minimum:
+        return row[0], row[1]
+    return None, row[0]
+
+
+def _minimum_bound_raw(
+    *, values: list[object], cursor_type: str | None, effective_grain: str | None
+) -> object:
+    """Choose a conservative minimum across compatible raw watermark values."""
+
+    if cursor_type != CursorType.TIMESTAMP:
+        return min(values)
+    grain: str = effective_grain or CursorGrain.SECOND
+    return min(values, key=lambda value: _timestamp_comparison_key(value=value, grain=grain))
+
+
+def _timestamp_comparison_key(*, value: object, grain: str) -> datetime:
+    """Normalize DATE and TIMESTAMP values to one grain-aware comparison domain."""
+
+    floored: object = _floor_timestamp_bound(value=value, grain=grain)
+    if _is_plain_date(floored):
+        return datetime.combine(cast(date, floored), datetime.min.time())
+    if isinstance(floored, datetime):
+        if floored.tzinfo is not None:
+            return floored.astimezone(UTC).replace(tzinfo=None)
+        return floored
+    raise ExecutorInputError(
+        f"runtime timestamp watermark returned incompatible value type '{type(value).__name__}'"
+    )
 
 
 def resolve_effective_timestamp_grain(

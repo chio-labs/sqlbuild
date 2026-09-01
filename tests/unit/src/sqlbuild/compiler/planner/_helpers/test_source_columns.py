@@ -8,27 +8,39 @@ import pytest
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
+    _build_cursor_input_relations,
+    _runtime_cursor_producer_names,
     build_planner_relations_context,
     gather_source_columns,
     validate_source_cursor_input_columns,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.models import PlannerRelationsContext, PlannerScope
+from sqlbuild.compiler.planner.models import (
+    CursorInputRelation,
+    PlannerRelationsContext,
+    PlannerScope,
+)
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
+    CursorRuntimeOwnershipTestCase,
     KnownSourceColumnsReuseTestCase,
     MultiDatabaseSourceColumnsTestCase,
+    RuntimeCursorProducerNamesTestCase,
     SourceColumnsTestCase,
     SourceCursorInputColumnsTestCase,
+    WatermarkLineageTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     build_cursor_input_contract_models,
     build_cursor_input_contract_sources,
     build_source_cursor_input_model,
     build_test_project_with_source_entry,
+    build_transitive_watermark_models,
 )
 
 
@@ -335,6 +347,16 @@ def test_given_known_source_columns_when_building_relations_context_then_reuses_
             expected_valid=True,
         ),
         SourceCursorInputColumnsTestCase(
+            description="passes when inferred model output exposes cursor input column",
+            reference_kind=SqlReferenceKind.REF,
+            reference_name="stg_orders",
+            cursor_column="event_time",
+            cursor_inputs={"stg_orders": "loaded_at"},
+            source_columns={},
+            upstream_inferred_columns=("order_id", "loaded_at"),
+            expected_valid=True,
+        ),
+        SourceCursorInputColumnsTestCase(
             description="passes when enforced source contract declares cursor input column",
             reference_kind=SqlReferenceKind.SOURCE,
             reference_name="raw_orders",
@@ -384,6 +406,48 @@ def test_given_valid_cursor_input_source_columns_when_validating_then_passes(
 @pytest.mark.parametrize(
     "test_case",
     [
+        WatermarkLineageTestCase(
+            description="direct view filter resolves transitive physical source watermark",
+            watermark_name="raw_orders",
+            watermark_column="loaded_at",
+            expected_valid=True,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_view_filter_and_transitive_watermark_when_planning_then_relation_is_physical(
+    test_case: WatermarkLineageTestCase,
+) -> None:
+    model: CompiledModel
+    models_by_name: dict[str, CompiledModel]
+    model, models_by_name = build_transitive_watermark_models(
+        watermark_name=test_case.watermark_name,
+        watermark_column=test_case.watermark_column,
+    )
+    view_model: CompiledModel = models_by_name["orders_view"]
+
+    relations: tuple[CursorInputRelation, ...] = _build_cursor_input_relations(
+        model=model,
+        adapter=DuckDbAdapter(),
+        model_locations={view_model.name: view_model.destination},
+        models_by_name=models_by_name,
+        seed_locations={},
+        source_map={"raw_orders": SourceEntry(name="raw_orders", schema="raw", table="raw_orders")},
+        cursor_column="event_time",
+        runtime_cursor_producer_names=frozenset({"raw_orders"}),
+    )
+
+    assert len(relations) == 1
+    assert relations[0].relation == "raw.raw_orders"
+    assert relations[0].cursor_column == "loaded_at"
+    assert relations[0].is_runtime_produced is True
+    assert "orders_view" not in relations[0].relation
+    assert test_case.expected_valid is True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         SourceCursorInputColumnsTestCase(
             description="raises when source cursor input column is missing",
             reference_kind=SqlReferenceKind.SOURCE,
@@ -408,6 +472,17 @@ def test_given_valid_cursor_input_source_columns_when_validating_then_passes(
             upstream_declared_columns=("order_id", "event_time"),
             expected_valid=False,
             expected_error_fragment="model contract does not expose the column",
+        ),
+        SourceCursorInputColumnsTestCase(
+            description="raises when inferred model output omits cursor input column",
+            reference_kind=SqlReferenceKind.REF,
+            reference_name="stg_orders",
+            cursor_column="event_time",
+            cursor_inputs={"stg_orders": "missing_loaded_at"},
+            source_columns={},
+            upstream_inferred_columns=("order_id", "event_time"),
+            expected_valid=False,
+            expected_error_fragment="reliable model output metadata does not expose the column",
         ),
         SourceCursorInputColumnsTestCase(
             description="raises when enforced source contract omits cursor input column",
@@ -458,3 +533,211 @@ def test_given_missing_cursor_input_source_column_when_validating_then_raises_cl
         )
 
     assert test_case.expected_valid is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        WatermarkLineageTestCase(
+            description="transitive source watermark belongs to upstream lineage",
+            watermark_name="raw_orders",
+            watermark_column="loaded_at",
+            expected_valid=True,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_transitive_watermark_when_validating_lineage_then_accepts_upstream_source(
+    test_case: WatermarkLineageTestCase,
+) -> None:
+    model: CompiledModel
+    models_by_name: dict[str, CompiledModel]
+    model, models_by_name = build_transitive_watermark_models(
+        watermark_name=test_case.watermark_name,
+        watermark_column=test_case.watermark_column,
+    )
+
+    validate_source_cursor_input_columns(
+        model=model,
+        cursor_column="event_time",
+        models_by_name=models_by_name,
+        source_map={"raw_orders": SourceEntry(name="raw_orders", schema="raw")},
+        source_warehouse_columns={"raw_orders": (ColumnInfo(name="loaded_at", type="TIMESTAMP"),)},
+    )
+
+    assert test_case.expected_valid is True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        WatermarkLineageTestCase(
+            description="unrelated watermark relation is rejected",
+            watermark_name="unrelated_orders",
+            watermark_column="loaded_at",
+            expected_valid=False,
+            expected_error_fragment="not in the model's upstream lineage",
+        ),
+        WatermarkLineageTestCase(
+            description="transitive watermark missing its cursor column is rejected",
+            watermark_name="raw_orders",
+            watermark_column="missing_loaded_at",
+            expected_valid=False,
+            expected_error_fragment="does not expose the column",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_watermark_when_validating_lineage_then_raises_precise_error(
+    test_case: WatermarkLineageTestCase,
+) -> None:
+    model: CompiledModel
+    models_by_name: dict[str, CompiledModel]
+    model, models_by_name = build_transitive_watermark_models(
+        watermark_name=test_case.watermark_name,
+        watermark_column=test_case.watermark_column,
+    )
+    assert test_case.expected_error_fragment is not None
+
+    with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):
+        validate_source_cursor_input_columns(
+            model=model,
+            cursor_column="event_time",
+            models_by_name=models_by_name,
+            source_map={"raw_orders": SourceEntry(name="raw_orders", schema="raw")},
+            source_warehouse_columns={
+                "raw_orders": (ColumnInfo(name="loaded_at", type="TIMESTAMP"),)
+            },
+        )
+
+    assert test_case.expected_valid is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RuntimeCursorProducerNamesTestCase(
+            description="only selected scheduled relation producers own runtime watermarks",
+            selected_keys=frozenset(
+                {
+                    CompiledObjectKey(
+                        resource_type=CompiledResourceType.MODEL, name="selected_model"
+                    ),
+                    CompiledObjectKey(
+                        resource_type=CompiledResourceType.SEED, name="selected_seed"
+                    ),
+                    CompiledObjectKey(
+                        resource_type=CompiledResourceType.SOURCE, name="loaded_source"
+                    ),
+                    CompiledObjectKey(
+                        resource_type=CompiledResourceType.SOURCE, name="static_source"
+                    ),
+                }
+            ),
+            source_map={
+                "loaded_source": SourceEntry(name="loaded_source", loader="load_orders"),
+                "static_source": SourceEntry(name="static_source"),
+                "unselected_loaded_source": SourceEntry(
+                    name="unselected_loaded_source", loader="load_orders"
+                ),
+            },
+            expected_names=frozenset({"selected_model", "selected_seed", "loaded_source"}),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_selected_relations_when_classifying_runtime_watermarks_then_only_producers_own(
+    test_case: RuntimeCursorProducerNamesTestCase,
+) -> None:
+    scope: PlannerScope = PlannerScope(
+        upstream_deps={},
+        downstream_deps={},
+        all_keys={},
+        models_by_name={},
+        selected_keys=test_case.selected_keys,
+        execution_order=(),
+    )
+
+    names: frozenset[str] = _runtime_cursor_producer_names(
+        scope=scope,
+        source_map=test_case.source_map,
+    )
+
+    assert names == test_case.expected_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CursorRuntimeOwnershipTestCase(
+            description="selected model",
+            is_model_backed=True,
+            is_runtime_produced=True,
+            expected_runtime_owned=True,
+        ),
+        CursorRuntimeOwnershipTestCase(
+            description="unselected model",
+            is_model_backed=True,
+            is_runtime_produced=False,
+            expected_runtime_owned=False,
+        ),
+        CursorRuntimeOwnershipTestCase(
+            description="deferred model",
+            is_model_backed=True,
+            is_runtime_produced=False,
+            expected_runtime_owned=False,
+        ),
+        CursorRuntimeOwnershipTestCase(
+            description="selected seed",
+            is_model_backed=False,
+            is_runtime_produced=True,
+            expected_runtime_owned=True,
+        ),
+        CursorRuntimeOwnershipTestCase(
+            description="unselected seed",
+            is_model_backed=False,
+            is_runtime_produced=False,
+            expected_runtime_owned=False,
+        ),
+        CursorRuntimeOwnershipTestCase(
+            description="deferred seed",
+            is_model_backed=False,
+            is_runtime_produced=False,
+            expected_runtime_owned=False,
+        ),
+        CursorRuntimeOwnershipTestCase(
+            description="selected managed loader",
+            is_model_backed=False,
+            is_runtime_produced=True,
+            expected_runtime_owned=True,
+        ),
+        CursorRuntimeOwnershipTestCase(
+            description="unselected managed loader",
+            is_model_backed=False,
+            is_runtime_produced=False,
+            expected_runtime_owned=False,
+        ),
+        CursorRuntimeOwnershipTestCase(
+            description="static source",
+            is_model_backed=False,
+            is_runtime_produced=False,
+            expected_runtime_owned=False,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cursor_relation_metadata_when_checking_runtime_ownership_then_only_produced_owns(
+    test_case: CursorRuntimeOwnershipTestCase,
+) -> None:
+    relation: CursorInputRelation = CursorInputRelation(
+        relation="warehouse.input",
+        cursor_column="event_time",
+        is_model_backed=test_case.is_model_backed,
+        is_runtime_produced=test_case.is_runtime_produced,
+    )
+
+    assert relation.is_runtime_owned is test_case.expected_runtime_owned
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-vv"])

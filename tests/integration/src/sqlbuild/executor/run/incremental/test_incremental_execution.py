@@ -72,6 +72,33 @@ class ZeroCopyDuckDbAdapter(DuckDbAdapter):
             ),
         ),
         IncrementalSuccessTestCase(
+            description="complete overrides skip normal runtime-produced watermark discovery",
+            setup_sql=(
+                "CREATE TABLE main.raw_events (id INTEGER, amount INTEGER)",
+                "INSERT INTO main.raw_events VALUES (5, 50), (10, 100), (20, 200), (21, 210)",
+                "CREATE TABLE main.orders (id INTEGER, amount INTEGER)",
+            ),
+            model_sql=("SELECT id, amount FROM main.raw_events WHERE id >= 10 AND id < 21"),
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="delete_insert",
+            cursor_column="id",
+            cursor_type="integer",
+            cursor_start="10",
+            cursor_end="21",
+            cursor_input_relations=(("main.missing_runtime_watermark", "id"),),
+            cursor_inputs_model_backed=True,
+            start_cursor_override="10",
+            end_cursor_override="20",
+            expected_row_count=2,
+            expected_query_results=(
+                (
+                    "SELECT id, amount FROM main.orders ORDER BY id",
+                    ((10, 100), (20, 200)),
+                ),
+            ),
+        ),
+        IncrementalSuccessTestCase(
             description="append strategy adds new rows to existing table",
             setup_sql=(
                 "CREATE TABLE main.orders (id INTEGER, name VARCHAR)",

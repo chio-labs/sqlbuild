@@ -130,6 +130,16 @@ class FakeCursorAdapter:
         return False
 
 
+class RecordingCursorAdapter(FakeCursorAdapter):
+    def __init__(self, *, target_relation_exists: bool) -> None:
+        super().__init__(target_relation_exists=target_relation_exists)
+        self.statements: list[str] = []
+
+    def execute(self, connection: Any, sql: str) -> Any:
+        self.statements.append(sql)
+        return connection.execute(sql)
+
+
 def build_name_test_adapter(adapter_name: str) -> DuckDbAdapter | BigQueryAdapter:
     return {"bigquery": BigQueryAdapter, "duckdb": DuckDbAdapter}[adapter_name]()
 

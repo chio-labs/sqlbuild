@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from sqlbuild.compiler.planner.constants import WHOLE_DAY_CURSOR_GRAINS
+from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
 
 
@@ -52,6 +53,27 @@ def cursor_bound_display(
     if cursor_grain in WHOLE_DAY_CURSOR_GRAINS and _has_no_time_component(value=parsed):
         return parsed.date().isoformat()
     return value
+
+
+def resolve_bounded_cursor_override(
+    *,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+    cursor_type: str | None,
+    cursor_grain: str | None,
+) -> CursorBounds | None:
+    """Resolve a fully bounded inclusive operator override to an executable interval."""
+
+    if start_cursor_override is None or end_cursor_override is None:
+        return None
+    return CursorBounds(
+        start=start_cursor_override,
+        end=advance_cursor_end(
+            value=end_cursor_override,
+            cursor_type=cursor_type,
+            cursor_grain=cursor_grain,
+        ),
+    )
 
 
 def _advance_integer_end(*, value: str) -> str:

@@ -42,7 +42,8 @@ from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_finger
 from sqlbuild.executor.run._helpers.validation.contracts import validate_runtime_contract
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     build_runtime_cursor_spec,
-    has_model_backed_cursor_inputs,
+    has_authoritative_cursor_override,
+    has_runtime_owned_cursor_watermarks,
     resolve_runtime_cursor_bounds,
     substitute_cursor_sentinels,
 )
@@ -78,8 +79,10 @@ def execute_table_entry(
     audit_results: list[AuditExecutionResult] = []
     hook_results: list[HookExecutionResult] = []
     statement_recorder: StatementRecorder = StatementRecorder()
-    runtime_owned_cursor_bounds: bool = not is_full_refresh and has_model_backed_cursor_inputs(
-        entry.cursor_input_relations
+    runtime_owned_cursor_bounds: bool = (
+        not is_full_refresh
+        and not has_authoritative_cursor_override(entry=entry)
+        and has_runtime_owned_cursor_watermarks(entry.cursor_input_relations)
     )
     resolved_sql: str = entry.resolved_sql
 
@@ -103,6 +106,7 @@ def execute_table_entry(
                 target_schema=targets.target_schema,
                 target_name=targets.target_table,
                 spec=build_runtime_cursor_spec(entry=entry),
+                watermark_resolver=context.watermark_resolver,
             )
         except Exception as exc:
             return build_failed_result(

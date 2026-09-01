@@ -11,6 +11,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapter.contract.types import AdapterExecute
+from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,
@@ -47,7 +48,7 @@ from sqlbuild.compiler.planner.models import (
     WarehouseFingerprints,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import MaterializationType
+from sqlbuild.compiler.planner.types import ContractPolicy, MaterializationType
 from sqlbuild.compiler.references.main._render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
@@ -141,6 +142,7 @@ def gather_warehouse_snapshot(
     full_refresh_model_names: frozenset[str] | None = None,
     on_progress: Callable[[str], None] | None = None,
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
+    runtime_producer_keys: frozenset[CompiledObjectKey] | None = None,
 ) -> WarehouseSnapshot:
     """Gather relations, columns, and fingerprints for all target schemas."""
 
@@ -202,6 +204,7 @@ def gather_warehouse_snapshot(
         full_refresh_model_names=effective_full_refresh_names,
         on_progress=on_progress,
         deferred_locations=deferred_locations,
+        runtime_producer_keys=runtime_producer_keys,
     )
 
     return WarehouseSnapshot(
@@ -528,6 +531,7 @@ def _gather_cursor_snapshots(
     full_refresh_model_names: frozenset[str],
     on_progress: Callable[[str], None] | None,
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
+    runtime_producer_keys: frozenset[CompiledObjectKey] | None = None,
 ) -> dict[str, ModelCursorSnapshot]:
     """Gather cursor MIN/MAX values for selected incremental models."""
 
@@ -543,6 +547,7 @@ def _gather_cursor_snapshots(
         selected_keys=selected_keys,
         full_refresh_model_names=full_refresh_model_names,
         deferred_locations=deferred_locations,
+        runtime_producer_keys=runtime_producer_keys,
     )
     if not cursor_models:
         return {}
@@ -576,11 +581,22 @@ def _collect_cursor_models(
     selected_keys: frozenset[CompiledObjectKey] | None,
     full_refresh_model_names: frozenset[str],
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
+    runtime_producer_keys: frozenset[CompiledObjectKey] | None = None,
 ) -> list[_CursorModelInfo]:
     """Identify selected incremental models and pre-resolve their cursor metadata."""
 
+    effective_runtime_producer_keys: frozenset[CompiledObjectKey] | None = (
+        runtime_producer_keys if runtime_producer_keys is not None else selected_keys
+    )
     selected_names: frozenset[str] | None = (
-        frozenset(k.name for k in selected_keys) if selected_keys is not None else None
+        frozenset(k.name for k in effective_runtime_producer_keys)
+        if effective_runtime_producer_keys is not None
+        else None
+    )
+    seed_map: dict[str, CompiledSeed] = {seed.name: seed for seed in project.seeds}
+    runtime_producer_names: frozenset[str] = _selected_runtime_producer_names(
+        project=project,
+        selected_keys=effective_runtime_producer_keys,
     )
     cursor_models: list[_CursorModelInfo] = []
     model: CompiledModel
@@ -599,7 +615,9 @@ def _collect_cursor_models(
         if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
             continue
 
-        cursor_inputs: dict[str, str] = _get_cursor_inputs(model=model, cursor_column=cursor_column)
+        cursor_watermark_inputs: dict[str, str] = resolve_cursor_input_roles(
+            model=model
+        ).watermark_inputs
 
         target_tag: str | None = None
         target_relation: str | None = None
@@ -613,16 +631,30 @@ def _collect_cursor_models(
             target_relation = model.destination.qualified_name
 
         upstreams: list[_UpstreamCursorInfo] = []
-        ref: CompileSqlReference
-        for ref in model.references:
-            upstream_cursor_col: str | None = cursor_inputs.get(ref.ref_name)
-            if upstream_cursor_col is None:
+        input_name: str
+        upstream_cursor_col: str
+        for input_name, upstream_cursor_col in cursor_watermark_inputs.items():
+            ref: CompileSqlReference = _resolve_lineage_reference(
+                model=model,
+                input_name=input_name,
+                model_map=model_map,
+            )
+            _validate_watermark_contract_column(
+                model=model,
+                ref=ref,
+                cursor_column=upstream_cursor_col,
+                model_map=model_map,
+                source_map=source_map,
+                seed_map=seed_map,
+            )
+            if ref.ref_name in runtime_producer_names:
                 continue
             upstream_relation: str | None = _resolve_upstream_qualified_name(
                 ref=ref,
                 adapter=adapter,
                 model_map=model_map,
                 source_map=source_map,
+                seed_map=seed_map,
                 deferred_locations=deferred_locations,
                 selected_names=selected_names,
             )
@@ -795,31 +827,29 @@ def _assemble_cursor_snapshots(
 
         upstream_mins: list[str] = []
         upstream_maxes: list[str] = []
+        unavailable_watermark_tags: list[str] = []
         upstream: _UpstreamCursorInfo
         for upstream in info.upstreams:
             min_val: str | None = results.get(upstream.tag_min)
             max_val: str | None = results.get(upstream.tag_max)
             if min_val is not None:
                 upstream_mins.append(min_val)
+            elif target_max is None:
+                unavailable_watermark_tags.append(upstream.tag_min)
             if max_val is not None:
                 upstream_maxes.append(max_val)
+            else:
+                unavailable_watermark_tags.append(upstream.tag_max)
 
         snapshots[info.model_name] = ModelCursorSnapshot(
             target_max=target_max,
             upstream_mins=tuple(upstream_mins),
             upstream_maxes=tuple(upstream_maxes),
+            expected_watermark_count=len(info.upstreams),
+            unavailable_watermark_tags=tuple(unavailable_watermark_tags),
         )
 
     return snapshots
-
-
-def _get_cursor_inputs(*, model: CompiledModel, cursor_column: str) -> dict[str, str]:
-    """Resolve cursor column mapping per upstream ref."""
-
-    raw: object | None = model.config.values.get("cursor_inputs")
-    if isinstance(raw, dict):
-        return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str)}
-    return {ref.ref_name: cursor_column for ref in model.references}
 
 
 def _resolve_upstream_qualified_name(
@@ -828,28 +858,135 @@ def _resolve_upstream_qualified_name(
     adapter: BaseAdapter,
     model_map: dict[str, CompiledModel],
     source_map: dict[str, CompiledSource],
+    seed_map: dict[str, CompiledSeed],
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     selected_names: frozenset[str] | None = None,
 ) -> str | None:
     """Resolve a reference to a qualified relation name for cursor reads."""
 
+    is_selected: bool = selected_names is not None and ref.ref_name in selected_names
+    if (
+        ref.ref_kind in {SqlReferenceKind.REF, SqlReferenceKind.SEED}
+        and deferred_locations is not None
+        and ref.ref_name in deferred_locations
+        and not is_selected
+    ):
+        return deferred_locations[ref.ref_name].qualified_name
     if ref.ref_kind == SqlReferenceKind.REF:
-        is_selected: bool = selected_names is not None and ref.ref_name in selected_names
-        if (
-            deferred_locations is not None
-            and ref.ref_name in deferred_locations
-            and not is_selected
-        ):
-            return deferred_locations[ref.ref_name].qualified_name
         upstream_model: CompiledModel | None = model_map.get(ref.ref_name)
         if upstream_model is not None:
             return upstream_model.destination.qualified_name
+        upstream_seed: CompiledSeed | None = seed_map.get(ref.ref_name)
+        if upstream_seed is not None:
+            return upstream_seed.destination.qualified_name
+    elif ref.ref_kind == SqlReferenceKind.SEED:
+        seed: CompiledSeed | None = seed_map.get(ref.ref_name)
+        if seed is not None:
+            return seed.destination.qualified_name
     elif ref.ref_kind == SqlReferenceKind.SOURCE:
         source: CompiledSource | None = source_map.get(ref.ref_name)
         if source is not None:
             entry: SourceEntry = source.source_entry
             return render_source_relation(entry=entry, adapter=adapter)
     return None
+
+
+def _selected_runtime_producer_names(
+    *, project: CompiledProject, selected_keys: frozenset[CompiledObjectKey] | None
+) -> frozenset[str]:
+    """Return selected warehouse relations produced during this planner invocation."""
+
+    if selected_keys is None:
+        return frozenset()
+    source_load_names: frozenset[str] = frozenset(
+        source.name for source in project.sources if source.source_entry.loader is not None
+    )
+    names: set[str] = set()
+    key: CompiledObjectKey
+    for key in selected_keys:
+        if key.resource_type in {CompiledResourceType.MODEL, CompiledResourceType.SEED}:
+            names.add(key.name)
+        elif key.resource_type == CompiledResourceType.SOURCE and key.name in source_load_names:
+            names.add(key.name)
+    return frozenset(names)
+
+
+def _resolve_lineage_reference(
+    *,
+    model: CompiledModel,
+    input_name: str,
+    model_map: dict[str, CompiledModel],
+) -> CompileSqlReference:
+    """Resolve one watermark input from transitive upstream lineage."""
+
+    pending: list[CompileSqlReference] = list(model.references)
+    visited_models: set[str] = set()
+    while pending:
+        reference: CompileSqlReference = pending.pop(0)
+        if reference.ref_name == input_name:
+            return reference
+        if reference.ref_kind != SqlReferenceKind.REF or reference.ref_name in visited_models:
+            continue
+        visited_models.add(reference.ref_name)
+        upstream_model: CompiledModel | None = model_map.get(reference.ref_name)
+        if upstream_model is not None:
+            pending.extend(upstream_model.references)
+    raise PlannerInputError(
+        f"model '{model.name}': cursor_watermark_inputs references '{input_name}', but it is "
+        "not in the model's upstream lineage",
+        code="S302",
+    )
+
+
+def _validate_watermark_contract_column(
+    *,
+    model: CompiledModel,
+    ref: CompileSqlReference,
+    cursor_column: str,
+    model_map: dict[str, CompiledModel],
+    source_map: dict[str, CompiledSource],
+    seed_map: dict[str, CompiledSeed],
+) -> None:
+    """Validate reliable watermark column contracts before warehouse inspection."""
+
+    declared_names: tuple[str, ...] = ()
+    if ref.ref_kind == SqlReferenceKind.REF:
+        upstream_model: CompiledModel | None = model_map.get(ref.ref_name)
+        if upstream_model is None:
+            return
+        if upstream_model.config.values.get("contract") == ContractPolicy.ENFORCED:
+            if upstream_model.schema_entry is not None:
+                declared_names = tuple(
+                    column.name for column in upstream_model.schema_entry.columns
+                )
+        elif upstream_model.inferred_columns and not upstream_model.fast_lineage_has_star:
+            declared_names = tuple(column.name for column in upstream_model.inferred_columns)
+        else:
+            return
+    elif ref.ref_kind == SqlReferenceKind.SOURCE:
+        upstream_source: CompiledSource | None = source_map.get(ref.ref_name)
+        if (
+            upstream_source is None
+            or upstream_source.source_entry.contract != ContractPolicy.ENFORCED
+        ):
+            return
+        declared_names = tuple(column.name for column in upstream_source.source_entry.columns)
+    elif ref.ref_kind == SqlReferenceKind.SEED:
+        upstream_seed: CompiledSeed | None = seed_map.get(ref.ref_name)
+        if upstream_seed is None:
+            return
+        declared_names = tuple(column.name for column in upstream_seed.schema_entry.columns)
+    else:
+        return
+    if cursor_column.lower() in {name.lower() for name in declared_names}:
+        return
+    declared_display: str = ", ".join(declared_names) or "none"
+    raise PlannerInputError(
+        f"model '{model.name}': cursor_watermark_inputs references '{ref.ref_name}' column "
+        f"'{cursor_column}', but its enforced contract does not expose the column. "
+        f"Declared contract columns: {declared_display}",
+        code="S302",
+    )
 
 
 def _get_config_str(*, model: CompiledModel, key: str) -> str | None:

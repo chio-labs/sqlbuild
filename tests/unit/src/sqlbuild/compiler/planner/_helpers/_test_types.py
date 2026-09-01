@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
     CompileSqlReference,
+    InferredColumn,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.fingerprints.models import Fingerprint
@@ -282,6 +283,48 @@ class SourceCursorInputColumnsTestCase:
     expected_error_fragment: str | None = None
     upstream_contract: str | None = None
     upstream_declared_columns: tuple[str, ...] = ()
+    upstream_inferred_columns: tuple[str, ...] | None = None
+
+    @property
+    def compiled_inferred_columns(self) -> tuple[InferredColumn, ...] | None:
+        if self.upstream_inferred_columns is None:
+            return None
+        return tuple(InferredColumn(name=name) for name in self.upstream_inferred_columns)
+
+
+@dataclass(frozen=True)
+class WatermarkLineageTestCase:
+    description: str
+    watermark_name: str
+    watermark_column: str
+    expected_valid: bool
+    expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class CursorSnapshotAvailabilityTestCase:
+    description: str
+    target_tag: str | None
+    target_relation: str | None
+    results: dict[str, str]
+    expected_available: bool
+    expected_unavailable_tags: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RuntimeCursorProducerNamesTestCase:
+    description: str
+    selected_keys: frozenset[CompiledObjectKey]
+    source_map: dict[str, SourceEntry]
+    expected_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class CursorRuntimeOwnershipTestCase:
+    description: str
+    is_model_backed: bool
+    is_runtime_produced: bool
+    expected_runtime_owned: bool
 
 
 @dataclass(frozen=True)
@@ -707,6 +750,28 @@ class PlanEntryCursorOverrideTestCase:
     description: str
     start_cursor_override: str
     end_cursor_override: str
+    expected_bounds: CursorBounds
+
+
+@dataclass(frozen=True)
+class AuthoritativeCursorOverrideTestCase:
+    description: str
+    cursor_type: str
+    cursor_grain: str | None
+    batch_size: str
+    start_override: str
+    end_override: str
+    expected_bounds: CursorBounds
+
+
+@dataclass(frozen=True)
+class PlannerOwnedMixedGrainRangeTestCase:
+    description: str
+    target_max: str
+    upstream_max: str
+    downstream_grain: str
+    upstream_grain: str
+    batch_size: str
     expected_bounds: CursorBounds
 
 

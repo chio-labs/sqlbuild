@@ -518,6 +518,13 @@ class IncrementalConfigErrorTestCase:
 
 
 @dataclass(frozen=True)
+class CursorAliasWarningTestCase:
+    description: str
+    config_values: tuple[dict[str, object], ...]
+    expected_warning_count: int
+
+
+@dataclass(frozen=True)
 class ContractConfigValidTestCase:
     description: str
     config_values: dict[str, object]
