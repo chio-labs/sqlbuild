@@ -6,6 +6,15 @@ from sqlbuild.executor.run.types import AuditGateReuseReason, AuditGateStatus, E
 
 
 @dataclass(frozen=True)
+class RuntimeFutureCursorTestCase:
+    description: str
+    expected_start: str
+    expected_end: str
+    expected_error_fragment: str | None = None
+    expected_determining_relation: str | None = None
+
+
+@dataclass(frozen=True)
 class CursorSentinelSubstitutionErrorTestCase:
     description: str
     sql: str

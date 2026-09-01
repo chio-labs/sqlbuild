@@ -14,6 +14,13 @@ class SourceWriteStrategy(StrEnum):
     TABLE = "table"
 
 
+class FutureCursorAction(StrEnum):
+    """Response when an effective cursor lies beyond the future horizon."""
+
+    CAP = "cap"
+    ERROR = "error"
+
+
 class SourceFreshnessStrategy(StrEnum):
     ADAPTER = "adapter"
     COLUMN = "column"

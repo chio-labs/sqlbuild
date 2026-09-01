@@ -13,6 +13,12 @@ class MicrobatchExecutionProtocolTestCase:
 
 
 @dataclass(frozen=True)
+class FutureCursorExecutionProtocolTestCase:
+    description: str
+    expected_action: str
+
+
+@dataclass(frozen=True)
 class SqlTestCaseExecutionProtocolTestCase:
     """Expected identity and typed parameter fields for one SQL test case."""
 

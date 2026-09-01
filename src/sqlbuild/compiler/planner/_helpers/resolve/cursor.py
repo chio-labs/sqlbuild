@@ -121,6 +121,7 @@ def normalize_cursor_snapshot_grain(
             _floor_timestamp_string(value=value, grain=effective_grain)
             for value in cursor_snapshot.upstream_maxes
         ),
+        input_evidence=cursor_snapshot.input_evidence,
         expected_watermark_count=cursor_snapshot.expected_watermark_count,
         unavailable_watermark_tags=cursor_snapshot.unavailable_watermark_tags,
     )

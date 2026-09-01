@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
+from sqlbuild.cli.output._helpers.future_cursor_safety import serialize_future_cursor_safety
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
@@ -498,6 +499,7 @@ def _format_model_assets(
                 "error_help": result.error_help,
                 "error_message": result.error_message,
                 "warnings": result.warning_messages,
+                "future_cursor_safety": serialize_future_cursor_safety(result.future_cursor_safety),
                 "microbatch": _format_microbatch_result(result),
             }
         )

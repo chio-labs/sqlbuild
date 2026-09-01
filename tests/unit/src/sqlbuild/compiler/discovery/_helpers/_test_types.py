@@ -6,6 +6,21 @@ from sqlbuild.sql_values.types import CollectionRendering
 
 
 @dataclass(frozen=True)
+class FutureCursorConfigTestCase:
+    description: str
+    future_toml: str
+    expected_max_distance: str
+    expected_action: str
+
+
+@dataclass(frozen=True)
+class FutureCursorConfigErrorTestCase:
+    description: str
+    future_toml: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class DiscoverMacroFilesTestCase:
     description: str
     files: dict[str, str]

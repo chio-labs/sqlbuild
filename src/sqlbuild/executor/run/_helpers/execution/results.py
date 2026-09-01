@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.planner.models import ModelPlanEntry
+from sqlbuild.compiler.planner.models import (
+    CursorBounds,
+    FutureCursorSafetyEvidence,
+    ModelPlanEntry,
+)
 from sqlbuild.errors.contracts.main.error_code import error_code
 from sqlbuild.errors.contracts.main.error_help import error_help
 from sqlbuild.errors.contracts.main.error_message import error_message
@@ -62,6 +66,7 @@ def build_failed_result(
         error_code=rendered_code,
         error_help=rendered_help,
         error_message=rendered_error,
+        future_cursor_safety=_future_cursor_safety(entry),
     )
 
 
@@ -90,7 +95,13 @@ def build_skipped_result(
         hook_results=tuple(hook_results),
         skip_mode=skipped_hook.skip_mode if skipped_hook is not None else None,
         skip_reason=skipped_hook.skip_reason if skipped_hook is not None else None,
+        future_cursor_safety=_future_cursor_safety(entry),
     )
+
+
+def _future_cursor_safety(entry: ModelPlanEntry) -> FutureCursorSafetyEvidence | None:
+    bounds: CursorBounds | None = entry.microbatch_range or entry.cursor_bounds
+    return bounds.future_safety if bounds is not None else None
 
 
 def _last_skipped_hook(

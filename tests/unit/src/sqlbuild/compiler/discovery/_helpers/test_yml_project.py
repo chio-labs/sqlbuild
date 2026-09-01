@@ -13,6 +13,8 @@ from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from sqlbuild.sql_values.types import CollectionRendering
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
+    FutureCursorConfigErrorTestCase,
+    FutureCursorConfigTestCase,
     LoadLocalConfigErrorTestCase,
     LoadLocalConfigTestCase,
     LoadNamedConnectionsTestCase,
@@ -54,6 +56,60 @@ def test_given_no_cost_config_when_loading_project_then_default_rate_is_flagged(
 
     assert config.cost.usd_per_credit == test_case.expected_usd_per_credit
     assert config.cost.usd_per_credit_is_default is test_case.expected_is_default
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FutureCursorConfigTestCase(
+            description="future cap policy is typed",
+            future_toml='max_distance = "7d"\naction = "cap"',
+            expected_max_distance="7d",
+            expected_action="cap",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_future_cursor_config_when_loading_project_then_policy_is_typed(
+    test_case: FutureCursorConfigTestCase, tmp_path: Path
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "demo"\nadapter = "duckdb"\n[cursors.future]\n{test_case.future_toml}\n',
+        encoding="utf-8",
+    )
+
+    config: ProjectConfig = load_project_config(project_dir=tmp_path)
+
+    assert config.cursors.future.max_distance == test_case.expected_max_distance
+    assert config.cursors.future.action == test_case.expected_action
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FutureCursorConfigErrorTestCase(
+            description="invalid duration",
+            future_toml='max_distance = "tomorrow"',
+            expected_error_fragment="max_distance must be a positive duration",
+        ),
+        FutureCursorConfigErrorTestCase(
+            description="invalid action",
+            future_toml='max_distance = "7d"\naction = "warn"',
+            expected_error_fragment="action must be one of: cap, error",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_future_cursor_config_when_loading_project_then_config_error_is_raised(
+    test_case: FutureCursorConfigErrorTestCase, tmp_path: Path
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "demo"\nadapter = "duckdb"\n[cursors.future]\n{test_case.future_toml}\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProjectConfigError, match=test_case.expected_error_fragment):
+        load_project_config(project_dir=tmp_path)
 
 
 @pytest.mark.parametrize(

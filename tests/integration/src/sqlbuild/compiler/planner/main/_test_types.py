@@ -70,6 +70,23 @@ class SourceCursorInputPlanErrorTestCase:
 
 
 @dataclass(frozen=True)
+class FutureCursorPlannerTestCase:
+    """Planner call-flow case for future cursor policy."""
+
+    description: str
+    warehouse_type: str
+    minimum: str
+    maximum: str
+    expected_relation: str
+
+
+@dataclass(frozen=True)
+class FutureCursorPlannerErrorTestCase:
+    description: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class TableTypePlanAssemblyTestCase:
     description: str
     expected_entry_names: tuple[str, ...]

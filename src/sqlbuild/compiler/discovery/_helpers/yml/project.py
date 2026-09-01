@@ -37,8 +37,10 @@ from sqlbuild.spec.contracts.models import (
     ClonePolicy,
     ConstantsConfig,
     CostConfig,
+    CursorsConfig,
     DbtConfig,
     DefaultsConfig,
+    FutureCursorsConfig,
     JanitorConfig,
     LocalClonePolicy,
     LocalConfig,
@@ -57,6 +59,7 @@ from sqlbuild.spec.contracts.models import (
     TargetConfig,
 )
 from sqlbuild.spec.contracts.types import (
+    FutureCursorAction,
     TableType,
     TableTypeDowngradePolicy,
     TableTypeValue,
@@ -75,6 +78,9 @@ _DEFAULT_HISTORICAL_SNAPSHOT_FULL_REFRESH: str = "require_confirmation"
 _DEFAULT_SNAPSHOT_SCHEMA_CHANGE: str = "append_new_columns"
 _DEFAULT_WILDCARD_CHECK_SNAPSHOT_SCHEMA_CHANGE: str = "require_confirmation"
 _BATCH_CONCURRENCY_CONFIG_KEY: str = "batch_concurrency"
+_CURSOR_DURATION_PATTERN: re.Pattern[str] = re.compile(
+    r"^(?=.*[1-9])(?:(\d+)y)?(?:(\d+)mo)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$"
+)
 
 
 def load_project_config(*, project_dir: Path) -> ProjectConfig:
@@ -96,6 +102,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
     constants: ConstantsConfig = _load_constants(
         payload=payload.get("constants"), file_path=file_path
     )
+    cursors: CursorsConfig = _load_cursors(payload=payload.get("cursors"), file_path=file_path)
     defaults: DefaultsConfig = _load_defaults(payload=payload.get("defaults"), file_path=file_path)
     materialization_defaults: MaterializationDefaultsConfig = _load_materialization_defaults(
         payload=payload.get("materialization_defaults"), file_path=file_path
@@ -133,6 +140,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         scopes=scopes,
         cost=cost,
         constants=constants,
+        cursors=cursors,
         defaults=defaults,
         materialization_defaults=materialization_defaults,
         path_defaults=path_defaults,
@@ -351,6 +359,38 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         default_audit_severity=default_audit_severity,
         default_audit_run_scope=default_audit_run_scope,
     )
+
+
+def _load_cursors(*, payload: object, file_path: Path) -> CursorsConfig:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label="cursors", file_path=file_path
+    )
+    _validate_allowed_keys(
+        mapping=mapping,
+        allowed_keys=frozenset({"future"}),
+        label="cursors",
+        file_path=file_path,
+    )
+    future: dict[str, object] = _coerce_mapping(
+        payload=mapping.get("future"), label="cursors.future", file_path=file_path
+    )
+    _validate_allowed_keys(
+        mapping=future,
+        allowed_keys=frozenset({"max_distance", "action"}),
+        label="cursors.future",
+        file_path=file_path,
+    )
+    max_distance: str | None = _optional_str(payload=future, key="max_distance")
+    if max_distance is not None and _CURSOR_DURATION_PATTERN.fullmatch(max_distance) is None:
+        raise ProjectConfigError(
+            "cursors.future.max_distance must be a positive duration like 7d, 12h, or 1mo"
+        )
+    raw_action: str | None = _optional_str(payload=future, key="action")
+    try:
+        action: FutureCursorAction = FutureCursorAction(raw_action or FutureCursorAction.ERROR)
+    except ValueError:
+        raise ProjectConfigError("cursors.future.action must be one of: cap, error") from None
+    return CursorsConfig(future=FutureCursorsConfig(max_distance=max_distance, action=action))
 
 
 def _load_scopes(*, payload: object, file_path: Path) -> ScopesConfig:

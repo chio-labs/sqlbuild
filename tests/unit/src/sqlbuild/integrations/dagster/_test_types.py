@@ -102,6 +102,20 @@ class DagsterCliJsonStreamTestCase:
 
 
 @dataclass(frozen=True)
+class DagsterFutureCursorMetadataTestCase:
+    description: str
+    expected_action: str
+
+
+@dataclass(frozen=True)
+class DagsterLiveFailureLoggingTestCase:
+    description: str
+    expected_phase: str
+    expected_error_code: str
+    expected_error_message: str
+
+
+@dataclass(frozen=True)
 class DagsterCliCloneStreamTestCase:
     description: str
     command_stdout: str

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -220,6 +221,7 @@ def verify_success_state(
     assert actual_count == test_case.expected_row_count
     assert len(result.audit_results) == test_case.expected_audit_count
     assert len(result.warning_messages) == test_case.expected_warning_count
+    assert (result.future_cursor_safety is not None) is test_case.expected_has_future_cursor_safety
 
     query: str
     expected_rows: tuple[tuple[object, ...], ...]
@@ -261,6 +263,7 @@ def verify_failure_state(
     assert len(result.audit_results) == test_case.expected_audit_count
     assert result.staging_relation == test_case.expected_staging_relation
     assert result.promoted_relation == test_case.expected_promoted_relation
+    assert (result.future_cursor_safety is not None) is test_case.expected_has_future_cursor_safety
 
     assert (test_case.expected_error_fragment or "") in (result.error_message or "")
     _FAILURE_ROW_COUNT_VERIFIERS.get(
@@ -310,6 +313,11 @@ def _execute_test(
         post_hooks=test_case.post_hook,
         start_cursor_override=test_case.start_cursor_override,
         end_cursor_override=test_case.end_cursor_override,
+    )
+    entry = replace(
+        entry,
+        future_cursor_config=test_case.future_cursor_config,
+        invocation_time=test_case.invocation_time,
     )
 
     declared_columns: tuple[ColumnInfo, ...] = build_declared_columns(test_case.declared_columns)

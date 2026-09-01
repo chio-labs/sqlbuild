@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -10,9 +11,12 @@ import pytest
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry, SqlHookEntry
+from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
 from sqlbuild.compiler.planner.types import OnSchemaChange
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.run.types import ExecutionPhase
+from sqlbuild.spec.contracts.models import FutureCursorsConfig
+from sqlbuild.spec.contracts.types import FutureCursorAction
 from tests.integration.src.sqlbuild.executor.run.incremental._test_types import (
     IncrementalFailureTestCase,
     IncrementalSuccessTestCase,
@@ -39,6 +43,36 @@ class ZeroCopyDuckDbAdapter(DuckDbAdapter):
 @pytest.mark.parametrize(
     "test_case",
     [
+        IncrementalSuccessTestCase(
+            description="future cap resolves before pre-hook mutates upstream",
+            setup_sql=(
+                "CREATE TABLE main.future_input (id INTEGER, event_time TIMESTAMP)",
+                "INSERT INTO main.future_input VALUES (1, '2500-01-01')",
+                "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP)",
+            ),
+            model_sql=(
+                "SELECT * FROM main.future_input "
+                f"WHERE event_time >= '{MICROBATCH_START_SENTINEL}' "
+                f"AND event_time < '{MICROBATCH_END_SENTINEL}'"
+            ),
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="delete_insert",
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            cursor_grain="second",
+            cursor_input_relations=(("main.future_input", "event_time"),),
+            cursor_inputs_model_backed=True,
+            pre_hook=[
+                SqlHookEntry(statement="DELETE FROM main.future_input"),
+                SqlHookEntry(statement="INSERT INTO main.future_input VALUES (2, '2026-01-01')"),
+            ],
+            future_cursor_config=FutureCursorsConfig("2d", FutureCursorAction.CAP),
+            invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
+            expected_row_count=0,
+            expected_warning_count=1,
+            expected_has_future_cursor_safety=True,
+        ),
         IncrementalSuccessTestCase(
             description="model-backed cursor input resolves runtime bounds for normal incremental",
             setup_sql=(
@@ -488,6 +522,61 @@ def test_given_existing_table_when_running_incremental_then_succeeds(
 @pytest.mark.parametrize(
     "test_case",
     [
+        IncrementalFailureTestCase(
+            description="future error blocks pre-hook side effects",
+            setup_sql=(
+                "CREATE TABLE main.future_input (id INTEGER, event_time TIMESTAMP)",
+                "INSERT INTO main.future_input VALUES (1, '2500-01-01')",
+                "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP)",
+                "CREATE TABLE main.hook_log (phase VARCHAR)",
+            ),
+            model_sql=(
+                "SELECT * FROM main.future_input "
+                f"WHERE event_time >= '{MICROBATCH_START_SENTINEL}' "
+                f"AND event_time < '{MICROBATCH_END_SENTINEL}'"
+            ),
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="delete_insert",
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            cursor_grain="second",
+            cursor_input_relations=(("main.future_input", "event_time"),),
+            cursor_inputs_model_backed=True,
+            pre_hook=[SqlHookEntry(statement="INSERT INTO main.hook_log VALUES ('pre')")],
+            future_cursor_config=FutureCursorsConfig("2d", FutureCursorAction.ERROR),
+            invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
+            expected_failed_phase=ExecutionPhase.STAGING,
+            expected_error_fragment="future cursor safety limit exceeded",
+            expected_query_results=(("SELECT * FROM main.hook_log", ()),),
+        ),
+        IncrementalFailureTestCase(
+            description="failed pre-hook preserves resolved future cap evidence",
+            setup_sql=(
+                "CREATE TABLE main.future_input (id INTEGER, event_time TIMESTAMP)",
+                "INSERT INTO main.future_input VALUES (1, '2500-01-01')",
+                "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP)",
+            ),
+            model_sql=(
+                "SELECT * FROM main.future_input "
+                f"WHERE event_time >= '{MICROBATCH_START_SENTINEL}' "
+                f"AND event_time < '{MICROBATCH_END_SENTINEL}'"
+            ),
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="delete_insert",
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            cursor_grain="second",
+            cursor_input_relations=(("main.future_input", "event_time"),),
+            cursor_inputs_model_backed=True,
+            pre_hook=[SqlHookEntry(statement="SELECT * FROM missing_pre_hook_table")],
+            future_cursor_config=FutureCursorsConfig("2d", FutureCursorAction.CAP),
+            invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
+            expected_failed_phase=ExecutionPhase.PRE_HOOK,
+            expected_error_fragment="missing_pre_hook_table",
+            expected_has_future_cursor_safety=True,
+        ),
         IncrementalFailureTestCase(
             description="sync_all_columns fails on incompatible type change",
             setup_sql=(

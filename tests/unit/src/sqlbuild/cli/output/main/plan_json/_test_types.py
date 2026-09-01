@@ -12,3 +12,9 @@ class JsonOutputTestCase:
     python_plan_entries: tuple[PythonPlanEntry, ...] = field(default_factory=tuple)
     expected_fragments: tuple[str, ...] = field(default_factory=tuple)
     unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class FutureCursorPlanJsonTestCase:
+    description: str
+    expected_action: str

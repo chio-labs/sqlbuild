@@ -25,6 +25,7 @@ from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor
 from sqlbuild.compiler.planner.main.execution.effective_microbatch_batch_size import (
     resolve_effective_microbatch_batch_size,
 )
+from sqlbuild.compiler.planner.main.execution.future_cursor_warning import future_cursor_cap_warning
 from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
@@ -144,6 +145,7 @@ class _MicrobatchPlan:
     effective_batch_size: str | None = None
     resolved_range: CursorBounds | None = None
     early_exit: ModelExecutionResult | None = None
+    runtime_discovery: bool = False
 
 
 @dataclass(frozen=True)
@@ -230,15 +232,6 @@ def execute_microbatch_entry(  # noqa: PLR0915
         hook_results=[],
         statement_recorder=StatementRecorder(),
     )
-    pre_hook_exit: ModelExecutionResult | None = run_pre_hook_phase(
-        context=context,
-        warnings=state.warnings,
-        audit_results=state.audit_results,
-        hook_results=state.hook_results,
-        statement_recorder=state.statement_recorder,
-    )
-    if pre_hook_exit is not None:
-        return pre_hook_exit
     batch_plan: _MicrobatchPlan = _plan_microbatch_windows(
         context=context,
         is_full_refresh=is_full_refresh,
@@ -250,6 +243,19 @@ def execute_microbatch_entry(  # noqa: PLR0915
     )
     if batch_plan.early_exit is not None:
         return batch_plan.early_exit
+    context = _context_with_microbatch_range(context=context, batch_plan=batch_plan)
+    cap_warning: str | None = future_cursor_cap_warning(batch_plan.resolved_range)
+    if cap_warning is not None:
+        state.warnings.append(cap_warning)
+    pre_hook_exit: ModelExecutionResult | None = run_pre_hook_phase(
+        context=context,
+        warnings=state.warnings,
+        audit_results=state.audit_results,
+        hook_results=state.hook_results,
+        statement_recorder=state.statement_recorder,
+    )
+    if pre_hook_exit is not None:
+        return pre_hook_exit
     history_read: (
         tuple[
             MicrobatchEventStore,
@@ -334,7 +340,7 @@ def execute_microbatch_entry(  # noqa: PLR0915
         state = replace(state, warnings=[*state.warnings, "no batches to process"])
     if (
         on_progress is not None
-        and context.entry.microbatch_range is None
+        and batch_plan.runtime_discovery
         and batch_plan.resolved_range is not None
         and batch_plan.effective_batch_size is not None
     ):
@@ -451,6 +457,7 @@ def execute_microbatch_entry(  # noqa: PLR0915
         cursor_range_end=None if resolved_range is None else resolved_range.end,
         cursor_type=context.entry.cursor_type,
         cursor_grain=context.entry.cursor_grain,
+        future_cursor_safety=(resolved_range.future_safety if resolved_range is not None else None),
         audit_results=tuple(state.audit_results),
         warning_messages=tuple(state.warnings),
         lifecycle_events=state.statement_recorder.snapshot(),
@@ -2523,6 +2530,17 @@ def _promote_microbatch_full_refresh(
     return None
 
 
+def _context_with_microbatch_range(
+    *, context: ModelMaterializationContext, batch_plan: _MicrobatchPlan
+) -> ModelMaterializationContext:
+    if batch_plan.resolved_range is None:
+        return context
+    return replace(
+        context,
+        entry=replace(context.entry, microbatch_range=batch_plan.resolved_range),
+    )
+
+
 def _plan_microbatch_windows(
     *,
     context: ModelMaterializationContext,
@@ -2629,6 +2647,7 @@ def _plan_microbatch_windows(
         batches=batches,
         effective_batch_size=effective_batch_size,
         resolved_range=microbatch_range,
+        runtime_discovery=runtime_discovery,
     )
 
 
