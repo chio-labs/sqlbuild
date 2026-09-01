@@ -13,6 +13,7 @@ from sqlbuild.compiler.planner._helpers.warehouse.snapshot import (
     _UpstreamCursorInfo,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
+    CursorFetchFailureTestCase,
     CursorQueryFailureTestCase,
     CursorQueryGroupingTestCase,
     CursorQueryShapeTestCase,
@@ -20,11 +21,30 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
 
 
 class _RowsResult:
-    def __init__(self, rows: list[tuple[str | None, ...]]) -> None:
+    def __init__(
+        self,
+        *,
+        rows: list[tuple[str | None, ...]],
+        progress: list[str],
+        expected_progress_at_fetch: tuple[str, ...],
+    ) -> None:
         self._rows: list[tuple[str | None, ...]] = rows
+        self._progress: list[str] = progress
+        self._expected_progress_at_fetch: tuple[str, ...] = expected_progress_at_fetch
 
     def fetchall(self) -> list[tuple[str | None, ...]]:
+        assert tuple(self._progress) == self._expected_progress_at_fetch
         return self._rows
+
+
+class _FailingRowsResult:
+    def __init__(self, *, progress: list[str], expected_progress_at_fetch: tuple[str, ...]) -> None:
+        self._progress: list[str] = progress
+        self._expected_progress_at_fetch: tuple[str, ...] = expected_progress_at_fetch
+
+    def fetchall(self) -> list[tuple[str | None, ...]]:
+        assert tuple(self._progress) == self._expected_progress_at_fetch
+        raise RuntimeError("result transfer failed")
 
 
 class _FailFirstExecute:
@@ -38,7 +58,36 @@ class _FailFirstExecute:
             assert self.progress[-1] == "Inspecting cursor bounds (1/2): schema.bad.ts [max]..."
             raise RuntimeError("warehouse unavailable")
         assert self.progress[-1] == "Inspecting cursor bounds (2/2): schema.good.ts [min,max]..."
-        return _RowsResult([("2024-01-01", "2024-02-01")])
+        return _RowsResult(
+            rows=[("2024-01-01", "2024-02-01")],
+            progress=self.progress,
+            expected_progress_at_fetch=tuple(self.progress),
+        )
+
+
+class _FailFirstFetch:
+    def __init__(self, *, progress: list[str]) -> None:
+        self.progress: list[str] = progress
+        self.sql: list[str] = []
+
+    def __call__(self, *, connection: Any, sql: str) -> _RowsResult | _FailingRowsResult:
+        self.sql.append(sql)
+        if "schema.bad" in sql:
+            return _FailingRowsResult(
+                progress=self.progress,
+                expected_progress_at_fetch=(
+                    "Inspecting cursor bounds (1/2): schema.bad.ts [max]...",
+                ),
+            )
+        return _RowsResult(
+            rows=[("2024-01-01", "2024-02-01")],
+            progress=self.progress,
+            expected_progress_at_fetch=(
+                "Inspecting cursor bounds (1/2): schema.bad.ts [max]...",
+                "Failed cursor bounds (1/2): schema.bad.ts [max] (0.25s): result transfer failed",
+                "Inspecting cursor bounds (2/2): schema.good.ts [min,max]...",
+            ),
+        )
 
 
 @pytest.mark.parametrize(
@@ -156,7 +205,14 @@ def test_given_requested_bounds_when_executing_then_uses_one_standalone_query_wi
             f"Inspecting cursor bounds (1/1): raw.events.event_time [{test_case.expected_bounds}]..."
         ]
         statements.append(sql)
-        return _RowsResult([test_case.row])
+        return _RowsResult(
+            rows=[test_case.row],
+            progress=progress,
+            expected_progress_at_fetch=(
+                f"Inspecting cursor bounds (1/1): raw.events.event_time "
+                f"[{test_case.expected_bounds}]...",
+            ),
+        )
 
     monotonic_values: Any = iter((10.0, 10.42))
     monkeypatch.setattr(snapshot_module.time, "monotonic", monotonic_values.__next__)
@@ -233,6 +289,57 @@ def test_given_one_failed_physical_read_when_executing_then_reports_failure_and_
     assert len(execute.sql) == 2
     assert progress[1] == test_case.expected_failure_progress
     assert progress[3] == test_case.expected_success_progress
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CursorFetchFailureTestCase(
+            description="fetch failure remains unavailable and later relation succeeds",
+            expected_results={"good__min": "2024-01-01", "good__max": "2024-02-01"},
+            expected_progress=(
+                "Inspecting cursor bounds (1/2): schema.bad.ts [max]...",
+                "Failed cursor bounds (1/2): schema.bad.ts [max] (0.25s): result transfer failed",
+                "Inspecting cursor bounds (2/2): schema.good.ts [min,max]...",
+                "Inspected cursor bounds (2/2): schema.good.ts [min,max] (0.50s)",
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_fetch_failure_when_executing_then_reports_failure_and_continues(
+    test_case: CursorFetchFailureTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    progress: list[str] = []
+    execute: _FailFirstFetch = _FailFirstFetch(progress=progress)
+    monotonic_values: Any = iter((20.0, 20.25, 30.0, 30.50))
+    monkeypatch.setattr(snapshot_module.time, "monotonic", monotonic_values.__next__)
+    queries: list[_PhysicalCursorQuery] = [
+        _PhysicalCursorQuery(
+            relation="schema.bad",
+            cursor_column="ts",
+            min_tags=(),
+            max_tags=("bad__max",),
+        ),
+        _PhysicalCursorQuery(
+            relation="schema.good",
+            cursor_column="ts",
+            min_tags=("good__min",),
+            max_tags=("good__max",),
+        ),
+    ]
+
+    results: dict[str, str] = _execute_cursor_queries(
+        queries=queries,
+        connection=object(),
+        execute=execute,
+        on_progress=progress.append,
+    )
+
+    assert results == test_case.expected_results
+    assert len(execute.sql) == 2
+    assert tuple(progress) == test_case.expected_progress
 
 
 if __name__ == "__main__":

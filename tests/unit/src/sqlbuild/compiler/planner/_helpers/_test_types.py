@@ -121,6 +121,13 @@ class CursorQueryFailureTestCase:
 
 
 @dataclass(frozen=True)
+class CursorFetchFailureTestCase:
+    description: str
+    expected_results: dict[str, str]
+    expected_progress: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SeedIdentityTestCase:
     description: str
     seed_contents: str

@@ -742,6 +742,7 @@ def _execute_cursor_query(
     query_start: float = time.monotonic()
     try:
         result: Any = execute(connection=connection, sql=sql)
+        rows: list[Any] = result.fetchall()
     except Exception as error:
         elapsed: float = time.monotonic() - query_start
         if on_progress is not None:
@@ -759,7 +760,6 @@ def _execute_cursor_query(
     elapsed = time.monotonic() - query_start
     if on_progress is not None:
         on_progress(f"Inspected cursor bounds {identity} ({elapsed:.2f}s)")
-    rows: list[Any] = result.fetchall()
     if not rows:
         return {}
     output: dict[str, str] = {}
