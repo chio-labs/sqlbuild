@@ -152,6 +152,7 @@ def test_given_cursor_runtime_failure_projects_when_running_build_then_cli_fails
         assert fragment in result.stdout, result.stdout + result.stderr
     for fragment in test_case.expected_stderr_fragments:
         assert fragment in result.stderr, result.stdout + result.stderr
+    assert test_case.verification_sql is not None
     verification_connection: duckdb.DuckDBPyConnection = duckdb.connect(str(db_path))
     verification_rows: list[tuple[object, ...]] = verification_connection.execute(
         test_case.verification_sql
