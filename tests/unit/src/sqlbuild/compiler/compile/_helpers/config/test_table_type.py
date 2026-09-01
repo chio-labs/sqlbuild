@@ -25,6 +25,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.config._test_types import
     [
         TableTypeResolutionTestCase(
             description="model overrides materialization and target",
+            materialized="table",
             model_value="transient",
             materialization_defaults=MaterializationDefaultsConfig(
                 table=MaterializationRetentionDefaults(table_type=TableType.PERMANENT)
@@ -36,6 +37,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.config._test_types import
         ),
         TableTypeResolutionTestCase(
             description="materialization overrides target",
+            materialized="table",
             model_value=None,
             materialization_defaults=MaterializationDefaultsConfig(
                 table=MaterializationRetentionDefaults(table_type=TableType.TRANSIENT)
@@ -47,6 +49,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.config._test_types import
         ),
         TableTypeResolutionTestCase(
             description="inherit preserves materialization value",
+            materialized="table",
             model_value="inherit",
             materialization_defaults=MaterializationDefaultsConfig(
                 table=MaterializationRetentionDefaults(table_type=TableType.PERMANENT)
@@ -58,6 +61,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.config._test_types import
         ),
         TableTypeResolutionTestCase(
             description="target supplies value without overrides",
+            materialized="table",
             model_value=None,
             materialization_defaults=MaterializationDefaultsConfig(),
             target_config=TargetConfig(default_table_type=TableType.PERMANENT),
@@ -67,9 +71,20 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.config._test_types import
         ),
         TableTypeResolutionTestCase(
             description="undeclared value defaults transient",
+            materialized="table",
             model_value=None,
             materialization_defaults=MaterializationDefaultsConfig(),
             target_config=None,
+            expected_value=TableType.TRANSIENT,
+            expected_source=TableTypeSource.DEFAULT,
+            expected_declared=False,
+        ),
+        TableTypeResolutionTestCase(
+            description="target default does not apply to view",
+            materialized="view",
+            model_value=None,
+            materialization_defaults=MaterializationDefaultsConfig(),
+            target_config=TargetConfig(default_table_type=TableType.PERMANENT),
             expected_value=TableType.TRANSIENT,
             expected_source=TableTypeSource.DEFAULT,
             expected_declared=False,
@@ -81,7 +96,7 @@ def test_given_layered_table_type_when_resolving_then_effective_value_tracks_sou
     test_case: TableTypeResolutionTestCase,
 ) -> None:
     result: ResolvedTableType = resolve_table_type(
-        materialized="table",
+        materialized=test_case.materialized,
         model_value=test_case.model_value,
         materialization_defaults=test_case.materialization_defaults,
         target_config=test_case.target_config,
@@ -133,6 +148,16 @@ def test_given_invalid_model_table_type_when_resolving_then_raises_compile_error
         TableTypeValidationErrorTestCase(
             description="custom declaration is rejected",
             materialized="partition_tracked",
+            expected_error_fragment="not supported for materialization",
+        ),
+        TableTypeValidationErrorTestCase(
+            description="ephemeral declaration is rejected",
+            materialized="ephemeral",
+            expected_error_fragment="not supported for materialization",
+        ),
+        TableTypeValidationErrorTestCase(
+            description="seed declaration is rejected",
+            materialized="seed",
             expected_error_fragment="not supported for materialization",
         ),
     ],

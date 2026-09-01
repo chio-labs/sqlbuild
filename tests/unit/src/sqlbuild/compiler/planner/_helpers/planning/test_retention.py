@@ -27,7 +27,11 @@ from sqlbuild.compiler.planner.models import (
     TableTypePlanEntry,
     WarehouseFingerprints,
 )
-from sqlbuild.compiler.planner.types import RetentionDirection, RetentionPlanPhase
+from sqlbuild.compiler.planner.types import (
+    MaterializationType,
+    RetentionDirection,
+    RetentionPlanPhase,
+)
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,
@@ -201,6 +205,137 @@ def test_given_missing_table_when_planning_type_then_no_entry_is_created(
         table_type=ResolvedTableType(
             value=test_case.desired_type,
             source=TableTypeSource.MODEL,
+            declared=True,
+        ),
+    )
+
+    entries: tuple[TableTypePlanEntry, ...] = plan_table_types(
+        runtime=runtime, warehouse=warehouse, scope=scope
+    )
+
+    assert len(entries) == test_case.expected_entry_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TableTypePlanningTestCase(
+            description="table relation plans table type drift",
+            desired_type=TableType.PERMANENT,
+            live_is_transient=None,
+            relation_exists=True,
+            downgrade_policy=TableTypeDowngradePolicy.REQUIRE_CONFIRMATION,
+            expected_entry_count=1,
+            expected_actual_type=None,
+            expected_downgrade=False,
+            materialized=MaterializationType.TABLE,
+        ),
+        TableTypePlanningTestCase(
+            description="incremental relation plans table type drift",
+            desired_type=TableType.PERMANENT,
+            live_is_transient=None,
+            relation_exists=True,
+            downgrade_policy=TableTypeDowngradePolicy.REQUIRE_CONFIRMATION,
+            expected_entry_count=1,
+            expected_actual_type=None,
+            expected_downgrade=False,
+            materialized=MaterializationType.INCREMENTAL,
+        ),
+        TableTypePlanningTestCase(
+            description="microbatch incremental relation plans table type drift",
+            desired_type=TableType.PERMANENT,
+            live_is_transient=None,
+            relation_exists=True,
+            downgrade_policy=TableTypeDowngradePolicy.REQUIRE_CONFIRMATION,
+            expected_entry_count=1,
+            expected_actual_type=None,
+            expected_downgrade=False,
+            materialized=MaterializationType.INCREMENTAL,
+            additional_config=(("incremental_mode", "microbatch"),),
+        ),
+        TableTypePlanningTestCase(
+            description="snapshot relation plans table type drift",
+            desired_type=TableType.PERMANENT,
+            live_is_transient=None,
+            relation_exists=True,
+            downgrade_policy=TableTypeDowngradePolicy.REQUIRE_CONFIRMATION,
+            expected_entry_count=1,
+            expected_actual_type=None,
+            expected_downgrade=False,
+            materialized=MaterializationType.SNAPSHOT,
+        ),
+        TableTypePlanningTestCase(
+            description="warehouse view with unknown table metadata has no drift",
+            desired_type=TableType.PERMANENT,
+            live_is_transient=None,
+            relation_exists=True,
+            downgrade_policy=TableTypeDowngradePolicy.REQUIRE_CONFIRMATION,
+            expected_entry_count=0,
+            expected_actual_type=None,
+            expected_downgrade=False,
+            materialized=MaterializationType.VIEW,
+            relation_type="VIEW",
+        ),
+        TableTypePlanningTestCase(
+            description="ephemeral model has no table type drift",
+            desired_type=TableType.PERMANENT,
+            live_is_transient=None,
+            relation_exists=True,
+            downgrade_policy=TableTypeDowngradePolicy.REQUIRE_CONFIRMATION,
+            expected_entry_count=0,
+            expected_actual_type=None,
+            expected_downgrade=False,
+            materialized="ephemeral",
+        ),
+        TableTypePlanningTestCase(
+            description="seed materialization has no table type drift",
+            desired_type=TableType.PERMANENT,
+            live_is_transient=None,
+            relation_exists=True,
+            downgrade_policy=TableTypeDowngradePolicy.REQUIRE_CONFIRMATION,
+            expected_entry_count=0,
+            expected_actual_type=None,
+            expected_downgrade=False,
+            materialized=MaterializationType.SEED,
+        ),
+        TableTypePlanningTestCase(
+            description="custom materialization has no table type drift",
+            desired_type=TableType.PERMANENT,
+            live_is_transient=None,
+            relation_exists=True,
+            downgrade_policy=TableTypeDowngradePolicy.REQUIRE_CONFIRMATION,
+            expected_entry_count=0,
+            expected_actual_type=None,
+            expected_downgrade=False,
+            materialized=MaterializationType.CUSTOM,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_materialization_family_when_planning_table_types_then_only_tables_have_drift(
+    test_case: TableTypePlanningTestCase,
+) -> None:
+    adapter: Mock = Mock(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
+    adapter.maximum_identifier_length.return_value = 255
+    relation: RelationInfo = RelationInfo(
+        database="warehouse",
+        schema="analytics",
+        name="orders",
+        relation_type=test_case.relation_type,
+        is_transient=test_case.live_is_transient,
+    )
+    config_values: dict[str, object] = {
+        "materialized": test_case.materialized,
+        **dict(test_case.additional_config),
+    }
+    runtime, warehouse, scope = build_retention_planner_inputs(
+        adapter=adapter,
+        desired_days=1,
+        existing_relations={"orders": relation},
+        config_values=config_values,
+        table_type=ResolvedTableType(
+            value=test_case.desired_type,
+            source=TableTypeSource.TARGET,
             declared=True,
         ),
     )
