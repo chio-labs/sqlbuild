@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 import pytest
 
+from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.output.main.plan import format_plan
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
@@ -20,10 +23,18 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
     WarningSeverity,
 )
+from sqlbuild.spec.contracts.models import (
+    LocalConfig,
+    ProjectConfig,
+    ResolvedTableType,
+    TargetConfig,
+)
+from sqlbuild.spec.contracts.types import TableType, TableTypeSource
 from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     BuildExecutionPlanTestCase,
     FormatPlanIntegrationTestCase,
     SourceCursorInputPlanErrorTestCase,
+    TableTypePlanAssemblyTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.planner.main.helpers import (
     build_execution_plan_from_kwargs,
@@ -366,6 +377,77 @@ def test_given_project_when_building_plan_then_produces_expected_output(
     expected_progress_fragment: str
     for expected_progress_fragment in test_case.expected_progress_fragments:
         assert expected_progress_fragment in progress_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TableTypePlanAssemblyTestCase(
+            description="selected view and table under permanent target default",
+            expected_entry_names=("orders",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_view_and_table_with_target_default_when_assembling_plan_then_only_table_has_drift(
+    test_case: TableTypePlanAssemblyTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection.execute("CREATE OR REPLACE VIEW staging.orders_view AS SELECT 1 AS id")
+    connection.execute("CREATE OR REPLACE TABLE staging.orders AS SELECT 1 AS id")
+    project: CompiledProject = build_project_from_test_case(
+        BuildExecutionPlanTestCase(
+            description=test_case.description,
+            setup_sql=(),
+            model_locations={"orders_view": "staging", "orders": "staging"},
+            model_configs={
+                "orders_view": {"materialized": "view"},
+                "orders": {"materialized": "table"},
+            },
+            model_queries={"orders_view": "SELECT 1 AS id", "orders": "SELECT 1 AS id"},
+            full_refresh=False,
+            expected_action={},
+            expected_reason={},
+        )
+    )
+    view_model, table_model = project.models
+    project = replace(
+        project,
+        effective_target_name="test",
+        models=(
+            view_model,
+            replace(
+                table_model,
+                config=replace(
+                    table_model.config,
+                    table_type=ResolvedTableType(
+                        value=TableType.PERMANENT,
+                        source=TableTypeSource.TARGET,
+                        declared=True,
+                    ),
+                ),
+            ),
+        ),
+    )
+    monkeypatch.setattr(adapter, "adapter_name", BuiltinAdapter.SNOWFLAKE.value)
+
+    plan: PlanOutput = build_execution_plan_from_kwargs(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        project_config=ProjectConfig(
+            name="test",
+            adapter=BuiltinAdapter.SNOWFLAKE.value,
+            targets={"test": TargetConfig(default_table_type=TableType.PERMANENT)},
+        ),
+        local_config=LocalConfig(),
+    )
+
+    assert tuple(entry.model_name for entry in plan.table_type_entries) == (
+        test_case.expected_entry_names
+    )
 
 
 @pytest.mark.parametrize(

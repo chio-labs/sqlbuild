@@ -17,14 +17,6 @@ from sqlbuild.spec.contracts.types import (
     TimeTravelRetentionValue,
 )
 
-_SUPPORTED_MATERIALIZATIONS: frozenset[str] = frozenset(
-    {
-        MaterializationType.TABLE,
-        MaterializationType.INCREMENTAL,
-        MaterializationType.SNAPSHOT,
-    }
-)
-
 
 def resolve_time_travel_retention(
     *,
@@ -42,7 +34,9 @@ def resolve_time_travel_retention(
     source: TimeTravelRetentionSource | None = (
         TimeTravelRetentionSource.TARGET if policy is not None else None
     )
-    if isinstance(materialized, str) and materialized in _SUPPORTED_MATERIALIZATIONS:
+    if isinstance(materialized, str) and MaterializationType.is_table_backed(
+        materialized=materialized
+    ):
         materialization_policy: AuthoredTimeTravelRetention | None = getattr(
             materialization_defaults, materialized
         ).time_travel_retention

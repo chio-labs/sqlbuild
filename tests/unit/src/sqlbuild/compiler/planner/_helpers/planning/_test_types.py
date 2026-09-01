@@ -33,3 +33,6 @@ class TableTypePlanningTestCase:
     expected_entry_count: int
     expected_actual_type: str | None
     expected_downgrade: bool
+    materialized: str = "table"
+    additional_config: tuple[tuple[str, object], ...] = ()
+    relation_type: str = "BASE TABLE"

@@ -215,6 +215,12 @@ class MaterializationType(StrEnum):
     SEED = "seed"
     CUSTOM = "custom"
 
+    @classmethod
+    def is_table_backed(cls, *, materialized: object | None) -> bool:
+        """Return whether a materialization owns a physical managed table."""
+
+        return materialized in {cls.TABLE, cls.INCREMENTAL, cls.SNAPSHOT}
+
 
 class SchemaActionKind(StrEnum):
     ADD_COLUMN = "add_column"

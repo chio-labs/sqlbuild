@@ -597,11 +597,7 @@ def validate_time_travel_retention(*, config: CompileModelConfig, model_name: st
             f"model '{model_name}': managed time_travel_retention is not valid for views; "
             "set time_travel_retention disabled"
         )
-    if materialized not in {
-        MaterializationType.TABLE,
-        MaterializationType.INCREMENTAL,
-        MaterializationType.SNAPSHOT,
-    }:
+    if not MaterializationType.is_table_backed(materialized=materialized):
         raise CompileInputError(
             f"model '{model_name}': managed time_travel_retention is not supported for "
             f"materialization '{materialized}'"
@@ -616,11 +612,7 @@ def validate_table_type(*, config: CompileModelConfig, model_name: str) -> None:
     materialized: str | None = _str(config=config, key="materialized")
     if materialized == MaterializationType.VIEW:
         raise CompileInputError(f"model '{model_name}': table_type is not valid for views")
-    if materialized not in {
-        MaterializationType.TABLE,
-        MaterializationType.INCREMENTAL,
-        MaterializationType.SNAPSHOT,
-    }:
+    if not MaterializationType.is_table_backed(materialized=materialized):
         raise CompileInputError(
             f"model '{model_name}': table_type is not supported for materialization "
             f"'{materialized}'"

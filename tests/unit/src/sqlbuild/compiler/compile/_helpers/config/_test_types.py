@@ -7,6 +7,7 @@ from sqlbuild.spec.contracts.types import TableType, TableTypeSource
 @dataclass(frozen=True)
 class TableTypeResolutionTestCase:
     description: str
+    materialized: str
     model_value: object | None
     materialization_defaults: MaterializationDefaultsConfig
     target_config: TargetConfig | None

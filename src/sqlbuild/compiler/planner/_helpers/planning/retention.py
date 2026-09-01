@@ -22,7 +22,11 @@ from sqlbuild.compiler.planner.models import (
     RetentionPlanEntry,
     TableTypePlanEntry,
 )
-from sqlbuild.compiler.planner.types import RetentionDirection, RetentionPlanPhase
+from sqlbuild.compiler.planner.types import (
+    MaterializationType,
+    RetentionDirection,
+    RetentionPlanPhase,
+)
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention, TargetConfig
 from sqlbuild.spec.contracts.types import TableType
@@ -56,6 +60,10 @@ def plan_table_types(
     target: TargetConfig = _effective_target(runtime=runtime)
     entries: list[TableTypePlanEntry] = []
     for model in selected_models:
+        if not MaterializationType.is_table_backed(
+            materialized=model.config.values.get("materialized")
+        ):
+            continue
         relation: RelationInfo | None = warehouse.snapshot.existing_relations.get(model.name)
         if relation is None:
             continue

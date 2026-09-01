@@ -13,9 +13,6 @@ from sqlbuild.spec.contracts.models import (
 )
 from sqlbuild.spec.contracts.types import TableType, TableTypeSource, TableTypeValue
 
-_SUPPORTED_MATERIALIZATIONS: frozenset[str] = frozenset(
-    {MaterializationType.TABLE, MaterializationType.INCREMENTAL, MaterializationType.SNAPSHOT}
-)
 _STORAGE_POLICY_KEYS: frozenset[str] = frozenset({"time_travel_retention", "table_type"})
 
 
@@ -66,7 +63,7 @@ def resolve_table_type(
     source: TableTypeSource = TableTypeSource.DEFAULT
     declared: bool = False
     materialization: str | None = materialized if isinstance(materialized, str) else None
-    supported: bool = materialization in _SUPPORTED_MATERIALIZATIONS
+    supported: bool = MaterializationType.is_table_backed(materialized=materialization)
     if supported and target_config is not None and target_config.default_table_type is not None:
         value = target_config.default_table_type
         source = TableTypeSource.TARGET
