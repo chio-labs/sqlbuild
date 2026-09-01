@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.71.5](https://github.com/chio-labs/sqlbuild/compare/v0.71.4...v0.71.5) (2026-09-01)
+
+
+### Bug Fixes
+
+* execute cursor bound inspections per physical relation ([#452](https://github.com/chio-labs/sqlbuild/issues/452)) ([8074020](https://github.com/chio-labs/sqlbuild/commit/8074020378ee56854f3d45fa4685a1f1fffe689c))
+
 ## [0.71.4](https://github.com/chio-labs/sqlbuild/compare/v0.71.3...v0.71.4) (2026-09-01)
 
 
