@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.72.2](https://github.com/chio-labs/sqlbuild/compare/v0.72.1...v0.72.2) (2026-09-01)
+
+
+### Bug Fixes
+
+* bound implausible future cursor watermarks ([#460](https://github.com/chio-labs/sqlbuild/issues/460)) ([cb22a2f](https://github.com/chio-labs/sqlbuild/commit/cb22a2fa9499d0ae5ae4df3bf62809e769bc9983))
+
 ## [0.72.1](https://github.com/chio-labs/sqlbuild/compare/v0.72.0...v0.72.1) (2026-09-01)
 
 
