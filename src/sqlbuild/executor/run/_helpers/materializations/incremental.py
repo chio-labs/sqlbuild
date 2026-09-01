@@ -35,7 +35,7 @@ from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_finger
 from sqlbuild.executor.run._helpers.validation.contracts import validate_runtime_contract
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     build_runtime_cursor_spec,
-    has_model_backed_cursor_inputs,
+    has_model_backed_cursor_watermarks,
     resolve_runtime_cursor_bounds,
     substitute_cursor_sentinels,
 )
@@ -373,7 +373,7 @@ def _prepare_delta_relation(
             schema=target_schema,
             statement_recorder=statement_recorder,
         )
-    if has_model_backed_cursor_inputs(entry.cursor_input_relations):
+    if has_model_backed_cursor_watermarks(entry.cursor_input_relations):
         if entry.cursor_column is None:
             raise ExecutorInputError("runtime-owned cursor resolution requires cursor_column")
         runtime_cursor_bounds = resolve_runtime_cursor_bounds(

@@ -285,6 +285,15 @@ class SourceCursorInputColumnsTestCase:
 
 
 @dataclass(frozen=True)
+class WatermarkLineageTestCase:
+    description: str
+    watermark_name: str
+    watermark_column: str
+    expected_valid: bool
+    expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
 class BuildDownstreamDepsTestCase:
     description: str
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]

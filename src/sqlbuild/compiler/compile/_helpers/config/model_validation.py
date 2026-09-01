@@ -65,6 +65,8 @@ _SNAPSHOT_DISALLOWED_KEYS: tuple[str, ...] = (
     "cursor_type",
     "cursor_grain",
     "cursor_inputs",
+    "cursor_filter_inputs",
+    "cursor_watermark_inputs",
     "lookback",
 )
 _CUSTOM_MATERIALIZATION_DISALLOWED_KEYS: tuple[str, ...] = (
@@ -77,6 +79,8 @@ _CUSTOM_MATERIALIZATION_DISALLOWED_KEYS: tuple[str, ...] = (
     "cursor_type",
     "cursor_grain",
     "cursor_inputs",
+    "cursor_filter_inputs",
+    "cursor_watermark_inputs",
     "lookback",
 )
 
@@ -107,7 +111,9 @@ def validate_incremental_config(
     batch_size: object | None = config.values.get("batch_size")
     batch_concurrency: object | None = config.values.get("batch_concurrency")
     unaccounted_partition_policy: object | None = config.values.get("unaccounted_partition_policy")
-    cursor_inputs: object | None = config.values.get("cursor_inputs")
+    legacy_cursor_inputs: object | None = config.values.get("cursor_inputs")
+    cursor_filter_inputs: object | None = config.values.get("cursor_filter_inputs")
+    cursor_watermark_inputs: object | None = config.values.get("cursor_watermark_inputs")
     cursor_grain: str | None = _str(config=config, key="cursor_grain")
     replay_on_change: object | None = config.values.get("replay_on_change")
     merge_exclude_columns: object | None = config.values.get("merge_exclude_columns")
@@ -134,22 +140,15 @@ def validate_incremental_config(
         strategy=strategy,
     )
 
-    if cursor_inputs is not None and cursor is None:
-        raise CompileInputError(f"model '{model_name}': cursor_inputs requires cursor")
-    if isinstance(cursor_inputs, dict):
-        input_name: object
-        for input_name in cursor_inputs:
-            if str(input_name) not in known_input_names:
-                expected_names: str = ", ".join(sorted(known_input_names))
-                raise CompileInputError(
-                    f"model '{model_name}': cursor_inputs references unknown input "
-                    f"'{input_name}'; expected one of: {expected_names}"
-                )
-    if cursor is not None and ref_count > 1 and cursor_inputs is None:
-        raise CompileInputError(
-            f"model '{model_name}': models with cursor and multiple inputs "
-            f"require explicit cursor_inputs"
-        )
+    _validate_cursor_input_config(
+        model_name=model_name,
+        cursor=cursor,
+        ref_count=ref_count,
+        known_input_names=known_input_names,
+        legacy_cursor_inputs=legacy_cursor_inputs,
+        cursor_filter_inputs=cursor_filter_inputs,
+        cursor_watermark_inputs=cursor_watermark_inputs,
+    )
 
     if strategy == IncrementalStrategy.DELETE_INSERT and cursor is None and not has_unique_key:
         raise CompileInputError(
@@ -231,6 +230,84 @@ def validate_incremental_config(
         batch_concurrency=batch_concurrency,
         unaccounted_partition_policy=unaccounted_partition_policy,
     )
+
+
+def _validate_cursor_input_config(
+    *,
+    model_name: str,
+    cursor: str | None,
+    ref_count: int,
+    known_input_names: frozenset[str],
+    legacy_cursor_inputs: object | None,
+    cursor_filter_inputs: object | None,
+    cursor_watermark_inputs: object | None,
+) -> None:
+    """Validate cursor filter, watermark, and deprecated alias combinations."""
+
+    if legacy_cursor_inputs is not None and cursor_filter_inputs is not None:
+        raise CompileInputError(
+            f"model '{model_name}': cursor_inputs is the deprecated name for "
+            "cursor_filter_inputs and both cannot be declared"
+        )
+    filter_inputs: object | None = (
+        cursor_filter_inputs if cursor_filter_inputs is not None else legacy_cursor_inputs
+    )
+    cursor_field: str
+    cursor_value: object
+    for cursor_field, cursor_value in (
+        ("cursor_inputs", legacy_cursor_inputs),
+        ("cursor_filter_inputs", cursor_filter_inputs),
+        ("cursor_watermark_inputs", cursor_watermark_inputs),
+    ):
+        if cursor_value is not None and cursor is None:
+            raise CompileInputError(f"model '{model_name}': {cursor_field} requires cursor")
+        if cursor_value is not None:
+            _validate_cursor_input_map(
+                model_name=model_name,
+                config_field=cursor_field,
+                value=cursor_value,
+            )
+    if cursor_watermark_inputs is not None and filter_inputs is None:
+        raise CompileInputError(
+            f"model '{model_name}': cursor_watermark_inputs requires cursor_filter_inputs "
+            "or deprecated cursor_inputs"
+        )
+    if isinstance(filter_inputs, dict):
+        input_name: object
+        filter_field: str = (
+            "cursor_filter_inputs" if cursor_filter_inputs is not None else "cursor_inputs"
+        )
+        for input_name in filter_inputs:
+            if str(input_name) not in known_input_names:
+                expected_names: str = ", ".join(sorted(known_input_names))
+                raise CompileInputError(
+                    f"model '{model_name}': {filter_field} references unknown input "
+                    f"'{input_name}'; expected one of: {expected_names}"
+                )
+    if cursor is not None and ref_count > 1 and filter_inputs is None:
+        raise CompileInputError(
+            f"model '{model_name}': models with cursor and multiple inputs require explicit "
+            "cursor_inputs (deprecated) or cursor_filter_inputs"
+        )
+
+
+def _validate_cursor_input_map(*, model_name: str, config_field: str, value: object) -> None:
+    """Validate one cursor input field as a relation-to-column map."""
+
+    if not isinstance(value, dict):
+        raise CompileInputError(f"model '{model_name}': {config_field} must be a relation map")
+    relation_name: object
+    cursor_column: object
+    for relation_name, cursor_column in value.items():
+        if not isinstance(relation_name, str) or not relation_name.strip():
+            raise CompileInputError(
+                f"model '{model_name}': {config_field} relation names must be non-empty strings"
+            )
+        if not isinstance(cursor_column, str) or not cursor_column.strip():
+            raise CompileInputError(
+                f"model '{model_name}': {config_field} column for relation "
+                f"'{relation_name}' must be a non-empty string"
+            )
 
 
 def _validate_microbatch_state_config(

@@ -201,6 +201,44 @@ def test_given_invalid_contract_config_when_validating_then_raises(
             ref_count=2,
         ),
         IncrementalConfigValidTestCase(
+            description="new filter inputs default watermark inputs",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "event_time",
+                "cursor_type": "timestamp",
+                "cursor_grain": "second",
+                "cursor_filter_inputs": {"orders": "event_time"},
+            },
+            ref_count=1,
+        ),
+        IncrementalConfigValidTestCase(
+            description="new filter and watermark inputs define separate roles",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "event_time",
+                "cursor_type": "timestamp",
+                "cursor_grain": "second",
+                "cursor_filter_inputs": {"orders": "event_time"},
+                "cursor_watermark_inputs": {"raw_orders": "loaded_at"},
+            },
+            ref_count=1,
+        ),
+        IncrementalConfigValidTestCase(
+            description="legacy filter alias allows explicit watermark migration",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "event_time",
+                "cursor_type": "timestamp",
+                "cursor_grain": "second",
+                "cursor_inputs": {"orders": "event_time"},
+                "cursor_watermark_inputs": {"raw_orders": "loaded_at"},
+            },
+            ref_count=1,
+        ),
+        IncrementalConfigValidTestCase(
             description="enforced contract allows declared cursor and unique key",
             config_values={
                 "materialized": "incremental",
@@ -237,7 +275,9 @@ def test_given_valid_config_when_validating_then_passes(
     test_case: IncrementalConfigValidTestCase,
 ) -> None:
     config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
-    cursor_inputs: object | None = test_case.config_values.get("cursor_inputs")
+    cursor_inputs: object | None = test_case.config_values.get(
+        "cursor_filter_inputs", test_case.config_values.get("cursor_inputs")
+    )
     cursor_input_dict: dict[object, object] = cast(
         dict[object, object], ({}, cursor_inputs)[isinstance(cursor_inputs, dict)]
     )
@@ -336,6 +376,43 @@ def test_given_valid_config_when_validating_then_passes(
             },
             ref_count=1,
             expected_error_fragment="cursor_inputs requires cursor",
+        ),
+        IncrementalConfigErrorTestCase(
+            description="new filter inputs without cursor raises",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "append",
+                "cursor_filter_inputs": {"orders": "event_time"},
+            },
+            ref_count=1,
+            expected_error_fragment="cursor_filter_inputs requires cursor",
+        ),
+        IncrementalConfigErrorTestCase(
+            description="watermark inputs without filter inputs raises",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "event_time",
+                "cursor_type": "timestamp",
+                "cursor_grain": "second",
+                "cursor_watermark_inputs": {"orders": "event_time"},
+            },
+            ref_count=1,
+            expected_error_fragment="cursor_watermark_inputs requires cursor_filter_inputs",
+        ),
+        IncrementalConfigErrorTestCase(
+            description="legacy and new filter aliases conflict",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "event_time",
+                "cursor_type": "timestamp",
+                "cursor_grain": "second",
+                "cursor_inputs": {"orders": "event_time"},
+                "cursor_filter_inputs": {"orders": "event_time"},
+            },
+            ref_count=1,
+            expected_error_fragment="deprecated name for cursor_filter_inputs",
         ),
         IncrementalConfigErrorTestCase(
             description="multi-input with cursor but no cursor_inputs raises",

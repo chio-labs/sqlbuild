@@ -147,6 +147,14 @@ class RuntimeTargetProbeFailureTestCase:
 
 
 @dataclass(frozen=True)
+class RuntimeWatermarkStatementTestCase:
+    description: str
+    target_exists: bool
+    expected_statements: tuple[str, ...]
+    expected_bounds: object
+
+
+@dataclass(frozen=True)
 class RuntimeCursorPolicyTestCase:
     description: str
     expected_bounds: object

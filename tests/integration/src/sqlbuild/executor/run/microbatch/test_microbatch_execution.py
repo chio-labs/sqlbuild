@@ -853,12 +853,7 @@ def test_given_runtime_owned_range_when_executing_then_reports_resolution_before
         connection=connection,
     )
 
-    assert (
-        progress_messages[0],
-        result.cursor_range_start,
-        result.cursor_range_end,
-    ) == (
-        test_case.expected_progress_message,
-        test_case.expected_cursor_range_start,
-        test_case.expected_cursor_range_end,
-    )
+    assert test_case.expected_progress_message is not None
+    assert progress_messages.index(test_case.expected_progress_message) > 0
+    assert result.cursor_range_start == test_case.expected_cursor_range_start
+    assert result.cursor_range_end == test_case.expected_cursor_range_end

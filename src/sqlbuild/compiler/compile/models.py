@@ -154,6 +154,17 @@ class CompileModelConfig:
 
 
 @dataclass(frozen=True)
+class CursorInputRoles:
+    """Effective filter and watermark inputs for one compiled model."""
+
+    filter_inputs: dict[str, str]
+    watermark_inputs: dict[str, str]
+    filter_field: str
+    watermark_field: str
+    uses_legacy_alias: bool
+
+
+@dataclass(frozen=True)
 class LoadedMacro:
     """One loaded project macro available for compile-time SQL expansion."""
 
@@ -356,6 +367,7 @@ class ModelInputScopeBuild:
     inputs: tuple[CompileModelInput, ...]
     declarations: DeclarationResolutionContext
     context: ModelInputBuildContext
+    diagnostics: tuple[CompilerDiagnostic, ...] = ()
 
 
 @dataclass(frozen=True)

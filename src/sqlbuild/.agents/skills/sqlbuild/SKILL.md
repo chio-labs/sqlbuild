@@ -3302,7 +3302,7 @@ Table promotion mode is a project setting rather than a `MODEL()` field. Staged 
 | `cursor_type` | `timestamp` or `integer` |
 | `cursor_grain` | Timestamp grain such as `second`, `hour`, or `day` |
 | `cursor_start` | Lower cursor bound |
-| `cursor_inputs` | Upstream names mapped to cursor columns |
+| `cursor_filter_inputs` | Upstream names mapped to cursor columns |
 | `unique_key` | Merge or delete/insert matching columns |
 | `incremental_mode` | Set to `microbatch` for batched execution |
 | `batch_size` | Timestamp duration string such as `1d` or `1h`; use a numeric string such as `"1000"` for an integer cursor |
@@ -4511,7 +4511,7 @@ MODEL (
   cursor last_ordered_at,
   cursor_type timestamp,
   cursor_grain second,
-  cursor_inputs (
+  cursor_filter_inputs (
     fact_orders ordered_at,
   ),
 );
@@ -4564,11 +4564,12 @@ Cursors define the incremental replay boundary. SQLBuild queries `MAX(cursor)` f
 | `cursor_type` | `timestamp` or `integer` |
 | `cursor_grain` | Time grain for timestamp cursors: `second`, `minute`, `hour`, `day`, `month`, `year` |
 | `cursor_start` | Lower bound floor; the cursor will never replay before this value |
-| `cursor_inputs` | Map of upstream ref/source names to their cursor columns |
+| `cursor_filter_inputs` | Direct ref/source names whose model SQL reads receive cursor filters |
+| `cursor_watermark_inputs` | Authoritative direct or transitive upstream names used to discover available bounds |
 
-#### cursor_inputs
+#### cursor_filter_inputs
 
-When a model references multiple upstream inputs, `cursor_inputs` is required to tell SQLBuild which column on each input carries the cursor:
+When a model references multiple upstream inputs, `cursor_filter_inputs` is required to tell SQLBuild which column on each input carries the cursor:
 
 ```sql
 MODEL (
@@ -4577,13 +4578,33 @@ MODEL (
   cursor activity_hour,
   cursor_type timestamp,
   cursor_grain hour,
-  cursor_inputs (
+  cursor_filter_inputs (
     fact_orders ordered_at,
   ),
 );
 ```
 
-SQLBuild uses these to determine the replay window. With multiple listed inputs, the end is the conservative common watermark: the minimum of their maxima. This prevents a faster input from advancing the model beyond data available from a slower input.
+By default SQLBuild also uses these relations to determine the replay window. Use `cursor_watermark_inputs` when an expensive view should remain the filtered data input while a compatible physical upstream relation provides the authoritative watermark:
+
+```sql
+MODEL (
+  materialized incremental,
+  incremental_strategy delete_insert,
+  cursor meeting_date,
+  cursor_type timestamp,
+  cursor_grain day,
+  cursor_filter_inputs (
+    market_prices_view meeting_date,
+  ),
+  cursor_watermark_inputs (
+    market_prices_physical meeting_date,
+  ),
+);
+```
+
+Watermark inputs may be transitive upstream models or sources, but cannot be unrelated project nodes. SQLBuild filters only `cursor_filter_inputs`; it never adds a predicate to a relation merely because it supplies a watermark. With multiple watermark inputs, the end is the conservative common watermark: the minimum of their maxima. The declared watermark must never advance beyond data visible through the corresponding filtered reads.
+
+`cursor_inputs` is a deprecated alias for `cursor_filter_inputs` until the next major release. Alias-only models use the same map for filtering and watermark discovery. During migration, `cursor_inputs` may be combined with explicit `cursor_watermark_inputs`; declaring both `cursor_inputs` and `cursor_filter_inputs` is an error.
 
 On a first build, SQLBuild derives the interval from the declared cursor inputs and cursor policy. If it cannot establish a valid interval, the build fails before mutating the destination.
 
@@ -4598,7 +4619,7 @@ MODEL (
   cursor activity_hour,
   cursor_type timestamp,
   cursor_grain hour,
-  cursor_inputs (
+  cursor_filter_inputs (
     fact_orders ordered_at,
   ),
 );
@@ -4615,7 +4636,7 @@ In microbatch mode, the intrinsics resolve to each batch's concrete bounds. A mi
 
 ##### Listed inputs bound the window; unlisted inputs do not
 
-Only the inputs you list in `cursor_inputs` bound the replay window. This is an explicit choice, and it has two consequences worth understanding:
+Only the inputs you list in `cursor_watermark_inputs` bound the replay window; when omitted, it defaults to `cursor_filter_inputs`. This is an explicit choice, and it has two consequences worth understanding:
 
 - **Listed inputs** drive the window. Their new data advances the `MAX`, which is what tells SQLBuild how far to reprocess and which rows of the target to rewrite.
 - **Unlisted inputs are read in full.** SQLBuild does not add a cursor filter to them, and they do not bound the window. This is correct for lookup or dimension tables that have no meaningful cursor column: you do not list them, and SQLBuild reads them whole rather than trying to filter on a column that may not exist.
@@ -4652,7 +4673,7 @@ MODEL (
   cursor activity_hour,
   cursor_type timestamp,
   cursor_grain hour,
-  cursor_inputs (
+  cursor_filter_inputs (
     fact_orders ordered_at,
   ),
   incremental_mode microbatch,
@@ -4680,7 +4701,7 @@ MODEL (
   cursor activity_day,
   cursor_type timestamp,
   cursor_grain day,
-  cursor_inputs (
+  cursor_filter_inputs (
     hourly_order_activity activity_hour,
   ),
   incremental_mode microbatch,
@@ -4694,7 +4715,7 @@ MODEL (
   cursor activity_hour,
   cursor_type timestamp,
   cursor_grain hour,
-  cursor_inputs (
+  cursor_filter_inputs (
     daily_activity_rollup activity_day,
   ),
   incremental_mode microbatch,

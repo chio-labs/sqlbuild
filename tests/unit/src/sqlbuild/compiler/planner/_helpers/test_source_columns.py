@@ -23,12 +23,14 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     MultiDatabaseSourceColumnsTestCase,
     SourceColumnsTestCase,
     SourceCursorInputColumnsTestCase,
+    WatermarkLineageTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     build_cursor_input_contract_models,
     build_cursor_input_contract_sources,
     build_source_cursor_input_model,
     build_test_project_with_source_entry,
+    build_transitive_watermark_models,
 )
 
 
@@ -458,3 +460,85 @@ def test_given_missing_cursor_input_source_column_when_validating_then_raises_cl
         )
 
     assert test_case.expected_valid is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        WatermarkLineageTestCase(
+            description="transitive source watermark belongs to upstream lineage",
+            watermark_name="raw_orders",
+            watermark_column="loaded_at",
+            expected_valid=True,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_transitive_watermark_when_validating_lineage_then_accepts_upstream_source(
+    test_case: WatermarkLineageTestCase,
+) -> None:
+    model: CompiledModel
+    models_by_name: dict[str, CompiledModel]
+    model, models_by_name = build_transitive_watermark_models(
+        watermark_name=test_case.watermark_name,
+        watermark_column=test_case.watermark_column,
+    )
+
+    validate_source_cursor_input_columns(
+        model=model,
+        cursor_column="event_time",
+        models_by_name=models_by_name,
+        source_map={"raw_orders": SourceEntry(name="raw_orders", schema="raw")},
+        source_warehouse_columns={"raw_orders": (ColumnInfo(name="loaded_at", type="TIMESTAMP"),)},
+    )
+
+    assert test_case.expected_valid is True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        WatermarkLineageTestCase(
+            description="unrelated watermark relation is rejected",
+            watermark_name="unrelated_orders",
+            watermark_column="loaded_at",
+            expected_valid=False,
+            expected_error_fragment="not in the model's upstream lineage",
+        ),
+        WatermarkLineageTestCase(
+            description="transitive watermark missing its cursor column is rejected",
+            watermark_name="raw_orders",
+            watermark_column="missing_loaded_at",
+            expected_valid=False,
+            expected_error_fragment="does not expose the column",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_watermark_when_validating_lineage_then_raises_precise_error(
+    test_case: WatermarkLineageTestCase,
+) -> None:
+    model: CompiledModel
+    models_by_name: dict[str, CompiledModel]
+    model, models_by_name = build_transitive_watermark_models(
+        watermark_name=test_case.watermark_name,
+        watermark_column=test_case.watermark_column,
+    )
+    assert test_case.expected_error_fragment is not None
+
+    with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):
+        validate_source_cursor_input_columns(
+            model=model,
+            cursor_column="event_time",
+            models_by_name=models_by_name,
+            source_map={"raw_orders": SourceEntry(name="raw_orders", schema="raw")},
+            source_warehouse_columns={
+                "raw_orders": (ColumnInfo(name="loaded_at", type="TIMESTAMP"),)
+            },
+        )
+
+    assert test_case.expected_valid is False
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-vv"])

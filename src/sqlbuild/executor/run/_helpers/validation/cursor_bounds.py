@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, cast
@@ -25,7 +27,7 @@ _TIMESTAMP_GRAIN_ORDER: dict[str, int] = {
 }
 
 
-def has_model_backed_cursor_inputs(
+def has_model_backed_cursor_watermarks(
     cursor_input_relations: tuple[CursorInputRelation, ...],
 ) -> bool:
     """Return whether any cursor input relation is backed by another model."""
@@ -65,18 +67,20 @@ def resolve_runtime_cursor_bounds(
     target_schema: str | None,
     target_name: str,
     spec: RuntimeCursorSpec,
+    on_progress: Callable[[str], None] | None = None,
 ) -> CursorBounds | None:
     """Resolve concrete runtime cursor bounds from target and upstream relations."""
 
     cursor_type: str | None = spec.cursor_type
-    upstream_parts: list[str] = []
-    cursor_input: CursorInputRelation
-    for cursor_input in spec.cursor_input_relations:
-        upstream_parts.append(
-            f"SELECT MIN({cursor_input.cursor_column}) AS _min, "
-            f"MAX({cursor_input.cursor_column}) AS _max FROM {cursor_input.relation}"
+    physical_inputs: tuple[tuple[str, str], ...] = tuple(
+        sorted(
+            {
+                (cursor_input.relation, cursor_input.cursor_column)
+                for cursor_input in spec.cursor_input_relations
+            }
         )
-    if not upstream_parts:
+    )
+    if not physical_inputs:
         return None
 
     target_max_raw: object | None = None
@@ -91,16 +95,31 @@ def resolve_runtime_cursor_bounds(
             cursor_column=spec.cursor_column,
         )
 
-    derived_alias: str = " AS __cursor_bounds" if adapter.requires_derived_table_aliases() else ""
-    sql: str = (
-        "SELECT MIN(_min), CASE WHEN COUNT(*) = COUNT(_max) THEN MIN(_max) END FROM ("
-        + " UNION ALL ".join(upstream_parts)
-        + f"){derived_alias}"
-    )
-    cursor: Any = adapter.execute(connection=connection, sql=sql)
-    row: Any = cursor.fetchone()
-    if row is None or row[1] is None:
+    read_minimum: bool = target_max_raw is None
+    upstream_mins: list[object] = []
+    upstream_maxes: list[object] = []
+    input_index: int
+    physical_input: tuple[str, str]
+    for input_index, physical_input in enumerate(physical_inputs, start=1):
+        minimum, maximum = _query_watermark_raw(
+            adapter=adapter,
+            connection=connection,
+            relation=physical_input[0],
+            cursor_column=physical_input[1],
+            read_minimum=read_minimum,
+            query_index=input_index,
+            total=len(physical_inputs),
+            on_progress=on_progress,
+        )
+        if maximum is None or (read_minimum and minimum is None):
+            return None
+        if minimum is not None:
+            upstream_mins.append(minimum)
+        upstream_maxes.append(maximum)
+    if not upstream_maxes:
         return None
+    upstream_min_raw: object | None = min(upstream_mins) if upstream_mins else None
+    upstream_max_raw: object = min(upstream_maxes)
 
     effective_grain: str | None = resolve_effective_timestamp_grain(
         cursor_type=cursor_type,
@@ -108,7 +127,9 @@ def resolve_runtime_cursor_bounds(
         cursor_input_relations=spec.cursor_input_relations,
     )
     if cursor_type == CursorType.TIMESTAMP and effective_grain is not None:
-        start_raw: object | None = target_max_raw if target_max_raw is not None else row[0]
+        start_raw: object | None = (
+            target_max_raw if target_max_raw is not None else upstream_min_raw
+        )
         if start_raw is None:
             return None
         start: str | None = _normalize_bound(
@@ -116,7 +137,7 @@ def resolve_runtime_cursor_bounds(
         )
         end: str | None = _normalize_bound(
             value=_increment_timestamp_bound(
-                value=_floor_timestamp_bound(value=row[1], grain=effective_grain),
+                value=_floor_timestamp_bound(value=upstream_max_raw, grain=effective_grain),
                 grain=effective_grain,
             ),
             is_end=False,
@@ -125,9 +146,9 @@ def resolve_runtime_cursor_bounds(
         start: str | None = (
             _normalize_bound(value=target_max_raw, is_end=False)
             if target_max_raw is not None
-            else _normalize_bound(value=row[0], is_end=False)
+            else _normalize_bound(value=upstream_min_raw, is_end=False)
         )
-        end: str | None = _normalize_bound(value=row[1], is_end=True)
+        end: str | None = _normalize_bound(value=upstream_max_raw, is_end=True)
     if start is None or end is None:
         return None
     if spec.end_cursor_override is not None:
@@ -149,6 +170,46 @@ def resolve_runtime_cursor_bounds(
         has_start_override=spec.start_cursor_override is not None,
     )
     return CursorBounds(start=start, end=end)
+
+
+def _query_watermark_raw(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    relation: str,
+    cursor_column: str,
+    read_minimum: bool,
+    query_index: int,
+    total: int,
+    on_progress: Callable[[str], None] | None,
+) -> tuple[object | None, object | None]:
+    """Read one physical watermark relation with an optimizer-friendly statement."""
+
+    bounds: str = "min,max" if read_minimum else "max"
+    identity: str = f"({query_index}/{total}): {relation}.{cursor_column} [{bounds}]"
+    select_sql: str = (
+        f"MIN({cursor_column}), MAX({cursor_column})" if read_minimum else f"MAX({cursor_column})"
+    )
+    sql: str = f"SELECT {select_sql} FROM {relation}"
+    if on_progress is not None:
+        on_progress(f"Inspecting runtime cursor watermark {identity}...")
+    query_start: float = time.monotonic()
+    try:
+        cursor: Any = adapter.execute(connection=connection, sql=sql)
+        row: Any = cursor.fetchone()
+    except Exception as error:
+        elapsed: float = time.monotonic() - query_start
+        if on_progress is not None:
+            on_progress(f"Failed runtime cursor watermark {identity} ({elapsed:.2f}s): {error}")
+        raise
+    elapsed = time.monotonic() - query_start
+    if on_progress is not None:
+        on_progress(f"Inspected runtime cursor watermark {identity} ({elapsed:.2f}s)")
+    if row is None:
+        return None, None
+    if read_minimum:
+        return row[0], row[1]
+    return None, row[0]
 
 
 def resolve_effective_timestamp_grain(

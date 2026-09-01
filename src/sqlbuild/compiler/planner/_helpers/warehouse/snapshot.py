@@ -11,6 +11,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapter.contract.types import AdapterExecute
+from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,
@@ -599,7 +600,9 @@ def _collect_cursor_models(
         if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
             continue
 
-        cursor_inputs: dict[str, str] = _get_cursor_inputs(model=model, cursor_column=cursor_column)
+        cursor_watermark_inputs: dict[str, str] = resolve_cursor_input_roles(
+            model=model
+        ).watermark_inputs
 
         target_tag: str | None = None
         target_relation: str | None = None
@@ -613,11 +616,14 @@ def _collect_cursor_models(
             target_relation = model.destination.qualified_name
 
         upstreams: list[_UpstreamCursorInfo] = []
-        ref: CompileSqlReference
-        for ref in model.references:
-            upstream_cursor_col: str | None = cursor_inputs.get(ref.ref_name)
-            if upstream_cursor_col is None:
-                continue
+        input_name: str
+        upstream_cursor_col: str
+        for input_name, upstream_cursor_col in cursor_watermark_inputs.items():
+            ref: CompileSqlReference = _resolve_lineage_reference(
+                model=model,
+                input_name=input_name,
+                model_map=model_map,
+            )
             upstream_relation: str | None = _resolve_upstream_qualified_name(
                 ref=ref,
                 adapter=adapter,
@@ -813,15 +819,6 @@ def _assemble_cursor_snapshots(
     return snapshots
 
 
-def _get_cursor_inputs(*, model: CompiledModel, cursor_column: str) -> dict[str, str]:
-    """Resolve cursor column mapping per upstream ref."""
-
-    raw: object | None = model.config.values.get("cursor_inputs")
-    if isinstance(raw, dict):
-        return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str)}
-    return {ref.ref_name: cursor_column for ref in model.references}
-
-
 def _resolve_upstream_qualified_name(
     *,
     ref: CompileSqlReference,
@@ -850,6 +847,33 @@ def _resolve_upstream_qualified_name(
             entry: SourceEntry = source.source_entry
             return render_source_relation(entry=entry, adapter=adapter)
     return None
+
+
+def _resolve_lineage_reference(
+    *,
+    model: CompiledModel,
+    input_name: str,
+    model_map: dict[str, CompiledModel],
+) -> CompileSqlReference:
+    """Resolve one watermark input from transitive upstream lineage."""
+
+    pending: list[CompileSqlReference] = list(model.references)
+    visited_models: set[str] = set()
+    while pending:
+        reference: CompileSqlReference = pending.pop(0)
+        if reference.ref_name == input_name:
+            return reference
+        if reference.ref_kind != SqlReferenceKind.REF or reference.ref_name in visited_models:
+            continue
+        visited_models.add(reference.ref_name)
+        upstream_model: CompiledModel | None = model_map.get(reference.ref_name)
+        if upstream_model is not None:
+            pending.extend(upstream_model.references)
+    raise PlannerInputError(
+        f"model '{model.name}': cursor_watermark_inputs references '{input_name}', but it is "
+        "not in the model's upstream lineage",
+        code="S302",
+    )
 
 
 def _get_config_str(*, model: CompiledModel, key: str) -> str | None:

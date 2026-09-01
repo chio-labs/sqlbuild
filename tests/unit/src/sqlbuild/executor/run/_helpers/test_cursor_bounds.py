@@ -25,8 +25,12 @@ from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
     RuntimeExistingTargetOverrideTestCase,
     RuntimeTargetMaxTestCase,
     RuntimeTargetProbeFailureTestCase,
+    RuntimeWatermarkStatementTestCase,
 )
-from tests.unit.src.sqlbuild.executor.run._helpers.helpers import FakeCursorAdapter
+from tests.unit.src.sqlbuild.executor.run._helpers.helpers import (
+    FakeCursorAdapter,
+    RecordingCursorAdapter,
+)
 
 
 @pytest.mark.parametrize(
@@ -112,6 +116,70 @@ def test_given_runtime_cursor_start_when_resolving_bounds_then_applies_lower_flo
     assert cursor_bounds is not None
     assert cursor_bounds.start == test_case.expected_start
     assert cursor_bounds.end == test_case.expected_end
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RuntimeWatermarkStatementTestCase(
+            description="first run reads standalone min and max in deterministic order",
+            target_exists=False,
+            expected_statements=(
+                "SELECT MIN(cursor_value), MAX(cursor_value) FROM a_watermark",
+                "SELECT MIN(cursor_value), MAX(cursor_value) FROM z_watermark",
+            ),
+            expected_bounds=CursorBounds(start="10", end="91"),
+        ),
+        RuntimeWatermarkStatementTestCase(
+            description="existing target reads only standalone maxima and deduplicates inputs",
+            target_exists=True,
+            expected_statements=(
+                "SELECT MAX(cursor_value) FROM target_data",
+                "SELECT MAX(cursor_value) FROM a_watermark",
+                "SELECT MAX(cursor_value) FROM z_watermark",
+            ),
+            expected_bounds=CursorBounds(start="50", end="91"),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_multiple_physical_watermarks_when_resolving_then_reads_standalone_statements(
+    test_case: RuntimeWatermarkStatementTestCase,
+) -> None:
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
+    connection.execute("CREATE TABLE a_watermark (cursor_value INTEGER)")
+    connection.execute("INSERT INTO a_watermark VALUES (10), (90)")
+    connection.execute("CREATE TABLE z_watermark (cursor_value INTEGER)")
+    connection.execute("INSERT INTO z_watermark VALUES (20), (100)")
+    connection.execute("CREATE TABLE target_data (cursor_value INTEGER)")
+    connection.execute("INSERT INTO target_data VALUES (50)")
+    adapter: RecordingCursorAdapter = RecordingCursorAdapter(
+        target_relation_exists=test_case.target_exists
+    )
+
+    bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
+        adapter=cast(BaseAdapter, adapter),
+        connection=connection,
+        target_relation="target_data",
+        target_database=None,
+        target_schema=None,
+        target_name="target_data",
+        spec=RuntimeCursorSpec(
+            cursor_column="cursor_value",
+            cursor_type=CursorType.INTEGER,
+            cursor_grain=None,
+            cursor_start=None,
+            cursor_input_relations=(
+                CursorInputRelation(relation="z_watermark", cursor_column="cursor_value"),
+                CursorInputRelation(relation="a_watermark", cursor_column="cursor_value"),
+                CursorInputRelation(relation="a_watermark", cursor_column="cursor_value"),
+            ),
+        ),
+    )
+
+    assert "UNION ALL" not in " ".join(adapter.statements)
+    assert tuple(adapter.statements) == test_case.expected_statements
+    assert bounds == test_case.expected_bounds
 
 
 @pytest.mark.parametrize(

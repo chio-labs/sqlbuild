@@ -73,7 +73,7 @@ def resolve_ref_references(
     model_locations: dict[str, CompiledRelationLocation],
     seed_locations: dict[str, CompiledRelationLocation],
     cursor_bounds: CursorBounds | None,
-    cursor_inputs: dict[str, str],
+    cursor_filter_inputs: dict[str, str],
     adapter: BaseAdapter,
     cursor_type: str | None,
     lower_bound_inclusive: bool,
@@ -90,7 +90,7 @@ def resolve_ref_references(
         )
         if cursor_bounds is None:
             return qualified_name
-        cursor_column: str | None = cursor_inputs.get(ref_name)
+        cursor_column: str | None = cursor_filter_inputs.get(ref_name)
         if cursor_column is None:
             return qualified_name
         has_user_alias: bool = _has_following_alias(sql=query_sql, start=match.end())
