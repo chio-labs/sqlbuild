@@ -176,7 +176,7 @@ def _assert_model_sql_ready_for_execution(entry: ModelPlanEntry) -> None:
         or MICROBATCH_END_SENTINEL in entry.resolved_sql
     )
     runtime_resolved: bool = entry.incremental_mode == IncrementalMode.MICROBATCH or any(
-        relation.is_model_backed for relation in entry.cursor_input_relations
+        relation.is_runtime_owned for relation in entry.cursor_input_relations
     )
     if has_cursor_markers and not runtime_resolved:
         raise ExecutorInputError(f"{context} contains unresolved cursor markers")

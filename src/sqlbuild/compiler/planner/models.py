@@ -314,6 +314,13 @@ class CursorInputRelation:
     cursor_column: str
     cursor_grain: str | None = None
     is_model_backed: bool = False
+    is_runtime_produced: bool = False
+
+    @property
+    def is_runtime_owned(self) -> bool:
+        """Return whether bounds must be discovered after scheduled upstream execution."""
+
+        return self.is_model_backed or self.is_runtime_produced
 
 
 @dataclass(frozen=True)
@@ -492,6 +499,7 @@ class ModelPlanContext:
     source_map: dict[str, SourceEntry]
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
     star_exclude_keyword: str
+    runtime_cursor_producer_names: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)

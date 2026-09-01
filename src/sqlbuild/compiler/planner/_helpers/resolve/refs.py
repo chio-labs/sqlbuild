@@ -109,7 +109,24 @@ def resolve_ref_references(
         target: CompiledRelationLocation | None = seed_locations.get(seed_name)
         if target is None:
             return match.group(0)
-        return resolve_relation_location_qualified_name(adapter=adapter, location=target)
+        qualified_name: str = resolve_relation_location_qualified_name(
+            adapter=adapter, location=target
+        )
+        if cursor_bounds is None:
+            return qualified_name
+        cursor_column: str | None = cursor_filter_inputs.get(seed_name)
+        if cursor_column is None:
+            return qualified_name
+        has_user_alias: bool = _has_following_alias(sql=query_sql, start=match.end())
+        return _build_cursor_subquery(
+            qualified_name=qualified_name,
+            cursor_column=cursor_column,
+            bounds=cursor_bounds,
+            adapter=adapter,
+            cursor_type=cursor_type,
+            lower_bound_inclusive=lower_bound_inclusive,
+            inject_alias=not has_user_alias,
+        )
 
     return _SEED_PATTERN.sub(_replace_seed, _REF_PATTERN.sub(_replace_ref, query_sql))
 

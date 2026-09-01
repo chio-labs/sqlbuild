@@ -28,7 +28,9 @@ def build_cursor_plan_details(*, entry: ModelPlanEntry) -> CursorPlanDetails | N
 
     if entry.cursor_column is None:
         return None
-    runtime_owned: bool = any(relation.is_model_backed for relation in entry.cursor_input_relations)
+    runtime_owned: bool = any(
+        relation.is_runtime_owned for relation in entry.cursor_input_relations
+    )
     resolved_bounds: CursorBounds | None = entry.microbatch_range or entry.cursor_bounds
     effective_grain: str | None = _effective_grain(entry=entry)
     effective_batch_size: str | None = _effective_batch_size(

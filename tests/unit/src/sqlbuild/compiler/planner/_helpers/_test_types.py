@@ -312,6 +312,14 @@ class CursorSnapshotAvailabilityTestCase:
 
 
 @dataclass(frozen=True)
+class RuntimeCursorProducerNamesTestCase:
+    description: str
+    selected_keys: frozenset[CompiledObjectKey]
+    source_map: dict[str, SourceEntry]
+    expected_names: frozenset[str]
+
+
+@dataclass(frozen=True)
 class BuildDownstreamDepsTestCase:
     description: str
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]

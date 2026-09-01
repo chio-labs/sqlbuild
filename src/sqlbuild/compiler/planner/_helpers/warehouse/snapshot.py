@@ -583,6 +583,11 @@ def _collect_cursor_models(
     selected_names: frozenset[str] | None = (
         frozenset(k.name for k in selected_keys) if selected_keys is not None else None
     )
+    seed_map: dict[str, CompiledSeed] = {seed.name: seed for seed in project.seeds}
+    runtime_producer_names: frozenset[str] = _selected_runtime_producer_names(
+        project=project,
+        selected_keys=selected_keys,
+    )
     cursor_models: list[_CursorModelInfo] = []
     model: CompiledModel
     for model in project.models:
@@ -630,12 +635,16 @@ def _collect_cursor_models(
                 cursor_column=upstream_cursor_col,
                 model_map=model_map,
                 source_map=source_map,
+                seed_map=seed_map,
             )
+            if ref.ref_name in runtime_producer_names:
+                continue
             upstream_relation: str | None = _resolve_upstream_qualified_name(
                 ref=ref,
                 adapter=adapter,
                 model_map=model_map,
                 source_map=source_map,
+                seed_map=seed_map,
                 deferred_locations=deferred_locations,
                 selected_names=selected_names,
             )
@@ -839,28 +848,57 @@ def _resolve_upstream_qualified_name(
     adapter: BaseAdapter,
     model_map: dict[str, CompiledModel],
     source_map: dict[str, CompiledSource],
+    seed_map: dict[str, CompiledSeed],
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     selected_names: frozenset[str] | None = None,
 ) -> str | None:
     """Resolve a reference to a qualified relation name for cursor reads."""
 
+    is_selected: bool = selected_names is not None and ref.ref_name in selected_names
+    if (
+        ref.ref_kind in {SqlReferenceKind.REF, SqlReferenceKind.SEED}
+        and deferred_locations is not None
+        and ref.ref_name in deferred_locations
+        and not is_selected
+    ):
+        return deferred_locations[ref.ref_name].qualified_name
     if ref.ref_kind == SqlReferenceKind.REF:
-        is_selected: bool = selected_names is not None and ref.ref_name in selected_names
-        if (
-            deferred_locations is not None
-            and ref.ref_name in deferred_locations
-            and not is_selected
-        ):
-            return deferred_locations[ref.ref_name].qualified_name
         upstream_model: CompiledModel | None = model_map.get(ref.ref_name)
         if upstream_model is not None:
             return upstream_model.destination.qualified_name
+        upstream_seed: CompiledSeed | None = seed_map.get(ref.ref_name)
+        if upstream_seed is not None:
+            return upstream_seed.destination.qualified_name
+    elif ref.ref_kind == SqlReferenceKind.SEED:
+        seed: CompiledSeed | None = seed_map.get(ref.ref_name)
+        if seed is not None:
+            return seed.destination.qualified_name
     elif ref.ref_kind == SqlReferenceKind.SOURCE:
         source: CompiledSource | None = source_map.get(ref.ref_name)
         if source is not None:
             entry: SourceEntry = source.source_entry
             return render_source_relation(entry=entry, adapter=adapter)
     return None
+
+
+def _selected_runtime_producer_names(
+    *, project: CompiledProject, selected_keys: frozenset[CompiledObjectKey] | None
+) -> frozenset[str]:
+    """Return selected warehouse relations produced during this planner invocation."""
+
+    if selected_keys is None:
+        return frozenset()
+    source_load_names: frozenset[str] = frozenset(
+        source.name for source in project.sources if source.source_entry.loader is not None
+    )
+    names: set[str] = set()
+    key: CompiledObjectKey
+    for key in selected_keys:
+        if key.resource_type in {CompiledResourceType.MODEL, CompiledResourceType.SEED}:
+            names.add(key.name)
+        elif key.resource_type == CompiledResourceType.SOURCE and key.name in source_load_names:
+            names.add(key.name)
+    return frozenset(names)
 
 
 def _resolve_lineage_reference(
@@ -897,6 +935,7 @@ def _validate_watermark_contract_column(
     cursor_column: str,
     model_map: dict[str, CompiledModel],
     source_map: dict[str, CompiledSource],
+    seed_map: dict[str, CompiledSeed],
 ) -> None:
     """Validate reliable watermark column contracts before warehouse inspection."""
 
@@ -922,6 +961,11 @@ def _validate_watermark_contract_column(
         ):
             return
         declared_names = tuple(column.name for column in upstream_source.source_entry.columns)
+    elif ref.ref_kind == SqlReferenceKind.SEED:
+        upstream_seed: CompiledSeed | None = seed_map.get(ref.ref_name)
+        if upstream_seed is None:
+            return
+        declared_names = tuple(column.name for column in upstream_seed.schema_entry.columns)
     else:
         return
     if cursor_column.lower() in {name.lower() for name in declared_names}:

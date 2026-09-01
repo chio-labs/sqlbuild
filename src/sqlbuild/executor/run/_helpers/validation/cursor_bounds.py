@@ -34,7 +34,7 @@ def has_model_backed_cursor_watermarks(
 ) -> bool:
     """Return whether any cursor input relation is backed by another model."""
 
-    return any(relation.is_model_backed for relation in cursor_input_relations)
+    return any(relation.is_runtime_owned for relation in cursor_input_relations)
 
 
 def build_runtime_cursor_spec(

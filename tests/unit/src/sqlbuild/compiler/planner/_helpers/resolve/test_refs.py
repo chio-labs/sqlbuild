@@ -70,7 +70,10 @@ _FUNCTION_TARGETS: dict[str, CompiledRelationLocation] = {
 
 _CURSOR_BOUNDS: CursorBounds = CursorBounds(start="2024-01-15", end="2024-02-01")
 _INTEGER_CURSOR_BOUNDS: CursorBounds = CursorBounds(start="10", end="20")
-_CURSOR_INPUTS: dict[str, str] = {"orders": "event_time"}
+_CURSOR_INPUTS: dict[str, str] = {
+    "orders": "event_time",
+    "country_codes": "event_time",
+}
 _DBT_MANIFEST: DbtManifestIndex = build_dbt_manifest_index(
     raw_data=build_manifest_data(
         nodes=(
@@ -177,6 +180,17 @@ def test_given_refs_without_cursor_when_resolving_then_returns_expected_sql(
             query_sql='SELECT * FROM __ref("orders")',
             expected_sql=(
                 "SELECT * FROM (SELECT * FROM staging.orders"
+                " WHERE event_time >= 10"
+                " AND event_time < 20)"
+            ),
+            cursor_type=CursorKind.INTEGER,
+            cursor_bounds=_INTEGER_CURSOR_BOUNDS,
+        ),
+        RefResolutionTestCase(
+            description="wraps seed in cursor-filtered subquery",
+            query_sql='SELECT * FROM __seed("country_codes")',
+            expected_sql=(
+                "SELECT * FROM (SELECT * FROM seeds.country_codes"
                 " WHERE event_time >= 10"
                 " AND event_time < 20)"
             ),

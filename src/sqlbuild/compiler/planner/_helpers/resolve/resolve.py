@@ -12,6 +12,9 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CursorInputRoles,
 )
+from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
+    resolve_bounded_cursor_override,
+)
 from sqlbuild.compiler.planner._helpers.resolve.config import (
     get_config_append_cursor_inclusive,
     get_config_cursor_start,
@@ -80,6 +83,7 @@ def resolve_model_sql(
         end_cursor_override=cursor_overrides.end_cursor_override,
         model_locations=model_locations,
         seed_locations=seed_locations,
+        runtime_cursor_producer_names=context.runtime_cursor_producer_names,
         suppress_runtime_cursor_bounds=suppress_runtime_cursor_bounds,
     )
 
@@ -212,6 +216,7 @@ def _compute_model_cursor_bounds(
     end_cursor_override: str | None,
     model_locations: dict[str, CompiledRelationLocation],
     seed_locations: dict[str, CompiledRelationLocation],
+    runtime_cursor_producer_names: frozenset[str],
     suppress_runtime_cursor_bounds: bool,
 ) -> CursorBounds | None:
     """Compute cursor bounds for a model if it is incremental with a cursor."""
@@ -222,21 +227,34 @@ def _compute_model_cursor_bounds(
     if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
         return None
 
+    incremental_mode: str | None = get_config_str(model=model, key="incremental_mode")
+    is_microbatch: bool = incremental_mode == IncrementalMode.MICROBATCH
+    if is_microbatch:
+        return CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL)
+
+    bounded_override: CursorBounds | None = resolve_bounded_cursor_override(
+        start_cursor_override=start_cursor_override,
+        end_cursor_override=end_cursor_override,
+        cursor_type=get_config_str(model=model, key="cursor_type"),
+        cursor_grain=get_config_str(model=model, key="cursor_grain"),
+    )
+    if bounded_override is not None:
+        return bounded_override
+
     cursor_snapshot: ModelCursorSnapshot | None = snapshot.cursor_snapshots.get(model.name)
     runtime_owned: bool = has_model_backed_cursor_watermarks(
         model=model,
         model_locations=model_locations,
         seed_locations=seed_locations,
         cursor_watermark_inputs=resolve_cursor_input_roles(model=model).watermark_inputs,
-    )
-    has_bounded_overrides: bool = (
-        start_cursor_override is not None and end_cursor_override is not None
+    ) or bool(
+        set(resolve_cursor_input_roles(model=model).watermark_inputs)
+        & runtime_cursor_producer_names
     )
     if (
         not full_refresh
         and not suppress_runtime_cursor_bounds
         and not runtime_owned
-        and not has_bounded_overrides
         and cursor_snapshot is not None
         and not cursor_snapshot.watermarks_available
     ):
@@ -246,11 +264,6 @@ def _compute_model_cursor_bounds(
             f"{unavailable}",
             code="S302",
         )
-
-    incremental_mode: str | None = get_config_str(model=model, key="incremental_mode")
-    is_microbatch: bool = incremental_mode == IncrementalMode.MICROBATCH
-    if is_microbatch:
-        return CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL)
 
     if full_refresh or suppress_runtime_cursor_bounds:
         return None

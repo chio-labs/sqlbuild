@@ -19,12 +19,15 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
     CursorInputRoles,
 )
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.graph.source_load_nodes import build_source_load_map
 from sqlbuild.compiler.planner._helpers.output.cursor_type_check import (
     check_cursor_type_consistency,
 )
-from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import advance_cursor_end
+from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
+    resolve_bounded_cursor_override,
+)
 from sqlbuild.compiler.planner._helpers.output.strategy import (
     build_model_warnings,
     get_materialization_type,
@@ -243,6 +246,10 @@ def build_plan_entries(
     end_cursor_override: str | None = inputs.end_cursor_override
     entries: list[ModelPlanEntry] = []
     warnings: list[PlanWarning] = []
+    runtime_cursor_producer_names: frozenset[str] = _runtime_cursor_producer_names(
+        scope=scope,
+        source_map=relations.source_map,
+    )
     key: CompiledObjectKey
     for key in scope.execution_order:
         if key not in scope.selected_keys or key.name not in resolved_actions.models:
@@ -280,6 +287,7 @@ def build_plan_entries(
                 source_map=relations.source_read_map,
                 source_warehouse_columns=relations.source_warehouse_columns,
                 star_exclude_keyword=relations.star_exclude_keyword,
+                runtime_cursor_producer_names=runtime_cursor_producer_names,
             ),
             sql_analysis_enabled=project.settings.sql_analysis,
             full_refresh=effective_full_refresh,
@@ -458,6 +466,7 @@ def plan_model_from_change(
             seed_locations=context.seed_locations,
             source_map=context.source_map,
             cursor_column=cursor_column,
+            runtime_cursor_producer_names=context.runtime_cursor_producer_names,
         )
     runtime_owned_cursor_bounds: bool = _has_model_backed_cursor_watermarks(cursor_input_relations)
     cursor_bounds: CursorBounds | None = _compute_plan_cursor_bounds(
@@ -917,15 +926,14 @@ def _compute_plan_cursor_bounds(
         return None
     if full_refresh:
         return None
-    if start_cursor_override is not None and end_cursor_override is not None:
-        return CursorBounds(
-            start=start_cursor_override,
-            end=advance_cursor_end(
-                value=end_cursor_override,
-                cursor_type=_get_config_str(model=model, key="cursor_type"),
-                cursor_grain=_get_config_str(model=model, key="cursor_grain"),
-            ),
-        )
+    bounded_override: CursorBounds | None = resolve_bounded_cursor_override(
+        start_cursor_override=start_cursor_override,
+        end_cursor_override=end_cursor_override,
+        cursor_type=_get_config_str(model=model, key="cursor_type"),
+        cursor_grain=_get_config_str(model=model, key="cursor_grain"),
+    )
+    if bounded_override is not None:
+        return bounded_override
 
     cursor_snapshot: ModelCursorSnapshot | None = snapshot.cursor_snapshots.get(model.name)
     if cursor_snapshot is None:
@@ -1033,6 +1041,7 @@ def _build_cursor_input_relations(
     seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     cursor_column: str | None,
+    runtime_cursor_producer_names: frozenset[str],
 ) -> tuple[CursorInputRelation, ...]:
     """Build cursor-bearing input relation metadata for runtime range discovery."""
 
@@ -1071,6 +1080,7 @@ def _build_cursor_input_relations(
                     is_model_backed=(
                         ref.ref_kind == SqlReferenceKind.REF and ref.ref_name in model_locations
                     ),
+                    is_runtime_produced=ref.ref_name in runtime_cursor_producer_names,
                 )
             )
     return tuple(relations)
@@ -1205,7 +1215,24 @@ def _has_model_backed_cursor_watermarks(
 ) -> bool:
     """Return whether any cursor input relation is backed by another model."""
 
-    return any(relation.is_model_backed for relation in cursor_input_relations)
+    return any(relation.is_runtime_owned for relation in cursor_input_relations)
+
+
+def _runtime_cursor_producer_names(
+    *, scope: PlannerScope, source_map: dict[str, SourceEntry]
+) -> frozenset[str]:
+    """Return selected relations whose contents are produced during this invocation."""
+
+    names: set[str] = set()
+    key: CompiledObjectKey
+    for key in scope.selected_keys:
+        if key.resource_type in {CompiledResourceType.MODEL, CompiledResourceType.SEED}:
+            names.add(key.name)
+        elif key.resource_type == CompiledResourceType.SOURCE:
+            source: SourceEntry | None = source_map.get(key.name)
+            if source is not None and source.loader is not None:
+                names.add(key.name)
+    return frozenset(names)
 
 
 def _build_runtime_placeholder_bounds() -> CursorBounds:
@@ -1229,6 +1256,9 @@ def _resolve_cursor_input_relation(
         if target is None:
             target = seed_locations.get(ref.ref_name)
         return target.qualified_name if target is not None else None
+    if ref.ref_kind == SqlReferenceKind.SEED:
+        seed_target: CompiledRelationLocation | None = seed_locations.get(ref.ref_name)
+        return seed_target.qualified_name if seed_target is not None else None
     if ref.ref_kind == SqlReferenceKind.SOURCE:
         source: SourceEntry | None = source_map.get(ref.ref_name)
         if source is None:

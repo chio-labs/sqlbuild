@@ -81,6 +81,7 @@ def test_given_ref_and_deferred_locations_when_resolving_upstream_then_returns_e
         adapter=PlannerTestAdapter(),
         model_map=model_map,
         source_map={},
+        seed_map={},
         deferred_locations=deferred_locations,
         selected_names=test_case.selected_names,
     )

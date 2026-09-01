@@ -9,9 +9,11 @@ import pytest
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     _build_cursor_input_relations,
+    _runtime_cursor_producer_names,
     build_planner_relations_context,
     gather_source_columns,
     validate_source_cursor_input_columns,
@@ -27,6 +29,7 @@ from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     KnownSourceColumnsReuseTestCase,
     MultiDatabaseSourceColumnsTestCase,
+    RuntimeCursorProducerNamesTestCase,
     SourceColumnsTestCase,
     SourceCursorInputColumnsTestCase,
     WatermarkLineageTestCase,
@@ -430,11 +433,13 @@ def test_given_view_filter_and_transitive_watermark_when_planning_then_relation_
         seed_locations={},
         source_map={"raw_orders": SourceEntry(name="raw_orders", schema="raw", table="raw_orders")},
         cursor_column="event_time",
+        runtime_cursor_producer_names=frozenset({"raw_orders"}),
     )
 
     assert len(relations) == 1
     assert relations[0].relation == "raw.raw_orders"
     assert relations[0].cursor_column == "loaded_at"
+    assert relations[0].is_runtime_produced is True
     assert "orders_view" not in relations[0].relation
     assert test_case.expected_valid is True
 
@@ -605,6 +610,59 @@ def test_given_invalid_watermark_when_validating_lineage_then_raises_precise_err
         )
 
     assert test_case.expected_valid is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RuntimeCursorProducerNamesTestCase(
+            description="only selected scheduled relation producers own runtime watermarks",
+            selected_keys=frozenset(
+                {
+                    CompiledObjectKey(
+                        resource_type=CompiledResourceType.MODEL, name="selected_model"
+                    ),
+                    CompiledObjectKey(
+                        resource_type=CompiledResourceType.SEED, name="selected_seed"
+                    ),
+                    CompiledObjectKey(
+                        resource_type=CompiledResourceType.SOURCE, name="loaded_source"
+                    ),
+                    CompiledObjectKey(
+                        resource_type=CompiledResourceType.SOURCE, name="static_source"
+                    ),
+                }
+            ),
+            source_map={
+                "loaded_source": SourceEntry(name="loaded_source", loader="load_orders"),
+                "static_source": SourceEntry(name="static_source"),
+                "unselected_loaded_source": SourceEntry(
+                    name="unselected_loaded_source", loader="load_orders"
+                ),
+            },
+            expected_names=frozenset({"selected_model", "selected_seed", "loaded_source"}),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_selected_relations_when_classifying_runtime_watermarks_then_only_producers_own(
+    test_case: RuntimeCursorProducerNamesTestCase,
+) -> None:
+    scope: PlannerScope = PlannerScope(
+        upstream_deps={},
+        downstream_deps={},
+        all_keys={},
+        models_by_name={},
+        selected_keys=test_case.selected_keys,
+        execution_order=(),
+    )
+
+    names: frozenset[str] = _runtime_cursor_producer_names(
+        scope=scope,
+        source_map=test_case.source_map,
+    )
+
+    assert names == test_case.expected_names
 
 
 if __name__ == "__main__":

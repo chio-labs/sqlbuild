@@ -43,6 +43,15 @@ class ReusableModelSchemaBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SeedWatermarkBuildE2ETestCase:
+    description: str
+    initial_seed: str
+    changed_seed: str
+    expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_changed_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class EnumContractBuildE2ETestCase:
     """Test case for enum-backed contract enforcement."""
 
