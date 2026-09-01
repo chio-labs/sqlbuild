@@ -634,9 +634,7 @@ def test_given_broad_metadata_scope_when_gathering_selected_cursor_then_ignores_
     connection: Any,
 ) -> None:
     connection.execute("CREATE TABLE staging.valid_upstream (event_time TIMESTAMP)")
-    connection.execute(
-        "INSERT INTO staging.valid_upstream VALUES ('2024-01-01'), ('2024-03-01')"
-    )
+    connection.execute("INSERT INTO staging.valid_upstream VALUES ('2024-01-01'), ('2024-03-01')")
     connection.execute("CREATE TABLE staging.invalid_upstream (id INTEGER)")
     statements: list[str] = []
 
