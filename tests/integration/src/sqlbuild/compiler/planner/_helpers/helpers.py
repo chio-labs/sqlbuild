@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +25,12 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.spec.contracts.models import SchemaSeedEntry, SourceEntry
+from sqlbuild.spec.contracts.models import (
+    SchemaColumn,
+    SchemaModelEntry,
+    SchemaSeedEntry,
+    SourceEntry,
+)
 
 
 class RecordingDuckDbAdapter(DuckDbAdapter):
@@ -193,6 +198,26 @@ def build_project_with_targets(
         sources=tuple(sources),
         seeds=tuple(seeds),
     )
+
+
+def with_leading_enforced_model_contracts(
+    project: CompiledProject, *, columns_by_model: dict[str, tuple[str, ...]]
+) -> CompiledProject:
+    """Attach enforced contracts to leading models in a compiled test project."""
+
+    models: list[CompiledModel] = list(project.models)
+    for index, (model_name, column_names) in enumerate(columns_by_model.items()):
+        model: CompiledModel = models[index]
+        assert model.name == model_name
+        models[index] = replace(
+            model,
+            config=replace(model.config, values=model.config.values | {"contract": "enforced"}),
+            schema_entry=SchemaModelEntry(
+                name=model.name,
+                columns=tuple(SchemaColumn(name=name) for name in column_names),
+            ),
+        )
+    return replace(project, models=tuple(models))
 
 
 def build_deferred_locations_from_map(

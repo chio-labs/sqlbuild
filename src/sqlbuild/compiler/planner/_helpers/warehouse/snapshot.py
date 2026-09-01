@@ -42,6 +42,7 @@ from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
 from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
+    CursorSnapshotScope,
     MissingUpstream,
     ModelCursorSnapshot,
     PlannerScope,
@@ -142,7 +143,7 @@ def gather_warehouse_snapshot(
     full_refresh_model_names: frozenset[str] | None = None,
     on_progress: Callable[[str], None] | None = None,
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
-    runtime_producer_keys: frozenset[CompiledObjectKey] | None = None,
+    cursor_scope: CursorSnapshotScope | None = None,
 ) -> WarehouseSnapshot:
     """Gather relations, columns, and fingerprints for all target schemas."""
 
@@ -200,11 +201,13 @@ def gather_warehouse_snapshot(
         connection=connection,
         execute=execute,
         existing_relations=relations,
-        selected_keys=selected_keys,
+        selected_keys=cursor_scope.model_keys if cursor_scope is not None else selected_keys,
         full_refresh_model_names=effective_full_refresh_names,
         on_progress=on_progress,
         deferred_locations=deferred_locations,
-        runtime_producer_keys=runtime_producer_keys,
+        runtime_producer_keys=(
+            cursor_scope.runtime_producer_keys if cursor_scope is not None else None
+        ),
     )
 
     return WarehouseSnapshot(
