@@ -1,0 +1,193 @@
+"""Validation support for immutable observability envelopes."""
+
+from __future__ import annotations
+
+import json
+import math
+from collections.abc import Mapping
+from datetime import UTC, datetime
+from types import MappingProxyType
+
+from sqlbuild.runtime.observability.constants import (
+    DURATION_MS_FIELD,
+    EXIT_CODE_FIELD,
+    FORBIDDEN_STATEMENT_PAYLOAD_FIELDS,
+    LIFECYCLE_EVENT_CATALOGS,
+    MAX_METADATA_BYTES,
+    METADATA_FIELD,
+    NONNEGATIVE_INTEGER_PAYLOAD_FIELDS,
+    STATEMENT_EVENT_PREFIX,
+    STRING_PAYLOAD_FIELDS,
+)
+from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
+from sqlbuild.runtime.observability.models import LifecycleEvent, LifecycleEventDefinition
+from sqlbuild.runtime.observability.types import JSONValue
+
+
+def validate_schema_version(*, value: object) -> None:
+    """Validate the shared positive integer schema-version contract."""
+
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ObservabilityValidationError(
+            "schema_version must be a positive integer excluding bool"
+        )
+
+
+def freeze_json(*, value: object, path: str) -> JSONValue:
+    """Validate and recursively freeze a JSON-compatible value."""
+
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ObservabilityValidationError(f"{path} must not contain NaN or infinity")
+        return value
+    if isinstance(value, Mapping):
+        frozen: dict[str, JSONValue] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise ObservabilityValidationError(f"{path} keys must be strings")
+            frozen[key] = freeze_json(value=item, path=f"{path}.{key}")
+        return MappingProxyType(frozen)
+    if isinstance(value, (list, tuple)):
+        return tuple(
+            freeze_json(value=item, path=f"{path}[{index}]") for index, item in enumerate(value)
+        )
+    raise ObservabilityValidationError(
+        f"{path} contains non-JSON value of type {type(value).__name__}"
+    )
+
+
+def validate_required_text(*, value: object, field_name: str) -> None:
+    """Validate one required non-empty string field."""
+
+    if not isinstance(value, str) or not value:
+        raise ObservabilityValidationError(f"{field_name} must be a non-empty string")
+
+
+def validate_optional_text(*, value: object, field_name: str) -> None:
+    """Validate one optional non-empty string field."""
+
+    if value is not None:
+        validate_required_text(value=value, field_name=field_name)
+
+
+def validate_timestamp(*, value: datetime) -> None:
+    """Validate a timezone-aware UTC timestamp."""
+
+    if not isinstance(value, datetime) or value.tzinfo is None:
+        raise ObservabilityValidationError("occurred_at must be a timezone-aware UTC datetime")
+    if value.utcoffset() != UTC.utcoffset(value):
+        raise ObservabilityValidationError("occurred_at must use UTC")
+
+
+def _forbidden_statement_fields(*, value: object) -> set[str]:
+    if isinstance(value, Mapping):
+        found: set[str] = {
+            key
+            for key in value
+            if isinstance(key, str) and key in FORBIDDEN_STATEMENT_PAYLOAD_FIELDS
+        }
+        for item in value.values():
+            found.update(_forbidden_statement_fields(value=item))
+        return found
+    if isinstance(value, (list, tuple)):
+        found = set()
+        for item in value:
+            found.update(_forbidden_statement_fields(value=item))
+        return found
+    return set()
+
+
+def _plain_json(*, value: object) -> object:
+    if isinstance(value, Mapping):
+        return {key: _plain_json(value=item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain_json(value=item) for item in value]
+    return value
+
+
+def _validate_payload_field(*, field_name: str, value: object) -> None:
+    if field_name in STRING_PAYLOAD_FIELDS:
+        if not isinstance(value, str) or not value:
+            raise ObservabilityValidationError(
+                f"payload field {field_name!r} must be a non-empty string"
+            )
+        return
+    if field_name in NONNEGATIVE_INTEGER_PAYLOAD_FIELDS:
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ObservabilityValidationError(
+                f"payload field {field_name!r} must be a nonnegative integer excluding bool"
+            )
+        return
+    if field_name == DURATION_MS_FIELD:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value < 0
+        ):
+            raise ObservabilityValidationError(
+                "payload field 'duration_ms' must be a nonnegative finite number excluding bool"
+            )
+        return
+    if field_name == EXIT_CODE_FIELD:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ObservabilityValidationError(
+                "payload field 'exit_code' must be an integer excluding bool"
+            )
+        return
+    if field_name == METADATA_FIELD:
+        if not isinstance(value, Mapping):
+            raise ObservabilityValidationError("payload field 'metadata' must be a JSON object")
+        encoded: bytes = json.dumps(
+            _plain_json(value=value),
+            ensure_ascii=True,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        if len(encoded) > MAX_METADATA_BYTES:
+            raise ObservabilityValidationError(
+                f"payload field 'metadata' must encode to at most {MAX_METADATA_BYTES} bytes"
+            )
+
+
+def validate_known_lifecycle_event(*, event: LifecycleEvent) -> None:
+    """Validate correlations and safe payload fields for a catalogued event."""
+
+    version_catalog: Mapping[str, LifecycleEventDefinition] | None = LIFECYCLE_EVENT_CATALOGS.get(
+        event.schema_version
+    )
+    definition: LifecycleEventDefinition | None = (
+        version_catalog.get(event.event_type) if version_catalog is not None else None
+    )
+    if definition is None:
+        raise ObservabilityValidationError(
+            f"unknown lifecycle event_type {event.event_type!r}; decode it as an opaque envelope"
+        )
+    missing: list[str] = sorted(
+        field_name
+        for field_name in definition.required_correlations
+        if getattr(event, field_name) is None
+    )
+    if missing:
+        raise ObservabilityValidationError(
+            f"known event {event.event_type!r} requires correlation field(s): {', '.join(missing)}"
+        )
+    unexpected: list[str] = sorted(set(event.payload) - definition.allowed_payload_fields)
+    if unexpected:
+        allowed: str = ", ".join(sorted(definition.allowed_payload_fields)) or "none"
+        raise ObservabilityValidationError(
+            f"payload field(s) not allowed for known event {event.event_type!r}: "
+            f"{', '.join(unexpected)}; allowed fields: {allowed}"
+        )
+    if event.event_type.startswith(STATEMENT_EVENT_PREFIX):
+        forbidden: list[str] = sorted(_forbidden_statement_fields(value=event.payload))
+        if forbidden:
+            raise ObservabilityValidationError(
+                f"statement lifecycle payload must not contain SQL or parameter values; "
+                f"forbidden field(s): {', '.join(forbidden)}"
+            )
+    for field_name, value in event.payload.items():
+        _validate_payload_field(field_name=field_name, value=value)

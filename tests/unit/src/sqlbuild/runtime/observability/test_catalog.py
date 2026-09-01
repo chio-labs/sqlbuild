@@ -1,0 +1,349 @@
+"""Tests for lifecycle catalog validation and semantic helpers."""
+
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from sqlbuild.runtime.observability.constants import LIFECYCLE_EVENT_CATALOGS
+from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
+from sqlbuild.runtime.observability.main.is_terminal_event import is_terminal_event
+from sqlbuild.runtime.observability.main.validate_idempotent_duplicate import (
+    validate_idempotent_duplicate,
+)
+from sqlbuild.runtime.observability.models import LifecycleEvent
+from tests.unit.src.sqlbuild.runtime.observability._test_types import (
+    CatalogVersionCase,
+    IdempotencyCase,
+    LifecycleErrorCase,
+    StatementPrivacyCase,
+    TerminalEvidenceCase,
+    TerminalSemanticsCase,
+    TimestampErrorCase,
+)
+from tests.unit.src.sqlbuild.runtime.observability.helpers import lifecycle_event
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StatementPrivacyCase(
+            description="full SQL field is rejected",
+            field_name="sql",
+            value="select * from customers",
+            expected_error="sql",
+        ),
+        StatementPrivacyCase(
+            description="full SQL alias is rejected",
+            field_name="full_sql",
+            value="select secret from credentials",
+            expected_error="full_sql",
+        ),
+        StatementPrivacyCase(
+            description="parameter object is rejected",
+            field_name="parameters",
+            value={"token": "secret"},
+            expected_error="parameters",
+        ),
+        StatementPrivacyCase(
+            description="parameter values are rejected",
+            field_name="parameter_values",
+            value=["secret"],
+            expected_error="parameter_values",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_statement_fact_with_private_content_when_constructing_then_field_is_rejected(
+    test_case: StatementPrivacyCase,
+) -> None:
+    with pytest.raises(ObservabilityValidationError, match=test_case.expected_error):
+        lifecycle_event(
+            "statement_started",
+            statement_id="statement-1",
+            payload={test_case.field_name: test_case.value},
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LifecycleErrorCase(
+            description="nested parameter values are rejected",
+            event_type="statement_failed",
+            statement_id="statement-1",
+            payload={"error_type": {"parameter_values": ["secret"]}},
+            expected_error="parameter_values",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_nested_parameter_values_when_constructing_statement_fact_then_they_are_rejected(
+    test_case: LifecycleErrorCase,
+) -> None:
+    with pytest.raises(ObservabilityValidationError, match=test_case.expected_error):
+        lifecycle_event(
+            test_case.event_type,
+            statement_id=test_case.statement_id,
+            payload=test_case.payload,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LifecycleErrorCase(
+            description="resource attempt ID is required",
+            event_type="resource_attempt_started",
+            run_id="run-1",
+            resource_id="model.orders",
+            payload={},
+            expected_error="requires correlation field.*resource_attempt_id",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_known_scoped_event_without_correlation_when_constructing_then_error_is_actionable(
+    test_case: LifecycleErrorCase,
+) -> None:
+    with pytest.raises(ObservabilityValidationError, match=test_case.expected_error):
+        lifecycle_event(
+            test_case.event_type,
+            run_id=test_case.run_id,
+            resource_id=test_case.resource_id,
+            payload=test_case.payload,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TimestampErrorCase(
+            description="non-UTC offset is rejected",
+            occurred_at=datetime(2026, 1, 1, tzinfo=timezone(timedelta(hours=1))),
+            expected_error="occurred_at must use UTC",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_non_utc_timestamp_when_constructing_then_it_is_rejected(
+    test_case: TimestampErrorCase,
+) -> None:
+    with pytest.raises(ObservabilityValidationError, match=test_case.expected_error):
+        lifecycle_event(occurred_at=test_case.occurred_at)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TerminalSemanticsCase(
+            description="statement completion is terminal while progress facts are not",
+            event_types=("statement_started", "statement_submitted", "statement_completed"),
+            expected_terminal=(False, False, True),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_terminal_and_non_terminal_facts_when_classifying_then_catalog_semantics_apply(
+    test_case: TerminalSemanticsCase,
+) -> None:
+    events: tuple[LifecycleEvent, ...] = tuple(
+        lifecycle_event(event_type, statement_id="statement-1")
+        for event_type in test_case.event_types
+    )
+    actual_terminal: tuple[bool, ...] = tuple(is_terminal_event(event) for event in events)
+
+    assert actual_terminal == test_case.expected_terminal
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TerminalEvidenceCase(
+            description="started and submitted facts contain no terminal evidence",
+            expected_terminal_count=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_only_started_and_submitted_facts_when_inspecting_then_no_terminal_evidence_exists(
+    test_case: TerminalEvidenceCase,
+) -> None:
+    events: tuple[LifecycleEvent, ...] = (
+        lifecycle_event("invocation_started"),
+        lifecycle_event("run_started", run_id="run-1"),
+        lifecycle_event("statement_started", statement_id="statement-1"),
+        lifecycle_event("statement_submitted", statement_id="statement-1"),
+    )
+    terminal_count: int = sum(is_terminal_event(event) for event in events)
+
+    assert terminal_count == test_case.expected_terminal_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CatalogVersionCase(
+            description="v1 catalog is authoritative and v2 is unsupported",
+            schema_version=1,
+            event_type="statement_completed",
+            expected_terminal=True,
+            expected_unsupported_version=2,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_catalog_when_looking_up_events_then_authority_is_version_dimensional(
+    test_case: CatalogVersionCase,
+) -> None:
+    assert (
+        LIFECYCLE_EVENT_CATALOGS[test_case.schema_version][test_case.event_type].terminal
+        is test_case.expected_terminal
+    )
+    assert test_case.expected_unsupported_version not in LIFECYCLE_EVENT_CATALOGS
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LifecycleErrorCase(
+            description="negative duration is rejected",
+            event_type="invocation_completed",
+            payload={"duration_ms": -0.1},
+            expected_error="nonnegative finite number",
+        ),
+        LifecycleErrorCase(
+            description="infinite duration is rejected",
+            event_type="invocation_completed",
+            payload={"duration_ms": float("inf")},
+            expected_error="NaN or infinity",
+        ),
+        LifecycleErrorCase(
+            description="boolean duration is rejected",
+            event_type="invocation_completed",
+            payload={"duration_ms": True},
+            expected_error="excluding bool",
+        ),
+        LifecycleErrorCase(
+            description="negative count is rejected",
+            event_type="run_started",
+            run_id="run-1",
+            payload={"selected_count": -1},
+            expected_error="nonnegative integer",
+        ),
+        LifecycleErrorCase(
+            description="boolean count is rejected",
+            event_type="run_started",
+            run_id="run-1",
+            payload={"selected_count": True},
+            expected_error="excluding bool",
+        ),
+        LifecycleErrorCase(
+            description="non-string command is rejected",
+            event_type="invocation_started",
+            payload={"command": 7},
+            expected_error="non-empty string",
+        ),
+        LifecycleErrorCase(
+            description="boolean exit code is rejected",
+            event_type="invocation_completed",
+            payload={"exit_code": False},
+            expected_error="integer excluding bool",
+        ),
+        LifecycleErrorCase(
+            description="fractional affected rows are rejected",
+            event_type="statement_completed",
+            statement_id="statement-1",
+            payload={"affected_rows": 1.5},
+            expected_error="nonnegative integer",
+        ),
+        LifecycleErrorCase(
+            description="non-object metadata is rejected",
+            event_type="statement_completed",
+            statement_id="statement-1",
+            payload={"metadata": ["not", "an", "object"]},
+            expected_error="metadata.*JSON object",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_catalogued_payload_value_when_constructing_then_it_is_rejected(
+    test_case: LifecycleErrorCase,
+) -> None:
+    with pytest.raises(ObservabilityValidationError, match=test_case.expected_error):
+        lifecycle_event(
+            test_case.event_type,
+            run_id=test_case.run_id,
+            statement_id=test_case.statement_id,
+            payload=test_case.payload,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LifecycleErrorCase(
+            description="metadata above 4096 encoded bytes is rejected",
+            event_type="statement_completed",
+            statement_id="statement-1",
+            payload={"metadata": {"x": "x" * 4089}},
+            expected_error="at most 4096 bytes",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_metadata_over_encoded_bound_when_constructing_then_it_is_rejected(
+    test_case: LifecycleErrorCase,
+) -> None:
+    with pytest.raises(ObservabilityValidationError, match=test_case.expected_error):
+        lifecycle_event(
+            test_case.event_type,
+            statement_id=test_case.statement_id,
+            payload=test_case.payload,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        IdempotencyCase(
+            description="identical duplicate event is idempotent",
+            duplicate_command=None,
+            expected_event_id="evt-1",
+            expected_error="",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_identical_duplicate_event_id_when_validating_then_it_is_idempotent(
+    test_case: IdempotencyCase,
+) -> None:
+    event: LifecycleEvent = lifecycle_event()
+
+    validate_idempotent_duplicate(original=event, duplicate=event)
+
+    assert event.event_id == test_case.expected_event_id
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        IdempotencyCase(
+            description="same event ID with changed payload conflicts",
+            duplicate_command="plan",
+            expected_event_id="evt-1",
+            expected_error="conflicting lifecycle facts",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_duplicate_event_id_with_different_fact_when_validating_then_conflict_is_rejected(
+    test_case: IdempotencyCase,
+) -> None:
+    event: LifecycleEvent = lifecycle_event()
+    conflicting: LifecycleEvent = replace(event, payload={"command": test_case.duplicate_command})
+
+    with pytest.raises(ObservabilityValidationError, match=test_case.expected_error):
+        validate_idempotent_duplicate(original=event, duplicate=conflicting)
+
+    assert conflicting.event_id == test_case.expected_event_id
