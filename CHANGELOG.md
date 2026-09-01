@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.71.6](https://github.com/chio-labs/sqlbuild/compare/v0.71.5...v0.71.6) (2026-09-01)
+
+
+### Bug Fixes
+
+* exclude views from table type conversion planning ([#454](https://github.com/chio-labs/sqlbuild/issues/454)) ([416550a](https://github.com/chio-labs/sqlbuild/commit/416550ad5c59990bc84ee1fc3975e962e3a582dd))
+
 ## [0.71.5](https://github.com/chio-labs/sqlbuild/compare/v0.71.4...v0.71.5) (2026-09-01)
 
 
