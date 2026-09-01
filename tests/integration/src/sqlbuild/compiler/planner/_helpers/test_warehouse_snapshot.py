@@ -18,10 +18,17 @@ from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.output.plan_entry import gather_source_columns
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import gather_warehouse_snapshot
 from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
-from sqlbuild.compiler.planner.models import ModelCursorSnapshot, WarehouseSnapshot
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.models import (
+    CursorSnapshotScope,
+    ModelCursorSnapshot,
+    WarehouseSnapshot,
+)
 from tests.integration.src.sqlbuild.compiler.planner._helpers._test_types import (
     GatherCursorSnapshotTestCase,
     GatherEmptySnapshotTestCase,
+    GatherInvalidCursorScopeTestCase,
+    GatherSelectedCursorScopeTestCase,
     GatherSharedCursorSnapshotTestCase,
     GatherSourceColumnsTestCase,
     GatherWarehouseSnapshotTestCase,
@@ -31,6 +38,7 @@ from tests.integration.src.sqlbuild.compiler.planner._helpers.helpers import (
     _IncrementalModelSpec,
     build_deferred_locations_from_map,
     build_project_with_targets,
+    with_leading_enforced_model_contracts,
 )
 
 _INCREMENTAL_MODEL: _IncrementalModelSpec = _IncrementalModelSpec(
@@ -600,6 +608,148 @@ def test_given_models_sharing_one_source_when_gathering_snapshot_then_executes_o
     }
     assert tuple(statements) == test_case.expected_statements
     assert "UNION ALL" not in statements[0]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        GatherSelectedCursorScopeTestCase(
+            description="selected cursor ignores unrelated invalid model",
+            expected_cursor_snapshot=ModelCursorSnapshot(
+                target_max=None,
+                upstream_mins=("2024-01-01 00:00:00",),
+                upstream_maxes=("2024-03-01 00:00:00",),
+            ),
+            expected_statements=(
+                "SELECT CAST(MIN(event_time) AS VARCHAR) AS _min, "
+                "CAST(MAX(event_time) AS VARCHAR) AS _max FROM staging.valid_upstream",
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_broad_metadata_scope_when_gathering_selected_cursor_then_ignores_unrelated_invalid_model(
+    test_case: GatherSelectedCursorScopeTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    connection.execute("CREATE TABLE staging.valid_upstream (event_time TIMESTAMP)")
+    connection.execute(
+        "INSERT INTO staging.valid_upstream VALUES ('2024-01-01'), ('2024-03-01')"
+    )
+    connection.execute("CREATE TABLE staging.invalid_upstream (id INTEGER)")
+    statements: list[str] = []
+
+    def _record_execute(*, connection: Any, sql: str) -> Any:
+        statements.append(sql)
+        return connection.execute(sql)
+
+    project: CompiledProject = build_project_with_targets(
+        model_locations={"valid_upstream": "staging", "invalid_upstream": "staging"},
+        incremental_models=(
+            _IncrementalModelSpec(
+                name="selected_cursor",
+                schema="staging",
+                cursor="event_time",
+                ref_names=("valid_upstream",),
+            ),
+            _IncrementalModelSpec(
+                name="unrelated_cursor",
+                schema="staging",
+                cursor="event_time",
+                ref_names=("invalid_upstream",),
+                extra_config={
+                    "cursor_filter_inputs": {"invalid_upstream": "id"},
+                    "cursor_watermark_inputs": {"invalid_upstream": "meeting_date"},
+                },
+            ),
+        ),
+    )
+    project = with_leading_enforced_model_contracts(
+        project,
+        columns_by_model={
+            "valid_upstream": ("event_time",),
+            "invalid_upstream": ("id",),
+        },
+    )
+    selected_cursor_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.MODEL,
+        name="selected_cursor",
+    )
+    metadata_keys: frozenset[CompiledObjectKey] = frozenset(model.key for model in project.models)
+
+    snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        execute=_record_execute,
+        selected_keys=metadata_keys,
+        cursor_scope=CursorSnapshotScope(
+            model_keys=frozenset({selected_cursor_key}),
+            runtime_producer_keys=frozenset({selected_cursor_key}),
+        ),
+    )
+
+    assert snapshot.cursor_snapshots == {"selected_cursor": test_case.expected_cursor_snapshot}
+    assert tuple(statements) == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        GatherInvalidCursorScopeTestCase(
+            description="selected invalid cursor fails precise contract validation",
+            expected_error_code="S302",
+            expected_error_fragment="Declared contract columns: id",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_selected_invalid_cursor_model_when_gathering_snapshot_then_raises_s302(
+    test_case: GatherInvalidCursorScopeTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+    execute: Any,
+) -> None:
+    connection.execute("CREATE TABLE staging.invalid_upstream (id INTEGER)")
+    project: CompiledProject = build_project_with_targets(
+        model_locations={"invalid_upstream": "staging"},
+        incremental_models=(
+            _IncrementalModelSpec(
+                name="invalid_cursor",
+                schema="staging",
+                cursor="id",
+                ref_names=("invalid_upstream",),
+                extra_config={
+                    "cursor_filter_inputs": {"invalid_upstream": "id"},
+                    "cursor_watermark_inputs": {"invalid_upstream": "meeting_date"},
+                },
+            ),
+        ),
+    )
+    project = with_leading_enforced_model_contracts(
+        project,
+        columns_by_model={"invalid_upstream": ("id",)},
+    )
+    invalid_cursor_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.MODEL,
+        name="invalid_cursor",
+    )
+
+    with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment) as exc_info:
+        gather_warehouse_snapshot(
+            project=project,
+            adapter=adapter,
+            connection=connection,
+            execute=execute,
+            selected_keys=frozenset(model.key for model in project.models),
+            cursor_scope=CursorSnapshotScope(
+                model_keys=frozenset({invalid_cursor_key}),
+                runtime_producer_keys=frozenset({invalid_cursor_key}),
+            ),
+        )
+
+    assert exc_info.value.code == test_case.expected_error_code
 
 
 if __name__ == "__main__":
