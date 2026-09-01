@@ -753,6 +753,8 @@ class CliFailureBuildE2ETestCase:
     command: tuple[str, ...]
     expected_exit_code: int
     expected_stderr_fragments: tuple[str, ...]
+    verification_sql: str
+    expected_verification_rows: tuple[tuple[object, ...], ...]
     expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
     pre_commands: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
 

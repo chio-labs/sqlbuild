@@ -37,6 +37,8 @@ from sqlbuild.compiler.planner._helpers.output.strategy import (
 from sqlbuild.compiler.planner._helpers.planning.full_refresh import resolve_model_full_refresh
 from sqlbuild.compiler.planner._helpers.resolve.cursor import (
     compute_cursor_bounds,
+    normalize_cursor_snapshot_grain,
+    resolve_effective_timestamp_grain,
 )
 from sqlbuild.compiler.planner._helpers.resolve.refs import (
     apply_deferred_locations,
@@ -513,6 +515,7 @@ def plan_model_from_change(
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
         runtime_owned_cursor_bounds=runtime_owned_cursor_bounds,
+        cursor_input_relations=cursor_input_relations,
     )
 
     fingerprint: Fingerprint | None = snapshot.fingerprints.models.get(model.name)
@@ -856,6 +859,7 @@ def _compute_microbatch_range(
     start_cursor_override: str | None,
     end_cursor_override: str | None,
     runtime_owned_cursor_bounds: bool,
+    cursor_input_relations: tuple[CursorInputRelation, ...],
 ) -> CursorBounds | None:
     """Compute the real overall cursor range for microbatch batch splitting."""
 
@@ -882,6 +886,20 @@ def _compute_microbatch_range(
     if cursor_snapshot is None:
         return None
 
+    cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
+    downstream_grain: str | None = _get_config_str(model=model, key="cursor_grain")
+    effective_grain: str | None = resolve_effective_timestamp_grain(
+        cursor_type=cursor_type,
+        downstream_grain=downstream_grain,
+        cursor_input_grains=tuple(relation.cursor_grain for relation in cursor_input_relations),
+    )
+    if downstream_grain is not None and effective_grain != downstream_grain:
+        cursor_snapshot = normalize_cursor_snapshot_grain(
+            cursor_snapshot=cursor_snapshot,
+            cursor_type=cursor_type,
+            effective_grain=effective_grain,
+        )
+
     lookback: str | None = resolve_microbatch_lookback(model)
     cursor_start: str | None = _get_cursor_start(model)
     backfill_duration: str | None = None
@@ -890,13 +908,13 @@ def _compute_microbatch_range(
 
     return compute_cursor_bounds(
         cursor_snapshot=cursor_snapshot,
-        cursor_type=_get_config_str(model=model, key="cursor_type"),
+        cursor_type=cursor_type,
         cursor_start=cursor_start,
         lookback=lookback,
         backfill_duration=backfill_duration,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
-        cursor_grain=_get_config_str(model=model, key="cursor_grain"),
+        cursor_grain=effective_grain,
         is_microbatch=False,
     )
 

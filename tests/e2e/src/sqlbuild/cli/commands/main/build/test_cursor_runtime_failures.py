@@ -21,7 +21,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     "test_case",
     [
         CliFailureBuildE2ETestCase(
-            description="bad mapped cursor input column fails at runtime",
+            description="bad mapped cursor input column fails during planning validation",
             repo_files={
                 "sqlbuild_project.toml": (
                     'name = "cursor_runtime_project"\n'
@@ -65,8 +65,13 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             },
             command=("--no-color", "build", "--select", "+customer_status_snapshot"),
             expected_exit_code=1,
-            expected_stderr_fragments=(),
-            expected_stdout_fragments=("missing_column",),
+            expected_stderr_fragments=(
+                "error[S302]: model 'customer_status_snapshot': cursor_watermark_inputs "
+                "references 'fact_orders' column 'missing_column', but its enforced contract "
+                "does not expose the column. Declared contract columns: order_id, ordered_at",
+            ),
+            verification_sql="SELECT COUNT(*) FROM main.customer_status_snapshot",
+            expected_verification_rows=((0,),),
             pre_commands=(("--no-color", "build", "--select", "+fact_orders"),),
         ),
         CliFailureBuildE2ETestCase(
@@ -104,6 +109,11 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             command=("--no-color", "build", "--select", "customer_status_snapshot"),
             expected_exit_code=1,
             expected_stderr_fragments=("references unknown model 'missing_orders'",),
+            verification_sql=(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                "WHERE table_name = 'customer_status_snapshot'"
+            ),
+            expected_verification_rows=((0,),),
         ),
     ],
     ids=lambda case: case.description,
@@ -142,3 +152,9 @@ def test_given_cursor_runtime_failure_projects_when_running_build_then_cli_fails
         assert fragment in result.stdout, result.stdout + result.stderr
     for fragment in test_case.expected_stderr_fragments:
         assert fragment in result.stderr, result.stdout + result.stderr
+    verification_connection: duckdb.DuckDBPyConnection = duckdb.connect(str(db_path))
+    verification_rows: list[tuple[object, ...]] = verification_connection.execute(
+        test_case.verification_sql
+    ).fetchall()
+    verification_connection.close()
+    assert tuple(verification_rows) == test_case.expected_verification_rows

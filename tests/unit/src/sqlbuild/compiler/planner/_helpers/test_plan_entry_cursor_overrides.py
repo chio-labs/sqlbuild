@@ -21,6 +21,7 @@ from sqlbuild.compiler.planner._helpers.output.plan_entry import (
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CursorBounds,
+    CursorInputRelation,
     ModelCursorSnapshot,
     WarehouseSnapshot,
 )
@@ -29,6 +30,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     AuthoritativeCursorOverrideTestCase,
     PlanEntryCursorGrainTestCase,
     PlanEntryCursorOverrideTestCase,
+    PlannerOwnedMixedGrainRangeTestCase,
 )
 
 
@@ -182,9 +184,88 @@ def test_given_runtime_owned_missing_snapshot_when_overrides_complete_then_all_r
         start_cursor_override=test_case.start_override,
         end_cursor_override=test_case.end_override,
         runtime_owned_cursor_bounds=True,
+        cursor_input_relations=(),
     )
 
     assert plan_bounds == test_case.expected_bounds
+    assert microbatch_range == test_case.expected_bounds
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PlannerOwnedMixedGrainRangeTestCase(
+            description="planner-owned day input replays the coarsest timestamp bucket",
+            target_max="2026-04-04 14:00:00",
+            upstream_max="2026-04-04 00:00:00",
+            downstream_grain="hour",
+            upstream_grain="day",
+            batch_size="6h",
+            expected_bounds=CursorBounds(
+                start="2026-04-03T18:00:00",
+                end="2026-04-05T00:00:00",
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_planner_owned_model_backed_input_when_grain_is_coarser_then_range_is_concrete(
+    test_case: PlannerOwnedMixedGrainRangeTestCase,
+) -> None:
+    model: CompiledModel = CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="hourly_context"),
+        deps=(),
+        name="hourly_context",
+        relative_path=Path("models/hourly_context.sql"),
+        query_sql="SELECT 1",
+        references=(),
+        config=CompileModelConfig(
+            values={
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "incremental_mode": "microbatch",
+                "batch_size": test_case.batch_size,
+                "cursor": "activity_hour",
+                "cursor_type": "timestamp",
+                "cursor_grain": test_case.downstream_grain,
+            }
+        ),
+        destination=CompiledRelationLocation(
+            database=None,
+            schema="main",
+            name="hourly_context",
+            qualified_name="main.hourly_context",
+        ),
+    )
+    snapshot: WarehouseSnapshot = WarehouseSnapshot(
+        cursor_snapshots={
+            "hourly_context": ModelCursorSnapshot(
+                target_max=test_case.target_max,
+                upstream_mins=(),
+                upstream_maxes=(test_case.upstream_max,),
+                expected_watermark_count=1,
+            )
+        }
+    )
+
+    microbatch_range: CursorBounds | None = _compute_microbatch_range(
+        model=model,
+        snapshot=snapshot,
+        backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+        start_cursor_override=None,
+        end_cursor_override=None,
+        runtime_owned_cursor_bounds=False,
+        cursor_input_relations=(
+            CursorInputRelation(
+                relation="main.daily_rollup",
+                cursor_column="activity_day",
+                cursor_grain=test_case.upstream_grain,
+                is_model_backed=True,
+                is_runtime_produced=False,
+            ),
+        ),
+    )
+
     assert microbatch_range == test_case.expected_bounds
 
 

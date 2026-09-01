@@ -13,6 +13,15 @@ from sqlbuild.compiler.planner.constants import (
 from sqlbuild.compiler.planner.models import CursorBounds, Duration, ModelCursorSnapshot
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
 
+_TIMESTAMP_GRAIN_ORDER: dict[str, int] = {
+    CursorGrain.SECOND: 0,
+    CursorGrain.MINUTE: 1,
+    CursorGrain.HOUR: 2,
+    CursorGrain.DAY: 3,
+    CursorGrain.MONTH: 4,
+    CursorGrain.YEAR: 5,
+}
+
 
 def compute_cursor_bounds(
     *,
@@ -67,6 +76,54 @@ def compute_cursor_bounds(
     )
 
     return CursorBounds(start=raw_start, end=raw_end)
+
+
+def resolve_effective_timestamp_grain(
+    *,
+    cursor_type: str | None,
+    downstream_grain: str | None,
+    cursor_input_grains: tuple[str | None, ...],
+) -> str | None:
+    """Return the coarsest timestamp grain participating in cursor replay."""
+
+    if cursor_type != CursorType.TIMESTAMP:
+        return None
+    effective: str = downstream_grain or CursorGrain.SECOND
+    input_grain: str | None
+    for input_grain in cursor_input_grains:
+        candidate: str = input_grain or CursorGrain.SECOND
+        if _TIMESTAMP_GRAIN_ORDER[candidate] > _TIMESTAMP_GRAIN_ORDER[effective]:
+            effective = candidate
+    return effective
+
+
+def normalize_cursor_snapshot_grain(
+    *,
+    cursor_snapshot: ModelCursorSnapshot,
+    cursor_type: str | None,
+    effective_grain: str | None,
+) -> ModelCursorSnapshot:
+    """Floor timestamp snapshot values to the effective replay grain."""
+
+    if cursor_type != CursorType.TIMESTAMP or effective_grain is None:
+        return cursor_snapshot
+    return ModelCursorSnapshot(
+        target_max=(
+            _floor_timestamp_string(value=cursor_snapshot.target_max, grain=effective_grain)
+            if cursor_snapshot.target_max is not None
+            else None
+        ),
+        upstream_mins=tuple(
+            _floor_timestamp_string(value=value, grain=effective_grain)
+            for value in cursor_snapshot.upstream_mins
+        ),
+        upstream_maxes=tuple(
+            _floor_timestamp_string(value=value, grain=effective_grain)
+            for value in cursor_snapshot.upstream_maxes
+        ),
+        expected_watermark_count=cursor_snapshot.expected_watermark_count,
+        unavailable_watermark_tags=cursor_snapshot.unavailable_watermark_tags,
+    )
 
 
 def apply_cursor_replay_policy(
@@ -185,6 +242,38 @@ def _try_parse_timestamp(value: str) -> datetime | None:
         return datetime.fromisoformat(value)
     except (ValueError, TypeError):
         return None
+
+
+def _floor_timestamp_string(*, value: str, grain: str) -> str:
+    plain_date: date | None
+    try:
+        plain_date = date.fromisoformat(value)
+    except ValueError:
+        plain_date = None
+    if plain_date is not None:
+        if grain == CursorGrain.MONTH:
+            plain_date = plain_date.replace(day=1)
+        elif grain == CursorGrain.YEAR:
+            plain_date = plain_date.replace(month=1, day=1)
+        return plain_date.isoformat()
+    parsed: datetime | None = _try_parse_timestamp(value)
+    if parsed is None:
+        return value
+    if grain == CursorGrain.SECOND:
+        floored: datetime = parsed.replace(microsecond=0)
+    elif grain == CursorGrain.MINUTE:
+        floored = parsed.replace(second=0, microsecond=0)
+    elif grain == CursorGrain.HOUR:
+        floored = parsed.replace(minute=0, second=0, microsecond=0)
+    elif grain == CursorGrain.DAY:
+        floored = parsed.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif grain == CursorGrain.MONTH:
+        floored = parsed.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    elif grain == CursorGrain.YEAR:
+        floored = parsed.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    else:
+        floored = parsed
+    return floored.isoformat()
 
 
 def _try_parse_integer(value: str) -> int | None:

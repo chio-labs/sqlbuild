@@ -142,6 +142,7 @@ def gather_warehouse_snapshot(
     full_refresh_model_names: frozenset[str] | None = None,
     on_progress: Callable[[str], None] | None = None,
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
+    runtime_producer_keys: frozenset[CompiledObjectKey] | None = None,
 ) -> WarehouseSnapshot:
     """Gather relations, columns, and fingerprints for all target schemas."""
 
@@ -203,6 +204,7 @@ def gather_warehouse_snapshot(
         full_refresh_model_names=effective_full_refresh_names,
         on_progress=on_progress,
         deferred_locations=deferred_locations,
+        runtime_producer_keys=runtime_producer_keys,
     )
 
     return WarehouseSnapshot(
@@ -529,6 +531,7 @@ def _gather_cursor_snapshots(
     full_refresh_model_names: frozenset[str],
     on_progress: Callable[[str], None] | None,
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
+    runtime_producer_keys: frozenset[CompiledObjectKey] | None = None,
 ) -> dict[str, ModelCursorSnapshot]:
     """Gather cursor MIN/MAX values for selected incremental models."""
 
@@ -544,6 +547,7 @@ def _gather_cursor_snapshots(
         selected_keys=selected_keys,
         full_refresh_model_names=full_refresh_model_names,
         deferred_locations=deferred_locations,
+        runtime_producer_keys=runtime_producer_keys,
     )
     if not cursor_models:
         return {}
@@ -577,16 +581,22 @@ def _collect_cursor_models(
     selected_keys: frozenset[CompiledObjectKey] | None,
     full_refresh_model_names: frozenset[str],
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
+    runtime_producer_keys: frozenset[CompiledObjectKey] | None = None,
 ) -> list[_CursorModelInfo]:
     """Identify selected incremental models and pre-resolve their cursor metadata."""
 
+    effective_runtime_producer_keys: frozenset[CompiledObjectKey] | None = (
+        runtime_producer_keys if runtime_producer_keys is not None else selected_keys
+    )
     selected_names: frozenset[str] | None = (
-        frozenset(k.name for k in selected_keys) if selected_keys is not None else None
+        frozenset(k.name for k in effective_runtime_producer_keys)
+        if effective_runtime_producer_keys is not None
+        else None
     )
     seed_map: dict[str, CompiledSeed] = {seed.name: seed for seed in project.seeds}
     runtime_producer_names: frozenset[str] = _selected_runtime_producer_names(
         project=project,
-        selected_keys=selected_keys,
+        selected_keys=effective_runtime_producer_keys,
     )
     cursor_models: list[_CursorModelInfo] = []
     model: CompiledModel

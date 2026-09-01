@@ -765,6 +765,17 @@ class AuthoritativeCursorOverrideTestCase:
 
 
 @dataclass(frozen=True)
+class PlannerOwnedMixedGrainRangeTestCase:
+    description: str
+    target_max: str
+    upstream_max: str
+    downstream_grain: str
+    upstream_grain: str
+    batch_size: str
+    expected_bounds: CursorBounds
+
+
+@dataclass(frozen=True)
 class PlanEntryCursorGrainTestCase:
     description: str
     cursor_grain: str
