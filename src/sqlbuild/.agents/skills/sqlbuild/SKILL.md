@@ -6892,9 +6892,9 @@ when it is at the project root.
 
 Declarations do not flow upward or sideways into sibling directories.
 
-### Terms used by inspection tools
+### Terms used in text output
 
-The CLI and JSON API use short canonical labels for the same four rules:
+The CLI's text output uses short labels for the same four rules:
 
 | Canonical label | Plain-language meaning |
 |-----------------|------------------------|
@@ -6906,6 +6906,11 @@ The CLI and JSON API use short canonical labels for the same four rules:
 Here, an **owner folder** is simply the folder directly containing a model, test, hook, function, or
 other authored resource. The [Scope Explorer](/concepts/declaration-scopes/explorer) shows the owner
 folder, its parents, and project-wide declarations separately.
+
+JSON keeps the underlying enum values for integrations. Its `scope` field uses `global`,
+`inherited`, `local`, or `private`, while derived `visibility` values use underscores, such as
+`descendant_public` and `exact_owner_private`. Consumers should use the fields documented in the
+versioned JSON schema rather than parsing text labels.
 
 ### Choose a location
 
@@ -7007,8 +7012,8 @@ hook uses declarations available where the hook itself is stored.
 
 ### Tests and expected output
 
-A test first sees declarations available from its own folder tree. It may also use public enums and
-constants available to a model for which it defines expected output.
+A test first sees declarations available from its own folder tree. It may also use file-based enums
+and constants available to a model for which it defines expected output.
 
 ```sql
 TEST();
@@ -7022,9 +7027,10 @@ __expected__orders AS (
 SELECT 1
 ```
 
-Because the test defines `__expected__orders`, that expected-output section may use public enums and
-constants available to `orders`. Scope Explorer describes this as **available through expected
-output for model `orders`**. This is an additional relationship, not another visibility level.
+Because the test defines `__expected__orders`, the test may use file-based enums and constants
+available to `orders`, including declarations in exact-folder `_enums/` and `_constants/` roles.
+Scope Explorer describes this as **available through expected output for model `orders`**. This is
+an additional relationship, not another visibility level.
 
 This additional access does **not** include:
 
@@ -7032,9 +7038,9 @@ This additional access does **not** include:
 - Enums or constants declared privately inside the model's `MODEL()` header
 - Declarations from a model merely mentioned by filename or directory layout
 
-Only an explicit `__expected__model_name` section adds the model's public enums and constants. When
-a test checks several models, each expected-output section can use the public enums and constants
-available to that model.
+Only an explicit `__expected__model_name` section adds the model's eligible file-based enums and
+constants. When a test checks several models, SQLBuild combines the declarations available through
+all expected models and makes that deterministic union available while compiling the entire test.
 
 ### Macros importing macros
 
@@ -7218,8 +7224,8 @@ both finance declarations. This gives every scoped declaration a real consumer a
 ### See available and used declarations
 
 Start with a model, test, scenario, hook, function, audit, source, or authored resource path to
-inspect its directory-derived scope. A declaration identity instead opens its explanation. These
-main sections from a resource report put actual usage beside the complete directory-derived scope:
+inspect its directory-derived scope. A declaration identity instead opens its explanation. This
+excerpt of the main report sections puts actual usage beside the complete directory-derived scope:
 
 ```console
 $ sqb scope model:orders
@@ -7363,9 +7369,10 @@ shows whether the declaration is placed more broadly than its real consumers req
 
 ### See declarations available through expected output
 
-Tests and scenarios can use public enums and constants available to a model when they define that
-model's expected output. That access remains separate from declarations visible through the test's
-own folder tree. The relevant report sections are:
+Tests and scenarios can use file-based enums and constants available to a model when they define
+that model's expected output. This includes eligible exact-folder declarations, but not declarations
+inside `MODEL()`. The access applies to the whole test or scenario and remains separate from
+declarations visible through its own folder tree. The relevant report sections are:
 
 ```console
 $ sqb scope test:orders__completed_only --used-only
@@ -7377,8 +7384,9 @@ Relationship grants (1 of 1)
 ```
 
 The compact reason `expected_model through model:orders` means **available through expected output
-for model `orders`**. This relationship grants public enums and constants, not macros or
-model-private declarations.
+for model `orders`**. With multiple expected models, SQLBuild combines their eligible file-based
+enums and constants into one deterministic set for the test or scenario. These relationships do
+not grant macros or declarations defined inside a model's `MODEL()` header.
 
 ### Preview a resource move
 
@@ -7439,6 +7447,12 @@ Available (3 of 5, 2 collapsed)
   ├─ ○ enum:order_status  [enum; descendant-public; inherited_ancestor; members 4; type VARCHAR; role models/commerce/enums]  models/commerce/enums/status.sql:1:1
   └─ ○ macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:4:1
   … 2 globals collapsed; run sqb scope --at models/commerce/returns/new_return.sql --globals all
+
+Relationship grants (0 of 0)
+  (none)
+
+Nearby unavailable (0 of 0)
+  (none)
 
 Diagnostics (1)
   ERROR S013 models/commerce/returns/new_return.sql: Runtime usage and relationship facts are unavailable for a prospective path
@@ -11915,7 +11929,7 @@ The default text report keeps distinct facts in distinct sections:
 
 - **Available** contains declarations visible through the resource's own lexical path.
 - **Used** contains declarations consumed by the resource, including tracked declaration dependencies.
-- **Relationship grants** contains public enums and constants made available through expected-output sections in a test or scenario.
+- **Relationship grants** contains eligible file-based enums and constants made available through expected-output sections in a test or scenario.
 - **Nearby unavailable** is opt-in and explains close declarations that are outside the target's scope.
 - **Scope chain** starts with the resource's owner folder, then shows parent folders and the project
   declaration roles. Its compact labels identify the access rule checked at each path.
@@ -12063,12 +12077,15 @@ sqb scope model:stg_orders --used-only
 ### Expected-output access
 
 Tests and scenarios have two independent ways to reach declarations. Their own folder paths provide
-ordinary visibility. Each explicit `__expected__<model>` section can also use the public enums and
-constants available to that model.
+ordinary visibility. Each explicit `__expected__<model>` section adds the eligible file-based enums
+and constants available to that model. This includes exact-folder `_enums/` and `_constants/`
+declarations, despite their private visibility label.
 
 `sqb scope` reports this additional access separately under **Relationship grants** and names the
-model that provides it. It never includes macros or model-private declarations. A test filename,
-mirrored path, or mock does not provide this access by itself.
+model that provides it. With multiple expected models, SQLBuild makes the deterministic union of
+their eligible declarations available while compiling the whole test or scenario. It never includes
+macros or declarations defined inside a model's `MODEL()` header. A test filename, mirrored path,
+or mock does not provide this access by itself.
 
 ```bash
 sqb scope test:orders__completed_only
