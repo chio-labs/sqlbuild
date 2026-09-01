@@ -70,7 +70,10 @@ MODEL (
   cursor event_time,
   cursor_type timestamp,
   cursor_grain hour,
-  cursor_inputs (
+  cursor_filter_inputs (
+    raw_events event_time,
+  ),
+  cursor_watermark_inputs (
     raw_events event_time,
   ),
   batch_size 1h,
@@ -229,7 +232,8 @@ def test_given_failed_first_virtual_microbatch_when_retried_then_provisional_map
                 "  cursor event_time,\n"
                 "  cursor_type timestamp,\n"
                 "  cursor_grain hour,\n"
-                "  cursor_inputs (raw_events event_time,),\n"
+                "  cursor_filter_inputs (raw_events event_time,),\n"
+                "  cursor_watermark_inputs (raw_events event_time,),\n"
                 "  batch_size 1h,\n"
                 "  batch_concurrency 2,\n"
                 ");\n"

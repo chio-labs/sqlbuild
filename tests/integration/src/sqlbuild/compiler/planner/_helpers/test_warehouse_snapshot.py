@@ -467,11 +467,11 @@ def test_given_incremental_models_when_gathering_cursor_snapshots_then_returns_e
             expected_cursor_snapshots={
                 "fact_orders": ModelCursorSnapshot(
                     target_max=None,
-                    upstream_mins=("2024-01-01 00:00:00",),
-                    upstream_maxes=("2024-03-01 00:00:00",),
+                    upstream_mins=(),
+                    upstream_maxes=(),
                 ),
             },
-            expected_progress_calls=3,
+            expected_progress_calls=1,
         ),
         GatherCursorSnapshotTestCase(
             description="non-selected upstream reads cursor from deferred env",

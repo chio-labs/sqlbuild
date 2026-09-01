@@ -101,6 +101,40 @@ _INT_MODEL_SQL: str = (
             ),
         ),
         MicrobatchSuccessTestCase(
+            description="complete overrides skip runtime-produced watermark discovery",
+            setup_sql=(
+                "CREATE TABLE main.raw_events (id INTEGER, batch_id INTEGER)",
+                "INSERT INTO main.raw_events VALUES (1, 10), (2, 20), (3, 21)",
+                "CREATE TABLE main.orders (id INTEGER, batch_id INTEGER)",
+            ),
+            model_sql=(
+                "SELECT id, batch_id FROM main.raw_events "
+                f"WHERE batch_id >= {MICROBATCH_START_SENTINEL} "
+                f"AND batch_id < {MICROBATCH_END_SENTINEL}"
+            ),
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="delete_insert",
+            cursor_column="batch_id",
+            cursor_type="integer",
+            batch_size="5",
+            microbatch_start="10",
+            microbatch_end="21",
+            cursor_input_relations=(("main.missing_runtime_watermark", "batch_id"),),
+            cursor_inputs_model_backed=True,
+            unique_key=("id",),
+            start_cursor_override="10",
+            end_cursor_override="20",
+            expected_row_count=2,
+            expected_batch_count=3,
+            expected_query_results=(
+                (
+                    "SELECT id, batch_id FROM main.orders ORDER BY id",
+                    ((1, 10), (2, 20)),
+                ),
+            ),
+        ),
+        MicrobatchSuccessTestCase(
             description="timestamp microbatch appends 3 hourly batches",
             setup_sql=(
                 _TS_SOURCE_SQL,
@@ -853,12 +887,7 @@ def test_given_runtime_owned_range_when_executing_then_reports_resolution_before
         connection=connection,
     )
 
-    assert (
-        progress_messages[0],
-        result.cursor_range_start,
-        result.cursor_range_end,
-    ) == (
-        test_case.expected_progress_message,
-        test_case.expected_cursor_range_start,
-        test_case.expected_cursor_range_end,
-    )
+    assert test_case.expected_progress_message is not None
+    assert progress_messages.index(test_case.expected_progress_message) > 0
+    assert result.cursor_range_start == test_case.expected_cursor_range_start
+    assert result.cursor_range_end == test_case.expected_cursor_range_end

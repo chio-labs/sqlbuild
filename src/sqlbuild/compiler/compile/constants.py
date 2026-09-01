@@ -14,6 +14,9 @@ GENERIC_AUDIT_DIRECTORY_NAME: str = "generic"
 NOT_NULL_AUDIT_NAME: str = "not_null"
 MODEL_AUDIT_OVERRIDE_KEYS: frozenset[str] = frozenset({"by_type", "by_column"})
 MODEL_FULL_REFRESH_CONFIG_KEY: str = "full_refresh"
+CURSOR_INPUTS_CONFIG_KEY: str = "cursor_inputs"
+CURSOR_FILTER_INPUTS_CONFIG_KEY: str = "cursor_filter_inputs"
+CURSOR_WATERMARK_INPUTS_CONFIG_KEY: str = "cursor_watermark_inputs"
 MODEL_HEADER_METADATA_KEYS: frozenset[str] = frozenset(
     {"description", "columns", "model_schema", "audits", "enums", "constants"}
 )

@@ -891,6 +891,53 @@ def build_source_cursor_input_model(
     )
 
 
+def build_transitive_watermark_models(
+    *, watermark_name: str, watermark_column: str
+) -> tuple[CompiledModel, dict[str, CompiledModel]]:
+    """Build a consumer, direct view, and transitive source watermark lineage."""
+
+    view_model: CompiledModel = CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders_view"),
+        deps=(),
+        name="orders_view",
+        relative_path=Path("models/orders_view.sql"),
+        query_sql='SELECT * FROM __source("raw_orders")',
+        references=(CompileSqlReference(ref_kind=SqlReferenceKind.SOURCE, ref_name="raw_orders"),),
+        config=CompileModelConfig(values={"materialized": "view"}),
+        inferred_columns=(),
+        fast_lineage_has_star=True,
+        destination=CompiledRelationLocation(
+            database=None,
+            schema="staging",
+            name="orders_view",
+            qualified_name="staging.orders_view",
+        ),
+    )
+    consumer: CompiledModel = CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="test_model"),
+        deps=(),
+        name="test_model",
+        relative_path=Path("models/test_model.sql"),
+        query_sql='SELECT * FROM __ref("orders_view")',
+        references=(CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders_view"),),
+        config=CompileModelConfig(
+            values={
+                "materialized": "incremental",
+                "cursor": "event_time",
+                "cursor_filter_inputs": {"orders_view": "event_time"},
+                "cursor_watermark_inputs": {watermark_name: watermark_column},
+            }
+        ),
+        destination=CompiledRelationLocation(
+            database=None,
+            schema="analytics",
+            name="test_model",
+            qualified_name="analytics.test_model",
+        ),
+    )
+    return consumer, {view_model.name: view_model}
+
+
 def build_cursor_input_contract_models(
     test_case: SourceCursorInputColumnsTestCase,
 ) -> dict[str, CompiledModel]:
@@ -905,6 +952,7 @@ def build_cursor_input_contract_models(
             relative_path=Path(f"models/{test_case.reference_name}.sql"),
             query_sql="SELECT 1",
             config=CompileModelConfig(values={"contract": test_case.upstream_contract}),
+            inferred_columns=test_case.compiled_inferred_columns,
             destination=CompiledRelationLocation(
                 database=None,
                 schema="staging",
@@ -920,8 +968,8 @@ def build_cursor_input_contract_models(
             ),
         )
     }
-    include_model: bool = (
-        test_case.reference_kind == SqlReferenceKind.REF and test_case.upstream_contract is not None
+    include_model: bool = test_case.reference_kind == SqlReferenceKind.REF and (
+        test_case.upstream_contract is not None or test_case.upstream_inferred_columns is not None
     )
     return ({}, models)[include_model]
 

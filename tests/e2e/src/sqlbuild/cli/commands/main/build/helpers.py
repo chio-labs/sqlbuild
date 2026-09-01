@@ -504,7 +504,7 @@ def _cursor_override_without_snapshot_model_sql(*, amount_expression: str) -> st
               cursor ordered_at,
               cursor_type timestamp,
               cursor_grain day,
-              cursor_inputs (),
+              cursor_filter_inputs (raw_orders ordered_at,),
               replay_on_change bounded-7d
             );
 

@@ -80,6 +80,7 @@ from sqlbuild.executor.load.main._build_execution_indexes import build_load_exec
 from sqlbuild.executor.load.main._skipped_result import skipped_load_result
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
+from sqlbuild.executor.run.classes.runtime_watermark_resolver import RuntimeWatermarkResolver
 from sqlbuild.executor.run.models import (
     BatchWindow,
     MicrobatchPhaseOutcome,
@@ -203,6 +204,7 @@ class BuildScheduler:
         self._microbatch_coordinator_demand: int = 0
         self._microbatch_subworkers: int = 0
         self._microbatch_coordinator_lock = threading.Lock()
+        self._watermark_resolver: RuntimeWatermarkResolver = RuntimeWatermarkResolver()
         self._ready: deque[CompiledObjectKey] = deque()
         self._stop: bool = False
         self._last_scheduler_state: SchedulerState | None = None
@@ -988,6 +990,7 @@ class BuildScheduler:
                         microbatch_lease_check=self._runtime.microbatch_lease_check,
                         microbatch_global_concurrency=self._max_concurrency,
                         microbatch_batch_runner=microbatch_batch_runner,
+                        watermark_resolver=self._watermark_resolver,
                     ),
                     promotion_mode=self._promotion_mode,
                     snapshots=self._snapshots,

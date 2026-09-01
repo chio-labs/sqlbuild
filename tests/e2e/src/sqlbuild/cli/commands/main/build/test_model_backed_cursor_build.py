@@ -130,7 +130,10 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                       cursor activity_hour,
                       cursor_type timestamp,
                       cursor_grain hour,
-                      cursor_inputs (
+                      cursor_filter_inputs (
+                        fact_orders_view ordered_at,
+                      ),
+                      cursor_watermark_inputs (
                         fact_orders ordered_at,
                       ),
                       incremental_mode microbatch,
@@ -142,10 +145,20 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                       COUNT(*) AS orders_placed,
                       SUM(quantity) AS quantity_total,
                       SUM(line_total_cents) AS revenue_cents
-                    FROM __ref("fact_orders")
+                    FROM __ref("fact_orders_view")
                     WHERE ordered_at >= __cursor_start()
                       AND ordered_at < __cursor_end()
                     GROUP BY DATE_TRUNC('hour', ordered_at)
+                    """
+                ).strip()
+                + "\n",
+                "models/marts/fact_orders_view.sql": dedent(
+                    """
+                    MODEL (
+                      materialized view
+                    );
+
+                    SELECT * FROM __ref("fact_orders")
                     """
                 ).strip()
                 + "\n",

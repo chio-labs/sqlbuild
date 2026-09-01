@@ -55,7 +55,7 @@ def resolve_source_references(
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
     star_exclude_keyword: str,
     cursor_bounds: CursorBounds | None,
-    cursor_inputs: dict[str, str],
+    cursor_filter_inputs: dict[str, str],
     adapter: BaseAdapter,
     cursor_type: str | None,
     lower_bound_inclusive: bool,
@@ -69,7 +69,7 @@ def resolve_source_references(
             source_map=source_map,
             source_warehouse_columns=source_warehouse_columns,
             cursor_bounds=cursor_bounds,
-            cursor_inputs=cursor_inputs,
+            cursor_filter_inputs=cursor_filter_inputs,
             adapter=adapter,
             cursor_type=cursor_type,
             lower_bound_inclusive=lower_bound_inclusive,
@@ -88,7 +88,7 @@ def resolve_source_references(
             source_map=source_map,
             source_warehouse_columns=source_warehouse_columns,
             cursor_bounds=cursor_bounds,
-            cursor_inputs=cursor_inputs,
+            cursor_filter_inputs=cursor_filter_inputs,
             adapter=adapter,
             cursor_type=cursor_type,
             lower_bound_inclusive=lower_bound_inclusive,
@@ -112,7 +112,7 @@ def _resolve_source_reference(
     source_map: dict[str, SourceEntry],
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
     cursor_bounds: CursorBounds | None,
-    cursor_inputs: dict[str, str],
+    cursor_filter_inputs: dict[str, str],
     adapter: BaseAdapter,
     cursor_type: str | None,
     lower_bound_inclusive: bool,
@@ -161,7 +161,7 @@ def _resolve_source_reference(
             )
     if cursor_bounds is None:
         return resolved_source
-    cursor_column: str | None = cursor_inputs.get(source_name)
+    cursor_column: str | None = cursor_filter_inputs.get(source_name)
     if cursor_column is None:
         return resolved_source
     return _build_cursor_subquery(

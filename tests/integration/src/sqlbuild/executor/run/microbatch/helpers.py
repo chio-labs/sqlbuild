@@ -87,6 +87,7 @@ def build_microbatch_plan_entry(
             relation=relation,
             cursor_column=cursor_column,
             is_model_backed=test_case.cursor_inputs_model_backed,
+            is_runtime_produced=test_case.cursor_inputs_model_backed,
         )
         for relation, cursor_column in test_case.cursor_input_relations
     )
@@ -116,6 +117,8 @@ def build_microbatch_plan_entry(
         cursor_input_relations=cursor_input_relations,
         batch_size=test_case.batch_size,
         microbatch_range=microbatch_range,
+        start_cursor_override=test_case.start_cursor_override,
+        end_cursor_override=test_case.end_cursor_override,
         unique_key=test_case.unique_key,
         on_schema_change=test_case.on_schema_change,
         pre_hooks=test_case.pre_hook,

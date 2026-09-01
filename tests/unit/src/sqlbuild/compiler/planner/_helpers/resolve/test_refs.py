@@ -70,7 +70,10 @@ _FUNCTION_TARGETS: dict[str, CompiledRelationLocation] = {
 
 _CURSOR_BOUNDS: CursorBounds = CursorBounds(start="2024-01-15", end="2024-02-01")
 _INTEGER_CURSOR_BOUNDS: CursorBounds = CursorBounds(start="10", end="20")
-_CURSOR_INPUTS: dict[str, str] = {"orders": "event_time"}
+_CURSOR_INPUTS: dict[str, str] = {
+    "orders": "event_time",
+    "country_codes": "event_time",
+}
 _DBT_MANIFEST: DbtManifestIndex = build_dbt_manifest_index(
     raw_data=build_manifest_data(
         nodes=(
@@ -135,7 +138,7 @@ def test_given_refs_without_cursor_when_resolving_then_returns_expected_sql(
         model_locations=_MODEL_TARGETS,
         seed_locations=_SEED_TARGETS,
         cursor_bounds=None,
-        cursor_inputs={},
+        cursor_filter_inputs={},
         adapter=DuckDbAdapter(),
         cursor_type=None,
         lower_bound_inclusive=True,
@@ -183,6 +186,17 @@ def test_given_refs_without_cursor_when_resolving_then_returns_expected_sql(
             cursor_type=CursorKind.INTEGER,
             cursor_bounds=_INTEGER_CURSOR_BOUNDS,
         ),
+        RefResolutionTestCase(
+            description="wraps seed in cursor-filtered subquery",
+            query_sql='SELECT * FROM __seed("country_codes")',
+            expected_sql=(
+                "SELECT * FROM (SELECT * FROM seeds.country_codes"
+                " WHERE event_time >= 10"
+                " AND event_time < 20)"
+            ),
+            cursor_type=CursorKind.INTEGER,
+            cursor_bounds=_INTEGER_CURSOR_BOUNDS,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -194,7 +208,7 @@ def test_given_refs_with_cursor_when_resolving_then_returns_expected_sql(
         model_locations=_MODEL_TARGETS,
         seed_locations=_SEED_TARGETS,
         cursor_bounds=test_case.cursor_bounds,
-        cursor_inputs=_CURSOR_INPUTS,
+        cursor_filter_inputs=_CURSOR_INPUTS,
         adapter=DuckDbAdapter(),
         cursor_type=test_case.cursor_type,
         lower_bound_inclusive=True,
@@ -228,7 +242,7 @@ def test_given_refs_with_exclusive_cursor_when_resolving_then_returns_expected_s
         model_locations=_MODEL_TARGETS,
         seed_locations=_SEED_TARGETS,
         cursor_bounds=test_case.cursor_bounds,
-        cursor_inputs=_CURSOR_INPUTS,
+        cursor_filter_inputs=_CURSOR_INPUTS,
         adapter=DuckDbAdapter(),
         cursor_type=test_case.cursor_type,
         lower_bound_inclusive=False,

@@ -6,12 +6,18 @@ from __future__ import annotations
 def build_version_identity_config(config_values: dict[str, object]) -> dict[str, object]:
     """Return config fields that affect produced model version identity."""
 
+    identity: dict[str, object] = {}
+    legacy_filter_inputs: object | None = config_values.get("cursor_inputs")
+    filter_inputs: object | None = config_values.get("cursor_filter_inputs", legacy_filter_inputs)
+    watermark_inputs: object | None = config_values.get("cursor_watermark_inputs", filter_inputs)
+    if filter_inputs is not None:
+        identity["cursor_filter_inputs"] = filter_inputs
+        identity["cursor_watermark_inputs"] = watermark_inputs
     version_identity_config_keys: tuple[str, ...] = (
         "append_cursor_inclusive",
         "check_columns",
         "cursor",
         "cursor_grain",
-        "cursor_inputs",
         "cursor_start",
         "cursor_type",
         "historical_input",
@@ -33,4 +39,7 @@ def build_version_identity_config(config_values: dict[str, object]) -> dict[str,
         "valid_from_column",
         "valid_to_column",
     )
-    return {key: config_values[key] for key in version_identity_config_keys if key in config_values}
+    identity.update(
+        {key: config_values[key] for key in version_identity_config_keys if key in config_values}
+    )
+    return identity

@@ -44,6 +44,7 @@ def gather_planner_warehouse_state(
         ),
         on_progress=runtime.on_progress,
         deferred_locations=deferral.deferred_locations,
+        runtime_producer_keys=scopes.selected_scope.selected_keys,
     )
     inspection_relations: PlannerRelationsContext = build_planner_relations_context(
         project=runtime.project,

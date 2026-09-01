@@ -4,11 +4,16 @@ from __future__ import annotations
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,
     CompiledRelationLocation,
+    CursorInputRoles,
+)
+from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
+    resolve_bounded_cursor_override,
 )
 from sqlbuild.compiler.planner._helpers.resolve.config import (
     get_config_append_cursor_inclusive,
@@ -16,9 +21,6 @@ from sqlbuild.compiler.planner._helpers.resolve.config import (
     get_config_str,
 )
 from sqlbuild.compiler.planner._helpers.resolve.cursor import compute_cursor_bounds
-from sqlbuild.compiler.planner._helpers.resolve.cursor_inputs import (
-    has_model_backed_cursor_inputs,
-)
 from sqlbuild.compiler.planner._helpers.resolve.refs import (
     resolve_dbt_ref_references,
     resolve_ref_references,
@@ -76,12 +78,11 @@ def resolve_model_sql(
         full_refresh=full_refresh,
         start_cursor_override=cursor_overrides.start_cursor_override,
         end_cursor_override=cursor_overrides.end_cursor_override,
-        model_locations=model_locations,
-        seed_locations=seed_locations,
+        runtime_cursor_producer_names=context.runtime_cursor_producer_names,
         suppress_runtime_cursor_bounds=suppress_runtime_cursor_bounds,
     )
 
-    cursor_inputs: dict[str, str] = _get_cursor_inputs(model)
+    cursor_roles: CursorInputRoles = resolve_cursor_input_roles(model=model)
     lower_bound_inclusive: bool = get_config_append_cursor_inclusive(model)
 
     query_sql = resolve_source_references(
@@ -90,7 +91,7 @@ def resolve_model_sql(
         source_warehouse_columns=source_warehouse_columns,
         star_exclude_keyword=star_exclude_keyword,
         cursor_bounds=cursor_bounds,
-        cursor_inputs=cursor_inputs,
+        cursor_filter_inputs=cursor_roles.filter_inputs,
         adapter=adapter,
         cursor_type=cursor_type,
         lower_bound_inclusive=lower_bound_inclusive,
@@ -101,7 +102,7 @@ def resolve_model_sql(
         model_locations=model_locations,
         seed_locations=seed_locations,
         cursor_bounds=cursor_bounds,
-        cursor_inputs=cursor_inputs,
+        cursor_filter_inputs=cursor_roles.filter_inputs,
         adapter=adapter,
         cursor_type=cursor_type,
         lower_bound_inclusive=lower_bound_inclusive,
@@ -168,7 +169,7 @@ def resolve_function_sql(
         source_warehouse_columns=source_warehouse_columns,
         star_exclude_keyword=star_exclude_keyword,
         cursor_bounds=None,
-        cursor_inputs={},
+        cursor_filter_inputs={},
         adapter=adapter,
         cursor_type=None,
         lower_bound_inclusive=True,
@@ -178,7 +179,7 @@ def resolve_function_sql(
         model_locations=model_locations,
         seed_locations=seed_locations,
         cursor_bounds=None,
-        cursor_inputs={},
+        cursor_filter_inputs={},
         adapter=adapter,
         cursor_type=None,
         lower_bound_inclusive=True,
@@ -208,8 +209,7 @@ def _compute_model_cursor_bounds(
     full_refresh: bool,
     start_cursor_override: str | None,
     end_cursor_override: str | None,
-    model_locations: dict[str, CompiledRelationLocation],
-    seed_locations: dict[str, CompiledRelationLocation],
+    runtime_cursor_producer_names: frozenset[str],
     suppress_runtime_cursor_bounds: bool,
 ) -> CursorBounds | None:
     """Compute cursor bounds for a model if it is incremental with a cursor."""
@@ -225,17 +225,39 @@ def _compute_model_cursor_bounds(
     if is_microbatch:
         return CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL)
 
+    bounded_override: CursorBounds | None = resolve_bounded_cursor_override(
+        start_cursor_override=start_cursor_override,
+        end_cursor_override=end_cursor_override,
+        cursor_type=get_config_str(model=model, key="cursor_type"),
+        cursor_grain=get_config_str(model=model, key="cursor_grain"),
+    )
+    if bounded_override is not None:
+        return bounded_override
+
+    cursor_snapshot: ModelCursorSnapshot | None = snapshot.cursor_snapshots.get(model.name)
+    runtime_owned: bool = bool(
+        set(resolve_cursor_input_roles(model=model).watermark_inputs)
+        & runtime_cursor_producer_names
+    )
+    if (
+        not full_refresh
+        and not suppress_runtime_cursor_bounds
+        and not runtime_owned
+        and cursor_snapshot is not None
+        and not cursor_snapshot.watermarks_available
+    ):
+        unavailable: str = ", ".join(cursor_snapshot.unavailable_watermark_tags)
+        raise PlannerInputError(
+            f"model '{model.name}': required cursor watermark bounds are unavailable: "
+            f"{unavailable}",
+            code="S302",
+        )
+
     if full_refresh or suppress_runtime_cursor_bounds:
         return None
 
-    if has_model_backed_cursor_inputs(
-        model=model,
-        model_locations=model_locations,
-        seed_locations=seed_locations,
-        cursor_inputs=_get_cursor_inputs(model),
-    ):
+    if runtime_owned:
         return CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL)
-    cursor_snapshot: ModelCursorSnapshot | None = snapshot.cursor_snapshots.get(model.name)
     if cursor_snapshot is None:
         return None
 
@@ -256,17 +278,3 @@ def _compute_model_cursor_bounds(
         is_microbatch=is_microbatch,
         cursor_grain=get_config_str(model=model, key="cursor_grain"),
     )
-
-
-def _get_cursor_inputs(model: CompiledModel) -> dict[str, str]:
-    """Resolve cursor column mapping per upstream ref."""
-
-    cursor_column: str | None = get_config_str(model=model, key="cursor")
-    if cursor_column is None:
-        return {}
-
-    raw: object | None = model.config.values.get("cursor_inputs")
-    if isinstance(raw, dict):
-        return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str)}
-
-    return {ref.ref_name: cursor_column for ref in model.references}

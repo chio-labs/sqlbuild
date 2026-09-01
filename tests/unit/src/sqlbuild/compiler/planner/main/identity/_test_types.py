@@ -15,3 +15,18 @@ class FunctionUpstreamIdentityTestCase:
     original_query: str
     changed_query: str
     expected_changed: bool
+
+
+@dataclass(frozen=True)
+class VersionIdentityConfigTestCase:
+    description: str
+    config_key: str
+    expected_in_identity: bool
+
+
+@dataclass(frozen=True)
+class CursorRoleIdentityTestCase:
+    description: str
+    original_config: dict[str, object]
+    changed_config: dict[str, object]
+    expected_equal: bool

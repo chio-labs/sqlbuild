@@ -87,6 +87,16 @@ class RuntimeCursorOverrideTestCase:
 
 
 @dataclass(frozen=True)
+class AuthoritativeRuntimeCursorOverrideTestCase:
+    description: str
+    cursor_type: str
+    cursor_grain: str | None
+    start_cursor_override: str
+    end_cursor_override: str
+    expected_bounds: object
+
+
+@dataclass(frozen=True)
 class RuntimeExistingTargetOverrideTestCase:
     description: str
     upstream_min: object
@@ -144,6 +154,21 @@ class RuntimeTargetMaxTestCase:
 class RuntimeTargetProbeFailureTestCase:
     description: str
     expected_error_type: type[BaseException]
+
+
+@dataclass(frozen=True)
+class RuntimeWatermarkStatementTestCase:
+    description: str
+    target_exists: bool
+    expected_statements: tuple[str, ...]
+    expected_bounds: object
+
+
+@dataclass(frozen=True)
+class MixedTemporalWatermarkTestCase:
+    description: str
+    expected_start: str
+    expected_end: str
 
 
 @dataclass(frozen=True)
