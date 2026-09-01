@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.72.0](https://github.com/chio-labs/sqlbuild/compare/v0.71.6...v0.72.0) (2026-09-01)
+
+
+### Features
+
+* separate cursor filter and watermark inputs ([#456](https://github.com/chio-labs/sqlbuild/issues/456)) ([2296306](https://github.com/chio-labs/sqlbuild/commit/22963069e173f909255ef7d345deed2c479e510d))
+
 ## [0.71.6](https://github.com/chio-labs/sqlbuild/compare/v0.71.5...v0.71.6) (2026-09-01)
 
 
