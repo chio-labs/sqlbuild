@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.73.0](https://github.com/chio-labs/sqlbuild/compare/v0.72.2...v0.73.0) (2026-09-01)
+
+
+### Features
+
+* add configurable microbatch limits ([#462](https://github.com/chio-labs/sqlbuild/issues/462)) ([5a82b36](https://github.com/chio-labs/sqlbuild/commit/5a82b363439871fb989a72a6f0d385fce4493a91))
+
 ## [0.72.2](https://github.com/chio-labs/sqlbuild/compare/v0.72.1...v0.72.2) (2026-09-01)
 
 
