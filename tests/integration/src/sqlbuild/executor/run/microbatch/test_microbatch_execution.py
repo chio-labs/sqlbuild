@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import dataclasses
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.cli.output._helpers.execution_protocol_v1 import _format_model_assets
 from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.planner.constants import (
@@ -17,10 +19,11 @@ from sqlbuild.compiler.planner.constants import (
     MICROBATCH_START_SENTINEL,
 )
 from sqlbuild.compiler.planner.types import OnSchemaChange
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run._helpers.materializations import microbatch as microbatch_module
+from sqlbuild.executor.run.models import BatchWindow, ModelExecutionResult
 from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.spec.contracts.models import FutureCursorsConfig
-from sqlbuild.spec.contracts.types import FutureCursorAction
+from sqlbuild.spec.contracts.types import FutureCursorAction, MicrobatchLimitAction
 from tests.integration.src.sqlbuild.executor.run.microbatch._test_types import (
     MicrobatchFailureTestCase,
     MicrobatchSuccessTestCase,
@@ -28,8 +31,11 @@ from tests.integration.src.sqlbuild.executor.run.microbatch._test_types import (
 from tests.integration.src.sqlbuild.executor.run.microbatch.helpers import (
     fail_microbatch_hook,
     insert_microbatch_hook_log,
+    reconcile_microbatch_batches,
     run_failure_test,
+    run_skipped_test,
     run_success_test,
+    skip_microbatch_hook,
     verify_failure_state,
     verify_success_state,
 )
@@ -67,6 +73,31 @@ _INT_MODEL_SQL: str = (
 @pytest.mark.parametrize(
     "test_case",
     [
+        MicrobatchSuccessTestCase(
+            description="runtime warn limit executes complete microbatch range",
+            setup_sql=(
+                _TS_SOURCE_SQL,
+                _TS_SOURCE_DATA,
+                "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP, payload VARCHAR)",
+            ),
+            model_sql=_TS_MODEL_SQL,
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="delete_insert",
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            batch_size="1h",
+            microbatch_start="2026-01-01T00:00:00",
+            microbatch_end="2026-01-01T03:00:00",
+            expected_row_count=3,
+            expected_batch_count=3,
+            expected_warning_count=1,
+            microbatch_limit=2,
+            microbatch_limit_action=MicrobatchLimitAction.WARN,
+            expected_microbatch_limit_count=3,
+            expected_microbatch_limit_warning=True,
+            expected_query_results=(("SELECT COUNT(*) FROM main.orders", ((3,),)),),
+        ),
         MicrobatchSuccessTestCase(
             description="model-backed cursor input resolves runtime range for microbatch",
             setup_sql=(
@@ -222,6 +253,28 @@ _INT_MODEL_SQL: str = (
                     ((99, "old"),),
                 ),
             ),
+        ),
+        MicrobatchSuccessTestCase(
+            description="equal-bound full refresh executes and reports one limited batch",
+            setup_sql=(
+                _TS_SOURCE_SQL,
+                "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP, payload VARCHAR)",
+            ),
+            model_sql=_TS_MODEL_SQL,
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="append",
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            batch_size="1h",
+            microbatch_start="1970-01-01T00:00:00",
+            microbatch_end="1970-01-01T00:00:00",
+            is_full_refresh=True,
+            cursor_input_relations=(("main.raw_events", "event_time"),),
+            expected_row_count=0,
+            expected_batch_count=1,
+            microbatch_limit=1,
+            microbatch_limit_action=MicrobatchLimitAction.ERROR,
         ),
         MicrobatchSuccessTestCase(
             description="full-refresh discovers range from input when output groups away cursor",
@@ -479,6 +532,258 @@ def test_given_microbatch_model_when_executing_then_succeeds(
 @pytest.mark.parametrize(
     "test_case",
     [
+        MicrobatchFailureTestCase(
+            description="warn limit survives failed pre-hook serialization",
+            setup_sql=(
+                _TS_SOURCE_SQL,
+                _TS_SOURCE_DATA,
+                "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP, payload VARCHAR)",
+            ),
+            model_sql=_TS_MODEL_SQL,
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="append",
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            batch_size="1h",
+            microbatch_start="2026-01-01T00:00:00",
+            microbatch_end="2026-01-01T03:00:00",
+            pre_hook=[SqlHookEntry(statement="SELECT * FROM missing_warn_hook_table")],
+            expected_failed_phase=ExecutionPhase.PRE_HOOK,
+            expected_error_fragment="missing_warn_hook_table",
+            expected_row_count=0,
+            microbatch_limit=2,
+            microbatch_limit_action=MicrobatchLimitAction.WARN,
+            expected_microbatch_limit_count=3,
+            expected_microbatch_limit_warning=True,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_warn_limit_when_pre_hook_fails_then_execution_metadata_is_preserved(
+    test_case: MicrobatchFailureTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    result: ModelExecutionResult = run_failure_test(
+        test_case=test_case, adapter=adapter, connection=connection
+    )
+    asset: dict[str, object] = _format_model_assets(results=(result,), plan=None)[0]
+    microbatch: dict[str, object] = cast(dict[str, object], asset["microbatch"])
+
+    assert result.microbatch_limit_count == test_case.expected_microbatch_limit_count
+    assert (
+        result.microbatch_limit_warning is not None
+    ) is test_case.expected_microbatch_limit_warning
+    assert result.warning_messages == (result.microbatch_limit_warning,)
+    assert microbatch["limit"] == 2
+    assert microbatch["count"] == 3
+    assert microbatch["action"] == "warn"
+    assert microbatch["warning"] == result.microbatch_limit_warning
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MicrobatchSuccessTestCase(
+            description="warn limit survives skipped pre-hook serialization",
+            setup_sql=(
+                _TS_SOURCE_SQL,
+                _TS_SOURCE_DATA,
+                "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP, payload VARCHAR)",
+            ),
+            model_sql=_TS_MODEL_SQL,
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="append",
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            batch_size="1h",
+            microbatch_start="2026-01-01T00:00:00",
+            microbatch_end="2026-01-01T03:00:00",
+            expected_row_count=0,
+            pre_hook=[PythonHookEntry(name="skip_hook", kwargs={"reason": "not today"})],
+            hook_functions=(
+                DiscoveredHookFunction(
+                    file_path=Path(__file__),
+                    relative_path=Path("hooks/python/microbatch.py"),
+                    name="skip_hook",
+                    function=skip_microbatch_hook,
+                ),
+            ),
+            microbatch_limit=2,
+            microbatch_limit_action=MicrobatchLimitAction.WARN,
+            expected_microbatch_limit_count=3,
+            expected_microbatch_limit_warning=True,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_warn_limit_when_pre_hook_skips_then_execution_metadata_is_preserved(
+    test_case: MicrobatchSuccessTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    result: ModelExecutionResult = run_skipped_test(
+        test_case=test_case, adapter=adapter, connection=connection
+    )
+    asset: dict[str, object] = _format_model_assets(results=(result,), plan=None)[0]
+    microbatch: dict[str, object] = cast(dict[str, object], asset["microbatch"])
+
+    assert result.microbatch_limit_count == test_case.expected_microbatch_limit_count
+    assert (
+        result.microbatch_limit_warning is not None
+    ) is test_case.expected_microbatch_limit_warning
+    assert result.warning_messages == (result.microbatch_limit_warning,)
+    assert microbatch["limit"] == 2
+    assert microbatch["count"] == 3
+    assert microbatch["action"] == "warn"
+    assert microbatch["warning"] == result.microbatch_limit_warning
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MicrobatchFailureTestCase(
+            description="reconciliation expansion is rejected before pre-hook",
+            setup_sql=(
+                _TS_SOURCE_SQL,
+                _TS_SOURCE_DATA,
+                "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP, payload VARCHAR)",
+                "CREATE TABLE main.hook_log (phase VARCHAR)",
+            ),
+            model_sql=_TS_MODEL_SQL,
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="append",
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            batch_size="3h",
+            microbatch_start="2026-01-01T00:00:00",
+            microbatch_end="2026-01-01T03:00:00",
+            pre_hook=[SqlHookEntry(statement="INSERT INTO main.hook_log VALUES ('pre')")],
+            expected_failed_phase=ExecutionPhase.STAGING,
+            expected_error_fragment="planned 3 batches",
+            expected_row_count=0,
+            expected_query_results=(("SELECT * FROM main.hook_log", ()),),
+            microbatch_limit=2,
+            microbatch_limit_action=MicrobatchLimitAction.ERROR,
+            expected_microbatch_limit_count=3,
+            expected_microbatch_limit_warning=True,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_reconciliation_expands_work_when_enforcing_limit_then_final_set_is_rejected(
+    test_case: MicrobatchFailureTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reconciled_batches: tuple[BatchWindow, ...] = (
+        BatchWindow(start="2026-01-01T00:00:00", end="2026-01-01T01:00:00", index=0),
+        BatchWindow(start="2026-01-01T01:00:00", end="2026-01-01T02:00:00", index=1),
+        BatchWindow(start="2026-01-01T02:00:00", end="2026-01-01T03:00:00", index=2),
+    )
+    monkeypatch.setattr(
+        microbatch_module,
+        "_run_microbatch_reconciliation",
+        partial(reconcile_microbatch_batches, reconciled_batches=reconciled_batches),
+    )
+
+    result: ModelExecutionResult = run_failure_test(
+        test_case=test_case, adapter=adapter, connection=connection
+    )
+
+    assert result.microbatch_limit_count == test_case.expected_microbatch_limit_count
+    verify_failure_state(result=result, test_case=test_case, connection=connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MicrobatchSuccessTestCase(
+            description="reconciliation reduction permits final batch set",
+            setup_sql=(
+                _TS_SOURCE_SQL,
+                _TS_SOURCE_DATA,
+                "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP, payload VARCHAR)",
+                "CREATE TABLE main.hook_log (phase VARCHAR)",
+            ),
+            model_sql=_TS_MODEL_SQL,
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="append",
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            batch_size="1h",
+            microbatch_start="2026-01-01T00:00:00",
+            microbatch_end="2026-01-01T03:00:00",
+            pre_hook=[SqlHookEntry(statement="INSERT INTO main.hook_log VALUES ('pre')")],
+            expected_row_count=1,
+            expected_batch_count=1,
+            expected_query_results=(("SELECT phase FROM main.hook_log", (("pre",),)),),
+            microbatch_limit=2,
+            microbatch_limit_action=MicrobatchLimitAction.ERROR,
+            expected_microbatch_limit_count=1,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_reconciliation_reduces_work_when_enforcing_limit_then_final_set_executes(
+    test_case: MicrobatchSuccessTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reconciled_batches: tuple[BatchWindow, ...] = (
+        BatchWindow(start="2026-01-01T00:00:00", end="2026-01-01T01:00:00", index=0),
+    )
+    monkeypatch.setattr(
+        microbatch_module,
+        "_run_microbatch_reconciliation",
+        partial(reconcile_microbatch_batches, reconciled_batches=reconciled_batches),
+    )
+
+    result: ModelExecutionResult = run_success_test(
+        test_case=test_case, adapter=adapter, connection=connection
+    )
+
+    assert result.microbatch_limit_count == test_case.expected_microbatch_limit_count
+    verify_success_state(result=result, test_case=test_case, connection=connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MicrobatchFailureTestCase(
+            description="runtime error limit blocks pre-hook and all batches",
+            setup_sql=(
+                _TS_SOURCE_SQL,
+                _TS_SOURCE_DATA,
+                "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP, payload VARCHAR)",
+                "CREATE TABLE main.hook_log (phase VARCHAR)",
+            ),
+            model_sql=_TS_MODEL_SQL,
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="delete_insert",
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            batch_size="1h",
+            microbatch_start="2026-01-01T00:00:00",
+            microbatch_end="2026-01-01T03:00:00",
+            pre_hook=[SqlHookEntry(statement="INSERT INTO main.hook_log VALUES ('pre')")],
+            expected_failed_phase=ExecutionPhase.STAGING,
+            expected_error_fragment="MICROBATCH LIMIT EXCEEDED",
+            expected_row_count=0,
+            microbatch_limit=2,
+            microbatch_limit_action=MicrobatchLimitAction.ERROR,
+            expected_query_results=(
+                ("SELECT COUNT(*) FROM main.hook_log", ((0,),)),
+                ("SELECT COUNT(*) FROM main.orders", ((0,),)),
+            ),
+        ),
         MicrobatchFailureTestCase(
             description="runtime cap evidence survives pre-hook failure",
             setup_sql=(

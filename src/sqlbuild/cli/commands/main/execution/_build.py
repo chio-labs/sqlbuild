@@ -120,6 +120,7 @@ def _run_build(*, request: BuildCommandRequest) -> int:
                     use_color=invocation.use_color,
                     providers=provider_session.providers,
                     command_started_at=command_started_at,
+                    max_microbatches=request.max_microbatches,
                 ),
             )
         if invocation.effective_defer_clone_from is not None:

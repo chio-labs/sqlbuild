@@ -719,6 +719,26 @@ class MicrobatchLookbackTestCase:
 
 
 @dataclass(frozen=True)
+class MicrobatchLimitPlanningTestCase:
+    description: str
+    max_batches: int
+    action: str
+    expected_count: int | None
+    expected_warning: bool
+    plan_action: str = "incremental_delete_insert"
+    range_start: str = "0"
+    range_end: str = "30"
+
+
+@dataclass(frozen=True)
+class MicrobatchLimitPlanningErrorTestCase:
+    description: str
+    max_batches: int
+    action: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class CursorOverridesValidationTestCase:
     description: str
     start_ts: str | None = None

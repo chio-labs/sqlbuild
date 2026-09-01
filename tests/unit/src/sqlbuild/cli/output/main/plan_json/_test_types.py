@@ -18,3 +18,12 @@ class JsonOutputTestCase:
 class FutureCursorPlanJsonTestCase:
     description: str
     expected_action: str
+
+
+@dataclass(frozen=True)
+class MicrobatchLimitPlanJsonTestCase:
+    description: str
+    expected_limit: int
+    expected_count: int
+    expected_action: str
+    expected_warning: str

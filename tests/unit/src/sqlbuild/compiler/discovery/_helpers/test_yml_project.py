@@ -26,6 +26,8 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     LoadProjectCostConfigTestCase,
     LoadRetentionConfigErrorTestCase,
     LoadRetentionConfigTestCase,
+    MicrobatchLimitConfigErrorTestCase,
+    MicrobatchLimitConfigTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
     write_project_config_test_files,
@@ -82,6 +84,71 @@ def test_given_future_cursor_config_when_loading_project_then_policy_is_typed(
 
     assert config.cursors.future.max_distance == test_case.expected_max_distance
     assert config.cursors.future.action == test_case.expected_action
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MicrobatchLimitConfigTestCase(
+            description="configured warn limit is typed",
+            limits_toml='max_batches = 24\naction = "warn"',
+            expected_max_batches=24,
+            expected_action="warn",
+        ),
+        MicrobatchLimitConfigTestCase(
+            description="absent max batches disables limit",
+            limits_toml='action = "error"',
+            expected_max_batches=None,
+            expected_action="error",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_microbatch_limit_config_when_loading_project_then_policy_is_typed(
+    test_case: MicrobatchLimitConfigTestCase, tmp_path: Path
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "demo"\nadapter = "duckdb"\n[microbatches.limits]\n{test_case.limits_toml}\n',
+        encoding="utf-8",
+    )
+
+    config: ProjectConfig = load_project_config(project_dir=tmp_path)
+
+    assert config.microbatches.limits.max_batches == test_case.expected_max_batches
+    assert config.microbatches.limits.action == test_case.expected_action
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MicrobatchLimitConfigErrorTestCase(
+            description="zero max batches is rejected",
+            limits_toml="max_batches = 0",
+            expected_error_fragment="must be a positive integer",
+        ),
+        MicrobatchLimitConfigErrorTestCase(
+            description="boolean max batches is rejected",
+            limits_toml="max_batches = true",
+            expected_error_fragment="must be a positive integer",
+        ),
+        MicrobatchLimitConfigErrorTestCase(
+            description="unsupported limit action is rejected",
+            limits_toml='max_batches = 2\naction = "cap"',
+            expected_error_fragment="action must be one of: error, warn",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_microbatch_limit_when_loading_project_then_error_is_raised(
+    test_case: MicrobatchLimitConfigErrorTestCase, tmp_path: Path
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "demo"\nadapter = "duckdb"\n[microbatches.limits]\n{test_case.limits_toml}\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProjectConfigError, match=test_case.expected_error_fragment):
+        load_project_config(project_dir=tmp_path)
 
 
 @pytest.mark.parametrize(

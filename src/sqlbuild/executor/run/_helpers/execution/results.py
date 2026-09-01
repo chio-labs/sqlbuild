@@ -67,6 +67,10 @@ def build_failed_result(
         error_help=rendered_help,
         error_message=rendered_error,
         future_cursor_safety=_future_cursor_safety(entry),
+        microbatch_limit=entry.microbatch_limit,
+        microbatch_limit_count=entry.microbatch_limit_count,
+        microbatch_limit_action=entry.microbatch_limit_action,
+        microbatch_limit_warning=entry.microbatch_limit_warning,
     )
 
 
@@ -96,6 +100,10 @@ def build_skipped_result(
         skip_mode=skipped_hook.skip_mode if skipped_hook is not None else None,
         skip_reason=skipped_hook.skip_reason if skipped_hook is not None else None,
         future_cursor_safety=_future_cursor_safety(entry),
+        microbatch_limit=entry.microbatch_limit,
+        microbatch_limit_count=entry.microbatch_limit_count,
+        microbatch_limit_action=entry.microbatch_limit_action,
+        microbatch_limit_warning=entry.microbatch_limit_warning,
     )
 
 

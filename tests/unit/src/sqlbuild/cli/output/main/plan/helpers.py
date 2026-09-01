@@ -34,7 +34,7 @@ from sqlbuild.compiler.planner.types import (
     WarningSeverity,
 )
 from sqlbuild.spec.contracts.models import SeedCsvSettings
-from sqlbuild.spec.contracts.types import SourceWriteStrategy
+from sqlbuild.spec.contracts.types import MicrobatchLimitAction, SourceWriteStrategy
 
 
 def build_model_entry(
@@ -69,6 +69,10 @@ def build_model_entry(
     custom_materialization_name: str | None = None,
     query_changed: bool = False,
     config_changed: bool = False,
+    microbatch_limit: int | None = None,
+    microbatch_limit_count: int | None = None,
+    microbatch_limit_action: MicrobatchLimitAction | None = None,
+    microbatch_limit_warning: str | None = None,
 ) -> ModelPlanEntry:
     """Build a minimal ModelPlanEntry for formatter tests."""
 
@@ -110,6 +114,10 @@ def build_model_entry(
         custom_materialization_name=custom_materialization_name,
         query_changed=query_changed,
         config_changed=config_changed,
+        microbatch_limit=microbatch_limit,
+        microbatch_limit_count=microbatch_limit_count,
+        microbatch_limit_action=microbatch_limit_action,
+        microbatch_limit_warning=microbatch_limit_warning,
     )
 
 

@@ -47,6 +47,7 @@ class CompilePipelineOptions:
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
     resolve_python_run_selectors: bool = False
     no_cache: bool = False
+    max_microbatches: int | None = None
 
 
 @dataclass(frozen=True)

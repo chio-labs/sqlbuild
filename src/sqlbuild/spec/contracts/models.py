@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlbuild.cost.constants import DEFAULT_USD_PER_CREDIT
 from sqlbuild.spec.contracts.types import (
     FutureCursorAction,
+    MicrobatchLimitAction,
     SourceFreshnessStrategy,
     SourceFreshnessValueKind,
     SourceWriteStrategy,
@@ -207,6 +208,21 @@ class CursorsConfig:
 
 
 @dataclass(frozen=True)
+class MicrobatchLimitsConfig:
+    """Per-model microbatch planning safety limit."""
+
+    max_batches: int | None = None
+    action: MicrobatchLimitAction = MicrobatchLimitAction.ERROR
+
+
+@dataclass(frozen=True)
+class MicrobatchesConfig:
+    """Project-wide microbatch configuration."""
+
+    limits: MicrobatchLimitsConfig = field(default_factory=MicrobatchLimitsConfig)
+
+
+@dataclass(frozen=True)
 class DefaultsConfig:
     """Project-wide resource defaults."""
 
@@ -312,6 +328,7 @@ class ProjectConfig:
     cost: CostConfig = field(default_factory=CostConfig)
     constants: ConstantsConfig = field(default_factory=ConstantsConfig)
     cursors: CursorsConfig = field(default_factory=CursorsConfig)
+    microbatches: MicrobatchesConfig = field(default_factory=MicrobatchesConfig)
     defaults: DefaultsConfig = field(default_factory=DefaultsConfig)
     materialization_defaults: MaterializationDefaultsConfig = field(
         default_factory=MaterializationDefaultsConfig
