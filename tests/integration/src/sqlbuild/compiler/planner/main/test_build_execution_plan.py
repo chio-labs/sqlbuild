@@ -435,8 +435,9 @@ def test_given_missing_source_cursor_input_column_when_building_plan_then_raises
             expected_warning_severity=WarningSeverity.WARNING,
             expected_warning_fragment="appears to be integer",
             expected_progress_fragments=(
-                "Gathering cursor bounds (1/1)",
-                "Gathered cursor bounds (1/1). (",
+                "Inspecting cursor bounds (1/1): staging.events.event_time [max]...",
+                "Inspected cursor bounds (1/1): staging.events.event_time [max] (",
+                "Gathered cursor bounds (1/1 logical values; 1 physical relation reads). (",
             ),
         ),
         BuildExecutionPlanTestCase(

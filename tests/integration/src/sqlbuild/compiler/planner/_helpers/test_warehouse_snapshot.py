@@ -22,6 +22,7 @@ from sqlbuild.compiler.planner.models import ModelCursorSnapshot, WarehouseSnaps
 from tests.integration.src.sqlbuild.compiler.planner._helpers._test_types import (
     GatherCursorSnapshotTestCase,
     GatherEmptySnapshotTestCase,
+    GatherSharedCursorSnapshotTestCase,
     GatherSourceColumnsTestCase,
     GatherWarehouseSnapshotTestCase,
 )
@@ -338,7 +339,7 @@ def test_given_sources_when_gathering_source_columns_then_filters_metadata_names
                     upstream_maxes=("2024-02-01 00:00:00",),
                 ),
             },
-            expected_progress_calls=2,
+            expected_progress_calls=5,
         ),
         GatherCursorSnapshotTestCase(
             description="gathers cursor bounds for first run with no target table",
@@ -356,7 +357,7 @@ def test_given_sources_when_gathering_source_columns_then_filters_metadata_names
                     upstream_maxes=("2024-02-01 00:00:00",),
                 ),
             },
-            expected_progress_calls=2,
+            expected_progress_calls=3,
         ),
         GatherCursorSnapshotTestCase(
             description="skips cursor gathering when full refresh is true",
@@ -386,7 +387,7 @@ def test_given_sources_when_gathering_source_columns_then_filters_metadata_names
                     upstream_maxes=("2024-02-01 00:00:00",),
                 ),
             },
-            expected_progress_calls=2,
+            expected_progress_calls=3,
         ),
         GatherCursorSnapshotTestCase(
             description="skips unselected incremental models",
@@ -470,7 +471,7 @@ def test_given_incremental_models_when_gathering_cursor_snapshots_then_returns_e
                     upstream_maxes=("2024-03-01 00:00:00",),
                 ),
             },
-            expected_progress_calls=2,
+            expected_progress_calls=3,
         ),
         GatherCursorSnapshotTestCase(
             description="non-selected upstream reads cursor from deferred env",
@@ -492,7 +493,7 @@ def test_given_incremental_models_when_gathering_cursor_snapshots_then_returns_e
                     upstream_maxes=("2024-06-01 00:00:00",),
                 ),
             },
-            expected_progress_calls=2,
+            expected_progress_calls=3,
         ),
     ],
     ids=lambda case: case.description,
@@ -535,3 +536,71 @@ def test_given_deferred_locations_when_gathering_cursor_snapshots_then_resolves_
     for model_name, expected_snap in test_case.expected_cursor_snapshots.items():
         assert snapshot.cursor_snapshots[model_name] == expected_snap
     assert len(progress_calls) == test_case.expected_progress_calls
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        GatherSharedCursorSnapshotTestCase(
+            description="two models share one physical source cursor read",
+            expected_cursor_snapshot=ModelCursorSnapshot(
+                target_max=None,
+                upstream_mins=("2024-01-01 00:00:00",),
+                upstream_maxes=("2024-03-01 00:00:00",),
+            ),
+            expected_statements=(
+                "SELECT CAST(MIN(event_time) AS VARCHAR) AS _min, "
+                "CAST(MAX(event_time) AS VARCHAR) AS _max FROM staging.raw_events",
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_models_sharing_one_source_when_gathering_snapshot_then_executes_one_bounds_statement(
+    test_case: GatherSharedCursorSnapshotTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    connection.execute("CREATE TABLE staging.raw_events (event_time TIMESTAMP)")
+    connection.execute("INSERT INTO staging.raw_events VALUES ('2024-01-01'), ('2024-03-01')")
+    statements: list[str] = []
+
+    def _record_execute(*, connection: Any, sql: str) -> Any:
+        statements.append(sql)
+        return connection.execute(sql)
+
+    project: CompiledProject = build_project_with_targets(
+        model_locations={"raw_events": "staging"},
+        incremental_models=(
+            _IncrementalModelSpec(
+                name="daily_events",
+                schema="staging",
+                cursor="event_time",
+                ref_names=("raw_events",),
+            ),
+            _IncrementalModelSpec(
+                name="monthly_events",
+                schema="staging",
+                cursor="event_time",
+                ref_names=("raw_events",),
+            ),
+        ),
+    )
+
+    snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        execute=_record_execute,
+    )
+
+    assert snapshot.cursor_snapshots == {
+        "daily_events": test_case.expected_cursor_snapshot,
+        "monthly_events": test_case.expected_cursor_snapshot,
+    }
+    assert tuple(statements) == test_case.expected_statements
+    assert "UNION ALL" not in statements[0]
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-vv"])

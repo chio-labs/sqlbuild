@@ -45,6 +45,13 @@ class GatherCursorSnapshotTestCase:
 
 
 @dataclass(frozen=True)
+class GatherSharedCursorSnapshotTestCase:
+    description: str
+    expected_cursor_snapshot: ModelCursorSnapshot
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class GatherSourceColumnsTestCase:
     description: str
     setup_sql: tuple[str, ...]

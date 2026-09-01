@@ -96,6 +96,38 @@ class MetadataNameFilterTestCase:
 
 
 @dataclass(frozen=True)
+class CursorQueryShapeTestCase:
+    description: str
+    min_tags: tuple[str, ...]
+    max_tags: tuple[str, ...]
+    row: tuple[str | None, ...]
+    expected_sql: str
+    expected_results: dict[str, str]
+    expected_bounds: str
+
+
+@dataclass(frozen=True)
+class CursorQueryGroupingTestCase:
+    description: str
+    expected_physical_queries: tuple[tuple[str, str, tuple[str, ...], tuple[str, ...]], ...]
+
+
+@dataclass(frozen=True)
+class CursorQueryFailureTestCase:
+    description: str
+    expected_results: dict[str, str]
+    expected_failure_progress: str
+    expected_success_progress: str
+
+
+@dataclass(frozen=True)
+class CursorFetchFailureTestCase:
+    description: str
+    expected_results: dict[str, str]
+    expected_progress: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SeedIdentityTestCase:
     description: str
     seed_contents: str
