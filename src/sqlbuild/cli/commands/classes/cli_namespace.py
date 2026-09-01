@@ -41,6 +41,7 @@ _DEFAULT_VALUES: dict[str, object] = {
     "profile_skip_contracts": False,
     "profile_skip_write": False,
     "start_cursor_ts": None,
+    "max_microbatches": None,
     "end_cursor_ts": None,
     "start_cursor_int": None,
     "end_cursor_int": None,
@@ -185,6 +186,7 @@ class CliNamespace:
     profile_skip_contracts: bool
     profile_skip_write: bool
     start_cursor_ts: str | None
+    max_microbatches: int | None
     end_cursor_ts: str | None
     start_cursor_int: str | None
     end_cursor_int: str | None

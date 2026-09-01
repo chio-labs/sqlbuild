@@ -37,7 +37,9 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.executor.run._helpers.materializations.microbatch import execute_microbatch_entry
 from sqlbuild.executor.run.models import (
+    BatchWindow,
     HookContext,
+    HookSkipResult,
     ModelExecutionResult,
     ModelMaterializationContext,
 )
@@ -60,6 +62,16 @@ def insert_microbatch_hook_log(ctx: HookContext, phase: str) -> None:
 
 def fail_microbatch_hook(ctx: HookContext, message: str) -> None:
     raise RuntimeError(message)
+
+
+def skip_microbatch_hook(ctx: HookContext, reason: str) -> HookSkipResult:
+    return ctx.skip(reason=reason)
+
+
+def reconcile_microbatch_batches(
+    *, history: Any, reconciled_batches: tuple[BatchWindow, ...], **_: Any
+) -> tuple[Any, tuple[BatchWindow, ...]]:
+    return history, reconciled_batches
 
 
 def build_microbatch_plan_entry(
@@ -124,6 +136,8 @@ def build_microbatch_plan_entry(
         on_schema_change=test_case.on_schema_change,
         pre_hooks=test_case.pre_hook,
         post_hooks=test_case.post_hook,
+        microbatch_limit=test_case.microbatch_limit,
+        microbatch_limit_action=test_case.microbatch_limit_action,
     )
 
 
@@ -184,6 +198,21 @@ def run_failure_test(
     return result
 
 
+def run_skipped_test(
+    *,
+    test_case: MicrobatchSuccessTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> ModelExecutionResult:
+    """Execute a microbatch hook-skip test case and return the result."""
+
+    result: ModelExecutionResult = _execute_test(
+        test_case=test_case, adapter=adapter, connection=connection
+    )
+    assert result.status == ExecutionStatus.SKIPPED
+    return result
+
+
 def verify_success_state(
     *,
     result: ModelExecutionResult,
@@ -200,6 +229,10 @@ def verify_success_state(
     assert actual_count == test_case.expected_row_count
     assert len(result.audit_results) == test_case.expected_audit_count
     assert len(result.warning_messages) == test_case.expected_warning_count
+    normalized_batch_count: int | None = {None: result.batch_count}.get(
+        test_case.expected_batch_count, test_case.expected_batch_count
+    )
+    assert result.batch_count == normalized_batch_count
     assert (result.future_cursor_safety is not None) is test_case.expected_has_future_cursor_safety
     state_table_count: int = connection.execute(
         "SELECT COUNT(*) FROM information_schema.tables "

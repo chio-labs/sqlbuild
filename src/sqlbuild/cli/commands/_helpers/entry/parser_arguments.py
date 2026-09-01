@@ -42,6 +42,19 @@ def add_cursor_override_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--end-cursor-int", default=None)
 
 
+def add_microbatch_limit_override_arg(parser: argparse.ArgumentParser) -> None:
+    """Add the intentional per-model microbatch limit override."""
+
+    parser.add_argument("--max-microbatches", type=_positive_integer, default=None)
+
+
+def _positive_integer(value: str) -> int:
+    parsed: int = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("value must be a positive integer")
+    return parsed
+
+
 def add_execution_args(parser: argparse.ArgumentParser) -> None:
     """Add execution control flags shared by build and run commands."""
 

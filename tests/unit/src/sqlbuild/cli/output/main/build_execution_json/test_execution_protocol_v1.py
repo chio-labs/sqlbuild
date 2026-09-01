@@ -15,9 +15,11 @@ from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 from tests.unit.src.sqlbuild.cli.commands.shared._helpers.helpers import build_audit_result
 from tests.unit.src.sqlbuild.cli.output.main.build_execution_json._test_types import (
     ExecutionJsonCostTestCase,
+    ExecutionJsonMicrobatchLimitTestCase,
     ExecutionJsonRelationReuseTestCase,
     ExecutionJsonSeedReasonTestCase,
     ExecutionJsonTestCase,
@@ -27,6 +29,48 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
     build_plan_output,
     build_seed_entry,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExecutionJsonMicrobatchLimitTestCase(
+            description="execution json preserves microbatch limit evidence",
+            expected_microbatch={
+                "limit": 2,
+                "count": 3,
+                "action": "warn",
+                "warning": "MICROBATCH LIMIT EXCEEDED",
+            },
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_microbatch_limit_result_when_formatting_execution_json_then_metadata_is_preserved(
+    test_case: ExecutionJsonMicrobatchLimitTestCase,
+) -> None:
+    result: str = format_build_execution_json(
+        result=BuildExecutionResult(
+            status=BuildStatus.SUCCESS,
+            model_results=(
+                ModelExecutionResult(
+                    model_name="events",
+                    status=ExecutionStatus.SUCCESS,
+                    microbatch_run_type="normal",
+                    microbatch_limit=2,
+                    microbatch_limit_count=3,
+                    microbatch_limit_action=MicrobatchLimitAction.WARN,
+                    microbatch_limit_warning="MICROBATCH LIMIT EXCEEDED",
+                ),
+            ),
+        ),
+        plan=build_plan_output(model_entries=(build_model_entry(name="events"),)),
+    )
+    payload: dict[str, object] = json.loads(result)
+    microbatch: dict[str, object] = payload["assets"][0]["microbatch"]  # type: ignore[index,assignment]
+
+    actual: dict[str, object] = {key: microbatch[key] for key in test_case.expected_microbatch}
+    assert actual == test_case.expected_microbatch
 
 
 @pytest.mark.parametrize(

@@ -133,6 +133,7 @@ def execute_virtual_build(
                     no_cache=request.no_cache,
                     defer_sources_to=request.defer_sources_to,
                     cursor_overrides=request.cursor_overrides,
+                    max_microbatches=request.max_microbatches,
                     full_refresh=request.full_refresh,
                     virtual_environment_name=request.virtual_environment_name,
                     include_stale_upstreams=request.include_stale_upstreams,

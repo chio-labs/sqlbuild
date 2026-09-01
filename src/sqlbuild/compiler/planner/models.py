@@ -61,7 +61,11 @@ from sqlbuild.spec.contracts.models import (
     SeedCsvSettings,
     SourceEntry,
 )
-from sqlbuild.spec.contracts.types import FutureCursorAction, SourceWriteStrategy
+from sqlbuild.spec.contracts.types import (
+    FutureCursorAction,
+    MicrobatchLimitAction,
+    SourceWriteStrategy,
+)
 from sqlbuild.sql_values.models import SqlValue
 
 
@@ -573,6 +577,7 @@ class ModelChangesPlanInputs:
     seed_version_hashes: dict[str, str] | None = None
     seed_metadata_jsons: dict[str, str] | None = None
     seed_plan_reasons: dict[str, PlanReason] | None = None
+    max_microbatches: int | None = None
 
 
 @dataclass(frozen=True)
@@ -586,6 +591,8 @@ class PlanEntryBuildInputs:
     end_cursor_override: str | None = None
     future_cursor_config: FutureCursorsConfig | None = None
     invocation_time: datetime | None = None
+    max_microbatches: int | None = None
+    microbatch_limit_action: MicrobatchLimitAction = MicrobatchLimitAction.ERROR
 
 
 @dataclass(frozen=True)
@@ -728,6 +735,10 @@ class ModelPlanEntry:
     batch_concurrency: int = 1
     unaccounted_partition_policy: str | None = None
     microbatch_range: CursorBounds | None = None
+    microbatch_limit: int | None = None
+    microbatch_limit_count: int | None = None
+    microbatch_limit_action: MicrobatchLimitAction | None = None
+    microbatch_limit_warning: str | None = None
     start_cursor_override: str | None = None
     end_cursor_override: str | None = None
     future_cursor_config: FutureCursorsConfig | None = None
@@ -1078,6 +1089,7 @@ class PlannerOverrides:
     reload_sources: bool = False
     forced_stale_model_names: tuple[str, ...] = ()
     external_blocked_model_names: tuple[str, ...] = ()
+    max_microbatches: int | None = None
 
 
 @dataclass(frozen=True)

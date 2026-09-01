@@ -30,6 +30,7 @@ class VirtualPlanOptions:
     cli_vars: dict[str, object] | None = None
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
     no_cache: bool = False
+    max_microbatches: int | None = None
 
 
 @dataclass(frozen=True)

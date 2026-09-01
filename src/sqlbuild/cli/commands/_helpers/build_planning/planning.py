@@ -48,6 +48,7 @@ def compile_build_plan(
                 discovered_inputs=invocation.discovered_inputs,
             ),
             resolve_python_run_selectors=(request.include_python or invocation.should_load_sources),
+            max_microbatches=request.max_microbatches,
         ),
         hooks=ConnectionHooks(
             on_progress=invocation.planning_progress.on_progress,

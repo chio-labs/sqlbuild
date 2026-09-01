@@ -35,6 +35,7 @@ from sqlbuild.microbatches.models import MicrobatchScope
 from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 from sqlbuild.spec.contracts.models import FutureCursorsConfig, SourceEntry
+from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
 
 @dataclass(frozen=True)
@@ -153,6 +154,10 @@ class ModelExecutionResult:
     microbatch_accounting_intervals: tuple[MicrobatchAccountingInterval, ...] = field(
         default_factory=tuple
     )
+    microbatch_limit: int | None = None
+    microbatch_limit_count: int | None = None
+    microbatch_limit_action: MicrobatchLimitAction | None = None
+    microbatch_limit_warning: str | None = None
 
 
 @dataclass(frozen=True)

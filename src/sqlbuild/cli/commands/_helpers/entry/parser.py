@@ -11,6 +11,7 @@ from sqlbuild.cli.commands._helpers.entry.parser_arguments import (
     add_dbt_config_args,
     add_execution_args,
     add_execution_json_output_arg,
+    add_microbatch_limit_override_arg,
     add_scenario_snapshot_safety_args,
     add_select_args,
     add_vars_args,
@@ -147,6 +148,7 @@ def _add_plan_and_build_parsers(
     plan_load_group.add_argument("--load", dest="load_sources", action="store_true", default=None)
     plan_load_group.add_argument("--no-load", dest="load_sources", action="store_false")
     _ = add_cursor_override_args(plan_parser)
+    _ = add_microbatch_limit_override_arg(plan_parser)
     _ = add_select_args(plan_parser)
     _ = add_vars_args(plan_parser)
     _ = add_dbt_config_args(parser=plan_parser)
@@ -181,6 +183,7 @@ def _add_plan_and_build_parsers(
     _ = add_execution_json_output_arg(build_parser)
     build_parser.add_argument("--event-output", type=Path, default=None, help=argparse.SUPPRESS)
     _ = add_cursor_override_args(build_parser)
+    _ = add_microbatch_limit_override_arg(build_parser)
     build_load_group: argparse._MutuallyExclusiveGroup = build_parser.add_mutually_exclusive_group()
     build_load_group.add_argument("--load", dest="load_sources", action="store_true", default=None)
     build_load_group.add_argument("--no-load", dest="load_sources", action="store_false")

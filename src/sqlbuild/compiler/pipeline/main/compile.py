@@ -201,6 +201,7 @@ def _build_result(
             cursor_overrides=options.cursor_overrides,
             full_refresh=options.full_refresh,
             reload_sources=options.reload_sources,
+            max_microbatches=options.max_microbatches,
         ),
         deferral=DeferralInputs(
             deferred_locations=deferred_locations,

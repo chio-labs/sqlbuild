@@ -27,6 +27,7 @@ from sqlbuild.compiler.planner.main.execution.effective_microbatch_batch_size im
 )
 from sqlbuild.compiler.planner.main.execution.future_cursor_warning import future_cursor_cap_warning
 from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
+from sqlbuild.compiler.planner.main.execution.microbatch_limit import microbatch_limit_warning
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
     Duration,
@@ -126,7 +127,7 @@ from sqlbuild.microbatches.types import (
     ReplayRequirementState,
     UnaccountedPartitionPolicy,
 )
-from sqlbuild.spec.contracts.types import TableType
+from sqlbuild.spec.contracts.types import MicrobatchLimitAction, TableType
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
@@ -243,19 +244,7 @@ def execute_microbatch_entry(  # noqa: PLR0915
     )
     if batch_plan.early_exit is not None:
         return batch_plan.early_exit
-    context = _context_with_microbatch_range(context=context, batch_plan=batch_plan)
-    cap_warning: str | None = future_cursor_cap_warning(batch_plan.resolved_range)
-    if cap_warning is not None:
-        state.warnings.append(cap_warning)
-    pre_hook_exit: ModelExecutionResult | None = run_pre_hook_phase(
-        context=context,
-        warnings=state.warnings,
-        audit_results=state.audit_results,
-        hook_results=state.hook_results,
-        statement_recorder=state.statement_recorder,
-    )
-    if pre_hook_exit is not None:
-        return pre_hook_exit
+    state = _with_future_cursor_warning(state=state, bounds=batch_plan.resolved_range)
     history_read: (
         tuple[
             MicrobatchEventStore,
@@ -299,14 +288,6 @@ def execute_microbatch_entry(  # noqa: PLR0915
     )
     if isinstance(history_context, ModelExecutionResult):
         return history_context
-    if full_refresh_relations is not None:
-        preparation_failure: ModelExecutionResult | None = _prepare_full_refresh_rebuild(
-            context=context,
-            state=state,
-            relations=full_refresh_relations,
-        )
-        if preparation_failure is not None:
-            return preparation_failure
     if history_context.run_type == MicrobatchRunType.REPLAY_ON_CHANGE:
         replay_batches: tuple[BatchWindow, ...] = compute_batch_windows(
             start=history_context.run_start,
@@ -338,6 +319,14 @@ def execute_microbatch_entry(  # noqa: PLR0915
     state = _with_reconciliation_warnings(context=context, state=state, history=history_context)
     if not batch_plan.batches:
         state = replace(state, warnings=[*state.warnings, "no batches to process"])
+    context, state, limit_failure = _enforce_microbatch_limit(
+        context=context, state=state, batch_plan=batch_plan
+    )
+    if limit_failure is not None:
+        return replace(
+            limit_failure,
+            **_microbatch_result_fields(history=history_context, succeeded=False),
+        )
     if (
         on_progress is not None
         and batch_plan.runtime_discovery
@@ -353,6 +342,29 @@ def execute_microbatch_entry(  # noqa: PLR0915
                 cursor_grain=context.entry.cursor_grain,
             )
         )
+    pre_hook_exit: ModelExecutionResult | None = run_pre_hook_phase(
+        context=context,
+        warnings=state.warnings,
+        audit_results=state.audit_results,
+        hook_results=state.hook_results,
+        statement_recorder=state.statement_recorder,
+    )
+    if pre_hook_exit is not None:
+        return replace(
+            pre_hook_exit,
+            **_microbatch_result_fields(history=history_context, succeeded=False),
+        )
+    if full_refresh_relations is not None:
+        preparation_failure: ModelExecutionResult | None = _prepare_full_refresh_rebuild(
+            context=context,
+            state=state,
+            relations=full_refresh_relations,
+        )
+        if preparation_failure is not None:
+            return replace(
+                preparation_failure,
+                **_microbatch_result_fields(history=history_context, succeeded=False),
+            )
     batch_outcome: MicrobatchPhaseOutcome = _execute_microbatch_batches(
         context=context,
         declared_columns=declared_columns,
@@ -411,7 +423,10 @@ def execute_microbatch_entry(  # noqa: PLR0915
             relations=full_refresh_relations,
         )
         if promotion_failure is not None:
-            return promotion_failure
+            return replace(
+                promotion_failure,
+                **_microbatch_result_fields(history=history_context, succeeded=True),
+            )
     post_hook_outcome: PostHookPhaseOutcome = run_post_hook_phase(
         context=context,
         warnings=state.warnings,
@@ -426,13 +441,16 @@ def execute_microbatch_entry(  # noqa: PLR0915
             **_microbatch_result_fields(history=history_context, succeeded=True),
         )
     if post_hook_outcome.skipped:
-        return build_skipped_result(
-            entry=context.entry,
-            warnings=state.warnings,
-            audit_results=state.audit_results,
-            statement_recorder=state.statement_recorder,
-            hook_results=state.hook_results,
-            promoted_relation=targets.target_qualified,
+        return replace(
+            build_skipped_result(
+                entry=context.entry,
+                warnings=state.warnings,
+                audit_results=state.audit_results,
+                statement_recorder=state.statement_recorder,
+                hook_results=state.hook_results,
+                promoted_relation=targets.target_qualified,
+            ),
+            **_microbatch_result_fields(history=history_context, succeeded=True),
         )
     state.warnings.extend(
         try_write_fingerprint(
@@ -462,8 +480,71 @@ def execute_microbatch_entry(  # noqa: PLR0915
         warning_messages=tuple(state.warnings),
         lifecycle_events=state.statement_recorder.snapshot(),
         hook_results=tuple(state.hook_results),
+        microbatch_limit=context.entry.microbatch_limit,
+        microbatch_limit_count=context.entry.microbatch_limit_count,
+        microbatch_limit_action=context.entry.microbatch_limit_action,
+        microbatch_limit_warning=context.entry.microbatch_limit_warning,
         **_microbatch_result_fields(history=history_context, succeeded=True),
     )
+
+
+def _enforce_microbatch_limit(
+    *,
+    context: ModelMaterializationContext,
+    state: MicrobatchLifecycleState,
+    batch_plan: _MicrobatchPlan,
+) -> tuple[ModelMaterializationContext, MicrobatchLifecycleState, ModelExecutionResult | None]:
+    limit_count: int = len(batch_plan.batches)
+    action: MicrobatchLimitAction | None = context.entry.microbatch_limit_action
+    warning: str | None = (
+        None
+        if action is None
+        else microbatch_limit_warning(
+            model_name=context.entry.name,
+            max_batches=context.entry.microbatch_limit,
+            batch_count=limit_count,
+            action=action,
+        )
+    )
+    limited_context: ModelMaterializationContext = replace(
+        context,
+        entry=replace(
+            context.entry,
+            microbatch_limit_count=limit_count,
+            microbatch_limit_warning=warning,
+        ),
+    )
+    limited_context = _context_with_microbatch_range(context=limited_context, batch_plan=batch_plan)
+    if warning is None:
+        return limited_context, state, None
+    if action == MicrobatchLimitAction.WARN:
+        warned_state: MicrobatchLifecycleState = replace(state, warnings=[*state.warnings, warning])
+        return limited_context, warned_state, None
+    failure: ModelExecutionResult = build_failed_result(
+        entry=limited_context.entry,
+        phase=ExecutionPhase.STAGING,
+        error=warning,
+        warnings=state.warnings,
+        audit_results=state.audit_results,
+        statement_recorder=state.statement_recorder,
+    )
+    return (
+        limited_context,
+        state,
+        replace(
+            failure,
+            microbatch_run_type=_microbatch_run_type(context=limited_context).value,
+        ),
+    )
+
+
+def _with_future_cursor_warning(
+    *, state: MicrobatchLifecycleState, bounds: CursorBounds | None
+) -> MicrobatchLifecycleState:
+    warning: str | None = future_cursor_cap_warning(bounds)
+    if warning is None:
+        return state
+    return replace(state, warnings=[*state.warnings, warning])
 
 
 def _run_microbatch_reconciliation(

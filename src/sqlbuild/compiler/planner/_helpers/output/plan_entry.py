@@ -28,6 +28,7 @@ from sqlbuild.compiler.planner._helpers.output.cursor_type_check import (
 from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
     resolve_bounded_cursor_override,
 )
+from sqlbuild.compiler.planner._helpers.output.microbatch_count import count_microbatches
 from sqlbuild.compiler.planner._helpers.output.strategy import (
     build_model_warnings,
     get_materialization_type,
@@ -57,6 +58,9 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.changes._model_changes import detect_model_changes
 from sqlbuild.compiler.planner.main.execution.future_cursor_safety import apply_future_cursor_safety
 from sqlbuild.compiler.planner.main.execution.future_cursor_warning import future_cursor_cap_warning
+from sqlbuild.compiler.planner.main.execution.microbatch_limit import (
+    microbatch_limit_warning,
+)
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,
@@ -102,7 +106,7 @@ from sqlbuild.spec.contracts.models import (
     SchemaColumn,
     SourceEntry,
 )
-from sqlbuild.spec.contracts.types import TableType
+from sqlbuild.spec.contracts.types import MicrobatchLimitAction, TableType
 
 _MODELS_DIR_PREFIX: str = "models/"
 _IDEMPOTENT_MICROBATCH_STRATEGIES: frozenset[IncrementalStrategy] = frozenset(
@@ -340,6 +344,14 @@ def build_plan_entries(
                     or project.settings.microbatch_unaccounted_partition_policy
                 ),
             )
+            if entry.action != PlanAction.SKIP:
+                entry, limit_warning = _apply_microbatch_limit(
+                    entry=entry,
+                    max_batches=inputs.max_microbatches,
+                    action=inputs.microbatch_limit_action,
+                )
+                if limit_warning is not None:
+                    warnings.append(limit_warning)
         entries.append(entry)
         warnings.extend(entry_warnings)
     configured_concurrent_entries: tuple[ModelPlanEntry, ...] = tuple(
@@ -382,6 +394,52 @@ def build_plan_entries(
             )
         )
     return PlannerModelEntryResults(entries=tuple(entries), warnings=tuple(warnings))
+
+
+def _apply_microbatch_limit(
+    *, entry: ModelPlanEntry, max_batches: int | None, action: MicrobatchLimitAction
+) -> tuple[ModelPlanEntry, PlanWarning | None]:
+    if entry.action == PlanAction.SKIP:
+        return entry, None
+    batch_count: int | None = None
+    if (
+        entry.microbatch_range is not None
+        and entry.batch_size is not None
+        and entry.cursor_type is not None
+    ):
+        batch_count = count_microbatches(
+            bounds=entry.microbatch_range,
+            batch_size=entry.batch_size,
+            cursor_type=entry.cursor_type,
+            equal_bounds_are_batch=entry.action == PlanAction.CREATE_TABLE,
+        )
+    warning: str | None = (
+        None
+        if batch_count is None
+        else microbatch_limit_warning(
+            model_name=entry.name,
+            max_batches=max_batches,
+            batch_count=batch_count,
+            action=action,
+        )
+    )
+    limited_entry: ModelPlanEntry = replace(
+        entry,
+        microbatch_limit=max_batches,
+        microbatch_limit_count=batch_count,
+        microbatch_limit_action=action if max_batches is not None else None,
+        microbatch_limit_warning=warning,
+    )
+    if warning is None:
+        return limited_entry, None
+    if action == MicrobatchLimitAction.ERROR:
+        raise CompileInputError(warning)
+    return limited_entry, PlanWarning(
+        model_name=entry.name,
+        severity=WarningSeverity.WARNING,
+        code="MICROBATCH_LIMIT_EXCEEDED",
+        message=warning,
+    )
 
 
 def plan_model_from_change(

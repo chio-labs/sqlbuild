@@ -18,6 +18,7 @@ from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     DeferralInputs,
     ModelChangesPlanInputs,
+    PlanEntryBuildInputs,
     PlannerChangeResults,
     PlannerModelEntryResults,
     PlannerRelationsContext,
@@ -73,6 +74,27 @@ def build_plan_output_from_model_changes_phase(
         resolved_actions=resolved_actions,
         cursor_overrides=resolved.cursor_overrides,
         full_refresh=resolved.full_refresh,
+        build_inputs=PlanEntryBuildInputs(
+            future_cursor_config=(
+                resolved.project_config.cursors.future
+                if resolved.project_config is not None
+                else None
+            ),
+            max_microbatches=(
+                resolved.max_microbatches
+                if resolved.max_microbatches is not None
+                else (
+                    resolved.project_config.microbatches.limits.max_batches
+                    if resolved.project_config is not None
+                    else None
+                )
+            ),
+            microbatch_limit_action=(
+                resolved.project_config.microbatches.limits.action
+                if resolved.project_config is not None
+                else PlanEntryBuildInputs().microbatch_limit_action
+            ),
+        ),
     )
     return build_plan_output(
         project=project,
