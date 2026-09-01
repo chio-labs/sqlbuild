@@ -1138,19 +1138,28 @@ def validate_source_cursor_input_columns(
         )
         if ref.ref_kind == SqlReferenceKind.REF:
             upstream_model: CompiledModel | None = effective_models_by_name.get(ref.ref_name)
-            if (
-                upstream_model is None
-                or upstream_model.config.values.get("contract") != ContractPolicy.ENFORCED
-            ):
+            if upstream_model is None:
                 continue
-            declared_names: tuple[str, ...] = _model_declared_column_names(upstream_model)
+            has_enforced_contract: bool = (
+                upstream_model.config.values.get("contract") == ContractPolicy.ENFORCED
+            )
+            declared_names: tuple[str, ...] = (
+                _model_declared_column_names(upstream_model)
+                if has_enforced_contract
+                else tuple(column.name for column in (upstream_model.inferred_columns or ()))
+            )
+            if not has_enforced_contract and upstream_model.inferred_columns is None:
+                continue
             if input_cursor_column.lower() in {name.lower() for name in declared_names}:
                 continue
             declared_display: str = ", ".join(declared_names) or "none"
+            metadata_description: str = (
+                "model contract" if has_enforced_contract else "reliable model output metadata"
+            )
             raise PlannerInputError(
                 f"model '{model.name}': {config_field} references model '{ref.ref_name}' "
-                f"column '{input_cursor_column}', but that model contract does not expose "
-                f"the column. Declared contract columns: {declared_display}",
+                f"column '{input_cursor_column}', but that {metadata_description} does not expose "
+                f"the column. Known output columns: {declared_display}",
                 code="S302",
             )
         if ref.ref_kind != SqlReferenceKind.SOURCE:

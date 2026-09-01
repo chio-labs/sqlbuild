@@ -950,6 +950,7 @@ def build_cursor_input_contract_models(
             relative_path=Path(f"models/{test_case.reference_name}.sql"),
             query_sql="SELECT 1",
             config=CompileModelConfig(values={"contract": test_case.upstream_contract}),
+            inferred_columns=test_case.compiled_inferred_columns,
             destination=CompiledRelationLocation(
                 database=None,
                 schema="staging",
@@ -965,8 +966,8 @@ def build_cursor_input_contract_models(
             ),
         )
     }
-    include_model: bool = (
-        test_case.reference_kind == SqlReferenceKind.REF and test_case.upstream_contract is not None
+    include_model: bool = test_case.reference_kind == SqlReferenceKind.REF and (
+        test_case.upstream_contract is not None or test_case.upstream_inferred_columns is not None
     )
     return ({}, models)[include_model]
 

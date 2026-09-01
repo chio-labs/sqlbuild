@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
     CompileSqlReference,
+    InferredColumn,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.fingerprints.models import Fingerprint
@@ -282,6 +283,13 @@ class SourceCursorInputColumnsTestCase:
     expected_error_fragment: str | None = None
     upstream_contract: str | None = None
     upstream_declared_columns: tuple[str, ...] = ()
+    upstream_inferred_columns: tuple[str, ...] | None = None
+
+    @property
+    def compiled_inferred_columns(self) -> tuple[InferredColumn, ...] | None:
+        if self.upstream_inferred_columns is None:
+            return None
+        return tuple(InferredColumn(name=name) for name in self.upstream_inferred_columns)
 
 
 @dataclass(frozen=True)
