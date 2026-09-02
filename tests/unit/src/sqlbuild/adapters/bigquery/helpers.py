@@ -136,6 +136,8 @@ class FakeBigQueryRows:
 
 
 class FakeBigQueryJob:
+    job_id: str = "job-current"
+
     def __init__(self, rows: FakeBigQueryRows, *, statement_type: str | None = "SELECT") -> None:
         self._rows: FakeBigQueryRows = rows
         self.statement_type: str | None = statement_type
@@ -145,6 +147,8 @@ class FakeBigQueryJob:
 
 
 class FakeBigQueryFailingJob:
+    job_id: str = "job-current"
+
     def __init__(self, error: Exception) -> None:
         self.error: Exception = error
 

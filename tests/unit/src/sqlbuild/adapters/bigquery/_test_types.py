@@ -56,6 +56,7 @@ class BigQueryQueryTestCase:
     expected_columns: tuple[str, ...]
     expected_rows: tuple[tuple[object, ...], ...]
     expected_truncated: bool
+    expected_row_count: int
 
 
 @dataclass(frozen=True)

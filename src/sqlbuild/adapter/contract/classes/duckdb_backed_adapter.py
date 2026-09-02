@@ -19,6 +19,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _render_ansi_typed_scalar,
     _render_typed_value_list,
 )
+from sqlbuild.adapter.contract.classes.observed_connection import ObservedConnection
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.constants import (
     DIFF_LEFT_SIDE,
@@ -65,6 +66,7 @@ from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.types import InitialValidFrom, SnapshotStrategy
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.diagnostics.main.log_sql import log_sql
+from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
 from sqlbuild.sql_values.models import SqlValue
@@ -1092,7 +1094,10 @@ class DuckDbBackedAdapter(BaseAdapter):
         import duckdb
 
         database: str = str(config.get("database", ":memory:"))
-        connection: duckdb.DuckDBPyConnection = duckdb.connect(database=database)
+        raw_connection: duckdb.DuckDBPyConnection = duckdb.connect(database=database)
+        connection: ObservedConnection = ObservedConnection(
+            raw_connection=raw_connection, adapter=self.adapter_name
+        )
 
         extensions: list[str] | tuple[str, ...] = config.get("extensions", ())
         extension_name: str
@@ -1117,7 +1122,10 @@ class DuckDbBackedAdapter(BaseAdapter):
         """Execute a SQL statement against a DuckDB connection."""
 
         log_sql(logger=logging.getLogger("sqlbuild.adapter.duckdb"), sql=sql)
-        return connection.execute(sql)
+        with StatementLifecycle(adapter=self.adapter_name, sql=sql, intent="execute") as lifecycle:
+            result: Any = connection.execute(sql)
+            lifecycle.completed(affected_rows=self.affected_row_count(cursor=result))
+            return result
 
     def query(self, *, connection: Any, sql: str, limit: int | None) -> QueryResult:
         """Execute SQL and return normalized rows for ad hoc query output."""

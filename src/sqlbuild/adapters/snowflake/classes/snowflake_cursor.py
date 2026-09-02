@@ -15,11 +15,13 @@ from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.cost.classes.statement_ledger import StatementLedger
 from sqlbuild.cost.constants import SQLBUILD_QUERY_TAG_APP
 from sqlbuild.cost.models import CostResourceContext, StatementExecutionTelemetry
+from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 
 _LOGGER: logging.Logger = logging.getLogger("sqlbuild.cost")
 _QUERY_TAG_PARAMETER: str = "QUERY_TAG"
 _STATEMENT_PARAMETER_ERROR_FRAGMENT: str = "STATEMENT PARAMETER"
 _RAW_CURSOR_ATTRIBUTE: str = "raw_cursor"
+_EXECUTEMANY_INTENT: str = "executemany"
 
 
 class _SnowflakeCursor:
@@ -48,6 +50,7 @@ class _SnowflakeCursor:
             context=context,
             statement_id=statement_id,
             query_tag_injected=query_tag_injected,
+            intent="execute",
         )
 
     def executemany(self, sql: str, *args: Any, **kwargs: Any) -> Any:
@@ -64,6 +67,7 @@ class _SnowflakeCursor:
             context=context,
             statement_id=statement_id,
             query_tag_injected=query_tag_injected,
+            intent=_EXECUTEMANY_INTENT,
         )
 
     def _execute_with_telemetry(
@@ -76,52 +80,58 @@ class _SnowflakeCursor:
         context: CostResourceContext | None,
         statement_id: str,
         query_tag_injected: bool,
+        intent: str,
     ) -> Any:
         started_at: datetime = datetime.now(UTC)
         started_monotonic: float = time.monotonic()
         previous_query_id: str | None = _current_query_id(cursor=self.raw_cursor)
-        try:
-            result: Any = operation(sql, *args, **kwargs)
-        except Exception as error:
-            if (
-                context is not None
-                and query_tag_injected
-                and _can_retry_without_query_tag(
+        batch_size: int | None = _batch_size(args=args) if intent == _EXECUTEMANY_INTENT else None
+        with StatementLifecycle(
+            adapter="snowflake",
+            sql=sql,
+            intent=intent,
+            batch_size=batch_size,
+            statement_id=statement_id,
+        ) as lifecycle:
+            try:
+                result: Any = operation(sql, *args, **kwargs)
+            except Exception as error:
+                if query_tag_injected and _can_retry_without_query_tag(
                     cursor=self.raw_cursor,
                     error=error,
                     kwargs=kwargs,
                     previous_query_id=previous_query_id,
-                )
-            ):
-                _LOGGER.warning(
-                    "Snowflake query tagging was rejected before submission; "
-                    "continuing without a query tag"
-                )
-                retry_kwargs: dict[str, Any] = _without_query_tag(kwargs=kwargs)
-                try:
-                    result = operation(sql, *args, **retry_kwargs)
-                except Exception as retry_error:
-                    self._record_failure(
+                ):
+                    _LOGGER.warning(
+                        "Snowflake query tagging was rejected before submission; "
+                        "continuing without a query tag"
+                    )
+                    retry_kwargs: dict[str, Any] = _without_query_tag(kwargs=kwargs)
+                    try:
+                        result = operation(sql, *args, **retry_kwargs)
+                    except Exception as retry_error:
+                        query_id: str | None = self._record_failure(
+                            context=context,
+                            sql=sql,
+                            started_at=started_at,
+                            started_monotonic=started_monotonic,
+                            error=retry_error,
+                            previous_query_id=previous_query_id,
+                            statement_id=statement_id,
+                        )
+                        lifecycle.failed(error=retry_error, query_id=query_id)
+                        raise
+                    query_id = self._record_success(
                         context=context,
                         sql=sql,
                         started_at=started_at,
                         started_monotonic=started_monotonic,
-                        error=retry_error,
                         previous_query_id=previous_query_id,
                         statement_id=statement_id,
                     )
-                    raise
-                self._record_success(
-                    context=context,
-                    sql=sql,
-                    started_at=started_at,
-                    started_monotonic=started_monotonic,
-                    previous_query_id=previous_query_id,
-                    statement_id=statement_id,
-                )
-                return self if result is self.raw_cursor else result
-            if context is not None:
-                self._record_failure(
+                    lifecycle.completed(query_id=query_id)
+                    return self if result is self.raw_cursor else result
+                query_id = self._record_failure(
                     context=context,
                     sql=sql,
                     started_at=started_at,
@@ -130,9 +140,9 @@ class _SnowflakeCursor:
                     previous_query_id=previous_query_id,
                     statement_id=statement_id,
                 )
-            raise
-        if context is not None:
-            self._record_success(
+                lifecycle.failed(error=error, query_id=query_id)
+                raise
+            query_id = self._record_success(
                 context=context,
                 sql=sql,
                 started_at=started_at,
@@ -140,7 +150,8 @@ class _SnowflakeCursor:
                 previous_query_id=previous_query_id,
                 statement_id=statement_id,
             )
-        return self if result is self.raw_cursor else result
+            lifecycle.completed(query_id=query_id)
+            return self if result is self.raw_cursor else result
 
     def __enter__(self) -> _SnowflakeCursor:
         self.raw_cursor.__enter__()
@@ -160,66 +171,70 @@ class _SnowflakeCursor:
     def _record_failure(
         self,
         *,
-        context: CostResourceContext,
+        context: CostResourceContext | None,
         sql: str,
         started_at: datetime,
         started_monotonic: float,
         error: Exception,
         previous_query_id: str | None,
         statement_id: str,
-    ) -> None:
+    ) -> str | None:
         completed_at: datetime = datetime.now(UTC)
         elapsed_seconds: float = time.monotonic() - started_monotonic
         query_id: str | None = _submitted_query_id(
             cursor=self.raw_cursor, previous_query_id=previous_query_id
         )
-        StatementLedger.record(
-            context=context,
-            statement_id=statement_id,
-            sql=sql,
-            query_id=query_id,
-            status="failed",
-            started_at=started_at,
-            completed_at=completed_at,
-            error=error,
-        )
-        _notify_statement_complete(
-            context=context,
-            query_id=query_id,
-            status="failed",
-            elapsed_seconds=elapsed_seconds,
-        )
+        if context is not None:
+            StatementLedger.record(
+                context=context,
+                statement_id=statement_id,
+                sql=sql,
+                query_id=query_id,
+                status="failed",
+                started_at=started_at,
+                completed_at=completed_at,
+                error=error,
+            )
+            _notify_statement_complete(
+                context=context,
+                query_id=query_id,
+                status="failed",
+                elapsed_seconds=elapsed_seconds,
+            )
+        return query_id
 
     def _record_success(
         self,
         *,
-        context: CostResourceContext,
+        context: CostResourceContext | None,
         sql: str,
         started_at: datetime,
         started_monotonic: float,
         previous_query_id: str | None,
         statement_id: str,
-    ) -> None:
+    ) -> str | None:
         completed_at: datetime = datetime.now(UTC)
         elapsed_seconds: float = time.monotonic() - started_monotonic
         query_id: str | None = _submitted_query_id(
             cursor=self.raw_cursor, previous_query_id=previous_query_id
         )
-        StatementLedger.record(
-            context=context,
-            statement_id=statement_id,
-            sql=sql,
-            query_id=query_id,
-            status="success",
-            started_at=started_at,
-            completed_at=completed_at,
-        )
-        _notify_statement_complete(
-            context=context,
-            query_id=query_id,
-            status="success",
-            elapsed_seconds=elapsed_seconds,
-        )
+        if context is not None:
+            StatementLedger.record(
+                context=context,
+                statement_id=statement_id,
+                sql=sql,
+                query_id=query_id,
+                status="success",
+                started_at=started_at,
+                completed_at=completed_at,
+            )
+            _notify_statement_complete(
+                context=context,
+                query_id=query_id,
+                status="success",
+                elapsed_seconds=elapsed_seconds,
+            )
+        return query_id
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self.raw_cursor, name)
@@ -290,6 +305,12 @@ def _submitted_query_id(*, cursor: Any, previous_query_id: str | None) -> str | 
 def _current_query_id(*, cursor: Any) -> str | None:
     query_id: object = getattr(cursor, "sfqid", None)
     return query_id if isinstance(query_id, str) and query_id else None
+
+
+def _batch_size(*, args: tuple[Any, ...]) -> int | None:
+    if not args or not isinstance(args[0], (list, tuple)):
+        return None
+    return len(args[0])
 
 
 def _notify_statement_complete(

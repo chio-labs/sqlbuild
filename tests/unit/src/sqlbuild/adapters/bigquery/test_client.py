@@ -27,6 +27,12 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.observability import (
+    EventDispatcher,
+    LifecycleEvent,
+    dispatcher_scope,
+    invocation_scope,
+)
 from tests.unit.src.sqlbuild.adapters.bigquery._test_types import (
     BigQueryConnectErrorTestCase,
     BigQueryCountRowsTestCase,
@@ -274,6 +280,7 @@ def test_given_wildcard_table_when_getting_freshness_metadata_then_bigquery_rais
             expected_columns=("id", "name"),
             expected_rows=((1, "a"), (2, "b")),
             expected_truncated=True,
+            expected_row_count=2,
         ),
         BigQueryQueryTestCase(
             description="returns all rows when limit is none",
@@ -282,6 +289,7 @@ def test_given_wildcard_table_when_getting_freshness_metadata_then_bigquery_rais
             expected_columns=("id", "name"),
             expected_rows=((1, "a"), (2, "b"), (3, "c")),
             expected_truncated=False,
+            expected_row_count=3,
         ),
     ],
     ids=lambda case: case.description,
@@ -299,15 +307,21 @@ def test_given_bigquery_rows_when_querying_then_returns_normalized_result(
         ),
         location="europe-west2",
     )
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
 
-    result: QueryResult = adapter.query(
-        connection=connection, sql=test_case.sql, limit=test_case.limit
-    )
+    with invocation_scope("inv-bigquery-query"), dispatcher_scope(dispatcher):
+        result: QueryResult = adapter.query(
+            connection=connection, sql=test_case.sql, limit=test_case.limit
+        )
 
     assert result.columns == test_case.expected_columns
     assert result.rows == test_case.expected_rows
     assert result.truncated is test_case.expected_truncated
     assert connection.client.queries == [(test_case.sql, "europe-west2")]
+    assert events[-1].event_type == "statement_completed"
+    assert events[-1].payload["row_count"] == test_case.expected_row_count
 
 
 @pytest.mark.parametrize(
@@ -580,6 +594,51 @@ def test_given_bigquery_job_failure_when_executing_then_includes_error_details(
         adapter.execute(connection=connection, sql="SELECT missing_column")
 
     assert error.value.code == test_case.expected_error_code
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryExecutionErrorTestCase(
+            description="query failure retains submitted BigQuery job ID",
+            error_message="query result failed",
+            error_details=[{"message": "query result failed"}],
+            expected_error_fragment="query result failed",
+            expected_error_code="A104",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_submitted_bigquery_job_when_query_result_fails_then_terminal_retains_job_id(
+    test_case: BigQueryExecutionErrorTestCase,
+) -> None:
+    connection: _BigQueryConnection = _BigQueryConnection(
+        client=FakeBigQueryFailingClient(
+            query_error=FakeBigQueryBadRequest(
+                test_case.error_message,
+                errors=test_case.error_details,
+            )
+        ),
+        location="europe-west2",
+    )
+    adapter: BigQueryAdapter = BigQueryAdapter()
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    with (
+        invocation_scope("inv-bigquery-query-failure"),
+        dispatcher_scope(dispatcher),
+        pytest.raises(FakeBigQueryBadRequest, match=test_case.expected_error_fragment),
+    ):
+        adapter.query(connection=connection, sql="SELECT missing_column", limit=None)
+
+    assert tuple(event.event_type for event in events) == (
+        "statement_started",
+        "statement_submitted",
+        "statement_failed",
+    )
+    assert events[-1].payload["job_id"] == "job-current"
 
 
 @pytest.mark.parametrize(

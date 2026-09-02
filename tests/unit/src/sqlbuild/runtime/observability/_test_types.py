@@ -248,3 +248,30 @@ class DispatcherContextCase:
     expected_outer_restored: bool
     expected_thread_isolated: bool
     expected_task_isolated: bool
+
+
+@dataclass(frozen=True)
+class StatementLifecycleCase:
+    description: str
+    sql: str
+    parameters: tuple[str, ...]
+    expected_event_types: tuple[str, ...]
+    expected_batch_size: int
+    expected_call_count: int = 1
+
+
+@dataclass(frozen=True)
+class StatementKindPrivacyCase:
+    description: str
+    sql: str
+    expected_statement_kind: str
+    private_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ErrorCodePrivacyCase:
+    description: str
+    attribute_name: str
+    code: object
+    expected_error_code: str | None
+    private_fragments: tuple[str, ...]

@@ -178,6 +178,18 @@ symbols = ["_SnowflakeCursor.execute", "_SnowflakeCursor.executemany"]
 reason = "This proxy preserves Snowflake's DB-API cursor positional execution protocol."
 
 [[rule_exceptions]]
+rule = "FFS120"
+path = "src/sqlbuild/adapter/contract/classes/observed_cursor.py"
+symbols = ["ObservedCursor.execute", "ObservedCursor.executemany"]
+reason = "This proxy preserves the external DB-API cursor positional execution protocol."
+
+[[rule_exceptions]]
+rule = "FFS120"
+path = "src/sqlbuild/adapter/contract/classes/observed_connection.py"
+symbols = ["ObservedConnection.execute", "ObservedConnection.executemany"]
+reason = "This proxy preserves DuckDB's positional connection execution protocol."
+
+[[rule_exceptions]]
 rule = "FFL101"
 path = "scripts/fensu_policy/rules/adapter_ownership.py"
 reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers imports, despite FFR704 requiring that layout."
