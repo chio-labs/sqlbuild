@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.75.0](https://github.com/chio-labs/sqlbuild/compare/v0.74.4...v0.75.0) (2026-09-02)
+
+
+### Features
+
+* add explicit column contract mode ([#475](https://github.com/chio-labs/sqlbuild/issues/475)) ([62c7724](https://github.com/chio-labs/sqlbuild/commit/62c7724870de760124734d0e67e4a063baa0900b))
+
 ## [0.74.4](https://github.com/chio-labs/sqlbuild/compare/v0.74.3...v0.74.4) (2026-09-02)
 
 
