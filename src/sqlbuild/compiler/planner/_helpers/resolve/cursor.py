@@ -10,7 +10,12 @@ from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
 )
-from sqlbuild.compiler.planner.models import CursorBounds, Duration, ModelCursorSnapshot
+from sqlbuild.compiler.planner.models import (
+    CursorBounds,
+    Duration,
+    MaximumStartPolicyInputs,
+    ModelCursorSnapshot,
+)
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
 
 _TIMESTAMP_GRAIN_ORDER: dict[str, int] = {
@@ -34,6 +39,7 @@ def compute_cursor_bounds(
     end_cursor_override: str | None,
     is_microbatch: bool,
     cursor_grain: str | None = None,
+    maximum_start_policy: MaximumStartPolicyInputs | None = None,
 ) -> CursorBounds | None:
     """Compute effective cursor bounds for one incremental model."""
 
@@ -75,7 +81,22 @@ def compute_cursor_bounds(
         has_start_override=start_cursor_override is not None,
     )
 
-    return CursorBounds(start=raw_start, end=raw_end)
+    bounds: CursorBounds = CursorBounds(start=raw_start, end=raw_end)
+    from sqlbuild.compiler.planner._helpers.resolve.maximum_start import (
+        apply_maximum_start_policy,
+    )
+
+    return apply_maximum_start_policy(
+        bounds=bounds,
+        snapshot=cursor_snapshot,
+        cursor_type=cursor_type,
+        cursor_grain=cursor_grain,
+        cursor_start=cursor_start,
+        lookback=lookback,
+        backfill_duration=backfill_duration,
+        policy=maximum_start_policy or MaximumStartPolicyInputs(),
+        has_start_override=start_cursor_override is not None,
+    )
 
 
 def resolve_effective_timestamp_grain(
@@ -121,6 +142,16 @@ def normalize_cursor_snapshot_grain(
             _floor_timestamp_string(value=value, grain=effective_grain)
             for value in cursor_snapshot.upstream_maxes
         ),
+        physical_target_max=cursor_snapshot.physical_target_max or cursor_snapshot.target_max,
+        target_eligible_max=(
+            _floor_timestamp_string(
+                value=cursor_snapshot.target_eligible_max, grain=effective_grain
+            )
+            if cursor_snapshot.target_eligible_max is not None
+            else None
+        ),
+        target_relation=cursor_snapshot.target_relation,
+        destination_cursor_column=cursor_snapshot.destination_cursor_column,
         input_evidence=cursor_snapshot.input_evidence,
         expected_watermark_count=cursor_snapshot.expected_watermark_count,
         unavailable_watermark_tags=cursor_snapshot.unavailable_watermark_tags,

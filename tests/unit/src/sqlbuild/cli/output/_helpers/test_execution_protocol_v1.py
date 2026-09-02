@@ -16,6 +16,7 @@ from sqlbuild.compiler.discovery.models import SqlTestParameterDeclaration
 from sqlbuild.compiler.planner.models import (
     CursorInputEvidence,
     FutureCursorSafetyEvidence,
+    MaximumStartSafetyEvidence,
 )
 from sqlbuild.executor.run.models import (
     MicrobatchAccountingInterval,
@@ -181,6 +182,46 @@ def test_given_future_cursor_cap_when_formatting_execution_json_then_structured_
                 "maximum": "2500-01-01T00:00:00",
             }
         ],
+    }
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [FutureCursorExecutionProtocolTestCase("structured maximum start evidence", "cap")],
+    ids=lambda case: case.description,
+)
+def test_given_maximum_start_cap_when_formatting_execution_json_then_evidence_is_exposed(
+    test_case: FutureCursorExecutionProtocolTestCase,
+) -> None:
+    evidence: MaximumStartSafetyEvidence = MaximumStartSafetyEvidence(
+        action=FutureCursorAction.CAP,
+        max_ahead="0d",
+        invocation_time="2026-09-01T12:00:00+00:00",
+        physical_target_max="2026-09-03",
+        highest_eligible_target_max="2026-09-01",
+        effective_start="2026-08-30T00:00:00",
+        maximum_allowed_start="2026-09-01",
+        target_relation="analytics.events",
+        cursor_column="event_at",
+    )
+    result: ModelExecutionResult = ModelExecutionResult(
+        model_name="events",
+        status=ExecutionStatus.SUCCESS,
+        maximum_start_safety=evidence,
+    )
+
+    asset: dict[str, object] = _format_model_assets(results=(result,), plan=None)[0]
+
+    maximum_start: object = asset["maximum_start_safety"]
+    assert maximum_start == {
+        "action": test_case.expected_action,
+        "max_ahead": "0d",
+        "invocation_time": "2026-09-01T12:00:00+00:00",
+        "physical_target_max": "2026-09-03",
+        "highest_eligible_target_max": "2026-09-01",
+        "effective_start": "2026-08-30T00:00:00",
+        "maximum_allowed_start": "2026-09-01",
+        "input": {"relation": "analytics.events", "cursor_column": "event_at"},
     }
 
 

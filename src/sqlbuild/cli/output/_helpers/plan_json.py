@@ -8,12 +8,14 @@ from typing import cast
 
 from sqlbuild.cli.output._helpers.cursor_plan import build_cursor_plan_details
 from sqlbuild.cli.output._helpers.future_cursor_safety import serialize_future_cursor_safety
+from sqlbuild.cli.output._helpers.maximum_start_safety import serialize_maximum_start_safety
 from sqlbuild.cli.output.models import CursorPlanDetails
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
     FunctionPlanEntry,
     FutureCursorSafetyEvidence,
+    MaximumStartSafetyEvidence,
     ModelPlanEntry,
     PlanOutput,
     PlanProviderUsage,
@@ -162,6 +164,17 @@ def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
     )
     if serialized_future_safety is not None:
         model["future_cursor_safety"] = serialized_future_safety
+    maximum_start_safety: MaximumStartSafetyEvidence | None = (
+        entry.microbatch_range.maximum_start_safety
+        if entry.microbatch_range is not None
+        and entry.microbatch_range.maximum_start_safety is not None
+        else (entry.cursor_bounds.maximum_start_safety if entry.cursor_bounds is not None else None)
+    )
+    serialized_maximum_start: dict[str, object] | None = serialize_maximum_start_safety(
+        maximum_start_safety
+    )
+    if serialized_maximum_start is not None:
+        model["maximum_start_safety"] = serialized_maximum_start
     cursor_details: CursorPlanDetails | None = build_cursor_plan_details(entry=entry)
     if cursor_details is not None:
         model["cursor"] = _serialize_cursor_details(details=cursor_details)

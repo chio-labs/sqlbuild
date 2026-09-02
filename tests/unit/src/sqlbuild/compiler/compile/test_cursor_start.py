@@ -13,6 +13,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,
 )
 from tests.unit.src.sqlbuild.compiler.compile._test_types import (
+    CursorSafetyCompileInputsTestCase,
     CursorStartCompileErrorTestCase,
     CursorStartCompileInputsTestCase,
 )
@@ -51,11 +52,61 @@ def test_given_cursor_start_layers_when_building_compile_inputs_then_model_uses_
         discovered_inputs=discovered_inputs,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
     )
-
     assert (
         test_case.expected_cursor_start
         == compile_inputs.model_inputs[0].config.values["cursor_start"]
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CursorSafetyCompileInputsTestCase(
+            description="model safety overrides path and default policy fields",
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n\n'
+                    '[defaults]\ncursor_start_max_ahead = "7d"\n'
+                    'cursor_start_max_action = "error"\n'
+                    'cursor_future_max_distance = "14d"\n'
+                    'cursor_future_action = "error"\n\n'
+                    '[path_defaults.events]\ncursor_start_max_ahead = "3d"\n'
+                    'cursor_future_max_distance = "disabled"\n'
+                ),
+                "models/events/orders.sql": (
+                    "MODEL (\nmaterialized incremental\nincremental_strategy delete_insert\n"
+                    "cursor event_at\ncursor_type timestamp\ncursor_grain day\n"
+                    "cursor_start_max_ahead '0d'\ncursor_start_max_action cap\n"
+                    "cursor_future_max_distance '2d'\ncursor_future_action cap\n"
+                    ");\n\nSELECT DATE '2026-01-01' AS event_at"
+                ),
+            },
+            expected_start_max_ahead="0d",
+            expected_start_action="cap",
+            expected_future_max_distance="2d",
+            expected_future_action="cap",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cursor_safety_layers_when_compiling_then_model_fields_use_model_precedence(
+    test_case: CursorSafetyCompileInputsTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.repo_files)
+
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+    compile_inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discovered_inputs,
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+    )
+    values: dict[str, object] = compile_inputs.model_inputs[0].config.values
+
+    assert values["cursor_start_max_ahead"] == test_case.expected_start_max_ahead
+    assert values["cursor_start_max_action"] == test_case.expected_start_action
+    assert values["cursor_future_max_distance"] == test_case.expected_future_max_distance
+    assert values["cursor_future_action"] == test_case.expected_future_action
 
 
 @pytest.mark.parametrize(

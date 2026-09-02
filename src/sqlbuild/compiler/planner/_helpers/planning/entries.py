@@ -69,6 +69,9 @@ def build_planner_entry_results(
                 if runtime.project_config is not None
                 else None
             ),
+            start_cursor_config=(
+                runtime.project_config.cursors.start if runtime.project_config is not None else None
+            ),
             invocation_time=runtime.invocation_time,
             max_microbatches=(
                 overrides.max_microbatches

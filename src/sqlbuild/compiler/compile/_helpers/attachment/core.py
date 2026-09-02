@@ -1843,6 +1843,14 @@ def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
         values["append_cursor_inclusive"] = defaults.append_cursor_inclusive
     if defaults.cursor_start is not None:
         values["cursor_start"] = defaults.cursor_start
+    if defaults.cursor_start_max_ahead is not None:
+        values["cursor_start_max_ahead"] = defaults.cursor_start_max_ahead
+    if defaults.cursor_start_max_action is not None:
+        values["cursor_start_max_action"] = defaults.cursor_start_max_action
+    if defaults.cursor_future_max_distance is not None:
+        values["cursor_future_max_distance"] = defaults.cursor_future_max_distance
+    if defaults.cursor_future_action is not None:
+        values["cursor_future_action"] = defaults.cursor_future_action
     if defaults.lookback is not None:
         values["lookback"] = defaults.lookback
     if defaults.batch_size is not None:

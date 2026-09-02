@@ -75,4 +75,5 @@ def result_with_cursor_safety(
     return replace(
         result,
         future_cursor_safety=bounds.future_safety if bounds is not None else None,
+        maximum_start_safety=(bounds.maximum_start_safety if bounds is not None else None),
     )

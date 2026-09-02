@@ -172,6 +172,16 @@ class CursorStartCompileInputsTestCase:
 
 
 @dataclass(frozen=True)
+class CursorSafetyCompileInputsTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_start_max_ahead: str
+    expected_start_action: str
+    expected_future_max_distance: str
+    expected_future_action: str
+
+
+@dataclass(frozen=True)
 class ResolvedConnectionCompileInputsTestCase:
     description: str
     repo_files: dict[str, str]

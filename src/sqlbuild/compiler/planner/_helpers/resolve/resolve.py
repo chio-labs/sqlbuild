@@ -23,6 +23,10 @@ from sqlbuild.compiler.planner._helpers.resolve.config import (
     get_config_str,
 )
 from sqlbuild.compiler.planner._helpers.resolve.cursor import compute_cursor_bounds
+from sqlbuild.compiler.planner._helpers.resolve.cursor_policies import (
+    resolve_future_cursor_config,
+    resolve_start_cursor_config,
+)
 from sqlbuild.compiler.planner._helpers.resolve.refs import (
     resolve_dbt_ref_references,
     resolve_ref_references,
@@ -39,6 +43,7 @@ from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CursorBounds,
     CursorOverridePair,
+    MaximumStartPolicyInputs,
     ModelCursorSnapshot,
     ModelPlanContext,
     WarehouseSnapshot,
@@ -48,7 +53,7 @@ from sqlbuild.compiler.references.main.assert_no_unresolved_sql_markers import (
     assert_no_unresolved_sql_markers,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-from sqlbuild.spec.contracts.models import FutureCursorsConfig, SourceEntry
+from sqlbuild.spec.contracts.models import FutureCursorsConfig, SourceEntry, StartCursorsConfig
 
 
 def resolve_model_sql(
@@ -83,8 +88,7 @@ def resolve_model_sql(
         end_cursor_override=cursor_overrides.end_cursor_override,
         runtime_cursor_producer_names=context.runtime_cursor_producer_names,
         suppress_runtime_cursor_bounds=suppress_runtime_cursor_bounds,
-        future_cursor_config=context.future_cursor_config,
-        invocation_time=context.invocation_time,
+        context=context,
     )
 
     cursor_roles: CursorInputRoles = resolve_cursor_input_roles(model=model)
@@ -216,8 +220,7 @@ def _compute_model_cursor_bounds(
     end_cursor_override: str | None,
     runtime_cursor_producer_names: frozenset[str],
     suppress_runtime_cursor_bounds: bool,
-    future_cursor_config: FutureCursorsConfig | None,
-    invocation_time: datetime | None,
+    context: ModelPlanContext,
 ) -> CursorBounds | None:
     """Compute cursor bounds for a model if it is incremental with a cursor."""
 
@@ -228,6 +231,13 @@ def _compute_model_cursor_bounds(
         return None
 
     incremental_mode: str | None = get_config_str(model=model, key="incremental_mode")
+    future_cursor_config: FutureCursorsConfig | None = resolve_future_cursor_config(
+        model=model, project_config=context.future_cursor_config
+    )
+    start_cursor_config: StartCursorsConfig | None = resolve_start_cursor_config(
+        model=model, project_config=context.start_cursor_config
+    )
+    invocation_time: datetime | None = context.invocation_time
     is_microbatch: bool = incremental_mode == IncrementalMode.MICROBATCH
     if is_microbatch:
         return CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL)
@@ -284,6 +294,12 @@ def _compute_model_cursor_bounds(
         end_cursor_override=end_cursor_override,
         is_microbatch=is_microbatch,
         cursor_grain=get_config_str(model=model, key="cursor_grain"),
+        maximum_start_policy=MaximumStartPolicyInputs(
+            config=start_cursor_config,
+            invocation_time=invocation_time,
+            incremental_strategy=get_config_str(model=model, key="incremental_strategy"),
+            incremental_mode=incremental_mode,
+        ),
     )
     if bounds is None:
         return None

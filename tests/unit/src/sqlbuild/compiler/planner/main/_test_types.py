@@ -33,6 +33,48 @@ class HookFunctionPlanOutputTestCase:
 
 
 @dataclass(frozen=True)
+class MaximumStartCapTestCase:
+    description: str
+    target_max: str
+    target_eligible_max: str | None
+    upstream_min: str
+    upstream_max: str
+    cursor_type: str
+    cursor_grain: str | None
+    lookback: str | None
+    start_override: str | None
+    incremental_strategy: str
+    expected_start: str
+    expected_has_safety: bool
+
+
+@dataclass(frozen=True)
+class MaximumStartErrorTestCase:
+    description: str
+    action: str
+    incremental_strategy: str
+    incremental_mode: str | None
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class MaximumStartUnsafeFallbackTestCase:
+    description: str
+    target_eligible_max: str | None
+    upstream_min: str
+    cursor_start: str | None
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class MaximumStartFutureEndInteractionTestCase:
+    description: str
+    upstream_max: str
+    expected_end: str
+    expected_future_end_safety: bool
+
+
+@dataclass(frozen=True)
 class ExternalBlockedPlanOutputTestCase:
     description: str
     expected_model_names: tuple[str, ...]

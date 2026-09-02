@@ -6,6 +6,7 @@ from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecord
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
     FutureCursorSafetyEvidence,
+    MaximumStartSafetyEvidence,
     ModelPlanEntry,
 )
 from sqlbuild.errors.contracts.main.error_code import error_code
@@ -67,6 +68,7 @@ def build_failed_result(
         error_help=rendered_help,
         error_message=rendered_error,
         future_cursor_safety=_future_cursor_safety(entry),
+        maximum_start_safety=_maximum_start_safety(entry=entry, error=error),
         microbatch_limit=entry.microbatch_limit,
         microbatch_limit_count=entry.microbatch_limit_count,
         microbatch_limit_action=entry.microbatch_limit_action,
@@ -100,6 +102,7 @@ def build_skipped_result(
         skip_mode=skipped_hook.skip_mode if skipped_hook is not None else None,
         skip_reason=skipped_hook.skip_reason if skipped_hook is not None else None,
         future_cursor_safety=_future_cursor_safety(entry),
+        maximum_start_safety=_maximum_start_safety(entry=entry, error=None),
         microbatch_limit=entry.microbatch_limit,
         microbatch_limit_count=entry.microbatch_limit_count,
         microbatch_limit_action=entry.microbatch_limit_action,
@@ -110,6 +113,16 @@ def build_skipped_result(
 def _future_cursor_safety(entry: ModelPlanEntry) -> FutureCursorSafetyEvidence | None:
     bounds: CursorBounds | None = entry.microbatch_range or entry.cursor_bounds
     return bounds.future_safety if bounds is not None else None
+
+
+def _maximum_start_safety(
+    *, entry: ModelPlanEntry, error: str | BaseException | None
+) -> MaximumStartSafetyEvidence | None:
+    bounds: CursorBounds | None = entry.microbatch_range or entry.cursor_bounds
+    if bounds is not None and bounds.maximum_start_safety is not None:
+        return bounds.maximum_start_safety
+    evidence: object | None = getattr(error, "evidence", None)
+    return evidence if isinstance(evidence, MaximumStartSafetyEvidence) else None
 
 
 def _last_skipped_hook(

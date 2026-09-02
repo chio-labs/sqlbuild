@@ -172,11 +172,13 @@ def build_execution_plan(
         pruning=pruning,
         source_freshness=source_freshness,
         plan_output=plan_output,
+        policies=policies,
     )
     plan_output = with_plan_metadata(
         plan_output=plan_output,
         pruning=pruning,
         source_freshness=source_freshness,
+        policies=policies,
     )
     if on_progress is not None:
         on_progress(f"Generated plan. ({time.monotonic() - plan_start:.2f}s)")

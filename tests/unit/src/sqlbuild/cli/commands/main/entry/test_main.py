@@ -2166,6 +2166,12 @@ def test_given_dag_command_arguments_when_running_then_dispatches_expected_handl
             expected_changes_only=True,
         ),
         MainTestCase(
+            description="passes selection diagnostics to build handler",
+            argv=["build", "--selection-diagnostics"],
+            expected_exit_code=5,
+            expected_selection_diagnostics=True,
+        ),
+        MainTestCase(
             description="passes no cache to build handler",
             argv=["build", "--no-cache"],
             expected_exit_code=5,
@@ -2184,6 +2190,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
             bool,
             str | None,
             bool | None,
+            bool,
             bool,
             bool,
             bool,
@@ -2213,6 +2220,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
                 request.verbose,
                 request.changes_only,
                 request.no_cache,
+                request.selection_diagnostics,
             )
         )
         return test_case.expected_exit_code
@@ -2239,6 +2247,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
             test_case.expected_verbose,
             test_case.expected_changes_only,
             test_case.expected_no_cache,
+            test_case.expected_selection_diagnostics,
         )
     ]
 
@@ -2259,6 +2268,12 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
             argv=["plan", "--changes-only"],
             expected_exit_code=4,
             expected_changes_only=True,
+        ),
+        MainTestCase(
+            description="passes selection diagnostics to plan handler",
+            argv=["plan", "--selection-diagnostics"],
+            expected_exit_code=4,
+            expected_selection_diagnostics=True,
         ),
         MainTestCase(
             description="passes no cache to plan handler",
@@ -2290,6 +2305,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
             dict[str, object] | None,
             bool,
             bool,
+            bool,
         ]
     ] = []
 
@@ -2312,6 +2328,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
                 request.cli_vars,
                 request.changes_only,
                 request.no_cache,
+                request.selection_diagnostics,
             )
         )
         return test_case.expected_exit_code
@@ -2335,6 +2352,7 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         {},
         test_case.expected_changes_only,
         test_case.expected_no_cache,
+        test_case.expected_selection_diagnostics,
     )
 
 

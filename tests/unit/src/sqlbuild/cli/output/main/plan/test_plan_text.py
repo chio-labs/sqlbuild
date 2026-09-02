@@ -1168,6 +1168,48 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             unexpected_fragments=("use --verbose",),
         ),
         FormatPlanTestCase(
+            description="direct selection diagnostics default hides stale warning and section",
+            plan_output=build_plan_output(
+                warnings=(
+                    build_warning(
+                        model_name=None,
+                        message="Stale inputs detected\n\n  Affected selected models:\n    fact_orders",
+                    ),
+                ),
+                metadata={
+                    "selection_diagnostics": {"mode": "direct", "enabled": False},
+                    "direct_remaining_stale_model_names": ("orders_rollup",),
+                },
+            ),
+            include_direct_freshness_diagnostics=True,
+            unexpected_fragments=(
+                "Stale inputs detected",
+                "Remaining stale",
+                "orders_rollup",
+            ),
+        ),
+        FormatPlanTestCase(
+            description="direct selection diagnostics flag restores stale warning and section",
+            plan_output=build_plan_output(
+                warnings=(
+                    build_warning(
+                        model_name=None,
+                        message="Stale inputs detected\n\n  Affected selected models:\n    fact_orders",
+                    ),
+                ),
+                metadata={
+                    "selection_diagnostics": {"mode": "direct", "enabled": True},
+                    "direct_remaining_stale_model_names": ("orders_rollup",),
+                },
+            ),
+            include_direct_freshness_diagnostics=False,
+            expected_fragments=(
+                "Stale inputs detected",
+                "Remaining stale",
+                "orders_rollup",
+            ),
+        ),
+        FormatPlanTestCase(
             description="provider usages show compact selected Python surface counts",
             plan_output=build_plan_output(
                 provider_usages=(

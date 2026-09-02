@@ -80,6 +80,11 @@ def build_plan_output_from_model_changes_phase(
                 if resolved.project_config is not None
                 else None
             ),
+            start_cursor_config=(
+                resolved.project_config.cursors.start
+                if resolved.project_config is not None
+                else None
+            ),
             max_microbatches=(
                 resolved.max_microbatches
                 if resolved.max_microbatches is not None

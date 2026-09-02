@@ -141,6 +141,12 @@ def _add_plan_and_build_parsers(
         help="Only include resources that require execution.",
     )
     plan_parser.add_argument(
+        "--selection-diagnostics",
+        action="store_true",
+        default=False,
+        help="Include direct-mode stale-out-of-selection diagnostics.",
+    )
+    plan_parser.add_argument(
         "--no-python", dest="include_python", action="store_false", default=True
     )
     plan_parser.add_argument("--verbose", "-v", action="store_true", default=False)
@@ -173,6 +179,12 @@ def _add_plan_and_build_parsers(
         action="store_true",
         default=False,
         help="Only include resources that require execution.",
+    )
+    build_parser.add_argument(
+        "--selection-diagnostics",
+        action="store_true",
+        default=False,
+        help="Include direct-mode stale-out-of-selection diagnostics.",
     )
     build_parser.add_argument(
         "--no-python", dest="include_python", action="store_false", default=True

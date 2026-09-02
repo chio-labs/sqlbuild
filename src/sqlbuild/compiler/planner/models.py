@@ -60,6 +60,7 @@ from sqlbuild.spec.contracts.models import (
     ProjectConfig,
     SeedCsvSettings,
     SourceEntry,
+    StartCursorsConfig,
 )
 from sqlbuild.spec.contracts.types import (
     FutureCursorAction,
@@ -199,6 +200,10 @@ class ModelCursorSnapshot:
     target_max: str | None
     upstream_mins: tuple[str, ...]
     upstream_maxes: tuple[str, ...]
+    physical_target_max: str | None = field(default=None, compare=False)
+    target_eligible_max: str | None = None
+    target_relation: str | None = field(default=None, compare=False)
+    destination_cursor_column: str | None = field(default=None, compare=False)
     input_evidence: tuple[CursorInputEvidence, ...] = field(default=(), compare=False)
     expected_watermark_count: int = field(default=0, compare=False)
     unavailable_watermark_tags: tuple[str, ...] = ()
@@ -217,6 +222,7 @@ class CursorBounds:
     start: str
     end: str
     future_safety: FutureCursorSafetyEvidence | None = None
+    maximum_start_safety: MaximumStartSafetyEvidence | None = None
 
 
 @dataclass(frozen=True)
@@ -247,6 +253,21 @@ class FutureCursorSafetyEvidence:
     determining_relation: str | None
     determining_cursor_column: str | None
     inputs: tuple[CursorInputEvidence, ...] = ()
+
+
+@dataclass(frozen=True)
+class MaximumStartSafetyEvidence:
+    """Structured evidence for an automatic-start eligibility decision."""
+
+    action: FutureCursorAction
+    max_ahead: str
+    invocation_time: str
+    physical_target_max: str
+    highest_eligible_target_max: str | None
+    effective_start: str
+    maximum_allowed_start: str
+    target_relation: str
+    cursor_column: str
 
 
 @dataclass(frozen=True)
@@ -381,6 +402,19 @@ class CursorSnapshotScope:
 
     model_keys: frozenset[CompiledObjectKey]
     runtime_producer_keys: frozenset[CompiledObjectKey]
+    invocation_time: datetime | None = None
+    start_cursor_config: StartCursorsConfig | None = None
+    cursor_overrides: CursorOverrides | None = None
+
+
+@dataclass(frozen=True)
+class MaximumStartPolicyInputs:
+    """Effective policy and materialization safety inputs for automatic starts."""
+
+    config: StartCursorsConfig | None = None
+    invocation_time: datetime | None = None
+    incremental_strategy: str | None = None
+    incremental_mode: str | None = None
 
 
 @dataclass(frozen=True)
@@ -551,6 +585,7 @@ class ModelPlanContext:
     star_exclude_keyword: str
     runtime_cursor_producer_names: frozenset[str] = frozenset()
     future_cursor_config: FutureCursorsConfig | None = None
+    start_cursor_config: StartCursorsConfig | None = None
     invocation_time: datetime | None = None
 
 
@@ -590,6 +625,7 @@ class PlanEntryBuildInputs:
     start_cursor_override: str | None = None
     end_cursor_override: str | None = None
     future_cursor_config: FutureCursorsConfig | None = None
+    start_cursor_config: StartCursorsConfig | None = None
     invocation_time: datetime | None = None
     max_microbatches: int | None = None
     microbatch_limit_action: MicrobatchLimitAction = MicrobatchLimitAction.ERROR
@@ -742,6 +778,7 @@ class ModelPlanEntry:
     start_cursor_override: str | None = None
     end_cursor_override: str | None = None
     future_cursor_config: FutureCursorsConfig | None = None
+    start_cursor_config: StartCursorsConfig | None = None
     invocation_time: datetime | None = None
     unique_key: tuple[str, ...] = field(default_factory=tuple)
     merge_exclude_columns: tuple[str, ...] = field(default_factory=tuple)
@@ -1107,6 +1144,7 @@ class PlannerPolicies:
     """Behavior policies selected by the caller for one planner invocation."""
 
     auto_load_sources: bool = False
+    selection_diagnostics: bool = False
 
 
 @dataclass(frozen=True)

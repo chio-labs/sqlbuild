@@ -197,6 +197,7 @@ class CliNamespace:
     skip_locked: bool
     include_stale_upstreams: bool
     changes_only: bool
+    selection_diagnostics: bool
     include_python: bool
     load_sources: bool | None
     reload: bool

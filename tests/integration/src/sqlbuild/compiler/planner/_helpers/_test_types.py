@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner.models import ModelCursorSnapshot
+from sqlbuild.compiler.planner.models import CursorSnapshotScope, ModelCursorSnapshot
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -42,6 +42,7 @@ class GatherCursorSnapshotTestCase:
     expected_progress_calls: int = 0
     deferred_locations: dict[str, CompiledRelationLocation] | None = None
     extra_model_locations: dict[str, str | None] = field(default_factory=dict)
+    cursor_scope: CursorSnapshotScope | None = None
 
 
 @dataclass(frozen=True)
@@ -56,6 +57,21 @@ class GatherSelectedCursorScopeTestCase:
     description: str
     expected_cursor_snapshot: ModelCursorSnapshot
     expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class GatherOverrideCursorSnapshotTestCase:
+    description: str
+    expected_target_max: str
+    expected_eligible_max: str | None
+    expected_statement_count: int
+
+
+@dataclass(frozen=True)
+class GatherMixedGrainEligibilityTestCase:
+    description: str
+    expected_eligible_max: str
+    expected_eligible_sql: str
 
 
 @dataclass(frozen=True)

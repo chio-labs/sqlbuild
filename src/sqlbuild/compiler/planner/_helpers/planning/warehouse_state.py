@@ -48,6 +48,11 @@ def gather_planner_warehouse_state(
         cursor_scope=CursorSnapshotScope(
             model_keys=scopes.selected_scope.selected_keys,
             runtime_producer_keys=scopes.selected_scope.selected_keys,
+            invocation_time=runtime.invocation_time,
+            start_cursor_config=(
+                runtime.project_config.cursors.start if runtime.project_config is not None else None
+            ),
+            cursor_overrides=overrides.cursor_overrides,
         ),
     )
     inspection_relations: PlannerRelationsContext = build_planner_relations_context(

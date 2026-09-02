@@ -15,6 +15,7 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.compiler.planner.main.execution.future_cursor_warning import future_cursor_cap_warning
+from sqlbuild.compiler.planner.main.execution.maximum_start_warning import maximum_start_cap_warning
 from sqlbuild.compiler.planner.models import CursorBounds, ModelPlanEntry
 from sqlbuild.compiler.planner.types import IncrementalStrategy, OnSchemaChange
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
@@ -104,7 +105,7 @@ def execute_incremental_entry(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.STAGING,
-            error=str(exc),
+            error=exc,
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
@@ -112,7 +113,7 @@ def execute_incremental_entry(
         )
     context = _context_with_runtime_cursor(context=context, preparation=preparation)
     entry = context.entry
-    warnings.extend(_future_cursor_warnings(entry.cursor_bounds))
+    warnings.extend(_cursor_safety_warnings(entry.cursor_bounds))
 
     pre_hook_exit: ModelExecutionResult | None = run_pre_hook_phase(
         context=context,
@@ -363,6 +364,9 @@ def execute_incremental_entry(
         future_cursor_safety=(
             effective_bounds.future_safety if effective_bounds is not None else None
         ),
+        maximum_start_safety=(
+            effective_bounds.maximum_start_safety if effective_bounds is not None else None
+        ),
         audit_results=tuple(audit_results),
         warning_messages=tuple(warnings),
         lifecycle_events=statement_recorder.snapshot(),
@@ -453,9 +457,12 @@ def _context_with_runtime_cursor(
     )
 
 
-def _future_cursor_warnings(bounds: CursorBounds | None) -> list[str]:
-    warning: str | None = future_cursor_cap_warning(bounds)
-    return [warning] if warning is not None else []
+def _cursor_safety_warnings(bounds: CursorBounds | None) -> list[str]:
+    return [
+        warning
+        for warning in (future_cursor_cap_warning(bounds), maximum_start_cap_warning(bounds))
+        if warning is not None
+    ]
 
 
 def _apply_schema_change(

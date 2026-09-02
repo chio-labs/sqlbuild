@@ -209,6 +209,28 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
             return None
         return row[0]
 
+    def render_max_cursor_at_or_before(
+        self,
+        *,
+        relation: str,
+        cursor_column: str,
+        maximum_allowed: str,
+        cursor_type: str | None,
+        is_date: bool,
+    ) -> str:
+        """Render a portable eligible-cursor MAX query."""
+
+        quoted_cursor: str = self.render_identifier(cursor_column)
+        maximum_literal: str = (
+            f"CAST('{maximum_allowed}' AS DATE)"
+            if is_date
+            else self.render_cursor_bound_literal(value=maximum_allowed, cursor_type=cursor_type)
+        )
+        return (
+            f"SELECT MAX({quoted_cursor}) FROM {relation} "
+            f"WHERE {quoted_cursor} <= {maximum_literal}"
+        )
+
     def build_cursor_filter(
         self,
         *,
