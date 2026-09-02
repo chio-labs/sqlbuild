@@ -1397,25 +1397,15 @@ def validate_source_cursor_input_columns(
             has_enforced_contract: bool = (
                 upstream_model.config.values.get("contract") == ContractPolicy.ENFORCED
             )
-            declared_names: tuple[str, ...] = (
-                _model_declared_column_names(upstream_model)
-                if has_enforced_contract
-                else tuple(column.name for column in upstream_model.inferred_columns or ())
-            )
-            has_reliable_inferred_output: bool = bool(upstream_model.inferred_columns) and not (
-                upstream_model.fast_lineage_has_star
-            )
-            if not has_enforced_contract and not has_reliable_inferred_output:
+            if not has_enforced_contract:
                 continue
+            declared_names: tuple[str, ...] = _model_declared_column_names(upstream_model)
             if input_cursor_column.lower() in {name.lower() for name in declared_names}:
                 continue
             declared_display: str = ", ".join(declared_names) or "none"
-            metadata_description: str = (
-                "model contract" if has_enforced_contract else "reliable model output metadata"
-            )
             raise PlannerInputError(
                 f"model '{model.name}': {config_field} references model '{ref.ref_name}' "
-                f"column '{input_cursor_column}', but that {metadata_description} does not expose "
+                f"column '{input_cursor_column}', but that model contract does not expose "
                 f"the column. Known output columns: {declared_display}",
                 code="S302",
             )
