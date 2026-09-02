@@ -99,6 +99,8 @@ class DagsterCliJsonStreamTestCase:
     expected_asset_keys: tuple[tuple[str, ...], ...]
     expected_check_names: tuple[str, ...]
     expected_check_severities: tuple[str, ...]
+    selected_check_keys: tuple[tuple[tuple[str, ...], str], ...] = ()
+    check_selection_is_explicit: bool = False
 
 
 @dataclass(frozen=True)
@@ -164,6 +166,7 @@ class DagsterCliSelectionTestCase:
     command_args: tuple[str, ...]
     expected_selectors: tuple[str, ...]
     assert_selector_transport: Callable[..., None]
+    selected_check_keys: tuple[tuple[tuple[str, ...], str], ...] = ()
 
 
 @dataclass(frozen=True)
