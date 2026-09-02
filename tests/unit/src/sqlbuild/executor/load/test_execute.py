@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
@@ -20,15 +21,151 @@ from sqlbuild.executor.load.models import (
     LoadRuntimeParams,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.observability import (
+    EventDispatcher,
+    LifecycleEvent,
+    dispatcher_scope,
+    invocation_scope,
+)
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.provider.classes.session import ProviderSession
+from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 from sqlbuild.spec.contracts.models import SourceEntry
+from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.executor.load._test_types import (
+    LoaderOperationLifecycleTestCase,
     SourceLoadExecutionContextTestCase,
     SourceLoadNoneReturnTestCase,
 )
-from tests.unit.src.sqlbuild.executor.load.helpers import LoaderContextTestAdapter
+from tests.unit.src.sqlbuild.executor.load.helpers import (
+    LoaderContextTestAdapter,
+    operation_events,
+    statement_events,
+)
 from tests.unit.src.sqlbuild.executor.python_nodes._helpers.helpers import ExecutionSlackProvider
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        LoaderOperationLifecycleTestCase(
+            description="generator completes after framework staging consumption",
+            expected_status=ExecutionStatus.SUCCESS,
+            expected_event_types=("operation_started", "operation_completed"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_loader_generator_when_staging_consumes_it_then_terminal_follows_exhaustion(
+    test_case: LoaderOperationLifecycleTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+    monkeypatch.setattr(
+        "sqlbuild.executor.load.main._execute._apply_source_write_strategy",
+        lambda **kwargs: kwargs["adapter"],
+    )
+
+    def raw_orders_loader(ctx: LoaderContext) -> Iterator[dict[str, object]]:
+        del ctx
+        assert tuple(event.event_type for event in operation_events(events)) == (
+            "operation_started",
+        )
+        with StatementLifecycle(adapter="duckdb", sql="SELECT 1", intent="loader_test"):
+            pass
+        yield {"order_id": 1}
+        assert tuple(event.event_type for event in operation_events(events)) == (
+            "operation_started",
+        )
+
+    with invocation_scope("inv-loader-generator"), dispatcher_scope(dispatcher):
+        result: LoadExecutionResult = execute_source_load(
+            source_entry=SourceEntry(
+                name="raw_orders",
+                table="orders",
+                loader="raw_orders_loader",
+                write_strategy=SourceWriteStrategy.TABLE,
+            ),
+            loader_function=DiscoveredLoaderFunction(
+                file_path=Path("loaders/raw.py"),
+                relative_path=Path("loaders/raw.py"),
+                name="raw_orders_loader",
+                function=raw_orders_loader,
+            ),
+            adapter=LoaderContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            statement_recorder=StatementRecorder(),
+            runtime=LoadRuntimeParams(run_id="run-loader", target="dev", vars={}, is_reload=False),
+        )
+
+    observed_operations: tuple[LifecycleEvent, ...] = operation_events(events)
+    observed_statements: tuple[LifecycleEvent, ...] = statement_events(events)
+    assert result.status == test_case.expected_status, result.error_message
+    assert (
+        tuple(event.event_type for event in observed_operations) == test_case.expected_event_types
+    )
+    assert observed_operations[0].payload["operation_name"] == "managed_source_load"
+    assert {event.operation_id for event in observed_statements} == {
+        observed_operations[0].operation_id
+    }
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        LoaderOperationLifecycleTestCase(
+            description="generator failure during framework staging consumption",
+            expected_status=ExecutionStatus.FAILED,
+            expected_event_types=("operation_started", "operation_failed"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_loader_generator_failure_when_staging_consumes_it_then_failed_terminal_follows(
+    test_case: LoaderOperationLifecycleTestCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    def failing_loader(ctx: LoaderContext) -> Iterator[dict[str, object]]:
+        del ctx
+        assert operation_events(events)[-1].event_type == "operation_started"
+        yield {"order_id": 1}
+        assert operation_events(events)[-1].event_type == "operation_started"
+        raise RuntimeError("private generator failure")
+
+    with invocation_scope("inv-loader-generator-failure"), dispatcher_scope(dispatcher):
+        result: LoadExecutionResult = execute_source_load(
+            source_entry=SourceEntry(
+                name="raw_orders",
+                table="orders",
+                loader="raw_orders_loader",
+                write_strategy=SourceWriteStrategy.TABLE,
+            ),
+            loader_function=DiscoveredLoaderFunction(
+                file_path=Path("loaders/raw.py"),
+                relative_path=Path("loaders/raw.py"),
+                name="raw_orders_loader",
+                function=failing_loader,
+            ),
+            adapter=LoaderContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            statement_recorder=StatementRecorder(),
+            runtime=LoadRuntimeParams(run_id="run-loader", target="dev", vars={}, is_reload=False),
+        )
+
+    observed_operations: tuple[LifecycleEvent, ...] = operation_events(events)
+    assert result.status == test_case.expected_status
+    assert (
+        tuple(event.event_type for event in observed_operations) == test_case.expected_event_types
+    )
+    assert observed_operations[-1].payload["error_type"] == "RuntimeError"
+    assert "private generator failure" not in repr(observed_operations)
 
 
 @pytest.mark.parametrize(
@@ -380,6 +517,7 @@ def test_given_provider_parameter_when_executing_external_source_loader_then_pro
     test_case: SourceLoadExecutionContextTestCase,
 ) -> None:
     observed_labels: list[str] = []
+    events: list[LifecycleEvent] = []
 
     def raw_orders_loader(
         ctx: LoaderContext,
@@ -392,37 +530,41 @@ def test_given_provider_parameter_when_executing_external_source_loader_then_pro
         {"slack_provider": ExecutionSlackProvider(label="slack")}
     ).providers
 
-    result: LoadExecutionResult = execute_source_load(
-        source_entry=SourceEntry(
-            name=test_case.source_name,
-            database=test_case.database,
-            schema=test_case.schema,
-            table=test_case.target_table,
-            loader=test_case.loader_name,
-        ),
-        loader_function=DiscoveredLoaderFunction(
-            file_path=Path("loaders/raw.py"),
-            relative_path=Path("loaders/raw.py"),
-            name=test_case.loader_name,
-            function=raw_orders_loader,
-            connection_mode=LoaderConnectionMode.EXTERNAL,
-        ),
-        adapter=LoaderContextTestAdapter(),
-        connection_config={},
-        connection=object(),
-        statement_recorder=StatementRecorder(),
-        runtime=LoadRuntimeParams(
-            run_id=test_case.run_id,
-            target=test_case.target,
-            vars=test_case.vars,
-            is_reload=test_case.is_reload,
-            providers=providers,
-        ),
-    )
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+    with invocation_scope("inv-external-loader"), dispatcher_scope(dispatcher):
+        result: LoadExecutionResult = execute_source_load(
+            source_entry=SourceEntry(
+                name=test_case.source_name,
+                database=test_case.database,
+                schema=test_case.schema,
+                table=test_case.target_table,
+                loader=test_case.loader_name,
+            ),
+            loader_function=DiscoveredLoaderFunction(
+                file_path=Path("loaders/raw.py"),
+                relative_path=Path("loaders/raw.py"),
+                name=test_case.loader_name,
+                function=raw_orders_loader,
+                connection_mode=LoaderConnectionMode.EXTERNAL,
+            ),
+            adapter=LoaderContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            statement_recorder=StatementRecorder(),
+            runtime=LoadRuntimeParams(
+                run_id=test_case.run_id,
+                target=test_case.target,
+                vars=test_case.vars,
+                is_reload=test_case.is_reload,
+                providers=providers,
+            ),
+        )
 
     assert result.status == test_case.expected_status
     assert result.rows_loaded == test_case.expected_rows_loaded
     assert tuple(observed_labels) == ("None:analytics.raw.orders:slack",)
+    assert operation_events(events)[0].payload["operation_name"] == "external_source_load"
 
 
 @pytest.mark.parametrize(

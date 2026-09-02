@@ -16,6 +16,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioCleanupTarget,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def execute_scenario_cleanup(
@@ -25,6 +26,19 @@ def execute_scenario_cleanup(
     connection: Any,
 ) -> ScenarioCleanupExecutionResult:
     """Drop only scenario-owned relations listed in the current scenario plan."""
+
+    with OperationLifecycle(operation_kind="scenario", operation_name="scenario_cleanup"):
+        return _execute_scenario_cleanup(
+            scenario_plan=scenario_plan, adapter=adapter, connection=connection
+        )
+
+
+def _execute_scenario_cleanup(
+    *,
+    scenario_plan: ScenarioExecutionPlan,
+    adapter: BaseAdapter,
+    connection: Any,
+) -> ScenarioCleanupExecutionResult:
 
     statement_recorder: StatementRecorder = StatementRecorder()
     cleanup_targets: tuple[ScenarioCleanupTarget, ...] = collect_scenario_cleanup_targets(

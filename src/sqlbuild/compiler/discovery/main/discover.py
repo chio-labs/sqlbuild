@@ -14,6 +14,7 @@ from sqlbuild.compiler.discovery._helpers.yml.project import (
 )
 from sqlbuild.compiler.discovery.constants import SQL_ANALYSIS_SETTING_KEY
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 
@@ -24,6 +25,21 @@ def discover_project_inputs(
     extract_output_column_locations: bool = True,
 ) -> DiscoveredProjectInputs:
     """Load all raw project inputs from disk before semantic resolution."""
+
+    with OperationLifecycle(operation_kind="project", operation_name="project_discovery"):
+        return _discover_project_inputs(
+            project_dir=project_dir,
+            sql_analysis_enabled_override=sql_analysis_enabled_override,
+            extract_output_column_locations=extract_output_column_locations,
+        )
+
+
+def _discover_project_inputs(
+    *,
+    project_dir: Path,
+    sql_analysis_enabled_override: bool | None,
+    extract_output_column_locations: bool,
+) -> DiscoveredProjectInputs:
 
     project_config: ProjectConfig = load_project_config(project_dir=project_dir)
     local_config: LocalConfig = load_local_config(project_dir=project_dir)

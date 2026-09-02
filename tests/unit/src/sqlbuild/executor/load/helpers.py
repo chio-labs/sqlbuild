@@ -5,6 +5,15 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.observability import LifecycleEvent
+
+
+def operation_events(events: list[LifecycleEvent]) -> tuple[LifecycleEvent, ...]:
+    return tuple(filter(lambda event: event.event_type.startswith("operation_"), events))
+
+
+def statement_events(events: list[LifecycleEvent]) -> tuple[LifecycleEvent, ...]:
+    return tuple(filter(lambda event: event.event_type.startswith("statement_"), events))
 
 
 class LoaderContextTestCursor:

@@ -21,13 +21,21 @@ from sqlbuild.executor.python_nodes._helpers.execution import (
 from sqlbuild.executor.python_nodes.models import (
     PythonNodeExecutionResult,
     PythonNodeExecutorResult,
+    PythonNodeResult,
     PythonNodeRunState,
     PythonNodeRuntime,
+)
+from sqlbuild.observability import (
+    EventDispatcher,
+    LifecycleEvent,
+    dispatcher_scope,
+    invocation_scope,
 )
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.provider.classes.session import ProviderSession
 from sqlbuild.python_nodes.models import RetryPolicy
 from tests.unit.src.sqlbuild.executor.python_nodes._helpers._test_types import (
+    MalformedPythonOperationTestCase,
     PythonNodeExecutorTestCase,
     PythonNodeRetryExecutorTestCase,
 )
@@ -50,9 +58,63 @@ from tests.unit.src.sqlbuild.executor.python_nodes._helpers.helpers import (
     missing_context_provider_task,
     provider_asset,
     provider_task,
+    python_operation_events,
     skip_empty_orders,
     successful_sibling,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MalformedPythonOperationTestCase(
+            description="task returns invalid materialized result",
+            operation_name="python_task",
+            expected_error_fragment="Only asset Python nodes may set materialized",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_malformed_task_return_when_executing_then_operation_fails_once(
+    test_case: MalformedPythonOperationTestCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    def malformed_task() -> PythonNodeResult:
+        return PythonNodeResult(payload={"invalid": True}, materialized=True)
+
+    with invocation_scope("inv-malformed-task"), dispatcher_scope(dispatcher):
+        result: PythonNodeExecutorResult = execute_python_nodes(
+            nodes=(
+                DiscoveredTaskFunction(
+                    file_path=Path("/project/tasks/bad.py"),
+                    relative_path=Path("tasks/bad.py"),
+                    name="malformed_task",
+                    function=malformed_task,
+                ),
+            ),
+            statement_recorder=StatementRecorder(),
+            runtime=PythonNodeRuntime(
+                adapter=PythonNodeContextTestAdapter(),
+                connection_config={},
+                connection=object(),
+                run_id="run-malformed",
+                target="dev",
+                vars={},
+                is_reload=False,
+            ),
+        )
+
+    operation_events: tuple[LifecycleEvent, ...] = python_operation_events(events)
+    assert result.results[0].status == PythonNodeStatus.FAILED
+    assert test_case.expected_error_fragment in (result.results[0].error_message or "")
+    assert tuple(event.event_type for event in operation_events) == (
+        "operation_started",
+        "operation_failed",
+    )
+    assert operation_events[0].payload["operation_name"] == test_case.operation_name
 
 
 @pytest.mark.parametrize(

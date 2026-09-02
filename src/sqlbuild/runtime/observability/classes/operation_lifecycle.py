@@ -1,0 +1,210 @@
+"""Canonical lifecycle boundary for framework-owned non-SQL blocking work."""
+
+from __future__ import annotations
+
+import re
+import time
+from collections.abc import Callable, Iterable, Mapping
+from concurrent.futures import Future
+from contextlib import ExitStack
+from types import TracebackType
+from typing import Any
+
+from sqlbuild.runtime.observability._helpers.dispatcher import (
+    current_event_dispatcher,
+    dispatcher_scope,
+)
+from sqlbuild.runtime.observability._helpers.factory import create_lifecycle_event
+from sqlbuild.runtime.observability._helpers.identity import (
+    current_execution_identity,
+    invocation_scope,
+    operation_scope,
+)
+from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
+from sqlbuild.runtime.observability.constants import (
+    OPERATION_KINDS,
+    OPERATION_METADATA_FIELDS,
+    OPERATION_NAMES,
+)
+from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
+from sqlbuild.runtime.observability.models import ExecutionIdentity
+from sqlbuild.runtime.observability.types import JSONValue
+
+_ERROR_TOKEN_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+
+
+class OperationLifecycle:
+    """Publish one start and one terminal fact around owned blocking work."""
+
+    def __init__(
+        self,
+        *,
+        operation_kind: str,
+        operation_name: str,
+        metadata: Mapping[str, int] | None = None,
+        operation_id: str | None = None,
+    ) -> None:
+        _validate_catalog_value(
+            value=operation_kind, allowed=OPERATION_KINDS, field_name="operation_kind"
+        )
+        _validate_catalog_value(
+            value=operation_name, allowed=OPERATION_NAMES, field_name="operation_name"
+        )
+        self._operation_kind: str = operation_kind
+        self._operation_name: str = operation_name
+        self._metadata: dict[str, int] = _validated_metadata(metadata)
+        self._operation_id: str | None = operation_id
+        self._stack: ExitStack = ExitStack()
+        self._dispatcher: EventDispatcher | None = None
+        self._started_monotonic: float | None = None
+        self._terminal = False
+        self._entered = False
+
+    def __enter__(self) -> OperationLifecycle:
+        if self._entered:
+            raise ObservabilityValidationError(
+                "operation lifecycle cannot be entered more than once"
+            )
+        self._entered = True
+        try:
+            if current_execution_identity() is None:
+                self._stack.enter_context(invocation_scope())
+            dispatcher: EventDispatcher | None = current_event_dispatcher()
+            if dispatcher is None:
+                dispatcher = EventDispatcher()
+                self._stack.enter_context(dispatcher_scope(dispatcher))
+            identity: ExecutionIdentity = self._stack.enter_context(
+                operation_scope(self._operation_id)
+            )
+            self._operation_id = identity.operation_id
+            self._dispatcher = dispatcher
+            self._started_monotonic = time.monotonic()
+            self._publish(event_type="operation_started", payload=self._base_payload())
+            return self
+        except BaseException:
+            try:
+                self._stack.close()
+            except BaseException:
+                pass
+            self._dispatcher = None
+            self._started_monotonic = None
+            raise
+
+    @property
+    def operation_id(self) -> str:
+        if self._operation_id is None:
+            raise ObservabilityValidationError("operation lifecycle has not started")
+        return self._operation_id
+
+    def run[RESULT](self, function: Callable[[], RESULT]) -> RESULT:
+        """Own a synchronous callable through its return or exception."""
+
+        with self:
+            return function()
+
+    def result[RESULT](self, future: Future[RESULT]) -> RESULT:
+        """Own submitted work through the future result boundary."""
+
+        with self:
+            return future.result()
+
+    def consume[ITEM](self, iterable: Iterable[ITEM]) -> tuple[ITEM, ...]:
+        """Own an iterable through exhaustion and return its consumed values."""
+
+        with self:
+            return tuple(iterable)
+
+    def completed(self) -> None:
+        self._publish_terminal(event_type="operation_completed", payload=self._terminal_payload())
+
+    def failed(self, *, error: BaseException) -> None:
+        payload: dict[str, JSONValue] = self._terminal_payload()
+        payload["error_type"] = _safe_error_token(
+            value=type(error).__name__, fallback="BaseException"
+        )
+        error_code: str | None = _error_code(error=error)
+        if error_code is not None:
+            payload["error_code"] = error_code
+        self._publish_terminal(event_type="operation_failed", payload=payload)
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        del exc_type, traceback
+        try:
+            if not self._terminal:
+                if exc_value is None:
+                    self.completed()
+                else:
+                    self.failed(error=exc_value)
+        finally:
+            self._stack.close()
+
+    def _base_payload(self) -> dict[str, JSONValue]:
+        payload: dict[str, JSONValue] = {
+            "operation_kind": self._operation_kind,
+            "operation_name": self._operation_name,
+        }
+        if self._metadata:
+            payload["metadata"] = self._metadata
+        return payload
+
+    def _terminal_payload(self) -> dict[str, JSONValue]:
+        payload: dict[str, JSONValue] = self._base_payload()
+        started: float = self._started_monotonic if self._started_monotonic is not None else 0.0
+        payload["duration_ms"] = max(0.0, (time.monotonic() - started) * 1000.0)
+        return payload
+
+    def _publish(self, *, event_type: str, payload: Mapping[str, JSONValue]) -> None:
+        if self._dispatcher is None:
+            raise ObservabilityValidationError("operation lifecycle has not started")
+        self._dispatcher.publish_lifecycle(
+            create_lifecycle_event(event_type=event_type, payload=payload)
+        )
+
+    def _publish_terminal(self, *, event_type: str, payload: Mapping[str, JSONValue]) -> None:
+        if self._terminal:
+            return
+        self._terminal = True
+        self._publish(event_type=event_type, payload=payload)
+
+
+def _validate_catalog_value(*, value: str, allowed: frozenset[str], field_name: str) -> None:
+    if value not in allowed:
+        raise ObservabilityValidationError(f"{field_name} must be a catalogued value")
+
+
+def _validated_metadata(metadata: Mapping[str, int] | None) -> dict[str, int]:
+    if metadata is None:
+        return {}
+    unexpected: set[str] = set(metadata) - OPERATION_METADATA_FIELDS
+    if unexpected:
+        raise ObservabilityValidationError("operation metadata contains a non-allowlisted field")
+    result: dict[str, int] = {}
+    for key, value in metadata.items():
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ObservabilityValidationError(
+                "operation metadata values must be nonnegative integers excluding bool"
+            )
+        result[key] = value
+    return result
+
+
+def _safe_error_token(*, value: object, fallback: str) -> str:
+    if not isinstance(value, str) or _ERROR_TOKEN_PATTERN.fullmatch(value) is None:
+        return fallback
+    return value
+
+
+def _error_code(*, error: BaseException) -> str | None:
+    for attribute in ("sqlstate", "code", "errno"):
+        value: Any | None = getattr(error, attribute, None)
+        if isinstance(value, bool) or not isinstance(value, str | int):
+            continue
+        code: str = str(value)
+        if _ERROR_TOKEN_PATTERN.fullmatch(code) is not None:
+            return code
+    return None

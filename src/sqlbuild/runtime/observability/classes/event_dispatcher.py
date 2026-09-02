@@ -96,7 +96,7 @@ class EventDispatcher:
                     OpaqueLifecycleSubscriber, subscriber
                 )
                 opaque_subscriber(event)
-            except Exception as error:
+            except BaseException as error:
                 self._report_failure(channel="lifecycle", subscriber=subscriber, error=error)
 
     def publish_diagnostic(self, log: DiagnosticLog) -> None:
@@ -109,7 +109,7 @@ class EventDispatcher:
         for _, subscriber in subscribers:
             try:
                 subscriber(log)
-            except Exception as error:
+            except BaseException as error:
                 self._report_failure(channel="diagnostic", subscriber=subscriber, error=error)
 
     def _unsubscribe_lifecycle(self, *, token: object) -> None:
@@ -129,7 +129,7 @@ class EventDispatcher:
         *,
         channel: Literal["lifecycle", "diagnostic"],
         subscriber: KnownLifecycleSubscriber | OpaqueLifecycleSubscriber | DiagnosticSubscriber,
-        error: Exception,
+        error: BaseException,
     ) -> None:
         callback: HealthCallback | None = self._health_callback
         if callback is None or _REPORTING_FAILURE.get():
@@ -143,7 +143,7 @@ class EventDispatcher:
         token: Token[bool] = _REPORTING_FAILURE.set(True)
         try:
             callback(failure)
-        except Exception:
+        except BaseException:
             pass
         finally:
             _REPORTING_FAILURE.reset(token)

@@ -46,16 +46,16 @@ class RecordingSubscriber:
             self._diagnostics.append(log)
 
 
-class _UnprintableSubscriberError(RuntimeError):
+class _UnprintableSubscriberError(BaseException):
     def __str__(self) -> str:
-        raise RuntimeError("exception formatting failed")
+        raise SystemExit("exception formatting escaped")
 
 
 class HostileSubscriber:
     """Subscriber whose name and raised exception cannot be formatted."""
 
     def __getattr__(self, name: str) -> object:
-        raise RuntimeError("subscriber naming failed")
+        raise SystemExit(f"subscriber naming escaped through {name}")
 
     def __call__(self, record: LifecycleEvent | DiagnosticLog) -> None:
         raise _UnprintableSubscriberError

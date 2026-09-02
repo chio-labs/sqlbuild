@@ -189,7 +189,7 @@ def test_given_failing_subscriber_and_health_when_publishing_then_healthy_delive
 
     def report(failure: DispatchFailure) -> None:
         health.append(failure)
-        raise RuntimeError("health callback failed")
+        raise SystemExit("health callback escaped")
 
     health_callback: HealthCallback = report
     hostile: KnownLifecycleSubscriber = HostileSubscriber()
@@ -206,6 +206,7 @@ def test_given_failing_subscriber_and_health_when_publishing_then_healthy_delive
     assert health[0].channel == test_case.expected_channel
     assert len(health[0].message) <= 512
     assert health[0].subscriber == "<unknown subscriber>"
+    assert health[0].error_type == "_UnprintableSubscriberError"
     assert health[0].message == "<unprintable subscriber exception>"
 
 

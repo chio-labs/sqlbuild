@@ -35,6 +35,7 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
 )
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy
 
@@ -97,12 +98,15 @@ def observe_source_freshness_for_command(
     adapter_observation_error: Exception | None = None
     if adapter_observation_sources:
         try:
-            adapter_observations = observe_adapter_sources_freshness(
-                adapter=adapter,
-                connection=connection,
-                sources=tuple(adapter_observation_sources),
-                observed_at=observed_at,
-            )
+            with OperationLifecycle(
+                operation_kind="freshness", operation_name="source_freshness_observation"
+            ):
+                adapter_observations = observe_adapter_sources_freshness(
+                    adapter=adapter,
+                    connection=connection,
+                    sources=tuple(adapter_observation_sources),
+                    observed_at=observed_at,
+                )
         except Exception as exc:
             adapter_observation_error = exc
 
@@ -137,12 +141,15 @@ def observe_source_freshness_for_command(
                 continue
         else:
             try:
-                observation = observe_configured_source_freshness(
-                    adapter=adapter,
-                    connection=connection,
-                    source=observation_source,
-                    observed_at=observed_at,
-                )
+                with OperationLifecycle(
+                    operation_kind="freshness", operation_name="source_freshness_observation"
+                ):
+                    observation = observe_configured_source_freshness(
+                        adapter=adapter,
+                        connection=connection,
+                        source=observation_source,
+                        observed_at=observed_at,
+                    )
             except Exception as exc:
                 results.append(
                     FreshnessSourceResult(

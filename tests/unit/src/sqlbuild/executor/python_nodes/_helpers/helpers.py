@@ -39,6 +39,7 @@ from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.python_nodes.models import BasePythonNodeContext, PythonNodeRunState
 from sqlbuild.executor.scheduling.main._unlock_downstream import unlock_downstream_python_nodes
 from sqlbuild.executor.scheduling.models import LifecycleExecutionNode
+from sqlbuild.observability import LifecycleEvent
 from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.refs import model
@@ -318,6 +319,10 @@ def export_after_failure(ctx: AssetContext) -> object:
 
 EXPECTED_START_CURSOR_TS: datetime = datetime(2026, 1, 1, tzinfo=UTC)
 EXPECTED_END_CURSOR_TS: datetime = datetime(2026, 1, 2, tzinfo=UTC)
+
+
+def python_operation_events(events: list[LifecycleEvent]) -> tuple[LifecycleEvent, ...]:
+    return tuple(filter(lambda event: event.event_type.startswith("operation_"), events))
 
 
 class FlakyTask:

@@ -32,6 +32,11 @@ from sqlbuild.executor.run.models import (
     ModelExecutionResult,
     ModelMaterializationContext,
 )
+from sqlbuild.observability import LifecycleEvent
+
+
+def operation_events(events: list[LifecycleEvent]) -> tuple[LifecycleEvent, ...]:
+    return tuple(filter(lambda event: event.event_type.startswith("operation_"), events))
 
 
 def insert_custom_hook_log(ctx: HookContext, phase: str) -> None:

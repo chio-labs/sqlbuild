@@ -16,6 +16,10 @@ from sqlbuild.runtime.observability.constants import (
     MAX_METADATA_BYTES,
     METADATA_FIELD,
     NONNEGATIVE_INTEGER_PAYLOAD_FIELDS,
+    OPERATION_EVENT_PREFIX,
+    OPERATION_KINDS,
+    OPERATION_METADATA_FIELDS,
+    OPERATION_NAMES,
     STATEMENT_EVENT_PREFIX,
     STRING_PAYLOAD_FIELDS,
 )
@@ -153,6 +157,31 @@ def _validate_payload_field(*, field_name: str, value: object) -> None:
             )
 
 
+def _validate_operation_payload(*, payload: Mapping[str, JSONValue]) -> None:
+    operation_kind: JSONValue | None = payload.get("operation_kind")
+    if operation_kind is not None and (
+        not isinstance(operation_kind, str) or operation_kind not in OPERATION_KINDS
+    ):
+        raise ObservabilityValidationError("operation_kind must be a catalogued value")
+    operation_name: JSONValue | None = payload.get("operation_name")
+    if operation_name is not None and (
+        not isinstance(operation_name, str) or operation_name not in OPERATION_NAMES
+    ):
+        raise ObservabilityValidationError("operation_name must be a catalogued value")
+    metadata: JSONValue | None = payload.get(METADATA_FIELD)
+    if metadata is None:
+        return
+    if not isinstance(metadata, Mapping):
+        raise ObservabilityValidationError("operation metadata must be a JSON object")
+    if set(metadata) - OPERATION_METADATA_FIELDS:
+        raise ObservabilityValidationError("operation metadata contains a non-allowlisted field")
+    for value in metadata.values():
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ObservabilityValidationError(
+                "operation metadata values must be nonnegative integers excluding bool"
+            )
+
+
 def validate_known_lifecycle_event(*, event: LifecycleEvent) -> None:
     """Validate correlations and safe payload fields for a catalogued event."""
 
@@ -189,5 +218,7 @@ def validate_known_lifecycle_event(*, event: LifecycleEvent) -> None:
                 f"statement lifecycle payload must not contain SQL or parameter values; "
                 f"forbidden field(s): {', '.join(forbidden)}"
             )
+    if event.event_type.startswith(OPERATION_EVENT_PREFIX):
+        _validate_operation_payload(payload=event.payload)
     for field_name, value in event.payload.items():
         _validate_payload_field(field_name=field_name, value=value)

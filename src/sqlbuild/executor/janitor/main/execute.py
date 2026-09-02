@@ -20,6 +20,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorStateBackupCandidate,
     JanitorVirtualStatePruneCandidate,
 )
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def execute_janitor_plan(
@@ -39,6 +40,37 @@ def execute_janitor_plan(
     prune_virtual_state: Callable[[JanitorVirtualStatePruneCandidate], object] | None = None,
 ) -> JanitorExecutionResult:
     """Delete all candidates in a janitor plan."""
+
+    with OperationLifecycle(operation_kind="janitor", operation_name="janitor_execution"):
+        return _execute_janitor_plan(
+            plan=plan,
+            adapter=adapter,
+            connection=connection,
+            delete_checkpoint=delete_checkpoint,
+            delete_detached_virtual_environment=delete_detached_virtual_environment,
+            delete_expired_virtual_environment=delete_expired_virtual_environment,
+            delete_state_backup=delete_state_backup,
+            delete_expired_lock=delete_expired_lock,
+            prune_virtual_state=prune_virtual_state,
+        )
+
+
+def _execute_janitor_plan(
+    *,
+    plan: JanitorPlan,
+    adapter: BaseAdapter,
+    connection: Any,
+    delete_checkpoint: Callable[[JanitorCheckpointCandidate], None] | None,
+    delete_detached_virtual_environment: Callable[
+        [JanitorDetachedVirtualEnvironmentCandidate], None
+    ]
+    | None,
+    delete_expired_virtual_environment: Callable[[JanitorExpiredVirtualEnvironmentCandidate], None]
+    | None,
+    delete_state_backup: Callable[[JanitorStateBackupCandidate], None] | None,
+    delete_expired_lock: Callable[[JanitorExpiredLockCandidate], None] | None,
+    prune_virtual_state: Callable[[JanitorVirtualStatePruneCandidate], object] | None,
+) -> JanitorExecutionResult:
 
     recorder: StatementRecorder = StatementRecorder()
     candidate: JanitorDeleteCandidate

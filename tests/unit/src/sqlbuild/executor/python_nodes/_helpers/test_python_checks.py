@@ -21,10 +21,17 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeRunState,
     PythonNodeRuntime,
 )
+from sqlbuild.observability import (
+    EventDispatcher,
+    LifecycleEvent,
+    dispatcher_scope,
+    invocation_scope,
+)
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.provider.classes.session import ProviderSession
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from tests.unit.src.sqlbuild.executor.python_nodes._helpers._test_types import (
+    MalformedPythonOperationTestCase,
     PythonCheckExecutorTestCase,
 )
 from tests.unit.src.sqlbuild.executor.python_nodes._helpers.helpers import (
@@ -36,7 +43,65 @@ from tests.unit.src.sqlbuild.executor.python_nodes._helpers.helpers import (
     context_provider_check,
     provider_check,
     python_check_function_for_case,
+    python_operation_events,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MalformedPythonOperationTestCase(
+            description="check returns unsupported object",
+            operation_name="python_check",
+            expected_error_fragment="must return PythonCheckResult, True, or False",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_malformed_check_return_when_executing_then_operation_fails_once(
+    test_case: MalformedPythonOperationTestCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    def malformed_check(ctx: CheckContext) -> object:
+        del ctx
+        return object()
+
+    check_function: DiscoveredCheckFunction = DiscoveredCheckFunction(
+        file_path=Path(__file__),
+        relative_path=Path(Path(__file__).name),
+        name="malformed_check",
+        function=malformed_check,
+        depends_on=(),
+    )
+    with invocation_scope("inv-malformed-check"), dispatcher_scope(dispatcher):
+        results: tuple[PythonCheckExecutionResult, ...] = execute_python_check_nodes(
+            check_functions=(check_function,),
+            python_graph=build_python_check_graph(check_function=check_function),
+            upstream_python_results=(),
+            upstream_load_results=(),
+            run_state=PythonNodeRunState(),
+            runtime=PythonNodeRuntime(
+                adapter=PythonNodeContextTestAdapter(),
+                connection_config={},
+                connection=object(),
+                run_id="run-malformed",
+                target="dev",
+                vars={},
+                is_reload=False,
+            ),
+        )
+
+    operation_events: tuple[LifecycleEvent, ...] = python_operation_events(events)
+    assert results[0].failed
+    assert test_case.expected_error_fragment in (results[0].error_message or "")
+    assert tuple(event.event_type for event in operation_events) == (
+        "operation_started",
+        "operation_failed",
+    )
+    assert operation_events[0].payload["operation_name"] == test_case.operation_name
 
 
 @pytest.mark.parametrize(

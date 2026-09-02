@@ -8,6 +8,7 @@ import subprocess
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TextIO, cast
 
@@ -16,6 +17,7 @@ from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult, DbtNodeMess
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.presentation.main.aligned_name_value import format_aligned_name_value
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 _DBT_ERROR_LEVEL: str = "error"
 _DBT_NODE_FINISHED_EVENT: str = "NodeFinished"
@@ -61,6 +63,17 @@ _DBT_DURATION_WIDTH: int = 7
 _DBT_STATUS_REFRESH_SECONDS: float = 1.0
 
 
+@dataclass
+class _DbtStreamState:
+    pending_messages: dict[str, list[DbtNodeMessage]] = field(default_factory=dict)
+    results: list[DbtNodeExecutionResult] = field(default_factory=list)
+    recorded_unique_ids: set[str] = field(default_factory=set)
+    started_indexes: dict[str, int] = field(default_factory=dict)
+    active_nodes: dict[str, tuple[str, float]] = field(default_factory=dict)
+    display_index: int = 0
+    use_color: bool = False
+
+
 def execute_dbt_json_event_stream(
     *,
     argv: tuple[str, ...],
@@ -75,139 +88,246 @@ def execute_dbt_json_event_stream(
 ) -> tuple[int, tuple[DbtNodeExecutionResult, ...]]:
     """Run dbt and render SQLBuild-styled rows from JSON events."""
 
-    style: CliStyle = CliStyle(use_color=use_color)
-    pending_messages: dict[str, list[DbtNodeMessage]] = {}
-    results: list[DbtNodeExecutionResult] = []
-    recorded_unique_ids: set[str] = set()
-    started_indexes: dict[str, int] = {}
-    active_nodes: dict[str, tuple[str, float]] = {}
-    display_index: int = 0
-    status: TransientStatusReporter | None = (
-        _start_dbt_status(
+    with OperationLifecycle(operation_kind="subprocess", operation_name="dbt_command"):
+        return _execute_dbt_json_event_stream(
+            argv=argv,
+            cwd=cwd,
             stream=stream,
             use_color=use_color,
+            target_path=target_path,
+            display_total=display_total,
+            on_node_result=on_node_result,
+            detail_by_unique_id=detail_by_unique_id,
+            enable_status=enable_status,
         )
-        if enable_status
-        else None
-    )
-    status_box: dict[str, TransientStatusReporter | None] = {"status": status}
+
+
+def _execute_dbt_json_event_stream(
+    *,
+    argv: tuple[str, ...],
+    cwd: Path | None,
+    stream: TextIO,
+    use_color: bool,
+    target_path: Path | None,
+    display_total: int | None,
+    on_node_result: Callable[[DbtNodeExecutionResult], None] | None,
+    detail_by_unique_id: dict[str, str] | None,
+    enable_status: bool,
+) -> tuple[int, tuple[DbtNodeExecutionResult, ...]]:
+    style: CliStyle = CliStyle(use_color=use_color)
+    state: _DbtStreamState = _DbtStreamState(use_color=use_color)
+    status_box: dict[str, TransientStatusReporter | None] = {"status": None}
     status_lock: threading.Lock = threading.Lock()
     status_stop: threading.Event = threading.Event()
-    status_thread: threading.Thread | None = _start_active_node_status_refresher(
-        stream=stream,
-        use_color=use_color,
-        enabled=enable_status,
-        active_nodes=active_nodes,
-        status_box=status_box,
-        status_lock=status_lock,
-        status_stop=status_stop,
-    )
-    process: subprocess.Popen[str] = _launch_dbt_process(
-        argv=argv,
-        cwd=cwd,
-        target_path=target_path,
-    )
-
-    if process.stdout is not None:
-        with process.stdout:
-            for line in process.stdout:
-                event: dict[str, object] | None = parse_dbt_json_event(line=line)
-                if event is None:
-                    continue
-                message: DbtNodeMessage | None = parse_dbt_node_message(event=event)
-                if message is not None:
-                    unique_id: str | None = _event_unique_id(event)
-                    if unique_id is not None:
-                        pending_messages.setdefault(unique_id, []).append(message)
-                    continue
-                node_start_message: str | None = parse_dbt_node_start_message(event=event)
-                if node_start_message is not None:
-                    if enable_status:
-                        with status_lock:
-                            status_box["status"] = _update_message_status(
-                                status=status_box["status"],
-                                message=node_start_message,
-                                stream=stream,
-                                use_color=use_color,
-                            )
-                    start_result: DbtNodeExecutionResult | None = parse_dbt_node_start_result(
-                        event=event
-                    )
-                    if start_result is not None and start_result.unique_id not in started_indexes:
-                        display_index += 1
-                        started_indexes[start_result.unique_id] = display_index
-                        status_box = _close_status(status_box=status_box, status_lock=status_lock)
-                        render_dbt_node_result(
-                            stream=stream,
-                            style=style,
-                            result=start_result,
-                            display_index=display_index,
-                            display_total=display_total,
-                            detail=_node_detail(
-                                unique_id=start_result.unique_id,
-                                detail_by_unique_id=detail_by_unique_id,
-                            ),
-                        )
-                        if enable_status:
-                            with status_lock:
-                                active_nodes[start_result.unique_id] = (
-                                    start_result.node_name,
-                                    time.monotonic(),
-                                )
-                                status_box["status"] = _update_active_node_status(
-                                    status=status_box["status"],
-                                    active_nodes=active_nodes,
-                                    stream=stream,
-                                    use_color=use_color,
-                                )
-                    continue
-                result: DbtNodeExecutionResult | None = parse_dbt_node_result(
-                    event=event,
-                    messages_by_unique_id=pending_messages,
-                )
-                if result is None:
-                    continue
-                if result.unique_id in recorded_unique_ids:
-                    continue
-                recorded_unique_ids.add(result.unique_id)
-                with status_lock:
-                    if status_box["status"] is not None:
-                        status_box["status"].close()
-                        status_box["status"] = None
-                    active_nodes.pop(result.unique_id, None)
-                results.append(result)
-                if on_node_result is not None:
-                    on_node_result(result)
-                result_display_index: int | None = started_indexes.get(result.unique_id)
-                if result_display_index is None:
-                    display_index += 1
-                    result_display_index = display_index
-                render_dbt_node_result(
-                    stream=stream,
-                    style=style,
-                    result=result,
-                    display_index=result_display_index,
-                    display_total=display_total,
-                    detail=_node_detail(
-                        unique_id=result.unique_id,
+    status_thread: threading.Thread | None = None
+    process: subprocess.Popen[str] | None = None
+    process_waited = False
+    try:
+        process = _launch_dbt_process(
+            argv=argv,
+            cwd=cwd,
+            target_path=target_path,
+        )
+        status_box["status"] = (
+            _start_dbt_status(stream=stream, use_color=use_color) if enable_status else None
+        )
+        status_thread = _start_active_node_status_refresher(
+            stream=stream,
+            use_color=use_color,
+            enabled=enable_status,
+            active_nodes=state.active_nodes,
+            status_box=status_box,
+            status_lock=status_lock,
+            status_stop=status_stop,
+        )
+        if process.stdout is not None:
+            try:
+                for line in process.stdout:
+                    state.display_index, status_box = _handle_dbt_output_line(
+                        line=line,
+                        stream=stream,
+                        style=style,
+                        display_total=display_total,
                         detail_by_unique_id=detail_by_unique_id,
-                    ),
-                )
-                if enable_status:
-                    with status_lock:
-                        status_box["status"] = _update_active_node_status(
-                            status=status_box["status"],
-                            active_nodes=active_nodes,
-                            stream=stream,
-                            use_color=use_color,
-                        )
+                        enable_status=enable_status,
+                        state=state,
+                        status_box=status_box,
+                        status_lock=status_lock,
+                        on_node_result=on_node_result,
+                    )
+            finally:
+                try:
+                    process.stdout.close()
+                except BaseException:
+                    pass
+        returncode: int = process.wait()
+        process_waited = True
+        return returncode, tuple(state.results)
+    finally:
+        _cleanup_dbt_runtime(
+            process=process,
+            process_waited=process_waited,
+            status_stop=status_stop,
+            status_thread=status_thread,
+            status_box=status_box,
+            status_lock=status_lock,
+        )
 
-    returncode: int = process.wait()
-    status_stop.set()
-    if status_thread is not None:
-        status_thread.join(timeout=1)
+
+def _handle_dbt_output_line(
+    *,
+    line: str,
+    stream: TextIO,
+    style: CliStyle,
+    display_total: int | None,
+    detail_by_unique_id: dict[str, str] | None,
+    enable_status: bool,
+    state: _DbtStreamState,
+    status_box: dict[str, TransientStatusReporter | None],
+    status_lock: threading.Lock,
+    on_node_result: Callable[[DbtNodeExecutionResult], None] | None,
+) -> tuple[int, dict[str, TransientStatusReporter | None]]:
+    event: dict[str, object] | None = parse_dbt_json_event(line=line)
+    if event is None:
+        return state.display_index, status_box
+    message: DbtNodeMessage | None = parse_dbt_node_message(event=event)
+    if message is not None:
+        unique_id: str | None = _event_unique_id(event)
+        if unique_id is not None:
+            state.pending_messages.setdefault(unique_id, []).append(message)
+        return state.display_index, status_box
+    node_start_message: str | None = parse_dbt_node_start_message(event=event)
+    if node_start_message is not None:
+        if enable_status:
+            with status_lock:
+                status_box["status"] = _update_message_status(
+                    status=status_box["status"],
+                    message=node_start_message,
+                    stream=stream,
+                    use_color=state.use_color,
+                )
+        start_result: DbtNodeExecutionResult | None = parse_dbt_node_start_result(event=event)
+        if start_result is not None and start_result.unique_id not in state.started_indexes:
+            state.display_index += 1
+            state.started_indexes[start_result.unique_id] = state.display_index
+            status_box = _close_status(status_box=status_box, status_lock=status_lock)
+            render_dbt_node_result(
+                stream=stream,
+                style=style,
+                result=start_result,
+                display_index=state.display_index,
+                display_total=display_total,
+                detail=_node_detail(
+                    unique_id=start_result.unique_id,
+                    detail_by_unique_id=detail_by_unique_id,
+                ),
+            )
+            if enable_status:
+                with status_lock:
+                    state.active_nodes[start_result.unique_id] = (
+                        start_result.node_name,
+                        time.monotonic(),
+                    )
+                    status_box["status"] = _update_active_node_status(
+                        status=status_box["status"],
+                        active_nodes=state.active_nodes,
+                        stream=stream,
+                        use_color=state.use_color,
+                    )
+        return state.display_index, status_box
+    result: DbtNodeExecutionResult | None = parse_dbt_node_result(
+        event=event,
+        messages_by_unique_id=state.pending_messages,
+    )
+    if result is None or result.unique_id in state.recorded_unique_ids:
+        return state.display_index, status_box
+    state.recorded_unique_ids.add(result.unique_id)
     status_box = _close_status(status_box=status_box, status_lock=status_lock)
-    return returncode, tuple(results)
+    with status_lock:
+        state.active_nodes.pop(result.unique_id, None)
+    state.results.append(result)
+    if on_node_result is not None:
+        on_node_result(result)
+    result_display_index: int | None = state.started_indexes.get(result.unique_id)
+    if result_display_index is None:
+        state.display_index += 1
+        result_display_index = state.display_index
+    render_dbt_node_result(
+        stream=stream,
+        style=style,
+        result=result,
+        display_index=result_display_index,
+        display_total=display_total,
+        detail=_node_detail(
+            unique_id=result.unique_id,
+            detail_by_unique_id=detail_by_unique_id,
+        ),
+    )
+    if enable_status:
+        with status_lock:
+            status_box["status"] = _update_active_node_status(
+                status=status_box["status"],
+                active_nodes=state.active_nodes,
+                stream=stream,
+                use_color=state.use_color,
+            )
+    return state.display_index, status_box
+
+
+def _cleanup_dbt_runtime(
+    *,
+    process: subprocess.Popen[str] | None,
+    process_waited: bool,
+    status_stop: threading.Event,
+    status_thread: threading.Thread | None,
+    status_box: dict[str, TransientStatusReporter | None],
+    status_lock: threading.Lock,
+) -> None:
+    try:
+        status_stop.set()
+    except BaseException:
+        pass
+    if status_thread is not None:
+        try:
+            status_thread.join(timeout=1)
+        except BaseException:
+            pass
+    try:
+        _ = _close_status(status_box=status_box, status_lock=status_lock)
+    except BaseException:
+        pass
+    if process is not None and not process_waited:
+        _stop_dbt_process(process=process)
+
+
+def _stop_dbt_process(*, process: subprocess.Popen[str]) -> None:
+    returncode: int | None = None
+    try:
+        returncode = process.poll()
+    except BaseException:
+        pass
+    if returncode is None:
+        try:
+            process.terminate()
+        except BaseException:
+            pass
+    try:
+        _ = process.wait(timeout=1)
+        return
+    except subprocess.TimeoutExpired:
+        try:
+            process.kill()
+        except BaseException:
+            pass
+    except BaseException:
+        try:
+            process.kill()
+        except BaseException:
+            pass
+    try:
+        _ = process.wait(timeout=1)
+    except BaseException:
+        pass
 
 
 def _launch_dbt_process(

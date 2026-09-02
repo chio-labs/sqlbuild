@@ -44,6 +44,7 @@ from sqlbuild.executor.run.models import (
 from sqlbuild.executor.run.types import ExecutionPhase, HookPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import _empty_provider_container, invoke_with_providers
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -230,12 +231,16 @@ def _run_custom_materialization(
     )
     try:
         with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="custom"):
-            result: object = invoke_with_providers(
-                function=materialize_fn,
-                context=materialization_context,
-                providers=context.providers,
-            )
-            materialization_result: MaterializationResult = cast(MaterializationResult, result)
+            with OperationLifecycle(
+                operation_kind="python_node", operation_name="python_materialization"
+            ):
+                result: object = invoke_with_providers(
+                    function=materialize_fn,
+                    context=materialization_context,
+                    providers=context.providers,
+                )
+                materialization_result: MaterializationResult = cast(MaterializationResult, result)
+                _ = materialization_result.failed
     except Exception as exc:
         return CustomMaterializationPhaseOutcome(
             failure=build_failed_result(

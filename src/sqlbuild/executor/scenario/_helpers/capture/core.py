@@ -30,6 +30,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotManifest,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def execute_scenario_snapshot_capture_steps(
@@ -42,6 +43,27 @@ def execute_scenario_snapshot_capture_steps(
     local_type_overrides: dict[str, str] | None = None,
 ) -> ScenarioSnapshotCaptureRunResult:
     """Materialize scenario inputs, capture JSONL snapshots, and apply cleanup policy."""
+
+    with OperationLifecycle(operation_kind="scenario", operation_name="scenario_capture"):
+        return _execute_scenario_snapshot_capture_steps(
+            project_dir=project_dir,
+            scenario_plan=scenario_plan,
+            adapter=adapter,
+            connection=connection,
+            settings=settings,
+            local_type_overrides=local_type_overrides,
+        )
+
+
+def _execute_scenario_snapshot_capture_steps(
+    *,
+    project_dir: Path,
+    scenario_plan: ScenarioExecutionPlan,
+    adapter: BaseAdapter,
+    connection: Any,
+    settings: ScenarioCaptureSettings,
+    local_type_overrides: dict[str, str] | None,
+) -> ScenarioSnapshotCaptureRunResult:
 
     prepare_result: ScenarioCleanupExecutionResult = execute_scenario_cleanup(
         scenario_plan=scenario_plan,

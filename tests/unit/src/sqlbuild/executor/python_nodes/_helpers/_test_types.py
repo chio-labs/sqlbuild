@@ -156,6 +156,13 @@ class PythonNodeRetryExecutorTestCase:
 
 
 @dataclass(frozen=True)
+class MalformedPythonOperationTestCase:
+    description: str
+    operation_name: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class PythonCheckReturnNormalizationTestCase:
     description: str
     returned: object

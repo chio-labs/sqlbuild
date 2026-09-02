@@ -22,9 +22,15 @@ from sqlbuild.executor.clone.models import (
     CloneItemResult,
 )
 from sqlbuild.executor.clone.types import CloneStatus
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def execute_clone(*, inputs: CloneExecutionInput) -> CloneExecutionResult:
+    with OperationLifecycle(operation_kind="clone", operation_name="clone_execution"):
+        return _execute_clone(inputs=inputs)
+
+
+def _execute_clone(*, inputs: CloneExecutionInput) -> CloneExecutionResult:
     origin_models_by_name: dict[str, ModelPlanEntry] = {
         entry.name: entry for entry in inputs.origin_model_entries
     }

@@ -261,6 +261,12 @@ class StatementLifecycleCase:
 
 
 @dataclass(frozen=True)
+class OperationLifecycleCase:
+    description: str
+    expected_event_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class StatementKindPrivacyCase:
     description: str
     sql: str

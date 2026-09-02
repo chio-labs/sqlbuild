@@ -190,3 +190,12 @@ class SourceLoadNoneReturnTestCase:
     expected_status: ExecutionStatus
     expected_rows_loaded: int
     expected_error_fragment: str = ""
+
+
+@dataclass(frozen=True)
+class LoaderOperationLifecycleTestCase:
+    """One framework-owned loader iterable lifecycle case."""
+
+    description: str
+    expected_status: ExecutionStatus
+    expected_event_types: tuple[str, ...]

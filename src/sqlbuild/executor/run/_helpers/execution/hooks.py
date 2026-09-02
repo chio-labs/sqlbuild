@@ -39,6 +39,7 @@ from sqlbuild.provider.main.runtime import (
     _empty_provider_container,
     invoke_with_providers,
 )
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def execute_hooks(
@@ -220,25 +221,41 @@ def _invoke_python_hook(
         destination=destination,
         hook_run=hook_run,
     )
-    try:
-        returned: object = invoke_with_providers(
-            function=hook_function.function,
-            context=context,
-            providers=hook_run.providers,
-            supplied_kwargs=dict(hook_entry.kwargs),
-        )
-    except Exception as exc:
-        error_message: str = f"{hook_label} failed: {exc}"
-        _record_hook_result(
-            hook_results=hook_results,
-            phase=phase,
-            hook_index=hook_index,
-            hook_type="python",
-            label=hook_entry.name,
-            status=ExecutionStatus.FAILED,
-            error_message=error_message,
-        )
-        raise ExecutorInputError(error_message) from exc
+    with OperationLifecycle(
+        operation_kind="python_node", operation_name="python_hook"
+    ) as lifecycle:
+        try:
+            returned: object = invoke_with_providers(
+                function=hook_function.function,
+                context=context,
+                providers=hook_run.providers,
+                supplied_kwargs=dict(hook_entry.kwargs),
+            )
+        except Exception as exc:
+            lifecycle.failed(error=exc)
+            error_message: str = f"{hook_label} failed: {exc}"
+            _record_hook_result(
+                hook_results=hook_results,
+                phase=phase,
+                hook_index=hook_index,
+                hook_type="python",
+                label=hook_entry.name,
+                status=ExecutionStatus.FAILED,
+                error_message=error_message,
+            )
+            raise ExecutorInputError(error_message) from exc
+        if returned is not None and not isinstance(returned, HookSkipResult):
+            error_message = f"{hook_label} returned unsupported value; return None or ctx.skip(...)"
+            _record_hook_result(
+                hook_results=hook_results,
+                phase=phase,
+                hook_index=hook_index,
+                hook_type="python",
+                label=hook_entry.name,
+                status=ExecutionStatus.FAILED,
+                error_message=error_message,
+            )
+            raise ExecutorInputError(error_message)
     if isinstance(returned, HookSkipResult):
         _record_hook_result(
             hook_results=hook_results,
@@ -260,18 +277,6 @@ def _invoke_python_hook(
             python_identity_recorder=hook_run.python_identity_recorder,
         )
         return True
-    if returned is not None:
-        error_message = f"{hook_label} returned unsupported value; return None or ctx.skip(...)"
-        _record_hook_result(
-            hook_results=hook_results,
-            phase=phase,
-            hook_index=hook_index,
-            hook_type="python",
-            label=hook_entry.name,
-            status=ExecutionStatus.FAILED,
-            error_message=error_message,
-        )
-        raise ExecutorInputError(error_message)
     _record_hook_result(
         hook_results=hook_results,
         phase=phase,

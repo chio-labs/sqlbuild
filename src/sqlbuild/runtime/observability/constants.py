@@ -16,7 +16,42 @@ DIAGNOSTIC_SEVERITIES: frozenset[str] = frozenset(
 ERROR_FIELDS: frozenset[str] = frozenset({"error_code", "error_type"})
 DURATION_FIELDS: frozenset[str] = frozenset({DURATION_MS_FIELD})
 RESOURCE_FIELDS: frozenset[str] = frozenset({"resource_kind", "resource_name", "attempt_number"})
-OPERATION_FIELDS: frozenset[str] = frozenset({"operation_kind", "operation_name"})
+OPERATION_FIELDS: frozenset[str] = frozenset({"operation_kind", "operation_name", METADATA_FIELD})
+OPERATION_EVENT_PREFIX: str = "operation_"
+OPERATION_KINDS: frozenset[str] = frozenset(
+    {
+        "clone",
+        "freshness",
+        "janitor",
+        "loader",
+        "project",
+        "python_node",
+        "quality",
+        "scenario",
+        "subprocess",
+    }
+)
+OPERATION_NAMES: frozenset[str] = frozenset(
+    {
+        "clone_execution",
+        "dbt_command",
+        "external_source_load",
+        "janitor_execution",
+        "managed_source_load",
+        "project_compile",
+        "project_discovery",
+        "python_asset",
+        "python_check",
+        "python_hook",
+        "python_materialization",
+        "python_task",
+        "scenario_capture",
+        "scenario_cleanup",
+        "scenario_execution",
+        "source_freshness_observation",
+    }
+)
+OPERATION_METADATA_FIELDS: frozenset[str] = frozenset({"attempt_number", "item_count"})
 STATEMENT_FIELDS: frozenset[str] = frozenset(
     {
         "adapter",

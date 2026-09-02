@@ -37,6 +37,7 @@ from sqlbuild.provider.main.runtime import (
     invoke_with_providers,
 )
 from sqlbuild.python_nodes.types import PythonCheckSeverity
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def execute_python_check_nodes(
@@ -149,15 +150,16 @@ def execute_python_check_nodes(
                 end_cursor_int=runtime.end_cursor_int,
             )
             try:
-                returned: object = invoke_with_providers(
-                    function=check_function.function,
-                    context=context,
-                    providers=providers,
-                )
-                check_result: PythonCheckResult = normalize_python_check_return(
-                    returned=returned,
-                    default_severity=check_function.severity,
-                )
+                with OperationLifecycle(operation_kind="quality", operation_name="python_check"):
+                    returned: object = invoke_with_providers(
+                        function=check_function.function,
+                        context=context,
+                        providers=providers,
+                    )
+                    check_result: PythonCheckResult = normalize_python_check_return(
+                        returned=returned,
+                        default_severity=check_function.severity,
+                    )
             except Exception as error:
                 error_result: PythonCheckExecutionResult = PythonCheckExecutionResult(
                     node_name=check_function.name,

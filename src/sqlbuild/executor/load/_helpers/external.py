@@ -25,6 +25,7 @@ from sqlbuild.provider.main.runtime import (
     invoke_with_providers,
 )
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -72,11 +73,12 @@ def execute_external_source_load(
             result_store=runtime.result_store,
             on_progress=on_progress,
         )
-        raw_rows: object = invoke_with_providers(
-            function=loader_function.function,
-            context=context,
-            providers=runtime.providers,
-        )
+        with OperationLifecycle(operation_kind="loader", operation_name="external_source_load"):
+            raw_rows: object = invoke_with_providers(
+                function=loader_function.function,
+                context=context,
+                providers=runtime.providers,
+            )
         if isinstance(raw_rows, LoaderSkipResult):
             return LoadExecutionResult(
                 source_name=source_entry.name,
