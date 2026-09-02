@@ -10,9 +10,13 @@ from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput
 from sqlbuild.executor.auditing.main._execute import execute_audit
+from sqlbuild.executor.auditing.main.resource_id import audit_resource_id
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build._helpers.blocking import downstream_blocked_keys
 from sqlbuild.executor.build.models import SourceAuditRunResult
+from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
+    ResourceAttemptLifecycle,
+)
 
 
 def run_pending_source_audits(
@@ -25,6 +29,7 @@ def run_pending_source_audits(
     adapter: BaseAdapter,
     connection: Any,
     fail_fast: bool,
+    run_id: str,
 ) -> SourceAuditRunResult:
     """Execute pending source audits and return the resulting state changes."""
 
@@ -48,16 +53,30 @@ def run_pending_source_audits(
             continue
         audit: AuditPlanEntry
         for audit in audits:
-            result: AuditExecutionResult = execute_audit(
-                audit=audit,
-                adapter=adapter,
-                connection=connection,
-                model_locations=plan.model_locations,
-                seed_locations=plan.seed_locations,
-                source_map=plan.source_map,
-                relation_overrides=None,
-                run_scope_phase=AuditRunScope.FINAL,
-            )
+            with ResourceAttemptLifecycle(
+                resource_id=audit_resource_id(
+                    audit_name=audit.name,
+                    attachment_kind=audit.attachment_kind,
+                    attached_target_name=audit.attached_target_name,
+                    attached_column_name=audit.attached_column_name,
+                ),
+                resource_kind="audit",
+                resource_name=audit.name,
+                run_id=run_id,
+            ) as lifecycle:
+                result: AuditExecutionResult = execute_audit(
+                    audit=audit,
+                    adapter=adapter,
+                    connection=connection,
+                    model_locations=plan.model_locations,
+                    seed_locations=plan.seed_locations,
+                    source_map=plan.source_map,
+                    relation_overrides=None,
+                    run_scope_phase=AuditRunScope.FINAL,
+                    quality_scope="source",
+                )
+                if result.outcome == AuditOutcome.ERROR:
+                    lifecycle.failed()
             audit_results.append(result)
             if result.outcome == AuditOutcome.ERROR:
                 failed_names.append(source_name)

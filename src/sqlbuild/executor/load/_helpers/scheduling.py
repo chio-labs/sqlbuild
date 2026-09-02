@@ -6,6 +6,8 @@ import queue
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
+from functools import partial
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -97,8 +99,6 @@ def run_external_source_loads(
     on_load_progress: LoadProgressCallback | None = callbacks.on_load_progress
     external_source: SourceEntry
     for external_source in external_sources:
-        if callbacks.on_load_start is not None:
-            callbacks.on_load_start(external_source)
         result: LoadExecutionResult = execute_ready_dag_source(
             source_name=external_source.name,
             dispatch=LoadDispatchInputs(
@@ -111,6 +111,7 @@ def run_external_source_loads(
             connection_config=connection_config,
             connection=None,
             runtime=runtime,
+            on_load_start=callbacks.on_load_start,
             on_progress=(
                 None
                 if on_load_progress is None
@@ -250,6 +251,7 @@ def _run_sequential_load_dag(
                 connection_config=connection_config,
                 connection=connection,
                 runtime=runtime,
+                on_load_start=callbacks.on_load_start,
             ),
             state=state,
             on_load_complete=callbacks.on_load_complete,
@@ -277,25 +279,24 @@ def _run_concurrent_load_dag(
             while state.ready and len(state.in_flight) < effective_concurrency:
                 source_name: str = state.pop_next_ready()
                 state.mark_in_flight(source_name)
-                if callbacks.on_load_start is not None:
-                    callbacks.on_load_start(source_by_name[source_name])
-                pool.submit(
-                    lambda name=source_name: load_dag_worker(
-                        source_name=name,
-                        dispatch=LoadDispatchInputs(
-                            source_by_name=source_by_name,
-                            indexes=indexes,
-                            failed_or_hard_skipped=state.failed_or_skipped,
-                            results_by_name=state.results_by_name,
-                        ),
-                        adapter=adapter,
-                        connection_config=connection_config,
-                        connection_pool=connection_pool,
-                        runtime=runtime,
-                        completion_queue=state.completion_queue,
-                        on_load_progress=callbacks.on_load_progress,
-                    )
+                worker: Callable[[], None] = partial(
+                    load_dag_worker,
+                    source_name=source_name,
+                    dispatch=LoadDispatchInputs(
+                        source_by_name=source_by_name,
+                        indexes=indexes,
+                        failed_or_hard_skipped=state.failed_or_skipped,
+                        results_by_name=state.results_by_name,
+                    ),
+                    adapter=adapter,
+                    connection_config=connection_config,
+                    connection_pool=connection_pool,
+                    runtime=runtime,
+                    completion_queue=state.completion_queue,
+                    on_load_start=callbacks.on_load_start,
+                    on_load_progress=callbacks.on_load_progress,
                 )
+                pool.submit(copy_context().run, worker)
             if not state.in_flight:
                 break
             completed_source_name, result = state.completion_queue.get()

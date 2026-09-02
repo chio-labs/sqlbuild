@@ -136,6 +136,45 @@ ADAPTER_IMPLEMENTATION_PATH_MARKERS: tuple[str, str] = ("/adapters/", "/classes/
 ADAPTER_ROOT_PARTS: tuple[str, ...] = ("src", "sqlbuild", "adapter")
 ADAPTERS_ROOT_PARTS: tuple[str, ...] = ("src", "sqlbuild", "adapters")
 ADAPTER_PACKAGE_IMPORT_PREFIX: str = "sqlbuild.adapters."
+ADAPTER_CONTRACT_CLASS_IMPORT_PREFIX: tuple[str, ...] = (
+    "sqlbuild",
+    "adapter",
+    "contract",
+    "classes",
+)
+ADAPTER_CONTRACT_BASE_CLASS_NAMES: frozenset[str] = frozenset(
+    {"BaseAdapter", "DuckDbBackedAdapter", "StrictAdapter"}
+)
+ADAPTER_CONTRACT_BASE_SYMBOLS: frozenset[tuple[str, ...]] = frozenset(
+    {
+        (
+            "sqlbuild",
+            "adapter",
+            "contract",
+            "classes",
+            "base_adapter",
+            "BaseAdapter",
+        ),
+        (
+            "sqlbuild",
+            "adapter",
+            "contract",
+            "classes",
+            "duckdb_backed_adapter",
+            "DuckDbBackedAdapter",
+        ),
+        (
+            "sqlbuild",
+            "adapter",
+            "contract",
+            "classes",
+            "strict_adapter",
+            "StrictAdapter",
+        ),
+    }
+)
+ADAPTER_PUBLIC_EXECUTE_OWNER: str = "src/sqlbuild/adapter/contract/classes/connection.py"
+ADAPTER_PUBLIC_EXECUTE_NAME: str = "execute"
 BASE_ADAPTER_CLASS_NAME: str = "BaseAdapter"
 BASE_ADAPTER_REFERENCE_PART_COUNT: int = 2
 CLIENT_MODULE_MIN_PARTS: int = 5
@@ -172,3 +211,103 @@ STRING_LITERAL_KIND: str = "string"
 SQL_REFERENCE_KIND_CLASS_NAME: str = "SqlReferenceKind"
 STRICT_ADAPTER_CLASS_NAME: str = "StrictAdapter"
 ATTRIBUTE_REFERENCE_KIND: str = "attribute"
+
+NON_RECURSIVE_EXECUTION_HISTORY_PATH: str = (
+    "src/sqlbuild/runtime/execution_history/classes/postgres_execution_history.py"
+)
+APPROVED_RAW_STATEMENT_MODULES: frozenset[str] = frozenset(
+    {
+        "src/sqlbuild/adapter/contract/classes/observed_connection.py",
+        "src/sqlbuild/adapter/contract/classes/observed_cursor.py",
+        "src/sqlbuild/adapters/bigquery/classes/bigquery_connection.py",
+        "src/sqlbuild/adapters/databricks/classes/databricks_connection.py",
+        "src/sqlbuild/adapters/postgres/classes/postgres_connection.py",
+        "src/sqlbuild/adapters/snowflake/classes/snowflake_connection.py",
+        "src/sqlbuild/adapters/snowflake/classes/snowflake_cursor.py",
+        "src/sqlbuild/adapters/sqlserver/classes/sqlserver_connection.py",
+    }
+)
+KNOWN_DRIVER_MODULE_PREFIXES: tuple[tuple[str, ...], ...] = (
+    ("duckdb",),
+    ("psycopg",),
+    ("snowflake", "connector"),
+    ("google", "cloud", "bigquery"),
+    ("databricks", "sql"),
+    ("pyodbc",),
+)
+RAW_DRIVER_FACTORY_NAMES: frozenset[str] = frozenset({"Client", "connect", "connect_to_cloud"})
+RAW_CURSOR_FACTORY_NAME: str = "cursor"
+RAW_STATEMENT_METHOD_NAMES: frozenset[str] = frozenset({"execute", "executemany", "query"})
+
+LIFECYCLE_CONSTRUCTION_OWNER_PATHS: frozenset[str] = frozenset(
+    {
+        "src/sqlbuild/runtime/observability/_helpers/factory.py",
+        "src/sqlbuild/runtime/observability/_helpers/observability.py",
+    }
+)
+LIFECYCLE_FACTORY_OWNER_PATHS: frozenset[str] = frozenset(
+    {
+        "src/sqlbuild/cli/commands/main/entrypoint/_dispatch_with_history.py",
+        "src/sqlbuild/executor/pipeline/main/run.py",
+        "src/sqlbuild/observability.py",
+        "src/sqlbuild/runtime/observability/classes/operation_lifecycle.py",
+        "src/sqlbuild/runtime/observability/classes/resource_attempt_lifecycle.py",
+        "src/sqlbuild/runtime/observability/classes/statement_lifecycle.py",
+        "src/sqlbuild/runtime/observability/main/create_lifecycle_event.py",
+    }
+)
+LIFECYCLE_CATALOG_OWNER_PATH: str = "src/sqlbuild/runtime/observability/constants.py"
+DIAGNOSTIC_CONSTRUCTION_OWNER_PATHS: frozenset[str] = frozenset(
+    {
+        "src/sqlbuild/runtime/compute_logs/classes/diagnostic_log_handler.py",
+        "src/sqlbuild/runtime/observability/_helpers/observability.py",
+    }
+)
+
+EVENT_EXPORTER_RUNTIME_PREFIX: str = "src/sqlbuild/runtime/event_exporting/"
+EVENT_EXPORTER_PUBLIC_PATH: str = "src/sqlbuild/event_exporters.py"
+EVENT_EXPORTER_DIRECTORY_NAME: str = "event_exporters"
+EVENT_EXPORTER_MODULE_PARTS: tuple[str, ...] = ("sqlbuild", "runtime", "event_exporting")
+CORE_EVENT_EXPORTER_CLASS_NAMES: frozenset[str] = frozenset(
+    {
+        "EventExporterCommandScope",
+        "EventExporterDispatcher",
+        "FinitePriorityEventQueue",
+        "MutableEventExporterCounts",
+    }
+)
+EVENT_EXPORTER_INTEGRATION_PATHS: frozenset[str] = frozenset(
+    {
+        "src/sqlbuild/cli/commands/_helpers/entry/observability.py",
+        "src/sqlbuild/compiler/discovery/_helpers/filesystem/core.py",
+        "src/sqlbuild/compiler/discovery/_helpers/yml/project.py",
+        "src/sqlbuild/compiler/discovery/main/discover.py",
+        "src/sqlbuild/compiler/discovery/main/runtime_extensions.py",
+        "src/sqlbuild/compiler/discovery/models.py",
+        "src/sqlbuild/provider/_helpers/session.py",
+    }
+)
+LIFECYCLE_DEFINITION_CLASS_NAME: str = "LifecycleEventDefinition"
+LIFECYCLE_DEFINITION_FACTORY_NAME: str = "create"
+LIFECYCLE_CATALOG_NAME_PREFIX: str = "LIFECYCLE_EVENT_CATALOG"
+LIFECYCLE_EVENT_CLASS_NAME: str = "LifecycleEvent"
+DIAGNOSTIC_LOG_CLASS_NAME: str = "DiagnosticLog"
+LIFECYCLE_EVENT_FACTORY_NAME: str = "create_lifecycle_event"
+EVENT_EXPORTER_DECORATOR_NAME: str = "event_exporter"
+OBSERVABILITY_MODULE_PREFIXES: tuple[tuple[str, ...], ...] = (
+    ("sqlbuild", "observability"),
+    ("sqlbuild", "runtime", "observability"),
+)
+OBSERVABILITY_LIFECYCLE_EVENT_MODULES: tuple[tuple[str, ...], ...] = (
+    ("sqlbuild", "observability"),
+    ("sqlbuild", "runtime", "observability", "models"),
+)
+OBSERVABILITY_FACTORY_MODULES: tuple[tuple[str, ...], ...] = (
+    ("sqlbuild", "observability"),
+    ("sqlbuild", "runtime", "observability", "_helpers", "factory"),
+    ("sqlbuild", "runtime", "observability", "main", "create_lifecycle_event"),
+)
+OBSERVABILITY_DEFINITION_MODULES: tuple[tuple[str, ...], ...] = (
+    ("sqlbuild", "runtime", "observability", "models"),
+)
+PUBLIC_EVENT_EXPORTER_MODULE_PARTS: tuple[str, ...] = ("sqlbuild", "event_exporters")

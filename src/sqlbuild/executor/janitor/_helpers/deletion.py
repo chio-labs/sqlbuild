@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
+
 
 def apply_janitor_deletions[T](
     *,
@@ -16,5 +18,6 @@ def apply_janitor_deletions[T](
         return ()
     candidate: T
     for candidate in candidates:
-        _ = delete(candidate)
+        with OperationLifecycle(operation_kind="janitor", operation_name="janitor_cleanup_action"):
+            _ = delete(candidate)
     return candidates

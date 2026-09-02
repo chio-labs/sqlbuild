@@ -1286,7 +1286,7 @@ class DatabricksAdapter(MicrobatchMixin, BaseAdapter):
         )
         return connection
 
-    def execute(self, *, connection: _DatabricksConnection, sql: str) -> Any:
+    def _execute(self, *, connection: _DatabricksConnection, sql: str) -> Any:
         """Execute a SQL statement against a Databricks connection."""
 
         log_sql(logger=logging.getLogger("sqlbuild.adapter.databricks"), sql=sql)

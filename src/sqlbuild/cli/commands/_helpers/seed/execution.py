@@ -12,7 +12,6 @@ from sqlbuild.cli.commands.models import (
     SeedRunOutcome,
 )
 from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
-from sqlbuild.cli.output.main._build_item_execution_event import format_build_item_execution_event
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.models import SeedExecutionResult
@@ -98,9 +97,7 @@ def _build_on_complete(
         if result.error_message is not None:
             stream.write(f"    {_format_seed_error(result=result, use_color=use_color)}\n")
         stream.flush()
-        event_writer.write(
-            format_build_item_execution_event(result=result, plan=plan, command="seed")
-        )
+        event_writer.write_build_result(result=result, plan=plan, command="seed")
 
     return _on_complete
 

@@ -2,42 +2,30 @@
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
-from sqlbuild.diagnostics._helpers.logging import (
-    get_diagnostics_logger,
-)
-from sqlbuild.diagnostics.classes.diagnostics_console_formatter import DiagnosticsConsoleFormatter
-from sqlbuild.diagnostics.classes.diagnostics_file_formatter import DiagnosticsFileFormatter
-from sqlbuild.diagnostics.classes.dynamic_stderr_handler import DynamicStderrHandler
+from sqlbuild.diagnostics.classes.invocation_diagnostic_routing import InvocationDiagnosticRouting
+from sqlbuild.diagnostics.models import DiagnosticRoutingOptions
 
 
-def configure_diagnostics(*, target_dir: Path, debug: bool, use_color: bool = False) -> None:
-    """Configure SQLBuild diagnostics logging for one CLI invocation."""
+def configure_diagnostics(
+    *,
+    target_dir: Path,
+    debug: bool,
+    use_color: bool = False,
+    invocation_id: str = "programmatic",
+    include_sql_text: bool = False,
+    write_legacy_file: bool = True,
+) -> InvocationDiagnosticRouting:
+    """Create an explicit scoped diagnostic routing context."""
 
-    _LOG_FILE_NAME: str = "sqlbuild.log"
-    target_dir.mkdir(parents=True, exist_ok=True)
-    logger: logging.Logger = get_diagnostics_logger()
-    logger.setLevel(logging.DEBUG)
-    logger.propagate = True
-
-    handler: logging.Handler
-    for handler in tuple(logger.handlers):
-        logger.removeHandler(handler)
-        handler.close()
-
-    file_handler: logging.FileHandler = logging.FileHandler(
-        target_dir / _LOG_FILE_NAME,
-        mode="w",
-        encoding="utf-8",
+    return InvocationDiagnosticRouting(
+        target_dir=target_dir,
+        invocation_id=invocation_id,
+        options=DiagnosticRoutingOptions(
+            debug_console=debug,
+            use_color=use_color,
+            include_sql_text=include_sql_text,
+            write_legacy_file=write_legacy_file,
+        ),
     )
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(DiagnosticsFileFormatter())
-    logger.addHandler(file_handler)
-
-    if debug:
-        console_handler: logging.StreamHandler = DynamicStderrHandler()
-        console_handler.setLevel(logging.DEBUG)
-        console_handler.setFormatter(DiagnosticsConsoleFormatter(use_color=use_color))
-        logger.addHandler(console_handler)

@@ -26,3 +26,13 @@ class PartialBuildPhaseTimings:
     execution_seconds: float | None = None
     cost_collection_seconds: float | None = None
     total_seconds: float | None = None
+
+
+@dataclass(frozen=True)
+class DiagnosticRoutingOptions:
+    """Policy for one invocation's diagnostic destinations."""
+
+    debug_console: bool = False
+    use_color: bool = False
+    include_sql_text: bool = False
+    write_legacy_file: bool = True

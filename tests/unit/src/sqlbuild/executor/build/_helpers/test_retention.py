@@ -23,9 +23,11 @@ from sqlbuild.executor.build._helpers.retention import (
     apply_table_type_conversions,
     reconcile_model_retention,
 )
+from sqlbuild.observability import EventDispatcher, LifecycleEvent, dispatcher_scope
 from tests.unit.src.sqlbuild.executor.build._helpers._test_types import (
     BuildModelRetentionReconciliationTestCase,
     BuildRetentionPhaseTestCase,
+    LifecycleProgressTestCase,
     TableTypeConversionErrorTestCase,
     TableTypeConversionTestCase,
 )
@@ -369,6 +371,120 @@ def test_given_unrecoverable_table_type_state_when_converting_then_fails_before_
     assert tuple(item.kwargs["sql"] for item in adapter.execute.call_args_list) == (
         test_case.expected_statements
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        LifecycleProgressTestCase(
+            "retention inspection", ("operation_started", "operation_completed")
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_retention_inspection_when_adapter_blocks_then_start_is_already_dispatched(
+    test_case: LifecycleProgressTestCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    barrier_events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+    adapter: Mock = Mock()
+    request: RetentionRequest = RetentionRequest(
+        request_id="orders",
+        scope=RetentionScope.RELATION,
+        database=None,
+        schema="analytics",
+        name="orders",
+        desired_days=7,
+    )
+    adapter.inspect_retention.side_effect = lambda **_: (
+        barrier_events.append(events[-1]),
+        RetentionState(
+            request_id="orders",
+            scope=RetentionScope.RELATION,
+            configured_days=7,
+            effective_days=7,
+        ),
+    )[1]
+    plan: PlanOutput = PlanOutput(
+        retention_entries=(
+            RetentionPlanEntry(
+                request=request,
+                model_names=("orders",),
+                actual_days=7,
+                effective_days=7,
+                source="model",
+                direction=RetentionDirection.MATCH,
+                phase=RetentionPlanPhase.AFTER_CREATE,
+            ),
+        )
+    )
+
+    with dispatcher_scope(dispatcher):
+        reconcile_model_retention(
+            plan=plan, adapter=adapter, connection=object(), model_name="orders"
+        )
+
+    assert tuple(event.event_type for event in events) == test_case.expected_event_types
+    assert barrier_events[0].event_type == "operation_started"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        LifecycleProgressTestCase(
+            "table type conversion",
+            (
+                "operation_started",
+                "operation_completed",
+                "operation_started",
+                "operation_started",
+                "operation_completed",
+                "operation_completed",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_table_type_conversion_when_ddl_blocks_then_start_is_already_dispatched(
+    test_case: LifecycleProgressTestCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    barrier_events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+    adapter: Mock = Mock()
+    adapter.render_qualified_name.side_effect = lambda *, database, schema, name: ".".join(
+        (database, schema, name)
+    )
+    adapter.list_relations.side_effect = ((_TRANSIENT_TARGET,), (_COPY,))
+    adapter.execute.side_effect = lambda **_: barrier_events.append(events[-1])
+    entry: TableTypePlanEntry = TableTypePlanEntry(
+        model_name="orders",
+        destination=CompiledRelationLocation(
+            database="warehouse",
+            schema="analytics",
+            name="orders",
+            qualified_name="warehouse.analytics.orders",
+        ),
+        copy_name="__sqb_type_swap__orders",
+        desired_type="permanent",
+        actual_type="transient",
+        source="model",
+        downgrade=False,
+        downgrade_policy="require_confirmation",
+    )
+
+    with dispatcher_scope(dispatcher):
+        apply_table_type_conversions(
+            plan=PlanOutput(table_type_entries=(entry,)),
+            adapter=adapter,
+            connection=object(),
+        )
+
+    assert tuple(event.event_type for event in events) == test_case.expected_event_types
+    assert barrier_events[0].event_type == "operation_started"
 
 
 if __name__ == "__main__":

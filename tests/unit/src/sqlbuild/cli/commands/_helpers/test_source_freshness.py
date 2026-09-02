@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Callable
 from typing import cast
 
 import pytest
@@ -20,6 +21,7 @@ from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.observability import EventDispatcher, dispatcher_scope, invocation_scope
 from tests.unit.src.sqlbuild.cli.commands._helpers._test_types import (
     SourceFreshnessAppendEligibilityTestCase,
 )
@@ -38,45 +40,64 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.helpers import (
             description="appends when all affected selected models succeed",
             model_statuses={"orders": ExecutionStatus.SUCCESS},
             expected_insert_count=1,
+            expected_lifecycle_order=("operation_started", "connect", "operation_completed"),
         ),
         SourceFreshnessAppendEligibilityTestCase(
             description="does not append when affected selected model fails",
             model_statuses={"orders": ExecutionStatus.FAILED},
             expected_insert_count=0,
+            expected_lifecycle_order=(),
         ),
     ],
     ids=lambda case: case.description,
 )
 def test_given_source_freshness_observation_when_appending_then_requires_successful_models(
     test_case: SourceFreshnessAppendEligibilityTestCase,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     adapter: RecordingAdapter = RecordingAdapter()
+    lifecycle_order: list[str] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(
+        subscriber=lambda event: lifecycle_order.append(event.event_type), accepts_opaque=False
+    )
+    original_connect: Callable[[dict[str, object]], object] = adapter.connect
 
-    append_eligible_direct_source_freshness_records(
-        plan=PlanOutput(
-            model_entries=(model_entry("orders"),),
-            source_freshness=DirectSourceFreshnessPlanningResult(
-                observed_records=(source_freshness_record(),),
-                changed_identities=frozenset({source_freshness_identity()}),
-                propagation=DirectSourceFreshnessPropagationResult(
-                    changed_source_model_names={source_freshness_identity(): frozenset({"orders"})},
-                    stale_model_names=frozenset({"orders"}),
+    def connect_after_start(config: dict[str, object]) -> object:
+        lifecycle_order.append("connect")
+        return original_connect(config)
+
+    monkeypatch.setattr(adapter, "connect", connect_after_start)
+
+    with invocation_scope("freshness-invocation"), dispatcher_scope(dispatcher):
+        append_eligible_direct_source_freshness_records(
+            plan=PlanOutput(
+                model_entries=(model_entry("orders"),),
+                source_freshness=DirectSourceFreshnessPlanningResult(
+                    observed_records=(source_freshness_record(),),
+                    changed_identities=frozenset({source_freshness_identity()}),
+                    propagation=DirectSourceFreshnessPropagationResult(
+                        changed_source_model_names={
+                            source_freshness_identity(): frozenset({"orders"})
+                        },
+                        stale_model_names=frozenset({"orders"}),
+                    ),
                 ),
             ),
-        ),
-        result=BuildExecutionResult(
-            status=BuildStatus.SUCCESS,
-            model_results=tuple(
-                ModelExecutionResult(model_name=model_name, status=status)
-                for model_name, status in test_case.model_statuses.items()
+            result=BuildExecutionResult(
+                status=BuildStatus.SUCCESS,
+                model_results=tuple(
+                    ModelExecutionResult(model_name=model_name, status=status)
+                    for model_name, status in test_case.model_statuses.items()
+                ),
             ),
-        ),
-        adapter=cast(BaseAdapter, adapter),
-        connection_config={},
-        run_id="run-1",
-    )
+            adapter=cast(BaseAdapter, adapter),
+            connection_config={},
+            run_id="run-1",
+        )
 
     assert adapter.insert_count == test_case.expected_insert_count
+    assert tuple(lifecycle_order) == test_case.expected_lifecycle_order
 
 
 @pytest.mark.parametrize(
@@ -86,6 +107,7 @@ def test_given_source_freshness_observation_when_appending_then_requires_success
             description="uses adapter-rendered source freshness state relation",
             model_statuses={"orders": ExecutionStatus.SUCCESS},
             expected_insert_count=1,
+            expected_lifecycle_order=(),
         )
     ],
     ids=lambda case: case.description,
@@ -145,6 +167,7 @@ def test_given_eligible_source_freshness_when_appending_then_uses_adapter_render
             description="persists plan-time observation with successful build run id",
             model_statuses={"orders": ExecutionStatus.SUCCESS},
             expected_insert_count=1,
+            expected_lifecycle_order=(),
         )
     ],
     ids=lambda case: case.description,

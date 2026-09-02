@@ -6,13 +6,18 @@ import logging
 import sys
 import threading
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.cli.commands._helpers.test.sql_progress import format_parameterized_test_label
 from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
-from sqlbuild.cli.output.main._build_item_execution_event import format_build_item_execution_event
+from sqlbuild.cli.output.main._execution_event_output_active import execution_event_output_active
+from sqlbuild.cli.progress.classes.native_progress_projector import (
+    NativeProgressProjector,
+    current_native_progress_projector,
+)
 from sqlbuild.cli.progress.main._expectation_detail import format_expectation_detail
 from sqlbuild.cli.progress.main._expectation_name import format_expectation_name
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
@@ -41,6 +46,7 @@ from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
 from sqlbuild.executor.run.types import HookPhase
+from sqlbuild.executor.testing.main.resource_id import sql_test_resource_id
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.presentation.classes.cli_style import CliStyle
@@ -53,6 +59,7 @@ from sqlbuild.presentation.main.terminal_columns import terminal_columns
 from sqlbuild.presentation.main.tree_connector import tree_connector
 from sqlbuild.presentation.types import CompletionState
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
+from sqlbuild.spec.contracts.models import SourceEntry
 
 _TYPE_WIDTH: int = 10
 _MAX_NAME_WIDTH: int = 60
@@ -86,6 +93,55 @@ _SCHEDULER_DIAGNOSTIC_LIMIT: int = 50
 _QUERY_DIAGNOSTIC_LIMIT: int = 25
 
 
+def _result_resource_name(result: object) -> str | None:
+    if isinstance(result, ModelExecutionResult):
+        return result.model_name
+    if isinstance(result, SeedExecutionResult):
+        return result.seed_name
+    if isinstance(result, FunctionExecutionResult):
+        return result.function_name
+    if isinstance(result, LoadExecutionResult):
+        return result.source_name
+    if isinstance(result, PythonNodeExecutionResult):
+        return result.node_name
+    if isinstance(result, SqlTestExecutionResult):
+        return result.test_name
+    return None
+
+
+def _result_resource_id(result: object) -> str | None:
+    if isinstance(result, ModelExecutionResult):
+        return f"model:{result.model_name}"
+    if isinstance(result, SeedExecutionResult):
+        return f"seed:{result.seed_name}"
+    if isinstance(result, FunctionExecutionResult):
+        return f"{result.function_kind}:{result.function_name}"
+    if isinstance(result, LoadExecutionResult):
+        return f"source:{result.source_name}"
+    if isinstance(result, PythonNodeExecutionResult):
+        return f"{result.kind.value}:{result.node_name}"
+    if isinstance(result, SqlTestExecutionResult):
+        return sql_test_resource_id(
+            test_name=result.test_name,
+            source_path=result.source_path,
+            block_index=result.block_index,
+            case_name=result.case_name,
+        )
+    return None
+
+
+def _with_canonical_duration(*, result: object, duration_ms: float) -> object:
+    if isinstance(result, ModelExecutionResult):
+        return replace(result, duration_ms=int(duration_ms))
+    if isinstance(result, SeedExecutionResult):
+        return replace(result, duration_ms=int(duration_ms))
+    if isinstance(result, FunctionExecutionResult):
+        return replace(result, duration_ms=int(duration_ms))
+    if isinstance(result, LoadExecutionResult):
+        return replace(result, duration_ms=int(duration_ms))
+    return result
+
+
 class BuildProgressCallbacks:
     """Encapsulates live build progress output state and callbacks."""
 
@@ -116,12 +172,18 @@ class BuildProgressCallbacks:
             )
         )
         self._counter: int = 0
-        self._use_color: bool = use_color
-        self._style: CliStyle = CliStyle(use_color=use_color)
+        machine_output: bool = execution_event_output_active(path=event_output_path)
+        self._use_color: bool = use_color and not machine_output
+        self._style: CliStyle = CliStyle(use_color=self._use_color)
         self._verbose: bool = verbose
         self._debug: bool = debug
-        self._is_tty: bool = hasattr(sys.stdout, "isatty") and sys.stdout.isatty() and not debug
-        self._stream = sys.stderr if debug else sys.stdout
+        self._is_tty: bool = (
+            hasattr(sys.stdout, "isatty")
+            and sys.stdout.isatty()
+            and not debug
+            and not machine_output
+        )
+        self._stream = sys.stderr if debug or machine_output else sys.stdout
         self._start_time: float = time.monotonic()
         self._current_node_name: str = ""
         self._current_node_type: ExecutionResourceKind = ExecutionResourceKind.TABLE
@@ -139,6 +201,23 @@ class BuildProgressCallbacks:
         self._query_diagnostic_count: int = 0
         self._query_diagnostic_omitted: int = 0
         self._last_omitted_query: StatementExecutionTelemetry | None = None
+        self._projector: NativeProgressProjector | None = current_native_progress_projector()
+        if self._projector is not None:
+            display_names: list[str] = []
+            for key in plan.execution_order:
+                if key.resource_type == CompiledResourceType.SQL_TEST:
+                    continue
+                if key.resource_type == CompiledResourceType.SOURCE:
+                    source: SourceEntry | None = plan.source_map.get(key.name)
+                    if source is None or source.loader is None:
+                        continue
+                display_names.append(key.name)
+            self._projector.configure_resources(
+                ordinals={name: index for index, name in enumerate(display_names, start=1)},
+                total=self._total,
+            )
+            for test_entry in plan.test_entries:
+                self._projector.expect_resource_enrichment(resource_name=test_entry.name)
 
         ctr_width: int = len(str(self._total)) * 2 + 1
         self._prefix_width: int = 2 + ctr_width + 2
@@ -206,6 +285,9 @@ class BuildProgressCallbacks:
             self._stream.write(f"{styled_continuation}\n")
 
     def on_node_start(self, *, name: str, resource_kind: ExecutionResourceKind) -> None:
+        if self._projector is not None:
+            self._projector.expect_resource_enrichment(resource_name=name)
+            return
         self._current_node_name = name
         self._current_node_type = resource_kind
         self._current_sub_message = ""
@@ -327,6 +409,16 @@ class BuildProgressCallbacks:
         self._cursor_hidden = False
 
     def on_node_complete(self, node_result: object) -> None:
+        if self._projector is not None:
+            resource_name: str | None = _result_resource_name(node_result)
+            if resource_name is not None:
+                duration_ms: float | None = self._projector.consume_resource_terminal(
+                    resource_name=resource_name,
+                    resource_id=_result_resource_id(node_result),
+                )
+                if duration_ms is None:
+                    return
+                node_result = _with_canonical_duration(result=node_result, duration_ms=duration_ms)
         try:
             self._write_node_result(node_result)
         finally:
@@ -427,11 +519,16 @@ class BuildProgressCallbacks:
             self._write_model_result(ctr=ctr, model_result=node_result)
 
     def _write_execution_event(self, node_result: object) -> None:
-        payload: str | None = format_build_item_execution_event(
+        self._event_writer.write_build_result(
             result=node_result,
             plan=self._plan,
         )
-        self._event_writer.write(payload)
+        if isinstance(node_result, ModelExecutionResult):
+            for audit_result in node_result.audit_results:
+                self._event_writer.write_build_result(
+                    result=audit_result,
+                    plan=self._plan,
+                )
 
     def write_execution_event(self, result: object) -> None:
         """Write one result to the shared structured event channel."""

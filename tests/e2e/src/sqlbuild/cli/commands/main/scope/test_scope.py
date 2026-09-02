@@ -48,7 +48,8 @@ def test_given_minimal_project_when_running_scope_aliases_then_outputs_are_offli
     assert first.returncode == second.returncode == text.returncode == test_case.expected_exit_code
     assert first.stdout.encode() == second.stdout.encode()
     assert json.loads(first.stdout)["schema_version"] == 1
-    assert first.stderr == second.stderr == text.stderr == ""
+    assert "Project discovery  START" in first.stderr
+    assert text.stderr == ""
     assert "Scope\n  Target: model:orders" in text.stdout
     assert prospective.returncode == 1
     assert "prospective, directory" in prospective.stdout

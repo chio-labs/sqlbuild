@@ -7,6 +7,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.executor.run._helpers.execution.schema import inspect_runtime_relation_schema
 
 
 def enforce_types_staged(
@@ -23,7 +24,8 @@ def enforce_types_staged(
 ) -> None:
     """Inspect staging columns and rebuild with casts for declared types."""
 
-    produced_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
+    produced_columns: tuple[ColumnInfo, ...] = inspect_runtime_relation_schema(
+        adapter=adapter,
         connection=connection,
         database=staging_database,
         schema=staging_schema,

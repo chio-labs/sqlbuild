@@ -4,15 +4,20 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextvars import copy_context
+from typing import Any, cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.planner.models import PlanOutput, SeedPlanEntry
 from sqlbuild.executor.build.models import SeedExecutionResult
+from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.seed.main._execute import execute_seed
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
+from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
+    ResourceAttemptLifecycle,
+)
 
 
 def run_seed_pipeline(
@@ -53,9 +58,12 @@ def run_seed_pipeline(
 
     try:
         with ThreadPoolExecutor(max_workers=effective_concurrency) as pool:
-            worker_results: tuple[tuple[tuple[int, SeedExecutionResult], ...], ...] = tuple(
-                pool.map(
-                    lambda worker_index: _run_seed_worker(
+            futures: tuple[Future[tuple[tuple[int, SeedExecutionResult], ...]], ...] = tuple(
+                cast(
+                    Future[tuple[tuple[int, SeedExecutionResult], ...]],
+                    pool.submit(
+                        copy_context().run,
+                        _run_seed_worker,
                         worker_index=worker_index,
                         effective_concurrency=effective_concurrency,
                         seed_entries=seed_entries,
@@ -65,8 +73,11 @@ def run_seed_pipeline(
                         query_change_tracking=query_change_tracking,
                         on_seed_complete=on_seed_complete,
                     ),
-                    range(effective_concurrency),
                 )
+                for worker_index in range(effective_concurrency)
+            )
+            worker_results: tuple[tuple[tuple[int, SeedExecutionResult], ...], ...] = tuple(
+                future.result() for future in futures
             )
         indexed_results: list[tuple[int, SeedExecutionResult]] = []
         for worker_result in worker_results:
@@ -98,14 +109,22 @@ def _run_seed_worker(
     for seed_index, entry in enumerate(seed_entries):
         if seed_index % effective_concurrency != worker_index:
             continue
-        result: SeedExecutionResult = execute_seed(
-            seed_entry=entry,
-            adapter=adapter,
-            connection=connection,
-            statement_recorder=StatementRecorder(),
+        with ResourceAttemptLifecycle(
+            resource_id=f"seed:{entry.name}",
+            resource_kind="seed",
+            resource_name=entry.name,
             run_id=run_id,
-            query_change_tracking=query_change_tracking,
-        )
+        ) as lifecycle:
+            result: SeedExecutionResult = execute_seed(
+                seed_entry=entry,
+                adapter=adapter,
+                connection=connection,
+                statement_recorder=StatementRecorder(),
+                run_id=run_id,
+                query_change_tracking=query_change_tracking,
+            )
+            if result.status == ExecutionStatus.FAILED:
+                lifecycle.failed(error_code=result.error_code)
         indexed_results.append((seed_index, result))
         if on_seed_complete is not None:
             on_seed_complete(result)

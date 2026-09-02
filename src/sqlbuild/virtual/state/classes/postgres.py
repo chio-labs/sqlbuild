@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.adapter.contract.classes.observed_connection import ObservedConnection
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.node_results.main.decode_json import decode_node_result_json
 from sqlbuild.executor.node_results.main.encode_json import encode_node_result_json
@@ -114,13 +115,16 @@ class PostgresStateBackend(StateBackend):
             ) from error
 
         try:
-            return psycopg.connect(
-                host=_optional_str(config.get("host")),
-                port=_optional_int(config.get("port")),
-                user=_optional_str(config.get("user")),
-                password=_optional_str(config.get("password")),
-                dbname=_optional_str(config.get("dbname")),
-                autocommit=True,
+            return ObservedConnection(
+                raw_connection=psycopg.connect(
+                    host=_optional_str(config.get("host")),
+                    port=_optional_int(config.get("port")),
+                    user=_optional_str(config.get("user")),
+                    password=_optional_str(config.get("password")),
+                    dbname=_optional_str(config.get("dbname")),
+                    autocommit=True,
+                ),
+                adapter="postgres",
             )
         except Exception as error:
             raise StateBackendConfigError("Could not connect to Postgres state backend") from error

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import replace
+from functools import partial
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -47,6 +49,14 @@ from sqlbuild.executor.scheduling.models import (
     LifecycleSchedulerResult,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus, LifecycleNodeStatus
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
+from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
+    ResourceAttemptLifecycle,
+)
+from sqlbuild.runtime.observability.main.current_execution_identity import (
+    current_execution_identity,
+)
+from sqlbuild.runtime.observability.models import ExecutionIdentity
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -176,33 +186,57 @@ def _execute_ingress_python_node(
         for upstream_name in python_graph.upstream_deps.get(node.name, ())
         if upstream_name in results.python_results_by_name
     )
+
     result: PythonNodeExecutionResult = run_ready_python_node(
         node=executable_node,
         upstream_results=upstream_results,
         runtime=runtime,
         statement_recorder=StatementRecorder(),
         run_state=run_state,
+        on_result=partial(
+            _finalize_ingress_python_result,
+            discovered_node=node,
+            runtime=runtime,
+            callbacks=callbacks,
+            run_state=run_state,
+            results=results,
+        ),
     )
-    run_state.record_result(node_function=executable_node.function, result=result)
-    results.record_python_result(name=node.name, result=result)
-    if result.status == PythonNodeStatus.SUCCESS:
-        with CostContext.resource_scope(
-            resource_type=node.kind.value,
-            resource_name=node.name,
-            phase="finalize",
-        ):
-            if callbacks.identity_recorder is not None:
-                callbacks.identity_recorder(identity=node.identity, _target_name=None)
-            else:
-                try_write_python_node_identity_fingerprint(
-                    identity=node.identity,
-                    adapter=runtime.adapter,
-                    connection=runtime.connection,
-                    run_id=runtime.run_id,
-                    database=runtime.default_database,
-                    schema=runtime.default_schema,
-                )
+    if callbacks.on_node_complete is not None:
+        callbacks.on_node_complete(result)
     return _python_result_to_lifecycle_result(result)
+
+
+def _finalize_ingress_python_result(
+    *,
+    node: ExecutablePythonNode,
+    result: PythonNodeExecutionResult,
+    discovered_node: DiscoveredPythonNode,
+    runtime: PythonNodeRuntime,
+    callbacks: IngressCallbacks,
+    run_state: PythonNodeRunState,
+    results: IngressResultAccumulator,
+) -> None:
+    run_state.record_result(node_function=node.function, result=result)
+    results.record_python_result(name=discovered_node.name, result=result)
+    if result.status != PythonNodeStatus.SUCCESS:
+        return
+    with CostContext.resource_scope(
+        resource_type=discovered_node.kind.value,
+        resource_name=discovered_node.name,
+        phase="finalize",
+    ):
+        if callbacks.identity_recorder is not None:
+            callbacks.identity_recorder(identity=discovered_node.identity, _target_name=None)
+        else:
+            try_write_python_node_identity_fingerprint(
+                identity=discovered_node.identity,
+                adapter=runtime.adapter,
+                connection=runtime.connection,
+                run_id=runtime.run_id,
+                database=runtime.default_database,
+                schema=runtime.default_schema,
+            )
 
 
 def _execute_ingress_loader(
@@ -223,61 +257,81 @@ def _execute_ingress_loader(
     )
     if source_entry is None:
         raise ExecutorInputError(f"No source entry found for Python ingress loader '{loader.name}'")
-    if callbacks.on_node_start is not None:
-        callbacks.on_node_start(
-            name=source_entry.name, resource_kind=load_resource_kind(source_entry)
-        )
-    with CostContext.resource_scope(
-        resource_type=PythonNodeKind.LOADER.value,
-        resource_name=loader.name,
-        phase="load",
-    ):
-        result: LoadExecutionResult = execute_source_load(
-            source_entry=source_entry,
-            loader_function=loader,
-            adapter=runtime.adapter,
-            connection_config=runtime.connection_config,
-            connection=runtime.connection,
-            runtime=LoadRuntimeParams(
-                run_id=runtime.run_id,
-                target=runtime.target,
-                vars=runtime.vars,
-                is_reload=runtime.is_reload,
-                start_cursor_ts=runtime.start_cursor_ts,
-                end_cursor_ts=runtime.end_cursor_ts,
-                start_cursor_int=runtime.start_cursor_int,
-                end_cursor_int=runtime.end_cursor_int,
-                use_color=callbacks.use_color,
-                providers=runtime.providers,
-                result_store=runtime.result_store,
-            ),
-            statement_recorder=StatementRecorder(),
-            loader_ref_entries=_loader_ref_entries(
-                loader_by_name=loader_by_name,
-                source_by_loader_name=source_by_loader_name,
-            ),
-            source_ref_entries=source_map,
-        )
-        results.record_load_result(name=node.name, result=result)
-        _persist_loader_result(
-            result_store=runtime.result_store,
-            loader_name=loader.name,
-            result=result,
+    resource_kind: ExecutionResourceKind = load_resource_kind(source_entry)
+    identity: ExecutionIdentity | None = current_execution_identity()
+    lifecycle: AbstractContextManager[ResourceAttemptLifecycle | None] = (
+        nullcontext(None)
+        if identity is not None and identity.resource_attempt_id is not None
+        else ResourceAttemptLifecycle(
+            resource_id=f"source:{source_entry.name}",
+            resource_kind=resource_kind.value,
+            resource_name=source_entry.name,
             run_id=runtime.run_id,
         )
-        if result.status == ExecutionStatus.SUCCESS:
-            if callbacks.identity_recorder is not None:
-                callbacks.identity_recorder(identity=node.identity, _target_name=source_entry.name)
-            else:
-                try_write_python_node_identity_fingerprint(
-                    identity=node.identity,
-                    adapter=runtime.adapter,
-                    connection=runtime.connection,
+    )
+    with lifecycle as attempt:
+        if callbacks.on_node_start is not None:
+            callbacks.on_node_start(name=source_entry.name, resource_kind=resource_kind)
+        with CostContext.resource_scope(
+            resource_type=PythonNodeKind.LOADER.value,
+            resource_name=loader.name,
+            phase="load",
+        ):
+            result: LoadExecutionResult = execute_source_load(
+                source_entry=source_entry,
+                loader_function=loader,
+                adapter=runtime.adapter,
+                connection_config=runtime.connection_config,
+                connection=runtime.connection,
+                runtime=LoadRuntimeParams(
                     run_id=runtime.run_id,
-                    database=runtime.adapter.default_database(),
-                    schema=runtime.adapter.default_schema(),
-                    target_name=source_entry.name,
-                )
+                    target=runtime.target,
+                    vars=runtime.vars,
+                    is_reload=runtime.is_reload,
+                    start_cursor_ts=runtime.start_cursor_ts,
+                    end_cursor_ts=runtime.end_cursor_ts,
+                    start_cursor_int=runtime.start_cursor_int,
+                    end_cursor_int=runtime.end_cursor_int,
+                    use_color=callbacks.use_color,
+                    providers=runtime.providers,
+                    result_store=runtime.result_store,
+                ),
+                statement_recorder=StatementRecorder(),
+                loader_ref_entries=_loader_ref_entries(
+                    loader_by_name=loader_by_name,
+                    source_by_loader_name=source_by_loader_name,
+                ),
+                source_ref_entries=source_map,
+            )
+            results.record_load_result(name=node.name, result=result)
+            _persist_loader_result(
+                result_store=runtime.result_store,
+                loader_name=loader.name,
+                result=result,
+                run_id=runtime.run_id,
+            )
+            if result.status == ExecutionStatus.SUCCESS:
+                if callbacks.identity_recorder is not None:
+                    callbacks.identity_recorder(
+                        identity=node.identity, _target_name=source_entry.name
+                    )
+                else:
+                    try_write_python_node_identity_fingerprint(
+                        identity=node.identity,
+                        adapter=runtime.adapter,
+                        connection=runtime.connection,
+                        run_id=runtime.run_id,
+                        database=runtime.adapter.default_database(),
+                        schema=runtime.adapter.default_schema(),
+                        target_name=source_entry.name,
+                    )
+        if attempt is not None and result.status == ExecutionStatus.FAILED:
+            attempt.failed()
+        elif attempt is not None and result.status == ExecutionStatus.SKIPPED:
+            attempt.skipped(
+                skip_code="explicit",
+                skip_mode=result.skip_mode.value if result.skip_mode is not None else None,
+            )
     if callbacks.on_node_complete is not None:
         callbacks.on_node_complete(result)
     return _load_result_to_lifecycle_result(node_name=node.name, result=result)
@@ -332,35 +386,51 @@ def _record_scheduler_skips(
         if discovered_node.kind == PythonNodeKind.LOADER:
             source_entry: SourceEntry | None = source_by_loader_name.get(result.name)
             if source_entry is not None and result.name not in results.load_results_by_name:
-                skipped_result: LoadExecutionResult = skipped_load_result(
-                    source=source_entry,
-                    reason=result.skip_reason,
-                    mode=result.skip_mode or SkipMode.HARD,
-                )
-                results.record_load_result(name=result.name, result=skipped_result)
-                with CostContext.resource_scope(
-                    resource_type=PythonNodeKind.LOADER.value,
-                    resource_name=result.name,
-                    phase="finalize",
-                ):
-                    _persist_loader_result(
-                        result_store=result_store,
-                        loader_name=result.name,
-                        result=skipped_result,
-                        run_id=run_id,
+                skip_mode: SkipMode = result.skip_mode or SkipMode.HARD
+                with ResourceAttemptLifecycle(
+                    resource_id=f"source:{source_entry.name}",
+                    resource_kind=load_resource_kind(source_entry).value,
+                    resource_name=source_entry.name,
+                    run_id=run_id,
+                ) as lifecycle:
+                    skipped_result: LoadExecutionResult = skipped_load_result(
+                        source=source_entry,
+                        reason=result.skip_reason,
+                        mode=skip_mode,
                     )
+                    results.record_load_result(name=result.name, result=skipped_result)
+                    with CostContext.resource_scope(
+                        resource_type=PythonNodeKind.LOADER.value,
+                        resource_name=result.name,
+                        phase="finalize",
+                    ):
+                        _persist_loader_result(
+                            result_store=result_store,
+                            loader_name=result.name,
+                            result=skipped_result,
+                            run_id=run_id,
+                        )
+                    lifecycle.skipped(skip_code="scheduler", skip_mode=skip_mode.value)
             continue
         if result.name not in results.python_results_by_name:
-            results.record_python_result(
-                name=result.name,
-                result=PythonNodeExecutionResult(
-                    node_name=result.name,
-                    kind=discovered_node.kind,
-                    status=PythonNodeStatus.SKIPPED,
-                    skip_reason=result.skip_reason,
-                    skip_mode=result.skip_mode,
-                ),
-            )
+            skip_mode = result.skip_mode or SkipMode.HARD
+            with ResourceAttemptLifecycle(
+                resource_id=f"{discovered_node.kind.value}:{discovered_node.name}",
+                resource_kind=discovered_node.kind.value,
+                resource_name=discovered_node.name,
+                run_id=run_id,
+            ) as lifecycle:
+                results.record_python_result(
+                    name=result.name,
+                    result=PythonNodeExecutionResult(
+                        node_name=result.name,
+                        kind=discovered_node.kind,
+                        status=PythonNodeStatus.SKIPPED,
+                        skip_reason=result.skip_reason,
+                        skip_mode=skip_mode,
+                    ),
+                )
+                lifecycle.skipped(skip_code="scheduler", skip_mode=skip_mode.value)
 
 
 def _to_executable_python_node(node: DiscoveredPythonNode) -> ExecutablePythonNode:

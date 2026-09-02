@@ -9,6 +9,7 @@ from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.integrations.dbt.main.manifest.build_compile_reference_resolver import (
     build_compile_reference_resolver,
 )
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def resolve_external_sql_reference_resolver(
@@ -16,10 +17,17 @@ def resolve_external_sql_reference_resolver(
 ) -> ExternalSqlReferenceResolver | None:
     """Build the external reference resolver configured for a discovered project."""
 
-    manifest_contents: str | None = _read_dbt_manifest_contents(
-        project_dir=project_dir,
-        target_path=discovered_inputs.project_config.dbt.target_path,
-    )
+    target_path: str | None = discovered_inputs.project_config.dbt.target_path
+    if target_path is None:
+        manifest_contents: str | None = None
+    else:
+        with OperationLifecycle(
+            operation_kind="project", operation_name="external_manifest_discovery"
+        ):
+            manifest_contents = _read_dbt_manifest_contents(
+                project_dir=project_dir,
+                target_path=target_path,
+            )
     return build_compile_reference_resolver(
         manifest_contents=manifest_contents,
     )

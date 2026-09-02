@@ -16,7 +16,6 @@ from sqlbuild.cli.commands.models import (
     LoadRunOutcome,
 )
 from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
-from sqlbuild.cli.output.main._build_item_execution_event import format_build_item_execution_event
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.executor.load.main.run import run_load_pipeline
 from sqlbuild.executor.load.models import (
@@ -54,9 +53,7 @@ def execute_load_plan(
 
     def on_load_complete(result: LoadExecutionResult) -> None:
         load_progress.on_complete(result)
-        event_writer.write(
-            format_build_item_execution_event(result=result, plan=None, command="load")
-        )
+        event_writer.write_build_result(result=result, plan=None, command="load")
 
     try:
         results: tuple[LoadExecutionResult, ...] = run_load_pipeline(

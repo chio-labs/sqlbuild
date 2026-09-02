@@ -5,6 +5,10 @@ from __future__ import annotations
 import threading
 from typing import TextIO
 
+from sqlbuild.cli.progress.classes.native_progress_projector import (
+    NativeProgressProjector,
+    current_native_progress_projector,
+)
 from sqlbuild.cli.progress.models import NestedProgressChildRow
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.inline_error_lines import format_inline_error_lines
@@ -57,8 +61,19 @@ class NestedCommandProgressCallbacks:
         self._spinner_stop_event: threading.Event | None = None
         self._spinner_thread: threading.Thread | None = None
         self._cursor_hidden: bool = False
+        self._projector: NativeProgressProjector | None = current_native_progress_projector()
 
-    def on_item_start(self, *, group_name: str, item_name: str) -> None:
+    def on_item_start(
+        self,
+        *,
+        group_name: str,
+        item_name: str,
+        canonical_resource_name: str | None = None,
+    ) -> None:
+        if self._projector is not None:
+            self._projector.expect_resource_enrichment(
+                resource_name=canonical_resource_name or item_name
+            )
         self._active_group = group_name
         self._active_name = item_name
         self._active_group_is_new = group_name != self._current_group
@@ -84,7 +99,17 @@ class NestedCommandProgressCallbacks:
         error_help: str | None = None,
         error_message: str | None = None,
         child_rows: tuple[NestedProgressChildRow, ...] = (),
+        canonical_resource_name: str | None = None,
+        canonical_resource_id: str | None = None,
     ) -> None:
+        if self._projector is not None:
+            duration_ms: float | None = self._projector.consume_resource_terminal(
+                resource_name=canonical_resource_name or item_name,
+                resource_id=canonical_resource_id,
+            )
+            if duration_ms is None:
+                return
+            detail = f"{detail}  {duration_ms / 1000.0:.2f}s"
         self._stop_spinner_loop()
         if self._is_tty:
             with self._write_lock:

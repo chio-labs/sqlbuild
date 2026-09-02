@@ -160,3 +160,11 @@ class ExecuteScenarioSnapshotCaptureStepsTestCase:
     expected_has_capture_result: bool
     expected_has_cleanup_result: bool
     expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class ScenarioCaptureRunIdentityTestCase:
+    description: str
+    expected_run_id: str
+    expected_seed_resource_ids: tuple[str, ...]
+    expected_operation_name: str

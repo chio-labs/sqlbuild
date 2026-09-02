@@ -5,38 +5,27 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.models import QueryResult
-from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
-    resolve_qualified_name_parts,
-)
 from sqlbuild.errors.contracts.main.error_code import error_code
-from sqlbuild.executor.scenario._helpers.capture.columns import build_scenario_snapshot_columns
-from sqlbuild.executor.scenario._helpers.capture.safety import (
-    capture_error_help,
-    max_relation_write_bytes,
-    query_capture_relation_row_count,
-    validate_capture_row_limits,
+from sqlbuild.executor.scenario._helpers.capture.relation import (
+    capture_scenario_snapshot_relation,
+    scenario_capture_source_relation_name,
 )
+from sqlbuild.executor.scenario._helpers.capture.safety import capture_error_help
 from sqlbuild.executor.scenario._helpers.snapshots.core import (
-    write_scenario_snapshot_jsonl,
     write_scenario_snapshot_manifest,
 )
-from sqlbuild.executor.scenario.constants import (
-    SCENARIO_EXEC_CAPTURE_FAILED,
-    SCENARIO_EXEC_CAPTURE_INTERNAL,
-)
+from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_CAPTURE_FAILED
 from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCaptureLimits,
     ScenarioSnapshotCapturePlan,
     ScenarioSnapshotCaptureRelationPlan,
     ScenarioSnapshotCaptureRelationResult,
     ScenarioSnapshotCaptureResult,
-    ScenarioSnapshotColumn,
-    ScenarioSnapshotFileStats,
     ScenarioSnapshotManifest,
     ScenarioSnapshotRelation,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def execute_scenario_snapshot_capture(
@@ -59,64 +48,19 @@ def execute_scenario_snapshot_capture(
     for relation_plan in capture_plan.relations:
         result: ScenarioSnapshotCaptureRelationResult
         try:
-            source_relation_name: str = _source_relation_name(
-                adapter=adapter,
+            result, manifest_relation, preflight_row_count = capture_scenario_snapshot_relation(
+                capture_plan=capture_plan,
                 relation_plan=relation_plan,
-            )
-            preflight_row_count: int = query_capture_relation_row_count(
                 adapter=adapter,
                 connection=connection,
-                relation_plan=relation_plan,
-                source_relation_name=source_relation_name,
-            )
-            if not effective_limits.force:
-                validate_capture_row_limits(
-                    scenario_name=capture_plan.scenario_name,
-                    relation_plan=relation_plan,
-                    relation_row_count=preflight_row_count,
-                    total_row_count=total_row_count,
-                    limits=effective_limits,
-                )
-            rows: tuple[dict[str, object], ...] = _query_relation_rows(
-                adapter=adapter,
-                connection=connection,
-                relation_plan=relation_plan,
-            )
-            columns: tuple[ScenarioSnapshotColumn, ...] = build_scenario_snapshot_columns(
-                adapter=adapter,
-                connection=connection,
-                relation_name=_source_relation_name(adapter=adapter, relation_plan=relation_plan),
                 local_type_overrides=local_type_overrides,
-            )
-            stats: ScenarioSnapshotFileStats = write_scenario_snapshot_jsonl(
-                file_path=capture_plan.snapshot_root / relation_plan.file_path,
-                rows=rows,
-                max_bytes=max_relation_write_bytes(
-                    total_byte_count=total_byte_count,
-                    limits=effective_limits,
-                ),
+                limits=effective_limits,
+                total_row_count=total_row_count,
+                total_byte_count=total_byte_count,
             )
             total_row_count += preflight_row_count
-            total_byte_count += stats.byte_count
-            result = ScenarioSnapshotCaptureRelationResult(
-                kind=relation_plan.kind,
-                logical_name=relation_plan.logical_name,
-                source_relation=_source_relation_name(adapter=adapter, relation_plan=relation_plan),
-                file_path=relation_plan.file_path,
-                status=ExecutionStatus.SUCCESS,
-                row_count=stats.row_count,
-                byte_count=stats.byte_count,
-            )
-            manifest_relations.append(
-                ScenarioSnapshotRelation(
-                    kind=relation_plan.kind,
-                    logical_name=relation_plan.logical_name,
-                    file_path=relation_plan.file_path,
-                    row_count=stats.row_count,
-                    byte_count=stats.byte_count,
-                    columns=columns,
-                )
-            )
+            total_byte_count += result.byte_count
+            manifest_relations.append(manifest_relation)
         except Exception as exc:
             captured_error_code: str = error_code(
                 error=exc,
@@ -125,7 +69,9 @@ def execute_scenario_snapshot_capture(
             result = ScenarioSnapshotCaptureRelationResult(
                 kind=relation_plan.kind,
                 logical_name=relation_plan.logical_name,
-                source_relation=_source_relation_name(adapter=adapter, relation_plan=relation_plan),
+                source_relation=scenario_capture_source_relation_name(
+                    adapter=adapter, relation_plan=relation_plan
+                ),
                 file_path=relation_plan.file_path,
                 status=ExecutionStatus.FAILED,
                 error_code=captured_error_code,
@@ -158,50 +104,24 @@ def execute_scenario_snapshot_capture(
         relations=tuple(manifest_relations),
         format=manifest.format,
     )
-    write_scenario_snapshot_manifest(
-        manifest_path=capture_plan.manifest_path,
-        manifest=final_manifest,
-    )
+    with OperationLifecycle(
+        operation_kind="scenario", operation_name="scenario_snapshot_serialization"
+    ) as serialization:
+        write_scenario_snapshot_manifest(
+            manifest_path=capture_plan.manifest_path,
+            manifest=final_manifest,
+        )
+        serialization.completed(
+            metadata={
+                "item_count": len(final_manifest.relations),
+                "row_count": final_manifest.total_rows,
+                "byte_count": final_manifest.total_bytes,
+            }
+        )
     return ScenarioSnapshotCaptureResult(
         scenario_name=capture_plan.scenario_name,
         status=ExecutionStatus.SUCCESS,
         manifest_path=capture_plan.manifest_path,
         manifest=final_manifest,
         relation_results=tuple(relation_results),
-    )
-
-
-def _query_relation_rows(
-    *,
-    adapter: BaseAdapter,
-    connection: Any,
-    relation_plan: ScenarioSnapshotCaptureRelationPlan,
-) -> tuple[dict[str, object], ...]:
-    query_result: QueryResult = adapter.query(
-        connection=connection,
-        sql=f"SELECT * FROM {_source_relation_name(adapter=adapter, relation_plan=relation_plan)}",
-        limit=None,
-    )
-    rows: list[dict[str, object]] = []
-    row: tuple[object, ...]
-    for row in query_result.rows:
-        if len(row) != len(query_result.columns):
-            error: ValueError = ValueError(
-                "row value count does not match column count for relation "
-                f"'{relation_plan.logical_name}'"
-            )
-            object.__setattr__(error, "code", SCENARIO_EXEC_CAPTURE_INTERNAL)
-            raise error
-        rows.append(dict(zip(query_result.columns, row, strict=True)))
-    return tuple(rows)
-
-
-def _source_relation_name(
-    *, adapter: BaseAdapter, relation_plan: ScenarioSnapshotCaptureRelationPlan
-) -> str:
-    return resolve_qualified_name_parts(
-        adapter=adapter,
-        database=relation_plan.source_target.database,
-        schema=relation_plan.source_target.schema,
-        name=relation_plan.source_target.name,
     )

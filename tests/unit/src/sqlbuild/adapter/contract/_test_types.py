@@ -29,6 +29,19 @@ class AdapterLoaderValueLiteralTestCase:
 
 
 @dataclass(frozen=True)
+class RawStatementAuditCase:
+    description: str
+    expected_violations: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RawStatementAuditFixtureCase:
+    description: str
+    source_files: tuple[tuple[str, str], ...]
+    expected_violations: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class AdapterIdentifierRenderingTestCase:
     description: str
     adapter_name: str

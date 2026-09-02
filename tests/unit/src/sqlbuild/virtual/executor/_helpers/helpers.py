@@ -28,6 +28,15 @@ from sqlbuild.virtual.state.models import PhysicalRelationRecord
 from sqlbuild.virtual.state.types import PhysicalArtifactType
 
 
+def build_relation_location(*, schema: str, name: str) -> CompiledRelationLocation:
+    return CompiledRelationLocation(
+        database=None,
+        schema=schema,
+        name=name,
+        qualified_name=f"{schema}.{name}",
+    )
+
+
 class SeedPhysicalRelationTestBackend:
     def __init__(self, *, available_seed_names: tuple[str, ...]) -> None:
         self.available_seed_names: frozenset[str] = frozenset(available_seed_names)

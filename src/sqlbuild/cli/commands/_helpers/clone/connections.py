@@ -16,6 +16,7 @@ from sqlbuild.cli.commands.models import (
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.phase_line import format_phase_line
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def connect_clone_targets(
@@ -35,7 +36,8 @@ def connect_clone_targets(
     )
     progress.start(f"Connecting to {invocation.adapter_name}...")
     connect_start: float = time.monotonic()
-    destination_connection: Any = invocation.adapter.connect(destination_connection_config)
+    with OperationLifecycle(operation_kind="clone", operation_name="clone_target_connection"):
+        destination_connection: Any = invocation.adapter.connect(destination_connection_config)
     progress.complete_styled(
         format_phase_line(
             style=CliStyle(use_color=invocation.use_color),

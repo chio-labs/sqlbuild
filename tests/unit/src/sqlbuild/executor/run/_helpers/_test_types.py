@@ -6,6 +6,20 @@ from sqlbuild.executor.run.types import AuditGateReuseReason, AuditGateStatus, E
 
 
 @dataclass(frozen=True)
+class LifecycleProgressTestCase:
+    description: str
+    expected_event_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PromotionProgressTestCase:
+    description: str
+    strategy: str
+    expected_method: str
+    expected_event_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class RuntimeFutureCursorTestCase:
     description: str
     expected_start: str

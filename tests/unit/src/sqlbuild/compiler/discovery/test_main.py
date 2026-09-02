@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from unittest.mock import call, patch
 
 import pytest
 
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.observability import EventDispatcher, LifecycleEvent, dispatcher_scope
 from tests.unit.src.sqlbuild.compiler.discovery._test_helpers import (
     base_repo_files,
 )
@@ -14,6 +16,8 @@ from tests.unit.src.sqlbuild.compiler.discovery._test_types import (
     DiscoverFactoryValidationTestCase,
     DiscoverProjectInputsErrorTestCase,
     DiscoverProjectInputsTestCase,
+    DiscoveryLifecycleTestCase,
+    DiscoveryRelevantCountTestCase,
 )
 
 
@@ -295,6 +299,100 @@ def test_given_project_repo_slice_when_discovering_inputs_then_it_returns_expect
     assert discovered_inputs.project_config.name == "demo"
     assert discovered_inputs.project_config.adapter == "duckdb"
     assert discovered_inputs.local_config.target == "dev"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DiscoveryLifecycleTestCase(
+            description="declarations complete before python failure",
+            expected_event_types=(
+                "operation_started",
+                "operation_started",
+                "operation_started",
+                "operation_completed",
+                "operation_started",
+                "operation_failed",
+                "operation_failed",
+                "operation_failed",
+            ),
+            expected_operation_names=(
+                "project_discovery",
+                "discovery_project_assembly",
+                "discovery_declaration_parse",
+                "discovery_declaration_parse",
+                "discovery_python_import",
+                "discovery_python_import",
+                "discovery_project_assembly",
+                "project_discovery",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_valid_sql_and_failing_python_import_when_discovering_then_phases_are_attributed(
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    test_case: DiscoveryLifecycleTestCase,
+) -> None:
+    write_repo_files(
+        tmp_path,
+        base_repo_files()
+        | {
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS order_id\n",
+            "tasks/broken.py": "import dependency_that_does_not_exist\n",
+        },
+    )
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    with dispatcher_scope(dispatcher):
+        with pytest.raises(Exception, match="dependency_that_does_not_exist"):
+            discover_project_inputs(project_dir=tmp_path)
+
+    assert tuple(event.event_type for event in events) == test_case.expected_event_types
+    assert tuple(str(event.payload["operation_name"]) for event in events) == (
+        test_case.expected_operation_names
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DiscoveryRelevantCountTestCase(
+            description="ignored siblings are not traversed or counted",
+            expected_item_count=1,
+            unexpected_root_pattern="*",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_ignored_siblings_when_discovering_then_count_uses_relevant_collections_only(
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    test_case: DiscoveryRelevantCountTestCase,
+) -> None:
+    write_repo_files(
+        tmp_path,
+        base_repo_files()
+        | {
+            "models/orders.sql": "MODEL ();\n\nSELECT 1 AS order_id\n",
+            ".git/objects/unrelated.sql": "not sqlbuild input\n",
+            ".venv/cache/generated.sql": "not sqlbuild input\n",
+        },
+    )
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    with patch.object(Path, "rglob", autospec=True, side_effect=Path.rglob) as rglob:
+        with dispatcher_scope(dispatcher):
+            discover_project_inputs(project_dir=tmp_path)
+
+    assert call(tmp_path, test_case.unexpected_root_pattern) not in rglob.call_args_list
+    assert events[3].payload["operation_name"] == "discovery_declaration_parse"
+    assert events[3].payload["metadata"] == {"item_count": test_case.expected_item_count}
 
 
 @pytest.mark.parametrize(

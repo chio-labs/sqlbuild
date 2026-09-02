@@ -8,6 +8,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
+from typing import ClassVar
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
@@ -102,11 +103,13 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
 class PlannerTestAdapter(BaseAdapter):
     """Minimal adapter for planner helper tests."""
 
+    adapter_name: ClassVar[str] = "planner-test"
+
     def connect(self, config: dict[str, object]) -> object:
         del config
         return object()
 
-    def execute(self, connection: object, sql: str) -> object:
+    def _execute(self, connection: object, sql: str) -> object:
         del connection, sql
         return object()
 

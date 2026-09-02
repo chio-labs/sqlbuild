@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -45,6 +45,8 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
 
 
 class _RecordingAdapter(BaseAdapter):
+    adapter_name: ClassVar[str] = "recording-test"
+
     def __init__(self, column_names: tuple[str, ...]) -> None:
         self.column_names: tuple[str, ...] = column_names
         self.queried_sql: list[str] = []
@@ -56,7 +58,7 @@ class _RecordingAdapter(BaseAdapter):
     def close(self, connection: Any) -> None:
         del connection
 
-    def execute(self, connection: Any, sql: str) -> Any:
+    def _execute(self, connection: Any, sql: str) -> Any:
         del connection, sql
         raise AssertionError("execute should not be called")
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -35,6 +35,8 @@ from sqlbuild.spec.contracts.models import SchemaSeedEntry, SeedCsvSettings, Sou
 
 
 class FakeJanitorAdapter(BaseAdapter):
+    adapter_name: ClassVar[str] = "janitor-test"
+
     def __init__(
         self,
         *,
@@ -117,7 +119,7 @@ class FakeJanitorAdapter(BaseAdapter):
     def close(self, connection: Any) -> None:
         return None
 
-    def execute(self, connection: Any, sql: str) -> Any:
+    def _execute(self, connection: Any, sql: str) -> Any:
         del connection
         self.executed_sql.append(sql)
         rows_by_query_kind: dict[bool, tuple[tuple[Any, ...], ...]] = {

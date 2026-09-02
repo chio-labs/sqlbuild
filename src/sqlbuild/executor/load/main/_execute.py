@@ -42,6 +42,7 @@ from sqlbuild.executor.load.models import (
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import invoke_with_providers
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.models import SourceEntry
 from sqlbuild.spec.contracts.types import SourceWriteStrategy
 
@@ -123,30 +124,31 @@ def execute_source_load(
                 ),
                 on_progress=on_progress,
             )
-            raw_rows: object = invoke_with_providers(
-                function=loader_function.function,
-                context=context,
-                providers=runtime.providers,
-            )
-            early_result: LoadExecutionResult | None = interpret_loader_return(
-                raw_rows=raw_rows,
-                source_entry=source_entry,
-                loader_function=loader_function,
-                destination_relation=destination_relation,
-                resource_kind=resource_kind,
-                statement_recorder=statement_recorder,
-                start=start,
-            )
-            if early_result is not None:
-                return early_result
-            rows_loaded: int = write_loader_rows_to_staging(
-                loader_return_value=raw_rows,
-                source_entry=source_entry,
-                adapter=adapter,
-                connection=connection,
-                staging=staging,
-                statement_recorder=statement_recorder,
-            )
+            with OperationLifecycle(operation_kind="loader", operation_name="managed_source_load"):
+                raw_rows: object = invoke_with_providers(
+                    function=loader_function.function,
+                    context=context,
+                    providers=runtime.providers,
+                )
+                early_result: LoadExecutionResult | None = interpret_loader_return(
+                    raw_rows=raw_rows,
+                    source_entry=source_entry,
+                    loader_function=loader_function,
+                    destination_relation=destination_relation,
+                    resource_kind=resource_kind,
+                    statement_recorder=statement_recorder,
+                    start=start,
+                )
+                if early_result is not None:
+                    return early_result
+                rows_loaded: int = write_loader_rows_to_staging(
+                    loader_return_value=raw_rows,
+                    source_entry=source_entry,
+                    adapter=adapter,
+                    connection=connection,
+                    staging=staging,
+                    statement_recorder=statement_recorder,
+                )
             adapter = _apply_source_write_strategy(
                 adapter=adapter,
                 connection=connection,

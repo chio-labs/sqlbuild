@@ -12,7 +12,7 @@ class InsertFaultDuckDbAdapter(DuckDbAdapter):
     def __init__(self, *, fault_target: str) -> None:
         self.fault_target = fault_target
 
-    def execute(self, connection: Any, sql: str) -> Any:
+    def _execute(self, connection: Any, sql: str) -> Any:
         executor: Callable[..., Any] = {
             False: self._execute_sql,
             True: self._raise_insert_failure,
@@ -20,7 +20,7 @@ class InsertFaultDuckDbAdapter(DuckDbAdapter):
         return executor(connection=connection, sql=sql)
 
     def _execute_sql(self, *, connection: Any, sql: str) -> Any:
-        return super().execute(connection=connection, sql=sql)
+        return super()._execute(connection=connection, sql=sql)
 
     def _raise_insert_failure(self, *, connection: Any, sql: str) -> Any:
         del connection, sql

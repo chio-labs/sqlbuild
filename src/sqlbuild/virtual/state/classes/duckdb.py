@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from sqlbuild.adapter.contract.classes.observed_connection import ObservedConnection
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.node_results.main.decode_json import decode_node_result_json
 from sqlbuild.executor.node_results.main.encode_json import encode_node_result_json
@@ -111,7 +112,7 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, StateBackend):
         database: object | None = config.get("database")
         if not isinstance(database, str) or not database:
             raise StateBackendConfigError("DuckDB state backend requires state.connection.database")
-        return duckdb.connect(database)
+        return ObservedConnection(raw_connection=duckdb.connect(database), adapter="duckdb")
 
     def close(self, connection: Any) -> None:
         connection.close()

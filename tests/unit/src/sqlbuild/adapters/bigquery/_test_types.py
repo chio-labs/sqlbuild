@@ -56,6 +56,16 @@ class BigQueryQueryTestCase:
     expected_columns: tuple[str, ...]
     expected_rows: tuple[tuple[object, ...], ...]
     expected_truncated: bool
+    expected_row_count: int
+
+
+@dataclass(frozen=True)
+class BigQueryDmlLifecycleTestCase:
+    description: str
+    sql: str
+    statement_type: str
+    affected_rows: object | None
+    expected_affected_rows: int | None
 
 
 @dataclass(frozen=True)

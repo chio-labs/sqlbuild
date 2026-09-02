@@ -9,7 +9,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeRunState,
     PythonNodeRuntime,
 )
-from sqlbuild.executor.python_nodes.types import ExecutablePythonNode
+from sqlbuild.executor.python_nodes.types import ExecutablePythonNode, OwnedResultCallback
 
 
 def run_ready_python_node(
@@ -19,6 +19,7 @@ def run_ready_python_node(
     runtime: PythonNodeRuntime,
     statement_recorder: StatementRecorder,
     run_state: PythonNodeRunState,
+    on_result: OwnedResultCallback | None = None,
 ) -> PythonNodeExecutionResult:
     """Execute one scheduler-ready task/asset Python node."""
 
@@ -28,4 +29,5 @@ def run_ready_python_node(
         runtime=runtime,
         statement_recorder=statement_recorder,
         run_state=run_state,
+        on_result=on_result,
     )

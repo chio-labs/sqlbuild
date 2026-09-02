@@ -14,14 +14,6 @@ class CloneExecutionJsonTestCase:
 
 
 @dataclass(frozen=True)
-class CloneItemExecutionEventTestCase:
-    description: str
-    item: CloneItemResult
-    resource_type: str
-    expected_asset: dict[str, object]
-
-
-@dataclass(frozen=True)
 class VirtualCloneExecutionJsonTestCase:
     description: str
     expected_status: str

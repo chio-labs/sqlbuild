@@ -29,6 +29,8 @@ class ProviderSession:
         self._setup_names: list[str] = []
         self._is_closed: bool = False
         self._lifecycle_lock: RLock = RLock()
+        self._close_holds: int = 0
+        self._close_requested: bool = False
         self.teardown_error: ProviderTeardownError | None = None
 
     @property
@@ -67,9 +69,30 @@ class ProviderSession:
                 self._setup_provider(name=name, provider=provider)
             return provider
 
-    def close(self) -> None:
+    def hold_open(self) -> None:
+        """Defer nested close requests while an outer command owner is active."""
+
+        with self._lifecycle_lock:
+            self._close_holds += 1
+
+    def release(self) -> None:
+        """Release an outer ownership hold and honor any deferred close request."""
+
+        should_close = False
+        with self._lifecycle_lock:
+            if self._close_holds < 1:
+                return
+            self._close_holds -= 1
+            should_close = self._close_holds == 0 and self._close_requested
+        if should_close:
+            self.close()
+
+    def close(self, *, force: bool = False) -> None:
         with self._lifecycle_lock:
             if self._is_closed:
+                return
+            if self._close_holds and not force:
+                self._close_requested = True
                 return
             self._is_closed = True
             errors: list[str] = []

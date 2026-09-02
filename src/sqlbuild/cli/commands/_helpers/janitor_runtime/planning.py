@@ -53,6 +53,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorStateCandidates,
 )
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.virtual.state.models import (
     CheckpointRetentionInspection,
@@ -71,37 +72,40 @@ def inspect_janitor_retention(
 ) -> JanitorRetentionInspection:
     """Inspect virtual state retention candidates."""
 
-    checkpoint: CheckpointRetentionInspection | None = checkpoint_retention(
-        project_dir=invocation.effective_project_dir,
-        discovered_inputs=invocation.discovered_inputs,
-        virtual_environment_name=compile_context.project.effective_target_name,
-    )
-    detached_environment: DetachedVirtualEnvironmentInspection | None = (
-        detached_environment_retention(
+    with OperationLifecycle(operation_kind="janitor", operation_name="janitor_state_inspection"):
+        checkpoint: CheckpointRetentionInspection | None = checkpoint_retention(
+            project_dir=invocation.effective_project_dir,
+            discovered_inputs=invocation.discovered_inputs,
+            virtual_environment_name=compile_context.project.effective_target_name,
+        )
+        detached_environment: DetachedVirtualEnvironmentInspection | None = (
+            detached_environment_retention(
+                project_dir=invocation.effective_project_dir,
+                discovered_inputs=invocation.discovered_inputs,
+                retention_days=settings.retention_days,
+            )
+        )
+        expired_environment: ExpiredVirtualEnvironmentInspection | None = (
+            expired_environment_retention(
+                project_dir=invocation.effective_project_dir,
+                discovered_inputs=invocation.discovered_inputs,
+                active_virtual_environment_name=compile_context.project.effective_target_name,
+                retention_days=settings.retention_days,
+            )
+        )
+        unsuffixed_virtual_environment_name: str | None = _unsuffixed_virtual_environment_name(
+            invocation=invocation,
+            compile_context=compile_context,
+        )
+        state: StateJanitorInspection | None = state_janitor_retention(
             project_dir=invocation.effective_project_dir,
             discovered_inputs=invocation.discovered_inputs,
             retention_days=settings.retention_days,
         )
-    )
-    expired_environment: ExpiredVirtualEnvironmentInspection | None = expired_environment_retention(
-        project_dir=invocation.effective_project_dir,
-        discovered_inputs=invocation.discovered_inputs,
-        active_virtual_environment_name=compile_context.project.effective_target_name,
-        retention_days=settings.retention_days,
-    )
-    unsuffixed_virtual_environment_name: str | None = _unsuffixed_virtual_environment_name(
-        invocation=invocation,
-        compile_context=compile_context,
-    )
-    state: StateJanitorInspection | None = state_janitor_retention(
-        project_dir=invocation.effective_project_dir,
-        discovered_inputs=invocation.discovered_inputs,
-        retention_days=settings.retention_days,
-    )
-    replay_relations: tuple[PhysicalRelationRecord, ...] = active_microbatch_replay_relations(
-        project_dir=invocation.effective_project_dir,
-        discovered_inputs=invocation.discovered_inputs,
-    )
+        replay_relations: tuple[PhysicalRelationRecord, ...] = active_microbatch_replay_relations(
+            project_dir=invocation.effective_project_dir,
+            discovered_inputs=invocation.discovered_inputs,
+        )
     return JanitorRetentionInspection(
         checkpoint=checkpoint,
         detached_environment=detached_environment,
@@ -150,45 +154,67 @@ def build_janitor_execution_plan(
             relations=inspection.active_microbatch_replay_relations
         )
     )
-    plan: JanitorPlan = build_janitor_plan(
-        project=compile_context.project,
-        adapter=compile_context.adapter,
-        connection=connection_context.connection,
-        retention_days=settings.retention_days,
-        delete_tracked_only=invocation.discovered_inputs.project_config.janitor.delete_tracked_only,
-        exclude_patterns=invocation.discovered_inputs.project_config.janitor.exclude_patterns,
-        relation_scope=JanitorRelationScope(
-            scan_relation_keys=detached_environment_scan_relation_keys(
-                retention=inspection.detached_environment
-            )
-            | expired_environment_scan_relation_keys(retention=inspection.expired_environment),
-            protected_relation_keys=protected_relation_keys,
-            protected_relation_reasons=protected_relation_reasons,
-        ),
-        state_candidates=JanitorStateCandidates(
-            checkpoint_candidates=checkpoint_candidates(retention=inspection.checkpoint),
-            detached_virtual_environment_candidates=detached_environment_candidates(
-                retention=inspection.detached_environment
+    with OperationLifecycle(
+        operation_kind="janitor", operation_name="janitor_candidate_planning"
+    ) as lifecycle:
+        plan: JanitorPlan = build_janitor_plan(
+            project=compile_context.project,
+            adapter=compile_context.adapter,
+            connection=connection_context.connection,
+            retention_days=settings.retention_days,
+            delete_tracked_only=invocation.discovered_inputs.project_config.janitor.delete_tracked_only,
+            exclude_patterns=invocation.discovered_inputs.project_config.janitor.exclude_patterns,
+            relation_scope=JanitorRelationScope(
+                scan_relation_keys=detached_environment_scan_relation_keys(
+                    retention=inspection.detached_environment
+                )
+                | expired_environment_scan_relation_keys(retention=inspection.expired_environment),
+                protected_relation_keys=protected_relation_keys,
+                protected_relation_reasons=protected_relation_reasons,
             ),
-            expired_virtual_environment_candidates=expired_environment_candidates(
-                retention=inspection.expired_environment
+            state_candidates=JanitorStateCandidates(
+                checkpoint_candidates=checkpoint_candidates(retention=inspection.checkpoint),
+                detached_virtual_environment_candidates=detached_environment_candidates(
+                    retention=inspection.detached_environment
+                ),
+                expired_virtual_environment_candidates=expired_environment_candidates(
+                    retention=inspection.expired_environment
+                ),
+                state_backup_candidates=state_backup_candidates(retention=inspection.state),
+                expired_lock_candidates=expired_lock_candidates(retention=inspection.state),
+                virtual_state_prune_candidates=virtual_state_prune_candidates(
+                    retention=inspection.state
+                ),
             ),
-            state_backup_candidates=state_backup_candidates(retention=inspection.state),
-            expired_lock_candidates=expired_lock_candidates(retention=inspection.state),
-            virtual_state_prune_candidates=virtual_state_prune_candidates(
-                retention=inspection.state
+            direct_settings=JanitorDirectModeSettings(
+                enabled=(
+                    not invocation.discovered_inputs.project_config.settings.virtual_environments
+                ),
+                state_history_versions=settings.direct_state_history_versions,
             ),
-        ),
-        direct_settings=JanitorDirectModeSettings(
-            enabled=not invocation.discovered_inputs.project_config.settings.virtual_environments,
-            state_history_versions=settings.direct_state_history_versions,
-        ),
-    )
+        )
+        lifecycle.completed(metadata={"item_count": _janitor_candidate_count(plan)})
     status.complete(
         message=f"Inspected warehouse state. ({time.perf_counter() - inspect_start:.2f}s)",
         blank_line_after=True,
     )
     return JanitorPlanningResult(plan=plan)
+
+
+def _janitor_candidate_count(plan: JanitorPlan) -> int:
+    return sum(
+        len(candidates)
+        for candidates in (
+            plan.candidates,
+            plan.checkpoint_candidates,
+            plan.detached_virtual_environment_candidates,
+            plan.expired_virtual_environment_candidates,
+            plan.state_backup_candidates,
+            plan.expired_lock_candidates,
+            plan.direct_state_prune_candidates,
+            plan.virtual_state_prune_candidates,
+        )
+    )
 
 
 def _unsuffixed_virtual_environment_name(

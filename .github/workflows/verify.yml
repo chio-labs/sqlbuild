@@ -48,7 +48,7 @@ jobs:
           while IFS= read -r -d '' path; do
             changed=true
             case "${path}" in
-              tests/e2e/src/sqlbuild/cli/commands/main/postgres/*|tests/integration/src/sqlbuild/adapters/postgres/*|tests/integration/src/sqlbuild/virtual/state/classes/postgres/*)
+              tests/e2e/src/sqlbuild/cli/commands/main/postgres/*|tests/integration/src/sqlbuild/adapters/postgres/*|tests/integration/src/sqlbuild/virtual/state/classes/postgres/*|tests/integration/src/sqlbuild/runtime/execution_history/*)
                 postgres=true
                 ;;
               tests/e2e/*)

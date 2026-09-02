@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -10,6 +9,13 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.runtime.contracts.models import ConnectionHooks
+from sqlbuild.runtime.observability.classes.operation_lifecycle import (
+    OperationAttributes,
+    OperationLifecycle,
+)
+from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
+    canonicalize_operation_adapter,
+)
 from sqlbuild.virtual.executor._helpers.environment_views import write_virtual_environment_views
 from sqlbuild.virtual.executor._helpers.project_context import resolve_virtual_project_context
 from sqlbuild.virtual.executor._helpers.promote import (
@@ -70,122 +76,147 @@ def run_virtual_promote(
         discovered_inputs=discovered_inputs,
         project_dir=project_dir,
     )
-    state_connection: Any = backend.connect(config.connection)
-    lease: StateLockLease | None = None
     handle: StateOperationHandle = create_state_operation_handle(StateOperationType.PROMOTE)
-    try:
-        inspect_start: float = time.perf_counter()
-        if on_progress is not None:
-            on_progress("Inspecting virtual state...")
-        write_state_operation_started(
-            backend=backend,
-            state_connection=state_connection,
-            schema=config.schema,
-            handle=handle,
-            virtual_environment_name=to_virtual_environment_name,
-            message=(
-                f"promote from {from_virtual_environment_name} to {to_virtual_environment_name}"
-            ),
-        )
-        lease = acquire_virtual_environment_lease_or_raise(
-            backend=backend,
-            state_connection=state_connection,
-            schema=config.schema,
-            virtual_environment_name=to_virtual_environment_name,
-            owner_prefix="promote",
-            locked_error_code="S014",
-        )
-        environment_state: PromoteEnvironmentState = read_promote_environment_state(
-            backend=backend,
-            state_connection=state_connection,
-            schema=config.schema,
-            from_virtual_environment_name=from_virtual_environment_name,
-            to_virtual_environment_name=to_virtual_environment_name,
-        )
-        semantics: PromoteSemantics = build_promote_semantics(
-            backend=backend,
-            state_connection=state_connection,
-            schema=config.schema,
-            graph=context.graph,
-            environment_state=environment_state,
-        )
-        selection: PromoteSelection = resolve_promote_selection(
-            graph=context.graph,
-            environment_state=environment_state,
-            source_semantics=semantics.source,
-            select=options.select,
-            exclude=options.exclude,
-            include_stale_upstreams=options.include_stale_upstreams,
-        )
-        resolution: PromoteResolution = resolve_promote_final_refs(
-            graph=context.graph,
-            environment_state=environment_state,
-            selection=selection,
-            target_semantics=semantics.target,
-            select=options.select,
-            include_stale_upstreams=options.include_stale_upstreams,
-            allow_partial_promotion=options.allow_partial_promotion,
-        )
-        update: PromoteRefUpdate = build_promote_ref_update(
-            backend=backend,
-            state_connection=state_connection,
-            schema=config.schema,
-            from_virtual_environment_name=from_virtual_environment_name,
-            to_virtual_environment_name=to_virtual_environment_name,
-            resolution=resolution,
-            source_function_refs=environment_state.source_function_refs,
-            select=options.select,
-        )
-        write_promote_environment_update(
-            backend=backend,
-            state_connection=state_connection,
-            schema=config.schema,
-            to_virtual_environment_name=to_virtual_environment_name,
-            update=update,
-        )
-        relations: VirtualEnvironmentPhysicalRelations = read_promote_physical_relations(
-            backend=backend,
-            state_connection=state_connection,
-            schema=config.schema,
-            update=update,
-        )
-        write_virtual_environment_views(
-            graph=context.graph,
-            adapter=adapter,
-            connection_config=connection_config,
-            virtual_environment_name=to_virtual_environment_name,
-            unsuffixed_virtual_environment_name=context.unsuffixed_virtual_environment_name,
-            relations=relations,
-            function_versions=update.function_versions,
-            hooks=hooks,
-        )
-        write_state_operation_result(
-            backend=backend,
-            state_connection=state_connection,
-            schema=config.schema,
-            handle=handle,
-            status=StateOperationStatus.SUCCEEDED,
-            message=f"promoted {resolution.promoted_model_count} models",
-        )
-        if on_progress is not None:
-            on_progress(f"Inspected virtual state. ({time.perf_counter() - inspect_start:.2f}s)")
-    except Exception as error:
-        write_state_operation_result(
-            backend=backend,
-            state_connection=state_connection,
-            schema=config.schema,
-            handle=handle,
-            status=StateOperationStatus.FAILED,
-            message=f"{error}",
-        )
-        raise
-    finally:
-        if lease is not None:
-            _ = release_state_lease(
+    with OperationLifecycle(
+        operation_kind="warehouse",
+        operation_name="relation_promotion",
+        operation_id=handle.operation_id,
+        attributes=OperationAttributes(
+            phase="reconcile",
+            strategy="virtual",
+            adapter=canonicalize_operation_adapter(adapter.adapter_name),
+            target_kind="virtual_environment",
+        ),
+    ) as lifecycle:
+        state_connection: Any | None = None
+        lease: StateLockLease | None = None
+        state_started = False
+        try:
+            state_connection = backend.connect(config.connection)
+            write_state_operation_started(
                 backend=backend,
-                connection=state_connection,
+                state_connection=state_connection,
+                schema=config.schema,
+                handle=handle,
+                virtual_environment_name=to_virtual_environment_name,
+                message=(
+                    f"promote from {from_virtual_environment_name} to {to_virtual_environment_name}"
+                ),
+            )
+            state_started = True
+            lease = acquire_virtual_environment_lease_or_raise(
+                backend=backend,
+                state_connection=state_connection,
+                schema=config.schema,
+                virtual_environment_name=to_virtual_environment_name,
+                owner_prefix="promote",
+                locked_error_code="S014",
+            )
+            environment_state: PromoteEnvironmentState = read_promote_environment_state(
+                backend=backend,
+                state_connection=state_connection,
+                schema=config.schema,
+                from_virtual_environment_name=from_virtual_environment_name,
+                to_virtual_environment_name=to_virtual_environment_name,
+            )
+            semantics: PromoteSemantics = build_promote_semantics(
+                backend=backend,
+                state_connection=state_connection,
+                schema=config.schema,
+                graph=context.graph,
+                environment_state=environment_state,
+            )
+            selection: PromoteSelection = resolve_promote_selection(
+                graph=context.graph,
+                environment_state=environment_state,
+                source_semantics=semantics.source,
+                select=options.select,
+                exclude=options.exclude,
+                include_stale_upstreams=options.include_stale_upstreams,
+            )
+            resolution: PromoteResolution = resolve_promote_final_refs(
+                graph=context.graph,
+                environment_state=environment_state,
+                selection=selection,
+                target_semantics=semantics.target,
+                select=options.select,
+                include_stale_upstreams=options.include_stale_upstreams,
+                allow_partial_promotion=options.allow_partial_promotion,
+            )
+            update: PromoteRefUpdate = build_promote_ref_update(
+                backend=backend,
+                state_connection=state_connection,
+                schema=config.schema,
+                from_virtual_environment_name=from_virtual_environment_name,
+                to_virtual_environment_name=to_virtual_environment_name,
+                resolution=resolution,
+                source_function_refs=environment_state.source_function_refs,
+                select=options.select,
+            )
+            write_promote_environment_update(
+                backend=backend,
+                state_connection=state_connection,
+                schema=config.schema,
+                to_virtual_environment_name=to_virtual_environment_name,
+                update=update,
+            )
+            relations: VirtualEnvironmentPhysicalRelations = read_promote_physical_relations(
+                backend=backend,
+                state_connection=state_connection,
+                schema=config.schema,
+                update=update,
+            )
+            write_virtual_environment_views(
+                graph=context.graph,
+                adapter=adapter,
+                connection_config=connection_config,
+                virtual_environment_name=to_virtual_environment_name,
+                unsuffixed_virtual_environment_name=context.unsuffixed_virtual_environment_name,
+                relations=relations,
+                function_versions=update.function_versions,
+                hooks=hooks,
+            )
+            write_state_operation_result(
+                backend=backend,
+                state_connection=state_connection,
+                schema=config.schema,
+                handle=handle,
+                status=StateOperationStatus.SUCCEEDED,
+                message=f"promoted {resolution.promoted_model_count} models",
+            )
+        except Exception as error:
+            if state_started:
+                write_state_operation_result(
+                    backend=backend,
+                    state_connection=state_connection,
+                    schema=config.schema,
+                    handle=handle,
+                    status=StateOperationStatus.FAILED,
+                    message=f"{error}",
+                )
+            raise
+        finally:
+            _ = _close_promote_runtime(
+                backend=backend,
+                state_connection=state_connection,
                 schema=config.schema,
                 lease=lease,
             )
-        backend.close(state_connection)
+        lifecycle.completed(metadata={"changed_count": resolution.promoted_model_count})
     return resolution.status.value, resolution.selected_model_names, resolution.stale_after
+
+
+def _close_promote_runtime(
+    *, backend: Any, state_connection: Any | None, schema: str, lease: StateLockLease | None
+) -> None:
+    """Release promotion-owned state resources before the canonical terminal."""
+
+    if lease is not None:
+        _ = release_state_lease(
+            backend=backend,
+            connection=state_connection,
+            schema=schema,
+            lease=lease,
+        )
+    if state_connection is not None:
+        backend.close(state_connection)

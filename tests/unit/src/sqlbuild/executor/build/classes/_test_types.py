@@ -30,3 +30,10 @@ class SchedulerDiagnosticsTestCase:
     expected_waiting: int
     expected_limit: int
     expected_aborted: int = 0
+
+
+@dataclass(frozen=True)
+class SchedulerIdentityTestCase:
+    description: str
+    expected_invocation_id: str
+    expected_run_id: str

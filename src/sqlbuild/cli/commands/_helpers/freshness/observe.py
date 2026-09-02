@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager, nullcontext
 from datetime import datetime
 from typing import Any
 
@@ -35,6 +36,7 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
 )
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
+from sqlbuild.observability import run_scope
 from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy
 
@@ -47,10 +49,39 @@ def observe_source_freshness_for_command(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     observed_at: datetime,
+    run_id: str | None = None,
     previous_records: dict[SourceFreshnessIdentity, SourceFreshnessRecord] | None = None,
     previous_records_by_source_name: dict[str, SourceFreshnessRecord] | None = None,
 ) -> FreshnessCommandResult:
     """Observe current source freshness for the CLI command."""
+
+    scope: AbstractContextManager[object] = (
+        run_scope(run_id) if run_id is not None else nullcontext()
+    )
+    with scope:
+        return _observe_source_freshness_for_command(
+            adapter=adapter,
+            connection=connection,
+            sources=sources,
+            select=select,
+            exclude=exclude,
+            observed_at=observed_at,
+            previous_records=previous_records,
+            previous_records_by_source_name=previous_records_by_source_name,
+        )
+
+
+def _observe_source_freshness_for_command(
+    *,
+    adapter: StrictAdapter,
+    connection: Any,
+    sources: tuple[SourceEntry, ...],
+    select: tuple[str, ...],
+    exclude: tuple[str, ...],
+    observed_at: datetime,
+    previous_records: dict[SourceFreshnessIdentity, SourceFreshnessRecord] | None,
+    previous_records_by_source_name: dict[str, SourceFreshnessRecord] | None,
+) -> FreshnessCommandResult:
 
     selected_sources: tuple[SourceEntry, ...] = _selected_sources(
         sources=sources,

@@ -11,6 +11,7 @@ from sqlbuild.cli.commands._helpers.clone.validation import validate_clone_reque
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import CloneCommandRequest, CloneInvocation
+from sqlbuild.cli.output.main._execution_event_output_active import execution_event_output_active
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -27,8 +28,9 @@ def resolve_clone_invocation(*, request: CloneCommandRequest) -> CloneInvocation
     effective_project_dir: Path = (
         request.project_dir if request.project_dir is not None else Path.cwd()
     )
-    use_color: bool = not request.no_color and supports_color()
-    progress_stream: TextIO = sys.stdout
+    machine_output: bool = execution_event_output_active(path=request.event_output_path)
+    use_color: bool = not request.no_color and not machine_output and supports_color()
+    progress_stream: TextIO = sys.stderr if machine_output else sys.stdout
     progress: PlanningProgressReporter = PlanningProgressReporter(
         stream=progress_stream,
         use_color=use_color,

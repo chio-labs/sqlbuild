@@ -21,15 +21,24 @@ from sqlbuild.executor.python_nodes._helpers.execution import (
 from sqlbuild.executor.python_nodes.models import (
     PythonNodeExecutionResult,
     PythonNodeExecutorResult,
+    PythonNodeResult,
     PythonNodeRunState,
     PythonNodeRuntime,
+)
+from sqlbuild.observability import (
+    EventDispatcher,
+    LifecycleEvent,
+    dispatcher_scope,
+    invocation_scope,
 )
 from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.provider.classes.session import ProviderSession
 from sqlbuild.python_nodes.models import RetryPolicy
 from tests.unit.src.sqlbuild.executor.python_nodes._helpers._test_types import (
+    MalformedPythonOperationTestCase,
     PythonNodeExecutorTestCase,
     PythonNodeRetryExecutorTestCase,
+    PythonPostCallLifecycleTestCase,
 )
 from tests.unit.src.sqlbuild.executor.python_nodes._helpers.helpers import (
     EXPECTED_END_CURSOR_TS,
@@ -37,6 +46,7 @@ from tests.unit.src.sqlbuild.executor.python_nodes._helpers.helpers import (
     ExecutionSlackProvider,
     FlakyTask,
     PythonNodeContextTestAdapter,
+    PythonNodeContextTestResultStore,
     context_provider_asset,
     context_provider_task,
     cursor_window,
@@ -50,9 +60,181 @@ from tests.unit.src.sqlbuild.executor.python_nodes._helpers.helpers import (
     missing_context_provider_task,
     provider_asset,
     provider_task,
+    python_operation_events,
     skip_empty_orders,
     successful_sibling,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MalformedPythonOperationTestCase(
+            description="task returns invalid materialized result",
+            operation_name="python_task",
+            expected_error_fragment="Only asset Python nodes may set materialized",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_malformed_task_return_when_executing_then_operation_fails_once(
+    test_case: MalformedPythonOperationTestCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    invocations: list[str] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    def malformed_task() -> PythonNodeResult:
+        invocations.append("called")
+        return PythonNodeResult(payload={"invalid": True}, materialized=True)
+
+    with invocation_scope("inv-malformed-task"), dispatcher_scope(dispatcher):
+        result: PythonNodeExecutorResult = execute_python_nodes(
+            nodes=(
+                DiscoveredTaskFunction(
+                    file_path=Path("/project/tasks/bad.py"),
+                    relative_path=Path("tasks/bad.py"),
+                    name="malformed_task",
+                    function=malformed_task,
+                    retry=RetryPolicy(max_attempts=3, retry_on=Exception, jitter=False),
+                ),
+            ),
+            statement_recorder=StatementRecorder(),
+            runtime=PythonNodeRuntime(
+                adapter=PythonNodeContextTestAdapter(),
+                connection_config={},
+                connection=object(),
+                run_id="run-malformed",
+                target="dev",
+                vars={},
+                is_reload=False,
+            ),
+        )
+
+    operation_events: tuple[LifecycleEvent, ...] = python_operation_events(events)
+    assert result.results[0].status == PythonNodeStatus.FAILED
+    assert test_case.expected_error_fragment in (result.results[0].error_message or "")
+    assert tuple(event.event_type for event in operation_events) == (
+        "operation_started",
+        "operation_failed",
+    )
+    assert operation_events[0].payload["operation_name"] == test_case.operation_name
+    assert operation_events[-1].payload["error_type"] == "ExecutorInputError"
+    assert invocations == ["called"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        PythonPostCallLifecycleTestCase(
+            description="successful callable followed by persistence failure",
+            expected_event_types=(
+                "resource_attempt_started",
+                "operation_started",
+                "operation_completed",
+                "resource_attempt_failed",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_successful_callable_when_result_persistence_fails_then_resource_only_fails(
+    test_case: PythonPostCallLifecycleTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+    result_store: PythonNodeContextTestResultStore = PythonNodeContextTestResultStore({})
+    monkeypatch.setattr(
+        result_store,
+        "write",
+        lambda record: (_ for _ in ()).throw(RuntimeError("persistence failed")),
+    )
+    node: DiscoveredTaskFunction = DiscoveredTaskFunction(
+        file_path=Path("/project/tasks/orders.py"),
+        relative_path=Path("tasks/orders.py"),
+        name="persist_orders",
+        function=lambda: "ok",
+    )
+
+    with (
+        invocation_scope("inv-persist-failure"),
+        dispatcher_scope(dispatcher),
+        pytest.raises(RuntimeError, match="persistence failed"),
+    ):
+        _ = execute_ready_python_node(
+            node=node,
+            upstream_results=(),
+            statement_recorder=StatementRecorder(),
+            runtime=PythonNodeRuntime(
+                adapter=PythonNodeContextTestAdapter(),
+                connection_config={},
+                connection=object(),
+                run_id="run-persist-failure",
+                target="dev",
+                vars={},
+                is_reload=False,
+                result_store=result_store,
+            ),
+        )
+
+    assert tuple(event.event_type for event in events) == test_case.expected_event_types
+    assert "resource_attempt_completed" not in tuple(event.event_type for event in events)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        PythonPostCallLifecycleTestCase(
+            description="successful callable followed by identity finalization failure",
+            expected_event_types=(
+                "resource_attempt_started",
+                "operation_started",
+                "operation_completed",
+                "resource_attempt_failed",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_successful_callable_when_owned_finalizer_fails_then_resource_only_fails(
+    test_case: PythonPostCallLifecycleTestCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+    node: DiscoveredTaskFunction = DiscoveredTaskFunction(
+        file_path=Path("/project/tasks/orders.py"),
+        relative_path=Path("tasks/orders.py"),
+        name="finalize_orders",
+        function=lambda: "ok",
+    )
+
+    with (
+        invocation_scope("inv-finalizer-failure"),
+        dispatcher_scope(dispatcher),
+        pytest.raises(RuntimeError, match="identity failed"),
+    ):
+        _ = execute_ready_python_node(
+            node=node,
+            upstream_results=(),
+            statement_recorder=StatementRecorder(),
+            runtime=PythonNodeRuntime(
+                adapter=PythonNodeContextTestAdapter(),
+                connection_config={},
+                connection=object(),
+                run_id="run-finalizer-failure",
+                target="dev",
+                vars={},
+                is_reload=False,
+            ),
+            on_result=lambda node, result: (_ for _ in ()).throw(RuntimeError("identity failed")),
+        )
+
+    assert tuple(event.event_type for event in events) == test_case.expected_event_types
+    assert "resource_attempt_completed" not in tuple(event.event_type for event in events)
 
 
 @pytest.mark.parametrize(
@@ -771,17 +953,28 @@ def test_given_retry_policy_when_transient_failures_then_retries_and_succeeds(
             ),
         ),
     )
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
 
-    with CostContext.scope(
-        run_id="test_run",
-        resource_type="run",
-        resource_name="dev",
-        phase="build",
+    def record_sleep(delay: float) -> None:
+        assert events[-1].event_type == "retry_scheduled"
+        sleeps.append(delay)
+
+    with (
+        invocation_scope("retry-invocation"),
+        dispatcher_scope(dispatcher),
+        CostContext.scope(
+            run_id="test_run",
+            resource_type="run",
+            resource_name="dev",
+            phase="build",
+        ),
     ):
         result: PythonNodeExecutorResult = execute_python_nodes(
             nodes=nodes,
             statement_recorder=StatementRecorder(),
-            sleep=sleeps.append,
+            sleep=record_sleep,
             runtime=PythonNodeRuntime(
                 adapter=PythonNodeContextTestAdapter(),
                 connection_config={},
@@ -808,6 +1001,47 @@ def test_given_retry_policy_when_transient_failures_then_retries_and_succeeds(
         )
         for attempt in (1, 2, 3)
     )
+    resource_events: tuple[LifecycleEvent, LifecycleEvent] = (events[0], events[-1])
+    assert tuple(event.run_id for event in resource_events) == ("test_run",) * 2
+    assert resource_events[0].payload["attempt_number"] == 1
+    attempt_events: tuple[LifecycleEvent, ...] = tuple(events[1:-1])
+    assert tuple(event.event_type for event in attempt_events) == (
+        "operation_started",
+        "operation_failed",
+        "retry_scheduled",
+        "operation_started",
+        "operation_failed",
+        "retry_scheduled",
+        "operation_started",
+        "operation_completed",
+    )
+    assert (
+        attempt_events[0].payload["metadata"],
+        attempt_events[3].payload["metadata"],
+        attempt_events[6].payload["metadata"],
+    ) == (
+        {"attempt_number": 1},
+        {"attempt_number": 2},
+        {"attempt_number": 3},
+    )
+    retry_events: tuple[LifecycleEvent, LifecycleEvent] = (
+        attempt_events[2],
+        attempt_events[5],
+    )
+    assert tuple(
+        (
+            event.payload["failed_attempt_number"],
+            event.payload["next_attempt_number"],
+            event.payload["delay_ms"],
+            event.payload["error_type"],
+        )
+        for event in retry_events
+    ) == ((1, 2, 500, "TimeoutError"), (2, 3, 1000, "TimeoutError"))
+    assert retry_events[0].operation_id == attempt_events[1].operation_id
+    assert retry_events[1].operation_id == attempt_events[4].operation_id
+    assert {event.resource_attempt_id for event in events} == {
+        resource_events[0].resource_attempt_id
+    }
 
 
 @pytest.mark.parametrize(

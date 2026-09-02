@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -40,6 +40,8 @@ SCENARIO_PLAN: ScenarioExecutionPlan = build_scenario_cleanup_test_plan_with_pro
 
 
 class ScenarioSnapshotCaptureTestAdapter(BaseAdapter):
+    adapter_name: ClassVar[str] = "scenario-snapshot-test"
+
     def __init__(self, *, fail_on_relation: str | None = None) -> None:
         self.fail_on_relation: str | None = fail_on_relation
         self.queries: list[str] = []
@@ -51,7 +53,7 @@ class ScenarioSnapshotCaptureTestAdapter(BaseAdapter):
     def close(self, connection: object) -> None:
         del connection
 
-    def execute(self, connection: object, sql: str) -> object:
+    def _execute(self, connection: object, sql: str) -> object:
         del connection, sql
         return object()
 

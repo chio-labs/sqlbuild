@@ -134,6 +134,13 @@ class PythonIngressLoaderExecutorTestCase:
 
 
 @dataclass(frozen=True)
+class IngressSchedulerSkipLifecycleTestCase:
+    description: str
+    expected_resource_ids: tuple[str, ...]
+    expected_event_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ReadSidePythonTrackerTestCase:
     description: str
     selected_names: frozenset[str]
@@ -153,6 +160,27 @@ class PythonNodeRetryExecutorTestCase:
     expected_error_fragment: str | None
     expected_attempts: int
     expected_sleeps: tuple[float, ...]
+
+
+@dataclass(frozen=True)
+class MalformedPythonOperationTestCase:
+    description: str
+    operation_name: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class PythonPostCallLifecycleTestCase:
+    description: str
+    expected_event_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PythonCheckLifecycleTestCase:
+    description: str
+    passed: bool
+    severity: PythonCheckSeverity
+    expected_event_types: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -197,6 +225,16 @@ class PythonCheckExecutorTestCase:
     expected_error_fragment: str | None = None
     upstream_status: PythonNodeStatus = PythonNodeStatus.SUCCESS
     upstream_skip_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class BlockedPythonCheckLifecycleTestCase:
+    description: str
+    upstream_status: PythonNodeStatus
+    upstream_skip_mode: SkipMode | None
+    expected_terminal: str
+    expected_check_status: str
+    expected_summary: dict[str, int]
 
 
 @dataclass(frozen=True)

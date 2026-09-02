@@ -15,6 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.seed._test_types import (
     SeedE2ETestCase,
+    SeedJsonOutputTestCase,
     VirtualSeedE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
@@ -130,6 +131,129 @@ def test_given_empty_typed_seed_fields_when_loading_then_persists_nulls(
         sql=f"SELECT mapping_id, mapping_name FROM main.{test_case.expected_seed_name} ORDER BY mapping_id",
     )
     assert tuple(tuple(row) for row in rows) == test_case.expected_data
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SeedJsonOutputTestCase(
+            description="successful standalone seeds retain unique assets",
+            expected_exit_code=0,
+            expected_status="success",
+            expected_summary={"success_count": 2, "failure_count": 0, "total_count": 2},
+            expected_assets=(("first_seed", "success"), ("second_seed", "success")),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_standalone_seeds_when_writing_json_file_then_assets_are_complete_and_unique(
+    test_case: SeedJsonOutputTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="seed_json_success",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "seed_json_success"\n'
+                'adapter = "duckdb"\n'
+                'default_target = "dev"\n\n'
+                "[settings]\n"
+                "concurrency = 2\n\n"
+                "[targets.dev]\n"
+                'schema = "main"\n'
+                "[targets.dev.connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "seeds/schema.yml": (
+                "seeds:\n"
+                "  - name: first_seed\n"
+                "    columns:\n"
+                "      - name: id\n"
+                "        type: INTEGER\n"
+                "  - name: second_seed\n"
+                "    columns:\n"
+                "      - name: id\n"
+                "        type: INTEGER\n"
+            ),
+            "seeds/first_seed.csv": "id\n1\n",
+            "seeds/second_seed.csv": "id\n2\n",
+        },
+    )
+    output_path: Path = project_dir / "seed-results.json"
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("seed", "--json-output", str(output_path)), project_dir=project_dir
+    )
+
+    payload: dict[str, object] = json.loads(output_path.read_text(encoding="utf-8"))
+    assets: list[dict[str, object]] = payload["assets"]  # type: ignore[assignment]
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert "first_seed" in result.stdout
+    assert "second_seed" in result.stdout
+    assert payload["status"] == test_case.expected_status
+    assert payload["summary"] == test_case.expected_summary
+    assert tuple(sorted((asset["name"], asset["status"]) for asset in assets)) == (
+        test_case.expected_assets
+    )
+    assert len(assets) == len({asset["name"] for asset in assets}) == 2
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SeedJsonOutputTestCase(
+            description="failed standalone seed retains honest result",
+            expected_exit_code=1,
+            expected_status="failed",
+            expected_summary={"success_count": 0, "failure_count": 1, "total_count": 1},
+            expected_assets=(("invalid_seed", "failed"),),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_failing_standalone_seed_when_writing_json_file_then_failure_is_honest(
+    test_case: SeedJsonOutputTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="seed_json_failure",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "seed_json_failure"\n'
+                'adapter = "duckdb"\n'
+                'default_target = "dev"\n\n'
+                "[targets.dev]\n"
+                'schema = "main"\n'
+                "[targets.dev.connection]\n"
+                'database = "warehouse.duckdb"\n'
+            ),
+            "seeds/schema.yml": (
+                "seeds:\n"
+                "  - name: invalid_seed\n"
+                "    columns:\n"
+                "      - name: id\n"
+                "        type: INTEGER\n"
+            ),
+            "seeds/invalid_seed.csv": "id\nnot-an-integer\n",
+        },
+    )
+    output_path: Path = project_dir / "seed-results.json"
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("seed", "--json-output", str(output_path)), project_dir=project_dir
+    )
+
+    payload: dict[str, object] = json.loads(output_path.read_text(encoding="utf-8"))
+    assets: list[dict[str, object]] = payload["assets"]  # type: ignore[assignment]
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert "invalid_seed" in result.stdout
+    assert payload["status"] == test_case.expected_status
+    assert payload["summary"] == test_case.expected_summary
+    assert tuple((asset["name"], asset["status"]) for asset in assets) == (
+        test_case.expected_assets
+    )
 
 
 @pytest.mark.parametrize(

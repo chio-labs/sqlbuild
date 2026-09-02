@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
 import pytest
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -23,6 +25,8 @@ from tests.unit.src.sqlbuild.virtual.executor._helpers.helpers import (
 
 
 class FakeSeedAdapter(BaseAdapter):
+    adapter_name: ClassVar[str] = "seed-test"
+
     def __init__(self, *, supports_durable_clone: bool, target_exists: bool = False) -> None:
         self._supports_durable_clone = supports_durable_clone
         self._target_exists = target_exists
@@ -33,7 +37,7 @@ class FakeSeedAdapter(BaseAdapter):
         del config
         return object()
 
-    def execute(self, connection: object, sql: str) -> object:
+    def _execute(self, connection: object, sql: str) -> object:
         del connection
         self.executed_sql.append(sql)
         return object()

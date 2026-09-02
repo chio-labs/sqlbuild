@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
@@ -18,6 +18,8 @@ from sqlbuild.spec.contracts.models import SourceEntry
 
 
 class RelationTargetTestAdapter(BaseAdapter):
+    adapter_name: ClassVar[str] = "relation-target-test"
+
     def connect(self, config: dict[str, object]) -> object:
         del config
         return object()
@@ -25,7 +27,7 @@ class RelationTargetTestAdapter(BaseAdapter):
     def close(self, connection: object) -> None:
         del connection
 
-    def execute(self, connection: Any, sql: str) -> object:
+    def _execute(self, connection: Any, sql: str) -> object:
         del connection
         return sql
 

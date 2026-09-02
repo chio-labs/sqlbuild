@@ -4,6 +4,15 @@ from sqlbuild.compiler.planner.types import MaterializationType, PlanAction
 
 
 @dataclass(frozen=True)
+class HydrationLifecycleTestCase:
+    description: str
+    resource_kind: str
+    resource_name: str
+    expected_action: str | None
+    expected_event_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class PhysicalTargetTestCase:
     description: str
     model_name: str

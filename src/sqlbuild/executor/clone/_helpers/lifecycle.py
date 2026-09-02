@@ -20,6 +20,7 @@ from sqlbuild.executor.clone.models import (
     CloneItemResult,
 )
 from sqlbuild.executor.clone.types import CloneStatus
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def prepare_clone_destination(
@@ -31,11 +32,12 @@ def prepare_clone_destination(
 ) -> None:
     """Create destination schemas and apply namespace retention increases."""
 
-    _ = _ensure_destination_schemas(
-        destination_entries=destination_entries,
-        adapter=inputs.adapter,
-        destination_connection=inputs.destination_connection,
-    )
+    with OperationLifecycle(operation_kind="clone", operation_name="clone_namespace_preparation"):
+        _ = _ensure_destination_schemas(
+            destination_entries=destination_entries,
+            adapter=inputs.adapter,
+            destination_connection=inputs.destination_connection,
+        )
     _ = apply_clone_namespace_retention_phase(
         requests=inputs.destination_retention_requests,
         adapter=inputs.adapter,

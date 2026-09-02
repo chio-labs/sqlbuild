@@ -212,6 +212,7 @@ def test_given_required_unmocked_seed_when_executing_then_loads_project_seed_to_
     )
 
     results: tuple[SeedExecutionResult, ...] = execute_scenario_seed_entries(
+        scenario_name="project_seed_load",
         seed_entries=(seed_entry,),
         adapter=adapter,
         connection=connection,

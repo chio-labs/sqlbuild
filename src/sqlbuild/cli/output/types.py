@@ -25,3 +25,10 @@ class PlanRowKind(StrEnum):
     LEAF = "leaf"
     NESTED = "nested"
     OTHER = "other"
+
+
+class IntegrationOutputKind(StrEnum):
+    """Kind of integration-facing result enrichment."""
+
+    ASSET = "asset"
+    CHECK = "check"

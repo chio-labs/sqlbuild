@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import replace
+from io import StringIO
 from pathlib import Path
 
 import pytest
 
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.cli.progress.classes.native_progress_projector import NativeProgressProjector
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import (
@@ -29,6 +31,13 @@ from sqlbuild.executor.build.models import (
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.run.models import HookContext
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.observability import (
+    EventDispatcher,
+    LifecycleEvent,
+    dispatcher_scope,
+    invocation_scope,
+)
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.models import SourceEntry
 from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.executor.build._helpers._test_types import (
@@ -54,6 +63,8 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
             loader_factory=build_failing_discovered_source_loader,
             expected_load_status=ExecutionStatus.FAILED,
             expected_model_status=ExecutionStatus.SKIPPED,
+            source_meta={},
+            expected_resource_kind=ExecutionResourceKind.SOURCE,
             expected_execution_order=("raw_orders",),
         ),
         BuildSchedulerSourceLoadTestCase(
@@ -62,6 +73,8 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
             loader_factory=build_discovered_source_loader,
             expected_load_status=ExecutionStatus.SUCCESS,
             expected_model_status=ExecutionStatus.SUCCESS,
+            source_meta={"sqlbuild_loader_node": True},
+            expected_resource_kind=ExecutionResourceKind.LOADER,
             expected_execution_order=("raw_orders", "stg_orders"),
             expected_model_rows=((1, "loaded"),),
         ),
@@ -78,7 +91,13 @@ def test_given_managed_source_node_when_build_runs_then_records_loader_and_block
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: object = adapter.connect({"database": str(tmp_path / "scheduler.duckdb")})
     loader_function: DiscoveredLoaderFunction = test_case.loader_factory(loader_name=loader_name)
-    node_starts: list[str] = []
+    node_starts: list[tuple[str, ExecutionResourceKind]] = []
+    lifecycle_events: list[LifecycleEvent] = []
+    stream: StringIO = StringIO()
+    projector: NativeProgressProjector = NativeProgressProjector(stream=stream, use_color=False)
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=lifecycle_events.append, accepts_opaque=False)
+    dispatcher.subscribe_lifecycle(subscriber=projector.consume, accepts_opaque=False)
     plan: PlanOutput = PlanOutput(
         execution_order=(source_key, model_key),
         selected_keys=frozenset({source_key, model_key}),
@@ -101,6 +120,7 @@ def test_given_managed_source_node_when_build_runs_then_records_loader_and_block
                 name="raw_orders",
                 loader=loader_name,
                 write_strategy=SourceWriteStrategy.TABLE,
+                meta=test_case.source_meta,
             )
         },
         upstream_deps={model_key: (source_key,)},
@@ -108,35 +128,52 @@ def test_given_managed_source_node_when_build_runs_then_records_loader_and_block
     )
 
     try:
-        result: BuildExecutionResult = execute_build_plan(
-            plan=plan,
-            adapter=adapter,
-            connection_config={"database": str(tmp_path / "scheduler.duckdb")},
-            connections=(connection,),
-            scheduler_connection=connection,
-            runtime=BuildRuntimeParams(
-                promotion_mode=TablePromotionMode.IMMEDIATE,
-                run_id="run-1",
-                run_audits=False,
-                run_tests=False,
-            ),
-            callbacks=BuildCallbacks(
-                on_node_start=lambda name, *, resource_kind: node_starts.append(name),
-            ),
-            customizations=BuildCustomizations(
-                loader_functions=(loader_function,),
-            ),
-        )
-        loaded_rows: tuple[tuple[object, ...], ...] = fetch_rows_or_empty(
-            connection,
-            "SELECT id, status FROM stg_orders ORDER BY id",
-        )
+        with invocation_scope("build-source-kind"), dispatcher_scope(dispatcher):
+            result: BuildExecutionResult = execute_build_plan(
+                plan=plan,
+                adapter=adapter,
+                connection_config={"database": str(tmp_path / "scheduler.duckdb")},
+                connections=(connection,),
+                scheduler_connection=connection,
+                runtime=BuildRuntimeParams(
+                    promotion_mode=TablePromotionMode.IMMEDIATE,
+                    run_id="run-1",
+                    run_audits=False,
+                    run_tests=False,
+                ),
+                callbacks=BuildCallbacks(
+                    on_node_start=lambda name, *, resource_kind: node_starts.append(
+                        (name, resource_kind)
+                    ),
+                ),
+                customizations=BuildCustomizations(
+                    loader_functions=(loader_function,),
+                ),
+            )
+            loaded_rows: tuple[tuple[object, ...], ...] = fetch_rows_or_empty(
+                connection,
+                "SELECT id, status FROM stg_orders ORDER BY id",
+            )
     finally:
         adapter.close(connection)
 
     assert result.load_results[0].status == test_case.expected_load_status
     assert result.model_results[0].status == test_case.expected_model_status
-    assert tuple(node_starts) == test_case.expected_execution_order
+    assert tuple(name for name, _ in node_starts) == test_case.expected_execution_order
+    source_lifecycle_events: tuple[LifecycleEvent, ...] = tuple(
+        filter(
+            lambda event: (
+                event.resource_id == "source:raw_orders"
+                and event.event_type.startswith("resource_attempt_")
+            ),
+            lifecycle_events,
+        )
+    )
+    assert tuple(event.payload["resource_kind"] for event in source_lifecycle_events) == (
+        test_case.expected_resource_kind.value,
+        test_case.expected_resource_kind.value,
+    )
+    assert f"  {test_case.expected_resource_kind.value:<10}raw_orders START" in stream.getvalue()
     assert loaded_rows == test_case.expected_model_rows
 
 

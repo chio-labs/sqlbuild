@@ -12,9 +12,10 @@ from sqlbuild.cli.commands.models import (
     JanitorCompileContext,
     JanitorInvocation,
 )
+from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.pipeline.main.project import compile_project
-from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
@@ -32,16 +33,17 @@ def compile_janitor_project(*, invocation: JanitorInvocation) -> JanitorCompileC
         project_dir=invocation.effective_project_dir,
     )
     compile_start: float = time.perf_counter()
-    status: TransientStatusReporter = TransientStatusReporter(
+    status: PlanningProgressReporter = PlanningProgressReporter(
         stream=sys.stdout,
         use_color=invocation.use_color,
     )
-    status.start("Compiling project...")
-    project: CompiledProject = compile_project(
-        discovered_inputs=invocation.discovered_inputs,
-        adapter=adapter,
-    )
-    status.complete(message=f"Compiled project. ({time.perf_counter() - compile_start:.2f}s)")
+    with OperationLifecycle(operation_kind="project", operation_name="project_compile"):
+        status.on_progress("Compiling project...")
+        project: CompiledProject = compile_project(
+            discovered_inputs=invocation.discovered_inputs,
+            adapter=adapter,
+        )
+        status.on_progress(f"Compiled project. ({time.perf_counter() - compile_start:.2f}s)")
     connection_config: dict[str, object] = resolve_connection_config(
         raw_config=project.effective_connection,
         project_dir=invocation.effective_project_dir,

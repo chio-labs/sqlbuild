@@ -18,6 +18,7 @@ from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.main._execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import (
@@ -44,6 +45,7 @@ from sqlbuild.executor.run.models import (
 from sqlbuild.executor.run.types import ExecutionPhase, HookPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.provider.main.runtime import _empty_provider_container, invoke_with_providers
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -230,12 +232,19 @@ def _run_custom_materialization(
     )
     try:
         with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="custom"):
-            result: object = invoke_with_providers(
-                function=materialize_fn,
-                context=materialization_context,
-                providers=context.providers,
-            )
-            materialization_result: MaterializationResult = cast(MaterializationResult, result)
+            with OperationLifecycle(
+                operation_kind="python_node", operation_name="python_materialization"
+            ):
+                result: object = invoke_with_providers(
+                    function=materialize_fn,
+                    context=materialization_context,
+                    providers=context.providers,
+                )
+                if not isinstance(result, MaterializationResult):
+                    raise ExecutorInputError(
+                        "custom materialization must return MaterializationResult"
+                    )
+                materialization_result: MaterializationResult = result
     except Exception as exc:
         return CustomMaterializationPhaseOutcome(
             failure=build_failed_result(
@@ -434,6 +443,7 @@ def _build_run_audits(
                 source_map=source_map,
                 relation_overrides=overrides,
                 run_scope_phase=AuditRunScope.FINAL,
+                quality_scope="final",
             )
             results.append(result)
         return tuple(results)

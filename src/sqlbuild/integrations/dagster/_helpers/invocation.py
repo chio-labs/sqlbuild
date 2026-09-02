@@ -6,15 +6,16 @@ import json
 import tempfile
 from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import asdict
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any, TextIO
 
+from sqlbuild.cli.output.models import IntegrationAssetResult, IntegrationResultEnvelope
 from sqlbuild.integrations.dagster.constants import (
     ASSET_SELECTION_COMMANDS,
     CHECK_COMMAND,
     CHECK_METADATA_EXCLUDED_KEYS,
     CHECK_NAME_SEPARATOR_CHARACTER,
-    CLONE_ASSET_EVENT,
     CLONE_COMMAND,
     COMPLETED_EXECUTION_STATUSES,
     DEFAULT_SELECTABLE_NODE_KINDS,
@@ -208,7 +209,7 @@ def _check_is_selected(
 def _with_json_output_args(
     *, args: tuple[str, ...], context: Any, dag: Mapping[str, Any] | None
 ) -> tuple[tuple[str, ...], Path | None]:
-    if dag is None or context is None or not args or not JSON_OUTPUT_FLAGS.isdisjoint(args):
+    if dag is None or context is None or not args or _json_output_requested(args=args):
         return args, None
     if args[0] in ASSET_SELECTION_COMMANDS:
         path: Path = _create_execution_json_path()
@@ -218,6 +219,23 @@ def _with_json_output_args(
         path = _create_execution_json_path()
         return (*args, JSON_OUTPUT_FLAG, str(path)), path
     return args, None
+
+
+def _json_output_requested(*, args: tuple[str, ...]) -> bool:
+    return any(
+        argument in JSON_OUTPUT_FLAGS or argument.startswith(f"{JSON_OUTPUT_FLAG}=")
+        for argument in args
+    )
+
+
+def _caller_json_output_path(*, args: tuple[str, ...]) -> Path | None:
+    for index, argument in enumerate(args):
+        if argument == JSON_OUTPUT_FLAG and index + 1 < len(args):
+            return Path(args[index + 1])
+        prefix: str = f"{JSON_OUTPUT_FLAG}="
+        if argument.startswith(prefix) and argument != prefix:
+            return Path(argument.removeprefix(prefix))
+    return None
 
 
 def _create_execution_json_path() -> Path:
@@ -411,8 +429,10 @@ def _build_results_from_execution_payload(
     context: Any,
 ) -> tuple[Any, ...]:
     selected_paths: set[tuple[str, ...]] = _selected_asset_paths(context=context)
+    selected_check_keys: set[tuple[tuple[str, ...], str]] = _selected_asset_check_keys(
+        context=context
+    )
     is_clone: bool = str(payload.get("command")) == CLONE_COMMAND
-    is_live_asset_event: bool = str(payload.get("event")) == CLONE_ASSET_EVENT
     if is_clone:
         selected_paths = set()
     nodes_by_name: dict[tuple[str, str], Mapping[str, Any]] = {
@@ -429,27 +449,30 @@ def _build_results_from_execution_payload(
             continue
         if is_clone and execution_status != SUCCESS_EXECUTION_STATUS:
             continue
+        payload_kind: str = str(payload_asset.get("kind"))
+        if payload_asset.get("loader") is not None:
+            payload_kind = SOURCE_NODE_KIND
         node: Mapping[str, Any] | None = nodes_by_name.get(
-            (str(payload_asset.get("kind")), str(payload_asset.get("name")))
+            (payload_kind, str(payload_asset.get("name")))
         )
         if node is None:
             continue
         asset_results_by_id[str(node.get("id"))] = payload_asset
-        if str(node.get("kind")) == SOURCE_NODE_KIND:
-            asset_results_by_id.update(
-                _loader_results_for_source_payload(
-                    dag=dag,
-                    source_node=node,
-                    payload_asset=payload_asset,
-                )
+        if str(node.get("kind")) == SOURCE_NODE_KIND and payload_asset.get("loader") is not None:
+            loader_result: tuple[str, Mapping[str, Any]] | None = _loader_result_for_source_payload(
+                dag=dag,
+                source_node=node,
+                payload_asset=payload_asset,
+                loader_name=str(payload_asset["loader"]),
             )
+            if loader_result is not None:
+                loader_id, loader_payload = loader_result
+                asset_results_by_id[loader_id] = loader_payload
     results: list[Any] = []
     for node in _sort_nodes_topologically(dag=dag):
         node_id: str = str(node.get("id"))
         execution_asset: Mapping[str, Any] | None = asset_results_by_id.get(node_id)
-        if execution_asset is None and (
-            is_clone or is_live_asset_event or str(node.get("kind")) != SOURCE_NODE_KIND
-        ):
+        if execution_asset is None:
             continue
         asset_key: Any = dg.AssetKey([str(part) for part in node["asset_key"]])
         if selected_paths and tuple(asset_key.path) not in selected_paths:
@@ -485,6 +508,7 @@ def _build_results_from_execution_payload(
             check=check,
             selected_paths=selected_paths,
             selected_check_keys=selected_check_keys,
+            emitted_asset_paths=None,
             check_selection_is_explicit=check_selection_is_explicit,
             seen_check_outputs=seen_check_outputs,
         )
@@ -492,6 +516,153 @@ def _build_results_from_execution_payload(
     if _asset_check_only_context(context=context):
         return tuple(result for result in results if isinstance(result, dg.AssetCheckResult))
     return tuple(results)
+
+
+def _build_results_from_integration_result(
+    *,
+    dg: Any,
+    dag: Mapping[str, Any],
+    envelope: IntegrationResultEnvelope,
+    command: tuple[str, ...],
+    context: Any,
+    emitted_asset_paths: set[tuple[str, ...]],
+) -> tuple[Any, ...]:
+    """Translate one canonical integration result directly into Dagster events."""
+
+    selected_paths: set[tuple[str, ...]] = _selected_asset_paths(context=context)
+    selected_check_keys: set[tuple[tuple[str, ...], str]] = _selected_asset_check_keys(
+        context=context
+    )
+    nodes_by_id: dict[str, Mapping[str, Any]] = {
+        str(node.get("id")): node for node in dag.get("nodes", ())
+    }
+    nodes_by_name: dict[tuple[str, str], Mapping[str, Any]] = {
+        (str(node.get("kind")), str(node.get("name"))): node for node in dag.get("nodes", ())
+    }
+    results: list[Any] = []
+    asset: IntegrationAssetResult | None = envelope.asset
+    if asset is not None and asset.status in COMPLETED_EXECUTION_STATUSES:
+        node: Mapping[str, Any] | None = nodes_by_id.get(envelope.resource_id)
+        loader_result: tuple[str, Mapping[str, Any]] | None = None
+        same_envelope_node_ids: set[str] = set()
+        if (
+            node is not None
+            and str(node.get("kind")) == SOURCE_NODE_KIND
+            and asset.loader is not None
+        ):
+            loader_result = _loader_result_for_source_payload(
+                dag=dag,
+                source_node=node,
+                payload_asset=asdict(asset),
+                loader_name=asset.loader,
+            )
+            if loader_result is not None:
+                same_envelope_node_ids.add(loader_result[0])
+        if node is not None and not _live_node_dependencies_emitted(
+            node=node,
+            dag=dag,
+            emitted_asset_paths=emitted_asset_paths,
+            same_envelope_node_ids=same_envelope_node_ids,
+        ):
+            node = None
+        asset_nodes: dict[str, tuple[Mapping[str, Any], Mapping[str, Any] | None]] = {}
+        if node is not None:
+            asset_nodes[str(node.get("id"))] = (node, asdict(asset))
+            if loader_result is not None:
+                loader_id, loader_payload = loader_result
+                loader_node: Mapping[str, Any] | None = nodes_by_id.get(loader_id)
+                if loader_node is not None:
+                    asset_nodes[loader_id] = (loader_node, loader_payload)
+        for candidate in _sort_nodes_topologically(dag=dag):
+            projected: tuple[Mapping[str, Any], Mapping[str, Any] | None] | None = asset_nodes.get(
+                str(candidate.get("id"))
+            )
+            if projected is None:
+                continue
+            projected_node, projected_asset = projected
+            asset_key: Any = dg.AssetKey([str(part) for part in candidate["asset_key"]])
+            if selected_paths and tuple(asset_key.path) not in selected_paths:
+                continue
+            materialization_type: Any = (
+                dg.AssetMaterialization
+                if envelope.command == CLONE_COMMAND
+                else dg.MaterializeResult
+            )
+            results.append(
+                materialization_type(
+                    asset_key=asset_key,
+                    metadata={
+                        "command": " ".join(command),
+                        "sqlbuild_id": candidate.get("id"),
+                        "event_id": envelope.event_id,
+                        "resource_attempt_id": envelope.resource_attempt_id,
+                        "resource_id": envelope.resource_id,
+                        "event_sequence": envelope.event_sequence,
+                        "duration_ms": envelope.duration_ms,
+                        **(
+                            _metadata_from_mapping(projected_asset)
+                            if projected_asset is not None
+                            else {
+                                "kind": "source",
+                                "name": projected_node.get("name"),
+                                "status": "observed",
+                            }
+                        ),
+                    },
+                )
+            )
+    seen_check_outputs: set[tuple[tuple[str, ...], str]] = set()
+    for check in envelope.checks:
+        check_results, seen_check_outputs = _build_check_results_from_execution_check(
+            dg=dg,
+            dag=dag,
+            nodes_by_id=nodes_by_id,
+            nodes_by_name=nodes_by_name,
+            check={
+                **asdict(check),
+                "event_id": envelope.event_id,
+                "resource_attempt_id": envelope.resource_attempt_id,
+                "resource_id": envelope.resource_id,
+                "event_sequence": envelope.event_sequence,
+            },
+            selected_paths=selected_paths,
+            selected_check_keys=selected_check_keys,
+            emitted_asset_paths=(
+                None if _asset_check_only_context(context=context) else emitted_asset_paths
+            ),
+            check_selection_is_explicit=_check_selection_is_explicit(context=context),
+            seen_check_outputs=seen_check_outputs,
+        )
+        results.extend(check_results)
+    if _asset_check_only_context(context=context):
+        return tuple(result for result in results if isinstance(result, dg.AssetCheckResult))
+    return tuple(results)
+
+
+def _live_node_dependencies_emitted(
+    *,
+    node: Mapping[str, Any],
+    dag: Mapping[str, Any],
+    emitted_asset_paths: set[tuple[str, ...]],
+    same_envelope_node_ids: set[str],
+) -> bool:
+    node_id: str = str(node.get("id"))
+    nodes_by_id: dict[str, Mapping[str, Any]] = {
+        str(candidate.get("id")): candidate for candidate in dag.get("nodes", ())
+    }
+    for edge in dag.get("edges", ()):
+        if str(edge.get("to_id")) != node_id:
+            continue
+        upstream: Mapping[str, Any] | None = nodes_by_id.get(str(edge.get("from_id")))
+        if upstream is None or not _is_materializable_node_kind(str(upstream.get("kind"))):
+            continue
+        upstream_id: str = str(upstream.get("id"))
+        if upstream_id in same_envelope_node_ids:
+            continue
+        upstream_path: tuple[str, ...] = tuple(str(part) for part in upstream.get("asset_key", ()))
+        if upstream_path not in emitted_asset_paths:
+            return False
+    return True
 
 
 def _build_check_results_from_execution_check(
@@ -503,6 +674,7 @@ def _build_check_results_from_execution_check(
     check: Mapping[str, Any],
     selected_paths: set[tuple[str, ...]],
     selected_check_keys: set[tuple[tuple[str, ...], str]],
+    emitted_asset_paths: set[tuple[str, ...]] | None,
     check_selection_is_explicit: bool,
     seen_check_outputs: set[tuple[tuple[str, ...], str]],
 ) -> tuple[tuple[Any, ...], set[tuple[tuple[str, ...], str]]]:
@@ -523,6 +695,8 @@ def _build_check_results_from_execution_check(
             continue
         asset_key: Any = dg.AssetKey([str(part) for part in node["asset_key"]])
         output_key: tuple[tuple[str, ...], str] = (tuple(asset_key.path), check_name)
+        if emitted_asset_paths is not None and tuple(asset_key.path) not in emitted_asset_paths:
+            continue
         if check_selection_is_explicit and output_key not in selected_check_keys:
             continue
         if (
@@ -546,30 +720,36 @@ def _build_check_results_from_execution_check(
     return tuple(results), seen_check_outputs
 
 
-def _loader_results_for_source_payload(
+def _loader_result_for_source_payload(
     *,
     dag: Mapping[str, Any],
     source_node: Mapping[str, Any],
     payload_asset: Mapping[str, Any],
-) -> dict[str, Mapping[str, Any]]:
+    loader_name: str,
+) -> tuple[str, Mapping[str, Any]] | None:
     nodes_by_id: dict[str, Mapping[str, Any]] = {
         str(node.get("id")): node for node in dag.get("nodes", ())
     }
     source_id: str = str(source_node.get("id"))
-    results: dict[str, Mapping[str, Any]] = {}
     for edge in dag.get("edges", ()):  # type: ignore[assignment]
         if str(edge.get("to_id")) != source_id:
             continue
         upstream_node: Mapping[str, Any] | None = nodes_by_id.get(str(edge.get("from_id")))
-        if upstream_node is None or str(upstream_node.get("kind")) != LOADER_NODE_KIND:
+        if (
+            upstream_node is None
+            or str(upstream_node.get("kind")) != LOADER_NODE_KIND
+            or str(upstream_node.get("name")) != loader_name
+        ):
             continue
-        results[str(upstream_node.get("id"))] = {
-            **payload_asset,
+        return str(upstream_node.get("id")), {
             "kind": "loader",
             "name": upstream_node.get("name"),
+            "resource_id": upstream_node.get("id"),
             "source": source_node.get("name"),
+            "source_relation": payload_asset.get("target"),
+            "status": payload_asset.get("status"),
         }
-    return results
+    return None
 
 
 def _selected_asset_paths(*, context: Any) -> set[tuple[str, ...]]:
@@ -658,10 +838,10 @@ def _asset_check_only_context(*, context: Any) -> bool:
 def _dag_check_for_execution_check(
     *, dag: Mapping[str, Any], check: Mapping[str, Any]
 ) -> Mapping[str, Any] | None:
-    check_id: object = check.get("check_id")
     dag_check: Mapping[str, Any]
+    dag_check_id: object = check.get("dag_check_id") or check.get("check_id")
     for dag_check in dag.get("checks", ()):  # type: ignore[assignment]
-        if dag_check.get("id") == check_id:
+        if dag_check.get("id") == dag_check_id:
             return dag_check
     return None
 
@@ -700,7 +880,7 @@ def _normalize_check_name(value: str) -> str:
 
 def _metadata_from_mapping(value: Mapping[str, Any]) -> Mapping[str, Any]:
     return {
-        str(key): item
+        str(key): list(item) if isinstance(item, tuple) else item
         for key, item in value.items()
         if item is not None and key not in CHECK_METADATA_EXCLUDED_KEYS
     }

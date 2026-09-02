@@ -12,3 +12,8 @@ class DynamicStderrHandler(logging.StreamHandler):
     def emit(self, record: logging.LogRecord) -> None:
         self.stream = sys.stderr
         super().emit(record)
+
+    def handleError(self, record: logging.LogRecord) -> None:
+        """Isolate console failures from the command and avoid recursive fallback logging."""
+
+        _ = record

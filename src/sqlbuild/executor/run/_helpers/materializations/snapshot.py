@@ -43,6 +43,7 @@ from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
 )
+from sqlbuild.executor.run._helpers.execution.schema import inspect_runtime_relation_schema
 from sqlbuild.executor.run._helpers.materializations.full_refresh import (
     promote_full_refresh_rebuild,
     relation_exists,
@@ -61,6 +62,13 @@ from sqlbuild.executor.run.models import (
 )
 from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.runtime.observability.classes.operation_lifecycle import (
+    OperationAttributes,
+    OperationLifecycle,
+)
+from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
+    canonicalize_operation_adapter,
+)
 from sqlbuild.spec.contracts.models import SnapshotsConfig
 
 _DEFAULT_VALID_FROM_COLUMN: str = "valid_from"
@@ -155,19 +163,30 @@ def execute_snapshot_entry(  # noqa: PLR0915
 
     try:
         with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_delta"):
-            adapter.drop(
-                connection=connection,
-                destination=delta_qualified,
-                if_exists=True,
-                statement_recorder=statement_recorder,
-            )
-            adapter.create_table_as(
-                connection=connection,
-                destination=delta_qualified,
-                sql=entry.resolved_sql,
-                statement_recorder=statement_recorder,
-            )
-            delta_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
+            with OperationLifecycle(
+                operation_kind="warehouse",
+                operation_name="staging_creation",
+                attributes=OperationAttributes(
+                    phase="create",
+                    adapter=canonicalize_operation_adapter(adapter.adapter_name),
+                    target_kind="staging_relation",
+                ),
+            ) as lifecycle:
+                adapter.drop(
+                    connection=connection,
+                    destination=delta_qualified,
+                    if_exists=True,
+                    statement_recorder=statement_recorder,
+                )
+                adapter.create_table_as(
+                    connection=connection,
+                    destination=delta_qualified,
+                    sql=entry.resolved_sql,
+                    statement_recorder=statement_recorder,
+                )
+                lifecycle.completed(metadata={"changed_count": 1})
+            delta_columns: tuple[ColumnInfo, ...] = inspect_runtime_relation_schema(
+                adapter=adapter,
                 connection=connection,
                 database=target_database,
                 schema=target_schema,
@@ -440,7 +459,8 @@ def _apply_snapshot_phase(
                 statement_recorder=statement_recorder,
             )
         elif full_refresh_relations is None:
-            target_columns: tuple[ColumnInfo, ...] = context.adapter.get_columns(
+            target_columns: tuple[ColumnInfo, ...] = inspect_runtime_relation_schema(
+                adapter=context.adapter,
                 connection=context.connection,
                 database=entry.destination.database,
                 schema=entry.destination.schema,
@@ -986,12 +1006,23 @@ def _apply_snapshot_schema_change(
             "re-run with --allow-snapshot-schema-change to accept"
         )
 
-    adapter.add_columns(
-        connection=connection,
-        destination=target_qualified,
-        columns=added,
-        statement_recorder=statement_recorder,
-    )
+    with OperationLifecycle(
+        operation_kind="warehouse",
+        operation_name="schema_synchronization",
+        attributes=OperationAttributes(
+            phase="apply",
+            strategy="append_new_columns",
+            adapter=canonicalize_operation_adapter(adapter.adapter_name),
+            target_kind="relation",
+        ),
+    ) as lifecycle:
+        adapter.add_columns(
+            connection=connection,
+            destination=target_qualified,
+            columns=added,
+            statement_recorder=statement_recorder,
+        )
+        lifecycle.completed(metadata={"changed_count": len(added), "added_count": len(added)})
 
 
 def _snapshot_types_compatible(*, target_type: str, delta_type: str, dialect: str | None) -> bool:

@@ -12,6 +12,12 @@ from sqlbuild.executor.python_nodes.classes.read_side_python_execution_tracker i
 from sqlbuild.executor.python_nodes.models import PythonNodeRuntime
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.observability import (
+    EventDispatcher,
+    LifecycleEvent,
+    dispatcher_scope,
+    invocation_scope,
+)
 from tests.unit.src.sqlbuild.executor.python_nodes._helpers._test_types import (
     ReadSidePythonTrackerTestCase,
 )
@@ -96,6 +102,9 @@ def test_given_sql_dep_fails_when_finalizing_read_side_then_skips_unrun_python_n
 ) -> None:
     graph: PythonNodeGraph = build_read_side_sql_task_asset_graph()
     reset_read_side_calls()
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
     tracker: ReadSidePythonExecutionTracker = ReadSidePythonExecutionTracker(
         python_graph=graph,
         selected_python_names=test_case.selected_names,
@@ -116,7 +125,8 @@ def test_given_sql_dep_fails_when_finalizing_read_side_then_skips_unrun_python_n
         tracker.record_sql_result(
             ModelExecutionResult(model_name=sql_name, status=ExecutionStatus.FAILED)
         )
-    tracker.finalize_unrun_python_nodes()
+    with invocation_scope("inv-read-side-skips"), dispatcher_scope(dispatcher):
+        tracker.finalize_unrun_python_nodes()
 
     assert tuple(result.node_name for result in tracker.results) == test_case.expected_result_names
     assert tuple(result.status for result in tracker.results) == test_case.expected_statuses
@@ -124,3 +134,17 @@ def test_given_sql_dep_fails_when_finalizing_read_side_then_skips_unrun_python_n
         tuple(result.skip_reason for result in tracker.results) == test_case.expected_skip_reasons
     )
     assert read_side_calls() == test_case.expected_call_order
+    assert tuple(event.event_type for event in events) == (
+        "resource_attempt_started",
+        "resource_attempt_skipped",
+        "resource_attempt_started",
+        "resource_attempt_skipped",
+    )
+    assert tuple(event.resource_id for event in events) == (
+        "asset:export_stg_profile",
+        "asset:export_stg_profile",
+        "task:profile_stg_orders",
+        "task:profile_stg_orders",
+    )
+    assert len({event.resource_attempt_id for event in events}) == 2
+    assert all(event.run_id == "test_run" for event in events)

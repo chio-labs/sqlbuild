@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import ClassVar
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -21,6 +22,8 @@ from sqlbuild.spec.contracts.models import SourceEntry
 
 
 class BuildSchemaPreflightAdapter(BaseAdapter):
+    adapter_name: ClassVar[str] = "schema-preflight-test"
+
     def __init__(self) -> None:
         self.connections: list[object] = []
         self.closed_connections: list[object] = []
@@ -32,7 +35,7 @@ class BuildSchemaPreflightAdapter(BaseAdapter):
         self.connections.append(connection)
         return connection
 
-    def execute(self, connection: object, sql: str) -> object:
+    def _execute(self, connection: object, sql: str) -> object:
         del connection, sql
         return object()
 

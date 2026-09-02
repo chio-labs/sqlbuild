@@ -14,6 +14,8 @@ from sqlbuild.adapter.contract.models import (
 from sqlbuild.compiler.references.main._render_source_relation import render_source_relation
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
+from sqlbuild.runtime.observability.models import OperationAttributes
 from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 
@@ -26,6 +28,34 @@ def observe_configured_source_freshness(
     observed_at: datetime,
 ) -> SourceFreshnessObservation:
     """Observe one source freshness config and return a comparable data version."""
+
+    config: SourceFreshnessConfig | None = source.freshness
+    strategy: str = config.strategy.value if config is not None else "sql"
+    operation_name: str = (
+        "source_freshness_metadata_observation"
+        if config is not None and config.strategy == SourceFreshnessStrategy.ADAPTER
+        else "source_freshness_query_observation"
+    )
+    with OperationLifecycle(
+        operation_kind="freshness",
+        operation_name=operation_name,
+        attributes=OperationAttributes(phase="observe", strategy=strategy, target_kind="source"),
+    ):
+        return _observe_configured_source_freshness(
+            adapter=adapter,
+            connection=connection,
+            source=source,
+            observed_at=observed_at,
+        )
+
+
+def _observe_configured_source_freshness(
+    *,
+    adapter: StrictAdapter,
+    connection: Any,
+    source: SourceEntry,
+    observed_at: datetime,
+) -> SourceFreshnessObservation:
 
     config: SourceFreshnessConfig | None = source.freshness
     if config is None:
@@ -130,6 +160,27 @@ def observe_adapter_sources_freshness(
 
     if not sources:
         return {}
+    with OperationLifecycle(
+        operation_kind="freshness",
+        operation_name="source_freshness_metadata_observation",
+        metadata={"item_count": len(sources)},
+        attributes=OperationAttributes(phase="observe", strategy="adapter", target_kind="source"),
+    ):
+        return _observe_adapter_sources_freshness(
+            adapter=adapter,
+            connection=connection,
+            sources=sources,
+            observed_at=observed_at,
+        )
+
+
+def _observe_adapter_sources_freshness(
+    *,
+    adapter: StrictAdapter,
+    connection: Any,
+    sources: tuple[SourceEntry, ...],
+    observed_at: datetime,
+) -> dict[str, SourceFreshnessObservation]:
     if not adapter.supports_table_freshness_metadata():
         raise SourceFreshnessObservationError(
             f"adapter '{adapter.adapter_name}' does not support table freshness metadata"

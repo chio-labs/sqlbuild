@@ -9,6 +9,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.clone.models import CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def recreate_view_by_names(
@@ -25,12 +26,13 @@ def recreate_view_by_names(
     recorder: StatementRecorder = StatementRecorder()
     start: float = time.monotonic()
     try:
-        adapter.create_view_as(
-            connection=connection,
-            destination=destination_relation,
-            sql=view_sql,
-            statement_recorder=recorder,
-        )
+        with OperationLifecycle(operation_kind="clone", operation_name="clone_relation_transfer"):
+            adapter.create_view_as(
+                connection=connection,
+                destination=destination_relation,
+                sql=view_sql,
+                statement_recorder=recorder,
+            )
     except Exception as exc:
         return CloneItemResult(
             name=name,

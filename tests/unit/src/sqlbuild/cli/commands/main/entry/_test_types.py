@@ -10,6 +10,28 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 
 
 @dataclass(frozen=True)
+class NoExporterFastPathTestCase:
+    description: str
+    expected_history_events: int
+
+
+@dataclass(frozen=True)
+class CliCaptureOutcomeTestCase:
+    description: str
+    expected_exit_code: int
+    expected_complete: bool
+    expected_error_type: type[BaseException] | None = None
+
+
+@dataclass(frozen=True)
+class ProjectCreationRoutingTestCase:
+    description: str
+    argv: tuple[str, ...]
+    handler_name: str
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
 class ScopeArgumentMisuseCase:
     """One invalid scope argument combination."""
 
@@ -98,3 +120,19 @@ class MainErrorRenderingTestCase:
     error_factory: Callable[[Path], Exception]
     expected_stderr_fragment: str
     expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class ObservabilityCleanupCase:
+    description: str
+    expected_history_close_count: int
+    expected_original_error: str
+
+
+@dataclass(frozen=True)
+class MachineProgressRoutingCase:
+    description: str
+    json: bool
+    json_output: Path | None
+    expected_stdout_fragment: str
+    expected_stderr_fragment: str

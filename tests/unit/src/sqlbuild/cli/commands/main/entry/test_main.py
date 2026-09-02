@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 from unittest.mock import Mock
 
 import pytest
 from _pytest.capture import CaptureResult
 
+import sqlbuild.cli.commands.main.entrypoint._dispatch_with_history as history_dispatch_module
 from sqlbuild.cli.commands._helpers.entry.parsing import read_selector_files
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.main.entrypoint.entry import _main_with_dependencies, main
@@ -33,6 +36,10 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
+from sqlbuild.execution_history import EventFilter, EventPage
+from sqlbuild.observability import ExecutionIdentity, current_execution_identity
+from sqlbuild.runtime.observability.models import LifecycleEvent
+from sqlbuild.sqlite_history import SQLiteExecutionHistory
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     MainErrorRenderingTestCase,
     MainTestCase,
@@ -2744,3 +2751,290 @@ def test_given_expected_cli_error_and_color_support_when_running_main_then_it_co
 
     assert exit_code == test_case.expected_exit_code
     assert test_case.expected_stderr_fragment in rendered_stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="handler sees invocation-only identity",
+            argv=["--project-dir", "/tmp/demo", "compile"],
+            expected_exit_code=7,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_successful_handler_when_cli_dispatches_then_invocation_identity_is_scoped(
+    test_case: MainTestCase,
+) -> None:
+    observed: list[ExecutionIdentity | None] = []
+
+    def run_compile(_request: CompileCommandRequest) -> int:
+        observed.append(current_execution_identity())
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_compile=run_compile),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert observed[0] is not None
+    assert observed[0].run_id is None
+    assert observed[0].resource_id is None
+    assert current_execution_identity() is None
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="failed handler restores identity",
+            argv=["--project-dir", "/tmp/demo", "compile"],
+            expected_exit_code=1,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_failing_handler_when_cli_returns_error_then_invocation_identity_is_restored(
+    test_case: MainTestCase,
+) -> None:
+    observed: list[ExecutionIdentity | None] = []
+
+    def run_compile(_request: CompileCommandRequest) -> int:
+        observed.append(current_execution_identity())
+        raise ValueError("controlled failure")
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_compile=run_compile),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert observed[0] is not None
+    assert current_execution_identity() is None
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="root help restores identity", argv=["--help"], expected_exit_code=0
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_root_help_when_cli_returns_then_invocation_identity_is_restored(
+    test_case: MainTestCase,
+) -> None:
+    exit_code: int = _main_with_dependencies(argv=test_case.argv, handlers=build_handlers())
+
+    assert exit_code == test_case.expected_exit_code
+    assert current_execution_identity() is None
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="local history records invocation facts", argv=[], expected_exit_code=0
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_parsed_project_command_when_dispatching_then_invocation_facts_persist(
+    tmp_path: Path, test_case: MainTestCase
+) -> None:
+    argv: list[str] = ["--project-dir", str(tmp_path), "compile"]
+
+    exit_code: int = _main_with_dependencies(argv=argv, handlers=build_handlers())
+    history: SQLiteExecutionHistory = SQLiteExecutionHistory(project_dir=tmp_path)
+    page: EventPage = history.get_events(event_filter=EventFilter())
+    event_types: tuple[str, ...] = tuple(
+        cast(LifecycleEvent, record.event).event_type for record in page.records
+    )
+    history.close()
+
+    assert exit_code == test_case.expected_exit_code
+    assert event_types == ("invocation_started", "invocation_completed")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="history publication failure preserves handler result",
+            argv=[],
+            expected_exit_code=7,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_history_write_failure_when_dispatching_then_handler_output_and_result_are_unchanged(
+    tmp_path: Path,
+    test_case: MainTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="sqlbuild.cli.execution_history")
+    monkeypatch.setattr(
+        SQLiteExecutionHistory,
+        "append_and_project",
+        Mock(side_effect=OSError("controlled storage failure")),
+    )
+
+    def run_compile(_request: CompileCommandRequest) -> int:
+        print("unchanged command output")
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=["--project-dir", str(tmp_path), "compile"],
+        handlers=build_handlers(run_compile=run_compile),
+    )
+    captured: CaptureResult[str] = capsys.readouterr()
+
+    assert exit_code == test_case.expected_exit_code
+    assert captured.out == "unchanged command output\n"
+    diagnostic_text: str = (tmp_path / "target" / "sqlbuild.log").read_text(encoding="utf-8")
+    assert "local execution history persistence failed" in diagnostic_text
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="history constructor failure preserves handler result",
+            argv=[],
+            expected_exit_code=6,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_history_open_failure_when_dispatching_then_handler_output_and_result_are_unchanged(
+    tmp_path: Path,
+    test_case: MainTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="sqlbuild.cli.execution_history")
+    monkeypatch.setattr(
+        history_dispatch_module,
+        "SQLiteExecutionHistory",
+        Mock(side_effect=OSError("controlled open failure")),
+    )
+
+    def run_compile(_request: CompileCommandRequest) -> int:
+        print("output survives open failure")
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=["--project-dir", str(tmp_path), "compile"],
+        handlers=build_handlers(run_compile=run_compile),
+    )
+    captured: CaptureResult[str] = capsys.readouterr()
+
+    assert exit_code == test_case.expected_exit_code
+    assert captured.out == "output survives open failure\n"
+    diagnostic_text: str = (tmp_path / "target" / "sqlbuild.log").read_text(encoding="utf-8")
+    assert "local execution history unavailable" in diagnostic_text
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="nonzero return emits failed terminal", argv=[], expected_exit_code=5
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_nonzero_handler_result_when_dispatching_then_exactly_one_failed_terminal_persists(
+    tmp_path: Path, test_case: MainTestCase
+) -> None:
+    exit_code: int = _main_with_dependencies(
+        argv=["--project-dir", str(tmp_path), "compile"],
+        handlers=build_handlers(run_compile=lambda _request: test_case.expected_exit_code),
+    )
+    history: SQLiteExecutionHistory = SQLiteExecutionHistory(project_dir=tmp_path)
+    page: EventPage = history.get_events(event_filter=EventFilter())
+    events: tuple[LifecycleEvent, ...] = tuple(
+        cast(LifecycleEvent, record.event) for record in page.records
+    )
+    history.close()
+
+    assert exit_code == test_case.expected_exit_code
+    assert tuple(event.event_type for event in events) == (
+        "invocation_started",
+        "invocation_failed",
+    )
+    assert events[-1].payload["exit_code"] == test_case.expected_exit_code
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="handler exception emits failed terminal", argv=[], expected_exit_code=1
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_handler_exception_when_dispatching_then_failed_terminal_has_original_error_type(
+    tmp_path: Path, test_case: MainTestCase
+) -> None:
+    def run_compile(_request: CompileCommandRequest) -> int:
+        raise ValueError("controlled command exception")
+
+    exit_code: int = _main_with_dependencies(
+        argv=["--project-dir", str(tmp_path), "compile"],
+        handlers=build_handlers(run_compile=run_compile),
+    )
+    history: SQLiteExecutionHistory = SQLiteExecutionHistory(project_dir=tmp_path)
+    page: EventPage = history.get_events(event_filter=EventFilter())
+    events: tuple[LifecycleEvent, ...] = tuple(
+        cast(LifecycleEvent, record.event) for record in page.records
+    )
+    history.close()
+
+    assert exit_code == test_case.expected_exit_code
+    assert tuple(event.event_type for event in events) == (
+        "invocation_started",
+        "invocation_failed",
+    )
+    assert events[-1].payload["error_type"] == "ValueError"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="handler SystemExit emits failed terminal", argv=[], expected_exit_code=9
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_handler_system_exit_when_dispatching_then_failed_terminal_is_persisted_once(
+    tmp_path: Path, test_case: MainTestCase
+) -> None:
+    def run_compile(_request: CompileCommandRequest) -> int:
+        raise SystemExit(test_case.expected_exit_code)
+
+    exit_code: int = _main_with_dependencies(
+        argv=["--project-dir", str(tmp_path), "compile"],
+        handlers=build_handlers(run_compile=run_compile),
+    )
+    history: SQLiteExecutionHistory = SQLiteExecutionHistory(project_dir=tmp_path)
+    page: EventPage = history.get_events(event_filter=EventFilter())
+    events: tuple[LifecycleEvent, ...] = tuple(
+        cast(LifecycleEvent, record.event) for record in page.records
+    )
+    history.close()
+
+    assert exit_code == test_case.expected_exit_code
+    assert tuple(event.event_type for event in events) == (
+        "invocation_started",
+        "invocation_failed",
+    )
+    assert events[-1].payload["error_type"] == "SystemExit"

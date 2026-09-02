@@ -32,7 +32,7 @@ class ConcreteBaseAdapter(BaseAdapter):
     def connect(self, config: dict[str, object]) -> object:
         return object()
 
-    def execute(self, connection: object, sql: str) -> object:
+    def _execute(self, connection: object, sql: str) -> object:
         del connection, sql
         return object()
 

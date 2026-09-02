@@ -14,7 +14,7 @@ class NoConnectDuckDbAdapter(DuckDbAdapter):
         del config
         raise AssertionError("dag should not connect")
 
-    def execute(self, connection: Any, sql: str) -> Any:
+    def _execute(self, connection: Any, sql: str) -> Any:
         del connection, sql
         raise AssertionError("dag should not execute SQL")
 

@@ -349,7 +349,7 @@ def test_given_snapshot_insert_failure_when_transaction_rolls_back_then_history_
         with adapter.transaction(connection):
             statement: str
             for statement in statements:
-                adapter.execute(connection, statement)
+                adapter.execute(connection=connection, sql=statement)
 
     rows_after_failure: tuple[tuple[object, ...], ...] = tuple(
         tuple(row)

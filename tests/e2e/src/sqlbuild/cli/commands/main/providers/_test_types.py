@@ -2,6 +2,19 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class EventExporterE2ETestCase:
+    description: str
+    expected_first_event: str
+
+
+@dataclass(frozen=True)
+class NoExporterCommandE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
 class ProviderCommandE2ETestCase:
     description: str
     expected_exit_code: int

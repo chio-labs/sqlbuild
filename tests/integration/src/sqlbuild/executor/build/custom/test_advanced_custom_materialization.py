@@ -87,7 +87,6 @@ def test_given_partition_tracked_materialization_when_first_run_then_builds_all_
     tmp_path: Path,
 ) -> None:
     target_dir: Path = tmp_path / "target"
-    configure_diagnostics(target_dir=target_dir, debug=False)
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
     sql_stmt: str
@@ -114,12 +113,13 @@ def test_given_partition_tracked_materialization_when_first_run_then_builds_all_
         build_partition_tracking_fn,
     )
 
-    result: ModelExecutionResult = run_custom_entry(
-        adapter=adapter,
-        connection=connection,
-        entry=entry,
-        materialize_fn=build_partition_tracking_fn(),
-    )
+    with configure_diagnostics(target_dir=target_dir, debug=False):
+        result: ModelExecutionResult = run_custom_entry(
+            adapter=adapter,
+            connection=connection,
+            entry=entry,
+            materialize_fn=build_partition_tracking_fn(),
+        )
 
     assert result.status == ExecutionStatus.SUCCESS
     assert (

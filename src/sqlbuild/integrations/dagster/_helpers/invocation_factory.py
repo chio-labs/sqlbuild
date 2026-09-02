@@ -8,8 +8,9 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.cli.output.constants import EXECUTION_EVENT_PATH_ENV
+from sqlbuild.cli.output.constants import INTEGRATION_RESULT_PATH_ENV
 from sqlbuild.integrations.dagster._helpers.invocation import (
+    _caller_json_output_path,
     _with_event_output_args,
     _with_json_output_args,
     _with_selected_asset_args,
@@ -43,6 +44,9 @@ def start_sqlbuild_cli_invocation(
         context=context,
         dag=dag,
     )
+    execution_json_owned: bool = execution_json_path is not None
+    if execution_json_path is None:
+        execution_json_path = _caller_json_output_path(args=resolved_args)
     event_args: tuple[str, ...]
     event_args, event_jsonl_path = _with_event_output_args(
         args=resolved_args,
@@ -53,7 +57,7 @@ def start_sqlbuild_cli_invocation(
     process_environment: dict[str, str] = dict(os.environ)
     process_environment["PYTHONUNBUFFERED"] = "1"
     if event_jsonl_path is not None:
-        process_environment[EXECUTION_EVENT_PATH_ENV] = str(event_jsonl_path)
+        process_environment[INTEGRATION_RESULT_PATH_ENV] = str(event_jsonl_path)
     process: subprocess.Popen[str] = subprocess.Popen(
         command,
         cwd=project_dir,
@@ -62,7 +66,7 @@ def start_sqlbuild_cli_invocation(
         stderr=subprocess.PIPE,
         text=True,
     )
-    return SqlBuildCliInvocation(
+    invocation: SqlBuildCliInvocation = SqlBuildCliInvocation(
         process=process,
         command=command,
         project_dir=project_dir,
@@ -74,3 +78,5 @@ def start_sqlbuild_cli_invocation(
         execution_json_path=execution_json_path,
         event_jsonl_path=event_jsonl_path,
     )
+    invocation.execution_json_owned = execution_json_owned
+    return invocation

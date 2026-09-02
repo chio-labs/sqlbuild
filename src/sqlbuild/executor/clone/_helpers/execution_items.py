@@ -117,6 +117,31 @@ def execute_clone_relation_item(
     )
 
 
+def execute_clone_destination_item(
+    *,
+    destination_entry: CloneSourcePlanEntry | SeedPlanEntry | ModelPlanEntry | FunctionPlanEntry,
+    inputs: CloneExecutionInput,
+    origins_by_key: dict[CompiledObjectKey, CloneSourcePlanEntry | SeedPlanEntry | ModelPlanEntry],
+    relation_lookup: RelationLookup,
+    available_keys: set[CompiledObjectKey],
+) -> CloneItemResult:
+    """Execute one typed destination entry through its clone implementation."""
+
+    if isinstance(destination_entry, FunctionPlanEntry):
+        return execute_clone_function_item(
+            destination_entry=destination_entry,
+            inputs=inputs,
+            available_keys=available_keys,
+        )
+    return execute_clone_relation_item(
+        destination_entry=destination_entry,
+        origin_entry=origins_by_key[destination_entry.key],
+        inputs=inputs,
+        relation_lookup=relation_lookup,
+        available_keys=available_keys,
+    )
+
+
 def _with_destination_retention(
     *, result: CloneItemResult, inputs: CloneExecutionInput
 ) -> CloneItemResult:

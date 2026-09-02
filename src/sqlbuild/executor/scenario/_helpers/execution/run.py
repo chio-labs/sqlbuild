@@ -29,6 +29,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioStepResults,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def execute_scenario_run_steps(
@@ -40,6 +41,25 @@ def execute_scenario_run_steps(
     retain: bool,
 ) -> ScenarioRunResult:
     """Execute a planned scenario and apply cleanup policy."""
+
+    with OperationLifecycle(operation_kind="scenario", operation_name="scenario_execution"):
+        return _execute_scenario_run_steps(
+            scenario_plan=scenario_plan,
+            adapter=adapter,
+            connection=connection,
+            run_id=run_id,
+            retain=retain,
+        )
+
+
+def _execute_scenario_run_steps(
+    *,
+    scenario_plan: ScenarioExecutionPlan,
+    adapter: BaseAdapter,
+    connection: Any,
+    run_id: str,
+    retain: bool,
+) -> ScenarioRunResult:
 
     prepare_result: ScenarioCleanupExecutionResult = execute_scenario_cleanup(
         scenario_plan=scenario_plan,
@@ -79,9 +99,11 @@ def execute_scenario_run_steps(
         )
 
     seed_results: tuple[SeedExecutionResult, ...] = execute_scenario_seed_entries(
+        scenario_name=scenario_plan.name,
         seed_entries=scenario_plan.seed_entries,
         adapter=adapter,
         connection=connection,
+        run_id=run_id,
     )
     if _has_failed(seed_results):
         return _finish_scenario(

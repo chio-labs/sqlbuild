@@ -32,6 +32,13 @@ from sqlbuild.executor.scheduling.main._run_worker import run_worker_with_comple
 from sqlbuild.executor.scheduling.main._unlock_downstream import unlock_downstream_python_nodes
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
+from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
+    ResourceAttemptLifecycle,
+)
+from sqlbuild.runtime.observability.main.current_execution_identity import (
+    current_execution_identity,
+)
+from sqlbuild.runtime.observability.models import ExecutionIdentity
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -100,9 +107,64 @@ def execute_ready_dag_source(
     connection_config: dict[str, object],
     connection: Any,
     runtime: LoadRuntimeParams,
+    on_load_start: Callable[[SourceEntry], None] | None = None,
     on_progress: Callable[[str], None] | None = None,
 ) -> LoadExecutionResult:
     """Execute one ready DAG node or return a skipped result."""
+
+    identity: ExecutionIdentity | None = current_execution_identity()
+    source: SourceEntry = dispatch.source_by_name[source_name]
+    if identity is not None and identity.resource_attempt_id is not None:
+        if on_load_start is not None:
+            on_load_start(source)
+        return _execute_ready_dag_source(
+            source_name=source_name,
+            dispatch=dispatch,
+            adapter=adapter,
+            connection_config=connection_config,
+            connection=connection,
+            runtime=runtime,
+            on_progress=on_progress,
+        )
+    resource_kind: ExecutionResourceKind = load_resource_kind(source)
+    with ResourceAttemptLifecycle(
+        resource_id=f"source:{source_name}",
+        resource_kind=resource_kind.value,
+        resource_name=source_name,
+        run_id=runtime.run_id,
+    ) as lifecycle:
+        if on_load_start is not None:
+            on_load_start(source)
+        result: LoadExecutionResult = _execute_ready_dag_source(
+            source_name=source_name,
+            dispatch=dispatch,
+            adapter=adapter,
+            connection_config=connection_config,
+            connection=connection,
+            runtime=runtime,
+            on_progress=on_progress,
+        )
+        if result.status == ExecutionStatus.FAILED:
+            lifecycle.failed()
+        elif result.status == ExecutionStatus.SKIPPED:
+            lifecycle.skipped(
+                skip_code="dependency",
+                skip_mode=result.skip_mode.value if result.skip_mode is not None else None,
+            )
+        return result
+
+
+def _execute_ready_dag_source(
+    *,
+    source_name: str,
+    dispatch: LoadDispatchInputs,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    connection: Any,
+    runtime: LoadRuntimeParams,
+    on_progress: Callable[[str], None] | None = None,
+) -> LoadExecutionResult:
+    """Execute one ready DAG node within its caller-owned lifecycle boundary."""
 
     indexes: LoadExecutionIndexes = dispatch.indexes
     source: SourceEntry = dispatch.source_by_name[source_name]
@@ -153,6 +215,7 @@ def load_dag_worker(
     connection_pool: queue.Queue[Any],
     runtime: LoadRuntimeParams,
     completion_queue: queue.Queue[tuple[str, LoadExecutionResult]],
+    on_load_start: Callable[[SourceEntry], None] | None = None,
     on_load_progress: LoadProgressCallback | None = None,
 ) -> None:
     """Worker wrapper for concurrent DAG source-loader execution."""
@@ -167,6 +230,7 @@ def load_dag_worker(
             connection_config=connection_config,
             connection=connection,
             runtime=runtime,
+            on_load_start=on_load_start,
             on_progress=(
                 None
                 if on_load_progress is None

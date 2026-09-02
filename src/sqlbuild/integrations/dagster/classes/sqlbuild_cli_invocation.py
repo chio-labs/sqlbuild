@@ -11,22 +11,23 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import IO, Any
 
+from sqlbuild.cli.output.models import IntegrationAssetResult, IntegrationResultEnvelope
 from sqlbuild.integrations.dagster._helpers.imports import load_dagster
 from sqlbuild.integrations.dagster._helpers.invocation import (
     _build_results_for_selected_assets,
     _build_results_from_execution_payload,
+    _build_results_from_integration_result,
     _load_execution_payload,
     _load_execution_payload_from_path,
     _log_invocation,
     _start_stream_future,
 )
 from sqlbuild.integrations.dagster.constants import (
-    CHECK_EVENT,
-    CLONE_ASSET_EVENT,
     COMPLETED_EXECUTION_STATUSES,
     FAILED_EXECUTION_STATUS,
     VERBOSE_FLAGS,
 )
+from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 
 _MAX_DIAGNOSTIC_CHARS: int = 4_000
 
@@ -79,6 +80,7 @@ class SqlBuildCliInvocation:
         self.selector_file: Path | None = selector_file
         self.selector_file_path: str = str(selector_file) if selector_file is not None else ""
         self.execution_json_path: Path | None = execution_json_path
+        self.execution_json_owned: bool = True
         self.event_jsonl_path: Path | None = event_jsonl_path
         self.stdout: str = ""
         self.stderr: str = ""
@@ -123,7 +125,7 @@ class SqlBuildCliInvocation:
                 self.selector_file.unlink(missing_ok=True)
             finally:
                 self.selector_file = None
-        if self.execution_json_path is None:
+        if self.execution_json_path is None or not self.execution_json_owned:
             pass
         else:
             try:
@@ -279,6 +281,7 @@ class SqlBuildCliInvocation:
                             dag=dag,
                             event_stream=event_stream,
                             logged_failed_assets=logged_failed_assets,
+                            emitted_asset_keys=emitted_asset_keys,
                         ):
                             if isinstance(result, dg.AssetCheckResult):
                                 check_key: tuple[tuple[str, ...], str] = (
@@ -301,6 +304,8 @@ class SqlBuildCliInvocation:
                 self.stdout = stdout_future.result() if stdout_future is not None else ""
                 self.stderr = stderr_future.result() if stderr_future is not None else ""
             self.execution_payload = _load_execution_payload_from_path(self.execution_json_path)
+            if self.execution_payload is None:
+                self.execution_payload = _load_execution_payload(self.stdout)
             _log_invocation(context=self.context, invocation=self)
             if self.execution_payload is not None:
                 for result in _build_results_from_execution_payload(
@@ -338,6 +343,7 @@ class SqlBuildCliInvocation:
         dag: Mapping[str, Any],
         event_stream: IO[str],
         logged_failed_assets: set[tuple[str, str]],
+        emitted_asset_keys: set[tuple[str, ...]],
     ) -> Iterator[Any]:
         pending: str = ""
         while True:
@@ -352,6 +358,7 @@ class SqlBuildCliInvocation:
                         dag=dag,
                         line=line,
                         logged_failed_assets=logged_failed_assets,
+                        emitted_asset_keys=emitted_asset_keys,
                     )
                 continue
             if self.process.poll() is not None:
@@ -363,6 +370,7 @@ class SqlBuildCliInvocation:
                         dag=dag,
                         line=line,
                         logged_failed_assets=logged_failed_assets,
+                        emitted_asset_keys=emitted_asset_keys,
                     )
                 return
             time.sleep(0.01)
@@ -374,52 +382,49 @@ class SqlBuildCliInvocation:
         dag: Mapping[str, Any],
         line: str,
         logged_failed_assets: set[tuple[str, str]],
+        emitted_asset_keys: set[tuple[str, ...]],
     ) -> Iterator[Any]:
         if line:
-            event: Any
             try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
+                envelope: IntegrationResultEnvelope = IntegrationResultEnvelope.from_json(line)
+            except ObservabilityValidationError:
+                self._warn_invalid_integration_record()
                 return
-            if not isinstance(event, Mapping) or event.get("event") not in {
-                CLONE_ASSET_EVENT,
-                CHECK_EVENT,
-            }:
-                return
-            asset: object = event.get("asset")
-            check: object = event.get("check")
-            if not isinstance(asset, Mapping) and not isinstance(check, Mapping):
-                return
-            if isinstance(asset, Mapping):
+            if envelope.asset is not None:
                 _ = self._log_live_asset_failure(
-                    asset=asset,
+                    asset=envelope.asset,
+                    envelope=envelope,
                     logged_failed_assets=logged_failed_assets,
                 )
-            payload: Mapping[str, Any] = {
-                "version": event.get("version"),
-                "command": event.get("command"),
-                "event": event.get("event"),
-                "assets": (asset,) if isinstance(asset, Mapping) else (),
-                "checks": (check,) if isinstance(check, Mapping) else (),
-            }
-            yield from _build_results_from_execution_payload(
+            yield from _build_results_from_integration_result(
                 dg=dg,
                 dag=dag,
-                payload=payload,
+                envelope=envelope,
                 command=self.command,
                 context=self.context,
+                emitted_asset_paths=emitted_asset_keys,
             )
+
+    def _warn_invalid_integration_record(self) -> None:
+        message: str = "Ignored invalid SQLBuild integration result record"
+        logger: Any = getattr(self.context, "log", None) if self.context is not None else None
+        if logger is not None:
+            logger.warning(message)
+            return
+        sys.stderr.write(f"{message}\n")
+        sys.stderr.flush()
 
     def _log_live_asset_failure(
         self,
         *,
-        asset: Mapping[str, Any],
+        asset: IntegrationAssetResult,
+        envelope: IntegrationResultEnvelope,
         logged_failed_assets: set[tuple[str, str]],
     ) -> set[tuple[str, str]]:
-        if str(asset.get("status")) != FAILED_EXECUTION_STATUS:
+        if asset.status != FAILED_EXECUTION_STATUS:
             return logged_failed_assets
-        asset_kind: str = str(asset.get("kind"))
-        asset_name: str = str(asset.get("name"))
+        asset_kind: str = asset.kind
+        asset_name: str = asset.name
         asset_identity: tuple[str, str] = (asset_kind, asset_name)
         if asset_identity in logged_failed_assets:
             return logged_failed_assets
@@ -428,9 +433,9 @@ class SqlBuildCliInvocation:
         if logger is None:
             return logged_failed_assets
         asset_label: str = f"{asset_kind}:{asset_name}"
-        phase: str = str(asset.get("failed_phase") or "unknown")
-        code: str = str(asset.get("error_code") or "unknown")
-        message: str = str(asset.get("error_message") or "Unknown SQLBuild asset failure")
+        phase: str = str(asset.failed_phase or "unknown")
+        code: str = str(envelope.error_code or "unknown")
+        message: str = "SQLBuild resource attempt failed; see final execution diagnostics"
         metadata: dict[str, Any] = {
             "sqlbuild_asset": asset_label,
             "sqlbuild_asset_kind": asset_kind,
@@ -440,8 +445,12 @@ class SqlBuildCliInvocation:
             "sqlbuild_error_message": message,
             "sqlbuild_command": " ".join(self.command),
         }
-        for key in ("target", "staging_relation", "duration_ms", "error_help"):
-            value: object = asset.get(key)
+        values: Mapping[str, object] = {
+            "target": asset.target,
+            "staging_relation": asset.staging_relation,
+            "duration_ms": envelope.duration_ms,
+        }
+        for key, value in values.items():
             if value is not None:
                 metadata[f"sqlbuild_{key}"] = value
         logger.error(

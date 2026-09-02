@@ -14,6 +14,7 @@ from sqlbuild.executor.clone.models import (
     CloneSourceEntries,
 )
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
+from sqlbuild.observability import EventDispatcher, LifecycleEvent, dispatcher_scope
 from tests.unit.src.sqlbuild.executor.clone._helpers.helpers import (
     FakeCloneAdapter,
     build_clone_function_entry,
@@ -21,6 +22,7 @@ from tests.unit.src.sqlbuild.executor.clone._helpers.helpers import (
 )
 from tests.unit.src.sqlbuild.executor.clone.main._test_types import (
     CloneFunctionDependencyTestCase,
+    CloneRunIdentityTestCase,
     CloneSchemaPreparationTestCase,
     CloneStreamTestCase,
     CloneViewDependencyTestCase,
@@ -92,6 +94,59 @@ def test_given_clone_entries_when_executing_then_streams_each_item(
     assert len(result.item_results) == len(test_case.model_names)
     assert adapter.used_connections
     assert all(connection is destination_connection for connection in adapter.used_connections)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CloneRunIdentityTestCase(
+            description="aggregate resource and transfer share clone run",
+            expected_run_id="clone-run",
+            expected_operation_names=(
+                "clone_execution",
+                "clone_relation_inspection",
+                "clone_relation_transfer",
+            ),
+            expected_resource_terminal="resource_attempt_completed",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_direct_clone_when_executing_then_all_nested_events_use_clone_run(
+    test_case: CloneRunIdentityTestCase,
+) -> None:
+    adapter: FakeCloneAdapter = FakeCloneAdapter(supports_zero_copy=True, origin_names=("orders",))
+    origin_entry: ModelPlanEntry = build_clone_model_entry(schema="prod", name="orders")
+    destination_entry: ModelPlanEntry = build_clone_model_entry(schema="dev", name="orders")
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    with dispatcher_scope(dispatcher):
+        execute_clone(
+            inputs=CloneExecutionInput(
+                source_entries=CloneSourceEntries(),
+                origin_model_entries=(origin_entry,),
+                destination_model_entries=(destination_entry,),
+                origin_seed_entries=(),
+                destination_seed_entries=(),
+                destination_function_entries=(),
+                execution_order=(destination_entry.key,),
+                adapter=adapter,
+                destination_connection=object(),
+                hard_copy=False,
+                run_id=test_case.expected_run_id,
+                query_change_tracking=False,
+            )
+        )
+
+    assert events
+    assert tuple(event.run_id for event in events) == (test_case.expected_run_id,) * len(events)
+    operation_names: tuple[object, ...] = tuple(
+        event.payload.get("operation_name") for event in events
+    )
+    assert all(name in operation_names for name in test_case.expected_operation_names)
+    assert test_case.expected_resource_terminal in tuple(event.event_type for event in events)
 
 
 @pytest.mark.parametrize(

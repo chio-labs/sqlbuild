@@ -8,13 +8,13 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.planner.types import RetentionPlanPhase
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.build._helpers.output import aggregate_build_result
 from sqlbuild.executor.build._helpers.retention import (
     apply_retention_phase,
     apply_table_type_conversions,
     reconcile_retention_after_build,
 )
 from sqlbuild.executor.build.classes.build_scheduler import BuildScheduler
+from sqlbuild.executor.build.main.aggregate_result import aggregate_build_result
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
     BuildCustomizations,

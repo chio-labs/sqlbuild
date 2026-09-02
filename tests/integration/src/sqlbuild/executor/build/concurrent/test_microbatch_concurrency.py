@@ -33,7 +33,7 @@ class _TrackingDuckDbAdapter(DuckDbAdapter):
         self.unattributed_delta_staging = 0
         self._tracking_lock = threading.Lock()
 
-    def execute(self, *, connection: Any, sql: str) -> Any:
+    def _execute(self, *, connection: Any, sql: str) -> Any:
         tracked: bool = (
             self.track_delta_staging and "CREATE OR REPLACE TABLE" in sql and "__delta_" in sql
         )
@@ -55,7 +55,7 @@ class _TrackingDuckDbAdapter(DuckDbAdapter):
                 )
             time.sleep(0.05)
         try:
-            return super().execute(connection=connection, sql=sql)
+            return super()._execute(connection=connection, sql=sql)
         finally:
             if tracked:
                 with self._tracking_lock:

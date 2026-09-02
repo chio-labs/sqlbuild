@@ -10,6 +10,7 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
     discover_audit_files,
     discover_constant_files,
     discover_enum_files,
+    discover_event_exporter_functions,
     discover_hook_functions,
     discover_macro_files,
     discover_materialization_files,
@@ -31,16 +32,27 @@ from sqlbuild.compiler.discovery._helpers.integrations.loaders import (
 )
 from sqlbuild.compiler.discovery._helpers.yml.project import load_local_config, load_project_config
 from sqlbuild.compiler.discovery.models import (
+    DiscoveredAdapterFile,
     DiscoveredAssetFunction,
+    DiscoveredAuditFile,
     DiscoveredCheckFunction,
     DiscoveredConstantFile,
     DiscoveredEnumFile,
+    DiscoveredEventExporter,
+    DiscoveredHookFunction,
     DiscoveredLoaderFunction,
     DiscoveredMacroFile,
+    DiscoveredMaterializationFile,
+    DiscoveredModelSchemaFile,
     DiscoveredProjectInputs,
     DiscoveredProvider,
+    DiscoveredPythonFunctionFile,
     DiscoveredPythonNodeFunctions,
+    DiscoveredSchemaFile,
+    DiscoveredSeedFile,
     DiscoveredSourceFile,
+    DiscoveredSqlFunctionFile,
+    DiscoveredSqlHookFile,
     DiscoveredSqlModelFile,
     DiscoveredSqlScenarioFile,
     DiscoveredSqlTestFile,
@@ -48,6 +60,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveryFileFault,
     TolerantScopeDiscovery,
 )
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 
@@ -61,12 +74,100 @@ def build_discovered_project_inputs(
 ) -> DiscoveredProjectInputs:
     """Discover all project files and functions into one inputs bundle."""
 
-    source_files: tuple[DiscoveredSourceFile, ...] = discover_source_files(project_dir=project_dir)
-    providers: tuple[DiscoveredProvider, ...] = discover_provider_classes(project_dir=project_dir)
-    python_nodes: DiscoveredPythonNodeFunctions = discover_python_node_functions(
-        project_dir=project_dir,
-        providers=providers,
-    )
+    with OperationLifecycle(
+        operation_kind="project", operation_name="discovery_declaration_parse"
+    ) as declaration_lifecycle:
+        source_files: tuple[DiscoveredSourceFile, ...] = discover_source_files(
+            project_dir=project_dir
+        )
+        model_files: tuple[DiscoveredSqlModelFile, ...] = discover_model_files(
+            project_dir=project_dir,
+            extract_implicit_alias_columns=sql_analysis_enabled,
+            extract_output_column_locations=extract_output_column_locations,
+        )
+        enum_files: tuple[DiscoveredEnumFile, ...] = discover_enum_files(project_dir=project_dir)
+        constant_files: tuple[DiscoveredConstantFile, ...] = discover_constant_files(
+            project_dir=project_dir
+        )
+        model_schema_files: tuple[DiscoveredModelSchemaFile, ...] = discover_model_schema_files(
+            project_dir=project_dir
+        )
+        sql_function_files: tuple[DiscoveredSqlFunctionFile, ...] = discover_sql_function_files(
+            project_dir=project_dir
+        )
+        sql_hook_files: tuple[DiscoveredSqlHookFile, ...] = discover_sql_hook_files(
+            project_dir=project_dir
+        )
+        python_function_files: tuple[DiscoveredPythonFunctionFile, ...] = (
+            discover_python_function_files(project_dir=project_dir)
+        )
+        schema_files: tuple[DiscoveredSchemaFile, ...] = discover_schema_files(
+            project_dir=project_dir
+        )
+        seed_files: tuple[DiscoveredSeedFile, ...] = discover_seed_files(project_dir=project_dir)
+        test_files: tuple[DiscoveredSqlTestFile, ...] = discover_test_files(project_dir=project_dir)
+        scenario_files: tuple[DiscoveredSqlScenarioFile, ...] = discover_scenario_files(
+            project_dir=project_dir
+        )
+        audit_files: tuple[DiscoveredAuditFile, ...] = discover_audit_files(project_dir=project_dir)
+        macro_files: tuple[DiscoveredMacroFile, ...] = discover_macro_files(project_dir=project_dir)
+        adapter_file: DiscoveredAdapterFile | None = discover_adapter_file(project_dir=project_dir)
+        declaration_lifecycle.completed(
+            metadata={
+                "item_count": sum(
+                    len(files)
+                    for files in (
+                        source_files,
+                        model_files,
+                        enum_files,
+                        constant_files,
+                        model_schema_files,
+                        sql_function_files,
+                        sql_hook_files,
+                        python_function_files,
+                        schema_files,
+                        seed_files,
+                        test_files,
+                        scenario_files,
+                        audit_files,
+                        macro_files,
+                    )
+                )
+                + int(adapter_file is not None)
+            }
+        )
+    with OperationLifecycle(
+        operation_kind="project", operation_name="discovery_python_import"
+    ) as python_lifecycle:
+        providers: tuple[DiscoveredProvider, ...] = discover_provider_classes(
+            project_dir=project_dir
+        )
+        python_nodes: DiscoveredPythonNodeFunctions = discover_python_node_functions(
+            project_dir=project_dir,
+            providers=providers,
+        )
+        materialization_files: tuple[DiscoveredMaterializationFile, ...] = (
+            discover_materialization_files(
+                project_dir=project_dir,
+                providers=providers,
+            )
+        )
+        hook_functions: tuple[DiscoveredHookFunction, ...] = discover_hook_functions(
+            project_dir=project_dir,
+            providers=providers,
+        )
+        event_exporters: tuple[DiscoveredEventExporter, ...] = discover_event_exporter_functions(
+            project_dir=project_dir, providers=providers
+        )
+        python_paths: set[Path] = {provider.relative_path for provider in providers}
+        python_paths.update(node.relative_path for node in python_nodes.loaders)
+        python_paths.update(node.relative_path for node in python_nodes.tasks)
+        python_paths.update(node.relative_path for node in python_nodes.assets)
+        python_paths.update(node.relative_path for node in python_nodes.checks)
+        python_paths.update(file.relative_path for file in materialization_files)
+        python_paths.update(function.relative_path for function in hook_functions)
+        python_paths.update(exporter.relative_path for exporter in event_exporters)
+        python_lifecycle.completed(metadata={"item_count": len(python_paths)})
     loader_functions: tuple[DiscoveredLoaderFunction, ...] = tuple(
         python_nodes.loaders
     ) + build_integration_loader_functions(source_files)
@@ -77,35 +178,29 @@ def build_discovered_project_inputs(
         project_config=project_config,
         local_config=local_config,
         project_dir=project_dir,
-        model_files=discover_model_files(
-            project_dir=project_dir,
-            extract_implicit_alias_columns=sql_analysis_enabled,
-            extract_output_column_locations=extract_output_column_locations,
-        ),
-        enum_files=discover_enum_files(project_dir=project_dir),
-        constant_files=discover_constant_files(project_dir=project_dir),
-        model_schema_files=discover_model_schema_files(project_dir=project_dir),
-        sql_function_files=discover_sql_function_files(project_dir=project_dir),
-        sql_hook_files=discover_sql_hook_files(project_dir=project_dir),
-        python_function_files=discover_python_function_files(project_dir=project_dir),
-        schema_files=discover_schema_files(project_dir=project_dir),
+        model_files=model_files,
+        enum_files=enum_files,
+        constant_files=constant_files,
+        model_schema_files=model_schema_files,
+        sql_function_files=sql_function_files,
+        sql_hook_files=sql_hook_files,
+        python_function_files=python_function_files,
+        schema_files=schema_files,
         source_files=source_files,
-        seed_files=discover_seed_files(project_dir=project_dir),
-        test_files=discover_test_files(project_dir=project_dir),
-        scenario_files=discover_scenario_files(project_dir=project_dir),
-        audit_files=discover_audit_files(project_dir=project_dir),
-        macro_files=discover_macro_files(project_dir=project_dir),
-        materialization_files=discover_materialization_files(
-            project_dir=project_dir,
-            providers=providers,
-        ),
+        seed_files=seed_files,
+        test_files=test_files,
+        scenario_files=scenario_files,
+        audit_files=audit_files,
+        macro_files=macro_files,
+        materialization_files=materialization_files,
         loader_functions=loader_functions,
         task_functions=task_functions,
         asset_functions=asset_functions,
         check_functions=check_functions,
-        hook_functions=discover_hook_functions(project_dir=project_dir, providers=providers),
+        hook_functions=hook_functions,
+        event_exporters=event_exporters,
         providers=providers,
-        adapter_file=discover_adapter_file(project_dir=project_dir),
+        adapter_file=adapter_file,
     )
 
 

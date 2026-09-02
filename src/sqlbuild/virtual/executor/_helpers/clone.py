@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from collections.abc import Callable
 from datetime import timedelta
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +37,10 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
+from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
+    ResourceAttemptLifecycle,
+)
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.virtual.executor._helpers.rewrite import (
     build_physical_destination,
@@ -131,31 +137,64 @@ def hydrate_relation(
     origin_location: CompiledRelationLocation,
     destination_location: CompiledRelationLocation,
 ) -> str:
+    with OperationLifecycle(operation_kind="clone", operation_name="clone_relation_transfer"):
+        adapter.ensure_schema(
+            connection=destination_connection,
+            database=destination_location.database,
+            schema=destination_location.schema or "",
+            statement_recorder=StatementRecorder(),
+        )
+        adapter.durable_clone(
+            connection=destination_connection,
+            origin=resolve_relation_location_qualified_name(
+                adapter=adapter, location=origin_location
+            ),
+            destination=resolve_relation_location_qualified_name(
+                adapter=adapter, location=destination_location
+            ),
+            origin_is_transient=_location_is_transient(
+                adapter=adapter, connection=destination_connection, location=origin_location
+            ),
+            statement_recorder=StatementRecorder(),
+        )
+    return "hydrated"
+
+
+def hydrate_and_register_relation(
+    *,
+    adapter: BaseAdapter,
+    destination_connection: Any,
+    origin_location: CompiledRelationLocation,
+    destination_location: CompiledRelationLocation,
+    resource_kind: str,
+    resource_name: str,
+    run_id: str,
+    register: Callable[[], None],
+) -> str:
+    """Hydrate fresh physical state and keep its attempt active through registration."""
+
     if adapter.relation_exists(
         connection=destination_connection,
         database=destination_location.database,
         schema=destination_location.schema,
         name=destination_location.name,
     ):
+        register()
         return "reused"
-    adapter.ensure_schema(
-        connection=destination_connection,
-        database=destination_location.database,
-        schema=destination_location.schema or "",
-        statement_recorder=StatementRecorder(),
-    )
-    adapter.durable_clone(
-        connection=destination_connection,
-        origin=resolve_relation_location_qualified_name(adapter=adapter, location=origin_location),
-        destination=resolve_relation_location_qualified_name(
-            adapter=adapter, location=destination_location
-        ),
-        origin_is_transient=_location_is_transient(
-            adapter=adapter, connection=destination_connection, location=origin_location
-        ),
-        statement_recorder=StatementRecorder(),
-    )
-    return "hydrated"
+    with ResourceAttemptLifecycle(
+        resource_id=f"{resource_kind}:{resource_name}",
+        resource_kind=resource_kind,
+        resource_name=resource_name,
+        run_id=run_id,
+    ):
+        action: str = hydrate_relation(
+            adapter=adapter,
+            destination_connection=destination_connection,
+            origin_location=origin_location,
+            destination_location=destination_location,
+        )
+        register()
+        return action
 
 
 def _location_is_transient(
@@ -432,14 +471,18 @@ def build_clone_origin_lookup(
         )
         for seed_name in context.seed_names
     }
-    lookup: RelationLookup = build_relation_lookup(
-        adapter=adapter,
-        connection=destination_connection,
-        locations=tuple(
-            (location.database, location.schema, location.name)
-            for location in (*model_locations.values(), *seed_locations.values())
-        ),
-    )
+    with OperationLifecycle(
+        operation_kind="clone", operation_name="clone_relation_inspection"
+    ) as inspection:
+        lookup: RelationLookup = build_relation_lookup(
+            adapter=adapter,
+            connection=destination_connection,
+            locations=tuple(
+                (location.database, location.schema, location.name)
+                for location in (*model_locations.values(), *seed_locations.values())
+            ),
+        )
+        inspection.completed(metadata={"item_count": len(model_locations) + len(seed_locations)})
     return CloneOriginLookup(
         model_locations=model_locations,
         seed_locations=seed_locations,
@@ -458,6 +501,7 @@ def hydrate_clone_model_relations(
     versions: CloneVersions,
     origin_lookup: CloneOriginLookup,
     skip_locked: bool,
+    run_id: str,
 ) -> tuple[VirtualCloneItemResult, ...]:
     """Hydrate selected model relations from origin warehouse artifacts."""
 
@@ -514,19 +558,23 @@ def hydrate_clone_model_relations(
                 help="Re-run with --skip-locked to hydrate other model versions.",
             )
         try:
-            action: str = hydrate_relation(
+            action: str = hydrate_and_register_relation(
                 adapter=adapter,
                 destination_connection=destination_connection,
                 origin_location=origin_location,
                 destination_location=destination_location,
-            )
-            register_hydrated_relation(
-                backend=backend,
-                config_schema=config_schema,
-                config_connection=config_connection,
-                model_version=versions.model_versions[model_name],
-                model=destination_model,
-                destination=destination_location,
+                resource_kind="model",
+                resource_name=model_name,
+                run_id=run_id,
+                register=partial(
+                    register_hydrated_relation,
+                    backend=backend,
+                    config_schema=config_schema,
+                    config_connection=config_connection,
+                    model_version=versions.model_versions[model_name],
+                    model=destination_model,
+                    destination=destination_location,
+                ),
             )
             results.append(
                 VirtualCloneItemResult(PhysicalArtifactType.MODEL, model_name, version_hash, action)
@@ -551,6 +599,7 @@ def hydrate_clone_seed_relations(
     context: CloneProjectContext,
     versions: CloneVersions,
     origin_lookup: CloneOriginLookup,
+    run_id: str,
 ) -> tuple[VirtualCloneItemResult, ...]:
     """Hydrate selected seed relations from origin warehouse artifacts."""
 
@@ -587,18 +636,22 @@ def hydrate_clone_seed_relations(
                 )
             )
             continue
-        action: str = hydrate_relation(
+        action: str = hydrate_and_register_relation(
             adapter=adapter,
             destination_connection=destination_connection,
             origin_location=origin_location,
             destination_location=destination_location,
-        )
-        register_hydrated_seed_relation(
-            backend=backend,
-            config_schema=config_schema,
-            config_connection=config_connection,
-            seed_version=seed_version,
-            destination=destination_location,
+            resource_kind="seed",
+            resource_name=seed_name,
+            run_id=run_id,
+            register=partial(
+                register_hydrated_seed_relation,
+                backend=backend,
+                config_schema=config_schema,
+                config_connection=config_connection,
+                seed_version=seed_version,
+                destination=destination_location,
+            ),
         )
         results.append(
             VirtualCloneItemResult(

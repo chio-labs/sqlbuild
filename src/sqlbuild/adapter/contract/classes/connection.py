@@ -5,22 +5,33 @@ from __future__ import annotations
 import contextlib
 from abc import ABC, abstractmethod
 from collections.abc import Generator
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild.adapter.contract.models import QueryResult
+from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 
 
 class ConnectionMixin(ABC):
     """Manages adapter connection lifecycle and transaction control."""
+
+    adapter_name: ClassVar[str]
 
     @abstractmethod
     def connect(self, config: dict[str, Any]) -> Any:
         """Open and return a connection using the provided configuration."""
         ...
 
-    @abstractmethod
     def execute(self, *, connection: Any, sql: str) -> Any:
-        """Execute a SQL statement and return the result."""
+        """Execute SQL through the framework-owned statement lifecycle."""
+
+        with StatementLifecycle(adapter=self.adapter_name, sql=sql, intent="execute") as lifecycle:
+            result: Any = self._execute(connection=connection, sql=sql)
+            lifecycle.completed(affected_rows=self.affected_row_count(cursor=result))
+            return result
+
+    @abstractmethod
+    def _execute(self, *, connection: Any, sql: str) -> Any:
+        """Execute one statement using the backend driver."""
         ...
 
     @abstractmethod

@@ -58,6 +58,7 @@ from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
 )
+from sqlbuild.executor.run._helpers.execution.schema import inspect_runtime_relation_schema
 from sqlbuild.executor.run._helpers.materializations.full_refresh import (
     promote_full_refresh_rebuild,
     relation_exists,
@@ -127,6 +128,13 @@ from sqlbuild.microbatches.types import (
     MicrobatchRunType,
     ReplayRequirementState,
     UnaccountedPartitionPolicy,
+)
+from sqlbuild.runtime.observability.classes.operation_lifecycle import (
+    OperationAttributes,
+    OperationLifecycle,
+)
+from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
+    canonicalize_operation_adapter,
 )
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction, TableType
 
@@ -2257,18 +2265,28 @@ def _stage_microbatch_delta(
             sqlbuild_action_name="create_delta",
             sqlbuild_window=window_text,
         ):
-            context.adapter.drop(
-                connection=context.connection,
-                destination=targets.delta_qualified,
-                if_exists=True,
-                statement_recorder=state.statement_recorder,
-            )
-            context.adapter.create_table_as(
-                connection=context.connection,
-                destination=targets.delta_qualified,
-                sql=batch_sql,
-                statement_recorder=state.statement_recorder,
-            )
+            with OperationLifecycle(
+                operation_kind="warehouse",
+                operation_name="staging_creation",
+                attributes=OperationAttributes(
+                    phase="create",
+                    adapter=canonicalize_operation_adapter(context.adapter.adapter_name),
+                    target_kind="staging_relation",
+                ),
+            ) as lifecycle:
+                context.adapter.drop(
+                    connection=context.connection,
+                    destination=targets.delta_qualified,
+                    if_exists=True,
+                    statement_recorder=state.statement_recorder,
+                )
+                context.adapter.create_table_as(
+                    connection=context.connection,
+                    destination=targets.delta_qualified,
+                    sql=batch_sql,
+                    statement_recorder=state.statement_recorder,
+                )
+                lifecycle.completed(metadata={"changed_count": 1})
     except Exception as exc:
         return build_failed_result(
             entry=context.entry,
@@ -2299,13 +2317,15 @@ def _apply_microbatch_schema_change(
             sqlbuild_action_name="inspect",
             sqlbuild_window=window_text,
         ):
-            delta_columns: tuple[ColumnInfo, ...] = context.adapter.get_columns(
+            delta_columns: tuple[ColumnInfo, ...] = inspect_runtime_relation_schema(
+                adapter=context.adapter,
                 connection=context.connection,
                 database=targets.target_database,
                 schema=targets.target_schema,
                 name=targets.delta_table,
             )
-            target_columns: tuple[ColumnInfo, ...] = context.adapter.get_columns(
+            target_columns: tuple[ColumnInfo, ...] = inspect_runtime_relation_schema(
+                adapter=context.adapter,
                 connection=context.connection,
                 database=targets.target_database,
                 schema=targets.target_schema,
@@ -2432,7 +2452,8 @@ def _apply_microbatch_dml(
             sqlbuild_window=window_text,
         ):
             target_columns: tuple[ColumnInfo, ...] = (
-                context.adapter.get_columns(
+                inspect_runtime_relation_schema(
+                    adapter=context.adapter,
                     connection=context.connection,
                     database=targets.target_database,
                     schema=targets.target_schema,
@@ -2441,7 +2462,8 @@ def _apply_microbatch_dml(
                 if not is_full_refresh or completed_batches > 0
                 else ()
             )
-            delta_columns: tuple[ColumnInfo, ...] = context.adapter.get_columns(
+            delta_columns: tuple[ColumnInfo, ...] = inspect_runtime_relation_schema(
+                adapter=context.adapter,
                 connection=context.connection,
                 database=targets.target_database,
                 schema=targets.target_schema,

@@ -58,7 +58,11 @@ def execute_virtual_clone(*, request: CloneCommandRequest, invocation: CloneInvo
             ),
         ),
     )
-    progress.complete(f"Cloned virtual environment. ({time.monotonic() - clone_start:.2f}s)")
+    elapsed: float = time.monotonic() - clone_start
+    if is_virtual_clone_success(result):
+        progress.complete(f"Cloned virtual environment. ({elapsed:.2f}s)")
+    else:
+        progress.error(f"Clone finished with errors. ({elapsed:.2f}s)")
     progress.finish(blank_line_after=True)
     render_virtual_clone_output(
         result=result,

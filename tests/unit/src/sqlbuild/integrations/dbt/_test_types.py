@@ -152,6 +152,13 @@ class DbtSilentStatusRefreshTestCase:
 
 
 @dataclass(frozen=True)
+class DbtRuntimeCleanupTestCase:
+    description: str
+    expected_error: str
+    expected_actions: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DbtDebugPipelineTestCase:
     description: str
     args: tuple[str, ...]

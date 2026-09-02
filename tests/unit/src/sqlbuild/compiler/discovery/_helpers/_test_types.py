@@ -6,6 +6,26 @@ from sqlbuild.sql_values.types import CollectionRendering
 
 
 @dataclass(frozen=True)
+class EventExporterDiscoveryTestCase:
+    description: str
+    expected_name: str
+
+
+@dataclass(frozen=True)
+class EventExporterSignatureErrorTestCase:
+    description: str
+    body: str
+    expected_error: str
+
+
+@dataclass(frozen=True)
+class EventExporterTypedSignatureTestCase:
+    description: str
+    declaration: str
+    expected_error: str
+
+
+@dataclass(frozen=True)
 class FutureCursorConfigTestCase:
     description: str
     future_toml: str

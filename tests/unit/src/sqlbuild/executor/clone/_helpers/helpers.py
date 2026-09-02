@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
@@ -20,6 +20,8 @@ from sqlbuild.spec.contracts.types import TimeTravelRetentionSource
 
 
 class FakeCloneAdapter(BaseAdapter):
+    adapter_name: ClassVar[str] = "clone-test"
+
     def __init__(
         self,
         *,
@@ -43,7 +45,7 @@ class FakeCloneAdapter(BaseAdapter):
     def close(self, connection: Any) -> None:
         del connection
 
-    def execute(self, connection: Any, sql: str) -> None:
+    def _execute(self, connection: Any, sql: str) -> None:
         self.used_connections.append(connection)
         self.executed_statements.append(sql)
 

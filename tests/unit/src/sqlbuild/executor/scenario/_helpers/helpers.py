@@ -33,11 +33,16 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotRelation,
     ScenarioSnapshotStateResult,
 )
+from sqlbuild.observability import LifecycleEvent
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from tests.unit.src.sqlbuild.executor.scenario._helpers._test_types import (
     ExecuteScenarioSnapshotCaptureStepsTestCase,
     ScenarioSnapshotStateTestCase,
 )
+
+
+def resource_attempt_events(events: list[LifecycleEvent]) -> tuple[LifecycleEvent, ...]:
+    return tuple(filter(lambda event: event.event_type.startswith("resource_attempt_"), events))
 
 
 def build_snapshot_input_specs_test_plan(

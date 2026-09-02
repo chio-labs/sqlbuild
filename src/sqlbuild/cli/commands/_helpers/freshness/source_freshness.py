@@ -17,6 +17,9 @@ from sqlbuild.compiler.source_freshness.models import (
 from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.observability import run_scope
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
+from sqlbuild.runtime.observability.models import OperationAttributes
 
 
 def append_eligible_direct_source_freshness_records(
@@ -47,38 +50,46 @@ def append_eligible_direct_source_freshness_records(
     }
     entries_by_name: dict[str, ModelPlanEntry] = {entry.name: entry for entry in plan.model_entries}
 
-    connection: Any = adapter.connect(connection_config)
-    try:
-        records_by_location: dict[tuple[str | None, str], list[SourceFreshnessRecord]] = {}
-        identity: SourceFreshnessIdentity
-        affected_model_names: frozenset[str]
-        for (
-            identity,
-            affected_model_names,
-        ) in source_freshness.propagation.changed_source_model_names.items():
-            affected_selected_model_names: frozenset[str] = (
-                affected_model_names & selected_model_names
-            )
-            if not affected_selected_model_names:
-                continue
-            if not affected_selected_model_names <= successful_model_names:
-                continue
-            record: SourceFreshnessRecord | None = observed_records_by_identity.get(identity)
-            if record is None:
-                continue
-            records_by_location = _collect_record_for_affected_model_schemas(
-                records_by_location=records_by_location,
-                record=replace(record, run_id=run_id),
-                affected_model_names=affected_selected_model_names,
-                entries_by_name=entries_by_name,
-            )
-        _append_records_by_location(
-            adapter=adapter,
-            connection=connection,
+    records_by_location: dict[tuple[str | None, str], list[SourceFreshnessRecord]] = {}
+    identity: SourceFreshnessIdentity
+    affected_model_names: frozenset[str]
+    for (
+        identity,
+        affected_model_names,
+    ) in source_freshness.propagation.changed_source_model_names.items():
+        affected_selected_model_names: frozenset[str] = affected_model_names & selected_model_names
+        if not affected_selected_model_names:
+            continue
+        if not affected_selected_model_names <= successful_model_names:
+            continue
+        record: SourceFreshnessRecord | None = observed_records_by_identity.get(identity)
+        if record is None:
+            continue
+        records_by_location = _collect_record_for_affected_model_schemas(
             records_by_location=records_by_location,
+            record=replace(record, run_id=run_id),
+            affected_model_names=affected_selected_model_names,
+            entries_by_name=entries_by_name,
         )
-    finally:
-        adapter.close(connection)
+    record_count: int = sum(len(records) for records in records_by_location.values())
+    if record_count == 0:
+        return
+    with run_scope(run_id):
+        with OperationLifecycle(
+            operation_kind="freshness",
+            operation_name="source_freshness_publication",
+            metadata={"item_count": record_count},
+            attributes=OperationAttributes(phase="publish", target_kind="state_batch"),
+        ):
+            connection: Any = adapter.connect(connection_config)
+            try:
+                _append_records_by_location(
+                    adapter=adapter,
+                    connection=connection,
+                    records_by_location=records_by_location,
+                )
+            finally:
+                adapter.close(connection)
 
 
 def _collect_record_for_affected_model_schemas(

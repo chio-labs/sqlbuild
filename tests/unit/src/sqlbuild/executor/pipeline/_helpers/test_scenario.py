@@ -20,9 +20,11 @@ from sqlbuild.executor.scenario.constants import (
 from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotStateResult
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.observability import EventDispatcher, LifecycleEvent, dispatcher_scope
 from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import (
     ScenarioFailureHelpTestCase,
     ScenarioLocalPipelineTestCase,
+    ScenarioPlanningLifecycleTestCase,
     ScenarioTestPipelineTestCase,
 )
 from tests.unit.src.sqlbuild.executor.pipeline._helpers.helpers import (
@@ -59,6 +61,9 @@ def test_given_selected_scenarios_when_running_scenario_test_pipeline_then_orche
         scenario_names=test_case.scenario_names,
     )
     adapter: ScenarioPipelineTestAdapter = ScenarioPipelineTestAdapter()
+    lifecycle_events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=lifecycle_events.append, accepts_opaque=False)
     started_names: list[str] = []
     completed_names: list[str] = []
     completed_plan_names: list[str | None] = []
@@ -95,16 +100,17 @@ def test_given_selected_scenarios_when_running_scenario_test_pipeline_then_orche
     )
     monkeypatch.setattr(scenario_pipeline, "execute_scenario_run", execute_run)
 
-    results: tuple[ScenarioRunResult, ...] = scenario_pipeline.run_scenario_test_pipeline(
-        pipeline_result=pipeline_result,
-        scenarios=pipeline_result.project.sql_scenarios,
-        connection_config={"database": "pipeline.duckdb"},
-        adapter=adapter,
-        project_name="waffle_shop",
-        retain=False,
-        on_scenario_start=lambda scenario: started_names.append(scenario.name),
-        on_scenario_complete=complete_scenario,
-    )
+    with dispatcher_scope(dispatcher):
+        results: tuple[ScenarioRunResult, ...] = scenario_pipeline.run_scenario_test_pipeline(
+            pipeline_result=pipeline_result,
+            scenarios=pipeline_result.project.sql_scenarios,
+            connection_config={"database": "pipeline.duckdb"},
+            adapter=adapter,
+            project_name="waffle_shop",
+            retain=False,
+            on_scenario_start=lambda scenario: started_names.append(scenario.name),
+            on_scenario_complete=complete_scenario,
+        )
 
     assert tuple(result.status for result in results) == test_case.expected_statuses
     assert tuple(started_names) == test_case.expected_started_names
@@ -113,6 +119,73 @@ def test_given_selected_scenarios_when_running_scenario_test_pipeline_then_orche
     assert tuple(adapter.events) == test_case.expected_connection_events
     assert results[-1].error_message is not None
     assert test_case.expected_error_fragment in results[-1].error_message
+    assert tuple(event.event_type for event in lifecycle_events) == (
+        "resource_attempt_started",
+        "resource_attempt_completed",
+        "resource_attempt_started",
+        "resource_attempt_failed",
+    )
+    assert tuple(event.resource_id for event in lifecycle_events) == (
+        "sql_scenario:passing_scenario",
+        "sql_scenario:passing_scenario",
+        "sql_scenario:planning_failure",
+        "sql_scenario:planning_failure",
+    )
+    assert tuple(event.run_id for event in lifecycle_events) == ("scenario-test-run",) * 4
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ScenarioPlanningLifecycleTestCase(
+            description="local planning failure has one failed scenario attempt",
+            expected_resource_id="sql_scenario:local_planning_failure",
+            expected_run_id="scenario-test-run",
+            expected_terminal="resource_attempt_failed",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_local_scenario_planning_failure_when_running_then_canonical_attempt_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    test_case: ScenarioPlanningLifecycleTestCase,
+) -> None:
+    pipeline_result: CompilePipelineResult = build_scenario_pipeline_result(
+        scenario_names=("local_planning_failure",)
+    )
+    monkeypatch.setattr(
+        scenario_pipeline,
+        "build_scenario_plan",
+        ScenarioPipelinePlanBuilder(
+            planning_failure_name="local_planning_failure",
+            error_message="local scenario planning failed",
+        ),
+    )
+    lifecycle_events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=lifecycle_events.append, accepts_opaque=False)
+
+    with dispatcher_scope(dispatcher):
+        results: tuple[ScenarioRunResult, ...] = scenario_pipeline.run_scenario_local_test_pipeline(
+            project_dir=tmp_path,
+            pipeline_result=pipeline_result,
+            scenarios=pipeline_result.project.sql_scenarios,
+            adapter=ScenarioLocalPipelineTestAdapter(),
+            project_name="waffle_shop",
+            strict=False,
+        )
+
+    assert results[0].status == ExecutionStatus.FAILED
+    assert tuple(event.resource_id for event in lifecycle_events) == (
+        test_case.expected_resource_id,
+        test_case.expected_resource_id,
+    )
+    assert tuple(event.run_id for event in lifecycle_events) == (
+        test_case.expected_run_id,
+        test_case.expected_run_id,
+    )
+    assert lifecycle_events[-1].event_type == test_case.expected_terminal
 
 
 @pytest.mark.parametrize(

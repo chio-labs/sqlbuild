@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from typing import ClassVar
 from unittest.mock import Mock
 
 import pytest
@@ -22,6 +23,8 @@ from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import (
 
 
 class _ConnectionAdapter(BaseAdapter):
+    adapter_name: ClassVar[str] = "connection-test"
+
     def __init__(self, *, fail_connect_index: int | None = None) -> None:
         self._lock: threading.Lock = threading.Lock()
         self._fail_connect_index: int | None = fail_connect_index
@@ -41,7 +44,7 @@ class _ConnectionAdapter(BaseAdapter):
         if len(self.close_attempts) == 1:
             raise RuntimeError("close failure")
 
-    def execute(self, connection: object, sql: str) -> object:
+    def _execute(self, connection: object, sql: str) -> object:
         del connection
         return sql
 
