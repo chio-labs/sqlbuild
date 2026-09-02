@@ -207,7 +207,7 @@ class FakeRelationReuseAdapter(BaseAdapter):
         del config
         return object()
 
-    def execute(self, connection: Any, sql: str) -> object:
+    def _execute(self, connection: Any, sql: str) -> object:
         del connection, sql
         return object()
 

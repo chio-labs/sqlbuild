@@ -9,6 +9,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.clone.models import CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def clone_relation_by_names(
@@ -36,20 +37,21 @@ def clone_relation_by_names(
     recorder: StatementRecorder = StatementRecorder()
     start: float = time.monotonic()
     try:
-        adapter.drop(
-            connection=connection,
-            destination=destination_relation,
-            if_exists=True,
-            statement_recorder=recorder,
-        )
-        adapter.clone(
-            connection=connection,
-            origin=origin_relation,
-            destination=destination_relation,
-            hard_copy=hard_copy,
-            origin_is_transient=origin_is_transient,
-            statement_recorder=recorder,
-        )
+        with OperationLifecycle(operation_kind="clone", operation_name="clone_relation_transfer"):
+            adapter.drop(
+                connection=connection,
+                destination=destination_relation,
+                if_exists=True,
+                statement_recorder=recorder,
+            )
+            adapter.clone(
+                connection=connection,
+                origin=origin_relation,
+                destination=destination_relation,
+                hard_copy=hard_copy,
+                origin_is_transient=origin_is_transient,
+                statement_recorder=recorder,
+            )
     except Exception as exc:
         return CloneItemResult(
             name=name,

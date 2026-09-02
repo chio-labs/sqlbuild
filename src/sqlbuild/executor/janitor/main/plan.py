@@ -22,6 +22,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorStateCandidates,
     JanitorWarehouseFacts,
 )
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def build_janitor_plan(
@@ -64,21 +65,25 @@ def build_janitor_plan(
             age_metadata_supported=adapter.supports_relation_age_metadata(),
         )
 
-    facts: JanitorWarehouseFacts = gather_janitor_warehouse_facts(
-        project=project,
-        adapter=adapter,
-        connection=connection,
-        target_schemas=target_schemas,
-        delete_tracked_only=delete_tracked_only,
-    )
-    direct_state_prune_candidates: tuple[JanitorDirectStatePruneCandidate, ...] = (
-        collect_direct_state_prune_candidates(
+    with OperationLifecycle(
+        operation_kind="janitor", operation_name="janitor_warehouse_inspection"
+    ) as inspection:
+        facts: JanitorWarehouseFacts = gather_janitor_warehouse_facts(
+            project=project,
             adapter=adapter,
             connection=connection,
             target_schemas=target_schemas,
-            direct_state_history_versions=direct.state_history_versions,
+            delete_tracked_only=delete_tracked_only,
         )
-    )
+        direct_state_prune_candidates: tuple[JanitorDirectStatePruneCandidate, ...] = (
+            collect_direct_state_prune_candidates(
+                adapter=adapter,
+                connection=connection,
+                target_schemas=target_schemas,
+                direct_state_history_versions=direct.state_history_versions,
+            )
+        )
+        inspection.completed(metadata={"item_count": len(target_schemas)})
     now: datetime = datetime.now(UTC)
     age_supported: bool = adapter.supports_relation_age_metadata()
     schemas: JanitorSchemaClassification = classify_target_schemas(

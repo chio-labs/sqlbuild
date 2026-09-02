@@ -11,10 +11,12 @@ def build_provider_session(
     *,
     discovered_providers: tuple[DiscoveredProvider, ...],
     setup_context: object | None = None,
+    allow_shared: bool = True,
 ) -> ProviderSession:
     """Build a runtime provider session with fresh provider instances."""
 
     return _build_provider_session(
         discovered_providers=discovered_providers,
         setup_context=setup_context,
+        allow_shared=allow_shared,
     )

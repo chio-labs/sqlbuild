@@ -24,6 +24,7 @@ from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
 )
+from sqlbuild.executor.run._helpers.execution.schema import inspect_runtime_relation_schema
 from sqlbuild.executor.run._helpers.execution.staging import create_staging_relation
 from sqlbuild.executor.run._helpers.execution.table_targets import resolve_table_targets
 from sqlbuild.executor.run._helpers.materializations.custom import (
@@ -241,7 +242,8 @@ def _staged_lifecycle(
         with diagnostics_context(
             sqlbuild_phase="contract", sqlbuild_action_name="validate_staging"
         ):
-            staging_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
+            staging_columns: tuple[ColumnInfo, ...] = inspect_runtime_relation_schema(
+                adapter=adapter,
                 connection=connection,
                 database=targets.target_database,
                 schema=targets.target_schema,

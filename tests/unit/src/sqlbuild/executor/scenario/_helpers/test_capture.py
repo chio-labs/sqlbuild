@@ -1,20 +1,26 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
+from sqlbuild.compiler.planner.models import ScenarioExecutionPlan, SeedPlanEntry
 from sqlbuild.executor.scenario._helpers.capture.core import execute_scenario_snapshot_capture_steps
 from sqlbuild.executor.scenario.models import (
     ScenarioCaptureSettings,
     ScenarioSnapshotCaptureRunResult,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.observability import EventDispatcher, LifecycleEvent, dispatcher_scope
 from tests.unit.src.sqlbuild.executor.scenario._helpers._test_types import (
     ExecuteScenarioSnapshotCaptureStepsTestCase,
+    ScenarioCaptureRunIdentityTestCase,
 )
-from tests.unit.src.sqlbuild.executor.scenario._helpers.helpers import assert_capture_steps_error
+from tests.unit.src.sqlbuild.executor.scenario._helpers.helpers import (
+    assert_capture_steps_error,
+    resource_attempt_events,
+)
 from tests.unit.src.sqlbuild.executor.scenario.main.helpers import (
     ScenarioSnapshotCaptureStepsTestAdapter,
     build_scenario_cleanup_test_plan_with_project_seed,
@@ -112,6 +118,7 @@ def test_given_scenario_plan_when_executing_snapshot_capture_steps_then_returns_
         scenario_plan=SCENARIO_PLAN,
         adapter=adapter,
         connection=object(),
+        run_id="capture-test-run",
         settings=ScenarioCaptureSettings(
             captured_at="2026-05-09T00:00:00Z",
             capture_adapter="duckdb",
@@ -128,3 +135,73 @@ def test_given_scenario_plan_when_executing_snapshot_capture_steps_then_returns_
     assert (result.capture_result is not None) is test_case.expected_has_capture_result
     assert (result.cleanup_result is not None) is test_case.expected_has_cleanup_result
     assert_capture_steps_error(result=result, test_case=test_case)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ScenarioCaptureRunIdentityTestCase(
+            description="capture operation and multiple seeds share project run identity",
+            expected_run_id="capture-project-run",
+            expected_seed_resource_ids=(
+                "scenario:revenue__customer_refund:seed:country_codes",
+                "scenario:revenue__customer_refund:seed:regions",
+            ),
+            expected_operation_name="scenario_capture",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_multiple_capture_seeds_when_executing_then_operation_and_resources_share_run_id(
+    tmp_path: Path,
+    test_case: ScenarioCaptureRunIdentityTestCase,
+) -> None:
+    first_seed: SeedPlanEntry = SCENARIO_PLAN.seed_entries[0]
+    second_seed: SeedPlanEntry = replace(
+        first_seed,
+        key=replace(first_seed.key, name="regions"),
+        name="regions",
+        destination=replace(
+            first_seed.destination,
+            name="__sqb_51b385aebe20__seed__country_codes_regions",
+            qualified_name="scenario_schema.__sqb_51b385aebe20__seed__country_codes_regions",
+        ),
+        file_path=Path("seeds/regions.csv"),
+    )
+    scenario_plan: ScenarioExecutionPlan = replace(
+        SCENARIO_PLAN,
+        seed_entries=(first_seed, second_seed),
+    )
+    lifecycle_events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=lifecycle_events.append, accepts_opaque=False)
+
+    with dispatcher_scope(dispatcher):
+        result: ScenarioSnapshotCaptureRunResult = execute_scenario_snapshot_capture_steps(
+            project_dir=tmp_path,
+            scenario_plan=scenario_plan,
+            adapter=ScenarioSnapshotCaptureStepsTestAdapter(),
+            connection=object(),
+            run_id=test_case.expected_run_id,
+            settings=ScenarioCaptureSettings(
+                captured_at="2026-05-09T00:00:00Z",
+                capture_adapter="duckdb",
+                capture_dialect="duckdb",
+                sqlbuild_version="0.1.0",
+                retain=True,
+            ),
+        )
+
+    assert result.status == ExecutionStatus.SUCCESS
+    assert len(result.seed_results) == 2
+    assert tuple(event.run_id for event in lifecycle_events) == (test_case.expected_run_id,) * len(
+        lifecycle_events
+    )
+    assert lifecycle_events[0].payload["operation_name"] == test_case.expected_operation_name
+    resource_events: tuple[LifecycleEvent, ...] = resource_attempt_events(lifecycle_events)
+    assert tuple(event.resource_id for event in resource_events) == (
+        test_case.expected_seed_resource_ids[0],
+        test_case.expected_seed_resource_ids[0],
+        test_case.expected_seed_resource_ids[1],
+        test_case.expected_seed_resource_ids[1],
+    )

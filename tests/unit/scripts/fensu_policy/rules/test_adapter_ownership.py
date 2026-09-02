@@ -18,6 +18,8 @@ from tests.unit.scripts.fensu_policy.rules._test_types import CustomRuleTestCase
             path="src/sqlbuild/adapters/example/client.py",
             source=dedent(
                 """
+                from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+
                 class ExampleAdapter(BaseAdapter):
                     render_identifier = BaseAdapter.render_identifier
                 """
@@ -29,6 +31,8 @@ from tests.unit.scripts.fensu_policy.rules._test_types import CustomRuleTestCase
             path="src/sqlbuild/adapters/example/client.py",
             source=dedent(
                 """
+                from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+
                 class ExampleAdapter(BaseAdapter):
                     def render_identifier(self, name: str) -> str:
                         return name
@@ -41,6 +45,8 @@ from tests.unit.scripts.fensu_policy.rules._test_types import CustomRuleTestCase
             path="src/sqlbuild/adapters/foo/classes/foo_adapter.py",
             source=dedent(
                 """
+                from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+
                 class FooAdapter(BaseAdapter):
                     render_identifier = BaseAdapter.render_identifier
                 """
@@ -65,6 +71,8 @@ from tests.unit.scripts.fensu_policy.rules._test_types import CustomRuleTestCase
             path="src/sqlbuild/adapters/foo/classes/foo_adapter.py",
             source=dedent(
                 """
+                from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+
                 class FooAdapter(BaseAdapter):
                     render_identifier = BaseAdapter.render_identifier
                 """
@@ -101,6 +109,8 @@ def test_given_adapter_when_checking_method_alias_then_matches_contract(
             path="src/sqlbuild/adapters/example/client.py",
             source=dedent(
                 """
+                from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+
                 class ExampleAdapter(BaseAdapter):
                     def render_identifier(self, name: str) -> str:
                         return super().render_identifier(name)
@@ -127,6 +137,8 @@ def test_given_adapter_when_checking_method_alias_then_matches_contract(
             path="src/sqlbuild/adapters/example/client.py",
             source=dedent(
                 """
+                from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+
                 class ExampleAdapter(BaseAdapter):
                     def render_identifier(self, name: str) -> str:
                         return name
@@ -153,6 +165,8 @@ def test_given_adapter_when_checking_method_alias_then_matches_contract(
             path="src/sqlbuild/adapters/example/client.py",
             source=dedent(
                 """
+                from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+
                 class ExampleAdapter(BaseAdapter):
                     def render_identifier(self, name: str) -> str:
                         return super().render_identifier(name)
@@ -179,6 +193,8 @@ def test_given_adapter_when_checking_method_alias_then_matches_contract(
             path="src/sqlbuild/adapters/example/client.py",
             source=dedent(
                 """
+                from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+
                 class ExampleAdapter(BaseAdapter):
                     def render_identifier(self, name: str) -> str:
                         return super().render_identifier(name)
@@ -205,6 +221,8 @@ def test_given_adapter_when_checking_method_alias_then_matches_contract(
             path="src/sqlbuild/adapters/example/client.py",
             source=dedent(
                 """
+                from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+
                 class ExampleAdapter(BaseAdapter):
                     def cleanup(self) -> None:
                         super().cleanup()
@@ -235,6 +253,8 @@ def test_given_adapter_when_checking_method_alias_then_matches_contract(
             path="src/sqlbuild/adapters/foo/classes/foo_adapter.py",
             source=dedent(
                 """
+                from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+
                 class FooAdapter(BaseAdapter):
                     def render_identifier(self, name: str) -> str:
                         return super().render_identifier(name)

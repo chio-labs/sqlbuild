@@ -43,6 +43,8 @@ from sqlbuild.spec.contracts.models import (
     CursorsConfig,
     DbtConfig,
     DefaultsConfig,
+    EventExporterFilterConfig,
+    EventExportersConfig,
     FutureCursorsConfig,
     JanitorConfig,
     LocalClonePolicy,
@@ -87,6 +89,8 @@ _DEFAULT_SNAPSHOT_SCHEMA_CHANGE: str = "append_new_columns"
 _DEFAULT_WILDCARD_CHECK_SNAPSHOT_SCHEMA_CHANGE: str = "require_confirmation"
 _BATCH_CONCURRENCY_CONFIG_KEY: str = "batch_concurrency"
 _MAX_BATCHES_CONFIG_KEY: str = "max_batches"
+_EVENT_EXPORTER_FILTER_KEYS: frozenset[str] = frozenset({"event_kinds", "min_severity"})
+_EVENT_EXPORTER_KEYS: frozenset[str] = _EVENT_EXPORTER_FILTER_KEYS | frozenset({"named"})
 _CURSOR_DURATION_PATTERN: re.Pattern[str] = re.compile(
     r"^(?=.*[1-9])(?:(\d+)y)?(?:(\d+)mo)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$"
 )
@@ -136,6 +140,9 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
     )
     scenario: ScenarioConfig = _load_scenario(payload=payload.get("scenario"), file_path=file_path)
     dbt: DbtConfig = _load_dbt(payload=payload.get("dbt"), file_path=file_path)
+    event_exporters: EventExportersConfig = _load_event_exporters(
+        payload=payload.get("event_exporters"), file_path=file_path
+    )
     if janitor.enabled and janitor.delete_tracked_only and not settings.query_change_tracking:
         raise ProjectConfigError(
             f"{file_path} janitor.delete_tracked_only requires "
@@ -163,6 +170,79 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         snapshots=snapshots,
         scenario=scenario,
         dbt=dbt,
+        event_exporters=event_exporters,
+    )
+
+
+def _load_event_exporters(*, payload: object, file_path: Path) -> EventExportersConfig:
+    from sqlbuild.runtime.event_exporting.constants import (
+        EVENT_EXPORT_KINDS,
+        EVENT_EXPORT_SEVERITIES,
+    )
+
+    if payload is None:
+        return EventExportersConfig()
+    if not isinstance(payload, dict):
+        raise ProjectConfigError(f"{file_path} event_exporters must be a mapping")
+    config_mapping: dict[str, object] = cast(dict[str, object], payload)
+    _validate_allowed_keys(
+        mapping=config_mapping,
+        allowed_keys=_EVENT_EXPORTER_KEYS,
+        label="event_exporters",
+        file_path=file_path,
+    )
+
+    def load_filter(*, value: object, label: str) -> EventExporterFilterConfig:
+        if not isinstance(value, dict):
+            raise ProjectConfigError(f"{file_path} {label} must be a mapping")
+        filter_mapping: dict[str, object] = cast(dict[str, object], value)
+        _validate_allowed_keys(
+            mapping=filter_mapping,
+            allowed_keys=_EVENT_EXPORTER_FILTER_KEYS,
+            label=label,
+            file_path=file_path,
+        )
+        kinds_value: object = filter_mapping.get("event_kinds")
+        kinds: frozenset[str] | None = None
+        if kinds_value is not None:
+            if not isinstance(kinds_value, list) or not all(
+                isinstance(kind, str) for kind in kinds_value
+            ):
+                raise ProjectConfigError(
+                    f"{file_path} {label}.event_kinds must be a list of strings"
+                )
+            kinds = frozenset(cast(list[str], kinds_value))
+            unknown: frozenset[str] = kinds - EVENT_EXPORT_KINDS
+            if unknown:
+                raise ProjectConfigError(
+                    f"{file_path} {label}.event_kinds contains unknown kind(s): "
+                    + ", ".join(sorted(unknown))
+                )
+        severity_value: object = filter_mapping.get("min_severity")
+        severity: str | None = None
+        if severity_value is not None:
+            if not isinstance(severity_value, str) or severity_value not in EVENT_EXPORT_SEVERITIES:
+                raise ProjectConfigError(
+                    f"{file_path} {label}.min_severity must be one of: "
+                    + ", ".join(EVENT_EXPORT_SEVERITIES)
+                )
+            severity = severity_value
+        return EventExporterFilterConfig(event_kinds=kinds, min_severity=severity)
+
+    named_value: object = config_mapping.get("named", {})
+    if not isinstance(named_value, dict):
+        raise ProjectConfigError(f"{file_path} event_exporters.named must be a mapping")
+    named: dict[str, EventExporterFilterConfig] = {}
+    for name, value in named_value.items():
+        if not isinstance(name, str) or not name:
+            raise ProjectConfigError(f"{file_path} event_exporters.named contains an invalid name")
+        named[name] = load_filter(value=value, label=f"event_exporters.named.{name}")
+    defaults_mapping: dict[str, object] = {
+        key: value for key, value in config_mapping.items() if key in _EVENT_EXPORTER_FILTER_KEYS
+    }
+    return EventExportersConfig(
+        defaults=load_filter(value=defaults_mapping, label="event_exporters"),
+        named=named,
     )
 
 

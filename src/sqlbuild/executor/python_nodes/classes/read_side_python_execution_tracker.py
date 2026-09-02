@@ -24,7 +24,10 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeRunState,
     PythonNodeRuntime,
 )
-from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
+from sqlbuild.executor.python_nodes.types import ExecutablePythonNode, PythonIdentityRecorder
+from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
+    ResourceAttemptLifecycle,
+)
 
 
 class ReadSidePythonExecutionTracker:
@@ -79,15 +82,22 @@ class ReadSidePythonExecutionTracker:
             if node_name in self._completed_python_names:
                 continue
             node: DiscoveredPythonNode = self._python_graph.nodes_by_name[node_name]
-            result: PythonNodeExecutionResult = PythonNodeExecutionResult(
-                node_name=node.name,
-                kind=node.kind,
-                status=PythonNodeStatus.SKIPPED,
-                skip_reason=self._unrun_reason(node),
-            )
-            self._results_by_name[node.name] = result
-            self._completed_python_names.add(node.name)
-            finalized_results.append(result)
+            with ResourceAttemptLifecycle(
+                resource_id=f"{node.kind.value}:{node.name}",
+                resource_kind=node.kind.value,
+                resource_name=node.name,
+                run_id=self._runtime.run_id,
+            ) as lifecycle:
+                result: PythonNodeExecutionResult = PythonNodeExecutionResult(
+                    node_name=node.name,
+                    kind=node.kind,
+                    status=PythonNodeStatus.SKIPPED,
+                    skip_reason=self._unrun_reason(node),
+                )
+                self._results_by_name[node.name] = result
+                self._completed_python_names.add(node.name)
+                finalized_results.append(result)
+                lifecycle.skipped(skip_code="dependency")
         return tuple(finalized_results)
 
     def record_sql_result(self, result: object) -> None:
@@ -141,7 +151,7 @@ class ReadSidePythonExecutionTracker:
 
     def _execute_python_node(self, node: DiscoveredPythonNode) -> None:
         runtime: PythonNodeRuntime = replace(self._runtime, result_store=self._result_store)
-        result: PythonNodeExecutionResult = run_ready_python_node(
+        _ = run_ready_python_node(
             node=_to_executable_python_node(node),
             upstream_results=tuple(
                 self._results_by_name[upstream_name]
@@ -151,27 +161,34 @@ class ReadSidePythonExecutionTracker:
             runtime=runtime,
             statement_recorder=StatementRecorder(),
             run_state=self._run_state,
+            on_result=self._finalize_owned_result,
         )
-        self._run_state.record_result(node_function=node.function, result=result)
-        self._results_by_name[node.name] = result
-        self._completed_python_names.add(node.name)
-        if result.status == PythonNodeStatus.SUCCESS:
-            with CostContext.resource_scope(
-                resource_type=node.kind.value,
-                resource_name=node.name,
-                phase="finalize",
-            ):
-                if self._identity_recorder is not None:
-                    self._identity_recorder(identity=node.identity, _target_name=None)
-                else:
-                    try_write_python_node_identity_fingerprint(
-                        identity=node.identity,
-                        adapter=self._runtime.adapter,
-                        connection=self._runtime.connection,
-                        run_id=self._runtime.run_id,
-                        database=self._runtime.default_database,
-                        schema=self._runtime.default_schema,
-                    )
+
+    def _finalize_owned_result(
+        self, *, node: ExecutablePythonNode, result: PythonNodeExecutionResult
+    ) -> None:
+        discovered_node: DiscoveredPythonNode = self._python_graph.nodes_by_name[node.name]
+        self._run_state.record_result(node_function=discovered_node.function, result=result)
+        self._results_by_name[discovered_node.name] = result
+        self._completed_python_names.add(discovered_node.name)
+        if result.status != PythonNodeStatus.SUCCESS:
+            return
+        with CostContext.resource_scope(
+            resource_type=discovered_node.kind.value,
+            resource_name=discovered_node.name,
+            phase="finalize",
+        ):
+            if self._identity_recorder is not None:
+                self._identity_recorder(identity=discovered_node.identity, _target_name=None)
+            else:
+                try_write_python_node_identity_fingerprint(
+                    identity=discovered_node.identity,
+                    adapter=self._runtime.adapter,
+                    connection=self._runtime.connection,
+                    run_id=self._runtime.run_id,
+                    database=self._runtime.default_database,
+                    schema=self._runtime.default_schema,
+                )
 
     def _unrun_reason(self, node: DiscoveredPythonNode) -> str:
         sql_dep_name: str

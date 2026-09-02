@@ -25,6 +25,7 @@ from sqlbuild.provider.main.runtime import (
     invoke_with_providers,
 )
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -72,26 +73,51 @@ def execute_external_source_load(
             result_store=runtime.result_store,
             on_progress=on_progress,
         )
-        raw_rows: object = invoke_with_providers(
-            function=loader_function.function,
-            context=context,
-            providers=runtime.providers,
-        )
-        if isinstance(raw_rows, LoaderSkipResult):
-            return LoadExecutionResult(
-                source_name=source_entry.name,
-                loader_name=loader_function.name,
-                status=ExecutionStatus.SKIPPED,
-                target=destination_relation,
-                resource_kind=resource_kind,
-                staging_relation=None,
-                rows_loaded=0,
-                duration_ms=int((time.monotonic() - start) * 1000),
-                lifecycle_events=statement_recorder.snapshot(),
-                skip_mode=raw_rows.mode,
-                skip_reason=raw_rows.reason,
+        with OperationLifecycle(operation_kind="loader", operation_name="external_source_load"):
+            raw_rows: object = invoke_with_providers(
+                function=loader_function.function,
+                context=context,
+                providers=runtime.providers,
             )
-        if isinstance(raw_rows, LoaderResult):
+            if isinstance(raw_rows, LoaderSkipResult):
+                return LoadExecutionResult(
+                    source_name=source_entry.name,
+                    loader_name=loader_function.name,
+                    status=ExecutionStatus.SKIPPED,
+                    target=destination_relation,
+                    resource_kind=resource_kind,
+                    staging_relation=None,
+                    rows_loaded=0,
+                    duration_ms=int((time.monotonic() - start) * 1000),
+                    lifecycle_events=statement_recorder.snapshot(),
+                    skip_mode=raw_rows.mode,
+                    skip_reason=raw_rows.reason,
+                )
+            if isinstance(raw_rows, LoaderResult):
+                return LoadExecutionResult(
+                    source_name=source_entry.name,
+                    loader_name=loader_function.name,
+                    status=ExecutionStatus.SUCCESS,
+                    target=destination_relation,
+                    resource_kind=resource_kind,
+                    staging_relation=None,
+                    rows_loaded=0,
+                    duration_ms=int((time.monotonic() - start) * 1000),
+                    lifecycle_events=statement_recorder.snapshot(),
+                    result_payload=raw_rows.payload,
+                    result_metadata=raw_rows.metadata,
+                    result_materialized=raw_rows.materialized,
+                )
+            if isinstance(raw_rows, NodeResultEnvelope):
+                raise ExecutorInputError(
+                    f"Loader '{loader_function.name}' returned a node result envelope; "
+                    "use ctx.result(...) to return this loader's own result"
+                )
+            if raw_rows is not None:
+                raise ExecutorInputError(
+                    f"External loader '{loader_function.name}' returned rows, but external "
+                    "loaders must write their own destination and return None"
+                )
             return LoadExecutionResult(
                 source_name=source_entry.name,
                 loader_name=loader_function.name,
@@ -102,31 +128,7 @@ def execute_external_source_load(
                 rows_loaded=0,
                 duration_ms=int((time.monotonic() - start) * 1000),
                 lifecycle_events=statement_recorder.snapshot(),
-                result_payload=raw_rows.payload,
-                result_metadata=raw_rows.metadata,
-                result_materialized=raw_rows.materialized,
             )
-        if isinstance(raw_rows, NodeResultEnvelope):
-            raise ExecutorInputError(
-                f"Loader '{loader_function.name}' returned a node result envelope; "
-                "use ctx.result(...) to return this loader's own result"
-            )
-        if raw_rows is not None:
-            raise ExecutorInputError(
-                f"External loader '{loader_function.name}' returned rows, but external loaders "
-                "must write their own destination and return None"
-            )
-        return LoadExecutionResult(
-            source_name=source_entry.name,
-            loader_name=loader_function.name,
-            status=ExecutionStatus.SUCCESS,
-            target=destination_relation,
-            resource_kind=resource_kind,
-            staging_relation=None,
-            rows_loaded=0,
-            duration_ms=int((time.monotonic() - start) * 1000),
-            lifecycle_events=statement_recorder.snapshot(),
-        )
     except Exception as error:
         return LoadExecutionResult(
             source_name=source_entry.name,

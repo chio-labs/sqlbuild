@@ -9,6 +9,10 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.progress.classes.native_progress_projector import (
+    NativeProgressProjector,
+    current_native_progress_projector,
+)
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.main.scenarios.scenario import build_scenario_plan
@@ -36,6 +40,10 @@ from sqlbuild.executor.scenario.models import (
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.contracts.models import ConnectionHooks
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
+from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
+    ResourceAttemptLifecycle,
+)
 from sqlbuild.spec.contracts.main.scenario_local_type_overrides_for_dialect import (
     scenario_local_type_overrides_for_dialect,
 )
@@ -88,31 +96,50 @@ def run_scenario_test_pipeline(
         results: list[ScenarioRunResult] = []
         scenario: CompiledSqlScenario
         for scenario in scenarios:
-            if on_scenario_start is not None:
-                on_scenario_start(scenario)
             scenario_plan: ScenarioExecutionPlan | None = None
-            try:
-                scenario_plan = build_scenario_plan(
-                    scenario=scenario,
-                    pipeline_result=pipeline_result,
-                    adapter=adapter,
-                    project_name=project_name,
-                )
-                result: ScenarioRunResult = execute_scenario_run(
-                    scenario_plan=scenario_plan,
-                    adapter=adapter,
-                    connection=connection,
-                    run_id=pipeline_result.project.run_id,
-                    retain=retain,
-                )
-            except Exception as exc:
-                result = ScenarioRunResult(
-                    scenario_name=scenario.name,
-                    status=ExecutionStatus.FAILED,
-                    retained=retain,
-                    error_code=error_code(error=exc, fallback_code=SCENARIO_EXEC_INTERNAL),
-                    error_help=_scenario_failure_help(exc),
-                    error_message=error_message(exc),
+            resource_id: str = f"sql_scenario:{scenario.name}"
+            projector: NativeProgressProjector | None = _prepare_scenario_presentation(
+                scenario_name=scenario.name,
+                has_completion_callback=on_scenario_complete is not None,
+            )
+            with ResourceAttemptLifecycle(
+                resource_id=resource_id,
+                resource_kind="scenario",
+                resource_name=scenario.name,
+                run_id=pipeline_result.project.run_id,
+            ) as lifecycle:
+                if on_scenario_start is not None:
+                    on_scenario_start(scenario)
+                try:
+                    scenario_plan = build_scenario_plan(
+                        scenario=scenario,
+                        pipeline_result=pipeline_result,
+                        adapter=adapter,
+                        project_name=project_name,
+                    )
+                    result: ScenarioRunResult = execute_scenario_run(
+                        scenario_plan=scenario_plan,
+                        adapter=adapter,
+                        connection=connection,
+                        run_id=pipeline_result.project.run_id,
+                        retain=retain,
+                    )
+                except Exception as exc:
+                    result = ScenarioRunResult(
+                        scenario_name=scenario.name,
+                        status=ExecutionStatus.FAILED,
+                        retained=retain,
+                        error_code=error_code(error=exc, fallback_code=SCENARIO_EXEC_INTERNAL),
+                        error_help=_scenario_failure_help(exc),
+                        error_message=error_message(exc),
+                    )
+                if result.status == ExecutionStatus.FAILED:
+                    lifecycle.failed(error_code=result.error_code)
+            if projector is not None and on_scenario_complete is not None:
+                _ = projector.consume_resource_terminal(
+                    resource_name=scenario.name,
+                    resource_id=resource_id,
+                    resource_attempt_id=lifecycle.resource_attempt_id,
                 )
             results.append(result)
             if on_scenario_complete is not None:
@@ -143,33 +170,52 @@ def run_scenario_local_test_pipeline(
     results: list[ScenarioRunResult] = []
     scenario: CompiledSqlScenario
     for scenario in scenarios:
-        if on_scenario_start is not None:
-            on_scenario_start(scenario)
         scenario_plan: ScenarioExecutionPlan | None = None
-        try:
-            scenario_plan = build_scenario_plan(
-                scenario=scenario,
-                pipeline_result=pipeline_result,
-                adapter=adapter,
-                project_name=project_name,
-            )
-            result: ScenarioRunResult = execute_local_scenario_load_only_run(
-                project_dir=project_dir,
-                scenario_plan=scenario_plan,
-                adapter=adapter,
-                strict=strict,
-                capture_adapter=capture_adapter,
-                capture_dialect=capture_dialect,
-            )
-        except Exception as exc:
-            result = ScenarioRunResult(
-                scenario_name=scenario.name,
-                status=ExecutionStatus.FAILED,
-                local_status=ScenarioLocalRunStatus.ERROR,
-                retained=False,
-                error_code=error_code(error=exc, fallback_code=SCENARIO_LOCAL_INTERNAL),
-                error_help=_scenario_failure_help(exc),
-                error_message=error_message(exc),
+        resource_id: str = f"sql_scenario:{scenario.name}"
+        projector: NativeProgressProjector | None = _prepare_scenario_presentation(
+            scenario_name=scenario.name,
+            has_completion_callback=on_scenario_complete is not None,
+        )
+        with ResourceAttemptLifecycle(
+            resource_id=resource_id,
+            resource_kind="scenario",
+            resource_name=scenario.name,
+            run_id=pipeline_result.project.run_id,
+        ) as lifecycle:
+            if on_scenario_start is not None:
+                on_scenario_start(scenario)
+            try:
+                scenario_plan = build_scenario_plan(
+                    scenario=scenario,
+                    pipeline_result=pipeline_result,
+                    adapter=adapter,
+                    project_name=project_name,
+                )
+                result: ScenarioRunResult = execute_local_scenario_load_only_run(
+                    project_dir=project_dir,
+                    scenario_plan=scenario_plan,
+                    adapter=adapter,
+                    strict=strict,
+                    capture_adapter=capture_adapter,
+                    capture_dialect=capture_dialect,
+                )
+            except Exception as exc:
+                result = ScenarioRunResult(
+                    scenario_name=scenario.name,
+                    status=ExecutionStatus.FAILED,
+                    local_status=ScenarioLocalRunStatus.ERROR,
+                    retained=False,
+                    error_code=error_code(error=exc, fallback_code=SCENARIO_LOCAL_INTERNAL),
+                    error_help=_scenario_failure_help(exc),
+                    error_message=error_message(exc),
+                )
+            if result.status == ExecutionStatus.FAILED:
+                lifecycle.failed(error_code=result.error_code)
+        if projector is not None and on_scenario_complete is not None:
+            _ = projector.consume_resource_terminal(
+                resource_name=scenario.name,
+                resource_id=resource_id,
+                resource_attempt_id=lifecycle.resource_attempt_id,
             )
         results.append(result)
         if on_scenario_complete is not None:
@@ -200,7 +246,10 @@ def run_scenario_capture_pipeline(
         hooks.on_connection_start(1)
     start: float = time.monotonic()
     try:
-        connection: Any = adapter.connect(connection_config)
+        with OperationLifecycle(
+            operation_kind="scenario", operation_name="scenario_target_connection"
+        ):
+            connection: Any = adapter.connect(connection_config)
     except Exception:
         if hooks.on_connection_error is not None:
             hooks.on_connection_error(1, elapsed_seconds=time.monotonic() - start)
@@ -211,35 +260,57 @@ def run_scenario_capture_pipeline(
         results: list[ScenarioSnapshotCaptureRunResult] = []
         scenario: CompiledSqlScenario
         for scenario in scenarios:
-            if on_scenario_start is not None:
-                on_scenario_start(scenario)
             scenario_plan: ScenarioExecutionPlan | None = None
-            try:
-                scenario_plan = build_scenario_plan(
-                    scenario=scenario,
-                    pipeline_result=pipeline_result,
-                    adapter=adapter,
-                    project_name=project_name,
-                )
-                result: ScenarioSnapshotCaptureRunResult = execute_scenario_snapshot_capture_run(
-                    project_dir=project_dir,
-                    scenario_plan=scenario_plan,
-                    adapter=adapter,
-                    connection=connection,
-                    settings=settings,
-                    local_type_overrides=scenario_local_type_overrides_for_dialect(
-                        scenario_config=pipeline_result.project.scenario,
-                        sql_analysis_dialect=adapter.sql_analysis_dialect(),
-                    ),
-                )
-            except Exception as exc:
-                result = ScenarioSnapshotCaptureRunResult(
-                    scenario_name=scenario.name,
-                    status=ExecutionStatus.FAILED,
-                    retained=settings.retain,
-                    error_code=error_code(error=exc, fallback_code=SCENARIO_EXEC_INTERNAL),
-                    error_help=_scenario_failure_help(exc),
-                    error_message=error_message(exc),
+            resource_id: str = f"sql_scenario:{scenario.name}"
+            projector: NativeProgressProjector | None = _prepare_scenario_presentation(
+                scenario_name=scenario.name,
+                has_completion_callback=on_scenario_complete is not None,
+            )
+            with ResourceAttemptLifecycle(
+                resource_id=resource_id,
+                resource_kind="scenario",
+                resource_name=scenario.name,
+                run_id=pipeline_result.project.run_id,
+            ) as lifecycle:
+                if on_scenario_start is not None:
+                    on_scenario_start(scenario)
+                try:
+                    scenario_plan = build_scenario_plan(
+                        scenario=scenario,
+                        pipeline_result=pipeline_result,
+                        adapter=adapter,
+                        project_name=project_name,
+                    )
+                    result: ScenarioSnapshotCaptureRunResult = (
+                        execute_scenario_snapshot_capture_run(
+                            project_dir=project_dir,
+                            scenario_plan=scenario_plan,
+                            adapter=adapter,
+                            connection=connection,
+                            run_id=pipeline_result.project.run_id,
+                            settings=settings,
+                            local_type_overrides=scenario_local_type_overrides_for_dialect(
+                                scenario_config=pipeline_result.project.scenario,
+                                sql_analysis_dialect=adapter.sql_analysis_dialect(),
+                            ),
+                        )
+                    )
+                except Exception as exc:
+                    result = ScenarioSnapshotCaptureRunResult(
+                        scenario_name=scenario.name,
+                        status=ExecutionStatus.FAILED,
+                        retained=settings.retain,
+                        error_code=error_code(error=exc, fallback_code=SCENARIO_EXEC_INTERNAL),
+                        error_help=_scenario_failure_help(exc),
+                        error_message=error_message(exc),
+                    )
+                if result.status == ExecutionStatus.FAILED:
+                    lifecycle.failed(error_code=result.error_code)
+            if projector is not None and on_scenario_complete is not None:
+                _ = projector.consume_resource_terminal(
+                    resource_name=scenario.name,
+                    resource_id=resource_id,
+                    resource_attempt_id=lifecycle.resource_attempt_id,
                 )
             results.append(result)
             if on_scenario_complete is not None:
@@ -247,6 +318,15 @@ def run_scenario_capture_pipeline(
         return tuple(results)
     finally:
         adapter.close(connection)
+
+
+def _prepare_scenario_presentation(
+    *, scenario_name: str, has_completion_callback: bool
+) -> NativeProgressProjector | None:
+    projector: NativeProgressProjector | None = current_native_progress_projector()
+    if projector is not None and has_completion_callback:
+        projector.expect_resource_enrichment(resource_name=scenario_name)
+    return projector
 
 
 def select_scenario_snapshot_capture_candidates(

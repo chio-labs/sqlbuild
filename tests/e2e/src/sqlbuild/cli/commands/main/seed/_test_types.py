@@ -17,6 +17,17 @@ class SeedE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SeedJsonOutputTestCase:
+    """Expected canonical standalone seed JSON output."""
+
+    description: str
+    expected_exit_code: int
+    expected_status: str
+    expected_summary: dict[str, int]
+    expected_assets: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
 class VirtualSeedE2ETestCase:
     """Test case for virtual sqb seed e2e verification."""
 

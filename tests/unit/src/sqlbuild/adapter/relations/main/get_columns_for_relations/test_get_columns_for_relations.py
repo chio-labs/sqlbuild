@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -12,6 +12,8 @@ from tests.unit.src.sqlbuild.adapter.relations.main.get_columns_for_relations._t
 
 
 class _BulkRecordingAdapter(BaseAdapter):
+    adapter_name: ClassVar[str] = "bulk-recording-test"
+
     def __init__(self) -> None:
         self.queries: list[tuple[str | None, tuple[str, ...] | None, tuple[str, ...] | None]] = []
         self.inventory_names: dict[tuple[str | None, str], tuple[str, ...]] = {}
@@ -23,7 +25,7 @@ class _BulkRecordingAdapter(BaseAdapter):
     def close(self, connection: object) -> None:
         del connection
 
-    def execute(self, connection: Any, sql: str) -> object:
+    def _execute(self, connection: Any, sql: str) -> object:
         del connection
         return sql
 

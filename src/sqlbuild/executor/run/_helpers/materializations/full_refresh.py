@@ -12,6 +12,13 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
 from sqlbuild.executor.run.models import FullRefreshRelations
+from sqlbuild.runtime.observability.classes.operation_lifecycle import (
+    OperationAttributes,
+    OperationLifecycle,
+)
+from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
+    canonicalize_operation_adapter,
+)
 
 _PREVIOUS_PREFIX: str = "__sqb_prev__"
 _REBUILD_PREFIX: str = "__sqb_rebuild__"
@@ -78,46 +85,57 @@ def promote_full_refresh_rebuild(
 ) -> None:
     """Promote a rebuild; dropping prev at the next swap is retention pruning only."""
 
-    if not target_exists:
-        adapter.rename(
-            connection=connection,
-            origin=relations.rebuild_qualified,
-            destination=relations.target_qualified,
-            statement_recorder=statement_recorder,
-        )
-        return
-    adapter.drop(
-        connection=connection,
-        destination=relations.previous_qualified,
-        if_exists=True,
-        statement_recorder=statement_recorder,
-    )
-    if adapter.adapter_name == BuiltinAdapter.SNOWFLAKE:
-        adapter.swap(
-            connection=connection,
-            left=relations.target_qualified,
-            right=relations.rebuild_qualified,
-            statement_recorder=statement_recorder,
-        )
-        adapter.rename(
-            connection=connection,
-            origin=relations.rebuild_qualified,
-            destination=relations.previous_qualified,
-            statement_recorder=statement_recorder,
-        )
-        return
-    adapter.rename(
-        connection=connection,
-        origin=relations.target_qualified,
-        destination=relations.previous_qualified,
-        statement_recorder=statement_recorder,
-    )
-    adapter.rename(
-        connection=connection,
-        origin=relations.rebuild_qualified,
-        destination=relations.target_qualified,
-        statement_recorder=statement_recorder,
-    )
+    with OperationLifecycle(
+        operation_kind="warehouse",
+        operation_name="relation_promotion",
+        attributes=OperationAttributes(
+            phase="promote",
+            strategy="build_aside",
+            adapter=canonicalize_operation_adapter(adapter.adapter_name),
+            target_kind="relation",
+        ),
+    ) as lifecycle:
+        if not target_exists:
+            adapter.rename(
+                connection=connection,
+                origin=relations.rebuild_qualified,
+                destination=relations.target_qualified,
+                statement_recorder=statement_recorder,
+            )
+        else:
+            adapter.drop(
+                connection=connection,
+                destination=relations.previous_qualified,
+                if_exists=True,
+                statement_recorder=statement_recorder,
+            )
+            if adapter.adapter_name == BuiltinAdapter.SNOWFLAKE:
+                adapter.swap(
+                    connection=connection,
+                    left=relations.target_qualified,
+                    right=relations.rebuild_qualified,
+                    statement_recorder=statement_recorder,
+                )
+                adapter.rename(
+                    connection=connection,
+                    origin=relations.rebuild_qualified,
+                    destination=relations.previous_qualified,
+                    statement_recorder=statement_recorder,
+                )
+            else:
+                adapter.rename(
+                    connection=connection,
+                    origin=relations.target_qualified,
+                    destination=relations.previous_qualified,
+                    statement_recorder=statement_recorder,
+                )
+                adapter.rename(
+                    connection=connection,
+                    origin=relations.rebuild_qualified,
+                    destination=relations.target_qualified,
+                    statement_recorder=statement_recorder,
+                )
+        lifecycle.completed(metadata={"changed_count": 1})
 
 
 def _artifact_name(*, logical_name: str, fixed_prefix: str, identifier_limit: int) -> str:

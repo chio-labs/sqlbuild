@@ -14,6 +14,13 @@ from sqlbuild.adapter.contract.types import BuiltinAdapter, RetentionScope
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.planner.types import RetentionPlanPhase
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.runtime.observability.classes.operation_lifecycle import (
+    OperationAttributes,
+    OperationLifecycle,
+)
+from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
+    canonicalize_operation_adapter,
+)
 from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention
 
 
@@ -88,7 +95,9 @@ def apply_clone_retention(
 ) -> tuple[str, ...]:
     """Apply destination retention after clone creation."""
 
-    state: RetentionState = adapter.inspect_retention(connection=connection, request=request)
+    state: RetentionState = _inspect_clone_retention(
+        request=request, adapter=adapter, connection=connection
+    )
     if state.is_transient and request.desired_days > 1:
         raise ExecutorInputError(
             "Snowflake transient clone destinations cannot retain time travel for more than 1 day"
@@ -106,12 +115,14 @@ def apply_clone_retention(
     changes: tuple[RenderedRetentionChange, ...] = adapter.render_retention_changes(
         request=request, state=state
     )
-    executed: list[str] = []
-    for change in changes:
-        for statement in change.statements:
-            adapter.execute(connection=connection, sql=statement)
-            executed.append(statement)
-    return tuple(executed)
+    statements: tuple[str, ...] = _rendered_statements(changes)
+    _apply_clone_retention_statements(
+        statements=statements,
+        request=request,
+        adapter=adapter,
+        connection=connection,
+    )
+    return statements
 
 
 def apply_clone_namespace_retention_phase(
@@ -130,7 +141,9 @@ def apply_clone_namespace_retention_phase(
     }
     executed: list[str] = []
     for request in namespace_requests.values():
-        state: RetentionState = adapter.inspect_retention(connection=connection, request=request)
+        state: RetentionState = _inspect_clone_retention(
+            request=request, adapter=adapter, connection=connection
+        )
         should_apply: bool = (
             phase == RetentionPlanPhase.PRE and request.desired_days > state.effective_days
         ) or (phase == RetentionPlanPhase.POST and request.desired_days < state.effective_days)
@@ -140,8 +153,69 @@ def apply_clone_namespace_retention_phase(
             request=request,
             state=state,
         )
-        for change in changes:
-            for statement in change.statements:
-                adapter.execute(connection=connection, sql=statement)
-                executed.append(statement)
+        statements: tuple[str, ...] = _rendered_statements(changes)
+        _apply_clone_retention_statements(
+            statements=statements,
+            request=request,
+            adapter=adapter,
+            connection=connection,
+        )
+        executed.extend(statements)
     return tuple(executed)
+
+
+def _inspect_clone_retention(
+    *, request: RetentionRequest, adapter: BaseAdapter, connection: Any
+) -> RetentionState:
+    with OperationLifecycle(
+        operation_kind="warehouse",
+        operation_name="retention_inspection",
+        attributes=OperationAttributes(
+            phase="inspect",
+            adapter=canonicalize_operation_adapter(adapter.adapter_name),
+            target_kind=request.scope.value,
+        ),
+    ) as lifecycle:
+        state: RetentionState = adapter.inspect_retention(connection=connection, request=request)
+        values: tuple[int, ...] = tuple(
+            value
+            for value in (
+                state.delta_log_retention_days,
+                state.delta_deleted_file_retention_days,
+            )
+            if value is not None
+        ) or (state.effective_days,)
+        lifecycle.completed(
+            metadata={"changed_count": int(any(value != request.desired_days for value in values))}
+        )
+        return state
+
+
+def _apply_clone_retention_statements(
+    *,
+    statements: tuple[str, ...],
+    request: RetentionRequest,
+    adapter: BaseAdapter,
+    connection: Any,
+) -> None:
+    if not statements:
+        return
+    with OperationLifecycle(
+        operation_kind="warehouse",
+        operation_name="retention_application",
+        attributes=OperationAttributes(
+            phase="apply",
+            adapter=canonicalize_operation_adapter(adapter.adapter_name),
+            target_kind=request.scope.value,
+        ),
+    ) as lifecycle:
+        for statement in statements:
+            adapter.execute(connection=connection, sql=statement)
+        lifecycle.completed(metadata={"changed_count": len(statements)})
+
+
+def _rendered_statements(changes: tuple[RenderedRetentionChange, ...]) -> tuple[str, ...]:
+    statements: list[str] = []
+    for change in changes:
+        statements.extend(change.statements)
+    return tuple(statements)

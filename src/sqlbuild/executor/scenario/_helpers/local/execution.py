@@ -66,6 +66,9 @@ from sqlbuild.executor.scenario.models import (
 )
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
+    ResourceAttemptLifecycle,
+)
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -405,25 +408,35 @@ def _execute_local_functions(
     results: list[FunctionExecutionResult] = []
     function_entry: FunctionPlanEntry
     for function_entry in scenario_plan.function_entries:
-        result: FunctionExecutionResult = execute_function(
-            function_entry=function_entry,
-            adapter=adapter,
-            connection=connection,
-            statement_recorder=StatementRecorder(),
+        resource_kind: str = str(function_entry.key.resource_type)
+        with ResourceAttemptLifecycle(
+            resource_id=(f"scenario:{scenario_plan.name}:{resource_kind}:{function_entry.name}"),
+            resource_kind=resource_kind,
+            resource_name=function_entry.name,
             run_id=run_id,
-            query_change_tracking=False,
-        )
-        if result.status == ExecutionStatus.FAILED:
-            result = replace(
-                result,
-                error_code=SCENARIO_LOCAL_FUNCTION_FAILED,
-                error_help="Inspect the retained local DuckDB database and function definition.",
-                error_message=(
-                    f"local function '{result.function_name}' failed: {result.error_message}"
-                    if result.error_message is not None
-                    else f"local function '{result.function_name}' failed"
-                ),
+        ) as lifecycle:
+            result: FunctionExecutionResult = execute_function(
+                function_entry=function_entry,
+                adapter=adapter,
+                connection=connection,
+                statement_recorder=StatementRecorder(),
+                run_id=run_id,
+                query_change_tracking=False,
             )
+            if result.status == ExecutionStatus.FAILED:
+                result = replace(
+                    result,
+                    error_code=SCENARIO_LOCAL_FUNCTION_FAILED,
+                    error_help=(
+                        "Inspect the retained local DuckDB database and function definition."
+                    ),
+                    error_message=(
+                        f"local function '{result.function_name}' failed: {result.error_message}"
+                        if result.error_message is not None
+                        else f"local function '{result.function_name}' failed"
+                    ),
+                )
+                lifecycle.failed(error_code=result.error_code)
         results.append(result)
         if result.status == ExecutionStatus.FAILED:
             break

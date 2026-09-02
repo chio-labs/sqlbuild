@@ -24,7 +24,7 @@ class RecordingRelationAdapter(BaseAdapter):
     def close(self, connection: Any) -> None:
         del connection
 
-    def execute(self, connection: Any, sql: str) -> None:
+    def _execute(self, connection: Any, sql: str) -> None:
         del connection, sql
 
     def list_relations(

@@ -15,6 +15,27 @@ class SqlTestFunctionPreflightTestCase:
 
 
 @dataclass(frozen=True)
+class SqlTestOperationLifecycleTestCase:
+    description: str
+    expected_resource_id: str
+    expected_operation_name: str
+
+
+@dataclass(frozen=True)
+class AuditPipelineLifecycleTestCase:
+    description: str
+    expected_event_type: str
+    expected_order: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AuditResourceIdentityTestCase:
+    description: str
+    expected_first_id: str
+    expected_second_id: str
+
+
+@dataclass(frozen=True)
 class ScenarioFailureHelpTestCase:
     """One scenario failure help resolution case."""
 
@@ -54,6 +75,14 @@ class ScenarioLocalPipelineTestCase:
 
 
 @dataclass(frozen=True)
+class ScenarioPlanningLifecycleTestCase:
+    description: str
+    expected_resource_id: str
+    expected_run_id: str
+    expected_terminal: str
+
+
+@dataclass(frozen=True)
 class SeedPipelineConcurrencyTestCase:
     """One seed pipeline concurrency orchestration case."""
 
@@ -63,6 +92,16 @@ class SeedPipelineConcurrencyTestCase:
     expected_connection_count: int
     expected_seed_order: tuple[str, ...]
     expected_json_asset_order: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SeedPipelineLifecycleTestCase:
+    """One standalone seed attempt lifecycle expectation."""
+
+    description: str
+    seed_names: tuple[str, ...]
+    expected_terminal_types: tuple[str, ...]
+    expected_resource_ids: frozenset[str]
 
 
 @dataclass(frozen=True)

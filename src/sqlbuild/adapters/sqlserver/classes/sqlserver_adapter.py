@@ -349,7 +349,7 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
         )
         return _SqlServerConnection(raw_connection)
 
-    def execute(self, *, connection: _SqlServerConnection, sql: str) -> Any:
+    def _execute(self, *, connection: _SqlServerConnection, sql: str) -> Any:
         log_sql(logger=logging.getLogger("sqlbuild.adapter.sqlserver"), sql=sql)
         return connection.execute(sql)
 

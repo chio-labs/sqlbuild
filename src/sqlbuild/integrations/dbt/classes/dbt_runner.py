@@ -16,6 +16,7 @@ from sqlbuild.integrations.dbt.main.cli._parse_ls_json_lines import parse_dbt_ls
 from sqlbuild.integrations.dbt.main.cli._resolve_executable import resolve_dbt_executable
 from sqlbuild.integrations.dbt.models import DbtCliOptions, DbtCommandResult, DbtLsResult
 from sqlbuild.integrations.dbt.types import DbtInvoker
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 class DbtRunner:
@@ -84,13 +85,26 @@ class DbtRunner:
         if self.invoker is not None:
             return cast(DbtCommandResult, self.invoker(argv=argv, cwd=cwd))
         try:
-            completed: subprocess.CompletedProcess[str] = subprocess.run(
-                argv,
-                cwd=cwd,
-                capture_output=True,
-                check=False,
-                text=True,
-            )
+            with OperationLifecycle(
+                operation_kind="subprocess",
+                operation_name="dbt_command",
+                auto_fail_base_exceptions=False,
+            ) as lifecycle:
+                completed: subprocess.CompletedProcess[str] = subprocess.run(
+                    argv,
+                    cwd=cwd,
+                    capture_output=True,
+                    check=False,
+                    text=True,
+                )
+                if completed.returncode == 0:
+                    lifecycle.completed(exit_code=0)
+                else:
+                    lifecycle.failed(
+                        error_code=f"exit_{completed.returncode}",
+                        exit_code=completed.returncode,
+                        signal_number=(-completed.returncode if completed.returncode < 0 else None),
+                    )
         except OSError as error:
             raise DbtInteropRuntimeError(
                 "failed to execute dbt",

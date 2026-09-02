@@ -20,6 +20,7 @@ def execute_scenario_snapshot_capture_run(
     scenario_plan: ScenarioExecutionPlan,
     adapter: BaseAdapter,
     connection: Any,
+    run_id: str,
     settings: ScenarioCaptureSettings,
     local_type_overrides: dict[str, str] | None = None,
 ) -> ScenarioSnapshotCaptureRunResult:
@@ -30,6 +31,7 @@ def execute_scenario_snapshot_capture_run(
         scenario_plan=scenario_plan,
         adapter=adapter,
         connection=connection,
+        run_id=run_id,
         settings=settings,
         local_type_overrides=local_type_overrides,
     )

@@ -17,6 +17,8 @@ from sqlbuild.executor.testing.main._sql_length import (
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
+from sqlbuild.runtime.observability.models import OperationAttributes
 
 
 def execute_sql_test(
@@ -24,6 +26,7 @@ def execute_sql_test(
     test_entry: SqlTestPlanEntry,
     adapter: BaseAdapter,
     connection: Any,
+    quality_scope: str = "standalone",
 ) -> SqlTestExecutionResult:
     """Execute one SQL unit test as a single comparison query."""
 
@@ -71,43 +74,51 @@ def execute_sql_test(
             error_message=error_message,
         )
 
-    try:
-        cursor: Any = adapter.execute(connection=connection, sql=comparison_sql)
-        rows: list[Any] = cursor.fetchall()
-    except Exception as error:
-        error_message = (
-            f"test '{test_entry.name}' encountered an execution error while running "
-            f"'{error_model_name}': {error}"
-        )
-        return SqlTestExecutionResult(
-            test_name=test_entry.name,
-            outcome=SqlTestOutcome.ERROR,
-            source_path=test_entry.source_path,
-            block_index=test_entry.block_index,
-            parent_name=test_entry.parent_name,
-            case_name=test_entry.case_name,
-            case_index=test_entry.case_index,
-            case_fingerprint=test_entry.case_fingerprint,
-            parameter_schema=test_entry.parameter_schema,
-            parameter_values=test_entry.parameter_values,
-            step_results=(
-                StepResult(
-                    model_name=error_model_name,
-                    outcome=SqlTestOutcome.ERROR,
-                    error_code=SQL_TEST_EXECUTION_ERROR_CODE,
-                    error_message=error_message,
+    with OperationLifecycle(
+        operation_kind="quality",
+        operation_name="sql_test_assertion",
+        metadata={"item_count": len(test_entry.chain) + len(test_entry.assertions)},
+        attributes=OperationAttributes(phase="assert", target_kind="sql_test", scope=quality_scope),
+    ) as lifecycle:
+        try:
+            cursor: Any = adapter.execute(connection=connection, sql=comparison_sql)
+            rows: list[Any] = cursor.fetchall()
+        except Exception as error:
+            lifecycle.failed(error=error, error_code=SQL_TEST_EXECUTION_ERROR_CODE)
+            error_message = (
+                f"test '{test_entry.name}' encountered an execution error while running "
+                f"'{error_model_name}': {error}"
+            )
+            return SqlTestExecutionResult(
+                test_name=test_entry.name,
+                outcome=SqlTestOutcome.ERROR,
+                source_path=test_entry.source_path,
+                block_index=test_entry.block_index,
+                parent_name=test_entry.parent_name,
+                case_name=test_entry.case_name,
+                case_index=test_entry.case_index,
+                case_fingerprint=test_entry.case_fingerprint,
+                parameter_schema=test_entry.parameter_schema,
+                parameter_values=test_entry.parameter_values,
+                step_results=(
+                    StepResult(
+                        model_name=error_model_name,
+                        outcome=SqlTestOutcome.ERROR,
+                        error_code=SQL_TEST_EXECUTION_ERROR_CODE,
+                        error_message=error_message,
+                    ),
                 ),
-            ),
-            error_code=SQL_TEST_EXECUTION_ERROR_CODE,
-            error_message=error_message,
-        )
+                error_code=SQL_TEST_EXECUTION_ERROR_CODE,
+                error_message=error_message,
+            )
 
-    step_results: list[StepResult] = _build_step_results(rows)
-    overall_outcome: SqlTestOutcome = SqlTestOutcome.PASS
-    step_result: StepResult
-    for step_result in step_results:
-        if step_result.outcome == SqlTestOutcome.FAIL:
-            overall_outcome = SqlTestOutcome.FAIL
+        step_results: list[StepResult] = _build_step_results(rows)
+        overall_outcome: SqlTestOutcome = SqlTestOutcome.PASS
+        step_result: StepResult
+        for step_result in step_results:
+            if step_result.outcome == SqlTestOutcome.FAIL:
+                overall_outcome = SqlTestOutcome.FAIL
+        lifecycle.completed()
 
     error_message: str | None = None
     if overall_outcome == SqlTestOutcome.FAIL:

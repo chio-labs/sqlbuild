@@ -4,6 +4,7 @@ tooling = ["scripts"]
 rule_modules = [
     "scripts.fensu_policy.rules.adapter_ownership",
     "scripts.fensu_policy.rules.canonical_operations",
+    "scripts.fensu_policy.rules.execution_observability",
     "scripts.fensu_policy.rules.module_boundaries",
     "scripts.fensu_policy.rules.orchestration_dataflow",
     "scripts.fensu_policy.rules.source_hygiene",
@@ -155,6 +156,12 @@ path = "src/sqlbuild/integrations/dagster/__init__.py"
 reason = "These imports preserve Dagster's documented external package-root APIs."
 
 [[rule_exceptions]]
+rule = "FFS120"
+path = "src/sqlbuild/event_exporters.py"
+symbols = ["event_exporter"]
+reason = "Bare @event_exporter is evaluated by Python as event_exporter(function), requiring positional function calling."
+
+[[rule_exceptions]]
 rule = "FFR402"
 path = "src/sqlbuild/integrations/rivers/__init__.py"
 reason = "These imports preserve Rivers' documented external package-root APIs."
@@ -178,6 +185,18 @@ symbols = ["_SnowflakeCursor.execute", "_SnowflakeCursor.executemany"]
 reason = "This proxy preserves Snowflake's DB-API cursor positional execution protocol."
 
 [[rule_exceptions]]
+rule = "FFS120"
+path = "src/sqlbuild/adapter/contract/classes/observed_cursor.py"
+symbols = ["ObservedCursor.execute", "ObservedCursor.executemany"]
+reason = "This proxy preserves the external DB-API cursor positional execution protocol."
+
+[[rule_exceptions]]
+rule = "FFS120"
+path = "src/sqlbuild/adapter/contract/classes/observed_connection.py"
+symbols = ["ObservedConnection.execute", "ObservedConnection.executemany"]
+reason = "This proxy preserves DuckDB's positional connection execution protocol."
+
+[[rule_exceptions]]
 rule = "FFL101"
 path = "scripts/fensu_policy/rules/adapter_ownership.py"
 reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers imports, despite FFR704 requiring that layout."
@@ -185,6 +204,11 @@ reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers 
 [[rule_exceptions]]
 rule = "FFL101"
 path = "scripts/fensu_policy/rules/canonical_operations.py"
+reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers imports, despite FFR704 requiring that layout."
+
+[[rule_exceptions]]
+rule = "FFL101"
+path = "scripts/fensu_policy/rules/execution_observability.py"
 reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers imports, despite FFR704 requiring that layout."
 
 [[rule_exceptions]]

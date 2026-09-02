@@ -103,3 +103,9 @@ class SqlHookParseError(DiscoveryError):
     """Raised when an authored SQL hook resource has an invalid shape."""
 
     code: str = "D014"
+
+
+class EventExporterDiscoveryError(DiscoveryError):
+    """Raised when project lifecycle event exporters are invalid."""
+
+    code: str = "D015"

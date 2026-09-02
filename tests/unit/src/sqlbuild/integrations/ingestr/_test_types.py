@@ -19,3 +19,11 @@ class IngestrLoaderDiscoveryTestCase:
     expected_loader_names: tuple[str, ...]
     expected_relative_path: str
     expected_function_name: str
+
+
+@dataclass(frozen=True)
+class IngestrRunnerTestCase:
+    description: str
+    returncode: int
+    expected_signal_number: int
+    expected_event_types: tuple[str, ...] = ()

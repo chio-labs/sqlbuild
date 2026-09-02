@@ -7,6 +7,7 @@ from datetime import date, datetime
 from typing import Any
 
 from sqlbuild.adapter.contract.types import CursorKind
+from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SourceColumnEntry
@@ -156,6 +157,21 @@ class LoadPipelineSkipFanInTestCase:
 
 
 @dataclass(frozen=True)
+class ConcurrentLoadProgressTestCase:
+    description: str
+    expected_start_count: int
+    expected_terminal_count: int
+    expected_rich_row_count: int
+
+
+@dataclass(frozen=True)
+class LoadStartOrderingTestCase:
+    description: str
+    connection_mode: LoaderConnectionMode
+    expected_connection_count: int
+
+
+@dataclass(frozen=True)
 class SourceLoadExecutionContextTestCase:
     """One source load execution context behavior case."""
 
@@ -190,3 +206,18 @@ class SourceLoadNoneReturnTestCase:
     expected_status: ExecutionStatus
     expected_rows_loaded: int
     expected_error_fragment: str = ""
+
+
+@dataclass(frozen=True)
+class LoaderOperationLifecycleTestCase:
+    """One framework-owned loader iterable lifecycle case."""
+
+    description: str
+    expected_status: ExecutionStatus
+    expected_event_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExternalLoaderContractTestCase:
+    description: str
+    expected_error_fragment: str
