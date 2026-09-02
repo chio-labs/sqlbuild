@@ -346,6 +346,7 @@ def _call_node_with_retry(
     start_time: float = monotonic()
     attempt: int = 1
     while True:
+        invocation_retryable = False
         try:
             with CostContext.resource_scope(
                 resource_type=_node_kind(node).value,
@@ -358,17 +359,23 @@ def _call_node_with_retry(
                     operation_name=f"python_{_node_kind(node).value}",
                     metadata={"attempt_number": attempt},
                 ):
-                    returned: object = invoke_with_providers(
-                        function=node.function,
-                        context=context,
-                        providers=providers,
-                    )
+                    try:
+                        returned: object = invoke_with_providers(
+                            function=node.function,
+                            context=context,
+                            providers=providers,
+                        )
+                    except retry_policy.retry_on:
+                        invocation_retryable = True
+                        raise
                     return normalize_python_node_return(
                         node_name=node.name,
                         kind=_node_kind(node),
                         returned=returned,
                     )
         except retry_policy.retry_on:
+            if not invocation_retryable:
+                raise
             if attempt >= retry_policy.max_attempts:
                 raise
             delay_seconds: float = calculate_retry_delay(

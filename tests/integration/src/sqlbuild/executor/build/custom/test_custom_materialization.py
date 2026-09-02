@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import duckdb
@@ -61,7 +62,7 @@ from tests.integration.src.sqlbuild.executor.build.custom.helpers import (
             model_sql="SELECT 1 AS id",
             expected_status=ExecutionStatus.FAILED,
             expected_failed_phase=ExecutionPhase.CUSTOM_MATERIALIZATION,
-            expected_error_fragment="has no attribute 'failed'",
+            expected_error_fragment="must return MaterializationResult",
             fn_name="malformed_custom",
         ),
     ),
@@ -78,7 +79,7 @@ def test_given_malformed_custom_return_when_executing_then_operation_fails_once(
 
     def malformed_custom(ctx: MaterializationContext) -> object:
         del ctx
-        return object()
+        return SimpleNamespace(failed=False)
 
     with invocation_scope("inv-malformed-custom"), dispatcher_scope(dispatcher):
         result: ModelExecutionResult = run_custom_entry(

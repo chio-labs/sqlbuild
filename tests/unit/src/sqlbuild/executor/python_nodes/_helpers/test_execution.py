@@ -79,10 +79,12 @@ def test_given_malformed_task_return_when_executing_then_operation_fails_once(
     test_case: MalformedPythonOperationTestCase,
 ) -> None:
     events: list[LifecycleEvent] = []
+    invocations: list[str] = []
     dispatcher: EventDispatcher = EventDispatcher()
     dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
 
     def malformed_task() -> PythonNodeResult:
+        invocations.append("called")
         return PythonNodeResult(payload={"invalid": True}, materialized=True)
 
     with invocation_scope("inv-malformed-task"), dispatcher_scope(dispatcher):
@@ -93,6 +95,7 @@ def test_given_malformed_task_return_when_executing_then_operation_fails_once(
                     relative_path=Path("tasks/bad.py"),
                     name="malformed_task",
                     function=malformed_task,
+                    retry=RetryPolicy(max_attempts=3, retry_on=Exception, jitter=False),
                 ),
             ),
             statement_recorder=StatementRecorder(),
@@ -115,6 +118,8 @@ def test_given_malformed_task_return_when_executing_then_operation_fails_once(
         "operation_failed",
     )
     assert operation_events[0].payload["operation_name"] == test_case.operation_name
+    assert operation_events[-1].payload["error_type"] == "ExecutorInputError"
+    assert invocations == ["called"]
 
 
 @pytest.mark.parametrize(

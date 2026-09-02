@@ -199,3 +199,9 @@ class LoaderOperationLifecycleTestCase:
     description: str
     expected_status: ExecutionStatus
     expected_event_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExternalLoaderContractTestCase:
+    description: str
+    expected_error_fragment: str

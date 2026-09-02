@@ -18,6 +18,7 @@ from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import PlanReason
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.main._execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import (
@@ -239,8 +240,11 @@ def _run_custom_materialization(
                     context=materialization_context,
                     providers=context.providers,
                 )
-                materialization_result: MaterializationResult = cast(MaterializationResult, result)
-                _ = materialization_result.failed
+                if not isinstance(result, MaterializationResult):
+                    raise ExecutorInputError(
+                        "custom materialization must return MaterializationResult"
+                    )
+                materialization_result: MaterializationResult = result
     except Exception as exc:
         return CustomMaterializationPhaseOutcome(
             failure=build_failed_result(

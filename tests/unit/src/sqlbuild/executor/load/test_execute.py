@@ -20,6 +20,7 @@ from sqlbuild.executor.load.models import (
     LoadExecutionResult,
     LoadRuntimeParams,
 )
+from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.observability import (
     EventDispatcher,
@@ -33,6 +34,7 @@ from sqlbuild.runtime.observability.classes.statement_lifecycle import Statement
 from sqlbuild.spec.contracts.models import SourceEntry
 from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.executor.load._test_types import (
+    ExternalLoaderContractTestCase,
     LoaderOperationLifecycleTestCase,
     SourceLoadExecutionContextTestCase,
     SourceLoadNoneReturnTestCase,
@@ -564,7 +566,123 @@ def test_given_provider_parameter_when_executing_external_source_loader_then_pro
     assert result.status == test_case.expected_status
     assert result.rows_loaded == test_case.expected_rows_loaded
     assert tuple(observed_labels) == ("None:analytics.raw.orders:slack",)
-    assert operation_events(events)[0].payload["operation_name"] == "external_source_load"
+    observed_operations: tuple[LifecycleEvent, ...] = operation_events(events)
+    assert observed_operations[0].payload["operation_name"] == "external_source_load"
+    assert tuple(event.event_type for event in observed_operations) == (
+        "operation_started",
+        "operation_completed",
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ExternalLoaderContractTestCase(
+            description="external loader returns unsupported generator",
+            expected_error_fragment="external loaders must write their own destination",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_external_loader_generator_when_validating_return_then_fails_without_consuming(
+    test_case: ExternalLoaderContractTestCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    consumed: list[str] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    def external_generator(ctx: LoaderContext) -> Iterator[dict[str, object]]:
+        del ctx
+        consumed.append("consumed")
+        yield {"order_id": 1}
+
+    with invocation_scope("inv-external-generator"), dispatcher_scope(dispatcher):
+        result: LoadExecutionResult = execute_source_load(
+            source_entry=SourceEntry(name="raw_orders", table="orders", loader="external"),
+            loader_function=DiscoveredLoaderFunction(
+                file_path=Path("loaders/external.py"),
+                relative_path=Path("loaders/external.py"),
+                name="external",
+                function=external_generator,
+                connection_mode=LoaderConnectionMode.EXTERNAL,
+            ),
+            adapter=LoaderContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            statement_recorder=StatementRecorder(),
+            runtime=LoadRuntimeParams(
+                run_id="run-external", target="dev", vars={}, is_reload=False
+            ),
+        )
+
+    observed_operations: tuple[LifecycleEvent, ...] = operation_events(events)
+    assert result.status == ExecutionStatus.FAILED
+    assert test_case.expected_error_fragment in (result.error_message or "").lower()
+    assert consumed == []
+    assert tuple(event.event_type for event in observed_operations) == (
+        "operation_started",
+        "operation_failed",
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ExternalLoaderContractTestCase(
+            description="external loader returns node result envelope",
+            expected_error_fragment="returned a node result envelope",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_external_loader_node_envelope_when_validating_return_then_operation_fails(
+    test_case: ExternalLoaderContractTestCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    def external_envelope(ctx: LoaderContext) -> NodeResultEnvelope:
+        del ctx
+        return NodeResultEnvelope(
+            node_type="loader",
+            node_name="other",
+            run_id="old-run",
+            status="success",
+            payload=None,
+            metadata={},
+            error_message=None,
+            materialized=None,
+            ts=datetime(2026, 1, 1),
+        )
+
+    with invocation_scope("inv-external-envelope"), dispatcher_scope(dispatcher):
+        result: LoadExecutionResult = execute_source_load(
+            source_entry=SourceEntry(name="raw_orders", table="orders", loader="external"),
+            loader_function=DiscoveredLoaderFunction(
+                file_path=Path("loaders/external.py"),
+                relative_path=Path("loaders/external.py"),
+                name="external",
+                function=external_envelope,
+                connection_mode=LoaderConnectionMode.EXTERNAL,
+            ),
+            adapter=LoaderContextTestAdapter(),
+            connection_config={},
+            connection=object(),
+            statement_recorder=StatementRecorder(),
+            runtime=LoadRuntimeParams(
+                run_id="run-external", target="dev", vars={}, is_reload=False
+            ),
+        )
+
+    observed_operations: tuple[LifecycleEvent, ...] = operation_events(events)
+    assert result.status == ExecutionStatus.FAILED
+    assert test_case.expected_error_fragment in (result.error_message or "")
+    assert tuple(event.event_type for event in observed_operations) == (
+        "operation_started",
+        "operation_failed",
+    )
 
 
 @pytest.mark.parametrize(
