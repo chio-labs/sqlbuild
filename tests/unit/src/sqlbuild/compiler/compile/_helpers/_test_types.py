@@ -273,7 +273,8 @@ class ModelSchemaContractDiagnosticTestCase:
     description: str
     contract: str
     projection: str
-    expected_code: str
+    expected_codes: tuple[str, ...]
+    expected_help_fragment: str
 
 
 @dataclass(frozen=True)

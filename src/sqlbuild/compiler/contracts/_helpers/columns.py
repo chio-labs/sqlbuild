@@ -32,6 +32,7 @@ _MISSING_DECLARATIONS_CODE: str = "K006"
 def collect_model_column_contract_diagnostics(
     *,
     model: CompiledModel,
+    validate_declared_shape: bool,
     dialect: TypeDialect | str | None = None,
 ) -> tuple[CompilerDiagnostic, ...]:
     """Collect diagnostics for one compiled model's declared column contract."""
@@ -54,16 +55,29 @@ def collect_model_column_contract_diagnostics(
     for declared_column in model.schema_entry.columns:
         inferred_column: InferredColumn | None = inferred_by_name.get(declared_column.name)
         if inferred_column is None:
-            diagnostics.append(_missing_column_diagnostic(model=model, column=declared_column))
+            if validate_declared_shape:
+                diagnostics.append(
+                    _missing_column_diagnostic(
+                        model=model,
+                        column=declared_column,
+                        contract_enforced=contract_enforced,
+                    )
+                )
             continue
-        diagnostics.extend(
-            _nullability_diagnostics(
-                model=model,
-                declared_column=declared_column,
-                inferred_column=inferred_column,
+        if validate_declared_shape:
+            diagnostics.extend(
+                _nullability_diagnostics(
+                    model=model,
+                    declared_column=declared_column,
+                    inferred_column=inferred_column,
+                )
             )
-        )
         if declared_column.type is None:
+            continue
+        type_enforcement: bool = model.schema_entry is not None and bool(
+            model.schema_entry.type_enforcement
+        )
+        if not validate_declared_shape and not type_enforcement:
             continue
         diagnostics.extend(
             _type_diagnostics(
@@ -160,22 +174,45 @@ def _declares_not_null(column: SchemaColumn) -> bool:
     return any(audit.definition_name == NOT_NULL_AUDIT_NAME for audit in column.audits)
 
 
-def _missing_column_diagnostic(*, model: CompiledModel, column: SchemaColumn) -> CompilerDiagnostic:
+def _missing_column_diagnostic(
+    *, model: CompiledModel, column: SchemaColumn, contract_enforced: bool
+) -> CompilerDiagnostic:
+    contract_label: str = "enforced contract column" if contract_enforced else "declared column"
+    declared_in_named_schema: bool = (
+        model.schema_entry is not None
+        and model.schema_entry.model_schema is not None
+        and column.location is not None
+        and column.location.path != model.relative_path
+    )
+    declaration_label: str = (
+        "the named SCHEMA declaration" if declared_in_named_schema else "MODEL(columns (...))"
+    )
+    help_text: str = (
+        f"add {column.name} to the SELECT list or correct {declaration_label}; "
+        "validation is active because this model declares contract enforced"
+        if contract_enforced
+        else (
+            f"add {column.name} to the SELECT list or correct/remove {declaration_label}; "
+            f"{declaration_label} is validated using static SQL analysis because "
+            'settings.column_contract_mode is "implicit" (the default). If this project '
+            "intentionally uses columns only for metadata and audits, set [settings] "
+            'column_contract_mode = "explicit"; models with contract enforced remain validated'
+        )
+    )
     return CompilerDiagnostic(
         phase=DiagnosticPhase.CONTRACT,
         severity=DiagnosticSeverity.ERROR,
         code=_MISSING_COLUMN_CODE,
-        message=f"required column '{column.name}' missing from model output",
+        message=(
+            f"{contract_label} '{column.name}' was not found in statically inferred output "
+            f"for model '{model.name}'"
+        ),
         resource_type=CompiledResourceType.MODEL,
         resource_name=model.name,
         column_name=column.name,
         path=model.relative_path,
         location=column.location,
-        help=(
-            f"add {column.name} to the SELECT list or remove it from the named SCHEMA"
-            if model.schema_entry is not None and model.schema_entry.model_schema is not None
-            else f"add {column.name} to the SELECT list or remove it from MODEL(columns)"
-        ),
+        help=help_text,
     )
 
 
@@ -219,7 +256,7 @@ def _type_diagnostics(
                     column_name=declared_column.name,
                     message="output expression with unproven type",
                 ),
-                help="add an explicit CAST if this contract should be checked statically",
+                help="add an explicit CAST if this declared type should be checked statically",
             ),
         )
 
@@ -235,7 +272,7 @@ def _type_diagnostics(
             code=_TYPE_MISMATCH_CODE,
             message=(
                 f"column '{declared_column.name}' inferred as {inferred_column.type} "
-                f"but contract declares {declared_type}"
+                f"but declared type is {declared_type}"
             ),
             resource_type=CompiledResourceType.MODEL,
             resource_name=model.name,

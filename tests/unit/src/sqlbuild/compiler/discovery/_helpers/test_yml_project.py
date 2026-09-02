@@ -13,6 +13,8 @@ from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from sqlbuild.sql_values.types import CollectionRendering
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
+    ColumnContractModeConfigErrorTestCase,
+    ColumnContractModeConfigTestCase,
     FutureCursorConfigErrorTestCase,
     FutureCursorConfigTestCase,
     LoadLocalConfigErrorTestCase,
@@ -1609,3 +1611,49 @@ def test_given_legacy_local_config_file_when_loading_local_config_then_it_raises
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
         load_local_config(project_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ColumnContractModeConfigTestCase("omitted mode uses implicit default", "", "implicit"),
+        ColumnContractModeConfigTestCase(
+            "explicit mode is accepted", 'column_contract_mode = "explicit"', "explicit"
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_column_contract_mode_when_loading_project_then_policy_is_typed(
+    test_case: ColumnContractModeConfigTestCase, tmp_path: Path
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "demo"\nadapter = "duckdb"\n[settings]\n{test_case.settings_toml}\n',
+        encoding="utf-8",
+    )
+
+    config: ProjectConfig = load_project_config(project_dir=tmp_path)
+
+    assert config.settings.column_contract_mode == test_case.expected_mode
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ColumnContractModeConfigErrorTestCase(
+            "unsupported mode is rejected",
+            'column_contract_mode = "disabled"',
+            "settings.column_contract_mode must be one of: implicit, explicit",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_column_contract_mode_when_loading_project_then_error_is_raised(
+    test_case: ColumnContractModeConfigErrorTestCase, tmp_path: Path
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "demo"\nadapter = "duckdb"\n[settings]\n{test_case.settings_toml}\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProjectConfigError, match=test_case.expected_error_fragment):
+        load_project_config(project_dir=tmp_path)

@@ -36,7 +36,68 @@ from tests.unit.src.sqlbuild.compiler.contracts.helpers import make_contract_pro
             type_enforcement=None,
             expected_codes=("K001",),
             expected_severities=("error",),
-            expected_messages=("required column 'customer_id' missing from model output",),
+            expected_messages=(
+                "declared column 'customer_id' was not found in statically inferred output "
+                "for model 'orders'",
+            ),
+        ),
+        ContractValidationTestCase(
+            description="explicit mode treats unspecified columns as metadata",
+            declared_columns=(("customer_id", None),),
+            inferred_columns=(("order_id", None),),
+            type_enforcement=None,
+            column_contract_mode="explicit",
+            expected_codes=(),
+            expected_severities=(),
+            expected_messages=(),
+        ),
+        ContractValidationTestCase(
+            description="contract none overrides implicit mode",
+            declared_columns=(("customer_id", None),),
+            inferred_columns=(("order_id", None),),
+            type_enforcement=None,
+            contract="none",
+            expected_codes=(),
+            expected_severities=(),
+            expected_messages=(),
+        ),
+        ContractValidationTestCase(
+            description="enforced contract overrides explicit mode",
+            declared_columns=(("customer_id", None),),
+            inferred_columns=(),
+            type_enforcement=None,
+            contract="enforced",
+            column_contract_mode="explicit",
+            expected_codes=("K001",),
+            expected_severities=("error",),
+            expected_messages=(
+                "enforced contract column 'customer_id' was not found in statically inferred "
+                "output for model 'orders'",
+            ),
+        ),
+        ContractValidationTestCase(
+            description="type enforcement remains active in explicit mode",
+            declared_columns=(("amount_cents", "INTEGER"),),
+            inferred_columns=(("amount_cents", "VARCHAR"),),
+            type_enforcement=True,
+            column_contract_mode="explicit",
+            expected_codes=("K002",),
+            expected_severities=("error",),
+            expected_messages=(
+                "column 'amount_cents' inferred as VARCHAR but declared type is INTEGER",
+            ),
+        ),
+        ContractValidationTestCase(
+            description="type enforcement remains active with contract none",
+            declared_columns=(("amount_cents", "INTEGER"),),
+            inferred_columns=(("amount_cents", "VARCHAR"),),
+            type_enforcement=True,
+            contract="none",
+            expected_codes=("K002",),
+            expected_severities=("error",),
+            expected_messages=(
+                "column 'amount_cents' inferred as VARCHAR but declared type is INTEGER",
+            ),
         ),
         ContractValidationTestCase(
             description="declared typed column matches inferred type",
@@ -55,7 +116,7 @@ from tests.unit.src.sqlbuild.compiler.contracts.helpers import make_contract_pro
             expected_codes=("K002",),
             expected_severities=("error",),
             expected_messages=(
-                "column 'amount_cents' inferred as VARCHAR but contract declares INTEGER",
+                "column 'amount_cents' inferred as VARCHAR but declared type is INTEGER",
             ),
         ),
         ContractValidationTestCase(
@@ -66,7 +127,7 @@ from tests.unit.src.sqlbuild.compiler.contracts.helpers import make_contract_pro
             expected_codes=("K002",),
             expected_severities=("warning",),
             expected_messages=(
-                "column 'amount_cents' inferred as VARCHAR but contract declares INTEGER",
+                "column 'amount_cents' inferred as VARCHAR but declared type is INTEGER",
             ),
         ),
         ContractValidationTestCase(
@@ -129,7 +190,7 @@ from tests.unit.src.sqlbuild.compiler.contracts.helpers import make_contract_pro
             expected_codes=("K002",),
             expected_severities=("error",),
             expected_messages=(
-                "column 'amount_cents' inferred as VARCHAR but contract declares INTEGER",
+                "column 'amount_cents' inferred as VARCHAR but declared type is INTEGER",
             ),
         ),
         ContractValidationTestCase(
@@ -191,6 +252,7 @@ def test_given_compiled_project_when_validating_contracts_then_returns_expected_
             declared_nullable_by_column=test_case.declared_nullable_by_column,
             inferred_nullability_by_column=test_case.inferred_nullability_by_column,
             contract=test_case.contract,
+            column_contract_mode=test_case.column_contract_mode,
         ),
         dialect=TypeDialect.DUCKDB,
     )

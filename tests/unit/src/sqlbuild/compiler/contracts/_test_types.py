@@ -16,6 +16,7 @@ class ContractValidationTestCase:
     expected_severities: tuple[str, ...]
     expected_messages: tuple[str, ...]
     contract: str | None = None
+    column_contract_mode: str = "implicit"
     declared_not_null_columns: tuple[str, ...] = ()
     declared_nullable_by_column: dict[str, bool | None] | None = None
     inferred_nullability_by_column: dict[str, InferredNullability] | None = None

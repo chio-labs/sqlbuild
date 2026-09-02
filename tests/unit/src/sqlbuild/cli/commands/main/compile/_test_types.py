@@ -22,6 +22,14 @@ class CompileCommandTestCase:
 
 
 @dataclass(frozen=True)
+class CompileColumnContractModeTestCase:
+    description: str
+    mode: str
+    expected_audit_name: str
+    expected_column_name: str
+
+
+@dataclass(frozen=True)
 class CompileDagArtifactTestCase:
     description: str
     dag_path: str
