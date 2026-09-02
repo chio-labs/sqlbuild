@@ -9,6 +9,7 @@ from collections.abc import Callable, Sequence
 from typing import cast
 
 from sqlbuild.cli.output._helpers.cursor_plan import build_cursor_plan_details
+from sqlbuild.cli.output._helpers.selection_diagnostics import direct_selection_diagnostics_enabled
 from sqlbuild.cli.output.models import CursorPlanDetails
 from sqlbuild.cli.output.types import CursorBoundsOwner, CursorResolutionStatus, PlanRowKind
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
@@ -1444,12 +1445,18 @@ def _format_warnings(
 ) -> list[str]:
     """Append the warnings section."""
 
+    selection_diagnostics: bool | None = direct_selection_diagnostics_enabled(plan)
+    include_stale_input_warnings: bool = (
+        selection_diagnostics
+        if selection_diagnostics is not None
+        else include_direct_freshness_diagnostics
+    )
     warning_entries: list[PlanWarning] = [
         warning
         for warning in plan.warnings
         if warning.severity != WarningSeverity.INFO
         and (
-            include_direct_freshness_diagnostics
+            include_stale_input_warnings
             or not warning.message.startswith(_STALE_INPUT_WARNING_TITLE)
         )
     ]
@@ -1769,6 +1776,8 @@ def _format_direct_remaining_stale_metadata(
     section_header_style: Callable[[str], str],
     display_options: DisplayOptions,
 ) -> list[str]:
+    if direct_selection_diagnostics_enabled(plan) is False:
+        return lines
     remaining_stale_model_names: tuple[str, ...] = _metadata_string_tuple(
         plan.metadata.get("direct_remaining_stale_model_names")
     )

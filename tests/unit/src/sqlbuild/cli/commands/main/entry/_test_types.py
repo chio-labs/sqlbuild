@@ -63,6 +63,7 @@ class MainTestCase:
     expected_no_cache: bool = False
     expected_full_refresh: bool = False
     expected_changes_only: bool = False
+    expected_selection_diagnostics: bool = False
     expected_virtual_env: str | None = None
     expected_load_sources: bool | None = None
     expected_reload: bool = False

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
@@ -21,11 +22,13 @@ from sqlbuild.compiler.planner.types import (
     SnapshotSchemaChangePolicy,
     SnapshotStrategy,
 )
+from sqlbuild.spec.contracts.constants import CURSOR_POLICY_DISABLED, ZERO_DAY_CURSOR_DURATION
 from sqlbuild.spec.contracts.models import (
     ResolvedTimeTravelRetention,
     SchemaColumn,
     SettingsConfig,
 )
+from sqlbuild.spec.contracts.types import FutureCursorAction
 
 _VALID_STRATEGIES: frozenset[str] = frozenset(s.value for s in IncrementalStrategy)
 _VALID_CURSOR_TYPES: frozenset[str] = frozenset(ct.value for ct in CursorType)
@@ -115,6 +118,10 @@ def validate_incremental_config(
     cursor: str | None = _str(config=config, key="cursor")
     cursor_type: str | None = _str(config=config, key="cursor_type")
     cursor_start: object | None = config.values.get("cursor_start")
+    cursor_start_max_ahead: object | None = config.values.get("cursor_start_max_ahead")
+    cursor_start_max_action: object | None = config.values.get("cursor_start_max_action")
+    cursor_future_max_distance: object | None = config.values.get("cursor_future_max_distance")
+    cursor_future_action: object | None = config.values.get("cursor_future_action")
     append_cursor_inclusive: object | None = config.values.get("append_cursor_inclusive")
     unique_key: object | None = config.values.get("unique_key")
     has_unique_key: bool = unique_key is not None and unique_key != () and unique_key != []
@@ -150,6 +157,14 @@ def validate_incremental_config(
         cursor_start=cursor_start,
         append_cursor_inclusive=append_cursor_inclusive,
         strategy=strategy,
+    )
+    _validate_cursor_safety_overrides(
+        model_name=model_name,
+        cursor=cursor,
+        cursor_start_max_ahead=cursor_start_max_ahead,
+        cursor_start_max_action=cursor_start_max_action,
+        cursor_future_max_distance=cursor_future_max_distance,
+        cursor_future_action=cursor_future_action,
     )
 
     _validate_cursor_input_config(
@@ -436,6 +451,54 @@ def _validate_incremental_cursor_rules(
         )
     if append_cursor_inclusive is not None and cursor is None:
         raise CompileInputError(f"model '{model_name}': append_cursor_inclusive requires cursor")
+
+
+def _validate_cursor_safety_overrides(
+    *,
+    model_name: str,
+    cursor: str | None,
+    cursor_start_max_ahead: object | None,
+    cursor_start_max_action: object | None,
+    cursor_future_max_distance: object | None,
+    cursor_future_action: object | None,
+) -> None:
+    values: tuple[object | None, ...] = (
+        cursor_start_max_ahead,
+        cursor_start_max_action,
+        cursor_future_max_distance,
+        cursor_future_action,
+    )
+    if cursor is None and any(value is not None for value in values):
+        raise CompileInputError(f"model '{model_name}': cursor safety overrides require cursor")
+    duration_pattern: re.Pattern[str] = re.compile(
+        r"^(?=.*[1-9])(?:(\d+)y)?(?:(\d+)mo)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$"
+    )
+    if cursor_start_max_ahead is not None and (
+        not isinstance(cursor_start_max_ahead, str)
+        or (
+            cursor_start_max_ahead not in {CURSOR_POLICY_DISABLED, ZERO_DAY_CURSOR_DURATION}
+            and duration_pattern.fullmatch(cursor_start_max_ahead) is None
+        )
+    ):
+        raise CompileInputError(
+            f"model '{model_name}': cursor_start_max_ahead must be a duration or 'disabled'"
+        )
+    if cursor_future_max_distance is not None and (
+        not isinstance(cursor_future_max_distance, str)
+        or (
+            cursor_future_max_distance not in {CURSOR_POLICY_DISABLED, ZERO_DAY_CURSOR_DURATION}
+            and duration_pattern.fullmatch(cursor_future_max_distance) is None
+        )
+    ):
+        raise CompileInputError(
+            f"model '{model_name}': cursor_future_max_distance must be a duration or 'disabled'"
+        )
+    for key, value in (
+        ("cursor_start_max_action", cursor_start_max_action),
+        ("cursor_future_action", cursor_future_action),
+    ):
+        if value is not None and value not in set(FutureCursorAction):
+            raise CompileInputError(f"model '{model_name}': {key} must be one of: cap, error")
 
 
 def validate_contract_config(

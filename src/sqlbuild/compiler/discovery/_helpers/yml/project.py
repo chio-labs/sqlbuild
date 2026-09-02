@@ -31,7 +31,10 @@ from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.path_defaults.constants import GLOB_SEGMENTS, UNSUPPORTED_GLOB_MARKERS
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.cost.constants import USD_PER_CREDIT_CONFIG_KEY
-from sqlbuild.spec.contracts.constants import TIME_TRAVEL_RETENTION_MATERIALIZATIONS
+from sqlbuild.spec.contracts.constants import (
+    TIME_TRAVEL_RETENTION_MATERIALIZATIONS,
+    ZERO_DAY_CURSOR_DURATION,
+)
 from sqlbuild.spec.contracts.models import (
     AuthoredTimeTravelRetention,
     ClonePolicy,
@@ -59,10 +62,12 @@ from sqlbuild.spec.contracts.models import (
     ScopesConfig,
     SettingsConfig,
     SnapshotsConfig,
+    StartCursorsConfig,
     StateConfig,
     TargetConfig,
 )
 from sqlbuild.spec.contracts.types import (
+    ColumnContractMode,
     FutureCursorAction,
     MicrobatchLimitAction,
     TableType,
@@ -398,6 +403,15 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         default=True,
     )
     sql_validation: bool = _optional_bool(mapping=mapping, key="sql_validation", default=True)
+    raw_column_contract_mode: object = mapping.get(
+        "column_contract_mode", ColumnContractMode.IMPLICIT.value
+    )
+    try:
+        column_contract_mode: ColumnContractMode = ColumnContractMode(raw_column_contract_mode)
+    except (TypeError, ValueError) as error:
+        raise ProjectConfigError(
+            "settings.column_contract_mode must be one of: implicit, explicit"
+        ) from error
     auto_load_sources: bool = _optional_bool(mapping=mapping, key="auto_load_sources", default=True)
     virtual_environments: bool = _optional_bool(
         mapping=mapping,
@@ -437,6 +451,7 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         sql_analysis=sql_analysis,
         query_change_tracking=query_change_tracking,
         sql_validation=sql_validation,
+        column_contract_mode=column_contract_mode,
         concurrency=concurrency,
         auto_load_sources=auto_load_sources,
         changes_only=changes_only,
@@ -455,7 +470,7 @@ def _load_cursors(*, payload: object, file_path: Path) -> CursorsConfig:
     )
     _validate_allowed_keys(
         mapping=mapping,
-        allowed_keys=frozenset({"future"}),
+        allowed_keys=frozenset({"future", "start"}),
         label="cursors",
         file_path=file_path,
     )
@@ -469,16 +484,48 @@ def _load_cursors(*, payload: object, file_path: Path) -> CursorsConfig:
         file_path=file_path,
     )
     max_distance: str | None = _optional_str(payload=future, key="max_distance")
-    if max_distance is not None and _CURSOR_DURATION_PATTERN.fullmatch(max_distance) is None:
+    if (
+        max_distance is not None
+        and max_distance != ZERO_DAY_CURSOR_DURATION
+        and _CURSOR_DURATION_PATTERN.fullmatch(max_distance) is None
+    ):
         raise ProjectConfigError(
-            "cursors.future.max_distance must be a positive duration like 7d, 12h, or 1mo"
+            "cursors.future.max_distance must be a duration like 0d, 7d, 12h, or 1mo"
         )
     raw_action: str | None = _optional_str(payload=future, key="action")
     try:
         action: FutureCursorAction = FutureCursorAction(raw_action or FutureCursorAction.ERROR)
     except ValueError:
         raise ProjectConfigError("cursors.future.action must be one of: cap, error") from None
-    return CursorsConfig(future=FutureCursorsConfig(max_distance=max_distance, action=action))
+    start: dict[str, object] = _coerce_mapping(
+        payload=mapping.get("start"), label="cursors.start", file_path=file_path
+    )
+    _validate_allowed_keys(
+        mapping=start,
+        allowed_keys=frozenset({"max_ahead", "action"}),
+        label="cursors.start",
+        file_path=file_path,
+    )
+    max_ahead: str | None = _optional_str(payload=start, key="max_ahead")
+    if (
+        max_ahead is not None
+        and max_ahead != ZERO_DAY_CURSOR_DURATION
+        and _CURSOR_DURATION_PATTERN.fullmatch(max_ahead) is None
+    ):
+        raise ProjectConfigError(
+            "cursors.start.max_ahead must be a duration like 0d, 7d, 12h, or 1mo"
+        )
+    raw_start_action: str | None = _optional_str(payload=start, key="action")
+    try:
+        start_action: FutureCursorAction = FutureCursorAction(
+            raw_start_action or FutureCursorAction.ERROR
+        )
+    except ValueError:
+        raise ProjectConfigError("cursors.start.action must be one of: cap, error") from None
+    return CursorsConfig(
+        future=FutureCursorsConfig(max_distance=max_distance, action=action),
+        start=StartCursorsConfig(max_ahead=max_ahead, action=start_action),
+    )
 
 
 def _load_microbatches(*, payload: object, file_path: Path) -> MicrobatchesConfig:
@@ -700,6 +747,10 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
             key="append_cursor_inclusive",
         ),
         cursor_start=_optional_cursor_start(mapping=mapping, key="cursor_start"),
+        cursor_start_max_ahead=_optional_str(payload=mapping, key="cursor_start_max_ahead"),
+        cursor_start_max_action=_optional_str(payload=mapping, key="cursor_start_max_action"),
+        cursor_future_max_distance=_optional_str(payload=mapping, key="cursor_future_max_distance"),
+        cursor_future_action=_optional_str(payload=mapping, key="cursor_future_action"),
         lookback=_optional_str(payload=mapping, key="lookback"),
         batch_size=_optional_scalar_batch_size(mapping=mapping, key="batch_size"),
         batch_concurrency=(

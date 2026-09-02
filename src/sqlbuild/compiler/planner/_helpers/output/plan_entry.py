@@ -41,6 +41,10 @@ from sqlbuild.compiler.planner._helpers.resolve.cursor import (
     normalize_cursor_snapshot_grain,
     resolve_effective_timestamp_grain,
 )
+from sqlbuild.compiler.planner._helpers.resolve.cursor_policies import (
+    resolve_future_cursor_config,
+    resolve_start_cursor_config,
+)
 from sqlbuild.compiler.planner._helpers.resolve.refs import (
     apply_deferred_locations,
     build_function_locations,
@@ -58,6 +62,7 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.changes._model_changes import detect_model_changes
 from sqlbuild.compiler.planner.main.execution.future_cursor_safety import apply_future_cursor_safety
 from sqlbuild.compiler.planner.main.execution.future_cursor_warning import future_cursor_cap_warning
+from sqlbuild.compiler.planner.main.execution.maximum_start_warning import maximum_start_cap_warning
 from sqlbuild.compiler.planner.main.execution.microbatch_limit import (
     microbatch_limit_warning,
 )
@@ -70,6 +75,7 @@ from sqlbuild.compiler.planner.models import (
     CursorOverridePair,
     CursorOverrides,
     DeferralInputs,
+    MaximumStartPolicyInputs,
     ModelCursorSnapshot,
     ModelPlanContext,
     ModelPlanEntry,
@@ -105,6 +111,7 @@ from sqlbuild.spec.contracts.models import (
     ProjectConfig,
     SchemaColumn,
     SourceEntry,
+    StartCursorsConfig,
 )
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction, TableType
 
@@ -304,6 +311,7 @@ def build_plan_entries(
                 star_exclude_keyword=relations.star_exclude_keyword,
                 runtime_cursor_producer_names=runtime_cursor_producer_names,
                 future_cursor_config=inputs.future_cursor_config,
+                start_cursor_config=inputs.start_cursor_config,
                 invocation_time=inputs.invocation_time,
             ),
             sql_analysis_enabled=project.settings.sql_analysis,
@@ -521,11 +529,16 @@ def plan_model_from_change(
         type_enforcement=type_enforcement,
     )
 
-    pre_hooks: object = model.config.values.get("pre_hooks")
-    post_hooks: object = model.config.values.get("post_hooks")
+    pre_hooks, post_hooks = (
+        model.config.values.get("pre_hooks"),
+        model.config.values.get("post_hooks"),
+    )
     cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
     cursor_grain: str | None = _get_config_str(model=model, key="cursor_grain")
     cursor_start: str | None = _get_cursor_start(model)
+    effective_future_cursor_config, effective_start_cursor_config = _resolve_cursor_safety_configs(
+        model=model, context=context
+    )
     cursor_input_relations: tuple[CursorInputRelation, ...] = ()
     if not suppress_runtime_cursor_bounds:
         cursor_input_relations = _build_cursor_input_relations(
@@ -549,7 +562,8 @@ def plan_model_from_change(
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
         runtime_owned_cursor_bounds=runtime_owned_cursor_bounds,
-        future_cursor_config=context.future_cursor_config,
+        future_cursor_config=effective_future_cursor_config,
+        start_cursor_config=effective_start_cursor_config,
         invocation_time=context.invocation_time,
     )
 
@@ -586,11 +600,12 @@ def plan_model_from_change(
         end_cursor_override=end_cursor_override,
         runtime_owned_cursor_bounds=runtime_owned_cursor_bounds,
         cursor_input_relations=cursor_input_relations,
-        future_cursor_config=context.future_cursor_config,
+        future_cursor_config=effective_future_cursor_config,
+        start_cursor_config=effective_start_cursor_config,
         invocation_time=context.invocation_time,
     )
 
-    warnings = _append_future_cap_warning(
+    warnings = _append_cursor_safety_warnings(
         warnings=warnings,
         model_name=model.name,
         bounds=microbatch_range or cursor_bounds,
@@ -669,7 +684,8 @@ def plan_model_from_change(
         microbatch_range=microbatch_range,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
-        future_cursor_config=context.future_cursor_config,
+        future_cursor_config=effective_future_cursor_config,
+        start_cursor_config=effective_start_cursor_config,
         invocation_time=context.invocation_time,
         unique_key=unique_key,
         merge_exclude_columns=_get_config_string_tuple(model=model, key="merge_exclude_columns"),
@@ -931,6 +947,15 @@ def _get_check_columns(model: CompiledModel) -> tuple[str, ...]:
     return ()
 
 
+def _resolve_cursor_safety_configs(
+    *, model: CompiledModel, context: ModelPlanContext
+) -> tuple[FutureCursorsConfig | None, StartCursorsConfig | None]:
+    return (
+        resolve_future_cursor_config(model=model, project_config=context.future_cursor_config),
+        resolve_start_cursor_config(model=model, project_config=context.start_cursor_config),
+    )
+
+
 def _compute_microbatch_range(
     *,
     model: CompiledModel,
@@ -941,6 +966,7 @@ def _compute_microbatch_range(
     runtime_owned_cursor_bounds: bool,
     cursor_input_relations: tuple[CursorInputRelation, ...],
     future_cursor_config: FutureCursorsConfig | None = None,
+    start_cursor_config: StartCursorsConfig | None = None,
     invocation_time: datetime | None = None,
 ) -> CursorBounds | None:
     """Compute the real overall cursor range for microbatch batch splitting."""
@@ -998,6 +1024,12 @@ def _compute_microbatch_range(
         end_cursor_override=end_cursor_override,
         cursor_grain=effective_grain,
         is_microbatch=False,
+        maximum_start_policy=MaximumStartPolicyInputs(
+            config=start_cursor_config,
+            invocation_time=invocation_time,
+            incremental_strategy=_get_config_str(model=model, key="incremental_strategy"),
+            incremental_mode=incremental_mode,
+        ),
     )
     return _apply_future_safety(
         bounds=bounds,
@@ -1036,6 +1068,7 @@ def _compute_plan_cursor_bounds(
     end_cursor_override: str | None,
     runtime_owned_cursor_bounds: bool,
     future_cursor_config: FutureCursorsConfig | None = None,
+    start_cursor_config: StartCursorsConfig | None = None,
     invocation_time: datetime | None = None,
 ) -> CursorBounds | None:
     """Compute cursor bounds for inclusion on the plan entry."""
@@ -1082,6 +1115,12 @@ def _compute_plan_cursor_bounds(
         end_cursor_override=end_cursor_override,
         is_microbatch=is_microbatch,
         cursor_grain=cursor_grain,
+        maximum_start_policy=MaximumStartPolicyInputs(
+            config=start_cursor_config,
+            invocation_time=invocation_time,
+            incremental_strategy=_get_config_str(model=model, key="incremental_strategy"),
+            incremental_mode=incremental_mode,
+        ),
     )
     return _apply_future_safety(
         bounds=bounds,
@@ -1135,6 +1174,32 @@ def _append_future_cap_warning(
             model_name=model_name,
             severity=WarningSeverity.WARNING,
             code="FUTURE_CURSOR_CAPPED",
+            message=message,
+        ),
+    )
+
+
+def _append_cursor_safety_warnings(
+    *, warnings: tuple[PlanWarning, ...], model_name: str, bounds: CursorBounds | None
+) -> tuple[PlanWarning, ...]:
+    with_future: tuple[PlanWarning, ...] = _append_future_cap_warning(
+        warnings=warnings, model_name=model_name, bounds=bounds
+    )
+    return _append_maximum_start_warning(warnings=with_future, model_name=model_name, bounds=bounds)
+
+
+def _append_maximum_start_warning(
+    *, warnings: tuple[PlanWarning, ...], model_name: str, bounds: CursorBounds | None
+) -> tuple[PlanWarning, ...]:
+    message: str | None = maximum_start_cap_warning(bounds)
+    if message is None:
+        return warnings
+    return (
+        *warnings,
+        PlanWarning(
+            model_name=model_name,
+            severity=WarningSeverity.WARNING,
+            code="AUTOMATIC_START_CAPPED",
             message=message,
         ),
     )
@@ -1332,25 +1397,15 @@ def validate_source_cursor_input_columns(
             has_enforced_contract: bool = (
                 upstream_model.config.values.get("contract") == ContractPolicy.ENFORCED
             )
-            declared_names: tuple[str, ...] = (
-                _model_declared_column_names(upstream_model)
-                if has_enforced_contract
-                else tuple(column.name for column in upstream_model.inferred_columns or ())
-            )
-            has_reliable_inferred_output: bool = bool(upstream_model.inferred_columns) and not (
-                upstream_model.fast_lineage_has_star
-            )
-            if not has_enforced_contract and not has_reliable_inferred_output:
+            if not has_enforced_contract:
                 continue
+            declared_names: tuple[str, ...] = _model_declared_column_names(upstream_model)
             if input_cursor_column.lower() in {name.lower() for name in declared_names}:
                 continue
             declared_display: str = ", ".join(declared_names) or "none"
-            metadata_description: str = (
-                "model contract" if has_enforced_contract else "reliable model output metadata"
-            )
             raise PlannerInputError(
                 f"model '{model.name}': {config_field} references model '{ref.ref_name}' "
-                f"column '{input_cursor_column}', but that {metadata_description} does not expose "
+                f"column '{input_cursor_column}', but that model contract does not expose "
                 f"the column. Known output columns: {declared_display}",
                 code="S302",
             )

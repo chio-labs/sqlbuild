@@ -19,6 +19,26 @@ from tests.unit.src.sqlbuild.compiler.planner.main.identity._test_types import (
             config_key="cursor_filter_inputs",
             expected_in_identity=True,
         ),
+        VersionIdentityConfigTestCase(
+            description="maximum start distance participates in model version identity",
+            config_key="cursor_start_max_ahead",
+            expected_in_identity=True,
+        ),
+        VersionIdentityConfigTestCase(
+            description="maximum start action participates in model version identity",
+            config_key="cursor_start_max_action",
+            expected_in_identity=True,
+        ),
+        VersionIdentityConfigTestCase(
+            description="future cursor distance participates in model version identity",
+            config_key="cursor_future_max_distance",
+            expected_in_identity=True,
+        ),
+        VersionIdentityConfigTestCase(
+            description="future cursor action participates in model version identity",
+            config_key="cursor_future_action",
+            expected_in_identity=True,
+        ),
     ],
     ids=lambda case: case.description,
 )

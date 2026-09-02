@@ -8,8 +8,10 @@ import duckdb
 import pytest
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.planner._helpers.resolve.cursor import normalize_cursor_snapshot_grain
 from sqlbuild.compiler.planner.exceptions import FutureCursorSafetyError
-from sqlbuild.compiler.planner.models import CursorBounds, CursorInputRelation
+from sqlbuild.compiler.planner.models import CursorBounds, CursorInputRelation, ModelCursorSnapshot
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
@@ -17,7 +19,7 @@ from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     substitute_cursor_sentinels,
 )
 from sqlbuild.executor.run.models import RuntimeCursorSpec
-from sqlbuild.spec.contracts.models import FutureCursorsConfig
+from sqlbuild.spec.contracts.models import FutureCursorsConfig, StartCursorsConfig
 from sqlbuild.spec.contracts.types import FutureCursorAction
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
     AuthoritativeRuntimeCursorOverrideTestCase,
@@ -783,6 +785,74 @@ def test_given_runtime_replay_policy_when_resolving_then_matches_planner_policy(
     )
 
     assert bounds == test_case.expected_bounds
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RuntimeCursorPolicyTestCase(
+            description="eligible target max is floored to mixed common day grain",
+            expected_bounds=CursorBounds(start="2026-08-31T00:00:00", end="2026-09-04T00:00:00"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_mixed_runtime_grains_when_capping_start_then_matches_planner_normalization(
+    test_case: RuntimeCursorPolicyTestCase,
+) -> None:
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
+    connection.execute("CREATE TABLE upstream_data (cursor_value TIMESTAMP)")
+    connection.execute(
+        "INSERT INTO upstream_data VALUES ('2026-08-01 00:00:00'), ('2026-09-03 18:00:00')"
+    )
+    connection.execute("CREATE TABLE target_data (cursor_value TIMESTAMP)")
+    connection.execute(
+        "INSERT INTO target_data VALUES ('2026-08-31 18:00:00'), ('2026-09-03 15:00:00')"
+    )
+
+    bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
+        adapter=DuckDbAdapter(),
+        connection=connection,
+        target_relation="target_data",
+        target_database=None,
+        target_schema=None,
+        target_name="target_data",
+        spec=RuntimeCursorSpec(
+            cursor_column="cursor_value",
+            cursor_type=CursorType.TIMESTAMP,
+            cursor_grain=CursorGrain.HOUR,
+            cursor_start=None,
+            cursor_input_relations=(
+                CursorInputRelation(
+                    relation="upstream_data",
+                    cursor_column="cursor_value",
+                    cursor_grain=CursorGrain.DAY,
+                ),
+            ),
+            incremental_strategy="delete_insert",
+            start_cursor_config=StartCursorsConfig(max_ahead="0d", action=FutureCursorAction.CAP),
+            invocation_time=datetime(2026, 9, 1, 12, tzinfo=UTC),
+        ),
+    )
+
+    assert bounds is not None
+    assert CursorBounds(start=bounds.start, end=bounds.end) == test_case.expected_bounds
+    assert bounds.maximum_start_safety is not None
+    planner_snapshot: ModelCursorSnapshot = normalize_cursor_snapshot_grain(
+        cursor_snapshot=ModelCursorSnapshot(
+            target_max="2026-09-03T15:00:00",
+            upstream_mins=("2026-08-01T00:00:00",),
+            upstream_maxes=("2026-09-03T18:00:00",),
+            target_eligible_max="2026-08-31T18:00:00",
+        ),
+        cursor_type=CursorType.TIMESTAMP,
+        effective_grain=CursorGrain.DAY,
+    )
+    assert (
+        bounds.maximum_start_safety.highest_eligible_target_max
+        == planner_snapshot.target_eligible_max
+    )
+    assert planner_snapshot.physical_target_max == "2026-09-03T15:00:00"
 
 
 @pytest.mark.parametrize(

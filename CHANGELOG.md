@@ -1,5 +1,54 @@
 # Changelog
 
+## [0.75.1](https://github.com/chio-labs/sqlbuild/compare/v0.75.0...v0.75.1) (2026-09-02)
+
+
+### Bug Fixes
+
+* scope Dagster check-only execution ([#477](https://github.com/chio-labs/sqlbuild/issues/477)) ([ba43f41](https://github.com/chio-labs/sqlbuild/commit/ba43f41a597e0208d3a52eeb9a941eb13c7aa566))
+
+## [0.75.0](https://github.com/chio-labs/sqlbuild/compare/v0.74.4...v0.75.0) (2026-09-02)
+
+
+### Features
+
+* add explicit column contract mode ([#475](https://github.com/chio-labs/sqlbuild/issues/475)) ([62c7724](https://github.com/chio-labs/sqlbuild/commit/62c7724870de760124734d0e67e4a063baa0900b))
+
+## [0.74.4](https://github.com/chio-labs/sqlbuild/compare/v0.74.3...v0.74.4) (2026-09-02)
+
+
+### Bug Fixes
+
+* defer inferred watermark columns to warehouse ([#472](https://github.com/chio-labs/sqlbuild/issues/472)) ([e77283b](https://github.com/chio-labs/sqlbuild/commit/e77283b69d2d08683c505ddf5ab3c75033cb3ef0))
+
+## [0.74.3](https://github.com/chio-labs/sqlbuild/compare/v0.74.2...v0.74.3) (2026-09-02)
+
+
+### Bug Fixes
+
+* align incremental writes by column name ([#470](https://github.com/chio-labs/sqlbuild/issues/470)) ([361ab15](https://github.com/chio-labs/sqlbuild/commit/361ab15deb857e711746e324f1b11fa657a30a3a))
+
+## [0.74.2](https://github.com/chio-labs/sqlbuild/compare/v0.74.1...v0.74.2) (2026-09-02)
+
+
+### Bug Fixes
+
+* allow zero-day future cursor caps ([#468](https://github.com/chio-labs/sqlbuild/issues/468)) ([c6cad5e](https://github.com/chio-labs/sqlbuild/commit/c6cad5e65ca3c483334fc1c3b6d57d82afc8da34))
+
+## [0.74.1](https://github.com/chio-labs/sqlbuild/compare/v0.74.0...v0.74.1) (2026-09-02)
+
+
+### Documentation
+
+* clarify automated delivery workflow ([#466](https://github.com/chio-labs/sqlbuild/issues/466)) ([b11048d](https://github.com/chio-labs/sqlbuild/commit/b11048dea014ba8b73db77f7fca568ff0a3777a9))
+
+## [0.74.0](https://github.com/chio-labs/sqlbuild/compare/v0.73.0...v0.74.0) (2026-09-02)
+
+
+### Features
+
+* bound automatic cursor starts ([#464](https://github.com/chio-labs/sqlbuild/issues/464)) ([5b1d19a](https://github.com/chio-labs/sqlbuild/commit/5b1d19a196cc13fc391e2a689b3669e6406e7ec8))
+
 ## [0.73.0](https://github.com/chio-labs/sqlbuild/compare/v0.72.2...v0.73.0) (2026-09-01)
 
 

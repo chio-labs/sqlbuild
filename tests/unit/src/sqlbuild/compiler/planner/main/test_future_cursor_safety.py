@@ -18,6 +18,17 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import FutureCurs
     "test_case",
     [
         FutureCursorSafetyTestCase(
+            description="zero-day cap stops at the invocation day boundary",
+            bounds=CursorBounds("2026-08-30T00:00:00", "2030-01-01T00:00:00"),
+            config=FutureCursorsConfig("0d", FutureCursorAction.CAP),
+            invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
+            cursor_grain=CursorGrain.DAY,
+            has_complete_override=False,
+            expected_start="2026-08-30T00:00:00",
+            expected_end="2026-09-02T00:00:00",
+            expected_has_safety=True,
+        ),
+        FutureCursorSafetyTestCase(
             description="timestamp cap advances equality horizon by one second",
             bounds=CursorBounds("2026-09-01T00:00:00", "2030-01-01T00:00:01"),
             config=FutureCursorsConfig("2d", FutureCursorAction.CAP),

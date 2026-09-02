@@ -17,6 +17,7 @@ from sqlbuild.compiler.planner.models import (
     CursorBounds,
     CursorInputRelation,
     FutureCursorSafetyEvidence,
+    MaximumStartSafetyEvidence,
     ModelPlanEntry,
 )
 from sqlbuild.compiler.python_nodes.types import SkipMode
@@ -34,7 +35,7 @@ from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.microbatches.models import MicrobatchScope
 from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
-from sqlbuild.spec.contracts.models import FutureCursorsConfig, SourceEntry
+from sqlbuild.spec.contracts.models import FutureCursorsConfig, SourceEntry, StartCursorsConfig
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
 
@@ -127,6 +128,7 @@ class ModelExecutionResult:
     cursor_type: str | None = None
     cursor_grain: str | None = None
     future_cursor_safety: FutureCursorSafetyEvidence | None = None
+    maximum_start_safety: MaximumStartSafetyEvidence | None = None
     audit_results: tuple[AuditExecutionResult, ...] = field(default_factory=tuple)
     warning_messages: tuple[str, ...] = field(default_factory=tuple)
     lifecycle_events: tuple[LifeCycleEvent, ...] = field(default_factory=tuple)
@@ -230,12 +232,15 @@ class RuntimeCursorSpec:
     cursor_grain: str | None
     cursor_start: str | None
     cursor_input_relations: tuple[CursorInputRelation, ...]
+    incremental_strategy: str | None = None
+    incremental_mode: str | None = None
     start_cursor_override: str | None = None
     end_cursor_override: str | None = None
     lookback: str | None = None
     backfill_duration: str | None = None
     read_destination_cursor: bool = True
     future_cursor_config: FutureCursorsConfig | None = None
+    start_cursor_config: StartCursorsConfig | None = None
     invocation_time: datetime | None = None
 
 

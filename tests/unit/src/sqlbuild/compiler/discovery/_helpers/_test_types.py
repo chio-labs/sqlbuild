@@ -34,6 +34,14 @@ class FutureCursorConfigTestCase:
 
 
 @dataclass(frozen=True)
+class StartCursorConfigTestCase:
+    description: str
+    start_toml: str
+    expected_max_ahead: str
+    expected_action: str
+
+
+@dataclass(frozen=True)
 class FutureCursorConfigErrorTestCase:
     description: str
     future_toml: str
@@ -52,6 +60,20 @@ class MicrobatchLimitConfigTestCase:
 class MicrobatchLimitConfigErrorTestCase:
     description: str
     limits_toml: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ColumnContractModeConfigTestCase:
+    description: str
+    settings_toml: str
+    expected_mode: str
+
+
+@dataclass(frozen=True)
+class ColumnContractModeConfigErrorTestCase:
+    description: str
+    settings_toml: str
     expected_error_fragment: str
 
 

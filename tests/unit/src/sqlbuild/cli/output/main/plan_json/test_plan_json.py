@@ -16,6 +16,7 @@ from sqlbuild.compiler.planner.models import (
     CursorInputEvidence,
     CursorInputRelation,
     FutureCursorSafetyEvidence,
+    MaximumStartSafetyEvidence,
     PlanOutput,
 )
 from sqlbuild.compiler.planner.types import (
@@ -44,6 +45,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan_json._test_types import (
     FutureCursorPlanJsonTestCase,
     JsonOutputTestCase,
     MicrobatchLimitPlanJsonTestCase,
+    SelectionDiagnosticsPlanJsonTestCase,
 )
 
 
@@ -151,6 +153,79 @@ def test_given_future_cursor_cap_when_formatting_plan_json_then_structured_bound
     assert model["future_cursor_safety"]["determining_input"] == {
         "relation": "raw.events",
         "cursor_column": "occurred_at",
+    }
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [FutureCursorPlanJsonTestCase("maximum start plan structure", "cap")],
+    ids=lambda case: case.description,
+)
+def test_given_maximum_start_cap_when_formatting_plan_json_then_physical_evidence_is_exposed(
+    test_case: FutureCursorPlanJsonTestCase,
+) -> None:
+    evidence: MaximumStartSafetyEvidence = MaximumStartSafetyEvidence(
+        action=FutureCursorAction.CAP,
+        max_ahead="0d",
+        invocation_time="2026-09-01T12:00:00+00:00",
+        physical_target_max="2026-09-03",
+        highest_eligible_target_max="2026-09-01",
+        effective_start="2026-08-30T00:00:00",
+        maximum_allowed_start="2026-09-01",
+        target_relation="analytics.events",
+        cursor_column="event_at",
+    )
+    plan: PlanOutput = build_plan_output(
+        model_entries=(
+            build_model_entry(
+                name="events",
+                cursor_bounds=CursorBounds(
+                    start=evidence.effective_start,
+                    end="2026-09-04",
+                    maximum_start_safety=evidence,
+                ),
+            ),
+        )
+    )
+
+    payload: dict[str, object] = json.loads(format_plan_json(plan=plan))
+    model: Any = payload["models"][0]
+
+    assert model["maximum_start_safety"] == {
+        "action": test_case.expected_action,
+        "max_ahead": "0d",
+        "invocation_time": "2026-09-01T12:00:00+00:00",
+        "physical_target_max": "2026-09-03",
+        "highest_eligible_target_max": "2026-09-01",
+        "effective_start": "2026-08-30T00:00:00",
+        "maximum_allowed_start": "2026-09-01",
+        "input": {"relation": "analytics.events", "cursor_column": "event_at"},
+    }
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [SelectionDiagnosticsPlanJsonTestCase("direct diagnostics disabled evidence", False, "direct")],
+    ids=lambda case: case.description,
+)
+def test_given_direct_diagnostics_policy_when_formatting_plan_json_then_evidence_is_exposed(
+    test_case: SelectionDiagnosticsPlanJsonTestCase,
+) -> None:
+    plan: PlanOutput = build_plan_output(
+        metadata={
+            "selection_diagnostics": {
+                "mode": "direct",
+                "enabled": test_case.enabled,
+            }
+        }
+    )
+
+    payload: dict[str, object] = json.loads(format_plan_json(plan=plan))
+    metadata: Any = payload["metadata"]
+
+    assert metadata["selection_diagnostics"] == {
+        "mode": test_case.expected_mode,
+        "enabled": test_case.enabled,
     }
 
 

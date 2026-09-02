@@ -478,6 +478,13 @@ def write_dagster_test_dag(*, root: Path) -> Path:
     return dag_path
 
 
+def write_python_augmented_dagster_test_dag(*, root: Path) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    dag_path: Path = root / "sqlbuild_dag.json"
+    dag_path.write_text(json.dumps(build_python_augmented_dagster_test_dag()), encoding="utf-8")
+    return dag_path
+
+
 def assert_select_file_selector_behavior(
     *, command: tuple[str, ...], selectors: tuple[str, ...]
 ) -> None:

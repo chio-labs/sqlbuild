@@ -13,6 +13,8 @@ from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from sqlbuild.sql_values.types import CollectionRendering
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
+    ColumnContractModeConfigErrorTestCase,
+    ColumnContractModeConfigTestCase,
     FutureCursorConfigErrorTestCase,
     FutureCursorConfigTestCase,
     LoadLocalConfigErrorTestCase,
@@ -28,6 +30,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     LoadRetentionConfigTestCase,
     MicrobatchLimitConfigErrorTestCase,
     MicrobatchLimitConfigTestCase,
+    StartCursorConfigTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
     write_project_config_test_files,
@@ -68,7 +71,13 @@ def test_given_no_cost_config_when_loading_project_then_default_rate_is_flagged(
             future_toml='max_distance = "7d"\naction = "cap"',
             expected_max_distance="7d",
             expected_action="cap",
-        )
+        ),
+        FutureCursorConfigTestCase(
+            description="zero-day future cap policy is typed",
+            future_toml='max_distance = "0d"\naction = "cap"',
+            expected_max_distance="0d",
+            expected_action="cap",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -84,6 +93,32 @@ def test_given_future_cursor_config_when_loading_project_then_policy_is_typed(
 
     assert config.cursors.future.max_distance == test_case.expected_max_distance
     assert config.cursors.future.action == test_case.expected_action
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StartCursorConfigTestCase(
+            description="zero-ahead cap policy is typed",
+            start_toml='max_ahead = "0d"\naction = "cap"',
+            expected_max_ahead="0d",
+            expected_action="cap",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_start_cursor_config_when_loading_project_then_policy_is_typed(
+    test_case: StartCursorConfigTestCase, tmp_path: Path
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "demo"\nadapter = "duckdb"\n[cursors.start]\n{test_case.start_toml}\n',
+        encoding="utf-8",
+    )
+
+    config: ProjectConfig = load_project_config(project_dir=tmp_path)
+
+    assert config.cursors.start.max_ahead == test_case.expected_max_ahead
+    assert config.cursors.start.action == test_case.expected_action
 
 
 @pytest.mark.parametrize(
@@ -157,7 +192,7 @@ def test_given_invalid_microbatch_limit_when_loading_project_then_error_is_raise
         FutureCursorConfigErrorTestCase(
             description="invalid duration",
             future_toml='max_distance = "tomorrow"',
-            expected_error_fragment="max_distance must be a positive duration",
+            expected_error_fragment="max_distance must be a duration",
         ),
         FutureCursorConfigErrorTestCase(
             description="invalid action",
@@ -1576,3 +1611,49 @@ def test_given_legacy_local_config_file_when_loading_local_config_then_it_raises
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
         load_local_config(project_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ColumnContractModeConfigTestCase("omitted mode uses implicit default", "", "implicit"),
+        ColumnContractModeConfigTestCase(
+            "explicit mode is accepted", 'column_contract_mode = "explicit"', "explicit"
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_column_contract_mode_when_loading_project_then_policy_is_typed(
+    test_case: ColumnContractModeConfigTestCase, tmp_path: Path
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "demo"\nadapter = "duckdb"\n[settings]\n{test_case.settings_toml}\n',
+        encoding="utf-8",
+    )
+
+    config: ProjectConfig = load_project_config(project_dir=tmp_path)
+
+    assert config.settings.column_contract_mode == test_case.expected_mode
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ColumnContractModeConfigErrorTestCase(
+            "unsupported mode is rejected",
+            'column_contract_mode = "disabled"',
+            "settings.column_contract_mode must be one of: implicit, explicit",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_column_contract_mode_when_loading_project_then_error_is_raised(
+    test_case: ColumnContractModeConfigErrorTestCase, tmp_path: Path
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "demo"\nadapter = "duckdb"\n[settings]\n{test_case.settings_toml}\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProjectConfigError, match=test_case.expected_error_fragment):
+        load_project_config(project_dir=tmp_path)

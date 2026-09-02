@@ -21,6 +21,13 @@ class FutureCursorPlanJsonTestCase:
 
 
 @dataclass(frozen=True)
+class SelectionDiagnosticsPlanJsonTestCase:
+    description: str
+    enabled: bool
+    expected_mode: str
+
+
+@dataclass(frozen=True)
 class MicrobatchLimitPlanJsonTestCase:
     description: str
     expected_limit: int

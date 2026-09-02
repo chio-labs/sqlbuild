@@ -195,8 +195,33 @@ _INT_MODEL_SQL: str = (
                 "CREATE OR REPLACE TABLE main.orders__delta AS SELECT id, event_time, payload",
                 "event_time >= '2026-01-01T00:00:00'",
                 "event_time < '2026-01-01T01:00:00'",
-                "INSERT INTO main.orders SELECT * FROM main.orders__delta",
+                'INSERT INTO main.orders ("id", "event_time", "payload") '
+                "SELECT id, event_time, payload FROM main.orders__delta",
                 "DROP TABLE IF EXISTS main.orders__delta",
+            ),
+        ),
+        MicrobatchSuccessTestCase(
+            description="append aligns identical column sets with different physical order",
+            setup_sql=(
+                _TS_SOURCE_SQL,
+                _TS_SOURCE_DATA,
+                "CREATE TABLE main.orders (payload VARCHAR, id INTEGER, event_time TIMESTAMP)",
+            ),
+            model_sql=_TS_MODEL_SQL,
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="append",
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            batch_size="1h",
+            microbatch_start="2026-01-01T00:00:00",
+            microbatch_end="2026-01-01T03:00:00",
+            expected_row_count=3,
+            expected_query_results=(
+                (
+                    "SELECT id, payload FROM main.orders ORDER BY id",
+                    ((1, "a"), (2, "b"), (3, "c")),
+                ),
             ),
         ),
         MicrobatchSuccessTestCase(

@@ -28,6 +28,13 @@ class MicrobatchLimitAction(StrEnum):
     WARN = "warn"
 
 
+class ColumnContractMode(StrEnum):
+    """Default contract behavior for model column declarations."""
+
+    IMPLICIT = "implicit"
+    EXPLICIT = "explicit"
+
+
 class SourceFreshnessStrategy(StrEnum):
     ADAPTER = "adapter"
     COLUMN = "column"
