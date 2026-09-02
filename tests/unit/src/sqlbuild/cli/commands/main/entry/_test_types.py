@@ -10,6 +10,14 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 
 
 @dataclass(frozen=True)
+class CliCaptureOutcomeTestCase:
+    description: str
+    expected_exit_code: int
+    expected_complete: bool
+    expected_error_type: type[BaseException] | None = None
+
+
+@dataclass(frozen=True)
 class ScopeArgumentMisuseCase:
     """One invalid scope argument combination."""
 
