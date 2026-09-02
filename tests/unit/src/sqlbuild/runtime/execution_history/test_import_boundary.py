@@ -39,3 +39,32 @@ def test_given_clean_interpreter_when_importing_execution_history_then_optional_
     )
 
     assert result.stdout.strip() == "()"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ImportCase(
+            description="all public history facades avoid PostgreSQL driver loading",
+            expected_forbidden_imports=("psycopg",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_clean_interpreter_when_importing_public_facades_then_postgres_driver_is_not_loaded(
+    test_case: ImportCase,
+) -> None:
+    module_names: str = ",".join(repr(name) for name in test_case.expected_forbidden_imports)
+    script = (
+        "import sys; import sqlbuild; import sqlbuild.execution_history; "
+        "import sqlbuild.observability; import sqlbuild.sqlite_history; "
+        "import sqlbuild.postgres_history; "
+        f"forbidden=({module_names},); "
+        "loaded=tuple(name for name in forbidden if name in sys.modules); print(repr(loaded))"
+    )
+
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        [sys.executable, "-c", script], check=True, capture_output=True, text=True
+    )
+
+    assert result.stdout.strip() == "()"

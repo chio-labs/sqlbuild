@@ -56,6 +56,24 @@ append commits and projection fails, the event log remains authoritative and rep
 when both stores share transactional infrastructure, but correctness cannot depend on that
 optimization. Projection must never publish facts that did not durably append.
 
-The intended local default backend is SQLite and the intended deployed backend is PostgreSQL. Those
-adapters are separate follow-up work. This core has no object-store, Kafka, ClickHouse, Dagster,
-SQLite driver, or PostgreSQL driver dependency.
+The local default backend is SQLite. PostgreSQL is an explicit deployed backend constructed from
+`sqlbuild.postgres_history.PostgresExecutionHistory` with a secret-resolved DSN; it is never selected
+implicitly and the DSN is neither retained for diagnostics nor included in errors or `repr` output.
+Install `sqlbuild[postgres]` only in deployed processes that construct it. Core, observability, and
+SQLite imports do not load or require `psycopg`.
+
+PostgreSQL startup applies forward-only transactional migrations under an advisory lock, so all
+instances should run the same SQLBuild version during rollout. Back up `sqlbuild_event_log` as the
+authoritative append-only history and `sqlbuild_storage_migrations` with the normal database backup
+policy. `sqlbuild_run_projection` is disposable serving state and can be rebuilt transactionally
+from the event log with `reconcile()`. Restore and disaster-recovery procedures must preserve event
+IDs, canonical JSON text, identity sequence values, and the storage namespace used by cursors.
+Unknown newer schema revisions are rejected without reset or downgrade. No automatic retention,
+partitioning, or archival is performed; operators must size and monitor the database accordingly.
+
+The backend retries only PostgreSQL serialization failures and deadlocks (`40001` and `40P01`). A
+connection failure can leave commit acknowledgement uncertain, so the backend does not retry that
+failure internally. The caller must discard the failed backend, construct a new backend from the
+secret-resolved DSN, and retry the same deterministic `event_id`. Canonical-content comparison then
+returns the committed fact as an idempotent no-op or rejects conflicting reuse. Errors produced in
+this recovery path remain DSN- and credential-free.

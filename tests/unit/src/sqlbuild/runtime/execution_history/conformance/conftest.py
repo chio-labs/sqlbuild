@@ -5,13 +5,14 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import os
 import tempfile
 import uuid
 from collections.abc import Callable, Iterable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import TracebackType
-from typing import Self, cast
+from typing import Any, Self, cast
 
 import pytest
 
@@ -301,6 +302,77 @@ class AtomicFailingSQLiteRunStorage(SQLiteExecutionHistory):
         super()._publish_projection(projected)
 
 
+def postgres_dsn() -> str:
+    """Create an isolated PostgreSQL schema and return its DSN."""
+
+    import psycopg
+    from psycopg.conninfo import make_conninfo
+    from psycopg.sql import SQL, Identifier
+
+    dsn: str = os.environ["SQLBUILD_TEST_POSTGRES_DSN"]
+    schema: str = f"sqlbuild_history_{uuid.uuid4().hex}"
+    with psycopg.connect(dsn, autocommit=True) as connection:
+        connection.execute(SQL("CREATE SCHEMA {}").format(Identifier(schema)))
+    return make_conninfo(dsn, options=f"-c search_path={schema}")
+
+
+def postgres_factory() -> EventLogStorage:
+    """Build an isolated PostgreSQL backend when conformance is explicitly DSN-gated."""
+
+    from sqlbuild.postgres_history import PostgresExecutionHistory
+
+    return PostgresExecutionHistory(postgres_dsn())
+
+
+class FailingPostgresEventLog:
+    """Test-only PostgreSQL append failure decorator."""
+
+    def __new__(cls) -> EventLogStorage:
+        storage: EventLogStorage = postgres_factory()
+
+        def fail(events: Iterable[CanonicalLifecycleEvent]) -> tuple[StoredEvent, ...]:
+            raise ExecutionHistoryStorageError("injected append failure")
+
+        storage.append_events = fail  # ty: ignore[invalid-assignment]
+        return storage
+
+
+class FailingPostgresRunStorage:
+    """Test-only PostgreSQL projection failure decorator."""
+
+    def __new__(cls) -> RunStorage:
+        storage: RunStorage = cast(RunStorage, postgres_factory())
+
+        def fail(events: Iterable[StoredEvent]) -> tuple[RunRecord, ...]:
+            raise ExecutionHistoryStorageError("injected projection failure")
+
+        storage.project = fail  # ty: ignore[invalid-assignment]
+        return storage
+
+
+class AtomicFailingPostgresRunStorage:
+    """Test-only PostgreSQL publication failure decorator."""
+
+    def __new__(cls) -> RunStorage:
+        from sqlbuild.postgres_history import PostgresExecutionHistory
+
+        class InjectedPublicationFailure(PostgresExecutionHistory):
+            def __init__(self, dsn: str) -> None:
+                self._publication_attempts = 0
+                super().__init__(dsn)
+                self._publication_attempts = 0
+
+            def _replace_projection(self, *, cursor: Any, projected: tuple[RunRecord, ...]) -> None:
+                self._publication_attempts += 1
+                if self._publication_attempts == 2:
+                    raise ExecutionHistoryStorageError(
+                        "injected atomic projection publication failure"
+                    )
+                super()._replace_projection(cursor=cursor, projected=projected)
+
+        return InjectedPublicationFailure(postgres_dsn())
+
+
 def lifecycle_event(
     event_id: str,
     event_type: str = "run_started",
@@ -518,6 +590,20 @@ BACKEND_CASES: tuple[BackendCase, ...] = (
         expected_backend="sqlite",
     ),
 )
+
+if os.environ.get("SQLBUILD_TEST_POSTGRES_DSN"):
+    BACKEND_CASES += (
+        BackendCase(
+            description="deployed PostgreSQL backend",
+            event_log_factory=postgres_factory,
+            run_storage_factory=lambda: cast(RunStorage, postgres_factory()),
+            append_failing_event_log_factory=FailingPostgresEventLog,
+            project_failing_run_storage_factory=FailingPostgresRunStorage,
+            atomic_failing_run_storage_factory=AtomicFailingPostgresRunStorage,
+            project_call_count=lambda storage: cast(Any, storage).project_calls,
+            expected_backend="postgres",
+        ),
+    )
 
 
 @pytest.fixture(params=BACKEND_CASES, ids=lambda case: case.description)

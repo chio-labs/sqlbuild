@@ -1,4 +1,4 @@
-"""Dataclass-backed SQLite execution history integration cases."""
+"""Dataclass-backed execution history integration cases."""
 
 from dataclasses import dataclass
 
@@ -28,3 +28,10 @@ class SQLiteTimeoutCase:
     description: str
     timeout: object
     expected_error: str
+
+
+@dataclass(frozen=True)
+class PostgresHistoryCase:
+    description: str
+    expected_event_count: int
+    expected_run_count: int
