@@ -73,4 +73,9 @@ def _assemble_discovered_project_inputs(
         extract_output_column_locations=extract_output_column_locations,
     )
     validate_discovered_inputs(discovered_inputs)
+    from sqlbuild.runtime.event_exporting.main.configure_discovered_event_exporters import (
+        configure_discovered_event_exporters,
+    )
+
+    _ = configure_discovered_event_exporters(discovered_inputs)
     return discovered_inputs

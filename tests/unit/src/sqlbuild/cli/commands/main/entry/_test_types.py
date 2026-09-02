@@ -10,6 +10,12 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 
 
 @dataclass(frozen=True)
+class NoExporterFastPathTestCase:
+    description: str
+    expected_history_events: int
+
+
+@dataclass(frozen=True)
 class CliCaptureOutcomeTestCase:
     description: str
     expected_exit_code: int

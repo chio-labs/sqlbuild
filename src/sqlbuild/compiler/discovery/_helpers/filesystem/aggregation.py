@@ -10,6 +10,7 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
     discover_audit_files,
     discover_constant_files,
     discover_enum_files,
+    discover_event_exporter_functions,
     discover_hook_functions,
     discover_macro_files,
     discover_materialization_files,
@@ -37,6 +38,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredCheckFunction,
     DiscoveredConstantFile,
     DiscoveredEnumFile,
+    DiscoveredEventExporter,
     DiscoveredHookFunction,
     DiscoveredLoaderFunction,
     DiscoveredMacroFile,
@@ -154,6 +156,9 @@ def build_discovered_project_inputs(
             project_dir=project_dir,
             providers=providers,
         )
+        event_exporters: tuple[DiscoveredEventExporter, ...] = discover_event_exporter_functions(
+            project_dir=project_dir, providers=providers
+        )
         python_paths: set[Path] = {provider.relative_path for provider in providers}
         python_paths.update(node.relative_path for node in python_nodes.loaders)
         python_paths.update(node.relative_path for node in python_nodes.tasks)
@@ -161,6 +166,7 @@ def build_discovered_project_inputs(
         python_paths.update(node.relative_path for node in python_nodes.checks)
         python_paths.update(file.relative_path for file in materialization_files)
         python_paths.update(function.relative_path for function in hook_functions)
+        python_paths.update(exporter.relative_path for exporter in event_exporters)
         python_lifecycle.completed(metadata={"item_count": len(python_paths)})
     loader_functions: tuple[DiscoveredLoaderFunction, ...] = tuple(
         python_nodes.loaders
@@ -192,6 +198,7 @@ def build_discovered_project_inputs(
         asset_functions=asset_functions,
         check_functions=check_functions,
         hook_functions=hook_functions,
+        event_exporters=event_exporters,
         providers=providers,
         adapter_file=adapter_file,
     )

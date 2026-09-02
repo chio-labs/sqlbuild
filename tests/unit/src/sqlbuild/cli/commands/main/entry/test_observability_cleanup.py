@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+from collections.abc import Callable
 from contextvars import Token
 from io import StringIO
 from pathlib import Path
@@ -17,6 +19,7 @@ from sqlbuild.cli.progress.classes.native_progress_projector import (
 from sqlbuild.observability import OperationLifecycle
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     MachineProgressRoutingCase,
+    NoExporterFastPathTestCase,
     ObservabilityCleanupCase,
 )
 
@@ -60,6 +63,63 @@ def test_given_projector_close_failure_when_command_fails_then_original_error_an
     assert current_native_progress_projector() is outer
     assert history.close.call_count == test_case.expected_history_close_count
     outer.restore(outer_token)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (NoExporterFastPathTestCase("no public exporter skips providers and thread", 2),),
+    ids=lambda case: case.description,
+)
+def test_given_no_public_exporter_when_observability_runs_then_provider_import_is_skipped(
+    test_case: NoExporterFastPathTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    marker_path: Path = tmp_path / "provider-imported"
+    helper_marker_path: Path = tmp_path / "helper-imported"
+    write_repo_files(
+        tmp_path,
+        {
+            "providers/exploding.py": (
+                "from pathlib import Path\n"
+                f"Path({str(marker_path)!r}).write_text('imported', encoding='utf-8')\n"
+                "raise RuntimeError('provider must not import')\n"
+            ),
+            "event_exporters/_private.py": "raise RuntimeError('private exporter imported')\n",
+            "event_exporters/helpers.py": (
+                "from pathlib import Path\n"
+                f"Path({str(helper_marker_path)!r}).write_text('imported', encoding='utf-8')\n"
+                "def encode(value):\n    return value\n"
+            ),
+        },
+    )
+    args: CliNamespace = CliNamespace()
+    history: Mock = Mock()
+    before_threads: int = sum(
+        map(
+            lambda thread: thread.name.startswith("sqlbuild-event-exporter-"),
+            threading.enumerate(),
+        )
+    )
+
+    with cli_observability_scope(
+        args=args,
+        project_dir=tmp_path,
+        history_factory=lambda **_kwargs: history,
+    ):
+        with OperationLifecycle(operation_kind="project", operation_name="project_compile"):
+            pass
+        active_threads: int = sum(
+            map(
+                lambda thread: thread.name.startswith("sqlbuild-event-exporter-"),
+                threading.enumerate(),
+            )
+        )
+
+    assert not marker_path.exists()
+    assert helper_marker_path.exists()
+    assert active_threads == before_threads
+    assert history.append_and_project.call_count == test_case.expected_history_events
 
 
 @pytest.mark.parametrize(

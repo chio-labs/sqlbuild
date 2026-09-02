@@ -442,6 +442,27 @@ class DiscoveredHookFunction:
 
 
 @dataclass(frozen=True)
+class DiscoveredEventExporterDeclaration:
+    """A discovered exporter declaration before provider binding."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+
+
+@dataclass(frozen=True)
+class DiscoveredEventExporter:
+    """A discovered canonical lifecycle event exporter function."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class DiscoveredProvider:
     """A discovered project provider class and validated settings object."""
 
@@ -489,6 +510,7 @@ class DiscoveredProjectInputs:
     asset_functions: tuple[DiscoveredAssetFunction, ...] = field(default_factory=tuple)
     check_functions: tuple[DiscoveredCheckFunction, ...] = field(default_factory=tuple)
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
+    event_exporters: tuple[DiscoveredEventExporter, ...] = field(default_factory=tuple)
     providers: tuple[DiscoveredProvider, ...] = field(default_factory=tuple)
     adapter_file: DiscoveredAdapterFile | None = None
 

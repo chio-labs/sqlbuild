@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import sys
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from contextvars import Token
 from pathlib import Path
 from typing import Any
@@ -21,10 +21,18 @@ from sqlbuild.cli.output.classes.terminal_event_index import (
 )
 from sqlbuild.cli.output.main._execution_event_output_active import execution_event_output_active
 from sqlbuild.cli.progress.classes.native_progress_projector import NativeProgressProjector
+from sqlbuild.compiler.discovery.main.runtime_extensions import discover_runtime_extensions
+from sqlbuild.compiler.discovery.models import DiscoveredEventExporter, DiscoveredProvider
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.execution_history import CanonicalLifecycleEvent
 from sqlbuild.observability import EventDispatcher, Unsubscribe, dispatcher_scope
 from sqlbuild.presentation.main.supports_color import supports_color
+from sqlbuild.runtime.event_exporting.classes.command_scope import EventExporterCommandScope
+from sqlbuild.runtime.event_exporting.classes.dispatcher import EventExporterDispatcher
+from sqlbuild.runtime.event_exporting.main.event_exporter_command_scope import (
+    event_exporter_command_scope,
+)
+from sqlbuild.runtime.event_exporting.models import EventExporterFailure, EventExportSummary
 from sqlbuild.sqlite_history import SQLiteExecutionHistory
 
 _LOGGER: logging.Logger = logging.getLogger("sqlbuild.cli.observability")
@@ -67,10 +75,38 @@ def cli_observability_scope(
         accepts_opaque=False,
     )
     projector_token: Token[NativeProgressProjector | None] = projector.install()
+    exporter_scope: EventExporterCommandScope | None = None
+    unsubscribe_exporters: Unsubscribe | None = None
     try:
-        with dispatcher_scope(dispatcher), terminal_event_index_scope(terminal_index):
+        providers: tuple[DiscoveredProvider, ...]
+        event_exporters: tuple[DiscoveredEventExporter, ...]
+        providers, event_exporters = discover_runtime_extensions(project_dir=project_dir)
+        if event_exporters:
+            exporter_delivery: EventExporterDispatcher = EventExporterDispatcher(
+                failure_callback=_log_exporter_failure,
+                summary_callback=_log_exporter_summary,
+            )
+            exporter_scope = EventExporterCommandScope(dispatcher=exporter_delivery)
+            exporter_scope.configure_extensions(
+                project_dir=project_dir,
+                providers=providers,
+                event_exporters=event_exporters,
+            )
+            unsubscribe_exporters = dispatcher.subscribe_lifecycle(
+                subscriber=exporter_delivery.enqueue,
+                accepts_opaque=False,
+            )
+        with ExitStack() as stack:
+            _ = stack.enter_context(dispatcher_scope(dispatcher))
+            _ = stack.enter_context(terminal_event_index_scope(terminal_index))
+            if exporter_scope is not None:
+                _ = stack.enter_context(event_exporter_command_scope(exporter_scope))
             yield dispatcher
     finally:
+        if unsubscribe_exporters is not None:
+            _run_cleanup(action=unsubscribe_exporters, phase="event_exporter_unsubscribe")
+        if exporter_scope is not None:
+            _run_cleanup(action=exporter_scope.close, phase="event_exporter_shutdown")
         _run_cleanup(action=unsubscribe_terminal_index, phase="terminal_index_unsubscribe")
         _run_cleanup(action=unsubscribe_progress, phase="progress_unsubscribe")
         if unsubscribe_history is not None:
@@ -113,3 +149,22 @@ def _report_cleanup_failure(*, error: BaseException, phase: str) -> None:
         )
     except BaseException:
         pass
+
+
+def _log_exporter_failure(failure: EventExporterFailure) -> None:
+    log_debug_event(
+        logger=_LOGGER,
+        message="Event exporter delivery failed",
+        exporter_name=failure.exporter_name,
+        error_type=failure.error_type,
+    )
+
+
+def _log_exporter_summary(summary: EventExportSummary) -> None:
+    log_debug_event(
+        logger=_LOGGER,
+        message="Event exporter delivery summary",
+        delivered=summary.delivered,
+        failed=summary.failed,
+        dropped=summary.dropped,
+    )

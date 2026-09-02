@@ -48,6 +48,7 @@ from sqlbuild.compiler.discovery.constants import (
 )
 from sqlbuild.compiler.discovery.exceptions import (
     DeclarationParseError,
+    EventExporterDiscoveryError,
     LoaderDiscoveryError,
     ProviderDiscoveryError,
     PythonNodeDiscoveryError,
@@ -61,6 +62,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredCheckFunction,
     DiscoveredConstantFile,
     DiscoveredEnumFile,
+    DiscoveredEventExporter,
+    DiscoveredEventExporterDeclaration,
     DiscoveredHookFunction,
     DiscoveredLoaderFunction,
     DiscoveredMacroFile,
@@ -90,6 +93,8 @@ from sqlbuild.compiler.scopes.constants import (
     LOCAL_DECLARATION_DIRECTORIES,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
+from sqlbuild.event_exporters import get_event_exporter_definition
+from sqlbuild.observability import LifecycleEvent
 from sqlbuild.provider.exceptions import ProviderInputError
 from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.main.read_asset_definition import read_asset_definition
@@ -106,6 +111,8 @@ from sqlbuild.python_nodes.models import (
     LoaderDefinition,
     TaskDefinition,
 )
+from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORTER_EVENT_PARAMETER_NAME
+from sqlbuild.runtime.event_exporting.models import EventExporterDefinition
 from sqlbuild.spec.contracts.models import SchemaModelEntry, SchemaSeedEntry, SourceEntry
 
 _PYTHON_NODE_KIND_FOLDERS: tuple[str, ...] = ("loaders", "tasks", "assets", "checks")
@@ -929,6 +936,15 @@ def discover_sql_hook_files(
 def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider, ...]:
     """Discover provider classes under providers/."""
 
+    from sqlbuild.runtime.event_exporting.main.cached_event_exporter_extensions import (
+        cached_event_exporter_extensions,
+    )
+
+    cached: tuple[tuple[DiscoveredProvider, ...], tuple[DiscoveredEventExporter, ...]] | None = (
+        cached_event_exporter_extensions(project_dir=project_dir)
+    )
+    if cached is not None:
+        return cached[0]
     providers_root: Path = project_dir / "providers"
     if not providers_root.is_dir():
         return ()
@@ -936,9 +952,7 @@ def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider,
     discovered_providers: list[DiscoveredProvider] = []
     seen_names: dict[str, Path] = {}
     file_path: Path
-    for file_path in sorted(providers_root.rglob("*.py")):
-        if file_path.stem == PYTHON_INIT_MODULE_STEM or file_path.name.startswith("_"):
-            continue
+    for file_path in _public_python_files(root=providers_root):
         module: ModuleType = _load_provider_module(file_path=file_path, project_dir=project_dir)
         for _, value in inspect.getmembers(module, inspect.isclass):
             if value.__module__ != module.__name__:
@@ -974,6 +988,207 @@ def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider,
                 )
             )
     return tuple(discovered_providers)
+
+
+def discover_event_exporter_functions(
+    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] = ()
+) -> tuple[DiscoveredEventExporter, ...]:
+    """Discover validated exporter declarations under event_exporters/."""
+
+    from sqlbuild.runtime.event_exporting.main.cached_event_exporter_extensions import (
+        cached_event_exporter_extensions,
+    )
+
+    cached: tuple[tuple[DiscoveredProvider, ...], tuple[DiscoveredEventExporter, ...]] | None = (
+        cached_event_exporter_extensions(project_dir=project_dir)
+    )
+    if cached is not None:
+        return cached[1]
+    declarations: tuple[DiscoveredEventExporterDeclaration, ...] = (
+        discover_event_exporter_declarations(project_dir=project_dir)
+    )
+    return bind_event_exporter_declarations(
+        declarations=declarations,
+        providers=providers,
+        project_dir=project_dir,
+    )
+
+
+def discover_event_exporter_declarations(
+    *, project_dir: Path
+) -> tuple[DiscoveredEventExporterDeclaration, ...]:
+    """Import exporter modules and collect declarations without discovering providers."""
+
+    exporters_root: Path = project_dir / "event_exporters"
+    if not exporters_root.is_dir():
+        return ()
+    discovered: list[DiscoveredEventExporterDeclaration] = []
+    seen_names: dict[str, Path] = {}
+    for file_path in _public_python_files(root=exporters_root):
+        module: ModuleType = _load_event_exporter_module(
+            file_path=file_path, project_dir=project_dir
+        )
+        seen_function_ids: set[int] = set()
+        for _, value in inspect.getmembers(module, inspect.isfunction):
+            if value.__module__ != module.__name__:
+                continue
+            function_id: int = id(value)
+            if function_id in seen_function_ids:
+                continue
+            seen_function_ids.add(function_id)
+            definition: EventExporterDefinition | None = get_event_exporter_definition(value)
+            if definition is None:
+                continue
+            existing_path: Path | None = seen_names.get(definition.name)
+            if existing_path is not None:
+                raise EventExporterDiscoveryError(
+                    f"Duplicate event exporter name '{definition.name}' found in "
+                    f"{existing_path.relative_to(project_dir)} and "
+                    f"{file_path.relative_to(project_dir)}"
+                )
+            _validate_event_exporter_declaration_signature(
+                function=value,
+                exporter_name=definition.name,
+                file_path=file_path,
+                project_dir=project_dir,
+            )
+            seen_names[definition.name] = file_path
+            discovered.append(
+                DiscoveredEventExporterDeclaration(
+                    file_path=file_path,
+                    relative_path=file_path.relative_to(project_dir),
+                    name=definition.name,
+                    function=value,
+                )
+            )
+    return tuple(discovered)
+
+
+def bind_event_exporter_declarations(
+    *,
+    declarations: tuple[DiscoveredEventExporterDeclaration, ...],
+    providers: tuple[DiscoveredProvider, ...],
+    project_dir: Path,
+) -> tuple[DiscoveredEventExporter, ...]:
+    """Validate declaration provider parameters against discovered project providers."""
+
+    provider_by_name: dict[str, DiscoveredProvider] = _provider_by_name(providers)
+    bound: list[DiscoveredEventExporter] = []
+    for declaration in declarations:
+        usages: tuple[DiscoveredProviderUsage, ...] = _bind_event_exporter_provider_usages(
+            function=declaration.function,
+            exporter_name=declaration.name,
+            file_path=declaration.file_path,
+            project_dir=project_dir,
+            provider_by_name=provider_by_name,
+        )
+        bound.append(
+            DiscoveredEventExporter(
+                file_path=declaration.file_path,
+                relative_path=declaration.relative_path,
+                name=declaration.name,
+                function=declaration.function,
+                provider_usages=usages,
+            )
+        )
+    return tuple(bound)
+
+
+def _validate_event_exporter_declaration_signature(
+    *,
+    function: Callable[..., object],
+    exporter_name: str,
+    file_path: Path,
+    project_dir: Path,
+) -> None:
+    relative_path: Path = file_path.relative_to(project_dir)
+    if inspect.iscoroutinefunction(function):
+        raise EventExporterDiscoveryError(
+            f"Event exporter '{exporter_name}' in {relative_path} must be synchronous"
+        )
+    parameters: tuple[inspect.Parameter, ...] = tuple(
+        inspect.signature(function).parameters.values()
+    )
+    if not parameters or parameters[0].name != EVENT_EXPORTER_EVENT_PARAMETER_NAME:
+        raise EventExporterDiscoveryError(
+            f"Event exporter '{exporter_name}' in {relative_path} must declare event first"
+        )
+    if any(
+        parameter.kind
+        in {
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        }
+        for parameter in parameters
+    ):
+        raise EventExporterDiscoveryError(
+            f"Event exporter '{exporter_name}' in {relative_path} must use named parameters"
+        )
+    if any(parameter.default is not inspect.Parameter.empty for parameter in parameters):
+        raise EventExporterDiscoveryError(
+            f"Event exporter '{exporter_name}' in {relative_path} parameters must not have defaults"
+        )
+    try:
+        type_hints: dict[str, object] = get_type_hints(function)
+    except (NameError, TypeError) as error:
+        raise EventExporterDiscoveryError(
+            f"Event exporter '{exporter_name}' in {relative_path} has invalid annotations"
+        ) from error
+    event_annotation: object = type_hints.get("event", parameters[0].annotation)
+    if event_annotation not in {inspect.Parameter.empty, LifecycleEvent}:
+        raise EventExporterDiscoveryError(
+            f"Event exporter '{exporter_name}' in {relative_path} event must be LifecycleEvent"
+        )
+    return_annotation: object = type_hints.get(
+        "return", inspect.signature(function).return_annotation
+    )
+    if return_annotation not in {inspect.Signature.empty, None, type(None)}:
+        raise EventExporterDiscoveryError(
+            f"Event exporter '{exporter_name}' in {relative_path} return annotation must be None"
+        )
+
+
+def _bind_event_exporter_provider_usages(
+    *,
+    function: Callable[..., object],
+    exporter_name: str,
+    file_path: Path,
+    project_dir: Path,
+    provider_by_name: dict[str, DiscoveredProvider],
+) -> tuple[DiscoveredProviderUsage, ...]:
+    relative_path: Path = file_path.relative_to(project_dir)
+    parameters: tuple[inspect.Parameter, ...] = tuple(
+        inspect.signature(function).parameters.values()
+    )
+    type_hints: dict[str, object] = get_type_hints(function)
+    for parameter in parameters[1:]:
+        provider: DiscoveredProvider | None = provider_by_name.get(parameter.name)
+        if provider is None:
+            raise EventExporterDiscoveryError(
+                f"Event exporter '{exporter_name}' in {relative_path} requires unknown provider "
+                f"'{parameter.name}'"
+            )
+        annotation: object = type_hints.get(parameter.name, parameter.annotation)
+        if annotation is not inspect.Parameter.empty and annotation is not provider.provider_class:
+            provider_class_name: str = provider.provider_class.__name__
+            raise EventExporterDiscoveryError(
+                f"Event exporter '{exporter_name}' in {relative_path} provider parameter "
+                f"'{parameter.name}' must be unannotated or exactly {provider_class_name}"
+            )
+    return _provider_usages(function=function, provider_by_name=provider_by_name)
+
+
+def _public_python_files(*, root: Path) -> tuple[Path, ...]:
+    public_files: list[Path] = []
+    for file_path in sorted(root.rglob("*.py")):
+        relative_parts: tuple[str, ...] = file_path.relative_to(root).parts
+        if file_path.stem == PYTHON_INIT_MODULE_STEM:
+            continue
+        if any(part.startswith("_") for part in relative_parts):
+            continue
+        public_files.append(file_path)
+    return tuple(public_files)
 
 
 def _provider_name(*, provider_class: type[Provider], file_path: Path, project_dir: Path) -> str:
@@ -1424,6 +1639,26 @@ def _load_provider_module(*, file_path: Path, project_dir: Path) -> ModuleType:
     except Exception as error:
         raise ProviderDiscoveryError(
             f"Failed to import provider file {file_path.relative_to(project_dir)}: {error}"
+        ) from error
+    finally:
+        sys.path = old_path
+    return module
+
+
+def _load_event_exporter_module(*, file_path: Path, project_dir: Path) -> ModuleType:
+    module_name: str = ".".join(file_path.relative_to(project_dir).with_suffix("").parts)
+    spec: ModuleSpec | None = importlib.util.spec_from_file_location(module_name, file_path)
+    if spec is None or spec.loader is None:
+        raise EventExporterDiscoveryError(f"Could not load event exporter file {file_path}")
+    module: ModuleType = importlib.util.module_from_spec(spec)
+    old_path: list[str] = list(sys.path)
+    sys.path.insert(0, str(project_dir))
+    try:
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+    except Exception as error:
+        raise EventExporterDiscoveryError(
+            f"Failed to import event exporter file {file_path.relative_to(project_dir)}: {error}"
         ) from error
     finally:
         sys.path = old_path

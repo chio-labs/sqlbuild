@@ -155,6 +155,12 @@ path = "src/sqlbuild/integrations/dagster/__init__.py"
 reason = "These imports preserve Dagster's documented external package-root APIs."
 
 [[rule_exceptions]]
+rule = "FFS120"
+path = "src/sqlbuild/event_exporters.py"
+symbols = ["event_exporter"]
+reason = "Bare @event_exporter is evaluated by Python as event_exporter(function), requiring positional function calling."
+
+[[rule_exceptions]]
 rule = "FFR402"
 path = "src/sqlbuild/integrations/rivers/__init__.py"
 reason = "These imports preserve Rivers' documented external package-root APIs."
