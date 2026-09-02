@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from collections.abc import Generator, Iterator
+from collections.abc import Generator, Iterator, Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from threading import Event
@@ -11,13 +11,16 @@ from unittest.mock import Mock
 
 import pytest
 
+from sqlbuild.cli.output._helpers.maximum_start_safety import serialize_maximum_start_safety
 from sqlbuild.cli.output.models import IntegrationResultEnvelope
+from sqlbuild.compiler.planner.models import MaximumStartSafetyEvidence
 from sqlbuild.integrations.dagster import SqlBuildCliResource
 from sqlbuild.integrations.dagster._helpers.invocation import (
     _build_results_from_execution_payload,
     _build_results_from_integration_result,
 )
 from sqlbuild.integrations.dagster.classes.sqlbuild_cli_invocation import SqlBuildCliInvocation
+from sqlbuild.spec.contracts.types import FutureCursorAction
 from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterAuditIdentityTestCase,
     DagsterCliCloneFailureTestCase,
@@ -282,6 +285,112 @@ def test_given_model_live_envelope_when_projecting_then_only_canonical_asset_is_
 
     assert tuple(tuple(result.asset_key.path) for result in results) == (("analytics", "orders"),)
     assert test_case.expected_output_path_retained is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (DagsterSelectedCheckTestCase("selected seed emits once", "waffle_types", False),),
+    ids=lambda case: case.description,
+)
+def test_given_seed_live_and_final_results_when_deduplicating_then_selected_seed_emits_once(
+    test_case: DagsterSelectedCheckTestCase,
+) -> None:
+    dag: Mapping[str, Any] = build_dagster_test_dag()
+    context: Any = type(
+        "SeedContext",
+        (),
+        {"selected_asset_keys": {dg.AssetKey(["analytics", "waffle_types"])}},
+    )()
+    envelope: IntegrationResultEnvelope = IntegrationResultEnvelope.from_json(
+        json.dumps(
+            integration_result_payload(
+                command="seed",
+                asset={"kind": "seed", "name": "waffle_types", "status": "success"},
+            )
+        )
+    )
+    emitted: set[tuple[str, ...]] = set()
+    live_results: tuple[Any, ...] = _build_results_from_integration_result(
+        dg=dg,
+        dag=dag,
+        envelope=envelope,
+        command=("sqb", "seed"),
+        context=context,
+        emitted_asset_paths=emitted,
+    )
+    for result in live_results:
+        emitted.add(tuple(result.asset_key.path))
+    final_results: tuple[Any, ...] = _build_results_from_execution_payload(
+        dg=dg,
+        dag=dag,
+        payload={
+            "version": 1,
+            "command": "seed",
+            "assets": ({"kind": "seed", "name": "waffle_types", "status": "success"},),
+            "checks": (),
+        },
+        command=("sqb", "seed"),
+        context=context,
+    )
+    final_keys: tuple[tuple[str, ...], ...] = tuple(
+        tuple(result.asset_key.path) for result in final_results
+    )
+
+    assert tuple(tuple(result.asset_key.path) for result in live_results) == (
+        ("analytics", "waffle_types"),
+    )
+    assert final_keys == tuple(emitted)
+    assert test_case.expected_check_name == "waffle_types"
+    assert test_case.expected_output_path_retained is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (DagsterFutureCursorMetadataTestCase("maximum-start cap metadata", "cap"),),
+    ids=lambda case: case.description,
+)
+def test_given_maximum_start_capping_when_projecting_live_model_then_dagster_matches_final_schema(
+    test_case: DagsterFutureCursorMetadataTestCase,
+) -> None:
+    safety: dict[str, object] | None = serialize_maximum_start_safety(
+        MaximumStartSafetyEvidence(
+            action=FutureCursorAction.CAP,
+            max_ahead="0d",
+            invocation_time="2026-09-02T12:00:00+00:00",
+            physical_target_max="2026-09-03",
+            highest_eligible_target_max="2026-09-02",
+            effective_start="2026-09-02",
+            maximum_allowed_start="2026-09-02",
+            target_relation="analytics.orders",
+            cursor_column="order_date",
+        )
+    )
+    assert safety is not None
+    envelope: IntegrationResultEnvelope = IntegrationResultEnvelope.from_json(
+        json.dumps(
+            integration_result_payload(
+                command="build",
+                asset={
+                    "kind": "model",
+                    "name": "orders",
+                    "status": "success",
+                    "maximum_start_safety": safety,
+                },
+            )
+        )
+    )
+
+    results: tuple[Any, ...] = _build_results_from_integration_result(
+        dg=dg,
+        dag=build_dagster_test_dag(),
+        envelope=envelope,
+        command=("sqb", "build"),
+        context=type("AssetContext", (), {"selected_asset_keys": set()})(),
+        emitted_asset_paths={("raw", "orders"), ("analytics", "normalize_email")},
+    )
+
+    assert results[0].metadata["maximum_start_safety"] == safety
+    assert results[0].metadata["maximum_start_safety"]["action"] == test_case.expected_action
 
 
 @pytest.mark.parametrize(

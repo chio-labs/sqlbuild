@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from contextvars import ContextVar, Token
 from functools import partial
 from threading import RLock
@@ -33,6 +34,8 @@ from sqlbuild.runtime.observability.types import (
 _REPORTING_FAILURE: ContextVar[bool] = ContextVar(
     "sqlbuild_observability_reporting_failure", default=False
 )
+_LIFECYCLE_CHANNEL: Literal["lifecycle"] = "lifecycle"
+_DIAGNOSTIC_CHANNEL: Literal["diagnostic"] = "diagnostic"
 
 
 class EventDispatcher:
@@ -41,8 +44,14 @@ class EventDispatcher:
     def __init__(self, *, health_callback: HealthCallback | None = None) -> None:
         self._health_callback: HealthCallback | None = health_callback
         self._lock: RLock = RLock()
+        self._publication_lock: RLock = RLock()
         self._lifecycle: tuple[LifecycleRegistration, ...] = ()
         self._diagnostics: tuple[DiagnosticRegistration, ...] = ()
+        self._pending_publications: deque[
+            tuple[Literal["lifecycle"], LifecycleEvent | OpaqueLifecycleEvent, bool]
+            | tuple[Literal["diagnostic"], DiagnosticLog, bool]
+        ] = deque()
+        self._publishing = False
 
     @overload
     def subscribe_lifecycle(
@@ -86,6 +95,58 @@ class EventDispatcher:
             )
         if isinstance(event, LifecycleEvent):
             validate_known_lifecycle_event(event=event)
+        self._publish(channel=_LIFECYCLE_CHANNEL, value=event)
+
+    def publish_diagnostic(self, log: DiagnosticLog) -> None:
+        """Synchronously publish a diagnostic log to the current ordered snapshot."""
+
+        if not isinstance(log, DiagnosticLog):
+            raise ObservabilityValidationError("diagnostic publication requires DiagnosticLog")
+        self._publish(channel=_DIAGNOSTIC_CHANNEL, value=log)
+
+    def _publish(
+        self,
+        *,
+        channel: Literal["lifecycle", "diagnostic"],
+        value: LifecycleEvent | OpaqueLifecycleEvent | DiagnosticLog,
+    ) -> None:
+        """Serialize outer publications and queue nested publications at their call point."""
+
+        with self._publication_lock:
+            suppress_health: bool = _REPORTING_FAILURE.get()
+            if channel == _LIFECYCLE_CHANNEL:
+                lifecycle_value: LifecycleEvent | OpaqueLifecycleEvent = cast(
+                    LifecycleEvent | OpaqueLifecycleEvent, value
+                )
+                self._pending_publications.append((channel, lifecycle_value, suppress_health))
+            else:
+                diagnostic_value: DiagnosticLog = cast(DiagnosticLog, value)
+                self._pending_publications.append((channel, diagnostic_value, suppress_health))
+            if self._publishing:
+                return
+            self._publishing = True
+            try:
+                while self._pending_publications:
+                    pending_channel, pending_value, suppress_health = (
+                        self._pending_publications.popleft()
+                    )
+                    health_token: Token[bool] | None = (
+                        _REPORTING_FAILURE.set(True) if suppress_health else None
+                    )
+                    try:
+                        if pending_channel == _LIFECYCLE_CHANNEL:
+                            self._publish_lifecycle_now(
+                                cast(LifecycleEvent | OpaqueLifecycleEvent, pending_value)
+                            )
+                        else:
+                            self._publish_diagnostic_now(cast(DiagnosticLog, pending_value))
+                    finally:
+                        if health_token is not None:
+                            _REPORTING_FAILURE.reset(health_token)
+            finally:
+                self._publishing = False
+
+    def _publish_lifecycle_now(self, event: LifecycleEvent | OpaqueLifecycleEvent) -> None:
         with self._lock:
             subscribers: tuple[LifecycleRegistration, ...] = self._lifecycle
         for _, subscriber, accepts_opaque in subscribers:
@@ -99,11 +160,7 @@ class EventDispatcher:
             except BaseException as error:
                 self._report_failure(channel="lifecycle", subscriber=subscriber, error=error)
 
-    def publish_diagnostic(self, log: DiagnosticLog) -> None:
-        """Synchronously publish a diagnostic log to the current ordered snapshot."""
-
-        if not isinstance(log, DiagnosticLog):
-            raise ObservabilityValidationError("diagnostic publication requires DiagnosticLog")
+    def _publish_diagnostic_now(self, log: DiagnosticLog) -> None:
         with self._lock:
             subscribers: tuple[DiagnosticRegistration, ...] = self._diagnostics
         for _, subscriber in subscribers:

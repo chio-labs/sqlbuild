@@ -95,6 +95,16 @@ class SeedPipelineConcurrencyTestCase:
 
 
 @dataclass(frozen=True)
+class SeedPipelineLifecycleTestCase:
+    """One standalone seed attempt lifecycle expectation."""
+
+    description: str
+    seed_names: tuple[str, ...]
+    expected_terminal_types: tuple[str, ...]
+    expected_resource_ids: frozenset[str]
+
+
+@dataclass(frozen=True)
 class WorkerConnectionTestCase:
     description: str
     connection_count: int

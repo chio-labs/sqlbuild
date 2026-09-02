@@ -28,3 +28,12 @@ class StructuralMetadataValidationTestCase:
     description: str
     value: object
     expected_error: str
+
+
+@dataclass(frozen=True)
+class MaximumStartMetadataValidationTestCase:
+    """One maximum-start structural metadata validation case."""
+
+    description: str
+    value: object
+    expected_error: str

@@ -10,6 +10,7 @@ from typing import Any, cast
 from sqlbuild.cli.output._helpers.future_cursor_safety import serialize_future_cursor_safety
 from sqlbuild.cli.output._helpers.integration_identity import integration_resource_id
 from sqlbuild.cli.output._helpers.integration_validation import encode_integration_json
+from sqlbuild.cli.output._helpers.maximum_start_safety import serialize_maximum_start_safety
 from sqlbuild.cli.output.constants import (
     INTEGRATION_RESOURCE_FAILED_EVENT,
     INTEGRATION_RESULT_RECORD_KIND,
@@ -198,6 +199,9 @@ def _asset_result(*, result: object, plan: PlanOutput | None) -> IntegrationAsse
             failed_phase=result.failed_phase.value if result.failed_phase else None,
             future_cursor_safety=_bounded_metadata(
                 serialize_future_cursor_safety(result.future_cursor_safety) or {}
+            ),
+            maximum_start_safety=_bounded_metadata(
+                serialize_maximum_start_safety(result.maximum_start_safety) or {}
             ),
             microbatch=_model_microbatch(result),
         )

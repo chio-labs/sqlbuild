@@ -14,6 +14,7 @@ from sqlbuild.cli.output._helpers.integration_validation import (
     encode_integration_json,
     validate_allowlisted_mapping,
     validate_identifier,
+    validate_maximum_start_safety,
     validate_optional_identifier,
 )
 from sqlbuild.cli.output.constants import (
@@ -100,6 +101,7 @@ class IntegrationAssetResult:
     rows_loaded: int | None = None
     materialized: bool | None = None
     future_cursor_safety: Mapping[str, JSONValue] = field(default_factory=dict)
+    maximum_start_safety: Mapping[str, JSONValue] = field(default_factory=dict)
     microbatch: Mapping[str, JSONValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -137,6 +139,7 @@ class IntegrationAssetResult:
             field_name="microbatch",
             allowed_keys=INTEGRATION_MICROBATCH_KEYS,
         )
+        validate_maximum_start_safety(self.maximum_start_safety)
         for key in INTEGRATION_MICROBATCH_COUNT_KEYS:
             count: object = self.microbatch.get(key)
             if count is not None and (type(count) is not int or count < 0):

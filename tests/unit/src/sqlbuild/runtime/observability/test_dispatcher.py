@@ -142,13 +142,13 @@ def test_given_opaque_opt_in_when_publishing_unknown_event_then_only_opted_subsc
     "test_case",
     [
         DispatchOrderCase(
-            description="registration and immediate nested order",
-            expected_order=("first:outer", "first:nested", "second:nested", "second:outer"),
+            description="registration and queued nested order",
+            expected_order=("first:outer", "second:outer", "first:nested", "second:nested"),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_reentrant_subscriber_when_publishing_then_nested_snapshot_runs_immediately_in_order(
+def test_given_reentrant_subscriber_when_publishing_then_nested_snapshot_preserves_global_order(
     test_case: DispatchOrderCase,
 ) -> None:
     dispatcher: EventDispatcher = EventDispatcher()
@@ -170,6 +170,137 @@ def test_given_reentrant_subscriber_when_publishing_then_nested_snapshot_runs_im
 
     _ = dispatcher.subscribe_lifecycle(subscriber=first, accepts_opaque=False)
     _ = dispatcher.subscribe_lifecycle(subscriber=second, accepts_opaque=False)
+
+    dispatcher.publish_lifecycle(outer)
+
+    assert tuple(observed) == test_case.expected_order
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (DispatchOrderCase("concurrent lifecycle total order", ("evt-1", "evt-2")),),
+    ids=lambda case: case.description,
+)
+def test_given_two_threads_when_publishing_lifecycle_then_subscribers_observe_same_total_order(
+    test_case: DispatchOrderCase,
+) -> None:
+    dispatcher: EventDispatcher = EventDispatcher()
+    first_entered: Event = Event()
+    second_publisher_observed: Event = Event()
+    orders: tuple[list[str], list[str]] = ([], [])
+    first_event: LifecycleEvent = lifecycle_event()
+    second_event: LifecycleEvent = replace(first_event, event_id="evt-2")
+    actions: dict[str, Callable[[], object]] = {
+        first_event.event_id: lambda: (
+            first_entered.set(),
+            second_publisher_observed.wait(timeout=0.05),
+        ),
+        second_event.event_id: second_publisher_observed.set,
+    }
+
+    def first_subscriber(event: LifecycleEvent) -> None:
+        orders[0].append(event.event_id)
+        _ = actions[event.event_id]()
+
+    def second_subscriber(event: LifecycleEvent) -> None:
+        orders[1].append(event.event_id)
+
+    _ = dispatcher.subscribe_lifecycle(subscriber=first_subscriber, accepts_opaque=False)
+    _ = dispatcher.subscribe_lifecycle(subscriber=second_subscriber, accepts_opaque=False)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first_future: Future[None] = pool.submit(dispatcher.publish_lifecycle, first_event)
+        assert first_entered.wait(timeout=5)
+        second_future: Future[None] = pool.submit(dispatcher.publish_lifecycle, second_event)
+        first_future.result(timeout=5)
+        second_future.result(timeout=5)
+
+    assert tuple(orders[0]) == tuple(orders[1]) == test_case.expected_order
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (DispatchOrderCase("concurrent diagnostic total order", ("diagnostic", "diagnostic-2")),),
+    ids=lambda case: case.description,
+)
+def test_given_two_threads_when_publishing_diagnostics_then_subscribers_observe_same_total_order(
+    test_case: DispatchOrderCase,
+) -> None:
+    dispatcher: EventDispatcher = EventDispatcher()
+    first_entered: Event = Event()
+    second_publisher_observed: Event = Event()
+    orders: tuple[list[str], list[str]] = ([], [])
+    first_log: DiagnosticLog = diagnostic_log()
+    second_log: DiagnosticLog = replace(first_log, message="diagnostic-2")
+    actions: dict[str, Callable[[], object]] = {
+        first_log.message: lambda: (
+            first_entered.set(),
+            second_publisher_observed.wait(timeout=0.05),
+        ),
+        second_log.message: second_publisher_observed.set,
+    }
+
+    def first_subscriber(log: DiagnosticLog) -> None:
+        orders[0].append(log.message)
+        _ = actions[log.message]()
+
+    def second_subscriber(log: DiagnosticLog) -> None:
+        orders[1].append(log.message)
+
+    _ = dispatcher.subscribe_diagnostics(first_subscriber)
+    _ = dispatcher.subscribe_diagnostics(second_subscriber)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first_future: Future[None] = pool.submit(dispatcher.publish_diagnostic, first_log)
+        assert first_entered.wait(timeout=5)
+        second_future: Future[None] = pool.submit(dispatcher.publish_diagnostic, second_log)
+        first_future.result(timeout=5)
+        second_future.result(timeout=5)
+
+    assert tuple(orders[0]) == tuple(orders[1]) == test_case.expected_order
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DispatchOrderCase(
+            "nested publication uses mutated subscription snapshot",
+            ("first:evt-1", "second:evt-1", "first:nested", "third:nested"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_subscription_mutation_during_callback_when_nested_publish_then_next_snapshot_is_used(
+    test_case: DispatchOrderCase,
+) -> None:
+    dispatcher: EventDispatcher = EventDispatcher()
+    observed: list[str] = []
+    outer: LifecycleEvent = lifecycle_event()
+    nested: LifecycleEvent = replace(outer, event_id="nested")
+    second_unsubscribe: list[Unsubscribe] = []
+
+    def third(event: LifecycleEvent) -> None:
+        observed.append(f"third:{event.event_id}")
+
+    def mutate_and_publish() -> None:
+        second_unsubscribe[0]()
+        _ = dispatcher.subscribe_lifecycle(subscriber=third, accepts_opaque=False)
+        dispatcher.publish_lifecycle(nested)
+
+    actions: dict[str, Callable[[], None]] = {
+        outer.event_id: mutate_and_publish,
+        nested.event_id: lambda: None,
+    }
+
+    def first(event: LifecycleEvent) -> None:
+        observed.append(f"first:{event.event_id}")
+        actions[event.event_id]()
+
+    def second(event: LifecycleEvent) -> None:
+        observed.append(f"second:{event.event_id}")
+
+    _ = dispatcher.subscribe_lifecycle(subscriber=first, accepts_opaque=False)
+    second_unsubscribe.append(
+        dispatcher.subscribe_lifecycle(subscriber=second, accepts_opaque=False)
+    )
 
     dispatcher.publish_lifecycle(outer)
 

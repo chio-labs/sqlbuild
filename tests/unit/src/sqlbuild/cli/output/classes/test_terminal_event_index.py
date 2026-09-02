@@ -32,6 +32,7 @@ from sqlbuild.runtime.observability.exceptions import ObservabilityValidationErr
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from tests.unit.src.sqlbuild.cli.output.classes._test_types import (
     EnvelopeFieldValidationTestCase,
+    MaximumStartMetadataValidationTestCase,
     StructuralMetadataValidationTestCase,
     TerminalProjectionTestCase,
 )
@@ -118,6 +119,95 @@ def test_given_unsafe_structural_metadata_when_constructing_asset_then_validatio
             status="success",
             microbatch=cast(Mapping[str, Any], test_case.value),
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        TerminalProjectionTestCase(
+            "canonical maximum-start structure",
+            {
+                "action": "cap",
+                "max_ahead": "0d",
+                "invocation_time": "2026-09-02T12:00:00+00:00",
+                "physical_target_max": "2026-09-03",
+                "highest_eligible_target_max": "2026-09-02",
+                "effective_start": "2026-09-02",
+                "maximum_allowed_start": "2026-09-02",
+                "input": {"relation": "main.orders", "cursor_column": "order_date"},
+            },
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_canonical_maximum_start_safety_when_encoding_then_round_trip_preserves_structure(
+    test_case: TerminalProjectionTestCase,
+) -> None:
+    payload: dict[str, object] = build_valid_integration_payload()
+    payload["asset"] = {
+        "kind": "model",
+        "name": "orders",
+        "status": "success",
+        "maximum_start_safety": test_case.expected_output,
+    }
+
+    envelope: IntegrationResultEnvelope = IntegrationResultEnvelope.from_json(json.dumps(payload))
+    decoded: IntegrationResultEnvelope = IntegrationResultEnvelope.from_json(envelope.to_json())
+
+    assert decoded.asset is not None
+    assert decoded.asset.maximum_start_safety == test_case.expected_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MaximumStartMetadataValidationTestCase(
+            "missing canonical fields", {"action": "cap"}, "maximum_start_safety"
+        ),
+        MaximumStartMetadataValidationTestCase(
+            "unsupported action",
+            {
+                "action": "ignore",
+                "max_ahead": "0d",
+                "invocation_time": "2026-09-02T12:00:00+00:00",
+                "physical_target_max": "2026-09-03",
+                "highest_eligible_target_max": None,
+                "effective_start": "2026-09-02",
+                "maximum_allowed_start": "2026-09-02",
+                "input": {"relation": "main.orders", "cursor_column": "order_date"},
+            },
+            "maximum_start_safety",
+        ),
+        MaximumStartMetadataValidationTestCase(
+            "invalid bound type",
+            {
+                "action": "cap",
+                "max_ahead": 0,
+                "invocation_time": "2026-09-02T12:00:00+00:00",
+                "physical_target_max": "2026-09-03",
+                "highest_eligible_target_max": None,
+                "effective_start": "2026-09-02",
+                "maximum_allowed_start": "2026-09-02",
+                "input": {"relation": "main.orders", "cursor_column": "order_date"},
+            },
+            "maximum_start_safety",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_malformed_maximum_start_safety_when_decoding_then_validation_rejects_it(
+    test_case: MaximumStartMetadataValidationTestCase,
+) -> None:
+    payload: dict[str, object] = build_valid_integration_payload()
+    payload["asset"] = {
+        "kind": "model",
+        "name": "orders",
+        "status": "success",
+        "maximum_start_safety": test_case.value,
+    }
+
+    with pytest.raises(ObservabilityValidationError, match=test_case.expected_error):
+        _ = IntegrationResultEnvelope.from_json(json.dumps(payload))
 
 
 @pytest.mark.parametrize(

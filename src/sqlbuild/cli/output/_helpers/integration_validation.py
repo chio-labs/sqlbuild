@@ -7,6 +7,10 @@ import math
 from collections.abc import Mapping, Sequence
 
 from sqlbuild.cli.output.constants import (
+    INTEGRATION_MAXIMUM_START_ACTIONS,
+    INTEGRATION_MAXIMUM_START_INPUT_KEYS,
+    INTEGRATION_MAXIMUM_START_KEYS,
+    INTEGRATION_MAXIMUM_START_REQUIRED_KEYS,
     MAX_INTEGRATION_COLLECTION_ITEMS,
     MAX_INTEGRATION_IDENTIFIER_CHARS,
     MAX_INTEGRATION_METADATA_BYTES,
@@ -15,6 +19,7 @@ from sqlbuild.cli.output.constants import (
     MAX_INTEGRATION_STRING_CHARS,
 )
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
+from sqlbuild.runtime.observability.types import JSONValue
 
 
 def encode_integration_json(*, value: object, record: bool = False) -> str:
@@ -82,6 +87,45 @@ def validate_optional_identifier(*, value: object, field_name: str) -> None:
 
     if value is not None:
         validate_identifier(value=value, field_name=field_name)
+
+
+def validate_maximum_start_safety(value: Mapping[str, JSONValue]) -> None:
+    """Validate the exact bounded structure emitted by the shared final JSON serializer."""
+
+    validate_allowlisted_mapping(
+        value=value,
+        field_name="maximum_start_safety",
+        allowed_keys=INTEGRATION_MAXIMUM_START_KEYS,
+    )
+    if not value:
+        return
+    if set(value) != INTEGRATION_MAXIMUM_START_REQUIRED_KEYS:
+        raise ObservabilityValidationError(
+            "integration maximum_start_safety must use the canonical structure"
+        )
+    if value.get("action") not in INTEGRATION_MAXIMUM_START_ACTIONS:
+        raise ObservabilityValidationError("integration maximum_start_safety action is unsupported")
+    optional_text_fields: frozenset[str] = frozenset({"highest_eligible_target_max"})
+    for field_name in INTEGRATION_MAXIMUM_START_REQUIRED_KEYS - {"action", "input"}:
+        field_value: object = value.get(field_name)
+        if type(field_value) is not str and not (
+            field_name in optional_text_fields and field_value is None
+        ):
+            raise ObservabilityValidationError(
+                f"integration maximum_start_safety {field_name} has an invalid type"
+            )
+    input_value: object = value.get("input")
+    if (
+        not isinstance(input_value, Mapping)
+        or set(input_value) != INTEGRATION_MAXIMUM_START_INPUT_KEYS
+    ):
+        raise ObservabilityValidationError(
+            "integration maximum_start_safety input must use the canonical structure"
+        )
+    if any(type(item) is not str or not item for item in input_value.values()):
+        raise ObservabilityValidationError(
+            "integration maximum_start_safety input values must be non-empty strings"
+        )
 
 
 def validate_allowlisted_mapping(

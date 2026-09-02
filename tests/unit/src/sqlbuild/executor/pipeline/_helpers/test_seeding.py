@@ -4,14 +4,24 @@ from __future__ import annotations
 
 import json
 from typing import Any, cast
+from unittest.mock import patch
 
 import pytest
 
+from sqlbuild.cli.output.classes.terminal_event_index import TerminalEventIndex
 from sqlbuild.cli.output.main._seed_execution_json import format_seed_execution_json
+from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.pipeline._helpers.seeding import run_seed_pipeline
+from sqlbuild.observability import (
+    EventDispatcher,
+    LifecycleEvent,
+    dispatcher_scope,
+    invocation_scope,
+)
 from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import (
     SeedPipelineConcurrencyTestCase,
+    SeedPipelineLifecycleTestCase,
 )
 from tests.unit.src.sqlbuild.executor.pipeline._helpers.helpers import (
     SeedPipelineTestAdapter,
@@ -61,3 +71,100 @@ def test_given_multiple_seeds_when_running_seed_pipeline_then_uses_concurrent_co
     loads_by_target: dict[str, object] = dict(adapter.loads)
     assert loads_by_target["seed_a"] is not loads_by_target["seed_b"]
     assert adapter.closed_connections == adapter.connections
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SeedPipelineLifecycleTestCase(
+            description="concurrent attempts complete before callbacks",
+            seed_names=("seed_a", "seed_b"),
+            expected_terminal_types=(
+                "resource_attempt_completed",
+                "resource_attempt_completed",
+            ),
+            expected_resource_ids=frozenset({"seed:seed_a", "seed:seed_b"}),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_concurrent_standalone_seeds_when_callbacks_run_then_each_terminal_precedes_callback(
+    test_case: SeedPipelineLifecycleTestCase,
+) -> None:
+    plan: PlanOutput = build_seed_plan(seed_names=test_case.seed_names)
+    adapter: SeedPipelineTestAdapter = SeedPipelineTestAdapter(barrier_targets=("seed_a", "seed_b"))
+    dispatcher: EventDispatcher = EventDispatcher()
+    terminal_index: TerminalEventIndex = TerminalEventIndex()
+    _ = dispatcher.subscribe_lifecycle(subscriber=terminal_index.consume, accepts_opaque=False)
+    callback_terminals: list[str] = []
+
+    def on_seed_complete(result: SeedExecutionResult) -> None:
+        terminal: LifecycleEvent | None = terminal_index.resource_terminal(
+            resource_name=result.seed_name,
+            resource_id=f"seed:{result.seed_name}",
+        )
+        assert terminal is not None
+        callback_terminals.append(terminal.event_type)
+
+    with invocation_scope("seed-pipeline-invocation"), dispatcher_scope(dispatcher):
+        results: tuple[SeedExecutionResult, ...] = run_seed_pipeline(
+            plan=plan,
+            connection_config={},
+            adapter=adapter,
+            max_concurrency=2,
+            run_id="seed-pipeline-run",
+            on_seed_complete=on_seed_complete,
+        )
+
+    resource_events: tuple[LifecycleEvent, ...] = terminal_index.events()
+    assert tuple(result.seed_name for result in results) == test_case.seed_names
+    assert tuple(callback_terminals) == test_case.expected_terminal_types
+    assert len(resource_events) == 4
+    assert {event.invocation_id for event in resource_events} == {"seed-pipeline-invocation"}
+    assert {event.run_id for event in resource_events} == {"seed-pipeline-run"}
+    assert {event.resource_id for event in resource_events} == test_case.expected_resource_ids
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SeedPipelineLifecycleTestCase(
+            description="base exception fails one attempt without callback",
+            seed_names=("seed_a",),
+            expected_terminal_types=(
+                "resource_attempt_started",
+                "resource_attempt_failed",
+            ),
+            expected_resource_ids=frozenset({"seed:seed_a"}),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_seed_executor_raises_when_running_worker_then_attempt_fails_once_without_callback(
+    test_case: SeedPipelineLifecycleTestCase,
+) -> None:
+    adapter: SeedPipelineTestAdapter = SeedPipelineTestAdapter(barrier_targets=("seed_a",))
+    dispatcher: EventDispatcher = EventDispatcher()
+    terminal_index: TerminalEventIndex = TerminalEventIndex()
+    _ = dispatcher.subscribe_lifecycle(subscriber=terminal_index.consume, accepts_opaque=False)
+    callbacks: list[SeedExecutionResult] = []
+
+    with (
+        invocation_scope("seed-exception-invocation"),
+        dispatcher_scope(dispatcher),
+        patch.object(adapter, "load_seed", side_effect=KeyboardInterrupt("stop")),
+        pytest.raises(KeyboardInterrupt, match="stop"),
+    ):
+        _ = run_seed_pipeline(
+            plan=build_seed_plan(seed_names=test_case.seed_names),
+            connection_config={},
+            adapter=adapter,
+            max_concurrency=1,
+            run_id="seed-exception-run",
+            on_seed_complete=callbacks.append,
+        )
+
+    resource_events: tuple[LifecycleEvent, ...] = terminal_index.events()
+    assert tuple(event.event_type for event in resource_events) == test_case.expected_terminal_types
+    assert {event.resource_id for event in resource_events} == test_case.expected_resource_ids
+    assert callbacks == []

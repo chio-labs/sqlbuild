@@ -67,6 +67,7 @@ def cli_observability_scope(
     )
     machine_output: bool = (
         args.json
+        or args.json_output is not None
         or getattr(args, "event_output", None) is not None
         or execution_event_output_active()
     )

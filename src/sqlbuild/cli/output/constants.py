@@ -87,6 +87,34 @@ INTEGRATION_FUTURE_CURSOR_KEYS: frozenset[str] = frozenset(
         "start",
     }
 )
+INTEGRATION_MAXIMUM_START_KEYS: frozenset[str] = frozenset(
+    {
+        "action",
+        "cursor_column",
+        "effective_start",
+        "highest_eligible_target_max",
+        "input",
+        "invocation_time",
+        "max_ahead",
+        "maximum_allowed_start",
+        "physical_target_max",
+        "relation",
+    }
+)
+INTEGRATION_MAXIMUM_START_ACTIONS: frozenset[str] = frozenset({"cap", "error"})
+INTEGRATION_MAXIMUM_START_INPUT_KEYS: frozenset[str] = frozenset({"relation", "cursor_column"})
+INTEGRATION_MAXIMUM_START_REQUIRED_KEYS: frozenset[str] = frozenset(
+    {
+        "action",
+        "max_ahead",
+        "invocation_time",
+        "physical_target_max",
+        "highest_eligible_target_max",
+        "effective_start",
+        "maximum_allowed_start",
+        "input",
+    }
+)
 INTEGRATION_MICROBATCH_KEYS: frozenset[str] = frozenset(
     {
         "action",
