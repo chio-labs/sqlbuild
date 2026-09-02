@@ -31,11 +31,13 @@ from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
     assert_json_output_file_behavior,
     assert_positional_selector_behavior,
     assert_select_file_selector_behavior,
+    build_dagster_test_dag,
     write_blocking_execution_event_command,
     write_blocking_failed_execution_event_command,
     write_blocking_fake_sqb_command,
     write_dagster_test_dag,
     write_fake_sqb_command,
+    write_python_augmented_dagster_test_dag,
 )
 
 dg: Any = pytest.importorskip("dagster")
@@ -239,7 +241,63 @@ def test_given_sqlbuild_cli_resource_with_dag_when_streaming_then_yields_asset_r
             expected_asset_keys=(("analytics", "orders"),),
             expected_check_names=("audit__not_null__order_id",),
             expected_check_severities=("WARN",),
-        )
+        ),
+        DagsterCliJsonStreamTestCase(
+            description="check-only selection emits only selected audit result",
+            command_stdout=(
+                '{"version": 1, "command": "build", "status": "success", '
+                '"summary": {}, '
+                '"assets": [{"kind": "model", "name": "orders", '
+                '"status": "success", "duration_ms": 12}], '
+                '"checks": [{"kind": "audit", "name": "not_null", '
+                '"check_id": "audit:not_null:model:orders:order_id", '
+                '"passed": true, "status": "pass", "severity": "warn", '
+                '"row_count": 0}, '
+                '{"kind": "audit", "name": "freshness", '
+                '"check_id": "audit:freshness:source:raw_orders:loaded_at", '
+                '"passed": true, "status": "pass", "severity": "warn", '
+                '"row_count": 0}]} '
+            ),
+            selected_asset_keys=(),
+            selected_check_keys=((("analytics", "orders"), "audit__not_null__order_id"),),
+            check_selection_is_explicit=True,
+            expected_asset_keys=(),
+            expected_check_names=("audit__not_null__order_id",),
+            expected_check_severities=("WARN",),
+        ),
+        DagsterCliJsonStreamTestCase(
+            description="combined selection retains check outside selected asset paths",
+            command_stdout=(
+                '{"version": 1, "command": "build", "status": "success", '
+                '"summary": {}, '
+                '"assets": [{"kind": "model", "name": "orders", "status": "success"}], '
+                '"checks": [{"kind": "audit", "name": "not_null", '
+                '"check_id": "audit:not_null:model:orders:order_id", '
+                '"passed": true, "status": "pass", "severity": "warn"}]}'
+            ),
+            selected_asset_keys=(("analytics", "customers"),),
+            selected_check_keys=((("analytics", "orders"), "audit__not_null__order_id"),),
+            check_selection_is_explicit=True,
+            expected_asset_keys=(),
+            expected_check_names=("audit__not_null__order_id",),
+            expected_check_severities=("WARN",),
+        ),
+        DagsterCliJsonStreamTestCase(
+            description="explicit empty check selection suppresses audit results",
+            command_stdout=(
+                '{"version": 1, "command": "build", "status": "success", '
+                '"summary": {}, '
+                '"assets": [{"kind": "model", "name": "orders", "status": "success"}], '
+                '"checks": [{"kind": "audit", "name": "not_null", '
+                '"check_id": "audit:not_null:model:orders:order_id", '
+                '"passed": true, "status": "pass", "severity": "warn"}]}'
+            ),
+            selected_asset_keys=(("analytics", "orders"),),
+            check_selection_is_explicit=True,
+            expected_asset_keys=(("analytics", "orders"),),
+            expected_check_names=(),
+            expected_check_severities=(),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -255,7 +313,14 @@ def test_given_execution_json_when_streaming_then_yields_structured_dagster_even
         {
             "selected_asset_keys": {
                 dg.AssetKey(list(asset_key)) for asset_key in test_case.selected_asset_keys
-            }
+            },
+            "selected_asset_check_keys": (
+                None,
+                {
+                    dg.AssetCheckKey(asset_key=dg.AssetKey(list(asset_key)), name=check_name)
+                    for asset_key, check_name in test_case.selected_check_keys
+                },
+            )[test_case.check_selection_is_explicit],
         },
     )()
     resource: SqlBuildCliResource = SqlBuildCliResource(
@@ -888,6 +953,14 @@ def test_given_sqlbuild_cli_resource_when_waiting_failed_invocation_then_raises_
             expected_selectors=(),
             assert_selector_transport=assert_positional_selector_behavior,
         ),
+        DagsterCliSelectionTestCase(
+            description="selected audit check appends checked model selector",
+            selected_asset_keys=(),
+            selected_check_keys=((("analytics", "orders"), "audit__not_null__order_id"),),
+            command_args=("build",),
+            expected_selectors=("orders",),
+            assert_selector_transport=assert_select_file_selector_behavior,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -903,7 +976,11 @@ def test_given_selected_dagster_assets_when_invoking_cli_then_applies_sqlbuild_s
         {
             "selected_asset_keys": {
                 dg.AssetKey(list(asset_key)) for asset_key in test_case.selected_asset_keys
-            }
+            },
+            "selected_asset_check_keys": {
+                dg.AssetCheckKey(asset_key=dg.AssetKey(list(asset_key)), name=check_name)
+                for asset_key, check_name in test_case.selected_check_keys
+            },
         },
     )()
     resource: SqlBuildCliResource = SqlBuildCliResource(
@@ -924,3 +1001,109 @@ def test_given_selected_dagster_assets_when_invoking_cli_then_applies_sqlbuild_s
         selectors=test_case.expected_selectors,
     )
     assert_json_output_file_behavior(command=invocation.command)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterCliSelectionTestCase(
+            description="selected Python check appends check selector",
+            selected_asset_keys=(),
+            command_args=("check",),
+            expected_selectors=("check_orders_export",),
+            assert_selector_transport=assert_select_file_selector_behavior,
+            selected_check_keys=(
+                (("asset", "orders_export"), "python_check__check_orders_export"),
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_selected_python_check_when_invoking_check_then_selects_check_identity(
+    test_case: DagsterCliSelectionTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    context: Any = type(
+        "SelectedCheckContext",
+        (),
+        {
+            "selected_asset_keys": set(),
+            "selected_asset_check_keys": {
+                dg.AssetCheckKey(asset_key=dg.AssetKey(list(asset_key)), name=check_name)
+                for asset_key, check_name in test_case.selected_check_keys
+            },
+        },
+    )()
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_fake_sqb_command(root=tmp_path),
+        dag_path=str(write_python_augmented_dagster_test_dag(root=tmp_path)),
+    )
+
+    invocation: SqlBuildCliInvocation = resource.cli(
+        args=test_case.command_args,
+        context=context,
+    ).wait()
+
+    assert invocation.selection == test_case.expected_selectors
+    test_case.assert_selector_transport(
+        command=invocation.command,
+        selectors=test_case.expected_selectors,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterCliSelectionTestCase(
+            description="selected multi-asset check scopes every checked model",
+            selected_asset_keys=(),
+            command_args=("build",),
+            expected_selectors=("orders", "customers"),
+            assert_selector_transport=assert_select_file_selector_behavior,
+            selected_check_keys=((("analytics", "orders"), "audit__not_null__order_id"),),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_selected_multi_asset_check_when_invoking_build_then_scopes_every_checked_asset(
+    test_case: DagsterCliSelectionTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    dag: dict[str, Any] = dict(build_dagster_test_dag())
+    checks: list[dict[str, Any]] = [dict(check) for check in dag["checks"]]
+    checks[0]["checked_asset_ids"] = ["model:orders", "model:customers"]
+    dag["checks"] = checks
+    dag_path: Path = tmp_path / "sqlbuild_dag.json"
+    dag_path.write_text(json.dumps(dag), encoding="utf-8")
+    context: Any = type(
+        "SelectedCheckContext",
+        (),
+        {
+            "selected_asset_keys": set(),
+            "selected_asset_check_keys": {
+                dg.AssetCheckKey(asset_key=dg.AssetKey(list(asset_key)), name=check_name)
+                for asset_key, check_name in test_case.selected_check_keys
+            },
+        },
+    )()
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_fake_sqb_command(root=tmp_path),
+        dag_path=str(dag_path),
+    )
+
+    invocation: SqlBuildCliInvocation = resource.cli(
+        args=test_case.command_args,
+        context=context,
+    ).wait()
+
+    assert set(invocation.selection) == set(test_case.expected_selectors)
+    test_case.assert_selector_transport(
+        command=invocation.command,
+        selectors=test_case.expected_selectors,
+    )

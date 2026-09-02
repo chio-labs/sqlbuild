@@ -11,6 +11,7 @@ from typing import IO, TYPE_CHECKING, Any, TextIO
 
 from sqlbuild.integrations.dagster.constants import (
     ASSET_SELECTION_COMMANDS,
+    CHECK_COMMAND,
     CHECK_METADATA_EXCLUDED_KEYS,
     CHECK_NAME_SEPARATOR_CHARACTER,
     CLONE_ASSET_EVENT,
@@ -88,10 +89,27 @@ def _with_selected_asset_args(
         return args, (), None
     if not EXPLICIT_SELECTION_FLAGS.isdisjoint(args):
         return args, (), None
-    selected_keys: object = getattr(context, "selected_asset_keys", None)
-    if selected_keys is None:
+    selected_paths: set[tuple[str, ...]] = _selected_asset_paths(context=context)
+    selected_check_keys: set[tuple[tuple[str, ...], str]] = _selected_asset_check_keys(
+        context=context
+    )
+    if args[0] == CHECK_COMMAND and selected_check_keys:
+        check_selectors: tuple[str, ...] = _selected_check_selectors(
+            dag=dag, selected_check_keys=selected_check_keys
+        )
+        if check_selectors:
+            selector_file: Path = _write_selector_file(check_selectors)
+            return (
+                (*args, SELECT_FILE_FLAG, str(selector_file)),
+                check_selectors,
+                selector_file,
+            )
+    if selected_check_keys:
+        selected_paths.update(
+            _selected_check_asset_paths(dag=dag, selected_check_keys=selected_check_keys)
+        )
+    if not selected_paths:
         return args, (), None
-    selected_paths: set[tuple[str, ...]] = {tuple(key.path) for key in selected_keys}
     selectors: list[str] = []
     for node in _sort_nodes_topologically(dag=dag):
         if tuple(str(part) for part in node["asset_key"]) not in selected_paths:
@@ -140,7 +158,7 @@ def _with_selected_scenario_args(
         ):
             continue
         check_name: str = _dagster_check_name(check)
-        if selected_check_keys and not _scenario_check_is_selected(
+        if selected_check_keys and not _check_is_selected(
             check=check,
             check_name=check_name,
             nodes_by_id=nodes_by_id,
@@ -170,7 +188,7 @@ def _has_explicit_scenario_selector(*, args: tuple[str, ...]) -> bool:
     return False
 
 
-def _scenario_check_is_selected(
+def _check_is_selected(
     *,
     check: Mapping[str, Any],
     check_name: str,
@@ -454,6 +472,10 @@ def _build_results_from_execution_payload(
         )
     check: Mapping[str, Any]
     seen_check_outputs: set[tuple[tuple[str, ...], str]] = set()
+    selected_check_keys: set[tuple[tuple[str, ...], str]] = _selected_asset_check_keys(
+        context=context
+    )
+    check_selection_is_explicit: bool = _check_selection_is_explicit(context=context)
     for check in payload.get("checks", ()):  # type: ignore[assignment]
         check_results, seen_check_outputs = _build_check_results_from_execution_check(
             dg=dg,
@@ -462,6 +484,8 @@ def _build_results_from_execution_payload(
             nodes_by_name=nodes_by_name,
             check=check,
             selected_paths=selected_paths,
+            selected_check_keys=selected_check_keys,
+            check_selection_is_explicit=check_selection_is_explicit,
             seen_check_outputs=seen_check_outputs,
         )
         results.extend(check_results)
@@ -478,6 +502,8 @@ def _build_check_results_from_execution_check(
     nodes_by_name: Mapping[tuple[str, str], Mapping[str, Any]],
     check: Mapping[str, Any],
     selected_paths: set[tuple[str, ...]],
+    selected_check_keys: set[tuple[tuple[str, ...], str]],
+    check_selection_is_explicit: bool,
     seen_check_outputs: set[tuple[tuple[str, ...], str]],
 ) -> tuple[tuple[Any, ...], set[tuple[tuple[str, ...], str]]]:
     dag_check: Mapping[str, Any] | None = _dag_check_for_execution_check(dag=dag, check=check)
@@ -496,9 +522,15 @@ def _build_check_results_from_execution_check(
         if node is None:
             continue
         asset_key: Any = dg.AssetKey([str(part) for part in node["asset_key"]])
-        if selected_paths and tuple(asset_key.path) not in selected_paths:
-            continue
         output_key: tuple[tuple[str, ...], str] = (tuple(asset_key.path), check_name)
+        if check_selection_is_explicit and output_key not in selected_check_keys:
+            continue
+        if (
+            not check_selection_is_explicit
+            and selected_paths
+            and output_key[0] not in selected_paths
+        ):
+            continue
         if output_key in seen_check_outputs:
             continue
         seen_check_outputs.add(output_key)
@@ -566,6 +598,55 @@ def _selected_asset_check_keys(*, context: Any) -> set[tuple[tuple[str, ...], st
             continue
         check_keys.add((tuple(str(part) for part in path), str(check_name)))
     return check_keys
+
+
+def _check_selection_is_explicit(*, context: Any) -> bool:
+    return context is not None and getattr(context, "selected_asset_check_keys", None) is not None
+
+
+def _selected_check_asset_paths(
+    *,
+    dag: Mapping[str, Any],
+    selected_check_keys: set[tuple[tuple[str, ...], str]],
+) -> set[tuple[str, ...]]:
+    nodes_by_id: dict[str, Mapping[str, Any]] = {
+        str(node.get("id")): node for node in dag.get("nodes", ())
+    }
+    paths: set[tuple[str, ...]] = set()
+    for check in dag.get("checks", ()):  # type: ignore[assignment]
+        check_name: str = _dagster_check_name(check)
+        if not _check_is_selected(
+            check=check,
+            check_name=check_name,
+            nodes_by_id=nodes_by_id,
+            selected_check_keys=selected_check_keys,
+        ):
+            continue
+        for asset_id in check.get("checked_asset_ids", ()):
+            node: Mapping[str, Any] | None = nodes_by_id.get(str(asset_id))
+            if node is None:
+                continue
+            asset_path: tuple[str, ...] = tuple(str(part) for part in node.get("asset_key", ()))
+            paths.add(asset_path)
+    return paths
+
+
+def _selected_check_selectors(
+    *, dag: Mapping[str, Any], selected_check_keys: set[tuple[tuple[str, ...], str]]
+) -> tuple[str, ...]:
+    nodes_by_id: dict[str, Mapping[str, Any]] = {
+        str(node.get("id")): node for node in dag.get("nodes", ())
+    }
+    selectors: list[str] = []
+    for check in dag.get("checks", ()):  # type: ignore[assignment]
+        if _check_is_selected(
+            check=check,
+            check_name=_dagster_check_name(check),
+            nodes_by_id=nodes_by_id,
+            selected_check_keys=selected_check_keys,
+        ):
+            selectors.append(str(check.get("name")))
+    return tuple(dict.fromkeys(selectors))
 
 
 def _asset_check_only_context(*, context: Any) -> bool:
