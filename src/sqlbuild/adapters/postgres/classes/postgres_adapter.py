@@ -1782,7 +1782,7 @@ class PostgresAdapter(MicrobatchMixin, BaseAdapter):
         raw_connection: Any = psycopg.connect(**config, autocommit=True)
         return _PostgresConnection(raw_connection)
 
-    def execute(self, *, connection: _PostgresConnection, sql: str) -> Any:
+    def _execute(self, *, connection: _PostgresConnection, sql: str) -> Any:
         log_sql(logger=logging.getLogger("sqlbuild.adapter.postgres"), sql=sql)
         return connection.execute(sql)
 

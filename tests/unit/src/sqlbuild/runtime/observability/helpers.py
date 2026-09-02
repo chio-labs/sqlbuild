@@ -1,10 +1,17 @@
 """Test builders for runtime observability contracts."""
 
+import asyncio
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import Context, copy_context
 from datetime import UTC, datetime
 from threading import Lock
 from types import MappingProxyType
 
+from sqlbuild.runtime.observability._helpers.dispatcher import dispatcher_scope
+from sqlbuild.runtime.observability._helpers.identity import invocation_scope
+from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
+from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 from sqlbuild.runtime.observability.models import (
     DiagnosticLog,
     LifecycleEvent,
@@ -13,6 +20,68 @@ from sqlbuild.runtime.observability.models import (
 from sqlbuild.runtime.observability.types import JSONValue
 
 OCCURRED_AT: datetime = datetime(2026, 8, 31, 12, 34, 56, 123456, tzinfo=UTC)
+
+
+async def delayed_statement(*, release: asyncio.Event, query_id: str) -> None:
+    await release.wait()
+    with StatementLifecycle(adapter="async", sql="SELECT delayed", intent="execute") as lifecycle:
+        lifecycle.submitted(query_id=query_id)
+        lifecycle.completed(query_id=query_id)
+
+
+async def overlapping_statement(*, query_id: str) -> None:
+    with StatementLifecycle(adapter="async", sql="SELECT overlap", intent="execute") as lifecycle:
+        lifecycle.submitted(query_id=query_id)
+        await asyncio.sleep(0)
+        lifecycle.completed(query_id=query_id)
+
+
+async def run_delayed_task_lifecycles(*, dispatcher: EventDispatcher, sql: str) -> None:
+    release: asyncio.Event = asyncio.Event()
+    with (
+        invocation_scope("inv-delayed-task"),
+        dispatcher_scope(dispatcher),
+        StatementLifecycle(adapter="async", sql=sql, intent="execute"),
+    ):
+        child: asyncio.Task[None] = asyncio.create_task(
+            delayed_statement(release=release, query_id="query-child")
+        )
+        await asyncio.sleep(0)
+    release.set()
+    await child
+
+
+async def run_overlapping_task_lifecycles(*, dispatcher: EventDispatcher, sql: str) -> None:
+    with (
+        invocation_scope("inv-overlapping-tasks"),
+        dispatcher_scope(dispatcher),
+        StatementLifecycle(adapter="async", sql=sql, intent="execute"),
+    ):
+        await asyncio.gather(
+            overlapping_statement(query_id="query-a"),
+            overlapping_statement(query_id="query-b"),
+        )
+
+
+def run_copied_context_thread_statement() -> None:
+    context: Context = copy_context()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        executor.submit(context.run, _thread_statement).result()
+
+
+def _thread_statement() -> None:
+    with StatementLifecycle(adapter="thread", sql="SELECT thread", intent="execute") as lifecycle:
+        lifecycle.submitted(query_id="query-thread")
+        lifecycle.completed(query_id="query-thread")
+
+
+def statement_event_types_by_id(
+    events: list[LifecycleEvent],
+) -> dict[str | None, tuple[str, ...]]:
+    grouped: dict[str | None, list[str]] = {}
+    for event in events:
+        grouped.setdefault(event.statement_id, []).append(event.event_type)
+    return {statement_id: tuple(event_types) for statement_id, event_types in grouped.items()}
 
 
 class RecordingSubscriber:

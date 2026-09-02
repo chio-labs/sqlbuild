@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -10,6 +10,8 @@ from sqlbuild.executor.custom.models import MaterializationContext, PrepareVersi
 
 
 class RecordingCustomAdapter(BaseAdapter):
+    adapter_name: ClassVar[str] = "custom-test"
+
     def __init__(self, *, operation_order: list[str], execute_result: object) -> None:
         self.operation_order = operation_order
         self.execute_result = execute_result
@@ -23,7 +25,7 @@ class RecordingCustomAdapter(BaseAdapter):
     def close(self, connection: object) -> None:
         del connection
 
-    def execute(self, connection: Any, sql: str) -> object:
+    def _execute(self, connection: Any, sql: str) -> object:
         self.operation_order.append("execute")
         self.executed_connection = connection
         self.executed_sql = sql

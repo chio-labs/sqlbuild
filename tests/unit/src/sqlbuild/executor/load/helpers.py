@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.observability import LifecycleEvent
@@ -16,6 +16,12 @@ def statement_events(events: list[LifecycleEvent]) -> tuple[LifecycleEvent, ...]
     return tuple(filter(lambda event: event.event_type.startswith("statement_"), events))
 
 
+def operation_statement_events(
+    *, events: tuple[LifecycleEvent, ...], operation_id: str | None
+) -> tuple[LifecycleEvent, ...]:
+    return tuple(filter(lambda event: event.operation_id == operation_id, events))
+
+
 class LoaderContextTestCursor:
     def __init__(self, row: tuple[object, ...] | None) -> None:
         self._row = row
@@ -26,6 +32,8 @@ class LoaderContextTestCursor:
 
 class LoaderContextTestAdapter(BaseAdapter):
     """Adapter that records SQL and returns deterministic values."""
+
+    adapter_name: ClassVar[str] = "loader-context-test"
 
     def __init__(self) -> None:
         self.executed_sql: list[str] = []
@@ -48,7 +56,7 @@ class LoaderContextTestAdapter(BaseAdapter):
         del connection, database, schema, name
         return True
 
-    def execute(self, connection: Any, sql: str) -> object:
+    def _execute(self, connection: Any, sql: str) -> object:
         del connection
         self.executed_sql.append(sql)
         return {

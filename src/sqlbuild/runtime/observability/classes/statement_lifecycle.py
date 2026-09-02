@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import re
+import threading
 import time
 from collections.abc import Mapping
 from contextlib import ExitStack
+from contextvars import ContextVar, Token
 from types import TracebackType
 
 from sqlbuild.runtime.observability._helpers.dispatcher import (
@@ -27,6 +30,10 @@ from sqlbuild.runtime.observability.types import JSONValue
 _MAX_ERROR_VALUE_LENGTH: int = 128
 _STATEMENT_KIND_PATTERN: re.Pattern[str] = re.compile(r"^([A-Za-z]{1,64})(?![A-Za-z0-9_])")
 _ERROR_CODE_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+_STATEMENT_LIFECYCLE_OWNER: ContextVar[StatementLifecycle | None] = ContextVar(
+    "sqlbuild_statement_lifecycle_owner", default=None
+)
+type _ExecutionOwnerKey = tuple[int, int | None]
 
 
 class StatementLifecycle:
@@ -50,8 +57,21 @@ class StatementLifecycle:
         self._dispatcher: EventDispatcher | None = None
         self._started_monotonic: float | None = None
         self._terminal = False
+        self._owner: StatementLifecycle | None = None
+        self._owner_token: Token[StatementLifecycle | None] | None = None
+        self._execution_owner_key: _ExecutionOwnerKey | None = None
+        self._pending_completion: tuple[str | None, str | None, int | None, int | None] | None = (
+            None
+        )
+        self._pending_failure: tuple[BaseException, str | None, str | None] | None = None
 
     def __enter__(self) -> StatementLifecycle:
+        execution_owner_key: _ExecutionOwnerKey = _current_execution_owner_key()
+        owner: StatementLifecycle | None = _STATEMENT_LIFECYCLE_OWNER.get()
+        if owner is not None and owner._execution_owner_key == execution_owner_key:
+            self._owner = owner
+            self._statement_id = owner.statement_id
+            return self
         if current_execution_identity() is None:
             self._stack.enter_context(invocation_scope())
         dispatcher: EventDispatcher | None = current_event_dispatcher()
@@ -62,7 +82,9 @@ class StatementLifecycle:
         self._statement_id = identity.statement_id
         self._dispatcher = dispatcher
         self._started_monotonic = time.monotonic()
+        self._execution_owner_key = execution_owner_key
         self._publish(event_type="statement_started", payload=self._base_payload())
+        self._owner_token = _STATEMENT_LIFECYCLE_OWNER.set(self)
         return self
 
     @property
@@ -72,6 +94,9 @@ class StatementLifecycle:
         return self._statement_id
 
     def submitted(self, *, query_id: str | None = None, job_id: str | None = None) -> None:
+        if self._owner is not None:
+            self._owner.submitted(query_id=query_id, job_id=job_id)
+            return
         payload: dict[str, JSONValue] = self._base_payload()
         if query_id is not None:
             payload["query_id"] = query_id
@@ -87,6 +112,33 @@ class StatementLifecycle:
         affected_rows: int | None = None,
         row_count: int | None = None,
     ) -> None:
+        if self._owner is not None:
+            self._terminal = True
+            self._owner._defer_completed(
+                query_id=query_id,
+                job_id=job_id,
+                affected_rows=affected_rows,
+                row_count=row_count,
+            )
+            return
+        if self._pending_failure is not None:
+            error, pending_query_id, pending_job_id = self._pending_failure
+            self.failed(
+                error=error,
+                query_id=pending_query_id,
+                job_id=pending_job_id,
+            )
+            return
+        if self._pending_completion is not None:
+            pending_query_id, pending_job_id, pending_affected_rows, pending_row_count = (
+                self._pending_completion
+            )
+            query_id = pending_query_id if pending_query_id is not None else query_id
+            job_id = pending_job_id if pending_job_id is not None else job_id
+            affected_rows = (
+                pending_affected_rows if pending_affected_rows is not None else affected_rows
+            )
+            row_count = pending_row_count if pending_row_count is not None else row_count
         payload: dict[str, JSONValue] = self._terminal_payload()
         if query_id is not None:
             payload["query_id"] = query_id
@@ -105,6 +157,10 @@ class StatementLifecycle:
         query_id: str | None = None,
         job_id: str | None = None,
     ) -> None:
+        if self._owner is not None:
+            self._terminal = True
+            self._owner._defer_failed(error=error, query_id=query_id, job_id=job_id)
+            return
         payload: dict[str, JSONValue] = self._terminal_payload()
         payload["error_type"] = type(error).__name__[:_MAX_ERROR_VALUE_LENGTH]
         error_code: str | None = _error_code(error=error)
@@ -123,13 +179,23 @@ class StatementLifecycle:
         traceback: TracebackType | None,
     ) -> None:
         del exc_type, traceback
+        if self._owner is not None:
+            if exc_value is not None and not self._terminal:
+                self.failed(error=exc_value)
+            return
         try:
             if not self._terminal:
-                if exc_value is None:
+                if self._pending_failure is not None:
+                    error, query_id, job_id = self._pending_failure
+                    self.failed(error=error, query_id=query_id, job_id=job_id)
+                elif exc_value is None:
                     self.completed()
                 else:
                     self.failed(error=exc_value)
         finally:
+            if self._owner_token is not None:
+                _STATEMENT_LIFECYCLE_OWNER.reset(self._owner_token)
+                self._owner_token = None
             self._stack.close()
 
     def _base_payload(self) -> dict[str, JSONValue]:
@@ -161,6 +227,29 @@ class StatementLifecycle:
             return
         self._terminal = True
         self._publish(event_type=event_type, payload=payload)
+
+    def _defer_completed(
+        self,
+        *,
+        query_id: str | None,
+        job_id: str | None,
+        affected_rows: int | None,
+        row_count: int | None,
+    ) -> None:
+        self._pending_completion = (query_id, job_id, affected_rows, row_count)
+
+    def _defer_failed(
+        self, *, error: BaseException, query_id: str | None, job_id: str | None
+    ) -> None:
+        self._pending_failure = (error, query_id, job_id)
+
+
+def _current_execution_owner_key() -> _ExecutionOwnerKey:
+    try:
+        task: asyncio.Task[object] | None = asyncio.current_task()
+    except RuntimeError:
+        task = None
+    return threading.get_ident(), None if task is None else id(task)
 
 
 def _statement_kind(*, sql: str) -> str:

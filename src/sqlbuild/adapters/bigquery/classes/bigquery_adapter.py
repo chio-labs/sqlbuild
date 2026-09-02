@@ -1389,7 +1389,7 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
             location=self._location,
         )
 
-    def execute(self, *, connection: _BigQueryConnection, sql: str) -> _BigQueryCursor:
+    def _execute(self, *, connection: _BigQueryConnection, sql: str) -> _BigQueryCursor:
         """Execute a SQL statement against BigQuery."""
 
         log_sql(logger=logging.getLogger("sqlbuild.adapter.bigquery"), sql=sql)

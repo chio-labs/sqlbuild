@@ -80,6 +80,8 @@ def apply_completion_order(
 class PythonNodeContextTestAdapter(BaseAdapter):
     """Adapter that records SQL and returns deterministic values."""
 
+    adapter_name: ClassVar[str] = "python-node-context-test"
+
     def __init__(self) -> None:
         self.executed_sql: list[str] = []
 
@@ -90,7 +92,7 @@ class PythonNodeContextTestAdapter(BaseAdapter):
     def close(self, connection: object) -> None:
         del connection
 
-    def execute(self, connection: Any, sql: str) -> object:
+    def _execute(self, connection: Any, sql: str) -> object:
         del connection
         self.executed_sql.append(sql)
         return f"result:{sql}"

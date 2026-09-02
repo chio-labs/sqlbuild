@@ -66,7 +66,6 @@ from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.types import InitialValidFrom, SnapshotStrategy
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.diagnostics.main.log_sql import log_sql
-from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
 from sqlbuild.sql_values.models import SqlValue
@@ -1118,14 +1117,11 @@ class DuckDbBackedAdapter(BaseAdapter):
 
         return connection
 
-    def execute(self, *, connection: Any, sql: str) -> Any:
+    def _execute(self, *, connection: Any, sql: str) -> Any:
         """Execute a SQL statement against a DuckDB connection."""
 
         log_sql(logger=logging.getLogger("sqlbuild.adapter.duckdb"), sql=sql)
-        with StatementLifecycle(adapter=self.adapter_name, sql=sql, intent="execute") as lifecycle:
-            result: Any = connection.execute(sql)
-            lifecycle.completed(affected_rows=self.affected_row_count(cursor=result))
-            return result
+        return connection.execute(sql)
 
     def query(self, *, connection: Any, sql: str, limit: int | None) -> QueryResult:
         """Execute SQL and return normalized rows for ad hoc query output."""

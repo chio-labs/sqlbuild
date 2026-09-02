@@ -42,6 +42,7 @@ from tests.unit.src.sqlbuild.executor.load._test_types import (
 from tests.unit.src.sqlbuild.executor.load.helpers import (
     LoaderContextTestAdapter,
     operation_events,
+    operation_statement_events,
     statement_events,
 )
 from tests.unit.src.sqlbuild.executor.python_nodes._helpers.helpers import ExecutionSlackProvider
@@ -110,7 +111,12 @@ def test_given_loader_generator_when_staging_consumes_it_then_terminal_follows_e
         tuple(event.event_type for event in observed_operations) == test_case.expected_event_types
     )
     assert observed_operations[0].payload["operation_name"] == "managed_source_load"
-    assert {event.operation_id for event in observed_statements} == {
+    correlated_statements: tuple[LifecycleEvent, ...] = operation_statement_events(
+        events=observed_statements,
+        operation_id=observed_operations[0].operation_id,
+    )
+    assert correlated_statements
+    assert {event.operation_id for event in correlated_statements} == {
         observed_operations[0].operation_id
     }
 

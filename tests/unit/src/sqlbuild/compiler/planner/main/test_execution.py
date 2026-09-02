@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -118,11 +119,14 @@ def test_given_external_blocked_model_when_building_execution_plan_then_only_tha
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
-    project: CompiledProject = build_compiled_project_with_models(
-        {
-            "blocked": "select 1 as id",
-            "unrelated": "select 2 as id",
-        }
+    project: CompiledProject = replace(
+        build_compiled_project_with_models(
+            {
+                "blocked": "select 1 as id",
+                "unrelated": "select 2 as id",
+            }
+        ),
+        run_id="external-blocked-run",
     )
     try:
         plan_output: PlanOutput = build_execution_plan_from_kwargs(

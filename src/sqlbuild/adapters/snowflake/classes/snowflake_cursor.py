@@ -16,12 +16,23 @@ from sqlbuild.cost.classes.statement_ledger import StatementLedger
 from sqlbuild.cost.constants import SQLBUILD_QUERY_TAG_APP
 from sqlbuild.cost.models import CostResourceContext, StatementExecutionTelemetry
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
+from sqlbuild.runtime.observability.main.current_execution_identity import (
+    current_execution_identity,
+)
+from sqlbuild.runtime.observability.models import ExecutionIdentity
 
 _LOGGER: logging.Logger = logging.getLogger("sqlbuild.cost")
 _QUERY_TAG_PARAMETER: str = "QUERY_TAG"
 _STATEMENT_PARAMETER_ERROR_FRAGMENT: str = "STATEMENT PARAMETER"
 _RAW_CURSOR_ATTRIBUTE: str = "raw_cursor"
 _EXECUTEMANY_INTENT: str = "executemany"
+
+
+def _statement_id() -> str:
+    identity: ExecutionIdentity | None = current_execution_identity()
+    if identity is not None and identity.statement_id is not None:
+        return identity.statement_id
+    return uuid4().hex
 
 
 class _SnowflakeCursor:
@@ -38,7 +49,7 @@ class _SnowflakeCursor:
 
     def execute(self, sql: str, *args: Any, **kwargs: Any) -> Any:
         context: CostResourceContext | None = CostContext.current()
-        statement_id: str = uuid4().hex
+        statement_id: str = _statement_id()
         tagged_kwargs, query_tag_injected = _with_query_tag(
             kwargs=kwargs, context=context, statement_id=statement_id
         )
@@ -55,7 +66,7 @@ class _SnowflakeCursor:
 
     def executemany(self, sql: str, *args: Any, **kwargs: Any) -> Any:
         context: CostResourceContext | None = CostContext.current()
-        statement_id: str = uuid4().hex
+        statement_id: str = _statement_id()
         tagged_kwargs, query_tag_injected = _with_query_tag(
             kwargs=kwargs, context=context, statement_id=statement_id
         )

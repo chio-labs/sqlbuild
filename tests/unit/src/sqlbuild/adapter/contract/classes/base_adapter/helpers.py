@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from types import MappingProxyType
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 
@@ -29,11 +29,13 @@ class RecordingConnection:
 
 
 class RecordingBaseAdapter(BaseAdapter):
+    adapter_name: ClassVar[str] = "recording-base-test"
+
     def connect(self, config: dict[str, object]) -> object:
         del config
         return object()
 
-    def execute(self, connection: object, sql: str) -> object:
+    def _execute(self, connection: object, sql: str) -> object:
         _CONNECTION_VALIDATORS[isinstance(connection, RecordingConnection)](connection)
         recording_connection: RecordingConnection = cast(RecordingConnection, connection)
         return recording_connection.execute(sql)

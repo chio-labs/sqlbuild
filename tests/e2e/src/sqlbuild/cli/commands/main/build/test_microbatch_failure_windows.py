@@ -67,14 +67,14 @@ def test_given_completion_write_failure_during_rebuild_when_retried_then_live_ta
                 "from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter\n\n"
                 "class FailingMicrobatchStateDuckDbAdapter(DuckDbAdapter):\n"
                 "    adapter_name = 'failing_microbatch_state_duckdb'\n\n"
-                "    def execute(self, *, connection: Any, sql: str) -> Any:\n"
+                "    def _execute(self, *, connection: Any, sql: str) -> Any:\n"
                 "        if (os.environ.get('SQLBUILD_FAIL_COMPLETION_WRITE') == '1' "
                 "and 'INSERT INTO main._sqlbuild_microbatches' in sql "
                 "and \"'partition_completion'\" in sql "
                 "and \"'2026-01-01T01:00:00'\" in sql "
                 "and \"'2026-01-01T02:00:00'\" in sql):\n"
                 "            raise RuntimeError('simulated completion write failure')\n"
-                "        return super().execute(connection=connection, sql=sql)\n"
+                "        return super()._execute(connection=connection, sql=sql)\n"
             ),
         },
     )
@@ -307,7 +307,9 @@ def test_given_concurrent_batches_when_audit_and_hooks_wrap_model_then_aggregate
     assert incremental.returncode == test_case.expected_exit_code, (
         incremental.stdout + incremental.stderr
     )
-    assert incremental.stdout.count("audit     expression_is_true") == 1
+    assert incremental.stdout.count("Audit evaluation  START") == 1
+    assert incremental.stdout.count("Audit evaluation  OK") == 1
+    assert "Audit evaluation  FAIL" not in incremental.stdout
     assert query_duckdb(
         db_path=db_path,
         sql="SELECT phase, COUNT(*) FROM hook_log GROUP BY phase ORDER BY phase",

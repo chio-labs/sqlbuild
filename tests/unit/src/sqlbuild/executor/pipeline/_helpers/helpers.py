@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -54,6 +54,8 @@ def lifecycle_order_with_prefix(*, order: list[str], prefixes: tuple[str, ...]) 
 class ScenarioPipelineTestAdapter(BaseAdapter):
     """Adapter that records pipeline connection lifecycle calls."""
 
+    adapter_name: ClassVar[str] = "scenario-pipeline-test"
+
     def __init__(self) -> None:
         self.events: list[str] = []
 
@@ -62,7 +64,7 @@ class ScenarioPipelineTestAdapter(BaseAdapter):
         self.events.append(f"connect:{database}")
         return object()
 
-    def execute(self, connection: object, sql: str) -> object:
+    def _execute(self, connection: object, sql: str) -> object:
         del connection, sql
         return object()
 
@@ -84,6 +86,8 @@ class ScenarioLocalPipelineTestAdapter(ScenarioPipelineTestAdapter):
 class SeedPipelineTestAdapter(BaseAdapter):
     """Adapter that records seed pipeline connection and load calls."""
 
+    adapter_name: ClassVar[str] = "seed-pipeline-test"
+
     def __init__(self, *, barrier_targets: tuple[str, ...]) -> None:
         self.connections: list[object] = []
         self.closed_connections: list[object] = []
@@ -97,7 +101,7 @@ class SeedPipelineTestAdapter(BaseAdapter):
         self.connections.append(connection)
         return connection
 
-    def execute(self, connection: object, sql: str) -> object:
+    def _execute(self, connection: object, sql: str) -> object:
         del connection, sql
         return object()
 

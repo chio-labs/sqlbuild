@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 
 
 class RecordingConnectionAdapter(BaseAdapter):
+    adapter_name: ClassVar[str] = "recording-connection-test"
+
     def __init__(self, *, events: list[str], connection: object) -> None:
         self.events = events
         self.connection = connection
@@ -19,12 +21,14 @@ class RecordingConnectionAdapter(BaseAdapter):
     def close(self, connection: object) -> None:
         del connection
 
-    def execute(self, connection: Any, sql: str) -> object:
+    def _execute(self, connection: Any, sql: str) -> object:
         del connection
         return sql
 
 
 class FailingConnectionAdapter(BaseAdapter):
+    adapter_name: ClassVar[str] = "failing-connection-test"
+
     def __init__(self, *, events: list[str], error: Exception) -> None:
         self.events = events
         self.error = error
@@ -38,6 +42,6 @@ class FailingConnectionAdapter(BaseAdapter):
     def close(self, connection: object) -> None:
         del connection
 
-    def execute(self, connection: Any, sql: str) -> object:
+    def _execute(self, connection: Any, sql: str) -> object:
         del connection
         return sql

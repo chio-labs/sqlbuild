@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -34,6 +34,8 @@ from sqlbuild.spec.contracts.models import SeedCsvSettings
 class ScenarioFixtureTestAdapter(BaseAdapter):
     """Adapter that records scenario fixture materialization calls."""
 
+    adapter_name: ClassVar[str] = "scenario-fixture-test"
+
     def __init__(self, *, fail_on_target: str | None = None) -> None:
         self.fail_on_target: str | None = fail_on_target
         self.executed_sql: list[str] = []
@@ -42,7 +44,7 @@ class ScenarioFixtureTestAdapter(BaseAdapter):
         del config
         return object()
 
-    def execute(self, connection: object, sql: str) -> object:
+    def _execute(self, connection: object, sql: str) -> object:
         del connection
         self.executed_sql.append(sql)
         _SCENARIO_EXECUTE_STRATEGIES[
@@ -56,6 +58,8 @@ class ScenarioFixtureTestAdapter(BaseAdapter):
 
 class ScenarioSnapshotCaptureStepsTestAdapter(BaseAdapter):
     """Adapter that records capture orchestration operations."""
+
+    adapter_name: ClassVar[str] = "scenario-snapshot-steps-test"
 
     def __init__(
         self,
@@ -73,7 +77,7 @@ class ScenarioSnapshotCaptureStepsTestAdapter(BaseAdapter):
         del config
         return object()
 
-    def execute(self, connection: object, sql: str) -> object:
+    def _execute(self, connection: object, sql: str) -> object:
         del connection
         self.events.append(sql)
         return object()

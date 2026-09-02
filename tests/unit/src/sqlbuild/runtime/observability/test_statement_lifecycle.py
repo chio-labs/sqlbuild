@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, cast
+import asyncio
+from typing import Any, ClassVar, cast
 
 import pytest
 
+from sqlbuild.adapter.contract.classes.connection import ConnectionMixin
 from sqlbuild.adapter.contract.classes.observed_cursor import ObservedCursor
+from sqlbuild.adapter.contract.models import QueryResult
+from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.bigquery.classes.bigquery_connection import _BigQueryConnection
 from sqlbuild.observability import (
     EventDispatcher,
@@ -20,6 +24,12 @@ from tests.unit.src.sqlbuild.runtime.observability._test_types import (
     ErrorCodePrivacyCase,
     StatementKindPrivacyCase,
     StatementLifecycleCase,
+)
+from tests.unit.src.sqlbuild.runtime.observability.helpers import (
+    run_copied_context_thread_statement,
+    run_delayed_task_lifecycles,
+    run_overlapping_task_lifecycles,
+    statement_event_types_by_id,
 )
 
 
@@ -105,6 +115,260 @@ class _CodedError(RuntimeError):
 class _SecretCode:
     def __str__(self) -> str:
         return "secret-object-code"
+
+
+class _HookResult:
+    rowcount: int = 4
+
+
+class _RawHookAdapter(ConnectionMixin):
+    adapter_name: ClassVar[str] = "raw-hook"
+
+    def connect(self, config: dict[str, Any]) -> Any:
+        return config
+
+    def _execute(self, *, connection: Any, sql: str) -> _HookResult:
+        del connection, sql
+        return _HookResult()
+
+    def query(self, *, connection: Any, sql: str, limit: int | None) -> QueryResult:
+        del connection, sql, limit
+        return QueryResult()
+
+    def close(self, connection: Any) -> None:
+        del connection
+
+
+class _NestedTelemetryAdapter(_RawHookAdapter):
+    adapter_name: ClassVar[str] = "nested-hook"
+
+    def __init__(self, *, events: list[LifecycleEvent]) -> None:
+        self._events: list[LifecycleEvent] = events
+
+    def _execute(self, *, connection: Any, sql: str) -> _HookResult:
+        del connection
+        with StatementLifecycle(adapter=self.adapter_name, sql=sql, intent="execute") as lifecycle:
+            lifecycle.submitted(query_id="query-rich")
+            lifecycle.completed(query_id="query-rich", affected_rows=9)
+        assert tuple(event.event_type for event in self._events) == (
+            "statement_started",
+            "statement_submitted",
+        )
+        return _HookResult()
+
+
+class _FailingHookAdapter(_RawHookAdapter):
+    adapter_name: ClassVar[str] = "failing-hook"
+
+    def _execute(self, *, connection: Any, sql: str) -> _HookResult:
+        del connection, sql
+        raise LookupError("driver failure")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StatementLifecycleCase(
+            description="outer lifecycle observes a raw custom hook",
+            sql="SELECT 1",
+            parameters=(),
+            expected_event_types=("statement_started", "statement_completed"),
+            expected_batch_size=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unobserved_hook_when_public_execute_returns_then_outer_lifecycle_completes_once(
+    test_case: StatementLifecycleCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    with invocation_scope("inv-raw-hook"), dispatcher_scope(dispatcher):
+        result: Any = _RawHookAdapter().execute(connection=object(), sql=test_case.sql)
+
+    assert isinstance(result, _HookResult)
+    assert tuple(event.event_type for event in events) == test_case.expected_event_types
+    assert len({event.statement_id for event in events}) == 1
+    assert events[-1].payload["affected_rows"] == 4
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StatementLifecycleCase(
+            description="nested rich telemetry forwards to outer lifecycle",
+            sql="SELECT 1",
+            parameters=(),
+            expected_event_types=(
+                "statement_started",
+                "statement_submitted",
+                "statement_completed",
+            ),
+            expected_batch_size=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_nested_rich_lifecycle_when_public_execute_returns_then_metadata_is_forwarded_once(
+    test_case: StatementLifecycleCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    with invocation_scope("inv-nested-hook"), dispatcher_scope(dispatcher):
+        _NestedTelemetryAdapter(events=events).execute(connection=object(), sql=test_case.sql)
+
+    assert tuple(event.event_type for event in events) == test_case.expected_event_types
+    assert len({event.statement_id for event in events}) == 1
+    assert events[1].payload["query_id"] == "query-rich"
+    assert events[-1].payload["query_id"] == "query-rich"
+    assert events[-1].payload["affected_rows"] == 9
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StatementLifecycleCase(
+            description="outer lifecycle preserves a raw hook failure",
+            sql="SELECT 1",
+            parameters=(),
+            expected_event_types=("statement_started", "statement_failed"),
+            expected_batch_size=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_failing_hook_when_public_execute_raises_then_original_failure_is_emitted_once(
+    test_case: StatementLifecycleCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    with (
+        invocation_scope("inv-failing-hook"),
+        dispatcher_scope(dispatcher),
+        pytest.raises(LookupError, match="driver failure"),
+    ):
+        _FailingHookAdapter().execute(connection=object(), sql=test_case.sql)
+
+    assert tuple(event.event_type for event in events) == test_case.expected_event_types
+    assert len({event.statement_id for event in events}) == 1
+    assert events[-1].payload["error_type"] == "LookupError"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StatementLifecycleCase(
+            description="delayed inherited child context becomes an independent owner",
+            sql="SELECT parent",
+            parameters=(),
+            expected_event_types=(
+                "statement_started",
+                "statement_completed",
+                "statement_started",
+                "statement_submitted",
+                "statement_completed",
+            ),
+            expected_batch_size=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_delayed_child_task_when_parent_exits_then_child_owns_distinct_lifecycle(
+    test_case: StatementLifecycleCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+    asyncio.run(run_delayed_task_lifecycles(dispatcher=dispatcher, sql=test_case.sql))
+
+    assert tuple(event.event_type for event in events) == test_case.expected_event_types
+    assert len({event.statement_id for event in events}) == 2
+    assert events[2].payload.get("query_id") is None
+    assert events[3].payload["query_id"] == "query-child"
+    assert events[4].payload["query_id"] == "query-child"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StatementLifecycleCase(
+            description="overlapping inherited child contexts own independent lifecycle facts",
+            sql="SELECT parent",
+            parameters=(),
+            expected_event_types=(
+                "statement_started",
+                "statement_submitted",
+                "statement_completed",
+            ),
+            expected_batch_size=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_overlapping_child_tasks_when_parent_is_active_then_each_has_one_lifecycle(
+    test_case: StatementLifecycleCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    asyncio.run(run_overlapping_task_lifecycles(dispatcher=dispatcher, sql=test_case.sql))
+
+    grouped: dict[str | None, tuple[str, ...]] = statement_event_types_by_id(events)
+    assert len(grouped) == 3
+    assert tuple(grouped.values()).count(test_case.expected_event_types) == 2
+    assert tuple(grouped.values()).count(("statement_started", "statement_completed")) == 1
+    assert sum(event.event_type == "statement_started" for event in events) == 3
+    assert (
+        sum(event.event_type in {"statement_completed", "statement_failed"} for event in events)
+        == 3
+    )
+    assert {event.payload.get("query_id") for event in events} == {None, "query-a", "query-b"}
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StatementLifecycleCase(
+            description="copied context in another thread owns an independent lifecycle",
+            sql="SELECT parent",
+            parameters=(),
+            expected_event_types=(
+                "statement_started",
+                "statement_started",
+                "statement_submitted",
+                "statement_completed",
+                "statement_completed",
+            ),
+            expected_batch_size=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_copied_context_in_thread_when_parent_is_active_then_ids_remain_independent(
+    test_case: StatementLifecycleCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    with (
+        invocation_scope("inv-thread-context"),
+        dispatcher_scope(dispatcher),
+        StatementLifecycle(adapter="thread", sql=test_case.sql, intent="execute"),
+    ):
+        run_copied_context_thread_statement()
+
+    assert tuple(event.event_type for event in events) == test_case.expected_event_types
+    assert len({event.statement_id for event in events}) == 2
+    assert events[2].payload["query_id"] == "query-thread"
+    assert events[3].payload["query_id"] == "query-thread"
 
 
 @pytest.mark.parametrize(
@@ -244,9 +508,10 @@ def test_given_bigquery_job_when_result_succeeds_then_submission_and_terminal_in
     )
 
     with invocation_scope("inv-bigquery"), dispatcher_scope(dispatcher):
-        connection.execute(test_case.sql)
+        BigQueryAdapter().execute(connection=connection, sql=test_case.sql)
 
     assert tuple(event.event_type for event in events) == test_case.expected_event_types
+    assert len({event.statement_id for event in events}) == 1
     assert events[1].payload["job_id"] == "job-current"
     assert events[2].payload["job_id"] == "job-current"
 

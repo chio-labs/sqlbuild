@@ -1589,7 +1589,7 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
         )
         return connection
 
-    def execute(self, *, connection: _SnowflakeConnection, sql: str) -> Any:
+    def _execute(self, *, connection: _SnowflakeConnection, sql: str) -> Any:
         """Execute a SQL statement against a Snowflake connection."""
 
         log_sql(logger=logging.getLogger("sqlbuild.adapter.snowflake"), sql=sql)

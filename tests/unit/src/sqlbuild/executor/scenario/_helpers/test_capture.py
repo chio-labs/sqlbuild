@@ -17,7 +17,10 @@ from tests.unit.src.sqlbuild.executor.scenario._helpers._test_types import (
     ExecuteScenarioSnapshotCaptureStepsTestCase,
     ScenarioCaptureRunIdentityTestCase,
 )
-from tests.unit.src.sqlbuild.executor.scenario._helpers.helpers import assert_capture_steps_error
+from tests.unit.src.sqlbuild.executor.scenario._helpers.helpers import (
+    assert_capture_steps_error,
+    resource_attempt_events,
+)
 from tests.unit.src.sqlbuild.executor.scenario.main.helpers import (
     ScenarioSnapshotCaptureStepsTestAdapter,
     build_scenario_cleanup_test_plan_with_project_seed,
@@ -195,7 +198,8 @@ def test_given_multiple_capture_seeds_when_executing_then_operation_and_resource
         lifecycle_events
     )
     assert lifecycle_events[0].payload["operation_name"] == test_case.expected_operation_name
-    assert tuple(event.resource_id for event in lifecycle_events[3:7]) == (
+    resource_events: tuple[LifecycleEvent, ...] = resource_attempt_events(lifecycle_events)
+    assert tuple(event.resource_id for event in resource_events) == (
         test_case.expected_seed_resource_ids[0],
         test_case.expected_seed_resource_ids[0],
         test_case.expected_seed_resource_ids[1],
