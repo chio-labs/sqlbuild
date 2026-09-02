@@ -13,6 +13,7 @@ from sqlbuild.compiler.planner.models import (
     FutureCursorSafetyEvidence,
 )
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
+from sqlbuild.spec.contracts.constants import ZERO_DAY_CURSOR_DURATION
 from sqlbuild.spec.contracts.models import FutureCursorsConfig
 from sqlbuild.spec.contracts.types import FutureCursorAction
 
@@ -37,7 +38,11 @@ def resolve_future_cursor_safety(
         or has_complete_override
     ):
         return bounds
-    duration: Duration | None = Duration.parse(config.max_distance)
+    duration: Duration | None = (
+        Duration()
+        if config.max_distance == ZERO_DAY_CURSOR_DURATION
+        else Duration.parse(config.max_distance)
+    )
     if duration is None:
         raise FutureCursorSafetyError(
             f"invalid cursors.future.max_distance '{config.max_distance}'"

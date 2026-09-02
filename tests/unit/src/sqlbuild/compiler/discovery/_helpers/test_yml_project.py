@@ -69,7 +69,13 @@ def test_given_no_cost_config_when_loading_project_then_default_rate_is_flagged(
             future_toml='max_distance = "7d"\naction = "cap"',
             expected_max_distance="7d",
             expected_action="cap",
-        )
+        ),
+        FutureCursorConfigTestCase(
+            description="zero-day future cap policy is typed",
+            future_toml='max_distance = "0d"\naction = "cap"',
+            expected_max_distance="0d",
+            expected_action="cap",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -184,7 +190,7 @@ def test_given_invalid_microbatch_limit_when_loading_project_then_error_is_raise
         FutureCursorConfigErrorTestCase(
             description="invalid duration",
             future_toml='max_distance = "tomorrow"',
-            expected_error_fragment="max_distance must be a positive duration",
+            expected_error_fragment="max_distance must be a duration",
         ),
         FutureCursorConfigErrorTestCase(
             description="invalid action",

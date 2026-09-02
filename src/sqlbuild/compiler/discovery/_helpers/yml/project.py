@@ -393,9 +393,13 @@ def _load_cursors(*, payload: object, file_path: Path) -> CursorsConfig:
         file_path=file_path,
     )
     max_distance: str | None = _optional_str(payload=future, key="max_distance")
-    if max_distance is not None and _CURSOR_DURATION_PATTERN.fullmatch(max_distance) is None:
+    if (
+        max_distance is not None
+        and max_distance != ZERO_DAY_CURSOR_DURATION
+        and _CURSOR_DURATION_PATTERN.fullmatch(max_distance) is None
+    ):
         raise ProjectConfigError(
-            "cursors.future.max_distance must be a positive duration like 7d, 12h, or 1mo"
+            "cursors.future.max_distance must be a duration like 0d, 7d, 12h, or 1mo"
         )
     raw_action: str | None = _optional_str(payload=future, key="action")
     try:
