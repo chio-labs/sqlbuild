@@ -114,8 +114,10 @@ def execute_test_plan(
                     parameter_schema=entry.parameter_schema,
                     parameter_values=entry.parameter_values,
                 ),
+                canonical_resource_name=entry.name,
             ),
             on_test_complete=on_complete,
+            run_id=pipeline_result.project.run_id,
         )
     finally:
         event_writer.close()
@@ -146,6 +148,8 @@ def _build_on_complete(
             error_code=result.error_code,
             error_help=result.error_help,
             error_message=result.error_message,
+            canonical_resource_name=result.test_name,
+            canonical_resource_id=f"sql_test:{result.test_name}",
         )
         event_writer.write(
             format_build_item_execution_event(

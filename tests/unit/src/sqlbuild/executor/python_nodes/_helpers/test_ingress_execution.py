@@ -10,8 +10,15 @@ from sqlbuild.executor.python_nodes._helpers.ingress_execution import (
     execute_ingress_python_loader_nodes,
 )
 from sqlbuild.executor.python_nodes.models import (
+    IngressCallbacks,
     PythonIngressLoaderExecutorResult,
     PythonNodeRuntime,
+)
+from sqlbuild.observability import (
+    EventDispatcher,
+    LifecycleEvent,
+    dispatcher_scope,
+    invocation_scope,
 )
 from tests.unit.src.sqlbuild.executor.python_nodes._helpers._test_types import (
     PythonIngressLoaderExecutorTestCase,
@@ -46,22 +53,38 @@ def test_given_ingress_task_to_loader_when_executing_then_runs_in_lifecycle_orde
 ) -> None:
     graph: PythonNodeGraph = build_ingress_task_loader_graph()
     reset_ingress_calls()
+    events: list[LifecycleEvent] = []
+    callback_order: list[str] = []
+    dispatcher: EventDispatcher = EventDispatcher()
 
-    result: PythonIngressLoaderExecutorResult = execute_ingress_python_loader_nodes(
-        python_graph=graph,
-        selected_python_names=test_case.selected_names,
-        loader_functions=(ingress_loader_function(),),
-        source_map=ingress_source_map(),
-        runtime=PythonNodeRuntime(
-            adapter=PythonNodeContextTestAdapter(),
-            connection_config={},
-            connection=object(),
-            run_id="test_run",
-            target="dev",
-            vars={},
-            is_reload=False,
-        ),
-    )
+    def record_event(event: LifecycleEvent) -> None:
+        events.append(event)
+        callback_order.append(f"event:{event.event_type}:{event.payload.get('resource_name', '')}")
+
+    dispatcher.subscribe_lifecycle(subscriber=record_event, accepts_opaque=False)
+
+    with invocation_scope("ingress-invocation"), dispatcher_scope(dispatcher):
+        result: PythonIngressLoaderExecutorResult = execute_ingress_python_loader_nodes(
+            python_graph=graph,
+            selected_python_names=test_case.selected_names,
+            loader_functions=(ingress_loader_function(),),
+            source_map=ingress_source_map(),
+            runtime=PythonNodeRuntime(
+                adapter=PythonNodeContextTestAdapter(),
+                connection_config={},
+                connection=object(),
+                run_id="test_run",
+                target="dev",
+                vars={},
+                is_reload=False,
+            ),
+            callbacks=IngressCallbacks(
+                on_node_start=lambda name, resource_kind: callback_order.append(f"start:{name}"),
+                on_node_complete=lambda completed: callback_order.append(
+                    f"complete:{completed.source_name}"
+                ),
+            ),
+        )
 
     assert tuple(node_result.node_name for node_result in result.python_results) == (
         test_case.expected_python_names
@@ -77,3 +100,20 @@ def test_given_ingress_task_to_loader_when_executing_then_runs_in_lifecycle_orde
     )
     assert ingress_calls() == test_case.expected_call_order
     assert result.python_results[0].payload == {"prepared": True}
+    loader_events: tuple[LifecycleEvent, ...] = tuple(
+        filter(lambda event: event.payload.get("resource_name") == "raw_orders", events)
+    )
+    assert tuple(event.event_type for event in loader_events) == (
+        "resource_attempt_started",
+        "resource_attempt_completed",
+    )
+    assert tuple(event.run_id for event in loader_events) == ("test_run", "test_run")
+    assert callback_order.index("event:resource_attempt_started:raw_orders") < (
+        callback_order.index("start:raw_orders")
+    )
+    assert callback_order.index("start:raw_orders") < callback_order.index(
+        "event:resource_attempt_completed:raw_orders"
+    )
+    assert callback_order.index("event:resource_attempt_completed:raw_orders") < (
+        callback_order.index("complete:raw_orders")
+    )

@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import sqlite3
+import threading
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -124,6 +125,7 @@ class SQLiteExecutionHistory:
         )
         self._closed = False
         self._project_calls = 0
+        self._lock: threading.RLock = threading.RLock()
         connection: sqlite3.Connection | None = None
         try:
             self._prepare_parent()
@@ -131,14 +133,16 @@ class SQLiteExecutionHistory:
                 self._path,
                 timeout=busy_timeout_ms / 1000,
                 isolation_level=None,
+                check_same_thread=False,
             )
             self._connection: sqlite3.Connection = connection
-            self._connection.row_factory = sqlite3.Row
-            _ = self._connection.execute(f"PRAGMA busy_timeout = {busy_timeout_ms}")
-            _ = self._connection.execute("PRAGMA foreign_keys = ON")
-            if self._path != _MEMORY_PATH:
-                _ = self._connection.execute("PRAGMA journal_mode = WAL").fetchone()
-            self._migrate()
+            with self._lock:
+                self._connection.row_factory = sqlite3.Row
+                _ = self._connection.execute(f"PRAGMA busy_timeout = {busy_timeout_ms}")
+                _ = self._connection.execute("PRAGMA foreign_keys = ON")
+                if self._path != _MEMORY_PATH:
+                    _ = self._connection.execute("PRAGMA journal_mode = WAL").fetchone()
+                self._migrate()
             self._restrict_file_permissions()
             _ = self.reconcile()
         except ExecutionHistoryStorageError:
@@ -162,22 +166,25 @@ class SQLiteExecutionHistory:
     def project_calls(self) -> int:
         """Return the number of incremental projection calls."""
 
-        return self._project_calls
+        with self._lock:
+            return self._project_calls
 
     def append_event(self, event: CanonicalLifecycleEvent) -> StoredEvent:
-        self._ensure_open()
-        return self.append_events((event,))[0]
+        with self._lock:
+            self._ensure_open()
+            return self.append_events((event,))[0]
 
     def append_events(self, events: Iterable[CanonicalLifecycleEvent]) -> tuple[StoredEvent, ...]:
-        self._ensure_open()
-        pending: tuple[CanonicalLifecycleEvent, ...] = tuple(events)
-        try:
-            with self._transaction():
-                return self._append_events(pending)
-        except IntegrityConflictError:
-            raise
-        except sqlite3.Error as error:
-            raise ExecutionHistoryStorageError("SQLite event append failed") from error
+        with self._lock:
+            self._ensure_open()
+            pending: tuple[CanonicalLifecycleEvent, ...] = tuple(events)
+            try:
+                with self._transaction():
+                    return self._append_events(pending)
+            except IntegrityConflictError:
+                raise
+            except sqlite3.Error as error:
+                raise ExecutionHistoryStorageError("SQLite event append failed") from error
 
     def get_events(
         self,
@@ -186,37 +193,41 @@ class SQLiteExecutionHistory:
         after_cursor: str | None = None,
         limit: int = DEFAULT_PAGE_LIMIT,
     ) -> EventPage:
-        self._ensure_open()
-        validate_page_limit(limit)
-        after_storage_id: int = self._event_cursor_position(after_cursor)
-        conditions: list[str] = ["storage_id > ?"]
-        values: list[object] = [after_storage_id]
-        conditions, values = self._add_event_filters(
-            conditions=conditions, values=values, event_filter=event_filter
-        )
-        sql: str = (
-            "SELECT * FROM event_log WHERE "
-            + " AND ".join(conditions)
-            + " ORDER BY storage_id ASC LIMIT ?"
-        )
-        values.append(limit + 1)
-        try:
-            rows: list[sqlite3.Row] = list(self._connection.execute(sql, values))
-        except sqlite3.Error as error:
-            raise ExecutionHistoryStorageError("SQLite event read failed") from error
-        records: tuple[StoredEvent, ...] = tuple(self._stored_event(row) for row in rows[:limit])
-        return EventPage(
-            records=records,
-            next_cursor=records[-1].cursor if records else None,
-            has_more=len(rows) > limit,
-        )
+        with self._lock:
+            self._ensure_open()
+            validate_page_limit(limit)
+            after_storage_id: int = self._event_cursor_position(after_cursor)
+            conditions: list[str] = ["storage_id > ?"]
+            values: list[object] = [after_storage_id]
+            conditions, values = self._add_event_filters(
+                conditions=conditions, values=values, event_filter=event_filter
+            )
+            sql: str = (
+                "SELECT * FROM event_log WHERE "
+                + " AND ".join(conditions)
+                + " ORDER BY storage_id ASC LIMIT ?"
+            )
+            values.append(limit + 1)
+            try:
+                rows: list[sqlite3.Row] = list(self._connection.execute(sql, values))
+            except sqlite3.Error as error:
+                raise ExecutionHistoryStorageError("SQLite event read failed") from error
+            records: tuple[StoredEvent, ...] = tuple(
+                self._stored_event(row) for row in rows[:limit]
+            )
+            return EventPage(
+                records=records,
+                next_cursor=records[-1].cursor if records else None,
+                has_more=len(rows) > limit,
+            )
 
     def get_run(self, run_id: str) -> RunRecord | None:
-        self._ensure_open()
-        row: sqlite3.Row | None = self._connection.execute(
-            "SELECT * FROM run_projection WHERE run_id = ?", (run_id,)
-        ).fetchone()
-        return None if row is None else self._run_record(row)
+        with self._lock:
+            self._ensure_open()
+            row: sqlite3.Row | None = self._connection.execute(
+                "SELECT * FROM run_projection WHERE run_id = ?", (run_id,)
+            ).fetchone()
+            return None if row is None else self._run_record(row)
 
     def get_runs(
         self,
@@ -225,117 +236,130 @@ class SQLiteExecutionHistory:
         after_cursor: str | None = None,
         limit: int = DEFAULT_PAGE_LIMIT,
     ) -> RunPage:
-        self._ensure_open()
-        validate_page_limit(limit)
-        after_key: tuple[str, str] | None = self._run_cursor_key(after_cursor)
-        conditions: list[str] = []
-        values: list[object] = []
-        if after_key is not None:
-            conditions.append("(created_at > ? OR (created_at = ? AND run_id > ?))")
-            values.extend((after_key[0], after_key[0], after_key[1]))
-        conditions, values = self._add_run_filters(
-            conditions=conditions, values=values, run_filter=run_filter
-        )
-        where: str = " WHERE " + " AND ".join(conditions) if conditions else ""
-        values.append(limit + 1)
-        rows: list[sqlite3.Row] = list(
-            self._connection.execute(
-                f"SELECT * FROM run_projection{where} ORDER BY created_at, run_id LIMIT ?", values
+        with self._lock:
+            self._ensure_open()
+            validate_page_limit(limit)
+            after_key: tuple[str, str] | None = self._run_cursor_key(after_cursor)
+            conditions: list[str] = []
+            values: list[object] = []
+            if after_key is not None:
+                conditions.append("(created_at > ? OR (created_at = ? AND run_id > ?))")
+                values.extend((after_key[0], after_key[0], after_key[1]))
+            conditions, values = self._add_run_filters(
+                conditions=conditions, values=values, run_filter=run_filter
             )
-        )
-        records: tuple[RunRecord, ...] = tuple(self._run_record(row) for row in rows[:limit])
-        return RunPage(
-            records=records,
-            next_cursor=self._run_cursor(records[-1]) if records else None,
-            has_more=len(rows) > limit,
-        )
+            where: str = " WHERE " + " AND ".join(conditions) if conditions else ""
+            values.append(limit + 1)
+            rows: list[sqlite3.Row] = list(
+                self._connection.execute(
+                    f"SELECT * FROM run_projection{where} ORDER BY created_at, run_id LIMIT ?",
+                    values,
+                )
+            )
+            records: tuple[RunRecord, ...] = tuple(self._run_record(row) for row in rows[:limit])
+            return RunPage(
+                records=records,
+                next_cursor=self._run_cursor(records[-1]) if records else None,
+                has_more=len(rows) > limit,
+            )
 
     def project(self, stored_events: Iterable[StoredEvent]) -> tuple[RunRecord, ...]:
-        self._ensure_open()
-        self._project_calls += 1
-        current: tuple[RunRecord, ...] = self._read_all_runs()
-        projected: tuple[RunRecord, ...] = project_runs(
-            stored_events=stored_events, current_runs=current
-        )
-        self._publish_projection(projected)
-        return projected
+        with self._lock:
+            self._ensure_open()
+            self._project_calls += 1
+            current: tuple[RunRecord, ...] = self._read_all_runs()
+            projected: tuple[RunRecord, ...] = project_runs(
+                stored_events=stored_events, current_runs=current
+            )
+            self._publish_projection(projected)
+            return projected
 
     def rebuild_from_events(self, stored_events: Iterable[StoredEvent]) -> tuple[RunRecord, ...]:
-        self._ensure_open()
-        projected: tuple[RunRecord, ...] = project_runs(stored_events=stored_events)
-        self._publish_projection(projected)
-        return projected
+        with self._lock:
+            self._ensure_open()
+            projected: tuple[RunRecord, ...] = project_runs(stored_events=stored_events)
+            self._publish_projection(projected)
+            return projected
 
     def append_and_project(
         self, events: Iterable[CanonicalLifecycleEvent]
     ) -> tuple[StoredEvent, ...]:
         """Atomically append immutable facts and publish their run projection."""
 
-        self._ensure_open()
-        pending: tuple[CanonicalLifecycleEvent, ...] = tuple(events)
-        try:
-            with self._transaction():
-                stored: tuple[StoredEvent, ...] = self._append_events(pending)
-                projected: tuple[RunRecord, ...] = project_runs(
-                    stored_events=stored, current_runs=self._read_all_runs()
-                )
-                self._replace_projection(projected)
-                return stored
-        except IntegrityConflictError:
-            raise
-        except sqlite3.Error as error:
-            raise ExecutionHistoryStorageError(
-                "SQLite atomic append and projection failed"
-            ) from error
+        with self._lock:
+            self._ensure_open()
+            pending: tuple[CanonicalLifecycleEvent, ...] = tuple(events)
+            try:
+                with self._transaction():
+                    stored: tuple[StoredEvent, ...] = self._append_events(pending)
+                    projected: tuple[RunRecord, ...] = project_runs(
+                        stored_events=stored, current_runs=self._read_all_runs()
+                    )
+                    self._replace_projection(projected)
+                    return stored
+            except IntegrityConflictError:
+                raise
+            except sqlite3.Error as error:
+                raise ExecutionHistoryStorageError(
+                    "SQLite atomic append and projection failed"
+                ) from error
 
     def reconcile(self) -> tuple[RunRecord, ...]:
         """Rebuild the disposable run projection from all durable event facts."""
 
-        self._ensure_open()
-        try:
-            with self._transaction():
-                records: tuple[StoredEvent, ...] = self._read_all_events()
-                projected: tuple[RunRecord, ...] = project_runs(stored_events=records)
-                self._replace_projection(projected)
-                return projected
-        except sqlite3.Error as error:
-            raise ExecutionHistoryStorageError("SQLite reconciliation failed") from error
+        with self._lock:
+            self._ensure_open()
+            try:
+                with self._transaction():
+                    records: tuple[StoredEvent, ...] = self._read_all_events()
+                    projected: tuple[RunRecord, ...] = project_runs(stored_events=records)
+                    self._replace_projection(projected)
+                    return projected
+            except sqlite3.Error as error:
+                raise ExecutionHistoryStorageError("SQLite reconciliation failed") from error
 
     def check_health(self) -> bool:
         """Verify connectivity, integrity, and the supported schema revision."""
 
-        self._ensure_open()
-        result: sqlite3.Row | None = self._connection.execute("PRAGMA quick_check").fetchone()
-        return (
-            result is not None
-            and result[0] == _HEALTHY_CHECK_RESULT
-            and self.get_schema_version() == _SCHEMA_VERSION
-        )
+        with self._lock:
+            self._ensure_open()
+            result: sqlite3.Row | None = self._connection.execute("PRAGMA quick_check").fetchone()
+            return (
+                result is not None
+                and result[0] == _HEALTHY_CHECK_RESULT
+                and self.get_schema_version() == _SCHEMA_VERSION
+            )
 
     def get_schema_version(self) -> int:
-        self._ensure_open()
-        return self._metadata_version()
+        with self._lock:
+            self._ensure_open()
+            return self._metadata_version()
 
     def upgrade_schema(self, *, target_version: int | None = None) -> int:
-        self._ensure_open()
-        target: int = _SCHEMA_VERSION if target_version is None else target_version
-        if target != _SCHEMA_VERSION:
-            raise UnsupportedSchemaVersionError(f"unsupported SQLite schema version {target}")
-        self._migrate()
-        return target
+        with self._lock:
+            self._ensure_open()
+            target: int = _SCHEMA_VERSION if target_version is None else target_version
+            if target != _SCHEMA_VERSION:
+                raise UnsupportedSchemaVersionError(f"unsupported SQLite schema version {target}")
+            self._migrate()
+            return target
 
     def close(self) -> None:
-        if self._closed:
-            return
-        self._connection.close()
-        self._closed = True
+        with self._lock:
+            if self._closed:
+                return
+            try:
+                self._connection.close()
+            finally:
+                self._closed = True
 
     def dispose(self) -> None:
         self.close()
 
     def __enter__(self) -> Self:
-        self._ensure_open()
-        return self
+        with self._lock:
+            self._ensure_open()
+            return self
 
     def __exit__(
         self,
@@ -741,14 +765,27 @@ class SQLiteExecutionHistory:
 
     @contextmanager
     def _transaction(self) -> Iterator[None]:
-        _ = self._connection.execute("BEGIN IMMEDIATE")
-        try:
-            yield
-        except BaseException:
-            _ = self._connection.execute("ROLLBACK")
-            raise
-        else:
-            _ = self._connection.execute("COMMIT")
+        with self._lock:
+            self._ensure_open()
+            _ = self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+            except BaseException:
+                try:
+                    _ = self._connection.execute("ROLLBACK")
+                except BaseException:
+                    pass
+                raise
+            else:
+                try:
+                    _ = self._connection.execute("COMMIT")
+                except sqlite3.Error:
+                    if self._connection.in_transaction:
+                        try:
+                            _ = self._connection.execute("ROLLBACK")
+                        except BaseException:
+                            pass
+                    raise
 
     def _ensure_open(self) -> None:
         if self._closed:

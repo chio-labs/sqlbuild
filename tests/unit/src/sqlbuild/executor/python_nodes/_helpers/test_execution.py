@@ -838,12 +838,19 @@ def test_given_retry_policy_when_transient_failures_then_retries_and_succeeds(
             ),
         ),
     )
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
 
-    with CostContext.scope(
-        run_id="test_run",
-        resource_type="run",
-        resource_name="dev",
-        phase="build",
+    with (
+        invocation_scope("retry-invocation"),
+        dispatcher_scope(dispatcher),
+        CostContext.scope(
+            run_id="test_run",
+            resource_type="run",
+            resource_name="dev",
+            phase="build",
+        ),
     ):
         result: PythonNodeExecutorResult = execute_python_nodes(
             nodes=nodes,
@@ -875,6 +882,14 @@ def test_given_retry_policy_when_transient_failures_then_retries_and_succeeds(
         )
         for attempt in (1, 2, 3)
     )
+    resource_events: tuple[LifecycleEvent, ...] = tuple(
+        filter(lambda event: event.event_type.startswith("resource_attempt_"), events)
+    )
+    assert tuple(event.run_id for event in resource_events) == ("test_run",) * 6
+    start_events: tuple[LifecycleEvent, ...] = tuple(
+        filter(lambda event: event.event_type == "resource_attempt_started", resource_events)
+    )
+    assert tuple(event.payload["attempt_number"] for event in start_events) == (1, 2, 3)
 
 
 @pytest.mark.parametrize(

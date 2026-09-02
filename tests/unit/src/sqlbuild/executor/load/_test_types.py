@@ -7,6 +7,7 @@ from datetime import date, datetime
 from typing import Any
 
 from sqlbuild.adapter.contract.types import CursorKind
+from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SourceColumnEntry
@@ -153,6 +154,21 @@ class LoadPipelineSkipFanInTestCase:
     expected_statuses: tuple[ExecutionStatus, ...]
     expected_skip_modes: tuple[str | None, ...]
     expected_skip_reasons: tuple[str | None, ...]
+
+
+@dataclass(frozen=True)
+class ConcurrentLoadProgressTestCase:
+    description: str
+    expected_start_count: int
+    expected_terminal_count: int
+    expected_rich_row_count: int
+
+
+@dataclass(frozen=True)
+class LoadStartOrderingTestCase:
+    description: str
+    connection_mode: LoaderConnectionMode
+    expected_connection_count: int
 
 
 @dataclass(frozen=True)

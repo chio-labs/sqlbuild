@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import replace
 from typing import Any
 
@@ -47,6 +48,14 @@ from sqlbuild.executor.scheduling.models import (
     LifecycleSchedulerResult,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus, LifecycleNodeStatus
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
+from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
+    ResourceAttemptLifecycle,
+)
+from sqlbuild.runtime.observability.main.current_execution_identity import (
+    current_execution_identity,
+)
+from sqlbuild.runtime.observability.models import ExecutionIdentity
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -223,61 +232,76 @@ def _execute_ingress_loader(
     )
     if source_entry is None:
         raise ExecutorInputError(f"No source entry found for Python ingress loader '{loader.name}'")
-    if callbacks.on_node_start is not None:
-        callbacks.on_node_start(
-            name=source_entry.name, resource_kind=load_resource_kind(source_entry)
-        )
-    with CostContext.resource_scope(
-        resource_type=PythonNodeKind.LOADER.value,
-        resource_name=loader.name,
-        phase="load",
-    ):
-        result: LoadExecutionResult = execute_source_load(
-            source_entry=source_entry,
-            loader_function=loader,
-            adapter=runtime.adapter,
-            connection_config=runtime.connection_config,
-            connection=runtime.connection,
-            runtime=LoadRuntimeParams(
-                run_id=runtime.run_id,
-                target=runtime.target,
-                vars=runtime.vars,
-                is_reload=runtime.is_reload,
-                start_cursor_ts=runtime.start_cursor_ts,
-                end_cursor_ts=runtime.end_cursor_ts,
-                start_cursor_int=runtime.start_cursor_int,
-                end_cursor_int=runtime.end_cursor_int,
-                use_color=callbacks.use_color,
-                providers=runtime.providers,
-                result_store=runtime.result_store,
-            ),
-            statement_recorder=StatementRecorder(),
-            loader_ref_entries=_loader_ref_entries(
-                loader_by_name=loader_by_name,
-                source_by_loader_name=source_by_loader_name,
-            ),
-            source_ref_entries=source_map,
-        )
-        results.record_load_result(name=node.name, result=result)
-        _persist_loader_result(
-            result_store=runtime.result_store,
-            loader_name=loader.name,
-            result=result,
+    resource_kind: ExecutionResourceKind = load_resource_kind(source_entry)
+    identity: ExecutionIdentity | None = current_execution_identity()
+    lifecycle: AbstractContextManager[ResourceAttemptLifecycle | None] = (
+        nullcontext(None)
+        if identity is not None and identity.resource_attempt_id is not None
+        else ResourceAttemptLifecycle(
+            resource_id=f"source:{source_entry.name}",
+            resource_kind=resource_kind.value,
+            resource_name=source_entry.name,
             run_id=runtime.run_id,
         )
-        if result.status == ExecutionStatus.SUCCESS:
-            if callbacks.identity_recorder is not None:
-                callbacks.identity_recorder(identity=node.identity, _target_name=source_entry.name)
-            else:
-                try_write_python_node_identity_fingerprint(
-                    identity=node.identity,
-                    adapter=runtime.adapter,
-                    connection=runtime.connection,
+    )
+    with lifecycle as attempt:
+        if callbacks.on_node_start is not None:
+            callbacks.on_node_start(name=source_entry.name, resource_kind=resource_kind)
+        with CostContext.resource_scope(
+            resource_type=PythonNodeKind.LOADER.value,
+            resource_name=loader.name,
+            phase="load",
+        ):
+            result: LoadExecutionResult = execute_source_load(
+                source_entry=source_entry,
+                loader_function=loader,
+                adapter=runtime.adapter,
+                connection_config=runtime.connection_config,
+                connection=runtime.connection,
+                runtime=LoadRuntimeParams(
                     run_id=runtime.run_id,
-                    database=runtime.adapter.default_database(),
-                    schema=runtime.adapter.default_schema(),
-                    target_name=source_entry.name,
-                )
+                    target=runtime.target,
+                    vars=runtime.vars,
+                    is_reload=runtime.is_reload,
+                    start_cursor_ts=runtime.start_cursor_ts,
+                    end_cursor_ts=runtime.end_cursor_ts,
+                    start_cursor_int=runtime.start_cursor_int,
+                    end_cursor_int=runtime.end_cursor_int,
+                    use_color=callbacks.use_color,
+                    providers=runtime.providers,
+                    result_store=runtime.result_store,
+                ),
+                statement_recorder=StatementRecorder(),
+                loader_ref_entries=_loader_ref_entries(
+                    loader_by_name=loader_by_name,
+                    source_by_loader_name=source_by_loader_name,
+                ),
+                source_ref_entries=source_map,
+            )
+            results.record_load_result(name=node.name, result=result)
+            _persist_loader_result(
+                result_store=runtime.result_store,
+                loader_name=loader.name,
+                result=result,
+                run_id=runtime.run_id,
+            )
+            if result.status == ExecutionStatus.SUCCESS:
+                if callbacks.identity_recorder is not None:
+                    callbacks.identity_recorder(
+                        identity=node.identity, _target_name=source_entry.name
+                    )
+                else:
+                    try_write_python_node_identity_fingerprint(
+                        identity=node.identity,
+                        adapter=runtime.adapter,
+                        connection=runtime.connection,
+                        run_id=runtime.run_id,
+                        database=runtime.adapter.default_database(),
+                        schema=runtime.adapter.default_schema(),
+                        target_name=source_entry.name,
+                    )
+        if attempt is not None and result.status == ExecutionStatus.FAILED:
+            attempt.failed()
     if callbacks.on_node_complete is not None:
         callbacks.on_node_complete(result)
     return _load_result_to_lifecycle_result(node_name=node.name, result=result)

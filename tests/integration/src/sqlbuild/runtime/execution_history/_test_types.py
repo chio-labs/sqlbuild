@@ -31,7 +31,21 @@ class SQLiteTimeoutCase:
 
 
 @dataclass(frozen=True)
+class SQLiteTransactionFailureCase:
+    description: str
+    expected_event_count: int
+    expected_run_count: int
+
+
+@dataclass(frozen=True)
 class PostgresHistoryCase:
     description: str
     expected_event_count: int
     expected_run_count: int
+
+
+@dataclass(frozen=True)
+class ConcurrentSQLiteHistoryCase:
+    description: str
+    expected_resource_start_count: int
+    expected_resource_terminal_count: int

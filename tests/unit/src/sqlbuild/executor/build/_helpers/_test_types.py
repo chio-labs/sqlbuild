@@ -35,6 +35,8 @@ class BuildSchedulerSourceLoadTestCase:
     loader_factory: Callable[..., DiscoveredLoaderFunction]
     expected_load_status: ExecutionStatus
     expected_model_status: ExecutionStatus
+    source_meta: dict[str, object]
+    expected_resource_kind: ExecutionResourceKind
     expected_execution_order: tuple[str, ...] = ()
     expected_model_rows: tuple[tuple[object, ...], ...] = ()
 

@@ -21,6 +21,13 @@ from sqlbuild.executor.build.models import (
 )
 from sqlbuild.executor.load.models import LoaderContext, LoadExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.observability import (
+    EventDispatcher,
+    LifecycleEvent,
+    dispatcher_scope,
+    invocation_scope,
+)
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.executor.build._helpers._test_types import (
     ExternalBuildSourceLoadTestCase,
@@ -53,54 +60,68 @@ def test_given_external_source_load_when_preloading_then_records_progress_and_no
     completed_results: list[object] = []
     started_nodes: list[tuple[str, object]] = []
     observed_connections: list[object] = []
+    order: list[str] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+
+    def record_event(event: LifecycleEvent) -> None:
+        order.append(event.event_type)
+
+    def record_start(name: str, *, resource_kind: ExecutionResourceKind) -> None:
+        order.append("callback_start")
+        started_nodes.append((name, resource_kind))
+
+    def record_complete(result: object) -> None:
+        order.append("callback_complete")
+        completed_results.append(result)
+
+    dispatcher.subscribe_lifecycle(subscriber=record_event, accepts_opaque=False)
 
     def external_loader(ctx: LoaderContext) -> None:
         observed_connections.append(ctx.connection)
         ctx.log(test_case.expected_lifecycle_message)
         return None
 
-    results: ExternalSourceLoadResults = run_external_source_loads_before_connections(
-        plan=PlanOutput(
-            execution_order=(key,),
-            selected_keys=frozenset({key}),
-            source_load_entries=(
-                SourceLoadPlanEntry(
-                    key=key,
-                    name=test_case.source_name,
-                    loader=test_case.loader_name,
-                    destination=test_case.source_name,
+    with invocation_scope("external-build-invocation"), dispatcher_scope(dispatcher):
+        results: ExternalSourceLoadResults = run_external_source_loads_before_connections(
+            plan=PlanOutput(
+                execution_order=(key,),
+                selected_keys=frozenset({key}),
+                source_load_entries=(
+                    SourceLoadPlanEntry(
+                        key=key,
+                        name=test_case.source_name,
+                        loader=test_case.loader_name,
+                        destination=test_case.source_name,
+                    ),
+                ),
+                source_map={
+                    test_case.source_name: SourceEntry(
+                        name=test_case.source_name,
+                        loader=test_case.loader_name,
+                    )
+                },
+            ),
+            loader_functions=(
+                DiscoveredLoaderFunction(
+                    file_path=Path("loaders/raw.py"),
+                    relative_path=Path("loaders/raw.py"),
+                    name=test_case.loader_name,
+                    function=external_loader,
+                    connection_mode=LoaderConnectionMode.EXTERNAL,
                 ),
             ),
-            source_map={
-                test_case.source_name: SourceEntry(
-                    name=test_case.source_name,
-                    loader=test_case.loader_name,
-                )
-            },
-        ),
-        loader_functions=(
-            DiscoveredLoaderFunction(
-                file_path=Path("loaders/raw.py"),
-                relative_path=Path("loaders/raw.py"),
-                name=test_case.loader_name,
-                function=external_loader,
-                connection_mode=LoaderConnectionMode.EXTERNAL,
+            adapter=adapter,
+            connection_config={},
+            runtime=BuildRuntimeParams(
+                run_id="run-1",
+                target="dev",
+                effective_vars={},
             ),
-        ),
-        adapter=adapter,
-        connection_config={},
-        runtime=BuildRuntimeParams(
-            run_id="run-1",
-            target="dev",
-            effective_vars={},
-        ),
-        callbacks=BuildCallbacks(
-            on_node_start=lambda name, *, resource_kind: started_nodes.append(
-                (name, resource_kind)
+            callbacks=BuildCallbacks(
+                on_node_start=record_start,
+                on_node_complete=record_complete,
             ),
-            on_node_complete=completed_results.append,
-        ),
-    )
+        )
 
     assert adapter.connection_count == 0
     assert observed_connections == [None]
@@ -109,3 +130,13 @@ def test_given_external_source_load_when_preloading_then_records_progress_and_no
     assert isinstance(completed_results[0], LoadExecutionResult)
     assert started_nodes[0][0] == test_case.source_name
     assert results.results[0].lifecycle_events[0].content == test_case.expected_lifecycle_message
+    operation_entries: tuple[str, ...] = tuple(
+        filter(lambda entry: entry.startswith("operation_"), order)
+    )
+    assert tuple(order) == (
+        "resource_attempt_started",
+        "callback_start",
+        *operation_entries,
+        "resource_attempt_completed",
+        "callback_complete",
+    )

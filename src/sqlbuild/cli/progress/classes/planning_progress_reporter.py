@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import TextIO
 
+from sqlbuild.cli.progress.classes.native_progress_projector import (
+    NativeProgressProjector,
+    current_native_progress_projector,
+)
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+
+_PROJECT_COMPILE_OPERATION: str = "project_compile"
 
 
 class PlanningProgressReporter:
@@ -16,8 +22,13 @@ class PlanningProgressReporter:
             use_color=use_color,
         )
         self._active: bool = False
+        self._projector: NativeProgressProjector | None = current_native_progress_projector()
 
     def on_progress(self, message: str) -> None:
+        if self._projector is not None and self._projector.is_operation_active(
+            operation_name=_PROJECT_COMPILE_OPERATION
+        ):
+            return
         if _is_planning_completion_message(message):
             self.complete(message)
             return

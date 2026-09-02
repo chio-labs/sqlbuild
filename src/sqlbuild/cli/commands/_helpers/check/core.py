@@ -13,6 +13,10 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.progress.classes.native_progress_projector import (
+    NativeProgressProjector,
+    current_native_progress_projector,
+)
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.relation_targets import build_python_relation_targets
@@ -260,6 +264,7 @@ def write_check_results(
     """Write human-readable check result rows."""
 
     style: CliStyle = CliStyle(use_color=use_color)
+    projector: NativeProgressProjector | None = current_native_progress_projector()
     result_by_name: dict[str, PythonCheckExecutionResult] = {
         result.node_name: result for result in results
     }
@@ -275,7 +280,25 @@ def write_check_results(
         stream.write(f"Python checks: {group_label}\n\n")
         for result_name in result_names:
             result: PythonCheckExecutionResult = result_by_name[result_name]
-            _write_check_result_row(stream=stream, result=result, style=style)
+            duration_ms: float | None = (
+                projector.resource_terminal_duration(
+                    resource_name=result.node_name,
+                    resource_id=f"check:{result.node_name}",
+                )
+                if projector is not None
+                else None
+            )
+            _write_check_result_row(
+                stream=stream,
+                result=result,
+                style=style,
+                duration_ms=duration_ms,
+            )
+            if projector is not None:
+                _ = projector.consume_resource_terminal(
+                    resource_name=result.node_name,
+                    resource_id=f"check:{result.node_name}",
+                )
         stream.write("\n")
 
 
@@ -498,10 +521,16 @@ def _check_group_label(
 
 
 def _write_check_result_row(
-    *, stream: TextIO, result: PythonCheckExecutionResult, style: CliStyle
+    *,
+    stream: TextIO,
+    result: PythonCheckExecutionResult,
+    style: CliStyle,
+    duration_ms: float | None,
 ) -> None:
     status: str = "PASS" if result.passed else "WARN" if result.warned else "FAIL"
     stream.write(f"  {'check':<10}{result.node_name:<50} {style.status(status=status)}")
+    if duration_ms is not None:
+        stream.write(f"  {duration_ms / 1000.0:.2f}s")
     detail: str | None = result.error_message or result.message
     if detail:
         stream.write(f"  {detail}")

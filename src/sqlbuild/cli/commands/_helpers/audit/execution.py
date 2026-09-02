@@ -19,6 +19,7 @@ from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import AuditPlanEntry
+from sqlbuild.executor.auditing.main.resource_id import audit_resource_id
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.pipeline.main.run import run_audit_pipeline
 from sqlbuild.presentation.classes.cli_style import CliStyle
@@ -96,6 +97,7 @@ def execute_audit_plan(
                 item_name=_audit_display_name_from_entry(entry),
             ),
             on_audit_complete=on_complete,
+            run_id=pipeline_result.project.run_id,
         )
     finally:
         event_writer.close()
@@ -128,6 +130,12 @@ def _build_on_complete(
             item_name=audit_name,
             status_text=status_text,
             detail=detail,
+            canonical_resource_id=audit_resource_id(
+                audit_name=result.audit_name,
+                attachment_kind=result.attachment_kind,
+                attached_target_name=result.attached_target_name,
+                attached_column_name=result.attached_column_name,
+            ),
         )
         event_writer.write(
             format_build_item_execution_event(

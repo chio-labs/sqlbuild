@@ -52,6 +52,9 @@ from sqlbuild.python_nodes.models import (
     TaskDefinition,
 )
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
+from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
+    ResourceAttemptLifecycle,
+)
 
 
 def execute_python_nodes(
@@ -324,35 +327,58 @@ def _call_node_with_retry(
     monotonic: Callable[[], float],
 ) -> PythonNodeExecutionResult:
     if retry_policy is None:
-        with CostContext.resource_scope(
-            resource_type=_node_kind(node).value,
-            resource_name=node.name,
-            phase="execute",
-            attempt=1,
+        node_kind: PythonNodeKind = _node_kind(node)
+        with (
+            ResourceAttemptLifecycle(
+                resource_id=f"{node_kind.value}:{node.name}",
+                resource_kind=node_kind.value,
+                resource_name=node.name,
+                attempt_number=1,
+                run_id=context.run_id,
+            ) as lifecycle,
+            CostContext.resource_scope(
+                resource_type=node_kind.value,
+                resource_name=node.name,
+                phase="execute",
+                attempt=1,
+            ),
         ):
             with OperationLifecycle(
-                operation_kind="python_node", operation_name=f"python_{_node_kind(node).value}"
+                operation_kind="python_node", operation_name=f"python_{node_kind.value}"
             ):
                 returned: object = invoke_with_providers(
                     function=node.function,
                     context=context,
                     providers=providers,
                 )
-                return normalize_python_node_return(
+                result: PythonNodeExecutionResult = normalize_python_node_return(
                     node_name=node.name,
-                    kind=_node_kind(node),
+                    kind=node_kind,
                     returned=returned,
                 )
+                if result.status == PythonNodeStatus.FAILED:
+                    lifecycle.failed()
+                return result
     start_time: float = monotonic()
     attempt: int = 1
     while True:
         invocation_retryable = False
         try:
-            with CostContext.resource_scope(
-                resource_type=_node_kind(node).value,
-                resource_name=node.name,
-                phase="execute",
-                attempt=attempt,
+            node_kind = _node_kind(node)
+            with (
+                ResourceAttemptLifecycle(
+                    resource_id=f"{node_kind.value}:{node.name}",
+                    resource_kind=node_kind.value,
+                    resource_name=node.name,
+                    attempt_number=attempt,
+                    run_id=context.run_id,
+                ) as lifecycle,
+                CostContext.resource_scope(
+                    resource_type=node_kind.value,
+                    resource_name=node.name,
+                    phase="execute",
+                    attempt=attempt,
+                ),
             ):
                 with OperationLifecycle(
                     operation_kind="python_node",
@@ -368,11 +394,14 @@ def _call_node_with_retry(
                     except retry_policy.retry_on:
                         invocation_retryable = True
                         raise
-                    return normalize_python_node_return(
+                    result = normalize_python_node_return(
                         node_name=node.name,
-                        kind=_node_kind(node),
+                        kind=node_kind,
                         returned=returned,
                     )
+                    if result.status == PythonNodeStatus.FAILED:
+                        lifecycle.failed()
+                    return result
         except retry_policy.retry_on:
             if not invocation_retryable:
                 raise

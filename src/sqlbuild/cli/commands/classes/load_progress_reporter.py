@@ -7,6 +7,10 @@ from typing import TextIO
 
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
+from sqlbuild.cli.progress.classes.native_progress_projector import (
+    NativeProgressProjector,
+    current_native_progress_projector,
+)
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.presentation.classes.cli_style import CliStyle
@@ -53,8 +57,13 @@ class LoadProgressReporter:
         self._spinner_thread: threading.Thread | None = None
         self._write_lock: threading.Lock = threading.Lock()
         self._cursor_hidden: bool = False
+        self._projector: NativeProgressProjector | None = current_native_progress_projector()
+        if self._projector is not None:
+            self._projector.configure_resources(ordinals=source_order, total=total_count)
 
     def on_start(self, source: SourceEntry) -> None:
+        if self._projector is not None:
+            return
         if not self._is_tty:
             return
         self._current_source = source
@@ -72,6 +81,14 @@ class LoadProgressReporter:
         self._write_spinner_line()
 
     def on_complete(self, result: LoadExecutionResult) -> None:
+        canonical_duration_ms: float | None = None
+        if self._projector is not None:
+            canonical_duration_ms = self._projector.consume_resource_terminal(
+                resource_name=result.source_name,
+                resource_id=f"source:{result.source_name}",
+            )
+            if canonical_duration_ms is None:
+                return
         self._stop_spinner_loop()
         if self._is_tty:
             with self._write_lock:
@@ -87,8 +104,11 @@ class LoadProgressReporter:
         )
         status: str = self._style.status(status=status_text)
         duration: str = ""
-        if result.duration_ms is not None:
-            duration = f"{result.duration_ms / 1000.0:.2f}s"
+        duration_ms: float | None = (
+            result.duration_ms if canonical_duration_ms is None else canonical_duration_ms
+        )
+        if duration_ms is not None:
+            duration = f"{duration_ms / 1000.0:.2f}s"
         rows_loaded: str = f"rows={result.rows_loaded:,}"
         ordinal: int = self._source_order[result.source_name]
         self._stream.write(

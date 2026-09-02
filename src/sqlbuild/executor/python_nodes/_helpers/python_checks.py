@@ -38,6 +38,9 @@ from sqlbuild.provider.main.runtime import (
 )
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
+from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
+    ResourceAttemptLifecycle,
+)
 
 
 def execute_python_check_nodes(
@@ -150,16 +153,29 @@ def execute_python_check_nodes(
                 end_cursor_int=runtime.end_cursor_int,
             )
             try:
-                with OperationLifecycle(operation_kind="quality", operation_name="python_check"):
-                    returned: object = invoke_with_providers(
-                        function=check_function.function,
-                        context=context,
-                        providers=providers,
+                with ResourceAttemptLifecycle(
+                    resource_id=f"check:{check_function.name}",
+                    resource_kind="check",
+                    resource_name=check_function.name,
+                    run_id=run_id,
+                ) as lifecycle:
+                    with OperationLifecycle(
+                        operation_kind="quality", operation_name="python_check"
+                    ):
+                        returned: object = invoke_with_providers(
+                            function=check_function.function,
+                            context=context,
+                            providers=providers,
+                        )
+                        check_result: PythonCheckResult = normalize_python_check_return(
+                            returned=returned,
+                            default_severity=check_function.severity,
+                        )
+                    effective_severity: PythonCheckSeverity = (
+                        check_result.severity or check_function.severity
                     )
-                    check_result: PythonCheckResult = normalize_python_check_return(
-                        returned=returned,
-                        default_severity=check_function.severity,
-                    )
+                    if not check_result.passed and effective_severity == PythonCheckSeverity.ERROR:
+                        lifecycle.failed()
             except Exception as error:
                 error_result: PythonCheckExecutionResult = PythonCheckExecutionResult(
                     node_name=check_function.name,

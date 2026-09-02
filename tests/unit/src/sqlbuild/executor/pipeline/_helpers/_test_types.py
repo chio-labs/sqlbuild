@@ -15,6 +15,20 @@ class SqlTestFunctionPreflightTestCase:
 
 
 @dataclass(frozen=True)
+class AuditPipelineLifecycleTestCase:
+    description: str
+    expected_event_type: str
+    expected_order: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AuditResourceIdentityTestCase:
+    description: str
+    expected_first_id: str
+    expected_second_id: str
+
+
+@dataclass(frozen=True)
 class ScenarioFailureHelpTestCase:
     """One scenario failure help resolution case."""
 

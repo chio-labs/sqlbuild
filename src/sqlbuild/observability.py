@@ -7,6 +7,9 @@ from types import MappingProxyType
 
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
+from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
+    ResourceAttemptLifecycle,
+)
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.main.create_lifecycle_event import (
     create_lifecycle_event as _create_lifecycle_event,
@@ -81,6 +84,7 @@ __all__ = (
     "LifecycleEvent",
     "ObservabilityValidationError",
     "OperationLifecycle",
+    "ResourceAttemptLifecycle",
     "OpaqueLifecycleEvent",
     "OpaqueLifecycleSubscriber",
     "Unsubscribe",

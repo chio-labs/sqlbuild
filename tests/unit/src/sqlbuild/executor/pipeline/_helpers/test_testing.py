@@ -15,6 +15,12 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ChainStep, PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.pipeline._helpers.testing import run_test_pipeline
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
+from sqlbuild.observability import (
+    EventDispatcher,
+    LifecycleEvent,
+    dispatcher_scope,
+    invocation_scope,
+)
 from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import (
     SqlTestFunctionPreflightTestCase,
 )
@@ -66,14 +72,47 @@ def test_given_sql_test_with_missing_function_when_running_pipeline_then_returns
             )
         },
     )
+    order: list[str] = []
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
 
-    results: tuple[SqlTestExecutionResult, ...] = run_test_pipeline(
-        plan=plan,
-        connection_config={"database": str(tmp_path / "test.duckdb")},
-        adapter=DuckDbAdapter(),
-    )
+    def record_event(event: LifecycleEvent) -> None:
+        events.append(event)
+        order.append(event.event_type)
+
+    dispatcher.subscribe_lifecycle(subscriber=record_event, accepts_opaque=False)
+
+    with invocation_scope("test-invocation"), dispatcher_scope(dispatcher):
+        results: tuple[SqlTestExecutionResult, ...] = run_test_pipeline(
+            plan=plan,
+            connection_config={"database": str(tmp_path / "test.duckdb")},
+            adapter=DuckDbAdapter(),
+            on_test_start=lambda _entry: order.append("callback_start"),
+            on_test_complete=lambda _result: order.append("callback_complete"),
+            run_id="test-run",
+        )
 
     assert len(results) == 1
     assert results[0].outcome == test_case.expected_outcome
     assert results[0].error_message is not None
     assert test_case.expected_error_fragment in results[0].error_message
+    lifecycle_order: tuple[str, ...] = tuple(
+        filter(
+            lambda value: value.startswith("resource_attempt_") or value.startswith("callback_"),
+            order,
+        )
+    )
+    assert lifecycle_order == (
+        "resource_attempt_started",
+        "callback_start",
+        "resource_attempt_failed",
+        "callback_complete",
+    )
+    resource_events: tuple[LifecycleEvent, ...] = tuple(
+        filter(lambda event: event.event_type.startswith("resource_attempt_"), events)
+    )
+    assert tuple(event.run_id for event in resource_events) == ("test-run", "test-run")
+    assert tuple(event.resource_id for event in resource_events) == (
+        "sql_test:test_missing_function",
+        "sql_test:test_missing_function",
+    )

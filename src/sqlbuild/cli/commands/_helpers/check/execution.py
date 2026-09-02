@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from sqlbuild.cli.commands._helpers.check.core import (
@@ -18,6 +19,10 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
 from sqlbuild.cli.output.main._build_item_execution_event import format_build_item_execution_event
+from sqlbuild.cli.progress.classes.native_progress_projector import (
+    NativeProgressProjector,
+    current_native_progress_projector,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
@@ -94,6 +99,19 @@ def execute_check_plan(
 
     connection: Any = invocation.adapter.connect(invocation.connection_config)
     event_writer: ExecutionEventWriter = ExecutionEventWriter()
+    projector: NativeProgressProjector | None = current_native_progress_projector()
+    if projector is not None:
+        projector.configure_resources(
+            ordinals={
+                check.name: index
+                for index, check in enumerate(preparation.check_functions, start=1)
+            },
+            total=len(preparation.check_functions),
+        )
+    on_check_complete: Callable[[PythonCheckExecutionResult], None] = _check_completion_adapter(
+        event_writer=event_writer,
+        pipeline_result=pipeline_result,
+    )
     try:
         ingress_result: PythonIngressLoaderExecutorResult = _execute_check_ingress(
             invocation=invocation,
@@ -134,19 +152,28 @@ def execute_check_plan(
             ),
             run_state=ingress_result.run_state,
             require_upstream_results=False,
-            callbacks=PythonCheckCallbacks(
-                on_check_complete=lambda result: event_writer.write(
-                    format_build_item_execution_event(
-                        result=result,
-                        plan=pipeline_result.plan_output,
-                        command="check",
-                    )
-                )
-            ),
+            callbacks=PythonCheckCallbacks(on_check_complete=on_check_complete),
         )
     finally:
         event_writer.close()
         invocation.adapter.close(connection)
+
+
+def _check_completion_adapter(
+    *,
+    event_writer: ExecutionEventWriter,
+    pipeline_result: CompilePipelineResult,
+) -> Callable[[PythonCheckExecutionResult], None]:
+    def _on_complete(result: PythonCheckExecutionResult) -> None:
+        event_writer.write(
+            format_build_item_execution_event(
+                result=result,
+                plan=pipeline_result.plan_output,
+                command="check",
+            )
+        )
+
+    return _on_complete
 
 
 def _execute_check_ingress(

@@ -77,6 +77,7 @@ from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.functions.constants import FUNCTION_ENTRY_MISSING_CODE
 from sqlbuild.executor.functions.main._execute import execute_function
 from sqlbuild.executor.load.main._build_execution_indexes import build_load_execution_indexes
+from sqlbuild.executor.load.main._resource_kind import load_resource_kind
 from sqlbuild.executor.load.main._skipped_result import skipped_load_result
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
@@ -104,6 +105,9 @@ from sqlbuild.microbatches.models import MicrobatchScope
 from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind, NodeStartCallback
+from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
+    ResourceAttemptLifecycle,
+)
 from sqlbuild.spec.contracts.models import SnapshotsConfig, SourceEntry
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
@@ -119,6 +123,12 @@ def _test_result_authored_order(*, plan: PlanOutput, result: SqlTestExecutionRes
         ):
             return index
     return len(plan.test_entries)
+
+
+def _resource_result_failed(result: object) -> bool:
+    if isinstance(result, SqlTestExecutionResult):
+        return result.outcome != SqlTestOutcome.PASS
+    return getattr(result, "status", None) == ExecutionStatus.FAILED
 
 
 class BuildScheduler:
@@ -707,14 +717,43 @@ class BuildScheduler:
         | SqlTestExecutionResult
         | LoadExecutionResult
     ):
-        with CostContext.scope(
-            run_id=self._run_id,
-            resource_type=str(key.resource_type),
+        resource_kind: str = self._canonical_resource_kind(key=key)
+        with ResourceAttemptLifecycle(
+            resource_id=f"{key.resource_type}:{key.name}",
+            resource_kind=resource_kind,
             resource_name=key.name,
-            ledger_path=(self._runtime_dir / "runs" / self._run_id / "statements.jsonl"),
-            on_statement_complete=self._on_statement_complete,
-        ):
-            return self._execute_node_with_cost_context(key=key, connection=connection)
+            run_id=self._run_id,
+        ) as lifecycle:
+            with CostContext.scope(
+                run_id=self._run_id,
+                resource_type=str(key.resource_type),
+                resource_name=key.name,
+                ledger_path=(self._runtime_dir / "runs" / self._run_id / "statements.jsonl"),
+                on_statement_complete=self._on_statement_complete,
+            ):
+                result: (
+                    ModelExecutionResult
+                    | SeedExecutionResult
+                    | FunctionExecutionResult
+                    | SqlTestExecutionResult
+                    | LoadExecutionResult
+                ) = self._execute_node_with_cost_context(key=key, connection=connection)
+            if _resource_result_failed(result):
+                lifecycle.failed(error_code=getattr(result, "error_code", None))
+            return result
+
+    def _canonical_resource_kind(self, *, key: CompiledObjectKey) -> str:
+        if key.resource_type == CompiledResourceType.MODEL:
+            entry: ModelPlanEntry | None = self._indexes.model_entries_by_key.get(key)
+            if entry is not None:
+                return _model_execution_resource_kind(entry.materialization_type).value
+        if key.resource_type == CompiledResourceType.SQL_TEST:
+            return "test"
+        if key.resource_type == CompiledResourceType.SOURCE:
+            source: SourceEntry | None = self._plan.source_map.get(key.name)
+            if source is not None:
+                return load_resource_kind(source).value
+        return str(key.resource_type)
 
     def _execute_node_with_cost_context(
         self, *, key: CompiledObjectKey, connection: Any

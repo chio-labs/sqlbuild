@@ -6,6 +6,7 @@ from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import Event
+from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
@@ -24,19 +25,53 @@ from sqlbuild.execution_history import (
     UnsupportedSchemaVersionError,
     canonical_event_content,
 )
-from sqlbuild.observability import OpaqueLifecycleEvent
+from sqlbuild.observability import LifecycleEvent, OpaqueLifecycleEvent
 from sqlbuild.sqlite_history import SQLiteExecutionHistory
 from tests.integration.src.sqlbuild.runtime.execution_history._test_types import (
     SQLiteMigrationCase,
     SQLitePathCase,
     SQLitePersistenceCase,
     SQLiteTimeoutCase,
+    SQLiteTransactionFailureCase,
 )
 from tests.integration.src.sqlbuild.runtime.execution_history.helpers import (
     append_atomically,
     lifecycle_event,
     reconcile_with_coordination,
 )
+
+
+class _TransactionFailureConnection:
+    def __init__(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        fail_commit_once: bool = False,
+        fail_rollback_once: bool = False,
+    ) -> None:
+        self._connection: sqlite3.Connection = connection
+        self._fail_commit_once: bool = fail_commit_once
+        self._fail_rollback_once: bool = fail_rollback_once
+
+    @property
+    def in_transaction(self) -> bool:
+        return self._connection.in_transaction
+
+    def execute(self, sql: str, parameters: Any = ()) -> sqlite3.Cursor:
+        if sql == "COMMIT" and self._fail_commit_once:
+            self._fail_commit_once = False
+            raise sqlite3.OperationalError("controlled commit failure")
+        if sql == "ROLLBACK" and self._fail_rollback_once:
+            self._fail_rollback_once = False
+            _ = self._connection.execute(sql)
+            raise sqlite3.OperationalError("controlled rollback failure")
+        return self._connection.execute(sql, parameters)
+
+    def executemany(self, sql: str, parameters: Any) -> sqlite3.Cursor:
+        return self._connection.executemany(sql, parameters)
+
+    def close(self) -> None:
+        self._connection.close()
 
 
 @pytest.mark.parametrize(
@@ -190,6 +225,72 @@ def test_given_conflicting_projection_when_appending_atomically_then_no_fact_or_
     )
     assert len(storage.get_runs(run_filter=RunFilter()).records) == test_case.expected_run_count
     storage.close()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SQLiteTransactionFailureCase(
+            description="commit failure rolls back and leaves history reusable",
+            expected_event_count=1,
+            expected_run_count=1,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_commit_failure_when_appending_atomically_then_next_append_succeeds(
+    tmp_path: Path, test_case: SQLiteTransactionFailureCase
+) -> None:
+    storage: SQLiteExecutionHistory = SQLiteExecutionHistory(path=tmp_path / "history.sqlite3")
+    storage._connection = cast(
+        sqlite3.Connection,
+        _TransactionFailureConnection(storage._connection, fail_commit_once=True),
+    )
+
+    with pytest.raises(ExecutionHistoryStorageError, match="atomic append and projection failed"):
+        storage.append_and_project((lifecycle_event("failed-commit"),))
+
+    _ = storage.append_and_project((lifecycle_event("successful-commit"),))
+    events: EventPage = storage.get_events(event_filter=EventFilter())
+    runs: RunPage = storage.get_runs(run_filter=RunFilter())
+    storage.close()
+
+    assert len(events.records) == test_case.expected_event_count
+    assert cast(LifecycleEvent, events.records[0].event).event_id == "successful-commit"
+    assert len(runs.records) == test_case.expected_run_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SQLiteTransactionFailureCase(
+            description="body failure remains primary when rollback also fails",
+            expected_event_count=1,
+            expected_run_count=1,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_body_and_rollback_failures_when_transaction_exits_then_body_error_is_preserved(
+    tmp_path: Path, test_case: SQLiteTransactionFailureCase
+) -> None:
+    storage: SQLiteExecutionHistory = SQLiteExecutionHistory(path=tmp_path / "history.sqlite3")
+    storage._connection = cast(
+        sqlite3.Connection,
+        _TransactionFailureConnection(storage._connection, fail_rollback_once=True),
+    )
+
+    with pytest.raises(ValueError, match="controlled body failure"):
+        with storage._transaction():
+            raise ValueError("controlled body failure")
+
+    _ = storage.append_and_project((lifecycle_event("after-rollback-failure"),))
+    events: EventPage = storage.get_events(event_filter=EventFilter())
+    runs: RunPage = storage.get_runs(run_filter=RunFilter())
+    storage.close()
+
+    assert len(events.records) == test_case.expected_event_count
+    assert len(runs.records) == test_case.expected_run_count
 
 
 @pytest.mark.parametrize(
@@ -451,10 +552,17 @@ def test_given_post_connect_setup_failure_when_constructing_then_open_connection
     real_connect: Callable[..., sqlite3.Connection] = sqlite3.connect
 
     def tracked_connect(
-        database: str, *, timeout: float, isolation_level: None
+        database: str,
+        *,
+        timeout: float,
+        isolation_level: None,
+        check_same_thread: bool,
     ) -> sqlite3.Connection:
         connection: sqlite3.Connection = real_connect(
-            database, timeout=timeout, isolation_level=isolation_level
+            database,
+            timeout=timeout,
+            isolation_level=isolation_level,
+            check_same_thread=check_same_thread,
         )
         opened.append(connection)
         return connection

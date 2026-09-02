@@ -15,6 +15,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
+from sqlbuild.executor.auditing.main.resource_id import audit_resource_id
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
@@ -802,14 +803,12 @@ def _format_audit_checks(
 
 
 def _audit_check_id(result: AuditExecutionResult) -> str:
-    parts: tuple[str | None, ...] = (
-        "audit",
-        result.audit_name,
-        result.attachment_kind.value,
-        result.attached_target_name,
-        result.attached_column_name,
+    return audit_resource_id(
+        audit_name=result.audit_name,
+        attachment_kind=result.attachment_kind,
+        attached_target_name=result.attached_target_name,
+        attached_column_name=result.attached_column_name,
     )
-    return ":".join(part for part in parts if part)
 
 
 def _format_scenario_checks(result: ScenarioRunResult) -> tuple[dict[str, object], ...]:

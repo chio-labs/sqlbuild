@@ -113,3 +113,19 @@ class MainErrorRenderingTestCase:
     error_factory: Callable[[Path], Exception]
     expected_stderr_fragment: str
     expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class ObservabilityCleanupCase:
+    description: str
+    expected_history_close_count: int
+    expected_original_error: str
+
+
+@dataclass(frozen=True)
+class MachineProgressRoutingCase:
+    description: str
+    json: bool
+    json_output: Path | None
+    expected_stdout_fragment: str
+    expected_stderr_fragment: str

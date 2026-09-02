@@ -95,6 +95,9 @@ def test_given_malformed_check_return_when_executing_then_operation_fails_once(
         )
 
     operation_events: tuple[LifecycleEvent, ...] = python_operation_events(events)
+    resource_events: tuple[LifecycleEvent, ...] = tuple(
+        filter(lambda event: event.event_type.startswith("resource_attempt_"), events)
+    )
     assert results[0].failed
     assert test_case.expected_error_fragment in (results[0].error_message or "")
     assert tuple(event.event_type for event in operation_events) == (
@@ -102,6 +105,10 @@ def test_given_malformed_check_return_when_executing_then_operation_fails_once(
         "operation_failed",
     )
     assert operation_events[0].payload["operation_name"] == test_case.operation_name
+    assert tuple(event.run_id for event in resource_events) == (
+        "run-malformed",
+        "run-malformed",
+    )
 
 
 @pytest.mark.parametrize(

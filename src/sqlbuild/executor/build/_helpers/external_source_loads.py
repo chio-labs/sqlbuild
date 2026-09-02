@@ -19,6 +19,9 @@ from sqlbuild.executor.build.models import (
 from sqlbuild.executor.load.main._build_execution_indexes import build_load_execution_indexes
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
+    ResourceAttemptLifecycle,
+)
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -68,17 +71,26 @@ def run_external_source_loads_before_connections(
             failed_keys.add(key)
             completed_keys.add(key)
             continue
-        result: LoadExecutionResult = execute_build_source_node(
-            key=key,
-            plan=plan,
-            loader_functions_by_name=loader_functions_by_name,
-            loader_ref_entries=loader_ref_entries,
-            adapter=adapter,
-            connection_config=connection_config,
-            connection=None,
-            runtime=runtime,
-            callbacks=callbacks,
-        )
+        source_entry: SourceEntry = plan.source_map[key.name]
+        with ResourceAttemptLifecycle(
+            resource_id=f"source:{source_entry.name}",
+            resource_kind=source_load_entry.resource_kind.value,
+            resource_name=source_entry.name,
+            run_id=runtime.run_id,
+        ) as lifecycle:
+            result: LoadExecutionResult = execute_build_source_node(
+                key=key,
+                plan=plan,
+                loader_functions_by_name=loader_functions_by_name,
+                loader_ref_entries=loader_ref_entries,
+                adapter=adapter,
+                connection_config=connection_config,
+                connection=None,
+                runtime=runtime,
+                callbacks=callbacks,
+            )
+            if result.status == ExecutionStatus.FAILED:
+                lifecycle.failed()
         results.append(result)
         completed_keys.add(key)
         if result.status != ExecutionStatus.SUCCESS:

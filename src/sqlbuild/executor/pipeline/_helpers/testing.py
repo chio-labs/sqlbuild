@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Iterable
 from typing import Any
+from uuid import uuid4
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -23,6 +24,9 @@ from sqlbuild.executor.testing.main._execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
+from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
+    ResourceAttemptLifecycle,
+)
 
 
 def run_test_pipeline(
@@ -36,11 +40,13 @@ def run_test_pipeline(
     on_progress: Callable[[str], None] | None = None,
     on_test_start: Callable[[SqlTestPlanEntry], None] | None = None,
     on_test_complete: Callable[[SqlTestExecutionResult], None] | None = None,
+    run_id: str | None = None,
 ) -> tuple[SqlTestExecutionResult, ...]:
     """Execute all SQL unit tests from a compiled plan."""
 
     if on_connection_start is not None:
         on_connection_start(1)
+    canonical_run_id: str = run_id or uuid4().hex
     start: float = time.monotonic()
     try:
         connection: Any = adapter.connect(connection_config)
@@ -66,27 +72,36 @@ def run_test_pipeline(
         results: list[SqlTestExecutionResult] = []
         entry: SqlTestPlanEntry
         for entry in plan.test_entries:
-            if on_test_start is not None:
-                on_test_start(entry)
             missing_functions: tuple[str, ...] = missing_functions_by_test.get(entry.key, ())
-            if missing_functions:
-                result: SqlTestExecutionResult = _build_missing_function_result(
-                    test_entry=entry,
-                    missing_functions=missing_functions,
+            resource_name: str = _test_resource_name(entry)
+            with ResourceAttemptLifecycle(
+                resource_id=f"sql_test:{resource_name}",
+                resource_kind="test",
+                resource_name=resource_name,
+                run_id=canonical_run_id,
+            ) as lifecycle:
+                if on_test_start is not None:
+                    on_test_start(entry)
+                result: SqlTestExecutionResult = (
+                    _build_missing_function_result(
+                        test_entry=entry,
+                        missing_functions=missing_functions,
+                    )
+                    if missing_functions
+                    else execute_sql_test(test_entry=entry, adapter=adapter, connection=connection)
                 )
-                results.append(result)
-                if on_test_complete is not None:
-                    on_test_complete(result)
-                continue
-            result: SqlTestExecutionResult = execute_sql_test(
-                test_entry=entry, adapter=adapter, connection=connection
-            )
+                if result.outcome != SqlTestOutcome.PASS:
+                    lifecycle.failed(error_code=result.error_code)
             results.append(result)
             if on_test_complete is not None:
                 on_test_complete(result)
         return tuple(results)
     finally:
         adapter.close(connection)
+
+
+def _test_resource_name(entry: SqlTestPlanEntry) -> str:
+    return entry.name
 
 
 def _prepare_test_functions(
