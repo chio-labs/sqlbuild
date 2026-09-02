@@ -1,6 +1,6 @@
 [package]
 name = "sqlbuild-kata-native"
-version = "0.74.0"
+version = "0.74.1"
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
