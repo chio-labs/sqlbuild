@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.75.1](https://github.com/chio-labs/sqlbuild/compare/v0.75.0...v0.75.1) (2026-09-02)
+
+
+### Bug Fixes
+
+* scope Dagster check-only execution ([#477](https://github.com/chio-labs/sqlbuild/issues/477)) ([ba43f41](https://github.com/chio-labs/sqlbuild/commit/ba43f41a597e0208d3a52eeb9a941eb13c7aa566))
+
 ## [0.75.0](https://github.com/chio-labs/sqlbuild/compare/v0.74.4...v0.75.0) (2026-09-02)
 
 
