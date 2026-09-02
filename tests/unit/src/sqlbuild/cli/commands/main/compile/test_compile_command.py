@@ -15,6 +15,7 @@ from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
+    CompileColumnContractModeTestCase,
     CompileCommandTestCase,
     CompileDagArtifactTestCase,
     CompileJsonDiagnosticsTestCase,
@@ -260,12 +261,14 @@ def test_given_python_project_dag_flag_when_running_compile_then_writes_python_d
             expected_stdout_fragments=(
                 "Compile ready  1 model",
                 "orders                   FAIL 1 columns",
-                "error[K001]: required column 'customer_id' missing from model output",
+                "error[K001]: declared column 'customer_id' was not found in statically inferred output",
                 "  model: orders",
                 "  --> models/orders.sql:5:5",
                 "  5 |     customer_id (),",
                 "    |     ^^^^^^^^^^^",
-                "  = help: add customer_id to the SELECT list or remove it from MODEL(columns)",
+                'settings.column_contract_mode is "implicit" (the default)',
+                'column_contract_mode = "explicit"',
+                "models with contract enforced remain validated",
                 "\u2717 Project compiled  1 model, 0 seeds, 0 functions, 1 error, 0 warnings",
                 "  Wrote: target/compiled/",
             ),
@@ -284,7 +287,7 @@ def test_given_python_project_dag_flag_when_running_compile_then_writes_python_d
             description="reports contract and output locations for type diagnostics",
             expected_exit_code=1,
             expected_stdout_fragments=(
-                "error[K002]: column 'amount_cents' inferred as TEXT but contract declares INTEGER",
+                "error[K002]: column 'amount_cents' inferred as TEXT but declared type is INTEGER",
                 "  --> models/orders.sql:4:5",
                 "  4 |     amount_cents (type INTEGER),",
                 "    |     ^^^^^^^^^^^^",
@@ -370,7 +373,10 @@ def test_given_contract_errors_when_running_compile_then_reports_diagnostics(
             expected_exit_code=1,
             expected_code="K001",
             expected_severity="error",
-            expected_message="required column 'customer_id' missing from model output",
+            expected_message=(
+                "declared column 'customer_id' was not found in statically inferred output "
+                "for model 'orders'"
+            ),
             expected_line=5,
             expected_column=5,
             model_sql=(
@@ -431,6 +437,59 @@ def test_given_contract_errors_when_running_compile_json_then_serializes_diagnos
         "end_column": 16,
     }
     assert diagnostics[0]["phase"] == "contract"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompileColumnContractModeTestCase(
+            description="explicit mode retains column audit",
+            mode="explicit",
+            expected_audit_name="not_null",
+            expected_column_name="customer_id",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_explicit_column_contract_mode_when_compiling_column_audit_then_audit_is_retained_without_contract_error(
+    test_case: CompileColumnContractModeTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = prepare_static_compile_project(tmp_path)
+    project_config_path: Path = project_dir / "sqlbuild_project.toml"
+    project_config_path.write_text(
+        project_config_path.read_text(encoding="utf-8")
+        + f'\n[settings]\ncolumn_contract_mode = "{test_case.mode}"\n',
+        encoding="utf-8",
+    )
+    (project_dir / "models" / "orders.sql").write_text(
+        "MODEL (\n"
+        "  materialized view,\n"
+        "  columns (\n"
+        "    customer_id (audits [not_null]),\n"
+        "  ),\n"
+        ");\n\n"
+        "SELECT 1 AS order_id\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        compile_pipeline,
+        "resolve_adapter",
+        lambda *args, **kwargs: NoConnectDuckDbAdapter(),
+    )
+
+    exit_code: int = run_compile(
+        CompileCommandRequest(project_dir=project_dir, no_sql_validation=True, dag_path="")
+    )
+    dag_payload: dict[str, object] = json.loads(
+        (project_dir / "target" / "sqlbuild_dag.json").read_text(encoding="utf-8")
+    )
+
+    assert exit_code == 0
+    assert len(dag_payload["checks"]) == 1
+    assert dag_payload["checks"][0]["name"] == test_case.expected_audit_name
+    assert dag_payload["checks"][0]["attached_column_name"] == test_case.expected_column_name
 
 
 @pytest.mark.parametrize(

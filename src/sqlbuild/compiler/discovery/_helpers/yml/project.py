@@ -65,6 +65,7 @@ from sqlbuild.spec.contracts.models import (
     TargetConfig,
 )
 from sqlbuild.spec.contracts.types import (
+    ColumnContractMode,
     FutureCursorAction,
     MicrobatchLimitAction,
     TableType,
@@ -322,6 +323,15 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         default=True,
     )
     sql_validation: bool = _optional_bool(mapping=mapping, key="sql_validation", default=True)
+    raw_column_contract_mode: object = mapping.get(
+        "column_contract_mode", ColumnContractMode.IMPLICIT.value
+    )
+    try:
+        column_contract_mode: ColumnContractMode = ColumnContractMode(raw_column_contract_mode)
+    except (TypeError, ValueError) as error:
+        raise ProjectConfigError(
+            "settings.column_contract_mode must be one of: implicit, explicit"
+        ) from error
     auto_load_sources: bool = _optional_bool(mapping=mapping, key="auto_load_sources", default=True)
     virtual_environments: bool = _optional_bool(
         mapping=mapping,
@@ -361,6 +371,7 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         sql_analysis=sql_analysis,
         query_change_tracking=query_change_tracking,
         sql_validation=sql_validation,
+        column_contract_mode=column_contract_mode,
         concurrency=concurrency,
         auto_load_sources=auto_load_sources,
         changes_only=changes_only,

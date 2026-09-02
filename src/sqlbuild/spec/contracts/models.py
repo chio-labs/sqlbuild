@@ -8,6 +8,7 @@ from pathlib import Path
 
 from sqlbuild.cost.constants import DEFAULT_USD_PER_CREDIT
 from sqlbuild.spec.contracts.types import (
+    ColumnContractMode,
     FutureCursorAction,
     MicrobatchLimitAction,
     SourceFreshnessStrategy,
@@ -159,6 +160,7 @@ class SettingsConfig:
     sql_analysis: bool = True
     query_change_tracking: bool = True
     sql_validation: bool = True
+    column_contract_mode: ColumnContractMode = ColumnContractMode.IMPLICIT
     concurrency: int = 1
     auto_load_sources: bool = True
     changes_only: bool = False
