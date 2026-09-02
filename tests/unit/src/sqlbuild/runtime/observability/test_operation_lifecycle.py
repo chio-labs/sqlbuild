@@ -47,8 +47,28 @@ class _ObservedContextManager:
     "test_case",
     (
         OperationLifecycleCase(
-            description="successful blocking callable",
+            description="clone physical transfer barrier",
             expected_event_types=("operation_started", "operation_completed"),
+            operation_kind="clone",
+            operation_name="clone_relation_transfer",
+        ),
+        OperationLifecycleCase(
+            description="janitor physical cleanup barrier",
+            expected_event_types=("operation_started", "operation_completed"),
+            operation_kind="janitor",
+            operation_name="janitor_cleanup_action",
+        ),
+        OperationLifecycleCase(
+            description="scenario snapshot write barrier",
+            expected_event_types=("operation_started", "operation_completed"),
+            operation_kind="scenario",
+            operation_name="scenario_snapshot_write",
+        ),
+        OperationLifecycleCase(
+            description="discovery Python import barrier",
+            expected_event_types=("operation_started", "operation_completed"),
+            operation_kind="project",
+            operation_name="discovery_python_import",
         ),
     ),
     ids=lambda case: case.description,
@@ -71,7 +91,8 @@ def test_given_blocking_callable_when_run_then_start_precedes_block_and_terminal
     with invocation_scope("inv-callable"), dispatcher_scope(dispatcher):
         context: Context = copy_context()
         lifecycle: OperationLifecycle = OperationLifecycle(
-            operation_kind="project", operation_name="project_compile"
+            operation_kind=test_case.operation_kind,
+            operation_name=test_case.operation_name,
         )
         thread: Thread = Thread(
             target=lambda: result.append(cast(str, context.run(lifecycle.run, block)))
@@ -410,3 +431,31 @@ def test_given_start_publication_base_exception_when_nested_then_parent_context_
         assert test_case.expected_event_types == ()
         assert current_execution_identity() is parent_identity
         assert current_event_dispatcher() is dispatcher
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        OperationLifecycleCase(
+            description="terminal row and byte counts become immutable completion facts",
+            expected_event_types=("operation_started", "operation_completed"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_terminal_counts_when_operation_completes_then_counts_are_terminal_only(
+    test_case: OperationLifecycleCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    with invocation_scope("inv-counts"), dispatcher_scope(dispatcher):
+        with OperationLifecycle(
+            operation_kind="scenario", operation_name="scenario_snapshot_write"
+        ) as lifecycle:
+            lifecycle.completed(metadata={"row_count": 2, "byte_count": 17})
+
+    assert tuple(event.event_type for event in events) == test_case.expected_event_types
+    assert "metadata" not in events[0].payload
+    assert events[1].payload["metadata"] == {"row_count": 2, "byte_count": 17}

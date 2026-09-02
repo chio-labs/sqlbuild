@@ -57,3 +57,11 @@ class PrephaseCloneItemRowTestCase:
     status: str
     expected_label: str
     expected_status: str
+
+
+@dataclass(frozen=True)
+class CloneRunIdentityTestCase:
+    description: str
+    expected_run_id: str
+    expected_operation_names: tuple[str, ...]
+    expected_resource_terminal: str

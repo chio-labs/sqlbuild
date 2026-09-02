@@ -37,3 +37,13 @@ class RenderCloneItemLineTestCase:
 class CloneConnectionLifecycleTestCase:
     description: str
     expected_destination_config: dict[str, object]
+
+
+@dataclass(frozen=True)
+class VirtualCloneLifecycleCase:
+    description: str
+    missing_count: int
+    skipped_count: int
+    expected_exit_code: int
+    expected_progress_fragment: str
+    unexpected_progress_fragment: str

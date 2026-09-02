@@ -16,3 +16,12 @@ class SelectScenariosErrorTestCase:
     exclude: tuple[str, ...]
     expected_error_fragment: str
     expected_error_code: str
+
+
+@dataclass(frozen=True)
+class ScenarioCompilePresentationTestCase:
+    description: str
+    tty: bool
+    expected_fragment: str
+    unexpected_fragment: str
+    expected_terminal: str

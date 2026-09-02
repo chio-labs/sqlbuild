@@ -396,3 +396,77 @@ def test_given_missing_terminal_on_tty_when_closed_then_only_cursor_is_restored(
     projector.close()
 
     assert stream.getvalue() == test_case.expected_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CursorCleanupCase(
+            description="tty standalone operations remain owned by existing spinners",
+            expected_output="",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_visible_operation_on_tty_when_projected_then_rich_progress_is_not_duplicated(
+    test_case: CursorCleanupCase,
+) -> None:
+    stream: _FlushRecordingStream = _FlushRecordingStream(tty=True)
+    projector: NativeProgressProjector = NativeProgressProjector(stream=stream, use_color=False)
+    start: LifecycleEvent = lifecycle_event(
+        "operation_started",
+        operation_id="walk",
+        payload={"operation_kind": "project", "operation_name": "discovery_filesystem_walk"},
+    )
+    terminal: LifecycleEvent = replace(
+        start,
+        event_id="walk-terminal",
+        event_type="operation_completed",
+        payload={**start.payload, "duration_ms": 10.0},
+    )
+
+    projector.consume(start)
+    projector.consume(terminal)
+
+    assert stream.getvalue() == test_case.expected_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (CursorCleanupCase(description="enriched capture owns tty", expected_output=""),),
+    ids=lambda case: case.description,
+)
+def test_given_enriched_resource_on_tty_when_projected_then_spinner_output_is_not_corrupted(
+    test_case: CursorCleanupCase,
+) -> None:
+    stream: _FlushRecordingStream = _FlushRecordingStream(tty=True)
+    projector: NativeProgressProjector = NativeProgressProjector(stream=stream, use_color=False)
+    projector.expect_resource_enrichment(resource_name="capture_orders")
+    start: LifecycleEvent = lifecycle_event(
+        "resource_attempt_started",
+        run_id="run",
+        resource_id="sql_scenario:capture_orders",
+        resource_attempt_id="attempt",
+        payload={
+            "resource_kind": "scenario",
+            "resource_name": "capture_orders",
+            "attempt_number": 1,
+        },
+    )
+    terminal: LifecycleEvent = replace(
+        start,
+        event_id="capture-terminal",
+        event_type="resource_attempt_completed",
+        payload={**start.payload, "duration_ms": 10.0},
+    )
+
+    projector.consume(start)
+    projector.consume(terminal)
+    duration: float | None = projector.consume_resource_terminal(
+        resource_name="capture_orders",
+        resource_id="sql_scenario:capture_orders",
+        resource_attempt_id="attempt",
+    )
+
+    assert duration == 10.0
+    assert stream.getvalue() == test_case.expected_output

@@ -264,6 +264,8 @@ class StatementLifecycleCase:
 class OperationLifecycleCase:
     description: str
     expected_event_types: tuple[str, ...]
+    operation_kind: str = "project"
+    operation_name: str = "project_compile"
 
 
 @dataclass(frozen=True)

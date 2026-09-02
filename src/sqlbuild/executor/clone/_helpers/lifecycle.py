@@ -20,6 +20,7 @@ from sqlbuild.executor.clone.models import (
     CloneItemResult,
 )
 from sqlbuild.executor.clone.types import CloneStatus
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def prepare_clone_destination(
@@ -31,17 +32,21 @@ def prepare_clone_destination(
 ) -> None:
     """Create destination schemas and apply namespace retention increases."""
 
-    _ = _ensure_destination_schemas(
-        destination_entries=destination_entries,
-        adapter=inputs.adapter,
-        destination_connection=inputs.destination_connection,
-    )
-    _ = apply_clone_namespace_retention_phase(
-        requests=inputs.destination_retention_requests,
-        adapter=inputs.adapter,
-        connection=inputs.destination_connection,
-        phase=RetentionPlanPhase.PRE,
-    )
+    with OperationLifecycle(operation_kind="clone", operation_name="clone_namespace_preparation"):
+        _ = _ensure_destination_schemas(
+            destination_entries=destination_entries,
+            adapter=inputs.adapter,
+            destination_connection=inputs.destination_connection,
+        )
+    with OperationLifecycle(
+        operation_kind="clone", operation_name="clone_retention_reconciliation"
+    ):
+        _ = apply_clone_namespace_retention_phase(
+            requests=inputs.destination_retention_requests,
+            adapter=inputs.adapter,
+            connection=inputs.destination_connection,
+            phase=RetentionPlanPhase.PRE,
+        )
 
 
 def finish_clone(
@@ -50,12 +55,15 @@ def finish_clone(
     """Apply namespace decreases only after every clone item succeeds."""
 
     if results and all(result.status == CloneStatus.SUCCESS for result in results):
-        _ = apply_clone_namespace_retention_phase(
-            requests=inputs.destination_retention_requests,
-            adapter=inputs.adapter,
-            connection=inputs.destination_connection,
-            phase=RetentionPlanPhase.POST,
-        )
+        with OperationLifecycle(
+            operation_kind="clone", operation_name="clone_retention_reconciliation"
+        ):
+            _ = apply_clone_namespace_retention_phase(
+                requests=inputs.destination_retention_requests,
+                adapter=inputs.adapter,
+                connection=inputs.destination_connection,
+                phase=RetentionPlanPhase.POST,
+            )
     return CloneExecutionResult(item_results=tuple(results))
 
 

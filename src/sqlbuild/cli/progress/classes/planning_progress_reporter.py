@@ -57,6 +57,12 @@ class PlanningProgressReporter:
         self._status.complete_styled(message=message)
         self._active = False
 
+    def error(self, message: str) -> None:
+        """Close active progress and render a non-success terminal message."""
+
+        self._status.error(message)
+        self._active = False
+
     def finish(self, *, blank_line_after: bool = False) -> None:
         self._status.close()
         self._active = False

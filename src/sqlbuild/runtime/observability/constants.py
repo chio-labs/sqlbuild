@@ -33,10 +33,28 @@ OPERATION_KINDS: frozenset[str] = frozenset(
 )
 OPERATION_NAMES: frozenset[str] = frozenset(
     {
+        "clone_finalization",
         "clone_execution",
+        "clone_namespace_preparation",
+        "clone_relation_inspection",
+        "clone_relation_transfer",
+        "clone_retention_reconciliation",
+        "clone_state_connection",
+        "clone_state_inspection",
+        "clone_target_connection",
         "dbt_command",
+        "discovery_declaration_parse",
+        "discovery_filesystem_walk",
+        "discovery_project_assembly",
+        "discovery_python_import",
+        "external_manifest_discovery",
         "external_source_load",
+        "janitor_candidate_planning",
+        "janitor_cleanup_action",
         "janitor_execution",
+        "janitor_state_inspection",
+        "janitor_target_connection",
+        "janitor_warehouse_inspection",
         "managed_source_load",
         "project_compile",
         "project_discovery",
@@ -48,10 +66,17 @@ OPERATION_NAMES: frozenset[str] = frozenset(
         "scenario_capture",
         "scenario_cleanup",
         "scenario_execution",
+        "scenario_relation_read",
+        "scenario_schema_inspection",
+        "scenario_snapshot_serialization",
+        "scenario_snapshot_write",
+        "scenario_target_connection",
         "source_freshness_observation",
     }
 )
-OPERATION_METADATA_FIELDS: frozenset[str] = frozenset({"attempt_number", "item_count"})
+OPERATION_METADATA_FIELDS: frozenset[str] = frozenset(
+    {"attempt_number", "byte_count", "item_count", "row_count"}
+)
 STATEMENT_FIELDS: frozenset[str] = frozenset(
     {
         "adapter",

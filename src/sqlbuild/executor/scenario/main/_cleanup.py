@@ -27,10 +27,15 @@ def execute_scenario_cleanup(
 ) -> ScenarioCleanupExecutionResult:
     """Drop only scenario-owned relations listed in the current scenario plan."""
 
-    with OperationLifecycle(operation_kind="scenario", operation_name="scenario_cleanup"):
-        return _execute_scenario_cleanup(
+    with OperationLifecycle(
+        operation_kind="scenario", operation_name="scenario_cleanup"
+    ) as lifecycle:
+        result: ScenarioCleanupExecutionResult = _execute_scenario_cleanup(
             scenario_plan=scenario_plan, adapter=adapter, connection=connection
         )
+        if result.status == ExecutionStatus.FAILED:
+            lifecycle.failed(error_code=result.error_code)
+        return result
 
 
 def _execute_scenario_cleanup(

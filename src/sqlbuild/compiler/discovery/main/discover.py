@@ -40,7 +40,20 @@ def _discover_project_inputs(
     sql_analysis_enabled_override: bool | None,
     extract_output_column_locations: bool,
 ) -> DiscoveredProjectInputs:
+    with OperationLifecycle(operation_kind="project", operation_name="discovery_project_assembly"):
+        return _assemble_discovered_project_inputs(
+            project_dir=project_dir,
+            sql_analysis_enabled_override=sql_analysis_enabled_override,
+            extract_output_column_locations=extract_output_column_locations,
+        )
 
+
+def _assemble_discovered_project_inputs(
+    *,
+    project_dir: Path,
+    sql_analysis_enabled_override: bool | None,
+    extract_output_column_locations: bool,
+) -> DiscoveredProjectInputs:
     project_config: ProjectConfig = load_project_config(project_dir=project_dir)
     local_config: LocalConfig = load_local_config(project_dir=project_dir)
     sql_analysis_enabled: bool = (

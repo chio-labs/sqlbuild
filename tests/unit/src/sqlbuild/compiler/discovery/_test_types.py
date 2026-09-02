@@ -54,3 +54,17 @@ class DiscoverFactoryValidationTestCase:
     expected_asset_names: tuple[str, ...] = ()
     expected_check_names: tuple[str, ...] = ()
     expected_error_fragment: str = ""
+
+
+@dataclass(frozen=True)
+class DiscoveryLifecycleTestCase:
+    description: str
+    expected_event_types: tuple[str, ...]
+    expected_operation_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DiscoveryRelevantCountTestCase:
+    description: str
+    expected_item_count: int
+    unexpected_root_pattern: str

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.contract.models import RelationLookup
-from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.planner.models import (
     CloneSourcePlanEntry,
@@ -11,9 +10,11 @@ from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
     SeedPlanEntry,
 )
+from sqlbuild.executor.clone._helpers.canonical_progress import clone_item_enrichment
 from sqlbuild.executor.clone._helpers.execution_items import (
     execute_clone_destination_item,
 )
+from sqlbuild.executor.clone._helpers.inspection import build_clone_relation_lookup
 from sqlbuild.executor.clone._helpers.lifecycle import finish_clone, prepare_clone_destination
 from sqlbuild.executor.clone.models import (
     CloneExecutionInput,
@@ -21,6 +22,7 @@ from sqlbuild.executor.clone.models import (
     CloneItemResult,
 )
 from sqlbuild.executor.clone.types import CloneStatus
+from sqlbuild.observability import run_scope
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,
@@ -28,8 +30,16 @@ from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
 
 
 def execute_clone(*, inputs: CloneExecutionInput) -> CloneExecutionResult:
-    with OperationLifecycle(operation_kind="clone", operation_name="clone_execution"):
-        return _execute_clone(inputs=inputs)
+    with run_scope(inputs.run_id):
+        with OperationLifecycle(
+            operation_kind="clone",
+            operation_name="clone_execution",
+            metadata={"item_count": len(inputs.execution_order)},
+        ) as lifecycle:
+            result: CloneExecutionResult = _execute_clone(inputs=inputs)
+            if any(item.status == CloneStatus.FAILED for item in result.item_results):
+                lifecycle.failed(error_code="clone_execution_failed")
+            return result
 
 
 def _execute_clone(*, inputs: CloneExecutionInput) -> CloneExecutionResult:
@@ -85,21 +95,8 @@ def _execute_clone(*, inputs: CloneExecutionInput) -> CloneExecutionResult:
         )
         is not None
     )
-    relation_lookup: RelationLookup = build_relation_lookup(
-        adapter=inputs.adapter,
-        connection=inputs.destination_connection,
-        locations=tuple(
-            (
-                origin_entry.destination.database,
-                origin_entry.destination.schema,
-                origin_entry.destination.name,
-            )
-            for _, origin_entry in clonable_entries
-        )
-        + tuple(
-            (location.database, location.schema, location.name)
-            for location in inputs.dependency_locations.values()
-        ),
+    relation_lookup: RelationLookup = build_clone_relation_lookup(
+        inputs=inputs, clonable_entries=clonable_entries
     )
     available_keys: set[CompiledObjectKey] = {
         key
@@ -116,21 +113,24 @@ def _execute_clone(*, inputs: CloneExecutionInput) -> CloneExecutionResult:
     total: int = len(ordered_destination_entries)
     for index, destination_entry in enumerate(ordered_destination_entries, start=1):
         resource_kind: str = str(destination_entry.key.resource_type)
-        with ResourceAttemptLifecycle(
-            resource_id=f"{resource_kind}:{destination_entry.name}",
-            resource_kind=resource_kind,
-            resource_name=destination_entry.name,
-            run_id=inputs.run_id,
-        ) as lifecycle:
-            item_result: CloneItemResult = execute_clone_destination_item(
-                destination_entry=destination_entry,
-                inputs=inputs,
-                origins_by_key=origins_by_key,
-                relation_lookup=relation_lookup,
-                available_keys=available_keys,
-            )
-            if item_result.status == CloneStatus.FAILED:
-                lifecycle.failed(error_code="clone_item_failed")
+        with clone_item_enrichment(
+            resource_name=destination_entry.name, enabled=inputs.on_item is not None
+        ):
+            with ResourceAttemptLifecycle(
+                resource_id=f"{resource_kind}:{destination_entry.name}",
+                resource_kind=resource_kind,
+                resource_name=destination_entry.name,
+                run_id=inputs.run_id,
+            ) as lifecycle:
+                item_result: CloneItemResult = execute_clone_destination_item(
+                    destination_entry=destination_entry,
+                    inputs=inputs,
+                    origins_by_key=origins_by_key,
+                    relation_lookup=relation_lookup,
+                    available_keys=available_keys,
+                )
+                if item_result.status == CloneStatus.FAILED:
+                    lifecycle.failed(error_code="clone_item_failed")
         results.append(item_result)
         available_keys = _updated_available_keys(
             available_keys=available_keys,

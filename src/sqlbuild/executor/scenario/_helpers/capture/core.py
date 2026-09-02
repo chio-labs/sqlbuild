@@ -47,8 +47,10 @@ def execute_scenario_snapshot_capture_steps(
     """Materialize scenario inputs, capture JSONL snapshots, and apply cleanup policy."""
 
     with run_scope(run_id):
-        with OperationLifecycle(operation_kind="scenario", operation_name="scenario_capture"):
-            return _execute_scenario_snapshot_capture_steps(
+        with OperationLifecycle(
+            operation_kind="scenario", operation_name="scenario_capture"
+        ) as lifecycle:
+            result: ScenarioSnapshotCaptureRunResult = _execute_scenario_snapshot_capture_steps(
                 project_dir=project_dir,
                 scenario_plan=scenario_plan,
                 adapter=adapter,
@@ -57,6 +59,9 @@ def execute_scenario_snapshot_capture_steps(
                 settings=settings,
                 local_type_overrides=local_type_overrides,
             )
+            if result.status == ExecutionStatus.FAILED:
+                lifecycle.failed(error_code=result.error_code)
+            return result
 
 
 def _execute_scenario_snapshot_capture_steps(

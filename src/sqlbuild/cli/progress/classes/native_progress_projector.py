@@ -11,7 +11,12 @@ from typing import TextIO
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.runtime.observability.models import LifecycleEvent
 
-_OPERATION_LABELS: Mapping[str, str] = {
+_VISIBLE_OPERATION_LABELS: Mapping[str, str] = {
+    "discovery_declaration_parse": "Declaration parsing",
+    "discovery_filesystem_walk": "Filesystem discovery",
+    "discovery_project_assembly": "Project assembly",
+    "discovery_python_import": "Python discovery",
+    "external_manifest_discovery": "External manifest discovery",
     "project_discovery": "Project discovery",
     "project_compile": "Project compile",
     "dbt_command": "dbt command",
@@ -30,6 +35,7 @@ class NativeProgressProjector:
     def __init__(self, *, stream: TextIO, use_color: bool) -> None:
         self._stream: TextIO = stream
         self._style: CliStyle = CliStyle(use_color=use_color)
+        self._is_tty: bool = hasattr(stream, "isatty") and stream.isatty()
         self._lock: threading.RLock = threading.RLock()
         self._seen_event_ids: set[str] = set()
         self._resource_ordinals: dict[str, int] = {}
@@ -170,6 +176,8 @@ class NativeProgressProjector:
         self._resource_ids_by_name[resource_name].add(resource_id)
         self._render_prior_attempts(resource_id=resource_id, resource_name=resource_name)
         self._attempts_by_id[attempt_id] = event
+        if self._is_tty and resource_name in self._enriched_resource_names:
+            return
         ordinal: int | None = self._resource_ordinals.get(resource_name)
         counter: str = ""
         if ordinal is not None and self._resource_total > 0:
@@ -264,12 +272,13 @@ class NativeProgressProjector:
             operation_id is None
             or event.resource_attempt_id is not None
             or not isinstance(operation_name, str)
-            or operation_name not in _OPERATION_LABELS
+            or operation_name not in _VISIBLE_OPERATION_LABELS
+            or self._is_tty
         ):
             return
         self._operation_starts[operation_id] = event
         status: str = self._style.status(status="START")
-        self._write(f"{_OPERATION_LABELS[operation_name]}  {status}")
+        self._write(f"{_VISIBLE_OPERATION_LABELS[operation_name]}  {status}")
 
     def _consume_operation_terminal(self, event: LifecycleEvent) -> None:
         operation_id: str | None = event.operation_id
@@ -285,7 +294,7 @@ class NativeProgressProjector:
         elapsed: str = (
             f"  ({float(duration) / 1000.0:.2f}s)" if isinstance(duration, int | float) else ""
         )
-        self._write(f"{_OPERATION_LABELS[operation_name]}  {status}{elapsed}")
+        self._write(f"{_VISIBLE_OPERATION_LABELS[operation_name]}  {status}{elapsed}")
 
     def _write(self, line: str) -> None:
         self._stream.write(f"{line}\n")

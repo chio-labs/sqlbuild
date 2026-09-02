@@ -114,17 +114,30 @@ class OperationLifecycle:
         with self:
             return tuple(iterable)
 
-    def completed(self) -> None:
-        self._publish_terminal(event_type="operation_completed", payload=self._terminal_payload())
-
-    def failed(self, *, error: BaseException) -> None:
-        payload: dict[str, JSONValue] = self._terminal_payload()
-        payload["error_type"] = _safe_error_token(
-            value=type(error).__name__, fallback="BaseException"
+    def completed(self, *, metadata: Mapping[str, int] | None = None) -> None:
+        self._publish_terminal(
+            event_type="operation_completed", payload=self._terminal_payload(metadata=metadata)
         )
-        error_code: str | None = _error_code(error=error)
-        if error_code is not None:
-            payload["error_code"] = error_code
+
+    def failed(
+        self,
+        *,
+        error: BaseException | None = None,
+        error_code: str | None = None,
+        metadata: Mapping[str, int] | None = None,
+    ) -> None:
+        payload: dict[str, JSONValue] = self._terminal_payload(metadata=metadata)
+        payload["error_type"] = _safe_error_token(
+            value="ExecutionFailed" if error is None else type(error).__name__,
+            fallback="ExecutionFailed",
+        )
+        resolved_error_code: str | None = (
+            _safe_optional_error_code(error_code)
+            if error_code is not None
+            else (_error_code(error=error) if error is not None else None)
+        )
+        if resolved_error_code is not None:
+            payload["error_code"] = resolved_error_code
         self._publish_terminal(event_type="operation_failed", payload=payload)
 
     def __exit__(
@@ -152,8 +165,13 @@ class OperationLifecycle:
             payload["metadata"] = self._metadata
         return payload
 
-    def _terminal_payload(self) -> dict[str, JSONValue]:
+    def _terminal_payload(
+        self, *, metadata: Mapping[str, int] | None = None
+    ) -> dict[str, JSONValue]:
         payload: dict[str, JSONValue] = self._base_payload()
+        terminal_metadata: dict[str, int] = _validated_metadata(metadata)
+        if terminal_metadata:
+            payload["metadata"] = {**self._metadata, **terminal_metadata}
         started: float = self._started_monotonic if self._started_monotonic is not None else 0.0
         payload["duration_ms"] = max(0.0, (time.monotonic() - started) * 1000.0)
         return payload
@@ -208,3 +226,9 @@ def _error_code(*, error: BaseException) -> str | None:
         if _ERROR_TOKEN_PATTERN.fullmatch(code) is not None:
             return code
     return None
+
+
+def _safe_optional_error_code(value: str | None) -> str | None:
+    if value is None or _ERROR_TOKEN_PATTERN.fullmatch(value) is None:
+        return None
+    return value
