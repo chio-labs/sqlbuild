@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from types import MappingProxyType
@@ -12,6 +13,8 @@ from sqlbuild.runtime.observability.constants import (
     DURATION_MS_FIELD,
     EXIT_CODE_FIELD,
     FORBIDDEN_STATEMENT_PAYLOAD_FIELDS,
+    HOOK_PHASES,
+    HOOK_TYPES,
     LIFECYCLE_EVENT_CATALOGS,
     MAX_METADATA_BYTES,
     METADATA_FIELD,
@@ -20,12 +23,18 @@ from sqlbuild.runtime.observability.constants import (
     OPERATION_KINDS,
     OPERATION_METADATA_FIELDS,
     OPERATION_NAMES,
+    RESOURCE_ATTEMPT_SKIPPED_EVENT,
+    RESOURCE_SKIP_CODES,
+    RESOURCE_SKIP_MODES,
+    RETRY_SCHEDULED_EVENT,
     STATEMENT_EVENT_PREFIX,
     STRING_PAYLOAD_FIELDS,
 )
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import LifecycleEvent, LifecycleEventDefinition
 from sqlbuild.runtime.observability.types import JSONValue
+
+_HOOK_NAME_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 
 
 def validate_schema_version(*, value: object) -> None:
@@ -168,6 +177,24 @@ def _validate_operation_payload(*, payload: Mapping[str, JSONValue]) -> None:
         not isinstance(operation_name, str) or operation_name not in OPERATION_NAMES
     ):
         raise ObservabilityValidationError("operation_name must be a catalogued value")
+    hook_phase: JSONValue | None = payload.get("hook_phase")
+    hook_type: JSONValue | None = payload.get("hook_type")
+    hook_index: JSONValue | None = payload.get("hook_index")
+    hook_name: JSONValue | None = payload.get("hook_name")
+    hook_fields_present: bool = any(
+        value is not None for value in (hook_phase, hook_type, hook_index, hook_name)
+    )
+    if hook_fields_present:
+        if hook_phase not in HOOK_PHASES:
+            raise ObservabilityValidationError("hook_phase must be a catalogued value")
+        if hook_type not in HOOK_TYPES:
+            raise ObservabilityValidationError("hook_type must be a catalogued value")
+        if isinstance(hook_index, bool) or not isinstance(hook_index, int) or hook_index < 0:
+            raise ObservabilityValidationError("hook_index must be a nonnegative integer")
+        if hook_name is not None and (
+            not isinstance(hook_name, str) or _HOOK_NAME_PATTERN.fullmatch(hook_name) is None
+        ):
+            raise ObservabilityValidationError("hook_name must be a non-empty safe token")
     metadata: JSONValue | None = payload.get(METADATA_FIELD)
     if metadata is None:
         return
@@ -204,6 +231,12 @@ def validate_known_lifecycle_event(*, event: LifecycleEvent) -> None:
         raise ObservabilityValidationError(
             f"known event {event.event_type!r} requires correlation field(s): {', '.join(missing)}"
         )
+    missing_payload: list[str] = sorted(definition.required_payload_fields - set(event.payload))
+    if missing_payload:
+        raise ObservabilityValidationError(
+            f"known event {event.event_type!r} requires payload field(s): "
+            f"{', '.join(missing_payload)}"
+        )
     unexpected: list[str] = sorted(set(event.payload) - definition.allowed_payload_fields)
     if unexpected:
         allowed: str = ", ".join(sorted(definition.allowed_payload_fields)) or "none"
@@ -220,5 +253,28 @@ def validate_known_lifecycle_event(*, event: LifecycleEvent) -> None:
             )
     if event.event_type.startswith(OPERATION_EVENT_PREFIX):
         _validate_operation_payload(payload=event.payload)
+    if event.event_type == RESOURCE_ATTEMPT_SKIPPED_EVENT:
+        if event.payload.get("skip_code") not in RESOURCE_SKIP_CODES:
+            raise ObservabilityValidationError("skip_code must be a catalogued value")
+        skip_mode: JSONValue | None = event.payload.get("skip_mode")
+        if skip_mode is not None and skip_mode not in RESOURCE_SKIP_MODES:
+            raise ObservabilityValidationError("skip_mode must be a catalogued value")
+    if event.event_type == RETRY_SCHEDULED_EVENT:
+        failed_attempt: JSONValue | None = event.payload.get("failed_attempt_number")
+        next_attempt: JSONValue | None = event.payload.get("next_attempt_number")
+        if (
+            not isinstance(failed_attempt, int)
+            or isinstance(failed_attempt, bool)
+            or failed_attempt <= 0
+        ):
+            raise ObservabilityValidationError("failed_attempt_number must be a positive integer")
+        if (
+            not isinstance(next_attempt, int)
+            or isinstance(next_attempt, bool)
+            or next_attempt != failed_attempt + 1
+        ):
+            raise ObservabilityValidationError(
+                "next_attempt_number must equal failed_attempt_number + 1"
+            )
     for field_name, value in event.payload.items():
         _validate_payload_field(field_name=field_name, value=value)

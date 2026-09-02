@@ -46,6 +46,7 @@ class LifecycleEventDefinition:
     """Validation contract for one known lifecycle event type."""
 
     required_correlations: frozenset[str]
+    required_payload_fields: frozenset[str]
     allowed_payload_fields: frozenset[str]
     terminal: bool
 
@@ -54,12 +55,13 @@ class LifecycleEventDefinition:
         cls,
         *,
         required_correlations: frozenset[str] = frozenset(),
+        required_payload: frozenset[str] = frozenset(),
         allowed: frozenset[str] = frozenset(),
         terminal: bool = False,
     ) -> Self:
         """Create one immutable catalog definition."""
 
-        return cls(required_correlations, allowed, terminal)
+        return cls(required_correlations, required_payload, allowed, terminal)
 
 
 @dataclass(frozen=True)

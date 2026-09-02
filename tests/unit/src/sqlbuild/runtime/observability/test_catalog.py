@@ -117,6 +117,51 @@ def test_given_known_scoped_event_without_correlation_when_constructing_then_err
 
 @pytest.mark.parametrize(
     "test_case",
+    (
+        LifecycleErrorCase(
+            description="retry requires safe error type",
+            event_type="retry_scheduled",
+            run_id="run-1",
+            resource_id="task:orders",
+            payload={
+                "failed_attempt_number": 1,
+                "next_attempt_number": 2,
+                "delay_ms": 100,
+            },
+            expected_error="requires payload field.*error_type",
+        ),
+        LifecycleErrorCase(
+            description="retry attempts must be consecutive",
+            event_type="retry_scheduled",
+            run_id="run-1",
+            resource_id="task:orders",
+            payload={
+                "failed_attempt_number": 1,
+                "next_attempt_number": 3,
+                "delay_ms": 100,
+                "error_type": "TimeoutError",
+            },
+            expected_error="next_attempt_number must equal",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_invalid_retry_contract_when_constructing_then_bounded_sequence_is_rejected(
+    test_case: LifecycleErrorCase,
+) -> None:
+    with pytest.raises(ObservabilityValidationError, match=test_case.expected_error):
+        lifecycle_event(
+            test_case.event_type,
+            run_id=test_case.run_id,
+            resource_id=test_case.resource_id,
+            resource_attempt_id="attempt-1",
+            operation_id="operation-1",
+            payload=test_case.payload,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [
         TimestampErrorCase(
             description="non-UTC offset is rejected",

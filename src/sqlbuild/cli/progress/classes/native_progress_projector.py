@@ -6,9 +6,10 @@ import threading
 from collections import defaultdict, deque
 from collections.abc import Mapping
 from contextvars import ContextVar, Token
-from typing import TextIO
+from typing import TextIO, cast
 
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.runtime.observability.constants import RESOURCE_TERMINALS, RETRY_SCHEDULED_EVENT
 from sqlbuild.runtime.observability.models import LifecycleEvent
 
 _VISIBLE_OPERATION_LABELS: Mapping[str, str] = {
@@ -20,11 +21,16 @@ _VISIBLE_OPERATION_LABELS: Mapping[str, str] = {
     "project_discovery": "Project discovery",
     "project_compile": "Project compile",
     "dbt_command": "dbt command",
+    "external_source_load": "loader callable",
+    "ingestr_command": "ingestr subprocess",
+    "managed_source_load": "loader callable",
+    "python_asset": "Python asset attempt",
+    "python_check": "Python check attempt",
+    "python_hook": "Python hook",
+    "python_task": "Python task attempt",
+    "sql_hook": "SQL hook",
 }
 _RESOURCE_START: str = "resource_attempt_started"
-_RESOURCE_TERMINALS: frozenset[str] = frozenset(
-    {"resource_attempt_completed", "resource_attempt_failed"}
-)
 _OPERATION_START: str = "operation_started"
 _OPERATION_TERMINALS: frozenset[str] = frozenset({"operation_completed", "operation_failed"})
 
@@ -89,12 +95,14 @@ class NativeProgressProjector:
             self._seen_event_ids.add(event.event_id)
             if event.event_type == _RESOURCE_START:
                 self._consume_resource_start(event)
-            elif event.event_type in _RESOURCE_TERMINALS:
+            elif event.event_type in RESOURCE_TERMINALS:
                 self._consume_resource_terminal(event)
             elif event.event_type == _OPERATION_START:
                 self._consume_operation_start(event)
             elif event.event_type in _OPERATION_TERMINALS:
                 self._consume_operation_terminal(event)
+            elif event.event_type == RETRY_SCHEDULED_EVENT:
+                self._consume_retry_scheduled(event)
 
     def consume_resource_terminal(
         self,
@@ -155,7 +163,7 @@ class NativeProgressProjector:
         with self._lock:
             event: LifecycleEvent
             for event in self._attempts_by_id.values():
-                if event.event_type not in _RESOURCE_TERMINALS:
+                if event.event_type not in RESOURCE_TERMINALS:
                     continue
                 resource_name: object = event.payload.get("resource_name")
                 if isinstance(resource_name, str):
@@ -205,7 +213,13 @@ class NativeProgressProjector:
         resource_kind: object = event.payload.get("resource_kind")
         if not isinstance(resource_kind, str):
             return
-        status_text: str = "FAIL" if event.event_type.endswith("failed") else "OK"
+        status_text: str = (
+            "FAIL"
+            if event.event_type.endswith("failed")
+            else "SKIP"
+            if event.event_type.endswith("skipped")
+            else "OK"
+        )
         status: str = self._style.status(status=status_text)
         duration: object = event.payload.get("duration_ms")
         elapsed: str = (
@@ -270,15 +284,16 @@ class NativeProgressProjector:
         operation_name: object = event.payload.get("operation_name")
         if (
             operation_id is None
-            or event.resource_attempt_id is not None
             or not isinstance(operation_name, str)
             or operation_name not in _VISIBLE_OPERATION_LABELS
-            or self._is_tty
+            or (self._is_tty and event.resource_attempt_id is None)
         ):
             return
         self._operation_starts[operation_id] = event
         status: str = self._style.status(status="START")
-        self._write(f"{_VISIBLE_OPERATION_LABELS[operation_name]}  {status}")
+        prefix: str = "    " if event.resource_attempt_id is not None else ""
+        attempt: str = _operation_attempt_label(event)
+        self._write(f"{prefix}{_VISIBLE_OPERATION_LABELS[operation_name]}{attempt}  {status}")
 
     def _consume_operation_terminal(self, event: LifecycleEvent) -> None:
         operation_id: str | None = event.operation_id
@@ -294,7 +309,25 @@ class NativeProgressProjector:
         elapsed: str = (
             f"  ({float(duration) / 1000.0:.2f}s)" if isinstance(duration, int | float) else ""
         )
-        self._write(f"{_VISIBLE_OPERATION_LABELS[operation_name]}  {status}{elapsed}")
+        prefix: str = "    " if event.resource_attempt_id is not None else ""
+        attempt: str = _operation_attempt_label(start)
+        self._write(
+            f"{prefix}{_VISIBLE_OPERATION_LABELS[operation_name]}{attempt}  {status}{elapsed}"
+        )
+
+    def _consume_retry_scheduled(self, event: LifecycleEvent) -> None:
+        failed_attempt: object = event.payload.get("failed_attempt_number")
+        next_attempt: object = event.payload.get("next_attempt_number")
+        delay_ms: object = event.payload.get("delay_ms")
+        if isinstance(failed_attempt, bool) or not isinstance(failed_attempt, int):
+            return
+        if isinstance(next_attempt, bool) or not isinstance(next_attempt, int):
+            return
+        if isinstance(delay_ms, bool) or not isinstance(delay_ms, int):
+            return
+        self._write(
+            f"    retry {failed_attempt}->{next_attempt} in {float(delay_ms) / 1000.0:.2f}s"
+        )
 
     def _write(self, line: str) -> None:
         self._stream.write(f"{line}\n")
@@ -333,3 +366,14 @@ def _claim_target(
             None,
         )
     return candidates[-1] if candidates else None
+
+
+def _operation_attempt_label(event: LifecycleEvent) -> str:
+    metadata: object = event.payload.get("metadata")
+    if not isinstance(metadata, Mapping):
+        return ""
+    typed_metadata: Mapping[str, object] = cast(Mapping[str, object], metadata)
+    attempt_number: object = typed_metadata.get("attempt_number")
+    if isinstance(attempt_number, int) and not isinstance(attempt_number, bool):
+        return f" {attempt_number}"
+    return ""

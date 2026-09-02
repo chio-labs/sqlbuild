@@ -17,6 +17,7 @@ from sqlbuild.observability import (
     run_scope,
 )
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
+from sqlbuild.runtime.observability.main.is_terminal_event import is_terminal_event
 from sqlbuild.runtime.observability.models import ExecutionIdentity
 from tests.unit.src.sqlbuild.runtime.observability._test_types import OperationLifecycleCase
 
@@ -50,6 +51,38 @@ def test_given_returned_failure_when_attempt_marked_failed_then_exact_terminal_i
     assert events[0].resource_attempt_id == events[1].resource_attempt_id
     assert events[1].payload["error_code"] == "SQB-101"
     assert cast(float, events[1].payload["duration_ms"]) >= 0
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        OperationLifecycleCase(
+            description="explicit hard skip terminal",
+            expected_event_types=("resource_attempt_started", "resource_attempt_skipped"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_bounded_skip_when_attempt_marked_skipped_then_reason_is_not_canonical(
+    test_case: OperationLifecycleCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    with invocation_scope("inv-skip"), run_scope("run-skip"), dispatcher_scope(dispatcher):
+        with ResourceAttemptLifecycle(
+            resource_id="task:orders",
+            resource_kind="task",
+            resource_name="orders",
+        ) as lifecycle:
+            lifecycle.skipped(skip_code="explicit", skip_mode="hard")
+
+    assert tuple(event.event_type for event in events) == test_case.expected_event_types
+    assert events[1].payload["skip_code"] == "explicit"
+    assert events[1].payload["skip_mode"] == "hard"
+    assert "reason" not in events[1].payload
+    assert is_terminal_event(events[1])
 
 
 @pytest.mark.parametrize(

@@ -11,11 +11,13 @@ from sqlbuild.cli.progress.classes.native_progress_projector import NativeProgre
 from sqlbuild.observability import (
     EventDispatcher,
     LifecycleEvent,
+    OperationLifecycle,
     ResourceAttemptLifecycle,
     dispatcher_scope,
     invocation_scope,
     run_scope,
 )
+from sqlbuild.runtime.observability.classes.operation_lifecycle import publish_retry_scheduled
 from tests.unit.src.sqlbuild.cli.progress.classes._test_types import (
     CursorCleanupCase,
     NativeProjectionCase,
@@ -37,6 +39,114 @@ class _FlushRecordingStream(StringIO):
 
     def isatty(self) -> bool:
         return self._tty
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        StartFlushCase(
+            description="logical skip renders one terminal",
+            expected_event_types=("resource_attempt_started", "resource_attempt_skipped"),
+            expected_flush_count_before_block=2,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_skipped_resource_when_projected_then_skip_terminal_renders_once(
+    test_case: StartFlushCase,
+) -> None:
+    stream: _FlushRecordingStream = _FlushRecordingStream()
+    projector: NativeProgressProjector = NativeProgressProjector(stream=stream, use_color=False)
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+    dispatcher.subscribe_lifecycle(subscriber=projector.consume, accepts_opaque=False)
+
+    with (
+        invocation_scope("inv-skip-projection"),
+        run_scope("run-skip-projection"),
+        dispatcher_scope(dispatcher),
+        ResourceAttemptLifecycle(
+            resource_id="task:skipped",
+            resource_kind="task",
+            resource_name="skipped",
+        ) as lifecycle,
+    ):
+        lifecycle.skipped(skip_code="scheduler")
+
+    assert tuple(event.event_type for event in events) == test_case.expected_event_types
+    assert stream.flush_count == test_case.expected_flush_count_before_block
+    lines: tuple[str, ...] = tuple(stream.getvalue().splitlines())
+    assert lines[0] == "  task      skipped START"
+    assert lines[1].startswith("  task      skipped SKIP 0.")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        RetryProjectionCase(
+            description="retry attempts flush before each blocking boundary",
+            expected_lines=(
+                "  task      flaky START",
+                "    Python task attempt 1  START",
+                "    Python task attempt 1  FAIL  (0.00s)",
+                "    retry 1->2 in 0.25s",
+                "    Python task attempt 2  START",
+                "    Python task attempt 2  OK  (0.00s)",
+                "  task      flaky OK 0.00s",
+            ),
+            expected_unrelated_duration_ms=0.0,
+            expected_final_duration_ms=0.0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_retrying_child_operation_when_projected_then_each_line_flushes_before_next_block(
+    test_case: RetryProjectionCase,
+) -> None:
+    stream: _FlushRecordingStream = _FlushRecordingStream()
+    projector: NativeProgressProjector = NativeProgressProjector(stream=stream, use_color=False)
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=projector.consume, accepts_opaque=False)
+
+    with (
+        invocation_scope("inv-retry-projection"),
+        run_scope("run-retry-projection"),
+        dispatcher_scope(dispatcher),
+        ResourceAttemptLifecycle(
+            resource_id="task:flaky",
+            resource_kind="task",
+            resource_name="flaky",
+        ),
+    ):
+        with OperationLifecycle(
+            operation_kind="python_node",
+            operation_name="python_task",
+            metadata={"attempt_number": 1},
+        ) as first_attempt:
+            assert stream.getvalue().endswith("Python task attempt 1  START\n")
+            first_attempt.failed(error=TimeoutError())
+        publish_retry_scheduled(
+            failed_attempt_number=1,
+            next_attempt_number=2,
+            delay_ms=250,
+            error=TimeoutError(),
+        )
+        assert stream.getvalue().endswith("    retry 1->2 in 0.25s\n")
+        with OperationLifecycle(
+            operation_kind="python_node",
+            operation_name="python_task",
+            metadata={"attempt_number": 2},
+        ):
+            assert stream.getvalue().endswith("Python task attempt 2  START\n")
+
+    assert stream.flush_count == len(stream.getvalue().splitlines())
+    rendered_lines: tuple[str, ...] = tuple(stream.getvalue().splitlines())
+    assert rendered_lines[0:2] == test_case.expected_lines[0:2]
+    assert rendered_lines[2].startswith("    Python task attempt 1  FAIL  (")
+    assert rendered_lines[3:5] == test_case.expected_lines[3:5]
+    assert rendered_lines[5].startswith("    Python task attempt 2  OK  (")
+    assert rendered_lines[-1].startswith("  task      flaky OK 0.")
 
 
 @pytest.mark.parametrize(

@@ -743,6 +743,12 @@ class BuildScheduler:
                 ) = self._execute_node_with_cost_context(key=key, connection=connection)
             if _resource_result_failed(result):
                 lifecycle.failed(error_code=getattr(result, "error_code", None))
+            elif getattr(result, "status", None) == ExecutionStatus.SKIPPED:
+                skip_mode: object = getattr(result, "skip_mode", None)
+                lifecycle.skipped(
+                    skip_code="scheduler",
+                    skip_mode=getattr(skip_mode, "value", None),
+                )
             return result
 
     def _canonical_resource_kind(self, *, key: CompiledObjectKey) -> str:
@@ -1227,8 +1233,12 @@ class BuildScheduler:
             resource_kind=self._canonical_resource_kind(key=key),
             resource_name=key.name,
             run_id=self._run_id,
-        ):
-            pass
+        ) as lifecycle:
+            skip_mode: object = getattr(result, "skip_mode", None)
+            lifecycle.skipped(
+                skip_code="scheduler",
+                skip_mode=getattr(skip_mode, "value", None),
+            )
         if isinstance(result, ModelExecutionResult):
             self._model_results.append(result)
         elif isinstance(result, SeedExecutionResult):

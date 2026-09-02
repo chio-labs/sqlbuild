@@ -27,6 +27,7 @@ from sqlbuild.executor.python_nodes.models import (
     CheckContext,
     PythonCheckCallbacks,
     PythonCheckExecutionResult,
+    PythonCheckResult,
     PythonNodeExecutionResult,
     PythonNodeRunState,
     PythonNodeRuntime,
@@ -44,6 +45,8 @@ from tests.unit.src.sqlbuild.executor.python_nodes._helpers._test_types import (
     BlockedPythonCheckLifecycleTestCase,
     MalformedPythonOperationTestCase,
     PythonCheckExecutorTestCase,
+    PythonCheckLifecycleTestCase,
+    PythonPostCallLifecycleTestCase,
 )
 from tests.unit.src.sqlbuild.executor.python_nodes._helpers.helpers import (
     ExecutionSlackProvider,
@@ -120,6 +123,139 @@ def test_given_malformed_check_return_when_executing_then_operation_fails_once(
         "run-malformed",
         "run-malformed",
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        PythonCheckLifecycleTestCase(
+            description="error-severity returned failure",
+            passed=False,
+            severity=PythonCheckSeverity.ERROR,
+            expected_event_types=(
+                "resource_attempt_started",
+                "operation_started",
+                "operation_failed",
+                "resource_attempt_failed",
+            ),
+        ),
+        PythonCheckLifecycleTestCase(
+            description="warning returned failure",
+            passed=False,
+            severity=PythonCheckSeverity.WARN,
+            expected_event_types=(
+                "resource_attempt_started",
+                "operation_started",
+                "operation_completed",
+                "resource_attempt_completed",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_returned_check_failure_when_executing_then_child_and_resource_match_severity(
+    test_case: PythonCheckLifecycleTestCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    def returned_check(ctx: CheckContext) -> object:
+        del ctx
+        return PythonCheckResult(passed=test_case.passed, severity=test_case.severity)
+
+    check_function: DiscoveredCheckFunction = DiscoveredCheckFunction(
+        file_path=Path(__file__),
+        relative_path=Path(Path(__file__).name),
+        name="returned_check",
+        function=returned_check,
+        depends_on=(),
+    )
+    with invocation_scope("inv-returned-check"), dispatcher_scope(dispatcher):
+        _ = execute_python_check_nodes(
+            check_functions=(check_function,),
+            python_graph=build_python_check_graph(check_function=check_function),
+            upstream_python_results=(),
+            upstream_load_results=(),
+            run_state=PythonNodeRunState(),
+            runtime=PythonNodeRuntime(
+                adapter=PythonNodeContextTestAdapter(),
+                connection_config={},
+                connection=object(),
+                run_id="run-returned-check",
+                target="dev",
+                vars={},
+                is_reload=False,
+            ),
+        )
+
+    assert tuple(event.event_type for event in events) == test_case.expected_event_types
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        PythonPostCallLifecycleTestCase(
+            description="passing check followed by persistence failure",
+            expected_event_types=(
+                "resource_attempt_started",
+                "operation_started",
+                "operation_completed",
+                "resource_attempt_failed",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_passing_check_when_persistence_fails_then_resource_only_fails(
+    test_case: PythonPostCallLifecycleTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+    result_store: PythonNodeContextTestResultStore = PythonNodeContextTestResultStore({})
+    monkeypatch.setattr(
+        result_store,
+        "write",
+        lambda record: (_ for _ in ()).throw(RuntimeError("check persistence failed")),
+    )
+
+    def passing_check(ctx: CheckContext) -> bool:
+        del ctx
+        return True
+
+    check_function: DiscoveredCheckFunction = DiscoveredCheckFunction(
+        file_path=Path(__file__),
+        relative_path=Path(Path(__file__).name),
+        name="persisted_check",
+        function=passing_check,
+        depends_on=(),
+    )
+    with (
+        invocation_scope("inv-check-persist-failure"),
+        dispatcher_scope(dispatcher),
+        pytest.raises(RuntimeError, match="check persistence failed"),
+    ):
+        _ = execute_python_check_nodes(
+            check_functions=(check_function,),
+            python_graph=build_python_check_graph(check_function=check_function),
+            upstream_python_results=(),
+            upstream_load_results=(),
+            run_state=PythonNodeRunState(),
+            runtime=PythonNodeRuntime(
+                adapter=PythonNodeContextTestAdapter(),
+                connection_config={},
+                connection=object(),
+                run_id="run-check-persist-failure",
+                target="dev",
+                vars={},
+                is_reload=False,
+                result_store=result_store,
+            ),
+        )
+
+    assert tuple(event.event_type for event in events) == test_case.expected_event_types
 
 
 @pytest.mark.parametrize(

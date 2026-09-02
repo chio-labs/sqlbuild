@@ -7,6 +7,8 @@ from sqlbuild.runtime.observability.models import LifecycleEventDefinition
 
 DURATION_MS_FIELD: str = "duration_ms"
 EXIT_CODE_FIELD: str = "exit_code"
+PROCESS_ID_FIELD: str = "process_id"
+SIGNAL_NUMBER_FIELD: str = "signal_number"
 METADATA_FIELD: str = "metadata"
 STATEMENT_EVENT_PREFIX: str = "statement_"
 MAX_METADATA_BYTES: int = 4096
@@ -16,8 +18,27 @@ DIAGNOSTIC_SEVERITIES: frozenset[str] = frozenset(
 ERROR_FIELDS: frozenset[str] = frozenset({"error_code", "error_type"})
 DURATION_FIELDS: frozenset[str] = frozenset({DURATION_MS_FIELD})
 RESOURCE_FIELDS: frozenset[str] = frozenset({"resource_kind", "resource_name", "attempt_number"})
-OPERATION_FIELDS: frozenset[str] = frozenset({"operation_kind", "operation_name", METADATA_FIELD})
+RESOURCE_SKIP_CODES: frozenset[str] = frozenset({"dependency", "explicit", "fan_in", "scheduler"})
+RESOURCE_SKIP_MODES: frozenset[str] = frozenset({"hard", "soft"})
+RESOURCE_ATTEMPT_SKIPPED_EVENT: str = "resource_attempt_skipped"
+RESOURCE_TERMINALS: frozenset[str] = frozenset(
+    {"resource_attempt_completed", "resource_attempt_failed", RESOURCE_ATTEMPT_SKIPPED_EVENT}
+)
+HOOK_PHASES: frozenset[str] = frozenset({"post_hooks", "pre_hooks"})
+HOOK_TYPES: frozenset[str] = frozenset({"python", "sql"})
+OPERATION_FIELDS: frozenset[str] = frozenset(
+    {
+        "operation_kind",
+        "operation_name",
+        METADATA_FIELD,
+        "hook_phase",
+        "hook_index",
+        "hook_type",
+        "hook_name",
+    }
+)
 OPERATION_EVENT_PREFIX: str = "operation_"
+RETRY_SCHEDULED_EVENT: str = "retry_scheduled"
 OPERATION_KINDS: frozenset[str] = frozenset(
     {
         "clone",
@@ -49,6 +70,7 @@ OPERATION_NAMES: frozenset[str] = frozenset(
         "discovery_python_import",
         "external_manifest_discovery",
         "external_source_load",
+        "ingestr_command",
         "janitor_candidate_planning",
         "janitor_cleanup_action",
         "janitor_execution",
@@ -63,6 +85,7 @@ OPERATION_NAMES: frozenset[str] = frozenset(
         "python_hook",
         "python_materialization",
         "python_task",
+        "sql_hook",
         "scenario_capture",
         "scenario_cleanup",
         "scenario_execution",
@@ -97,6 +120,9 @@ STRING_PAYLOAD_FIELDS: frozenset[str] = frozenset(
         "command",
         "error_code",
         "error_type",
+        "hook_name",
+        "hook_phase",
+        "hook_type",
         "intent",
         "job_id",
         "operation_kind",
@@ -114,9 +140,15 @@ NONNEGATIVE_INTEGER_PAYLOAD_FIELDS: frozenset[str] = frozenset(
         "affected_rows",
         "attempt_number",
         "batch_size",
+        "delay_ms",
         "failed_count",
+        "failed_attempt_number",
+        "hook_index",
+        "next_attempt_number",
+        PROCESS_ID_FIELD,
         "row_count",
         "selected_count",
+        SIGNAL_NUMBER_FIELD,
         "skipped_count",
         "succeeded_count",
     }
@@ -211,18 +243,49 @@ LIFECYCLE_EVENT_CATALOG_V1: Mapping[str, LifecycleEventDefinition] = MappingProx
             allowed=RESOURCE_FIELDS | DURATION_FIELDS | ERROR_FIELDS,
             terminal=True,
         ),
+        RESOURCE_ATTEMPT_SKIPPED_EVENT: LifecycleEventDefinition.create(
+            required_correlations=frozenset({"run_id", "resource_id", "resource_attempt_id"}),
+            required_payload=RESOURCE_FIELDS | frozenset({"skip_code"}),
+            allowed=RESOURCE_FIELDS | DURATION_FIELDS | frozenset({"skip_code", "skip_mode"}),
+            terminal=True,
+        ),
         "operation_started": LifecycleEventDefinition.create(
             required_correlations=frozenset({"operation_id"}), allowed=OPERATION_FIELDS
         ),
         "operation_completed": LifecycleEventDefinition.create(
             required_correlations=frozenset({"operation_id"}),
-            allowed=OPERATION_FIELDS | DURATION_FIELDS,
+            allowed=OPERATION_FIELDS
+            | DURATION_FIELDS
+            | frozenset({EXIT_CODE_FIELD, PROCESS_ID_FIELD, SIGNAL_NUMBER_FIELD}),
             terminal=True,
         ),
         "operation_failed": LifecycleEventDefinition.create(
             required_correlations=frozenset({"operation_id"}),
-            allowed=OPERATION_FIELDS | DURATION_FIELDS | ERROR_FIELDS,
+            allowed=OPERATION_FIELDS
+            | DURATION_FIELDS
+            | ERROR_FIELDS
+            | frozenset({EXIT_CODE_FIELD, PROCESS_ID_FIELD, SIGNAL_NUMBER_FIELD}),
             terminal=True,
+        ),
+        RETRY_SCHEDULED_EVENT: LifecycleEventDefinition.create(
+            required_correlations=frozenset({"run_id", "resource_id", "resource_attempt_id"}),
+            required_payload=frozenset(
+                {
+                    "failed_attempt_number",
+                    "next_attempt_number",
+                    "delay_ms",
+                    "error_type",
+                }
+            ),
+            allowed=frozenset(
+                {
+                    "failed_attempt_number",
+                    "next_attempt_number",
+                    "delay_ms",
+                    "error_type",
+                    "error_code",
+                }
+            ),
         ),
         "statement_started": LifecycleEventDefinition.create(
             required_correlations=frozenset({"statement_id"}), allowed=STATEMENT_FIELDS

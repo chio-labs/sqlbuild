@@ -9,12 +9,10 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from pathlib import Path
 
+from sqlbuild.runtime.observability.constants import RESOURCE_TERMINALS
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import LifecycleEvent
 
-_RESOURCE_TERMINALS: frozenset[str] = frozenset(
-    {"resource_attempt_completed", "resource_attempt_failed"}
-)
 _RUN_TERMINALS: frozenset[str] = frozenset({"run_completed", "run_failed"})
 _INVOCATION_TERMINALS: frozenset[str] = frozenset({"invocation_completed", "invocation_failed"})
 _OPERATION_TERMINALS: frozenset[str] = frozenset({"operation_completed", "operation_failed"})
@@ -47,7 +45,7 @@ class CompatibilityEventProjector:
                 return
             self._seen_event_ids.add(event.event_id)
             self._events.append(event)
-            if event.event_type not in _RESOURCE_TERMINALS:
+            if event.event_type not in RESOURCE_TERMINALS:
                 return
             resource_id: str | None = event.resource_id
             resource_name: object = event.payload.get("resource_name")
@@ -117,7 +115,7 @@ class CompatibilityEventProjector:
                     and event.payload.get("operation_name") in _AGGREGATE_OPERATION_NAMES
                 ):
                     operation = event
-                elif event.event_type in _RESOURCE_TERMINALS:
+                elif event.event_type in RESOURCE_TERMINALS:
                     resource = event
                     if event.event_type.endswith("failed"):
                         failed_resource = event
@@ -181,7 +179,7 @@ class CompatibilityEventProjector:
     def _drain_v1(self, *, finalize: bool) -> str:
         projected: list[str] = []
         terminals: list[LifecycleEvent] = [
-            event for event in self._events if event.event_type in _RESOURCE_TERMINALS
+            event for event in self._events if event.event_type in RESOURCE_TERMINALS
         ]
         for event in terminals:
             if event.event_id in self._v1_emitted_event_ids:

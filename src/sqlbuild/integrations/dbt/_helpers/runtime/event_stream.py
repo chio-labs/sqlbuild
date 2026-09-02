@@ -88,8 +88,12 @@ def execute_dbt_json_event_stream(
 ) -> tuple[int, tuple[DbtNodeExecutionResult, ...]]:
     """Run dbt and render SQLBuild-styled rows from JSON events."""
 
-    with OperationLifecycle(operation_kind="subprocess", operation_name="dbt_command"):
-        return _execute_dbt_json_event_stream(
+    with OperationLifecycle(
+        operation_kind="subprocess",
+        operation_name="dbt_command",
+        auto_fail_base_exceptions=False,
+    ) as lifecycle:
+        returncode, results, process_id = _execute_dbt_json_event_stream(
             argv=argv,
             cwd=cwd,
             stream=stream,
@@ -100,6 +104,16 @@ def execute_dbt_json_event_stream(
             detail_by_unique_id=detail_by_unique_id,
             enable_status=enable_status,
         )
+        if returncode == 0:
+            lifecycle.completed(exit_code=0, process_id=process_id)
+        else:
+            lifecycle.failed(
+                error_code=f"exit_{returncode}",
+                exit_code=returncode,
+                process_id=process_id,
+                signal_number=-returncode if returncode < 0 else None,
+            )
+        return returncode, results
 
 
 def _execute_dbt_json_event_stream(
@@ -113,7 +127,7 @@ def _execute_dbt_json_event_stream(
     on_node_result: Callable[[DbtNodeExecutionResult], None] | None,
     detail_by_unique_id: dict[str, str] | None,
     enable_status: bool,
-) -> tuple[int, tuple[DbtNodeExecutionResult, ...]]:
+) -> tuple[int, tuple[DbtNodeExecutionResult, ...], int | None]:
     style: CliStyle = CliStyle(use_color=use_color)
     state: _DbtStreamState = _DbtStreamState(use_color=use_color)
     status_box: dict[str, TransientStatusReporter | None] = {"status": None}
@@ -162,7 +176,14 @@ def _execute_dbt_json_event_stream(
                     pass
         returncode: int = process.wait()
         process_waited = True
-        return returncode, tuple(state.results)
+        process_id: object = getattr(process, "pid", None)
+        return (
+            returncode,
+            tuple(state.results),
+            process_id
+            if isinstance(process_id, int) and not isinstance(process_id, bool) and process_id >= 0
+            else None,
+        )
     finally:
         _cleanup_dbt_runtime(
             process=process,

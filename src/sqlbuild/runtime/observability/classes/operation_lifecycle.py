@@ -22,15 +22,19 @@ from sqlbuild.runtime.observability._helpers.identity import (
 )
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
 from sqlbuild.runtime.observability.constants import (
+    HOOK_PHASES,
+    HOOK_TYPES,
     OPERATION_KINDS,
     OPERATION_METADATA_FIELDS,
     OPERATION_NAMES,
+    RETRY_SCHEDULED_EVENT,
 )
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import ExecutionIdentity
 from sqlbuild.runtime.observability.types import JSONValue
 
 _ERROR_TOKEN_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+_HOOK_NAME_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 
 
 class OperationLifecycle:
@@ -43,6 +47,11 @@ class OperationLifecycle:
         operation_name: str,
         metadata: Mapping[str, int] | None = None,
         operation_id: str | None = None,
+        hook_phase: str | None = None,
+        hook_index: int | None = None,
+        hook_type: str | None = None,
+        hook_name: str | None = None,
+        auto_fail_base_exceptions: bool = True,
     ) -> None:
         _validate_catalog_value(
             value=operation_kind, allowed=OPERATION_KINDS, field_name="operation_kind"
@@ -54,6 +63,13 @@ class OperationLifecycle:
         self._operation_name: str = operation_name
         self._metadata: dict[str, int] = _validated_metadata(metadata)
         self._operation_id: str | None = operation_id
+        self._hook_fields: dict[str, JSONValue] = _validated_hook_fields(
+            hook_phase=hook_phase,
+            hook_index=hook_index,
+            hook_type=hook_type,
+            hook_name=hook_name,
+        )
+        self._auto_fail_base_exceptions: bool = auto_fail_base_exceptions
         self._stack: ExitStack = ExitStack()
         self._dispatcher: EventDispatcher | None = None
         self._started_monotonic: float | None = None
@@ -114,9 +130,24 @@ class OperationLifecycle:
         with self:
             return tuple(iterable)
 
-    def completed(self, *, metadata: Mapping[str, int] | None = None) -> None:
+    def completed(
+        self,
+        *,
+        metadata: Mapping[str, int] | None = None,
+        exit_code: int | None = None,
+        process_id: int | None = None,
+        signal_number: int | None = None,
+    ) -> None:
+        payload: dict[str, JSONValue] = self._terminal_payload(metadata=metadata)
+        payload = _with_process_metadata(
+            payload=payload,
+            exit_code=exit_code,
+            process_id=process_id,
+            signal_number=signal_number,
+        )
         self._publish_terminal(
-            event_type="operation_completed", payload=self._terminal_payload(metadata=metadata)
+            event_type="operation_completed",
+            payload=payload,
         )
 
     def failed(
@@ -125,8 +156,17 @@ class OperationLifecycle:
         error: BaseException | None = None,
         error_code: str | None = None,
         metadata: Mapping[str, int] | None = None,
+        exit_code: int | None = None,
+        process_id: int | None = None,
+        signal_number: int | None = None,
     ) -> None:
         payload: dict[str, JSONValue] = self._terminal_payload(metadata=metadata)
+        payload = _with_process_metadata(
+            payload=payload,
+            exit_code=exit_code,
+            process_id=process_id,
+            signal_number=signal_number,
+        )
         payload["error_type"] = _safe_error_token(
             value="ExecutionFailed" if error is None else type(error).__name__,
             fallback="ExecutionFailed",
@@ -151,7 +191,7 @@ class OperationLifecycle:
             if not self._terminal:
                 if exc_value is None:
                     self.completed()
-                else:
+                elif isinstance(exc_value, Exception) or self._auto_fail_base_exceptions:
                     self.failed(error=exc_value)
         finally:
             self._stack.close()
@@ -163,6 +203,7 @@ class OperationLifecycle:
         }
         if self._metadata:
             payload["metadata"] = self._metadata
+        payload.update(self._hook_fields)
         return payload
 
     def _terminal_payload(
@@ -190,6 +231,32 @@ class OperationLifecycle:
         self._publish(event_type=event_type, payload=payload)
 
 
+def publish_retry_scheduled(
+    *,
+    failed_attempt_number: int,
+    next_attempt_number: int,
+    delay_ms: int,
+    error: BaseException,
+) -> None:
+    """Publish one bounded retry decision before the caller blocks for its delay."""
+
+    dispatcher: EventDispatcher | None = current_event_dispatcher()
+    if dispatcher is None:
+        return
+    payload: dict[str, JSONValue] = {
+        "failed_attempt_number": failed_attempt_number,
+        "next_attempt_number": next_attempt_number,
+        "delay_ms": delay_ms,
+        "error_type": _safe_error_token(value=type(error).__name__, fallback="ExecutionFailed"),
+    }
+    error_code: str | None = _error_code(error=error)
+    if error_code is not None:
+        payload["error_code"] = error_code
+    dispatcher.publish_lifecycle(
+        create_lifecycle_event(event_type=RETRY_SCHEDULED_EVENT, payload=payload)
+    )
+
+
 def _validate_catalog_value(*, value: str, allowed: frozenset[str], field_name: str) -> None:
     if value not in allowed:
         raise ObservabilityValidationError(f"{field_name} must be a catalogued value")
@@ -211,10 +278,61 @@ def _validated_metadata(metadata: Mapping[str, int] | None) -> dict[str, int]:
     return result
 
 
+def _validated_hook_fields(
+    *,
+    hook_phase: str | None,
+    hook_index: int | None,
+    hook_type: str | None,
+    hook_name: str | None,
+) -> dict[str, JSONValue]:
+    supplied: bool = any(
+        value is not None for value in (hook_phase, hook_index, hook_type, hook_name)
+    )
+    if not supplied:
+        return {}
+    if hook_phase not in HOOK_PHASES:
+        raise ObservabilityValidationError("hook_phase must be a catalogued value")
+    if hook_type not in HOOK_TYPES:
+        raise ObservabilityValidationError("hook_type must be a catalogued value")
+    if isinstance(hook_index, bool) or not isinstance(hook_index, int) or hook_index < 0:
+        raise ObservabilityValidationError("hook_index must be a nonnegative integer")
+    result: dict[str, JSONValue] = {
+        "hook_phase": hook_phase,
+        "hook_index": hook_index,
+        "hook_type": hook_type,
+    }
+    if hook_name is not None and _HOOK_NAME_PATTERN.fullmatch(hook_name) is not None:
+        result["hook_name"] = hook_name
+    return result
+
+
 def _safe_error_token(*, value: object, fallback: str) -> str:
     if not isinstance(value, str) or _ERROR_TOKEN_PATTERN.fullmatch(value) is None:
         return fallback
     return value
+
+
+def _with_process_metadata(
+    *,
+    payload: dict[str, JSONValue],
+    exit_code: int | None,
+    process_id: int | None,
+    signal_number: int | None,
+) -> dict[str, JSONValue]:
+    result: dict[str, JSONValue] = dict(payload)
+    if exit_code is not None:
+        if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+            raise ObservabilityValidationError("exit_code must be an integer excluding bool")
+        result["exit_code"] = exit_code
+    for field_name, value in (("process_id", process_id), ("signal_number", signal_number)):
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ObservabilityValidationError(
+                f"{field_name} must be a nonnegative integer excluding bool"
+            )
+        result[field_name] = value
+    return result
 
 
 def _error_code(*, error: BaseException) -> str | None:

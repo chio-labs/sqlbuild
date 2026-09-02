@@ -701,6 +701,63 @@ def test_given_popen_failure_when_streaming_then_no_status_runtime_is_started(
     "test_case",
     (
         DbtRuntimeCleanupTestCase(
+            description="interrupted dbt wait leaves operation unmatched",
+            expected_error="",
+            expected_actions=("operation_started",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_unobserved_dbt_interruption_when_cleanup_reaps_then_no_terminal_is_fabricated(
+    test_case: DbtRuntimeCleanupTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lifecycle_events: list[LifecycleEvent] = []
+    wait_outcomes: Iterator[Callable[[], int]] = iter(
+        (
+            lambda: (_ for _ in ()).throw(KeyboardInterrupt),
+            lambda: -2,
+        )
+    )
+
+    class Process:
+        stdout: io.StringIO = io.StringIO()
+
+        def poll(self) -> int:
+            return -2
+
+        def wait(self, timeout: float | None = None) -> int:
+            del timeout
+            return next(wait_outcomes)()
+
+    monkeypatch.setattr(
+        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.subprocess.Popen",
+        lambda *args, **kwargs: Process(),
+    )
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=lifecycle_events.append, accepts_opaque=False)
+
+    with (
+        invocation_scope("inv-dbt-interrupted"),
+        dispatcher_scope(dispatcher),
+        pytest.raises(KeyboardInterrupt),
+    ):
+        _ = execute_dbt_json_event_stream(
+            argv=("dbt", "run"),
+            cwd=None,
+            stream=io.StringIO(),
+            use_color=False,
+            target_path=None,
+            enable_status=False,
+        )
+
+    assert tuple(event.event_type for event in lifecycle_events) == test_case.expected_actions
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DbtRuntimeCleanupTestCase(
             description="cleanup failures preserve parse exception",
             expected_error="original parse failure",
             expected_actions=(

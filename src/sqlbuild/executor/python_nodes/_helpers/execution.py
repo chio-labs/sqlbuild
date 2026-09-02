@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -33,7 +34,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeRuntime,
     TaskContext,
 )
-from sqlbuild.executor.python_nodes.types import ExecutablePythonNode
+from sqlbuild.executor.python_nodes.types import ExecutablePythonNode, OwnedResultCallback
 from sqlbuild.executor.scheduling.main._build_in_degree import build_python_node_in_degree
 from sqlbuild.executor.scheduling.main._build_ready_queue import build_python_node_ready_queue
 from sqlbuild.executor.scheduling.main._unlock_downstream import unlock_downstream_python_nodes
@@ -51,10 +52,25 @@ from sqlbuild.python_nodes.models import (
     SqlResourceRef,
     TaskDefinition,
 )
-from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
+from sqlbuild.runtime.observability.classes.operation_lifecycle import (
+    OperationLifecycle,
+    publish_retry_scheduled,
+)
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,
 )
+
+
+@dataclass
+class _SerialResultAccumulator:
+    run_state: PythonNodeRunState
+    results_by_name: dict[str, PythonNodeExecutionResult] = field(default_factory=dict)
+    ordered_results: list[PythonNodeExecutionResult] = field(default_factory=list)
+
+    def record(self, *, node: ExecutablePythonNode, result: PythonNodeExecutionResult) -> None:
+        self.run_state.record_result(node_function=node.function, result=result)
+        self.results_by_name[node.name] = result
+        self.ordered_results.append(result)
 
 
 def execute_python_nodes(
@@ -104,15 +120,17 @@ def execute_python_nodes(
         node_names=tuple(node.name for node in nodes),
         in_degree=in_degree,
     )
-    results_by_name: dict[str, PythonNodeExecutionResult] = {}
-    ordered_results: list[PythonNodeExecutionResult] = []
+    accumulator: _SerialResultAccumulator = _SerialResultAccumulator(resolved_run_state)
 
     while ready:
         node_name: str = ready.pop(0)
         node: ExecutablePythonNode = node_by_name[node_name]
-        result: PythonNodeExecutionResult = _execute_ready_node(
+
+        _ = _execute_ready_node(
             node=node,
-            upstream_results=tuple(results_by_name[name] for name in upstream_names[node.name]),
+            upstream_results=tuple(
+                accumulator.results_by_name[name] for name in upstream_names[node.name]
+            ),
             runtime=runtime,
             statement_recorder=statement_recorder,
             logger=logger,
@@ -120,10 +138,8 @@ def execute_python_nodes(
             result_store=result_store,
             sleep=sleep,
             monotonic=monotonic,
+            on_result=accumulator.record,
         )
-        resolved_run_state.record_result(node_function=node.function, result=result)
-        results_by_name[node.name] = result
-        ordered_results.append(result)
         newly_ready: tuple[str, ...]
         in_degree, newly_ready = unlock_downstream_python_nodes(
             completed_node_name=node.name,
@@ -132,10 +148,10 @@ def execute_python_nodes(
         )
         ready.extend(newly_ready)
 
-    if len(ordered_results) != len(nodes):
+    if len(accumulator.ordered_results) != len(nodes):
         raise ExecutorInputError("Python node executor could not resolve all dependencies")
     return PythonNodeExecutorResult(
-        results=tuple(ordered_results),
+        results=tuple(accumulator.ordered_results),
         run_state=resolved_run_state,
     )
 
@@ -150,6 +166,7 @@ def execute_ready_python_node(
     run_state: PythonNodeRunState | None = None,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
+    on_result: OwnedResultCallback | None = None,
 ) -> PythonNodeExecutionResult:
     """Execute one scheduler-ready task/asset node."""
 
@@ -174,6 +191,7 @@ def execute_ready_python_node(
         ),
         sleep=sleep,
         monotonic=monotonic,
+        on_result=on_result,
     )
 
 
@@ -188,6 +206,7 @@ def _execute_ready_node(
     result_store: Any | None,
     sleep: Callable[[float], None],
     monotonic: Callable[[], float],
+    on_result: OwnedResultCallback | None,
 ) -> PythonNodeExecutionResult:
     node_kind: PythonNodeKind = _node_kind(node)
     with CostContext.resource_scope(
@@ -195,18 +214,34 @@ def _execute_ready_node(
         resource_name=node.name,
         phase="execute",
     ):
-        return _execute_ready_node_in_cost_scope(
-            node=node,
-            node_kind=node_kind,
-            upstream_results=upstream_results,
-            runtime=runtime,
-            statement_recorder=statement_recorder,
-            logger=logger,
-            run_state=run_state,
-            result_store=result_store,
-            sleep=sleep,
-            monotonic=monotonic,
-        )
+        with ResourceAttemptLifecycle(
+            resource_id=f"{node_kind.value}:{node.name}",
+            resource_kind=node_kind.value,
+            resource_name=node.name,
+            run_id=runtime.run_id,
+        ) as lifecycle:
+            result, skip_code = _execute_ready_node_in_cost_scope(
+                node=node,
+                node_kind=node_kind,
+                upstream_results=upstream_results,
+                runtime=runtime,
+                statement_recorder=statement_recorder,
+                logger=logger,
+                run_state=run_state,
+                result_store=result_store,
+                sleep=sleep,
+                monotonic=monotonic,
+            )
+            if on_result is not None:
+                on_result(node=node, result=result)
+            if result.status == PythonNodeStatus.SKIPPED:
+                lifecycle.skipped(
+                    skip_code=skip_code or "explicit",
+                    skip_mode=result.skip_mode.value if result.skip_mode is not None else None,
+                )
+            elif result.status == PythonNodeStatus.FAILED:
+                lifecycle.failed()
+            return result
 
 
 def _execute_ready_node_in_cost_scope(
@@ -221,7 +256,7 @@ def _execute_ready_node_in_cost_scope(
     result_store: Any | None,
     sleep: Callable[[float], None],
     monotonic: Callable[[], float],
-) -> PythonNodeExecutionResult:
+) -> tuple[PythonNodeExecutionResult, str | None]:
     run_id: str = runtime.run_id
     providers: ProviderContainer | None = runtime.providers
     decision: PythonNodeFanInDecision = evaluate_python_node_fan_in(
@@ -236,7 +271,7 @@ def _execute_ready_node_in_cost_scope(
             skip_reason=decision.reason,
         )
         _persist_python_node_result(result_store=result_store, result=result, run_id=run_id)
-        return result
+        return result, "fan_in"
     if decision.action == PythonNodeFanInAction.BLOCK:
         result: PythonNodeExecutionResult = PythonNodeExecutionResult(
             node_name=node.name,
@@ -245,7 +280,7 @@ def _execute_ready_node_in_cost_scope(
             error_message=decision.reason,
         )
         _persist_python_node_result(result_store=result_store, result=result, run_id=run_id)
-        return result
+        return result, None
     context: TaskContext | AssetContext = _build_context(
         node=node,
         node_kind=node_kind,
@@ -271,9 +306,9 @@ def _execute_ready_node_in_cost_scope(
             error=error,
         )
         _persist_python_node_result(result_store=result_store, result=result, run_id=run_id)
-        return result
+        return result, None
     _persist_python_node_result(result_store=result_store, result=result, run_id=run_id)
-    return result
+    return result, "explicit" if result.status == PythonNodeStatus.SKIPPED else None
 
 
 def _persist_python_node_result(
@@ -326,26 +361,19 @@ def _call_node_with_retry(
     sleep: Callable[[float], None],
     monotonic: Callable[[], float],
 ) -> PythonNodeExecutionResult:
+    node_kind: PythonNodeKind = _node_kind(node)
     if retry_policy is None:
-        node_kind: PythonNodeKind = _node_kind(node)
-        with (
-            ResourceAttemptLifecycle(
-                resource_id=f"{node_kind.value}:{node.name}",
-                resource_kind=node_kind.value,
-                resource_name=node.name,
-                attempt_number=1,
-                run_id=context.run_id,
-            ) as lifecycle,
-            CostContext.resource_scope(
-                resource_type=node_kind.value,
-                resource_name=node.name,
-                phase="execute",
-                attempt=1,
-            ),
+        with CostContext.resource_scope(
+            resource_type=node_kind.value,
+            resource_name=node.name,
+            phase="execute",
+            attempt=1,
         ):
             with OperationLifecycle(
-                operation_kind="python_node", operation_name=f"python_{node_kind.value}"
-            ):
+                operation_kind="python_node",
+                operation_name=f"python_{node_kind.value}",
+                metadata={"attempt_number": 1},
+            ) as operation:
                 returned: object = invoke_with_providers(
                     function=node.function,
                     context=context,
@@ -357,66 +385,62 @@ def _call_node_with_retry(
                     returned=returned,
                 )
                 if result.status == PythonNodeStatus.FAILED:
-                    lifecycle.failed()
+                    operation.failed()
                 return result
     start_time: float = monotonic()
     attempt: int = 1
     while True:
-        invocation_retryable = False
-        try:
-            node_kind = _node_kind(node)
-            with (
-                ResourceAttemptLifecycle(
-                    resource_id=f"{node_kind.value}:{node.name}",
-                    resource_kind=node_kind.value,
-                    resource_name=node.name,
-                    attempt_number=attempt,
-                    run_id=context.run_id,
-                ) as lifecycle,
-                CostContext.resource_scope(
-                    resource_type=node_kind.value,
-                    resource_name=node.name,
-                    phase="execute",
-                    attempt=attempt,
-                ),
-            ):
-                with OperationLifecycle(
-                    operation_kind="python_node",
-                    operation_name=f"python_{_node_kind(node).value}",
-                    metadata={"attempt_number": attempt},
-                ):
-                    try:
-                        returned: object = invoke_with_providers(
-                            function=node.function,
-                            context=context,
-                            providers=providers,
-                        )
-                    except retry_policy.retry_on:
-                        invocation_retryable = True
+        retry_error: BaseException | None = None
+        delay_seconds: float | None = None
+        with CostContext.resource_scope(
+            resource_type=node_kind.value,
+            resource_name=node.name,
+            phase="execute",
+            attempt=attempt,
+        ):
+            with OperationLifecycle(
+                operation_kind="python_node",
+                operation_name=f"python_{node_kind.value}",
+                metadata={"attempt_number": attempt},
+            ) as operation:
+                try:
+                    returned = invoke_with_providers(
+                        function=node.function,
+                        context=context,
+                        providers=providers,
+                    )
+                except retry_policy.retry_on as error:
+                    retry_error = error
+                    operation.failed(error=error)
+                    if attempt >= retry_policy.max_attempts:
                         raise
+                    delay_seconds = calculate_retry_delay(
+                        retry_policy=retry_policy,
+                        retry_index=attempt - 1,
+                    )
+                    if retry_policy.max_elapsed_seconds is not None:
+                        elapsed_seconds: float = monotonic() - start_time
+                        if elapsed_seconds + delay_seconds > retry_policy.max_elapsed_seconds:
+                            raise
+                    publish_retry_scheduled(
+                        failed_attempt_number=attempt,
+                        next_attempt_number=attempt + 1,
+                        delay_ms=max(0, round(delay_seconds * 1000)),
+                        error=error,
+                    )
+                else:
                     result = normalize_python_node_return(
                         node_name=node.name,
                         kind=node_kind,
                         returned=returned,
                     )
                     if result.status == PythonNodeStatus.FAILED:
-                        lifecycle.failed()
+                        operation.failed()
                     return result
-        except retry_policy.retry_on:
-            if not invocation_retryable:
-                raise
-            if attempt >= retry_policy.max_attempts:
-                raise
-            delay_seconds: float = calculate_retry_delay(
-                retry_policy=retry_policy,
-                retry_index=attempt - 1,
-            )
-            if retry_policy.max_elapsed_seconds is not None:
-                elapsed_seconds: float = monotonic() - start_time
-                if elapsed_seconds + delay_seconds > retry_policy.max_elapsed_seconds:
-                    raise
-            sleep(delay_seconds)
-            attempt += 1
+        if retry_error is None or delay_seconds is None:
+            raise ExecutorInputError("Python retry attempt ended without a retry decision")
+        sleep(delay_seconds)
+        attempt += 1
 
 
 def _build_context(

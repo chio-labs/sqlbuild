@@ -417,6 +417,10 @@ def load_ingress_orders(_ctx: object) -> object:
     return None
 
 
+def scheduler_bypassed_task() -> object:
+    raise AssertionError("scheduler-bypassed task must not run")
+
+
 def build_ingress_task_loader_graph() -> PythonNodeGraph:
     return build_python_node_graph(
         discovered_inputs=DiscoveredProjectInputs(

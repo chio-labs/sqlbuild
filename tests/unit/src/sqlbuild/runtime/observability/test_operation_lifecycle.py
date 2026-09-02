@@ -459,3 +459,74 @@ def test_given_terminal_counts_when_operation_completes_then_counts_are_terminal
     assert tuple(event.event_type for event in events) == test_case.expected_event_types
     assert "metadata" not in events[0].payload
     assert events[1].payload["metadata"] == {"row_count": 2, "byte_count": 17}
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        OperationLifecycleCase(
+            description="observed subprocess signal metadata",
+            expected_event_types=("operation_started", "operation_failed"),
+            operation_kind="subprocess",
+            operation_name="dbt_command",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_observed_signal_when_subprocess_fails_then_terminal_has_bounded_exit_metadata(
+    test_case: OperationLifecycleCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    with invocation_scope("inv-signal"), dispatcher_scope(dispatcher):
+        with OperationLifecycle(
+            operation_kind=test_case.operation_kind, operation_name=test_case.operation_name
+        ) as lifecycle:
+            lifecycle.failed(
+                error_code="exit_-15",
+                exit_code=-15,
+                process_id=123,
+                signal_number=15,
+            )
+
+    assert tuple(event.event_type for event in events) == test_case.expected_event_types
+    assert events[1].payload["exit_code"] == -15
+    assert events[1].payload["process_id"] == 123
+    assert events[1].payload["signal_number"] == 15
+    assert events[1].payload["error_code"] == "exit_-15"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        OperationLifecycleCase(
+            description="unobserved subprocess interruption",
+            expected_event_types=("operation_started",),
+            operation_kind="subprocess",
+            operation_name="dbt_command",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_unobserved_base_exception_when_operation_opts_out_then_terminal_remains_missing(
+    test_case: OperationLifecycleCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    with (
+        invocation_scope("inv-interrupted-child"),
+        dispatcher_scope(dispatcher),
+        pytest.raises(KeyboardInterrupt),
+    ):
+        with OperationLifecycle(
+            operation_kind=test_case.operation_kind,
+            operation_name=test_case.operation_name,
+            auto_fail_base_exceptions=False,
+        ):
+            raise KeyboardInterrupt
+
+    assert tuple(event.event_type for event in events) == test_case.expected_event_types

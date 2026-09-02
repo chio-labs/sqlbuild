@@ -67,11 +67,18 @@ def run_external_source_loads_before_connections(
         source_load_entry: SourceLoadPlanEntry | None = external_entries_by_key.get(key)
         if source_load_entry is None:
             continue
+        source_entry: SourceEntry = plan.source_map[key.name]
         if any(upstream in failed_keys for upstream in plan.upstream_deps.get(key, ())):
+            with ResourceAttemptLifecycle(
+                resource_id=f"source:{source_entry.name}",
+                resource_kind=source_load_entry.resource_kind.value,
+                resource_name=source_entry.name,
+                run_id=runtime.run_id,
+            ) as lifecycle:
+                lifecycle.skipped(skip_code="dependency")
             failed_keys.add(key)
             completed_keys.add(key)
             continue
-        source_entry: SourceEntry = plan.source_map[key.name]
         with ResourceAttemptLifecycle(
             resource_id=f"source:{source_entry.name}",
             resource_kind=source_load_entry.resource_kind.value,
@@ -91,6 +98,11 @@ def run_external_source_loads_before_connections(
             )
             if result.status == ExecutionStatus.FAILED:
                 lifecycle.failed()
+            elif result.status == ExecutionStatus.SKIPPED:
+                lifecycle.skipped(
+                    skip_code="explicit",
+                    skip_mode=result.skip_mode.value if result.skip_mode is not None else None,
+                )
         results.append(result)
         completed_keys.add(key)
         if result.status != ExecutionStatus.SUCCESS:

@@ -20,6 +20,11 @@ from sqlbuild.runtime.observability._helpers.identity import (
     run_scope,
 )
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
+from sqlbuild.runtime.observability.constants import (
+    RESOURCE_ATTEMPT_SKIPPED_EVENT,
+    RESOURCE_SKIP_CODES,
+    RESOURCE_SKIP_MODES,
+)
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import ExecutionIdentity
 from sqlbuild.runtime.observability.types import JSONValue
@@ -107,6 +112,19 @@ class ResourceAttemptLifecycle:
         if safe_error_code is not None:
             payload["error_code"] = safe_error_code
         self._publish_terminal(event_type="resource_attempt_failed", payload=payload)
+
+    def skipped(self, *, skip_code: str, skip_mode: str | None = None) -> None:
+        """Publish one bounded logical skip terminal without retaining its user reason."""
+
+        if skip_code not in RESOURCE_SKIP_CODES:
+            raise ObservabilityValidationError("skip_code must be a catalogued value")
+        if skip_mode is not None and skip_mode not in RESOURCE_SKIP_MODES:
+            raise ObservabilityValidationError("skip_mode must be a catalogued value")
+        payload: dict[str, JSONValue] = self._terminal_payload()
+        payload["skip_code"] = skip_code
+        if skip_mode is not None:
+            payload["skip_mode"] = skip_mode
+        self._publish_terminal(event_type=RESOURCE_ATTEMPT_SKIPPED_EVENT, payload=payload)
 
     def __exit__(
         self,

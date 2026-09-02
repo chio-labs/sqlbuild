@@ -146,6 +146,11 @@ def execute_ready_dag_source(
         )
         if result.status == ExecutionStatus.FAILED:
             lifecycle.failed()
+        elif result.status == ExecutionStatus.SKIPPED:
+            lifecycle.skipped(
+                skip_code="dependency",
+                skip_mode=result.skip_mode.value if result.skip_mode is not None else None,
+            )
         return result
 
 

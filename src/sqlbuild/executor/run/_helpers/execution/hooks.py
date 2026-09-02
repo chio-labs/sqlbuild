@@ -66,6 +66,7 @@ def execute_hooks(
             phase=phase,
             hook_results=hook_results,
             label=_sql_hook_preview(hooks),
+            hook_name=None,
         )
         return False
     if isinstance(hooks, SqlHookEntry):
@@ -77,6 +78,7 @@ def execute_hooks(
             phase=phase,
             hook_results=hook_results,
             label=hooks.name or _sql_hook_preview(hooks.statement),
+            hook_name=hooks.name,
         )
         return False
     if isinstance(hooks, PythonHookEntry):
@@ -104,6 +106,7 @@ def execute_hooks(
                     phase=phase,
                     hook_results=hook_results,
                     label=_sql_hook_preview(hook),
+                    hook_name=None,
                 )
             elif isinstance(hook, SqlHookEntry):
                 _execute_sql_hook(
@@ -114,6 +117,7 @@ def execute_hooks(
                     phase=phase,
                     hook_results=hook_results,
                     label=hook.name or _sql_hook_preview(hook.statement),
+                    hook_name=hook.name,
                 )
             elif isinstance(hook, PythonHookEntry):
                 skipped = invoke_python_hook(
@@ -222,7 +226,12 @@ def _invoke_python_hook(
         hook_run=hook_run,
     )
     with OperationLifecycle(
-        operation_kind="python_node", operation_name="python_hook"
+        operation_kind="python_node",
+        operation_name="python_hook",
+        hook_phase=phase.value,
+        hook_index=hook_index,
+        hook_type="python",
+        hook_name=hook_entry.name,
     ) as lifecycle:
         try:
             returned: object = invoke_with_providers(
@@ -337,6 +346,7 @@ def _execute_sql_hook(
     phase: HookPhase,
     hook_results: list[HookExecutionResult] | None,
     label: str,
+    hook_name: str | None,
 ) -> None:
     try:
         current: CostResourceContext | None = CostContext.current()
@@ -346,7 +356,15 @@ def _execute_sql_hook(
             resource_name=f"{parent_name}.{phase.value}[{hook_index}]",
             phase=phase.value,
         ):
-            adapter.execute(connection=connection, sql=statement)
+            with OperationLifecycle(
+                operation_kind="quality",
+                operation_name="sql_hook",
+                hook_phase=phase.value,
+                hook_index=hook_index,
+                hook_type="sql",
+                hook_name=hook_name,
+            ):
+                adapter.execute(connection=connection, sql=statement)
     except Exception as exc:
         _record_hook_result(
             hook_results=hook_results,
