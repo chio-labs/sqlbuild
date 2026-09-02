@@ -77,13 +77,13 @@ def test_given_cursor_start_layers_when_building_compile_inputs_then_model_uses_
                     "MODEL (\nmaterialized incremental\nincremental_strategy delete_insert\n"
                     "cursor event_at\ncursor_type timestamp\ncursor_grain day\n"
                     "cursor_start_max_ahead '0d'\ncursor_start_max_action cap\n"
-                    "cursor_future_max_distance '2d'\ncursor_future_action cap\n"
+                    "cursor_future_max_distance '0d'\ncursor_future_action cap\n"
                     ");\n\nSELECT DATE '2026-01-01' AS event_at"
                 ),
             },
             expected_start_max_ahead="0d",
             expected_start_action="cap",
-            expected_future_max_distance="2d",
+            expected_future_max_distance="0d",
             expected_future_action="cap",
         )
     ],

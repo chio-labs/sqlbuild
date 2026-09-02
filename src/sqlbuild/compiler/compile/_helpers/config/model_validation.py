@@ -486,7 +486,7 @@ def _validate_cursor_safety_overrides(
     if cursor_future_max_distance is not None and (
         not isinstance(cursor_future_max_distance, str)
         or (
-            cursor_future_max_distance != CURSOR_POLICY_DISABLED
+            cursor_future_max_distance not in {CURSOR_POLICY_DISABLED, ZERO_DAY_CURSOR_DURATION}
             and duration_pattern.fullmatch(cursor_future_max_distance) is None
         )
     ):
