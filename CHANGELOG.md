@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.0](https://github.com/chio-labs/sqlbuild/compare/v0.75.1...v0.76.0) (2026-09-02)
+
+
+### Features
+
+* add execution observability foundation ([#479](https://github.com/chio-labs/sqlbuild/issues/479)) ([80ee9a9](https://github.com/chio-labs/sqlbuild/commit/80ee9a9f601e771c720b881057743776a04ffae8))
+
 ## [0.75.1](https://github.com/chio-labs/sqlbuild/compare/v0.75.0...v0.75.1) (2026-09-02)
 
 
