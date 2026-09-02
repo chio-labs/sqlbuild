@@ -593,13 +593,11 @@ def _execute_dml(
     unique_key: tuple[str, ...] = entry.unique_key
 
     target_col_set: frozenset[str] = frozenset(col.name.lower() for col in target_columns)
-    delta_col_set: frozenset[str] = frozenset(col.name.lower() for col in delta_columns)
     intersection_names: tuple[str, ...] = tuple(
         col.name for col in delta_columns if col.name.lower() in target_col_set
     )
-    columns_match: bool = target_col_set == delta_col_set
-    dml_columns: tuple[str, ...] | None = None if columns_match else intersection_names
-    projection: str = ", ".join(intersection_names) if not columns_match else "*"
+    dml_columns: tuple[str, ...] = intersection_names
+    projection: str = ", ".join(intersection_names)
     dml_sql: str = f"SELECT {projection} FROM {delta_qualified}"
 
     if strategy == IncrementalStrategy.APPEND:
