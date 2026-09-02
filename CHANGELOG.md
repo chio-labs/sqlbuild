@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.74.2](https://github.com/chio-labs/sqlbuild/compare/v0.74.1...v0.74.2) (2026-09-02)
+
+
+### Bug Fixes
+
+* allow zero-day future cursor caps ([#468](https://github.com/chio-labs/sqlbuild/issues/468)) ([c6cad5e](https://github.com/chio-labs/sqlbuild/commit/c6cad5e65ca3c483334fc1c3b6d57d82afc8da34))
+
 ## [0.74.1](https://github.com/chio-labs/sqlbuild/compare/v0.74.0...v0.74.1) (2026-09-02)
 
 
