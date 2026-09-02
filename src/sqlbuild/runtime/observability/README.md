@@ -1,6 +1,7 @@
 # Runtime observability contracts
 
-This package defines wire contracts only. It does not dispatch, store, route, or render records.
+This package defines wire contracts and synchronous in-process publication. It does not store,
+export, queue, route across processes, or render records.
 
 ## Execution identity
 
@@ -53,3 +54,23 @@ are not lifecycle facts and cannot establish completion or failure semantics.
 SQLBuild's structured `log_sql` and `log_debug_event` helpers attach the current execution identity.
 Arbitrary raw calls to Python's `logging` API are not automatically correlated; that integration is
 deferred to CHI-176 rather than installing a global logging filter here.
+
+## In-process publication
+
+`EventDispatcher` keeps lifecycle facts and diagnostic logs on separate typed channels. Publication
+is synchronous and invokes a registration-order snapshot before returning, preserving each
+producer's call order without promising a global order across concurrent producers. Unknown event
+names and newer schema versions are delivered intact only to lifecycle subscribers registered with
+`accepts_opaque=True`.
+
+Subscriber failures are isolated and reported through an optional bounded health callback. Health
+callback failures are swallowed, and nested failure reporting is suppressed to prevent recursion.
+Registration and unsubscription are thread-safe. Callbacks run without the registration lock, so a
+callback may publish recursively without deadlock. Nested publication runs immediately on the
+current thread using the then-current subscriber snapshot; registration changes made by a callback
+affect only later publishes, not the snapshot already in progress.
+
+Framework boundaries may install an explicit dispatcher with `dispatcher_scope`; the scoped current
+dispatcher is ContextVar-backed and defaults to `None`, avoiding mutable process-global lifecycle
+state. `create_lifecycle_event` copies lifecycle correlation fields from the current execution
+identity but intentionally excludes diagnostic-only `log_stream_id` and does not dispatch.

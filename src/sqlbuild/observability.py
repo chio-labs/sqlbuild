@@ -1,9 +1,18 @@
 """Public runtime observability API."""
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
+from datetime import datetime
+from types import MappingProxyType
 
+from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
+from sqlbuild.runtime.observability.main.create_lifecycle_event import (
+    create_lifecycle_event as _create_lifecycle_event,
+)
+from sqlbuild.runtime.observability.main.current_event_dispatcher import (
+    current_event_dispatcher as _current_event_dispatcher,
+)
 from sqlbuild.runtime.observability.main.current_execution_identity import (
     current_execution_identity as _current_execution_identity,
 )
@@ -12,6 +21,9 @@ from sqlbuild.runtime.observability.main.diagnostic_log_from_json import (
 )
 from sqlbuild.runtime.observability.main.diagnostic_log_to_json import (
     diagnostic_log_to_json as _diagnostic_log_to_json,
+)
+from sqlbuild.runtime.observability.main.dispatcher_scope import (
+    dispatcher_scope as _dispatcher_scope,
 )
 from sqlbuild.runtime.observability.main.execution_identity_to_dict import (
     execution_identity_to_dict as _execution_identity_to_dict,
@@ -43,19 +55,38 @@ from sqlbuild.runtime.observability.main.validate_idempotent_duplicate import (
 )
 from sqlbuild.runtime.observability.models import (
     DiagnosticLog,
+    DispatchFailure,
     ExecutionIdentity,
     LifecycleEvent,
     OpaqueLifecycleEvent,
 )
+from sqlbuild.runtime.observability.types import (
+    DiagnosticSubscriber,
+    HealthCallback,
+    JSONValue,
+    KnownLifecycleSubscriber,
+    OpaqueLifecycleSubscriber,
+    Unsubscribe,
+)
 
 __all__ = (
     "DiagnosticLog",
+    "DiagnosticSubscriber",
+    "DispatchFailure",
+    "EventDispatcher",
     "ExecutionIdentity",
+    "HealthCallback",
+    "KnownLifecycleSubscriber",
     "LifecycleEvent",
     "ObservabilityValidationError",
     "OpaqueLifecycleEvent",
+    "OpaqueLifecycleSubscriber",
+    "Unsubscribe",
+    "create_lifecycle_event",
+    "current_event_dispatcher",
     "diagnostic_log_from_json",
     "diagnostic_log_to_json",
+    "dispatcher_scope",
     "current_execution_identity",
     "execution_identity_to_dict",
     "identity_scope",
@@ -70,6 +101,41 @@ __all__ = (
     "statement_scope",
     "validate_idempotent_duplicate",
 )
+
+
+def create_lifecycle_event(
+    *,
+    event_type: str,
+    payload: Mapping[str, JSONValue] = MappingProxyType({}),
+    event_id: str | None = None,
+    occurred_at: datetime | None = None,
+    producer: str = "sqlbuild",
+    producer_version: str | None = None,
+) -> LifecycleEvent:
+    """Create a validated lifecycle fact from the active execution identity."""
+
+    return _create_lifecycle_event(
+        event_type=event_type,
+        payload=payload,
+        event_id=event_id,
+        occurred_at=occurred_at,
+        producer=producer,
+        producer_version=producer_version,
+    )
+
+
+def current_event_dispatcher() -> EventDispatcher | None:
+    """Return the dispatcher installed in the current context, if any."""
+
+    return _current_event_dispatcher()
+
+
+@contextmanager
+def dispatcher_scope(dispatcher: EventDispatcher) -> Iterator[EventDispatcher]:
+    """Install an explicit dispatcher for a nested framework boundary."""
+
+    with _dispatcher_scope(dispatcher) as installed:
+        yield installed
 
 
 def current_execution_identity() -> ExecutionIdentity | None:

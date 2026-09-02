@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Self
+from typing import Literal, Self
 
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.types import JSONValue
@@ -197,3 +197,13 @@ class DiagnosticLog:
         if not isinstance(frozen_fields, Mapping):
             raise ObservabilityValidationError("fields must be a JSON object")
         object.__setattr__(self, "fields", frozen_fields)
+
+
+@dataclass(frozen=True)
+class DispatchFailure:
+    """Bounded health record for one isolated subscriber failure."""
+
+    channel: Literal["lifecycle", "diagnostic"]
+    subscriber: str
+    error_type: str
+    message: str

@@ -159,3 +159,92 @@ class IdentityFieldErrorCase:
 class IdentityBehaviorCase:
     description: str
     expected_invocation_id: str
+
+
+@dataclass(frozen=True)
+class DispatchCountCase:
+    description: str
+    expected_lifecycle_count: int
+    expected_diagnostic_count: int
+
+
+@dataclass(frozen=True)
+class OpaqueDispatchCase:
+    description: str
+    raw: Mapping[str, JSONValue]
+    expected_typed_count: int
+    expected_opaque_count: int
+
+
+@dataclass(frozen=True)
+class DispatchOrderCase:
+    description: str
+    expected_order: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DispatchFailureCase:
+    description: str
+    expected_health_count: int
+    expected_healthy_count: int
+    expected_channel: str
+
+
+@dataclass(frozen=True)
+class RecursiveHealthCase:
+    description: str
+    channel: str
+    expected_health_count: int
+    expected_healthy_count: int
+
+
+@dataclass(frozen=True)
+class DispatchMutationCase:
+    description: str
+    expected_first_publish: tuple[str, ...]
+    expected_second_publish: tuple[str, ...]
+    expected_after_cleanup: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ConcurrentDispatchCase:
+    description: str
+    publisher_count: int
+    events_per_publisher: int
+    expected_count: int
+
+
+@dataclass(frozen=True)
+class ProducerVersionCase:
+    description: str
+    producer: str
+    expected_error: str
+
+
+@dataclass(frozen=True)
+class BlockingDispatchCase:
+    description: str
+    expected_before_release: tuple[str, ...]
+    expected_after_release: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FactoryCase:
+    description: str
+    expected_event_id: str
+    expected_producer: str
+    expected_producer_version: str
+    expected_invocation_id: str
+    expected_run_id: str
+    expected_resource_id: str
+    expected_resource_attempt_id: str
+    expected_operation_id: str
+    expected_statement_id: str
+
+
+@dataclass(frozen=True)
+class DispatcherContextCase:
+    description: str
+    expected_outer_restored: bool
+    expected_thread_isolated: bool
+    expected_task_isolated: bool
