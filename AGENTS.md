@@ -23,14 +23,23 @@
 - Model lifecycle state as immutable, append-only events or facts with deterministic event IDs and idempotent writes. Derive current status by projecting event history, following the existing microbatch requirement/completion pattern. Retention pruning is cleanup, not a lifecycle update.
 - Design every warehouse-DML/state-publication failure window for reconciliation from durable events and physical warehouse evidence. If append-only state cannot represent a proposed direct-mode feature safely, stop and resolve the architecture explicitly rather than adding mutable transitions.
 
-## Pull Requests
+## Delivery Workflow
 
-- Prefer one PR for related changes targeting the same release; split work only when independent review, release timing, or risk isolation provides a concrete benefit that outweighs duplicate CI and review overhead.
-- PR titles must follow Conventional Commits.
-- PR descriptions must be no longer than 2,000 characters.
-- PR descriptions must contain non-empty `## Why`, `## Changes`, and `## Verification` sections in that order.
-- Before running `gh pr create` or editing PR metadata, validate the proposed title and body locally with `make check-pr-metadata PR_TITLE='type: summary' PR_BODY_FILE=/path/to/body.md`.
+- Consolidate related work targeting the same release into one delivery branch and one pull request. Use separate pull requests only for independently releasable changes, intentionally different delivery timing, concrete risk isolation, or explicit user instruction.
+- Local commits are checkpoints and do not trigger CI. Complete related implementation and review before the first push.
+- Run targeted regressions and fast local static checks before pushing. Do not delay a ready commit or push solely to run or wait for long full integration or end-to-end suites that CI already executes; run those locally only to reproduce or diagnose the change, or when the user explicitly requests them. CI remains the required broad-suite gate.
+- Review the complete local diff against the target branch and resolve findings before pushing. Do not push partial or overlapping branches merely to start CI.
+- Push once and open one ready pull request so CI and configured auto-merge can complete delivery.
+- After auto-merge is enabled, do not invoke a manual merge while the automation is healthy. Watch the pull request through merge in the foreground when no other useful work remains, or keep a background watch running while continuing independent work. Use a manual merge only with concrete evidence that auto-merge is broken or unavailable, and document that evidence and the fallback reason first.
+- PR titles must follow Conventional Commits. Descriptions must be no longer than 2,000 characters and contain non-empty `## Why`, `## Changes`, and `## Verification` sections in that order.
+- Before creating or editing a PR, validate its metadata with `make check-pr-metadata PR_TITLE='type: summary' PR_BODY_FILE=/path/to/body.md`.
+- Monitor CI after every push and follow it through completion. Address failures before considering delivery complete.
+- Push follow-up commits only for CI failures or correctness findings that could not reasonably have been found before the first push.
+- For deployable changes, continue through auto-merge, release workflow completion, package publication, and published-version verification. Do not stop at PR creation unless the user explicitly asks.
 
-## Release Follow-Through
+## Review Discipline
 
-- After opening a deployable pull request, monitor it through CI, merge, release workflow completion, and package publication, either directly or with a background task. Resolve failures where possible and verify the published version before handing off. Do not stop at pull request creation unless the user explicitly asks you to.
+- Treat review findings as hypotheses to validate against the supported product contract, ownership boundary, and realistic execution paths before changing code.
+- Prioritize concrete correctness, authorization, data-loss, and mutation risks within systems the project manages. Distinguish those from unsupported external misuse or purely theoretical states.
+- Keep fixes within the requested scope. Do not expand supported behavior, permissions, operational cost, or system ownership without a short product decision from the user.
+- Do not add safeguards solely for impossible or unsupported states. Record residual risks when a concern is real but outside the current contract.
