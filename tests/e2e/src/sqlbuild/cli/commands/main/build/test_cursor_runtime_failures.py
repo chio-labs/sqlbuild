@@ -40,7 +40,14 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                     "SELECT id AS order_id, ordered_at FROM main.raw_orders\n"
                 ),
                 "models/fact_orders.sql": (
-                    "MODEL (materialized table);\n\n"
+                    "MODEL (\n"
+                    "  materialized table,\n"
+                    "  contract enforced,\n"
+                    "  columns (\n"
+                    "    order_id (type INTEGER),\n"
+                    "    ordered_at (type TIMESTAMP),\n"
+                    "  ),\n"
+                    ");\n\n"
                     'SELECT order_id, ordered_at FROM __ref("stg_orders")\n'
                 ),
                 "models/customer_status_snapshot.sql": dedent(
