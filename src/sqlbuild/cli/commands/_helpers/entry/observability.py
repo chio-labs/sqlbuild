@@ -15,6 +15,13 @@ from sqlbuild.cli.commands._helpers.entry.history_diagnostics import (
     log_history_open_failure,
 )
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
+from sqlbuild.cli.commands.constants import (
+    CSV_OUTPUT_FORMAT,
+    DEBUG_COMMAND,
+    JSON_OUTPUT_FORMAT,
+    LINEAGE_COMMAND,
+    QUERY_COMMAND,
+)
 from sqlbuild.cli.output.classes.terminal_event_index import (
     TerminalEventIndex,
     terminal_event_index_scope,
@@ -67,12 +74,18 @@ def cli_observability_scope(
     )
     machine_output: bool = (
         args.json
-        or args.json_output is not None
         or getattr(args, "event_output", None) is not None
         or execution_event_output_active()
+        or (args.command == LINEAGE_COMMAND and args.lineage_format == JSON_OUTPUT_FORMAT)
+        or (
+            args.command == QUERY_COMMAND
+            and args.query_format in {CSV_OUTPUT_FORMAT, JSON_OUTPUT_FORMAT}
+        )
     )
     projector: NativeProgressProjector = NativeProgressProjector(
-        stream=sys.stderr if machine_output or args.debug else sys.stdout,
+        stream=sys.stderr
+        if machine_output or args.debug or args.command == DEBUG_COMMAND
+        else sys.stdout,
         use_color=not machine_output and not args.no_color and supports_color(),
     )
     unsubscribe_progress: Unsubscribe = dispatcher.subscribe_lifecycle(

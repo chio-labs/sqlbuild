@@ -35,11 +35,7 @@ def resolve_seed_invocation(*, request: SeedCommandRequest) -> SeedInvocation:
         selected_target=request.selected_target,
         cli_vars=request.cli_vars,
     )
-    machine_output: bool = (
-        request.json_output
-        or request.json_output_path is not None
-        or execution_event_output_active()
-    )
+    machine_output: bool = request.json_output or execution_event_output_active()
     use_color: bool = not request.no_color and not machine_output and supports_color()
     progress_stream: TextIO = sys.stderr if machine_output else sys.stdout
     return SeedInvocation(

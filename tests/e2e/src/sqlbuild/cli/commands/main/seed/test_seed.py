@@ -189,7 +189,8 @@ def test_given_standalone_seeds_when_writing_json_file_then_assets_are_complete_
     payload: dict[str, object] = json.loads(output_path.read_text(encoding="utf-8"))
     assets: list[dict[str, object]] = payload["assets"]  # type: ignore[assignment]
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    assert result.stdout == ""
+    assert "first_seed" in result.stdout
+    assert "second_seed" in result.stdout
     assert payload["status"] == test_case.expected_status
     assert payload["summary"] == test_case.expected_summary
     assert tuple(sorted((asset["name"], asset["status"]) for asset in assets)) == (
@@ -247,7 +248,7 @@ def test_given_failing_standalone_seed_when_writing_json_file_then_failure_is_ho
     payload: dict[str, object] = json.loads(output_path.read_text(encoding="utf-8"))
     assets: list[dict[str, object]] = payload["assets"]  # type: ignore[assignment]
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    assert result.stdout == ""
+    assert "invalid_seed" in result.stdout
     assert payload["status"] == test_case.expected_status
     assert payload["summary"] == test_case.expected_summary
     assert tuple((asset["name"], asset["status"]) for asset in assets) == (
