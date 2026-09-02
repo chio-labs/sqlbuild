@@ -21,6 +21,7 @@ from sqlbuild.adapter.contract.models import (
 from sqlbuild.adapter.contract.types import CursorKind, FunctionNullabilityRule
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.bigquery.classes.bigquery_connection import _BigQueryConnection
+from sqlbuild.adapters.bigquery.classes.bigquery_cursor import _BigQueryCursor
 from sqlbuild.compiler.compile.models import (
     FunctionArgument,
     FunctionReturnColumn,
@@ -36,6 +37,7 @@ from sqlbuild.observability import (
 from tests.unit.src.sqlbuild.adapters.bigquery._test_types import (
     BigQueryConnectErrorTestCase,
     BigQueryCountRowsTestCase,
+    BigQueryDmlLifecycleTestCase,
     BigQueryExecutionErrorTestCase,
     BigQueryExpressionInferenceProfileTestCase,
     BigQueryMergeExclusionTestCase,
@@ -322,6 +324,114 @@ def test_given_bigquery_rows_when_querying_then_returns_normalized_result(
     assert connection.client.queries == [(test_case.sql, "europe-west2")]
     assert events[-1].event_type == "statement_completed"
     assert events[-1].payload["row_count"] == test_case.expected_row_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryDmlLifecycleTestCase(
+            description="connection INSERT reports affected rows",
+            sql="INSERT INTO private_target SELECT 1",
+            statement_type="INSERT",
+            affected_rows=3,
+            expected_affected_rows=3,
+        ),
+        BigQueryDmlLifecycleTestCase(
+            description="connection UPDATE omits unknown affected rows",
+            sql="UPDATE private_target SET value = 1",
+            statement_type="UPDATE",
+            affected_rows=None,
+            expected_affected_rows=None,
+        ),
+        BigQueryDmlLifecycleTestCase(
+            description="connection DML excludes boolean affected rows",
+            sql="UPDATE private_target SET value = 2",
+            statement_type="UPDATE",
+            affected_rows=True,
+            expected_affected_rows=None,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_bigquery_dml_job_when_connection_executes_then_terminal_reports_safe_affected_rows(
+    test_case: BigQueryDmlLifecycleTestCase,
+) -> None:
+    connection: _BigQueryConnection = _BigQueryConnection(
+        client=FakeBigQueryClient(
+            rows=FakeBigQueryRows(columns=(), rows=()),
+            statement_type=test_case.statement_type,
+            num_dml_affected_rows=test_case.affected_rows,
+        ),
+        location="europe-west2",
+    )
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    with invocation_scope("inv-bigquery-dml"), dispatcher_scope(dispatcher):
+        cursor: _BigQueryCursor = connection.execute(test_case.sql)
+
+    assert cursor.fetchall() == []
+    assert tuple(event.event_type for event in events) == (
+        "statement_started",
+        "statement_submitted",
+        "statement_completed",
+    )
+    assert events[-1].payload["job_id"] == "job-current"
+    assert events[-1].payload.get("affected_rows") == test_case.expected_affected_rows
+    assert "row_count" not in events[-1].payload
+    assert test_case.sql not in repr(events)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryDmlLifecycleTestCase(
+            description="adapter INSERT query reports affected rows",
+            sql="INSERT INTO private_target SELECT 1",
+            statement_type="INSERT",
+            affected_rows=7,
+            expected_affected_rows=7,
+        ),
+        BigQueryDmlLifecycleTestCase(
+            description="adapter UPDATE query omits unknown affected rows",
+            sql="UPDATE private_target SET value = 1",
+            statement_type="UPDATE",
+            affected_rows=None,
+            expected_affected_rows=None,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_bigquery_dml_job_when_adapter_queries_then_result_and_terminal_are_preserved(
+    test_case: BigQueryDmlLifecycleTestCase,
+) -> None:
+    adapter: BigQueryAdapter = BigQueryAdapter()
+    connection: _BigQueryConnection = _BigQueryConnection(
+        client=FakeBigQueryClient(
+            rows=FakeBigQueryRows(columns=(), rows=()),
+            statement_type=test_case.statement_type,
+            num_dml_affected_rows=test_case.affected_rows,
+        ),
+        location="europe-west2",
+    )
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    with invocation_scope("inv-bigquery-dml-query"), dispatcher_scope(dispatcher):
+        result: QueryResult = adapter.query(connection=connection, sql=test_case.sql, limit=None)
+
+    assert result == QueryResult()
+    assert tuple(event.event_type for event in events) == (
+        "statement_started",
+        "statement_submitted",
+        "statement_completed",
+    )
+    assert events[-1].payload["job_id"] == "job-current"
+    assert events[-1].payload.get("affected_rows") == test_case.expected_affected_rows
+    assert "row_count" not in events[-1].payload
+    assert test_case.sql not in repr(events)
 
 
 @pytest.mark.parametrize(

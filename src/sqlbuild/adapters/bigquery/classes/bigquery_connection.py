@@ -2,7 +2,9 @@
 
 from typing import Any
 
+from sqlbuild.adapters.bigquery._helpers.statement_telemetry import affected_rows
 from sqlbuild.adapters.bigquery.classes.bigquery_cursor import _BigQueryCursor
+from sqlbuild.adapters.bigquery.constants import SELECT_STATEMENT_TYPE
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 
 
@@ -23,7 +25,12 @@ class _BigQueryConnection:
             except Exception as error:
                 lifecycle.failed(error=error, job_id=job_id)
                 raise
-            lifecycle.completed(job_id=job_id, row_count=len(cursor._rows))
+            statement_type: object | None = getattr(job, "statement_type", None)
+            dml_affected_rows: int | None = affected_rows(job=job)
+            if statement_type == SELECT_STATEMENT_TYPE:
+                lifecycle.completed(job_id=job_id, row_count=len(cursor._rows))
+            else:
+                lifecycle.completed(job_id=job_id, affected_rows=dml_affected_rows)
             return cursor
 
     def query_job(self, sql: str) -> Any:

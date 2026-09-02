@@ -60,6 +60,15 @@ class BigQueryQueryTestCase:
 
 
 @dataclass(frozen=True)
+class BigQueryDmlLifecycleTestCase:
+    description: str
+    sql: str
+    statement_type: str
+    affected_rows: object | None
+    expected_affected_rows: int | None
+
+
+@dataclass(frozen=True)
 class BigQueryRenderSchemaTestCase:
     description: str
     database: str | None

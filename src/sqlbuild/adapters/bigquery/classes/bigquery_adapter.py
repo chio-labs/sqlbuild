@@ -69,6 +69,7 @@ from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
 from sqlbuild.adapter.type_system.main.first_arg_nullability import first_arg_nullability
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
+from sqlbuild.adapters.bigquery._helpers.statement_telemetry import affected_rows
 from sqlbuild.adapters.bigquery.classes.bigquery_connection import _BigQueryConnection
 from sqlbuild.adapters.bigquery.classes.bigquery_cursor import _BigQueryCursor
 from sqlbuild.adapters.bigquery.constants import (
@@ -1433,7 +1434,7 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
                 statement_type: str | None = getattr(job, "statement_type", None)
                 if statement_type is not None and statement_type != SELECT_STATEMENT_TYPE:
                     job.result()
-                    lifecycle.completed(job_id=job_id)
+                    lifecycle.completed(job_id=job_id, affected_rows=affected_rows(job=job))
                     return QueryResult()
                 cursor: Any = _BigQueryCursor(job.result())
                 description: Any | None = getattr(cursor, "description", None)
