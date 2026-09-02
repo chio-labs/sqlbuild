@@ -8,6 +8,10 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
+from sqlbuild.cli.output.classes.terminal_event_index import (
+    TerminalEventIndex,
+    terminal_event_index_scope,
+)
 from sqlbuild.cli.progress.classes.native_progress_projector import NativeProgressProjector
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -144,17 +148,10 @@ def test_given_failing_build_test_when_canonical_terminal_arrives_then_rich_row_
     monkeypatch.setattr("sys.stderr", stream)
     projector: NativeProgressProjector = NativeProgressProjector(stream=stream, use_color=False)
     token: Token[NativeProgressProjector | None] = projector.install()
+    terminal_index: TerminalEventIndex = TerminalEventIndex()
     event_path: Path = tmp_path / "events.jsonl"
     test_key: CompiledObjectKey = CompiledObjectKey(
         resource_type=CompiledResourceType.SQL_TEST, name="test_orders"
-    )
-    callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
-        plan=PlanOutput(
-            execution_order=(test_key,),
-            test_entries=(SqlTestPlanEntry(key=test_key, name="test_orders"),),
-        ),
-        use_color=False,
-        event_output_path=event_path,
     )
     start: LifecycleEvent = replace(
         lifecycle_event(
@@ -171,9 +168,18 @@ def test_given_failing_build_test_when_canonical_terminal_arrives_then_rich_row_
         event_id="test-start",
     )
     try:
-        projector.consume(start)
-        projector.consume(
-            replace(
+        with terminal_event_index_scope(terminal_index):
+            callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
+                plan=PlanOutput(
+                    execution_order=(test_key,),
+                    test_entries=(SqlTestPlanEntry(key=test_key, name="test_orders"),),
+                ),
+                use_color=False,
+                event_output_path=event_path,
+            )
+            projector.consume(start)
+            terminal_index.consume(start)
+            terminal: LifecycleEvent = replace(
                 start,
                 event_id="test-terminal",
                 event_type="resource_attempt_failed",
@@ -183,17 +189,18 @@ def test_given_failing_build_test_when_canonical_terminal_arrives_then_rich_row_
                     "error_type": "TestExecutionError",
                 },
             )
-        )
-        callbacks.on_node_complete(
-            SqlTestExecutionResult(
-                test_name="test_orders",
-                outcome=SqlTestOutcome.ERROR,
-                step_results=(StepResult(model_name="orders", outcome=SqlTestOutcome.ERROR),),
-                error_code="T001",
-                error_message="controlled test failure",
+            projector.consume(terminal)
+            terminal_index.consume(terminal)
+            callbacks.on_node_complete(
+                SqlTestExecutionResult(
+                    test_name="test_orders",
+                    outcome=SqlTestOutcome.ERROR,
+                    step_results=(StepResult(model_name="orders", outcome=SqlTestOutcome.ERROR),),
+                    error_code="T001",
+                    error_message="controlled test failure",
+                )
             )
-        )
-        callbacks.close()
+            callbacks.close()
         projector.close()
     finally:
         projector.restore(token)

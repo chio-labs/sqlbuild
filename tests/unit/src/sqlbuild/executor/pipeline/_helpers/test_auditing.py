@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-import sqlbuild.executor.pipeline._helpers.auditing as auditing_module
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
@@ -30,6 +29,10 @@ from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import (
     AuditPipelineLifecycleTestCase,
     AuditResourceIdentityTestCase,
 )
+from tests.unit.src.sqlbuild.executor.pipeline._helpers.helpers import (
+    lifecycle_events_with_prefix,
+    lifecycle_order_with_prefix,
+)
 
 
 @pytest.mark.parametrize(
@@ -41,6 +44,10 @@ from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import (
             expected_order=(
                 "resource_attempt_started",
                 "callback_start",
+                "operation_started",
+                "statement_started",
+                "statement_completed",
+                "operation_completed",
                 "resource_attempt_completed",
                 "callback_complete",
             ),
@@ -50,7 +57,6 @@ from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import (
 )
 def test_given_warning_audit_when_run_then_start_and_completed_terminal_wrap_callbacks(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     test_case: AuditPipelineLifecycleTestCase,
 ) -> None:
     entry: AuditPlanEntry = AuditPlanEntry(
@@ -75,7 +81,6 @@ def test_given_warning_audit_when_run_then_start_and_completed_terminal_wrap_cal
         attached_target_name="orders",
         attached_column_name="order_id",
     )
-    monkeypatch.setattr(auditing_module, "execute_audit", lambda **_kwargs: result)
     order: list[str] = []
     events: list[LifecycleEvent] = []
     dispatcher: EventDispatcher = EventDispatcher()
@@ -95,18 +100,38 @@ def test_given_warning_audit_when_run_then_start_and_completed_terminal_wrap_cal
             run_id="audit-run",
         )
 
-    assert results == (result,)
-    assert tuple(order) == test_case.expected_order
+    assert results[0].outcome == result.outcome
+    lifecycle_order: tuple[str, ...] = lifecycle_order_with_prefix(
+        order=order,
+        prefixes=("resource_attempt_", "operation_", "statement_", "callback_"),
+    )
+    assert lifecycle_order == test_case.expected_order
     assert events[-1].event_type == test_case.expected_event_type
-    assert tuple(event.run_id for event in events) == ("audit-run", "audit-run")
-    assert tuple(event.resource_id for event in events) == (
+    assert all(event.run_id == "audit-run" for event in events)
+    resource_events: tuple[LifecycleEvent, ...] = lifecycle_events_with_prefix(
+        events=events, prefixes=("resource_",)
+    )
+    assert tuple(event.resource_id for event in resource_events) == (
         "audit:warn_audit:model:orders:order_id",
         "audit:warn_audit:model:orders:order_id",
     )
-    assert tuple(event.payload["resource_name"] for event in events) == (
+    assert tuple(event.payload["resource_name"] for event in resource_events) == (
         "warn_audit",
         "warn_audit",
     )
+    operation_events: tuple[LifecycleEvent, ...] = lifecycle_events_with_prefix(
+        events=events, prefixes=("operation_",)
+    )
+    statement_events: tuple[LifecycleEvent, ...] = lifecycle_events_with_prefix(
+        events=events, prefixes=("statement_",)
+    )
+    assert len(operation_events) == 2
+    assert all(
+        event.resource_attempt_id == operation_events[0].resource_attempt_id
+        for event in statement_events
+    )
+    assert all(event.operation_id == operation_events[0].operation_id for event in statement_events)
+    assert "SELECT 1" not in str(operation_events)
     assert results[0].attached_column_name == "order_id"
 
 

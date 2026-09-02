@@ -21,12 +21,15 @@ from sqlbuild.executor.functions.main._execute import execute_function
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.testing.constants import SQL_TEST_EXECUTION_ERROR_CODE
 from sqlbuild.executor.testing.main._execute import execute_sql_test
+from sqlbuild.executor.testing.main.resource_id import sql_test_resource_id
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,
 )
+from sqlbuild.runtime.observability.models import OperationAttributes
 
 
 def run_test_pipeline(
@@ -60,13 +63,19 @@ def run_test_pipeline(
         preflight_start: float = time.monotonic()
         if on_progress is not None:
             on_progress("Preparing test functions...")
-        missing_functions_by_test: dict[CompiledObjectKey, tuple[str, ...]] = (
-            _prepare_test_functions(
-                plan=plan,
-                adapter=adapter,
-                connection=connection,
-            )
-        )
+        missing_functions_by_test: dict[CompiledObjectKey, tuple[str, ...]] = {}
+        if any(entry.function_deps for entry in plan.test_entries):
+            with OperationLifecycle(
+                operation_kind="quality",
+                operation_name="sql_test_setup",
+                metadata={"item_count": len(plan.test_entries)},
+                attributes=OperationAttributes(phase="setup", target_kind="sql_test"),
+            ):
+                missing_functions_by_test = _prepare_test_functions(
+                    plan=plan,
+                    adapter=adapter,
+                    connection=connection,
+                )
         if on_progress is not None:
             on_progress(f"Prepared test functions. ({time.monotonic() - preflight_start:.2f}s)")
         results: list[SqlTestExecutionResult] = []
@@ -75,7 +84,12 @@ def run_test_pipeline(
             missing_functions: tuple[str, ...] = missing_functions_by_test.get(entry.key, ())
             resource_name: str = _test_resource_name(entry)
             with ResourceAttemptLifecycle(
-                resource_id=f"sql_test:{resource_name}",
+                resource_id=sql_test_resource_id(
+                    test_name=entry.name,
+                    source_path=entry.source_path,
+                    block_index=entry.block_index,
+                    case_name=entry.case_name,
+                ),
                 resource_kind="test",
                 resource_name=resource_name,
                 run_id=canonical_run_id,

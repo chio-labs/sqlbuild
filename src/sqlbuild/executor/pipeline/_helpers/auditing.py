@@ -72,6 +72,7 @@ def run_audit_pipeline(
                     source_map=plan.source_map,
                     relation_overrides=None,
                     run_scope_phase=AuditRunScope.FINAL,
+                    quality_scope="standalone",
                 )
                 if result.outcome == AuditOutcome.ERROR:
                     lifecycle.failed()

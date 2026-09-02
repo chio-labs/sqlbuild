@@ -29,6 +29,7 @@ from sqlbuild.runtime.observability.constants import (
     OPERATION_METADATA_FIELDS,
     OPERATION_NAMES,
     OPERATION_PHASES,
+    OPERATION_SCOPES,
     OPERATION_STRATEGIES,
     OPERATION_TARGET_KINDS,
     RETRY_SCHEDULED_EVENT,
@@ -289,6 +290,7 @@ def _validated_attribute_fields(
         ("strategy", resolved.strategy, OPERATION_STRATEGIES),
         ("target_kind", resolved.target_kind, OPERATION_TARGET_KINDS),
         ("adapter", resolved.adapter, OPERATION_ADAPTERS),
+        ("scope", resolved.scope, OPERATION_SCOPES),
     ):
         if value is not None:
             _validate_catalog_value(value=value, allowed=allowed, field_name=field_name)

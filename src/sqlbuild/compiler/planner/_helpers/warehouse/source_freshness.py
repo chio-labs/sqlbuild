@@ -24,6 +24,7 @@ from sqlbuild.compiler.source_freshness.main._propagation import (
     build_direct_source_freshness_propagation_result,
 )
 from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
+from sqlbuild.observability import run_scope
 
 
 def build_planner_source_freshness_result(
@@ -38,23 +39,24 @@ def build_planner_source_freshness_result(
     """Build direct source freshness comparison data for planner output."""
 
     state_schemas: tuple[str, ...] = _collect_state_schemas(project=project, scope=scope)
-    source_freshness: DirectSourceFreshnessPlanningResult = (
-        build_direct_source_freshness_planning_result(
-            adapter=adapter,
-            connection=connection,
-            sources=tuple(relations.source_read_map.values()),
-            state_database=_resolve_state_database(project),
-            state_schemas=state_schemas,
-            observed_at=datetime.now(UTC),
-            run_id="planning",
-            render_qualified_name=adapter.render_qualified_name,
-            state_table_exists_by_schema={
-                state_schema: state_schema.lower() in freshness_state_schemas
-                for state_schema in state_schemas
-            },
-            filter_previous_to_sources=True,
+    with run_scope(project.run_id):
+        source_freshness: DirectSourceFreshnessPlanningResult = (
+            build_direct_source_freshness_planning_result(
+                adapter=adapter,
+                connection=connection,
+                sources=tuple(relations.source_read_map.values()),
+                state_database=_resolve_state_database(project),
+                state_schemas=state_schemas,
+                observed_at=datetime.now(UTC),
+                run_id="planning",
+                render_qualified_name=adapter.render_qualified_name,
+                state_table_exists_by_schema={
+                    state_schema: state_schema.lower() in freshness_state_schemas
+                    for state_schema in state_schemas
+                },
+                filter_previous_to_sources=True,
+            )
         )
-    )
     return replace(
         source_freshness,
         propagation=build_direct_source_freshness_propagation_result(

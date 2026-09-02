@@ -33,11 +33,22 @@ from sqlbuild.executor.scenario.models import (
     ScenarioLocalSnapshotLoadResult,
     ScenarioSnapshotManifest,
 )
+from sqlbuild.observability import LifecycleEvent
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
 from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import (
     ScenarioLocalPipelineTestCase,
 )
+
+
+def lifecycle_events_with_prefix(
+    *, events: list[LifecycleEvent], prefixes: tuple[str, ...]
+) -> tuple[LifecycleEvent, ...]:
+    return tuple(filter(lambda event: event.event_type.startswith(prefixes), events))
+
+
+def lifecycle_order_with_prefix(*, order: list[str], prefixes: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(filter(lambda item: item.startswith(prefixes), order))
 
 
 class ScenarioPipelineTestAdapter(BaseAdapter):

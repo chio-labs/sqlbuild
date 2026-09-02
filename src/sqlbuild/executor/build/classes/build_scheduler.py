@@ -95,6 +95,7 @@ from sqlbuild.executor.seed.constants import SEED_ENTRY_MISSING_CODE
 from sqlbuild.executor.seed.main._execute import execute_seed
 from sqlbuild.executor.testing.constants import SQL_TEST_ENTRY_MISSING_CODE
 from sqlbuild.executor.testing.main._execute import execute_sql_test
+from sqlbuild.executor.testing.main.resource_id import sql_test_resource_id
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.microbatches.classes.direct_store import (
@@ -722,7 +723,7 @@ class BuildScheduler:
     ):
         resource_kind: str = self._canonical_resource_kind(key=key)
         with ResourceAttemptLifecycle(
-            resource_id=f"{key.resource_type}:{key.name}",
+            resource_id=self._canonical_resource_id(key=key),
             resource_kind=resource_kind,
             resource_name=key.name,
             run_id=self._run_id,
@@ -763,6 +764,19 @@ class BuildScheduler:
             if source is not None:
                 return load_resource_kind(source).value
         return str(key.resource_type)
+
+    def _canonical_resource_id(self, *, key: CompiledObjectKey) -> str:
+        if key.resource_type != CompiledResourceType.SQL_TEST:
+            return f"{key.resource_type}:{key.name}"
+        entry: SqlTestPlanEntry | None = self._indexes.test_entries_by_key.get(key)
+        if entry is None:
+            return f"sql_test:{key.name}"
+        return sql_test_resource_id(
+            test_name=entry.name,
+            source_path=entry.source_path,
+            block_index=entry.block_index,
+            case_name=entry.case_name,
+        )
 
     def _execute_node_with_cost_context(
         self, *, key: CompiledObjectKey, connection: Any
@@ -885,7 +899,10 @@ class BuildScheduler:
             sqlbuild_phase="run",
         ):
             result: SqlTestExecutionResult = execute_sql_test(
-                test_entry=test_entry, adapter=self._adapter, connection=connection
+                test_entry=test_entry,
+                adapter=self._adapter,
+                connection=connection,
+                quality_scope="model",
             )
         duration: int = int((time.monotonic() - start) * 1000)
         log_debug_event(
@@ -1229,7 +1246,7 @@ class BuildScheduler:
         | LoadExecutionResult,
     ) -> None:
         with ResourceAttemptLifecycle(
-            resource_id=f"{key.resource_type}:{key.name}",
+            resource_id=self._canonical_resource_id(key=key),
             resource_kind=self._canonical_resource_kind(key=key),
             resource_name=key.name,
             run_id=self._run_id,

@@ -46,6 +46,7 @@ from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.executor.run.models import HookExecutionResult, ModelExecutionResult
 from sqlbuild.executor.run.types import HookPhase
+from sqlbuild.executor.testing.main.resource_id import sql_test_resource_id
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.presentation.classes.cli_style import CliStyle
@@ -120,7 +121,12 @@ def _result_resource_id(result: object) -> str | None:
     if isinstance(result, PythonNodeExecutionResult):
         return f"{result.kind.value}:{result.node_name}"
     if isinstance(result, SqlTestExecutionResult):
-        return f"sql_test:{result.test_name}"
+        return sql_test_resource_id(
+            test_name=result.test_name,
+            source_path=result.source_path,
+            block_index=result.block_index,
+            case_name=result.case_name,
+        )
     return None
 
 

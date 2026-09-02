@@ -29,6 +29,12 @@ _VISIBLE_OPERATION_LABELS: Mapping[str, str] = {
     "python_hook": "Python hook",
     "python_task": "Python task attempt",
     "sql_hook": "SQL hook",
+    "audit_evaluation": "Audit evaluation",
+    "sql_test_setup": "SQL test setup",
+    "sql_test_assertion": "SQL test assertion",
+    "source_freshness_metadata_observation": "Freshness metadata",
+    "source_freshness_query_observation": "Freshness query",
+    "source_freshness_publication": "Publish freshness state",
     "retention_inspection": "Inspect retention",
     "retention_application": "Apply retention",
     "table_type_inspection": "Inspect table type",
@@ -55,7 +61,11 @@ _TTY_TRANSIENT_OWNER_OPERATIONS: frozenset[str] = frozenset(
         "python_hook",
         "python_task",
         "sql_hook",
+        "sql_test_setup",
     }
+)
+_TTY_RESOURCE_OWNER_OPERATIONS: frozenset[str] = frozenset(
+    {"audit_evaluation", "sql_test_assertion"}
 )
 _RESOURCE_START: str = "resource_attempt_started"
 _OPERATION_START: str = "operation_started"
@@ -315,8 +325,16 @@ class NativeProgressProjector:
             or operation_name not in _VISIBLE_OPERATION_LABELS
             or (
                 self._is_tty
-                and event.resource_attempt_id is None
-                and operation_name in _TTY_TRANSIENT_OWNER_OPERATIONS
+                and (
+                    (
+                        event.resource_attempt_id is None
+                        and operation_name in _TTY_TRANSIENT_OWNER_OPERATIONS
+                    )
+                    or (
+                        event.resource_attempt_id is not None
+                        and operation_name in _TTY_RESOURCE_OWNER_OPERATIONS
+                    )
+                )
             )
         ):
             return

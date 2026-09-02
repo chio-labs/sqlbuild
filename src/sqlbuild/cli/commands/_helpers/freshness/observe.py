@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager, nullcontext
 from datetime import datetime
 from typing import Any
 
@@ -35,7 +36,7 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
 )
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
-from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
+from sqlbuild.observability import run_scope
 from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy
 
@@ -48,10 +49,39 @@ def observe_source_freshness_for_command(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     observed_at: datetime,
+    run_id: str | None = None,
     previous_records: dict[SourceFreshnessIdentity, SourceFreshnessRecord] | None = None,
     previous_records_by_source_name: dict[str, SourceFreshnessRecord] | None = None,
 ) -> FreshnessCommandResult:
     """Observe current source freshness for the CLI command."""
+
+    scope: AbstractContextManager[object] = (
+        run_scope(run_id) if run_id is not None else nullcontext()
+    )
+    with scope:
+        return _observe_source_freshness_for_command(
+            adapter=adapter,
+            connection=connection,
+            sources=sources,
+            select=select,
+            exclude=exclude,
+            observed_at=observed_at,
+            previous_records=previous_records,
+            previous_records_by_source_name=previous_records_by_source_name,
+        )
+
+
+def _observe_source_freshness_for_command(
+    *,
+    adapter: StrictAdapter,
+    connection: Any,
+    sources: tuple[SourceEntry, ...],
+    select: tuple[str, ...],
+    exclude: tuple[str, ...],
+    observed_at: datetime,
+    previous_records: dict[SourceFreshnessIdentity, SourceFreshnessRecord] | None,
+    previous_records_by_source_name: dict[str, SourceFreshnessRecord] | None,
+) -> FreshnessCommandResult:
 
     selected_sources: tuple[SourceEntry, ...] = _selected_sources(
         sources=sources,
@@ -98,15 +128,12 @@ def observe_source_freshness_for_command(
     adapter_observation_error: Exception | None = None
     if adapter_observation_sources:
         try:
-            with OperationLifecycle(
-                operation_kind="freshness", operation_name="source_freshness_observation"
-            ):
-                adapter_observations = observe_adapter_sources_freshness(
-                    adapter=adapter,
-                    connection=connection,
-                    sources=tuple(adapter_observation_sources),
-                    observed_at=observed_at,
-                )
+            adapter_observations = observe_adapter_sources_freshness(
+                adapter=adapter,
+                connection=connection,
+                sources=tuple(adapter_observation_sources),
+                observed_at=observed_at,
+            )
         except Exception as exc:
             adapter_observation_error = exc
 
@@ -141,15 +168,12 @@ def observe_source_freshness_for_command(
                 continue
         else:
             try:
-                with OperationLifecycle(
-                    operation_kind="freshness", operation_name="source_freshness_observation"
-                ):
-                    observation = observe_configured_source_freshness(
-                        adapter=adapter,
-                        connection=connection,
-                        source=observation_source,
-                        observed_at=observed_at,
-                    )
+                observation = observe_configured_source_freshness(
+                    adapter=adapter,
+                    connection=connection,
+                    source=observation_source,
+                    observed_at=observed_at,
+                )
             except Exception as exc:
                 results.append(
                     FreshnessSourceResult(

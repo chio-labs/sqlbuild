@@ -18,12 +18,17 @@ from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWri
 from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )
+from sqlbuild.cli.progress.classes.native_progress_projector import (
+    NativeProgressProjector,
+    current_native_progress_projector,
+)
 from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
     NestedCommandProgressCallbacks,
 )
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.executor.pipeline.main.run import run_test_pipeline
+from sqlbuild.executor.testing.main.resource_id import sql_test_resource_id
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
@@ -56,6 +61,10 @@ def prepare_test_execution(
         use_color=invocation.use_color,
         name_width=resolve_test_name_width(pipeline_result.plan_output.test_entries),
     )
+    projector: NativeProgressProjector | None = current_native_progress_projector()
+    if projector is not None:
+        for entry in pipeline_result.plan_output.test_entries:
+            projector.expect_resource_enrichment(resource_name=entry.name)
     invocation.progress_stream.write(f"\n{styled_header}\n\n")
     invocation.progress_stream.flush()
     execution_connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
@@ -148,7 +157,12 @@ def _build_on_complete(
             error_help=result.error_help,
             error_message=result.error_message,
             canonical_resource_name=result.test_name,
-            canonical_resource_id=f"sql_test:{result.test_name}",
+            canonical_resource_id=sql_test_resource_id(
+                test_name=result.test_name,
+                source_path=result.source_path,
+                block_index=result.block_index,
+                case_name=result.case_name,
+            ),
         )
         event_writer.write_build_result(
             result=result,

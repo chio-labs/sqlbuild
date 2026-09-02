@@ -146,6 +146,7 @@ def execute_view_entry(
             source_map=source_map,
             relation_overrides=None,
             run_scope_phase=AuditRunScope.FINAL,
+            quality_scope="final",
         )
         audit_results.append(result)
         if result.outcome == AuditOutcome.ERROR:

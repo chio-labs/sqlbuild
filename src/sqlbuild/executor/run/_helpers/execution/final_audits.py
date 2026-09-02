@@ -59,6 +59,7 @@ def run_final_model_audits(
             source_map=source_map,
             relation_overrides=relation_overrides,
             run_scope_phase=AuditRunScope.FINAL,
+            quality_scope="final",
         )
         results.append(result)
         if result.outcome == AuditOutcome.ERROR:
@@ -105,6 +106,7 @@ def run_delta_scope_audits(
             source_map=context.source_map,
             relation_overrides={context.entry.name: delta_qualified},
             run_scope_phase=AuditRunScope.DELTA_AND_FINAL,
+            quality_scope="delta",
         )
         results.append(result)
         if result.outcome == AuditOutcome.ERROR:

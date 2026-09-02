@@ -37,6 +37,7 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeExecutionResult,
 )
 from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.testing.main.resource_id import sql_test_resource_id
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.runtime.observability.constants import RESOURCE_ATTEMPT_SKIPPED_EVENT
@@ -171,7 +172,7 @@ def result_resource_identity(*, result: object) -> tuple[str | None, str | None]
             resource_kind="python_check", resource_name=result.node_name, check_id=check_id
         )
     if isinstance(result, SqlTestExecutionResult):
-        check_id = f"sql_test:{result.test_name}"
+        check_id = _sql_test_check_id(result)
         return result.test_name, integration_resource_id(
             resource_kind="sql_test", resource_name=result.test_name, check_id=check_id
         )
@@ -249,7 +250,7 @@ def _check_results(*, result: object) -> tuple[IntegrationCheckResult, ...]:
             IntegrationCheckResult(
                 kind="sql_test",
                 name=result.test_name,
-                check_id=f"sql_test:{result.test_name}",
+                check_id=_sql_test_check_id(result),
                 dag_check_id=_sql_test_check_id(result),
                 passed=result.outcome == SqlTestOutcome.PASS,
                 status=result.outcome.value,
@@ -301,9 +302,12 @@ def _audit_check_id(result: AuditExecutionResult) -> str:
 
 
 def _sql_test_check_id(result: SqlTestExecutionResult) -> str:
-    if result.case_name is None or result.source_path is None or result.block_index is None:
-        return f"sql_test:{result.test_name}"
-    return f"sql_test:{result.source_path.as_posix()}:{result.block_index}:{result.case_name}"
+    return sql_test_resource_id(
+        test_name=result.test_name,
+        source_path=result.source_path,
+        block_index=result.block_index,
+        case_name=result.case_name,
+    )
 
 
 def _bounded_metadata(value: Mapping[str, object]) -> Mapping[str, JSONValue]:

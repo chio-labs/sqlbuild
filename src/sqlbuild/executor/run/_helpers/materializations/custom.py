@@ -443,6 +443,7 @@ def _build_run_audits(
                 source_map=source_map,
                 relation_overrides=overrides,
                 run_scope_phase=AuditRunScope.FINAL,
+                quality_scope="final",
             )
             results.append(result)
         return tuple(results)

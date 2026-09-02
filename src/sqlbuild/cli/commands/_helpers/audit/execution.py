@@ -12,6 +12,10 @@ from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWri
 from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )
+from sqlbuild.cli.progress.classes.native_progress_projector import (
+    NativeProgressProjector,
+    current_native_progress_projector,
+)
 from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
     NestedCommandProgressCallbacks,
 )
@@ -48,6 +52,10 @@ def prepare_audit_execution(
         stream=invocation.progress_stream,
         use_color=invocation.use_color,
     )
+    projector: NativeProgressProjector | None = current_native_progress_projector()
+    if projector is not None:
+        for entry in pipeline_result.plan_output.audit_entries:
+            projector.expect_resource_enrichment(resource_name=entry.name)
     invocation.progress_stream.write(f"\n{styled_header}\n\n")
     invocation.progress_stream.flush()
     execution_connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(

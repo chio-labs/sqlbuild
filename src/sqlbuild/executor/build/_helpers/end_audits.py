@@ -52,6 +52,7 @@ def run_end_audits(
                 source_map=source_map,
                 relation_overrides=None,
                 run_scope_phase=AuditRunScope.FINAL,
+                quality_scope="end",
             )
             if result.outcome == AuditOutcome.ERROR:
                 lifecycle.failed()

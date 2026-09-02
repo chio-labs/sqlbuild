@@ -19,6 +19,7 @@ class OperationAttributes:
     strategy: str | None = None
     adapter: str | None = None
     target_kind: str | None = None
+    scope: str | None = None
 
 
 @dataclass(frozen=True)

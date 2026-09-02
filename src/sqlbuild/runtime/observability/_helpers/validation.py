@@ -25,6 +25,7 @@ from sqlbuild.runtime.observability.constants import (
     OPERATION_METADATA_FIELDS,
     OPERATION_NAMES,
     OPERATION_PHASES,
+    OPERATION_SCOPES,
     OPERATION_STRATEGIES,
     OPERATION_TARGET_KINDS,
     RESOURCE_ATTEMPT_SKIPPED_EVENT,
@@ -186,6 +187,7 @@ def _validate_operation_payload(*, payload: Mapping[str, JSONValue]) -> None:
         ("strategy", OPERATION_STRATEGIES),
         ("target_kind", OPERATION_TARGET_KINDS),
         ("adapter", OPERATION_ADAPTERS),
+        ("scope", OPERATION_SCOPES),
     ):
         value: JSONValue | None = payload.get(field_name)
         if value is not None and (not isinstance(value, str) or value not in allowed):

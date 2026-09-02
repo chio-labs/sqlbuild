@@ -73,6 +73,7 @@ def run_pending_source_audits(
                     source_map=plan.source_map,
                     relation_overrides=None,
                     run_scope_phase=AuditRunScope.FINAL,
+                    quality_scope="source",
                 )
                 if result.outcome == AuditOutcome.ERROR:
                     lifecycle.failed()

@@ -83,7 +83,7 @@ class NestedCommandProgressCallbacks:
             prefix: str = "\n" if self._counter > 0 else ""
             self._stream.write(f"{prefix}{group_header}\n")
             self._stream.flush()
-        if self._is_tty and self._projector is None:
+        if self._is_tty:
             self._hide_cursor()
             self._write_spinner_line()
             self._start_spinner_loop()

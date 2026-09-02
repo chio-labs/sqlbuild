@@ -112,6 +112,7 @@ def run_freshness(request: FreshnessCommandRequest) -> int:
                 select=selected_source_names,
                 exclude=(),
                 observed_at=datetime.now(),
+                run_id=graph.project.run_id,
                 previous_records=previous_records,
                 previous_records_by_source_name=previous_records_by_source_name,
             )

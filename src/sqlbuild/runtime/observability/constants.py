@@ -39,6 +39,7 @@ OPERATION_FIELDS: frozenset[str] = frozenset(
         "strategy",
         "adapter",
         "target_kind",
+        "scope",
     }
 )
 OPERATION_EVENT_PREFIX: str = "operation_"
@@ -100,7 +101,12 @@ OPERATION_NAMES: frozenset[str] = frozenset(
         "scenario_snapshot_serialization",
         "scenario_snapshot_write",
         "scenario_target_connection",
-        "source_freshness_observation",
+        "source_freshness_metadata_observation",
+        "source_freshness_query_observation",
+        "source_freshness_publication",
+        "audit_evaluation",
+        "sql_test_setup",
+        "sql_test_assertion",
         "retention_inspection",
         "retention_application",
         "table_type_inspection",
@@ -124,7 +130,19 @@ OPERATION_METADATA_FIELDS: frozenset[str] = frozenset(
     }
 )
 OPERATION_PHASES: frozenset[str] = frozenset(
-    {"inspect", "apply", "convert", "create", "promote", "reconcile"}
+    {
+        "inspect",
+        "apply",
+        "assert",
+        "convert",
+        "create",
+        "evaluate",
+        "observe",
+        "promote",
+        "publish",
+        "reconcile",
+        "setup",
+    }
 )
 OPERATION_STRATEGIES: frozenset[str] = frozenset(
     {
@@ -136,10 +154,25 @@ OPERATION_STRATEGIES: frozenset[str] = frozenset(
         "virtual",
         "append_new_columns",
         "sync_all_columns",
+        "adapter",
+        "column",
+        "sql",
     }
 )
 OPERATION_TARGET_KINDS: frozenset[str] = frozenset(
-    {"namespace", "relation", "staging_relation", "virtual_environment"}
+    {
+        "audit",
+        "namespace",
+        "relation",
+        "source",
+        "sql_test",
+        "staging_relation",
+        "state_batch",
+        "virtual_environment",
+    }
+)
+OPERATION_SCOPES: frozenset[str] = frozenset(
+    {"delta", "end", "final", "model", "source", "standalone"}
 )
 OPERATION_ADAPTERS: frozenset[str] = frozenset(
     {
@@ -184,6 +217,7 @@ STRING_PAYLOAD_FIELDS: frozenset[str] = frozenset(
         "resource_kind",
         "resource_name",
         "run_kind",
+        "scope",
         "sql_digest",
         "statement_kind",
     }

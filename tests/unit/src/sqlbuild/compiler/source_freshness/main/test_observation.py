@@ -11,6 +11,12 @@ from sqlbuild.compiler.source_freshness.main.observation import (
     observe_configured_source_freshness,
 )
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
+from sqlbuild.observability import (
+    EventDispatcher,
+    LifecycleEvent,
+    dispatcher_scope,
+    invocation_scope,
+)
 from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 from tests.unit.src.sqlbuild.compiler.source_freshness.main._test_types import (
@@ -49,8 +55,10 @@ class CapturingQueryDuckDbAdapter(DuckDbAdapter):
     def __init__(self) -> None:
         super().__init__()
         self.captured_sql = None
+        self.calls: list[str] = []
 
     def query(self, connection: Any, sql: str, *, limit: int | None = 1000) -> QueryResult:
+        self.calls.append("query")
         self.captured_sql = sql
         return QueryResult(columns=("data_version",), rows=((1,),))
 
@@ -124,28 +132,41 @@ def test_given_column_freshness_source_when_observing_then_renders_full_relation
     test_case: SharedSourceFreshnessColumnSqlTestCase,
 ) -> None:
     adapter: CapturingQueryDuckDbAdapter = CapturingQueryDuckDbAdapter()
-    observe_configured_source_freshness(
-        adapter=adapter,
-        connection=object(),
-        source=SourceEntry(
-            name="raw.orders",
-            database=test_case.source_database,
-            schema=test_case.source_schema,
-            table=test_case.source_table,
-            freshness=SourceFreshnessConfig(
-                strategy=SourceFreshnessStrategy.COLUMN,
-                value_kind=SourceFreshnessValueKind.INTEGER,
-                column="batch_id",
-                filter=test_case.freshness_filter,
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+
+    def record_event(event: LifecycleEvent) -> None:
+        events.append(event)
+        adapter.calls.append(event.event_type)
+
+    dispatcher.subscribe_lifecycle(subscriber=record_event, accepts_opaque=False)
+    with invocation_scope("freshness-invocation"), dispatcher_scope(dispatcher):
+        observe_configured_source_freshness(
+            adapter=adapter,
+            connection=object(),
+            source=SourceEntry(
+                name="raw.orders",
+                database=test_case.source_database,
+                schema=test_case.source_schema,
+                table=test_case.source_table,
+                freshness=SourceFreshnessConfig(
+                    strategy=SourceFreshnessStrategy.COLUMN,
+                    value_kind=SourceFreshnessValueKind.INTEGER,
+                    column="batch_id",
+                    filter=test_case.freshness_filter,
+                ),
             ),
-        ),
-        observed_at=datetime(2026, 1, 15, 12, 5, 0),
-    )
+            observed_at=datetime(2026, 1, 15, 12, 5, 0),
+        )
 
     assert adapter.captured_sql is not None
     assert test_case.expected_sql_fragment in adapter.captured_sql
     assert (test_case.expected_filter_fragment or "") in adapter.captured_sql
     assert (test_case.unexpected_sql_fragment or "__not_present__") not in adapter.captured_sql
+    assert adapter.calls == ["operation_started", "query", "operation_completed"]
+    assert events[0].payload["operation_name"] == "source_freshness_query_observation"
+    assert "raw.orders" not in str(events)
+    assert adapter.captured_sql not in str(events)
 
 
 @pytest.mark.parametrize(

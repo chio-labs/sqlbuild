@@ -15,6 +15,13 @@ class SqlTestFunctionPreflightTestCase:
 
 
 @dataclass(frozen=True)
+class SqlTestOperationLifecycleTestCase:
+    description: str
+    expected_resource_id: str
+    expected_operation_name: str
+
+
+@dataclass(frozen=True)
 class AuditPipelineLifecycleTestCase:
     description: str
     expected_event_type: str
