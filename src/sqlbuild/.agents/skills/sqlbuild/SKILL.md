@@ -1301,6 +1301,7 @@ Global feature toggles:
 sql_analysis = true
 query_change_tracking = true
 sql_validation = true
+column_contract_mode = "implicit"
 concurrency = 1
 auto_load_sources = true
 table_promotion_mode = "staged"
@@ -1315,6 +1316,7 @@ default_audit_run_scope = "final"
 | `virtual_environments` | `false` | Enable [virtual environments](/concepts/virtual-environments) (versioned model outputs, promotion, rollback, state management). When `false`, the project runs in direct mode. |
 | `query_change_tracking` | `true` | Track query fingerprints for change detection |
 | `sql_validation` | `true` | Validate SQL syntax during compilation |
+| `column_contract_mode` | `implicit` | Controls whether column declarations on models without a `contract` declaration activate static shape/nullability validation. `implicit` preserves that validation; `explicit` treats columns as metadata and audit attachment unless the model declares `contract enforced`. Model-level `contract enforced` and `contract none` override this setting. Explicit type enforcement remains independent. See [Contracts](/concepts/models/contracts). |
 | `concurrency` | `1` | Maximum parallel model execution (currently serial only) |
 | `auto_load_sources` | `true` | Automatically run source loaders before building dependent models during `sqb build`. See [Loaders](/concepts/python-nodes/loaders). |
 | `table_promotion_mode` | adapter default | `staged` (CTAS to staging, audit, then promote) or `immediate` (CTAS directly to target, then audit) |
@@ -2689,7 +2691,7 @@ Physical SQL output order is not currently enforced. Static contract analysis ma
 
 ### Contracts and planning
 
-`contract enforced` treats the complete named-plus-local declaration as the exact output shape. With `contract none`, the default, SQLBuild checks declared columns when static inference is available and permits additional output columns; it does not add a runtime shape requirement. See [Contracts](/concepts/models/contracts).
+`contract enforced` treats the complete named-plus-local declaration as the exact output shape. An unspecified model follows the project's `column_contract_mode`; `contract none` explicitly keeps the resolved columns as metadata, audit attachment, and type-enforcement inputs without activating shape validation. See [Contracts](/concepts/models/contracts).
 
 For models bound to a reusable schema, effective column names, types, nullability, and enum members participate in model version identity. Changing those fields on a parent therefore affects models bound through descendants. Descriptions do not change model identity. Audits have their own audit-gate identities, so audit changes invalidate reusable audit results without changing the model version itself.
 
@@ -2782,12 +2784,22 @@ Source: `concepts/models/contracts.mdx`
 
 Validate required or exact model output schemas.
 
-A model's declared columns describe expected output metadata. The `contract` policy determines whether SQLBuild treats that declaration as an open shape or a complete exact shape.
+A model's declared columns provide output metadata, type enforcement, and column audit attachment. The project `column_contract_mode` and model `contract` policy determine whether those declarations also define a statically validated output shape.
 
-| Value | Behavior |
-|-------|----------|
-| `none` | Statically check declared columns when SQLBuild can infer the output; allow undeclared output columns. This is the default. |
+| Model declaration | Behavior |
+|-------------------|----------|
+| Unspecified | Follow `settings.column_contract_mode`: `implicit` validates declared columns as an open shape; `explicit` treats them as metadata and audit attachment only. |
+| `none` | Do not activate declared-shape or nullability contract validation for this model. Explicit type enforcement remains active. |
 | `enforced` | Treat declared columns as the complete authoritative output shape and enable runtime exact-schema checks on supported materializations. |
+
+The project default is `column_contract_mode = "implicit"`, which preserves SQLBuild's original behavior. Projects that use column declarations primarily for metadata and audits, including migrations from dbt, can opt into explicit contracts:
+
+```toml
+[settings]
+column_contract_mode = "explicit"
+```
+
+Under explicit mode, a model must declare `contract enforced` to activate shape validation. A model-level `contract enforced` or `contract none` always overrides the project mode.
 
 ```sql
 MODEL (
@@ -2806,14 +2818,16 @@ MODEL (
 
 #### Compile time
 
-When SQL analysis can infer the model's output, both contract policies check declared columns against that inference:
+When declared-shape validation is active and SQL analysis can infer the model's output:
 
 - A missing declared column fails.
 - A proven type mismatch fails when type enforcement or an exact contract is active.
 - A declared non-null column fails when its expression is proven nullable.
 - Additional inferred columns fail only for `contract enforced`.
 
-If SQLBuild cannot infer the output shape, these static shape checks cannot run. `contract none` does not add a later runtime requirement. An enforced contract additionally requires a non-empty column declaration.
+If SQLBuild cannot infer the output shape, these static shape checks cannot run. An enforced contract additionally requires a non-empty column declaration and adds runtime requirements on supported materializations.
+
+Type enforcement remains independent. Typed columns continue to receive static type checks and supported runtime casts under explicit mode and `contract none`.
 
 Configuration fields that reference output columns, including `unique_key`, `cursor`, `updated_at`, and `check_columns`, are checked against an enforced declaration.
 
@@ -2855,7 +2869,7 @@ MODEL (
 );
 ```
 
-With `contract enforced`, this requires exactly the resolved `order` columns plus `ingestion_batch_id`. With `contract none`, SQLBuild checks those columns when static inference is available and permits further output. See [Schemas](/concepts/models/schemas).
+With `contract enforced`, this requires exactly the resolved `order` columns plus `ingestion_batch_id`. With `contract none`, the resolved columns remain metadata, audit attachment points, and inputs to explicit type enforcement without activating shape validation. See [Schemas](/concepts/models/schemas).
 
 ### Enum columns
 
@@ -2876,7 +2890,7 @@ Enum member references such as `@enum("market_type").WIN` are a separate feature
 
 ### Related policies
 
-The core default is `contract none`. A repository can enable [`SQBKR401`](/concepts/kata#layers-and-model-grammar) to require enforced contracts through Kata architecture policy.
+The project default is implicit open-shape validation for models that omit `contract`. A repository can select explicit opt-in contracts with `settings.column_contract_mode = "explicit"` or enable [`SQBKR401`](/concepts/kata#layers-and-model-grammar) to require enforced contracts through Kata architecture policy.
 
 Contracts also constrain schema-change behavior. For example, `snapshot_schema_change append_new_columns` is incompatible with `contract enforced` because an unannounced appended column would violate the exact declaration.
 
@@ -3302,7 +3316,7 @@ Table promotion mode is a project setting rather than a `MODEL()` field. Staged 
 | `cursor_type` | `timestamp` or `integer` |
 | `cursor_grain` | Timestamp grain such as `second`, `hour`, or `day` |
 | `cursor_start` | Lower cursor bound |
-| `cursor_filter_inputs` | Upstream names mapped to cursor columns |
+| `cursor_inputs` | Upstream names mapped to cursor columns |
 | `unique_key` | Merge or delete/insert matching columns |
 | `incremental_mode` | Set to `microbatch` for batched execution |
 | `batch_size` | Timestamp duration string such as `1d` or `1h`; use a numeric string such as `"1000"` for an integer cursor |
@@ -4511,7 +4525,7 @@ MODEL (
   cursor last_ordered_at,
   cursor_type timestamp,
   cursor_grain second,
-  cursor_filter_inputs (
+  cursor_inputs (
     fact_orders ordered_at,
   ),
 );
@@ -4564,12 +4578,11 @@ Cursors define the incremental replay boundary. SQLBuild queries `MAX(cursor)` f
 | `cursor_type` | `timestamp` or `integer` |
 | `cursor_grain` | Time grain for timestamp cursors: `second`, `minute`, `hour`, `day`, `month`, `year` |
 | `cursor_start` | Lower bound floor; the cursor will never replay before this value |
-| `cursor_filter_inputs` | Direct ref/source names whose model SQL reads receive cursor filters |
-| `cursor_watermark_inputs` | Authoritative direct or transitive upstream names used to discover available bounds |
+| `cursor_inputs` | Map of upstream ref/source names to their cursor columns |
 
-#### cursor_filter_inputs
+#### cursor_inputs
 
-When a model references multiple upstream inputs, `cursor_filter_inputs` is required to tell SQLBuild which column on each input carries the cursor:
+When a model references multiple upstream inputs, `cursor_inputs` is required to tell SQLBuild which column on each input carries the cursor:
 
 ```sql
 MODEL (
@@ -4578,33 +4591,13 @@ MODEL (
   cursor activity_hour,
   cursor_type timestamp,
   cursor_grain hour,
-  cursor_filter_inputs (
+  cursor_inputs (
     fact_orders ordered_at,
   ),
 );
 ```
 
-By default SQLBuild also uses these relations to determine the replay window. Use `cursor_watermark_inputs` when an expensive view should remain the filtered data input while a compatible physical upstream relation provides the authoritative watermark:
-
-```sql
-MODEL (
-  materialized incremental,
-  incremental_strategy delete_insert,
-  cursor meeting_date,
-  cursor_type timestamp,
-  cursor_grain day,
-  cursor_filter_inputs (
-    market_prices_view meeting_date,
-  ),
-  cursor_watermark_inputs (
-    market_prices_physical meeting_date,
-  ),
-);
-```
-
-Watermark inputs may be transitive upstream models or sources, but cannot be unrelated project nodes. SQLBuild filters only `cursor_filter_inputs`; it never adds a predicate to a relation merely because it supplies a watermark. With multiple watermark inputs, the end is the conservative common watermark: the minimum of their maxima. The declared watermark must never advance beyond data visible through the corresponding filtered reads.
-
-`cursor_inputs` is a deprecated alias for `cursor_filter_inputs` until the next major release. Alias-only models use the same map for filtering and watermark discovery. During migration, `cursor_inputs` may be combined with explicit `cursor_watermark_inputs`; declaring both `cursor_inputs` and `cursor_filter_inputs` is an error.
+SQLBuild uses these to determine the replay window. With multiple listed inputs, the end is the conservative common watermark: the minimum of their maxima. This prevents a faster input from advancing the model beyond data available from a slower input.
 
 On a first build, SQLBuild derives the interval from the declared cursor inputs and cursor policy. If it cannot establish a valid interval, the build fails before mutating the destination.
 
@@ -4619,7 +4612,7 @@ MODEL (
   cursor activity_hour,
   cursor_type timestamp,
   cursor_grain hour,
-  cursor_filter_inputs (
+  cursor_inputs (
     fact_orders ordered_at,
   ),
 );
@@ -4634,15 +4627,14 @@ WHERE ordered_at >= __cursor_start()
 
 In microbatch mode, the intrinsics resolve to each batch's concrete bounds. A microbatch full refresh discovers its range from current inputs while ignoring the old destination watermark.
 
-##### Filtering and watermark membership are independent
+##### Listed inputs bound the window; unlisted inputs do not
 
-`cursor_filter_inputs` exclusively controls which direct model reads receive cursor predicates. `cursor_watermark_inputs` exclusively controls which authoritative upstream relations bound the replay window; when omitted, it defaults to `cursor_filter_inputs`.
+Only the inputs you list in `cursor_inputs` bound the replay window. This is an explicit choice, and it has two consequences worth understanding:
 
-- A relation listed only in `cursor_filter_inputs` is filtered but does not determine availability when explicit watermark inputs are configured.
-- A relation listed only in `cursor_watermark_inputs` determines availability but is not added to model SQL and does not receive a predicate.
-- A direct input absent from `cursor_filter_inputs` is read without an automatic cursor predicate, regardless of watermark membership.
+- **Listed inputs** drive the window. Their new data advances the `MAX`, which is what tells SQLBuild how far to reprocess and which rows of the target to rewrite.
+- **Unlisted inputs are read in full.** SQLBuild does not add a cursor filter to them, and they do not bound the window. This is correct for lookup or dimension tables that have no meaningful cursor column: you do not list them, and SQLBuild reads them whole rather than trying to filter on a column that may not exist.
 
-For `delete_insert` and `merge`, target rows are rewritten within the window derived from watermark inputs. Configure filter membership according to which direct reads need that window, and watermark membership according to which upstream relations authoritatively prove that the window is available.
+The implication for `delete_insert` and `merge`: the target rows that get rewritten are the ones whose cursor falls inside the window derived from the listed inputs. If an unlisted input changes in a way that should affect target rows outside that window, those rows are not rewritten on a normal incremental run. List every input whose new data should drive reprocessing; leave unlisted only the inputs you intend to read in full.
 
 To capture changes that fall outside the normal forward window, see [Lookback](#lookback) for late-arriving data and [Replay on change](#replay-on-change) for model changes.
 
@@ -4674,7 +4666,7 @@ MODEL (
   cursor activity_hour,
   cursor_type timestamp,
   cursor_grain hour,
-  cursor_filter_inputs (
+  cursor_inputs (
     fact_orders ordered_at,
   ),
   incremental_mode microbatch,
@@ -4702,7 +4694,7 @@ MODEL (
   cursor activity_day,
   cursor_type timestamp,
   cursor_grain day,
-  cursor_filter_inputs (
+  cursor_inputs (
     hourly_order_activity activity_hour,
   ),
   incremental_mode microbatch,
@@ -4716,7 +4708,7 @@ MODEL (
   cursor activity_hour,
   cursor_type timestamp,
   cursor_grain hour,
-  cursor_filter_inputs (
+  cursor_inputs (
     daily_activity_rollup activity_day,
   ),
   incremental_mode microbatch,
@@ -11761,7 +11753,7 @@ sqb --project-dir <path> compile [flags]
 When SQL analysis is enabled (default), compile performs static analysis on your models without connecting to the warehouse:
 
 - **Column inference**: Infers output columns from each model's SQL, including through CTEs, subqueries, and JOINs
-- **Column contract validation**: If a model declares columns in its `MODEL()` header, compile checks that every declared column exists in the query output. If a column declares a type and `type_enforcement` is enabled, compile also verifies the inferred type matches the declared type
+- **Column contract validation**: Under the default `settings.column_contract_mode = "implicit"`, a model with declared columns and no model-level `contract` declaration checks that every declared column exists in the statically inferred query output. `explicit` mode requires `contract enforced` to activate shape checks. Explicit type enforcement remains independent and verifies inferred types when possible
 - **Column lineage**: Traces which source columns flow into each output column, including transform classification. See [Column Lineage](/concepts/column-lineage) for details
 
 `sqb compile` checks SQL correctness, contracts, and lineage. [`sqb kata`](/cli/kata) compiles the
@@ -11773,13 +11765,15 @@ automatically by `compile`.
 When a contract violation is found, compile reports it with source-annotated diagnostics:
 
 ```
-error[K001]: required column 'total_cents' missing from model output
+error[K001]: declared column 'total_cents' was not found in statically inferred output for model 'fact_orders'
   model: fact_orders
-  --> models/marts/fact_orders.sql:5:3
-  5 | SELECT order_id, customer_id
-    |        ^^^^^^^^
-  = help: add total_cents to the SELECT list or remove it from MODEL(columns)
+  --> models/marts/fact_orders.sql:6:5
+  6 |     total_cents (),
+    |     ^^^^^^^^^^^
+  = help: add total_cents to the SELECT list or correct/remove MODEL(columns (...)); MODEL(columns (...)) is validated using static SQL analysis because settings.column_contract_mode is "implicit" (the default). If this project intentionally uses columns only for metadata and audits, set [settings] column_contract_mode = "explicit"; models with contract enforced remain validated
 ```
+
+The configuration guidance is an intentional project-policy choice, not a general error suppression. Fix the query or declaration when the model is intended to have a column contract. Diagnostics for `contract enforced` models do not recommend changing the project mode because explicit model contracts remain authoritative.
 
 Diagnostic codes:
 

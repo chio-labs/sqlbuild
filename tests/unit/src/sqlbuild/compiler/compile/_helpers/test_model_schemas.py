@@ -260,10 +260,11 @@ SELECT
     "test_case",
     [
         ModelSchemaContractDiagnosticTestCase(
-            description="superset contract requires model-local declared columns",
+            description="contract none treats named columns as metadata",
             contract="none",
             projection="1::INTEGER AS order_id, 'OPEN'::VARCHAR AS status",
-            expected_code="K001",
+            expected_codes=(),
+            expected_help_fragment="",
         ),
         ModelSchemaContractDiagnosticTestCase(
             description="exact contract rejects additional output columns",
@@ -272,7 +273,8 @@ SELECT
                 "1::INTEGER AS order_id, 'OPEN'::VARCHAR AS status, "
                 "'declared'::VARCHAR AS local_note, 1 AS extra_column"
             ),
-            expected_code="K005",
+            expected_codes=("K005",),
+            expected_help_fragment="named SCHEMA",
         ),
     ],
     ids=lambda case: case.description,
@@ -318,8 +320,10 @@ SELECT {test_case.projection}
     diagnostics: tuple[CompilerDiagnostic, ...] = evaluate_model_contracts(
         project=project, dialect="duckdb"
     ).diagnostics
-    assert tuple(diagnostic.code for diagnostic in diagnostics) == (test_case.expected_code,)
-    assert "named SCHEMA" in (diagnostics[0].help or "")
+    assert tuple(diagnostic.code for diagnostic in diagnostics) == test_case.expected_codes
+    assert test_case.expected_help_fragment in " ".join(
+        diagnostic.help or "" for diagnostic in diagnostics
+    )
 
 
 @pytest.mark.parametrize(

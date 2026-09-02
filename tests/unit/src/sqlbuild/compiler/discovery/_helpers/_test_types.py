@@ -44,6 +44,20 @@ class MicrobatchLimitConfigErrorTestCase:
 
 
 @dataclass(frozen=True)
+class ColumnContractModeConfigTestCase:
+    description: str
+    settings_toml: str
+    expected_mode: str
+
+
+@dataclass(frozen=True)
+class ColumnContractModeConfigErrorTestCase:
+    description: str
+    settings_toml: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class DiscoverMacroFilesTestCase:
     description: str
     files: dict[str, str]
