@@ -17,6 +17,7 @@ from sqlbuild.compiler.scopes.types import ScopeKind
 from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.models import ColumnLineageRef, RetryPolicy, SqlResourceRef
 from sqlbuild.python_nodes.types import PythonCheckSeverity
+from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORT_KINDS
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,
@@ -449,6 +450,8 @@ class DiscoveredEventExporterDeclaration:
     relative_path: Path
     name: str
     function: Callable[..., object]
+    event_kinds: frozenset[str]
+    min_severity: str
 
 
 @dataclass(frozen=True)
@@ -459,6 +462,8 @@ class DiscoveredEventExporter:
     relative_path: Path
     name: str
     function: Callable[..., object]
+    event_kinds: frozenset[str] = EVENT_EXPORT_KINDS
+    min_severity: str = "debug"
     provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
 
 

@@ -10,6 +10,10 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.observability import LifecycleEvent
 from sqlbuild.providers import Provider
+from sqlbuild.runtime.event_exporting.models import (
+    LifecycleExportPolicy,
+    QueuedLifecycleEvent,
+)
 
 
 class BlockingProvider(Provider):
@@ -68,10 +72,10 @@ def blocking_discovery() -> tuple[
     return (provider,), (exporter,)
 
 
-def lifecycle_event(index: int = 1) -> LifecycleEvent:
+def lifecycle_event(index: int = 1, event_type: str = "invocation_started") -> LifecycleEvent:
     return LifecycleEvent(
         event_id=f"event-{index}",
-        event_type="invocation_started",
+        event_type=event_type,
         schema_version=1,
         producer="test",
         producer_version="1",
@@ -79,3 +83,18 @@ def lifecycle_event(index: int = 1) -> LifecycleEvent:
         invocation_id="invocation",
         payload={"command": "build"},
     )
+
+
+def queued_event(
+    *, sequence: int, priority: int, eligible: tuple[int, ...] = (0,)
+) -> QueuedLifecycleEvent:
+    return QueuedLifecycleEvent(
+        sequence,
+        lifecycle_event(sequence),
+        LifecycleExportPolicy("invocation", "debug", priority),
+        eligible,
+    )
+
+
+def queued_sequence(event: QueuedLifecycleEvent | None) -> int | None:
+    return getattr(event, "sequence", None)

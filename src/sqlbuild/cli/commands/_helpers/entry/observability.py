@@ -32,7 +32,11 @@ from sqlbuild.runtime.event_exporting.classes.dispatcher import EventExporterDis
 from sqlbuild.runtime.event_exporting.main.event_exporter_command_scope import (
     event_exporter_command_scope,
 )
-from sqlbuild.runtime.event_exporting.models import EventExporterFailure, EventExportSummary
+from sqlbuild.runtime.event_exporting.models import (
+    EventExporterCounts,
+    EventExporterFailure,
+    EventExportSummary,
+)
 from sqlbuild.sqlite_history import SQLiteExecutionHistory
 
 _LOGGER: logging.Logger = logging.getLogger("sqlbuild.cli.observability")
@@ -157,6 +161,8 @@ def _log_exporter_failure(failure: EventExporterFailure) -> None:
         message="Event exporter delivery failed",
         exporter_name=failure.exporter_name,
         error_type=failure.error_type,
+        event_kind=failure.event_kind,
+        event_severity=failure.event_severity,
     )
 
 
@@ -164,7 +170,27 @@ def _log_exporter_summary(summary: EventExportSummary) -> None:
     log_debug_event(
         logger=_LOGGER,
         message="Event exporter delivery summary",
+        accepted=summary.accepted,
+        filtered=summary.filtered,
         delivered=summary.delivered,
         failed=summary.failed,
         dropped=summary.dropped,
+        queue_depth=summary.queue_depth,
+        queue_capacity=summary.queue_capacity,
+        flush_complete=summary.flush_complete,
     )
+    for exporter in summary.per_exporter:
+        counts: EventExporterCounts = exporter.counts
+        log_debug_event(
+            logger=_LOGGER,
+            message="Event exporter accounting",
+            exporter_name=exporter.exporter_name,
+            accepted=counts.accepted,
+            filtered=counts.filtered,
+            delivered=counts.delivered,
+            failed=counts.failed,
+            dropped=counts.dropped,
+            queue_depth=summary.queue_depth,
+            queue_capacity=summary.queue_capacity,
+            flush_complete=summary.flush_complete,
+        )

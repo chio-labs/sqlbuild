@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any, cast
 
 from sqlbuild.observability import LifecycleEvent
 from sqlbuild.python_nodes._helpers.attachment import attach_definition, read_attached_definition
+from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORT_KINDS, EVENT_EXPORT_SEVERITIES
 from sqlbuild.runtime.event_exporting.exceptions import EventExporterInputError
 from sqlbuild.runtime.event_exporting.models import EventExporterDefinition
 
@@ -25,6 +26,8 @@ def event_exporter(
     function: Callable[..., object] | None = None,
     *,
     name: str | None = None,
+    event_kinds: Iterable[str] | None = None,
+    min_severity: str = "debug",
 ) -> Callable[..., object] | Callable[[Callable[..., object]], Callable[..., object]]:
     """Mark a synchronous function as a SQLBuild lifecycle event exporter."""
 
@@ -35,10 +38,34 @@ def event_exporter(
             raise EventExporterInputError(
                 "event exporter names must be lower snake_case Python identifiers"
             )
+        try:
+            resolved_kinds: frozenset[str] = (
+                EVENT_EXPORT_KINDS if event_kinds is None else frozenset(event_kinds)
+            )
+        except TypeError as error:
+            raise EventExporterInputError(
+                "event exporter event_kinds must contain only strings"
+            ) from error
+        if not all(isinstance(kind, str) for kind in resolved_kinds):
+            raise EventExporterInputError("event exporter event_kinds must contain only strings")
+        unknown_kinds: frozenset[str] = resolved_kinds - EVENT_EXPORT_KINDS
+        if not resolved_kinds or unknown_kinds:
+            raise EventExporterInputError(
+                "event exporter event_kinds must be a non-empty subset of: "
+                + ", ".join(sorted(EVENT_EXPORT_KINDS))
+            )
+        if min_severity not in EVENT_EXPORT_SEVERITIES:
+            raise EventExporterInputError(
+                "event exporter min_severity must be one of: " + ", ".join(EVENT_EXPORT_SEVERITIES)
+            )
         return attach_definition(
             function=inner,
             attribute_name=_ATTRIBUTE_NAME,
-            definition=EventExporterDefinition(name=resolved_name),
+            definition=EventExporterDefinition(
+                name=resolved_name,
+                event_kinds=resolved_kinds,
+                min_severity=min_severity,
+            ),
         )
 
     return decorate(function) if function is not None else decorate

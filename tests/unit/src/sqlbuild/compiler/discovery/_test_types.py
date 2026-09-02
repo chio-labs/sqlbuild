@@ -2,6 +2,21 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class InvalidEventExporterConfigTestCase:
+    description: str
+    config: str
+    expected_error: str
+
+
+@dataclass(frozen=True)
+class EventExporterConfigTestCase:
+    description: str
+    config: str
+    expected_kinds: frozenset[str]
+    expected_min_severity: str
+
+
+@dataclass(frozen=True)
 class DiscoverProjectInputsTestCase:
     description: str
     repo_files: dict[str, str]

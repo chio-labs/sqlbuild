@@ -72,6 +72,8 @@ class EventExporterCommandScope:
                         name=exporter.name,
                         function=exporter.function,
                         provider_arguments=provider_arguments,
+                        event_kinds=exporter.event_kinds,
+                        min_severity=exporter.min_severity,
                     )
                 )
         except BaseException:

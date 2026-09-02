@@ -1059,6 +1059,8 @@ def discover_event_exporter_declarations(
                     relative_path=file_path.relative_to(project_dir),
                     name=definition.name,
                     function=value,
+                    event_kinds=definition.event_kinds,
+                    min_severity=definition.min_severity,
                 )
             )
     return tuple(discovered)
@@ -1088,6 +1090,8 @@ def bind_event_exporter_declarations(
                 relative_path=declaration.relative_path,
                 name=declaration.name,
                 function=declaration.function,
+                event_kinds=declaration.event_kinds,
+                min_severity=declaration.min_severity,
                 provider_usages=usages,
             )
         )
