@@ -10,6 +10,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
+from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.build.main._execute import execute_build_plan
 from sqlbuild.executor.build.main._external_source_loads import (
     run_external_source_loads_before_connections,
@@ -51,6 +52,7 @@ from sqlbuild.executor.pipeline._helpers.testing import (
     run_test_pipeline as run_test_pipeline,
 )
 from sqlbuild.executor.pipeline.models import BuildConnectionPreparation, ResolvedBuildInputs
+from sqlbuild.observability import run_scope
 from sqlbuild.spec.contracts.models import SettingsConfig
 
 
@@ -67,24 +69,31 @@ def run_build_pipeline(
 ) -> BuildExecutionResult:
     """Execute a full build pipeline: resolve settings, open connections, run plan, close."""
 
-    with CostContext.scope(
-        run_id=runtime.run_id,
-        resource_type="run",
-        resource_name=runtime.target,
-        ledger_path=runtime.runtime_dir / "runs" / runtime.run_id / "statements.jsonl",
-        phase="build",
-        on_statement_complete=(None if callbacks is None else callbacks.on_statement_complete),
-    ):
-        return _run_build_pipeline(
-            plan=plan,
-            connection_config=connection_config,
-            adapter=adapter,
-            settings=settings,
-            runtime=runtime,
-            callbacks=callbacks,
-            customizations=customizations,
-            initial_state=initial_state,
-        )
+    with run_scope(runtime.run_id) as identity:
+        with diagnostics_context(
+            sqlbuild_invocation_id=identity.invocation_id,
+            sqlbuild_run_id=identity.run_id,
+        ):
+            with CostContext.scope(
+                run_id=runtime.run_id,
+                resource_type="run",
+                resource_name=runtime.target,
+                ledger_path=runtime.runtime_dir / "runs" / runtime.run_id / "statements.jsonl",
+                phase="build",
+                on_statement_complete=(
+                    None if callbacks is None else callbacks.on_statement_complete
+                ),
+            ):
+                return _run_build_pipeline(
+                    plan=plan,
+                    connection_config=connection_config,
+                    adapter=adapter,
+                    settings=settings,
+                    runtime=runtime,
+                    callbacks=callbacks,
+                    customizations=customizations,
+                    initial_state=initial_state,
+                )
 
 
 def _run_build_pipeline(

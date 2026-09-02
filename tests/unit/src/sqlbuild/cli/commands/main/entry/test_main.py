@@ -33,6 +33,7 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
+from sqlbuild.observability import ExecutionIdentity, current_execution_identity
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     MainErrorRenderingTestCase,
     MainTestCase,
@@ -2726,3 +2727,83 @@ def test_given_expected_cli_error_and_color_support_when_running_main_then_it_co
 
     assert exit_code == test_case.expected_exit_code
     assert test_case.expected_stderr_fragment in rendered_stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="handler sees invocation-only identity",
+            argv=["--project-dir", "/tmp/demo", "compile"],
+            expected_exit_code=7,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_successful_handler_when_cli_dispatches_then_invocation_identity_is_scoped(
+    test_case: MainTestCase,
+) -> None:
+    observed: list[ExecutionIdentity | None] = []
+
+    def run_compile(_request: CompileCommandRequest) -> int:
+        observed.append(current_execution_identity())
+        return test_case.expected_exit_code
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_compile=run_compile),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert observed[0] is not None
+    assert observed[0].run_id is None
+    assert observed[0].resource_id is None
+    assert current_execution_identity() is None
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="failed handler restores identity",
+            argv=["--project-dir", "/tmp/demo", "compile"],
+            expected_exit_code=1,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_failing_handler_when_cli_returns_error_then_invocation_identity_is_restored(
+    test_case: MainTestCase,
+) -> None:
+    observed: list[ExecutionIdentity | None] = []
+
+    def run_compile(_request: CompileCommandRequest) -> int:
+        observed.append(current_execution_identity())
+        raise ValueError("controlled failure")
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_compile=run_compile),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert observed[0] is not None
+    assert current_execution_identity() is None
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MainTestCase(
+            description="root help restores identity", argv=["--help"], expected_exit_code=0
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_root_help_when_cli_returns_then_invocation_identity_is_restored(
+    test_case: MainTestCase,
+) -> None:
+    exit_code: int = _main_with_dependencies(argv=test_case.argv, handlers=build_handlers())
+
+    assert exit_code == test_case.expected_exit_code
+    assert current_execution_identity() is None

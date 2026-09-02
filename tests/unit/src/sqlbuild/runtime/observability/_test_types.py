@@ -145,3 +145,17 @@ class EnvelopeFieldErrorCase:
     field_name: str
     field_value: JSONValue
     expected_error: str
+
+
+@dataclass(frozen=True)
+class IdentityFieldErrorCase:
+    description: str
+    field_name: str
+    field_value: object
+    expected_error: str
+
+
+@dataclass(frozen=True)
+class IdentityBehaviorCase:
+    description: str
+    expected_invocation_id: str

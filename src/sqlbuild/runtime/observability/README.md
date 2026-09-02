@@ -2,6 +2,14 @@
 
 This package defines wire contracts only. It does not dispatch, store, route, or render records.
 
+## Execution identity
+
+Runtime correlation uses one immutable `ExecutionIdentity` snapshot backed by a scoped context
+variable. Invocation identity is required; run, resource, resource-attempt, operation, statement,
+and diagnostic log-stream identities are optional. Resource and resource-attempt IDs remain
+separate. Explicit non-empty string IDs are preserved exactly, including SQLBuild run IDs, while
+new invocation, resource-attempt, operation, statement, and log-stream IDs use `uuid4().hex`.
+
 ## Lifecycle facts
 
 Schema version 1 uses an immutable envelope with `event_id`, `event_type`, `schema_version`,
@@ -41,3 +49,7 @@ Diagnostic schema version 1 is structurally separate from lifecycle facts. Its e
 `severity`, `logger`, `source`, `message`, JSON-compatible `fields`, producer and UTC timestamp
 metadata, and optional `log_stream_id` plus lifecycle correlation IDs. Logs explain behavior but
 are not lifecycle facts and cannot establish completion or failure semantics.
+
+SQLBuild's structured `log_sql` and `log_debug_event` helpers attach the current execution identity.
+Arbitrary raw calls to Python's `logging` API are not automatically correlated; that integration is
+deferred to CHI-176 rather than installing a global logging filter here.

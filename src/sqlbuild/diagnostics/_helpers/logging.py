@@ -7,11 +7,24 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 
+from sqlbuild.observability import (
+    ExecutionIdentity,
+    current_execution_identity,
+    execution_identity_to_dict,
+)
+
 _LOGGER_ROOT_NAME: str = "sqlbuild"
 _EMPTY_CONTEXT: dict[str, object] = {}
 _DIAGNOSTICS_CONTEXT: ContextVar[dict[str, object] | None] = ContextVar(
     "sqlbuild_diagnostics_context", default=None
 )
+
+
+def _current_identity_context() -> dict[str, object]:
+    identity: ExecutionIdentity | None = current_execution_identity()
+    if identity is None:
+        return {}
+    return {f"sqlbuild_{key}": value for key, value in execution_identity_to_dict(identity).items()}
 
 
 def get_diagnostics_logger(name: str | None = None) -> logging.Logger:
@@ -28,9 +41,10 @@ def log_sql(*, logger: logging.Logger, sql: str, action: str = "execute") -> Non
     logger.debug(
         f"{action} SQL",
         extra={
+            **(_DIAGNOSTICS_CONTEXT.get() or _EMPTY_CONTEXT),
             "sqlbuild_sql": sql,
             "sqlbuild_sql_action": action,
-            **(_DIAGNOSTICS_CONTEXT.get() or _EMPTY_CONTEXT),
+            **_current_identity_context(),
         },
     )
 
@@ -38,7 +52,14 @@ def log_sql(*, logger: logging.Logger, sql: str, action: str = "execute") -> Non
 def log_debug_event(*, logger: logging.Logger, message: str, **context: object) -> None:
     """Log a structured diagnostics event without SQL."""
 
-    logger.debug(message, extra=context)
+    logger.debug(
+        message,
+        extra={
+            **(_DIAGNOSTICS_CONTEXT.get() or _EMPTY_CONTEXT),
+            **context,
+            **_current_identity_context(),
+        },
+    )
 
 
 @contextmanager

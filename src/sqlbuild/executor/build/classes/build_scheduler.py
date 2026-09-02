@@ -400,7 +400,7 @@ class BuildScheduler:
                             self._mark_complete(key)
                             continue
                         self._in_flight.add(key)
-                        pool.submit(self._worker, key)
+                        pool.submit(copy_context().run, self._worker, key)
                         continue
                     if key in self._blocked_keys:
                         self._record_skipped(key)
@@ -424,10 +424,15 @@ class BuildScheduler:
                                 break
                             self._microbatch_coordinators.add(key)
                         self._in_flight.add(key)
-                        pool.submit(self._concurrent_microbatch_worker, key=key, pool=pool)
+                        pool.submit(
+                            copy_context().run,
+                            self._concurrent_microbatch_worker,
+                            key=key,
+                            pool=pool,
+                        )
                         continue
                     self._in_flight.add(key)
-                    pool.submit(self._worker, key)
+                    pool.submit(copy_context().run, self._worker, key)
 
                 self._report_scheduler_state()
                 if not self._in_flight:

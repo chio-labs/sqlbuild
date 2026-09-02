@@ -26,8 +26,10 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.cli.commands.types import CliCommand
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
+from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.kata_engine.exceptions import KataError
 from sqlbuild.lint.exceptions import LintError
+from sqlbuild.observability import invocation_scope
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.virtual.state.exceptions import StateBackendError
 
@@ -45,40 +47,42 @@ def _main_with_dependencies(
 ) -> int:
     """Run the CLI entrypoint with injected handlers for testing."""
 
-    use_color: bool = cli_error_use_color(argv=argv, supports_color=supports_color)
-    parser: argparse.ArgumentParser = build_cli_parser(use_color=use_color)
-    invocation: ParsedCliInvocation = parse_cli_invocation(argv=argv, parser=parser)
-    if invocation.args is None:
-        return invocation.exit_code if invocation.exit_code is not None else 1
-    try:
-        return dispatch_cli_command(args=invocation.args, handlers=handlers)
-    except SystemExit as error:
-        if isinstance(error.code, int):
-            return error.code
-        return 1
-    except (CliUserError, KataError) as error:
-        logging.getLogger("sqlbuild.cli").exception("cli user error")
-        print(
-            format_expected_error(error=error, fallback_code="C000", use_color=use_color),
-            file=sys.stderr,
-        )
-        return 1
-    except LintError as error:
-        logging.getLogger("sqlbuild.cli").exception("lint failed")
-        print(
-            format_expected_error(error=error, fallback_code="L001", use_color=use_color),
-            file=sys.stderr,
-        )
-        return 1
-    except (DiscoveryError, StateBackendError, ValueError) as error:
-        logging.getLogger("sqlbuild.cli").exception("command failed")
-        print(
-            format_expected_error(error=error, fallback_code="E001", use_color=use_color),
-            file=sys.stderr,
-        )
-        return 1
-    finally:
-        _report_skill_freshness(invocation=invocation)
+    with invocation_scope() as identity:
+        with diagnostics_context(sqlbuild_invocation_id=identity.invocation_id):
+            use_color: bool = cli_error_use_color(argv=argv, supports_color=supports_color)
+            parser: argparse.ArgumentParser = build_cli_parser(use_color=use_color)
+            invocation: ParsedCliInvocation = parse_cli_invocation(argv=argv, parser=parser)
+            if invocation.args is None:
+                return invocation.exit_code if invocation.exit_code is not None else 1
+            try:
+                return dispatch_cli_command(args=invocation.args, handlers=handlers)
+            except SystemExit as error:
+                if isinstance(error.code, int):
+                    return error.code
+                return 1
+            except (CliUserError, KataError) as error:
+                logging.getLogger("sqlbuild.cli").exception("cli user error")
+                print(
+                    format_expected_error(error=error, fallback_code="C000", use_color=use_color),
+                    file=sys.stderr,
+                )
+                return 1
+            except LintError as error:
+                logging.getLogger("sqlbuild.cli").exception("lint failed")
+                print(
+                    format_expected_error(error=error, fallback_code="L001", use_color=use_color),
+                    file=sys.stderr,
+                )
+                return 1
+            except (DiscoveryError, StateBackendError, ValueError) as error:
+                logging.getLogger("sqlbuild.cli").exception("command failed")
+                print(
+                    format_expected_error(error=error, fallback_code="E001", use_color=use_color),
+                    file=sys.stderr,
+                )
+                return 1
+            finally:
+                _report_skill_freshness(invocation=invocation)
 
 
 def _report_skill_freshness(*, invocation: ParsedCliInvocation) -> None:

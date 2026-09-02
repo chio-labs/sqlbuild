@@ -12,6 +12,36 @@ from sqlbuild.runtime.observability.types import JSONValue
 
 
 @dataclass(frozen=True)
+class ExecutionIdentity:
+    """Immutable correlation identity for one point in an execution hierarchy."""
+
+    invocation_id: str
+    run_id: str | None = None
+    resource_id: str | None = None
+    resource_attempt_id: str | None = None
+    operation_id: str | None = None
+    statement_id: str | None = None
+    log_stream_id: str | None = None
+
+    def __post_init__(self) -> None:
+        from sqlbuild.runtime.observability._helpers.validation import (
+            validate_optional_text,
+            validate_required_text,
+        )
+
+        validate_required_text(value=self.invocation_id, field_name="invocation_id")
+        for field_name in (
+            "run_id",
+            "resource_id",
+            "resource_attempt_id",
+            "operation_id",
+            "statement_id",
+            "log_stream_id",
+        ):
+            validate_optional_text(value=getattr(self, field_name), field_name=field_name)
+
+
+@dataclass(frozen=True)
 class LifecycleEventDefinition:
     """Validation contract for one known lifecycle event type."""
 
