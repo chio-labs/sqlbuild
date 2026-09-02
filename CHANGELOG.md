@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.74.4](https://github.com/chio-labs/sqlbuild/compare/v0.74.3...v0.74.4) (2026-09-02)
+
+
+### Bug Fixes
+
+* defer inferred watermark columns to warehouse ([#472](https://github.com/chio-labs/sqlbuild/issues/472)) ([e77283b](https://github.com/chio-labs/sqlbuild/commit/e77283b69d2d08683c505ddf5ab3c75033cb3ef0))
+
 ## [0.74.3](https://github.com/chio-labs/sqlbuild/compare/v0.74.2...v0.74.3) (2026-09-02)
 
 
