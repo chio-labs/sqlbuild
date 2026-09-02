@@ -201,10 +201,19 @@ class FutureCursorsConfig:
 
 
 @dataclass(frozen=True)
+class StartCursorsConfig:
+    """Safety policy for automatically discovered incremental starts."""
+
+    max_ahead: str | None = None
+    action: FutureCursorAction = FutureCursorAction.ERROR
+
+
+@dataclass(frozen=True)
 class CursorsConfig:
     """Project-wide cursor safety configuration."""
 
     future: FutureCursorsConfig = field(default_factory=FutureCursorsConfig)
+    start: StartCursorsConfig = field(default_factory=StartCursorsConfig)
 
 
 @dataclass(frozen=True)
@@ -239,6 +248,10 @@ class DefaultsConfig:
     full_refresh: bool | None = None
     append_cursor_inclusive: object | None = None
     cursor_start: object | None = None
+    cursor_start_max_ahead: str | None = None
+    cursor_start_max_action: str | None = None
+    cursor_future_max_distance: str | None = None
+    cursor_future_action: str | None = None
     lookback: str | None = None
     batch_size: str | int | None = None
     batch_concurrency: int | None = None

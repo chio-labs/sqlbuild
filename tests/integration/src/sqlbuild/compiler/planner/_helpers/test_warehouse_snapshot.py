@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -20,6 +20,7 @@ from sqlbuild.compiler.planner._helpers.warehouse.snapshot import gather_warehou
 from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
+    CursorOverrides,
     CursorSnapshotScope,
     ModelCursorSnapshot,
     WarehouseSnapshot,
@@ -28,6 +29,8 @@ from tests.integration.src.sqlbuild.compiler.planner._helpers._test_types import
     GatherCursorSnapshotTestCase,
     GatherEmptySnapshotTestCase,
     GatherInvalidCursorScopeTestCase,
+    GatherMixedGrainEligibilityTestCase,
+    GatherOverrideCursorSnapshotTestCase,
     GatherSelectedCursorScopeTestCase,
     GatherSharedCursorSnapshotTestCase,
     GatherSourceColumnsTestCase,
@@ -35,6 +38,7 @@ from tests.integration.src.sqlbuild.compiler.planner._helpers._test_types import
 )
 from tests.integration.src.sqlbuild.compiler.planner._helpers.helpers import (
     RecordingDuckDbAdapter,
+    _FailEligibleCursorAdapter,
     _IncrementalModelSpec,
     build_deferred_locations_from_map,
     build_project_with_targets,
@@ -350,6 +354,38 @@ def test_given_sources_when_gathering_source_columns_then_filters_metadata_names
             expected_progress_calls=5,
         ),
         GatherCursorSnapshotTestCase(
+            description="derives highest eligible target max without removing future rows",
+            setup_sql=(
+                "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
+                "INSERT INTO staging.raw_orders VALUES (1, '2024-01-01'), (2, '2024-02-01')",
+                "CREATE TABLE staging.fact_orders (order_id INTEGER, event_time TIMESTAMP)",
+                "INSERT INTO staging.fact_orders VALUES (1, '2024-01-15'), (2, '2024-02-01')",
+            ),
+            selected_keys=frozenset({_SELECTED_KEY}),
+            full_refresh=False,
+            model_extra_config={
+                "cursor_type": "timestamp",
+                "cursor_grain": "day",
+                "cursor_start_max_ahead": "0d",
+                "cursor_start_max_action": "cap",
+            },
+            cursor_scope=CursorSnapshotScope(
+                model_keys=frozenset({_SELECTED_KEY}),
+                runtime_producer_keys=frozenset({_SELECTED_KEY}),
+                invocation_time=datetime(2024, 1, 20, 12, tzinfo=UTC),
+            ),
+            expected_cursor_model_names=frozenset({"fact_orders"}),
+            expected_cursor_snapshots={
+                "fact_orders": ModelCursorSnapshot(
+                    target_max="2024-02-01 00:00:00",
+                    target_eligible_max="2024-01-15T00:00:00",
+                    upstream_mins=("2024-01-01 00:00:00",),
+                    upstream_maxes=("2024-02-01 00:00:00",),
+                ),
+            },
+            expected_progress_calls=5,
+        ),
+        GatherCursorSnapshotTestCase(
             description="gathers cursor bounds for first run with no target table",
             setup_sql=(
                 "CREATE TABLE staging.raw_orders (order_id INTEGER, event_time TIMESTAMP)",
@@ -446,6 +482,7 @@ def test_given_incremental_models_when_gathering_cursor_snapshots_then_returns_e
         selected_keys=test_case.selected_keys,
         full_refresh=test_case.full_refresh,
         on_progress=_track_progress,
+        cursor_scope=test_case.cursor_scope,
     )
 
     assert frozenset(snapshot.cursor_snapshots.keys()) == test_case.expected_cursor_model_names
@@ -607,6 +644,148 @@ def test_given_models_sharing_one_source_when_gathering_snapshot_then_executes_o
         "monthly_events": test_case.expected_cursor_snapshot,
     }
     assert tuple(statements) == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        GatherOverrideCursorSnapshotTestCase(
+            description="explicit timestamp start skips eligible target query",
+            expected_target_max="2026-09-03 00:00:00",
+            expected_eligible_max=None,
+            expected_statement_count=2,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_explicit_start_when_gathering_snapshot_then_eligible_query_is_never_attempted(
+    test_case: GatherOverrideCursorSnapshotTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    connection.execute("CREATE TABLE staging.raw_events (event_time TIMESTAMP)")
+    connection.execute("INSERT INTO staging.raw_events VALUES ('2026-08-01'), ('2026-09-03')")
+    connection.execute("CREATE TABLE staging.daily_events (event_time TIMESTAMP)")
+    connection.execute("INSERT INTO staging.daily_events VALUES ('2026-09-03')")
+    statements: list[str] = []
+
+    def _fail_eligible_execute(*, connection: Any, sql: str) -> Any:
+        statements.append(sql)
+        return connection.execute(sql)
+
+    project: CompiledProject = build_project_with_targets(
+        model_locations={"raw_events": "staging"},
+        incremental_models=(
+            _IncrementalModelSpec(
+                name="daily_events",
+                schema="staging",
+                cursor="event_time",
+                ref_names=("raw_events",),
+                extra_config={
+                    "cursor_type": "timestamp",
+                    "cursor_grain": "day",
+                    "cursor_start_max_ahead": "0d",
+                    "cursor_start_max_action": "cap",
+                },
+            ),
+        ),
+    )
+    daily_events_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.MODEL, name="daily_events"
+    )
+
+    snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
+        project=project,
+        adapter=_FailEligibleCursorAdapter(),
+        connection=connection,
+        execute=_fail_eligible_execute,
+        cursor_scope=CursorSnapshotScope(
+            model_keys=frozenset({daily_events_key}),
+            runtime_producer_keys=frozenset({daily_events_key}),
+            invocation_time=datetime(2026, 9, 1, 12, tzinfo=UTC),
+            cursor_overrides=CursorOverrides(start_ts="2026-07-01"),
+        ),
+    )
+
+    cursor_snapshot: ModelCursorSnapshot = snapshot.cursor_snapshots["daily_events"]
+    assert cursor_snapshot.target_max == test_case.expected_target_max
+    assert cursor_snapshot.target_eligible_max == test_case.expected_eligible_max
+    assert len(statements) == test_case.expected_statement_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        GatherMixedGrainEligibilityTestCase(
+            description="planner eligible query and result use common day grain",
+            expected_eligible_max="2024-01-15T00:00:00",
+            expected_eligible_sql=(
+                'SELECT MAX("event_time") FROM staging.hourly_events '
+                "WHERE \"event_time\" <= TIMESTAMP '2024-01-20T00:00:00'"
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_mixed_model_grains_when_gathering_eligibility_then_warehouse_flow_matches_runtime(
+    test_case: GatherMixedGrainEligibilityTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    connection.execute("CREATE TABLE staging.daily_events (event_time TIMESTAMP)")
+    connection.execute("INSERT INTO staging.daily_events VALUES ('2024-01-01'), ('2024-02-01')")
+    connection.execute("CREATE TABLE staging.hourly_events (event_time TIMESTAMP)")
+    connection.execute(
+        "INSERT INTO staging.hourly_events VALUES ('2024-01-15 18:00:00'), ('2024-02-01 15:00:00')"
+    )
+    statements: list[str] = []
+
+    def _record_execute(*, connection: Any, sql: str) -> Any:
+        statements.append(sql)
+        return connection.execute(sql)
+
+    project: CompiledProject = build_project_with_targets(
+        incremental_models=(
+            _IncrementalModelSpec(
+                name="daily_events",
+                schema="staging",
+                cursor="event_time",
+                ref_names=(),
+                extra_config={"cursor_type": "timestamp", "cursor_grain": "day"},
+            ),
+            _IncrementalModelSpec(
+                name="hourly_events",
+                schema="staging",
+                cursor="event_time",
+                ref_names=("daily_events",),
+                extra_config={
+                    "cursor_type": "timestamp",
+                    "cursor_grain": "hour",
+                    "cursor_start_max_ahead": "0d",
+                    "cursor_start_max_action": "cap",
+                },
+            ),
+        ),
+    )
+    hourly_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.MODEL, name="hourly_events"
+    )
+
+    snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        execute=_record_execute,
+        cursor_scope=CursorSnapshotScope(
+            model_keys=frozenset({hourly_key}),
+            runtime_producer_keys=frozenset({hourly_key}),
+            invocation_time=datetime(2024, 1, 20, 12, tzinfo=UTC),
+        ),
+    )
+
+    cursor_snapshot: ModelCursorSnapshot = snapshot.cursor_snapshots["hourly_events"]
+    assert cursor_snapshot.target_eligible_max == test_case.expected_eligible_max
+    assert test_case.expected_eligible_sql in statements
     assert "UNION ALL" not in statements[0]
 
 

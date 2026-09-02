@@ -37,6 +37,16 @@ class AdapterRelationMaxCursorTestCase:
 
 
 @dataclass(frozen=True)
+class AdapterEligibleMaxCursorSqlTestCase:
+    description: str
+    adapter: StrictAdapter
+    cursor_column: str
+    maximum_allowed: str
+    is_date: bool
+    expected_sql: str
+
+
+@dataclass(frozen=True)
 class AdapterSeedSelectAfterCursorTestCase:
     description: str
     adapter: StrictAdapter

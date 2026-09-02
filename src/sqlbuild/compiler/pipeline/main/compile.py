@@ -211,6 +211,7 @@ def _build_result(
         ),
         policies=PlannerPolicies(
             auto_load_sources=options.auto_load_sources,
+            selection_diagnostics=options.selection_diagnostics,
         ),
         on_progress=on_progress,
         project_config=discovered_inputs.project_config,
