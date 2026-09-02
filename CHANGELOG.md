@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.74.1](https://github.com/chio-labs/sqlbuild/compare/v0.74.0...v0.74.1) (2026-09-02)
+
+
+### Documentation
+
+* clarify automated delivery workflow ([#466](https://github.com/chio-labs/sqlbuild/issues/466)) ([b11048d](https://github.com/chio-labs/sqlbuild/commit/b11048dea014ba8b73db77f7fca568ff0a3777a9))
+
 ## [0.74.0](https://github.com/chio-labs/sqlbuild/compare/v0.73.0...v0.74.0) (2026-09-02)
 
 
