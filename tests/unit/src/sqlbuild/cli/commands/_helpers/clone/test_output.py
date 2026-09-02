@@ -117,21 +117,38 @@ def test_given_clone_result_when_rendering_summary_then_reports_footer_and_messa
             unexpected_fragments=("PROD.MAIN.FACT_ORDERS", "DEV.MAIN.FACT_ORDERS"),
         ),
         RenderCloneItemLineTestCase(
-            description="quoted relation names preserve case",
+            description="mixed quoted relation names preserve quoted case",
             index=5,
             total=5,
             item=CloneItemResult(
                 name="orders",
                 action=CloneAction.CLONED,
                 status=CloneStatus.SUCCESS,
-                origin_relation='"PROD"."MAIN"."Orders"',
-                destination_relation='"DEV"."MAIN"."Orders"',
+                origin_relation='PROD.MAIN."Orders"',
+                destination_relation='DEV.MAIN."Orders"',
             ),
-            expected_fragments=('"PROD"."MAIN"."Orders"', '"DEV"."MAIN"."Orders"'),
+            expected_fragments=('prod.main."Orders"', 'dev.main."Orders"'),
             expected_line=(
-                "  5/5  cloned                      "
-                '"PROD"."MAIN"."Orders" -> "DEV"."MAIN"."Orders"  OK'
+                '  5/5  cloned                      prod.main."Orders" -> dev.main."Orders"  OK'
             ),
+            unexpected_fragments=("PROD.MAIN", "DEV.MAIN"),
+        ),
+        RenderCloneItemLineTestCase(
+            description="escaped bracket identifier preserves quoted case",
+            index=5,
+            total=5,
+            item=CloneItemResult(
+                name="orders",
+                action=CloneAction.CLONED,
+                status=CloneStatus.SUCCESS,
+                origin_relation="PROD.DBO.[My]]Table]",
+                destination_relation="DEV.DBO.[My]]Table]",
+            ),
+            expected_fragments=("prod.dbo.[My]]Table]", "dev.dbo.[My]]Table]"),
+            expected_line=(
+                "  5/5  cloned                      prod.dbo.[My]]Table] -> dev.dbo.[My]]Table]  OK"
+            ),
+            unexpected_fragments=("[My]]table]",),
         ),
     ],
     ids=lambda case: case.description,

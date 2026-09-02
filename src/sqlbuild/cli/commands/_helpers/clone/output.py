@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import re
+
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.completion_line import format_completion_line
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
 from sqlbuild.presentation.types import CompletionState
+
+_QUOTED_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(
+    r'("(?:[^"]|"")*"|`(?:[^`]|``)*`|\[(?:[^\]]|\]\])*\])'
+)
 
 
 def render_clone_header(
@@ -48,9 +54,10 @@ def clone_relation_flow_text(
 def clone_relation_display_name(relation: str) -> str:
     """Normalize ordinary identifiers while preserving quoted identifier case."""
 
-    if any(marker in relation for marker in ('"', "`", "[")):
-        return relation
-    return relation.lower()
+    parts: list[str] = _QUOTED_IDENTIFIER_PATTERN.split(relation)
+    return "".join(
+        part if _QUOTED_IDENTIFIER_PATTERN.fullmatch(part) else part.lower() for part in parts
+    )
 
 
 def render_clone_item_line(
