@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import logging
 import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from functools import partial
+from pathlib import Path
 from typing import Any
 
-from sqlbuild.runtime.compute_logs.classes.diagnostic_log_handler import (
-    ComputeDiagnosticLogHandler,
-)
+from sqlbuild.diagnostics.classes.invocation_diagnostic_routing import InvocationDiagnosticRouting
+from sqlbuild.diagnostics.models import DiagnosticRoutingOptions
 from sqlbuild.runtime.compute_logs.classes.local_filesystem_compute_log_storage import (
     LocalFilesystemComputeLogStorage,
 )
@@ -33,16 +32,19 @@ class ScopedComputeLogCapture:
         storage: LocalFilesystemComputeLogStorage,
         metadata: CaptureMetadata,
         failure_callback: Callable[[Exception, str], None],
+        routing_options: DiagnosticRoutingOptions | None = None,
     ) -> None:
         self._storage: LocalFilesystemComputeLogStorage = storage
         self._metadata: CaptureMetadata = metadata
         self._failure_callback: Callable[[Exception, str], None] = failure_callback
         self._original_stdout: Any = sys.stdout
         self._original_stderr: Any = sys.stderr
-        self._root_logger: logging.Logger = logging.getLogger()
+        self._routing_options: DiagnosticRoutingOptions = (
+            DiagnosticRoutingOptions() if routing_options is None else routing_options
+        )
         self._stdout_tee: TextComputeLogTee | None = None
         self._stderr_tee: TextComputeLogTee | None = None
-        self._handler: ComputeDiagnosticLogHandler | None = None
+        self._routing: InvocationDiagnosticRouting | None = None
 
     def run(self, *, operation: Callable[[], int]) -> int:
         """Install capture, run once, clean up, and restore the original outcome."""
@@ -87,12 +89,14 @@ class ScopedComputeLogCapture:
             stream=ComputeLogStream.STDERR,
             failure_callback=write_failure,
         )
-        self._handler = ComputeDiagnosticLogHandler(
+        self._routing = InvocationDiagnosticRouting(
+            target_dir=Path(self._metadata.project_dir) / "target",
             storage=self._storage,
             invocation_id=self._metadata.invocation_id,
+            options=self._routing_options,
             failure_callback=write_failure,
         )
-        self._root_logger.addHandler(self._handler)
+        self._routing.__enter__()
         sys.stdout = self._stdout_tee
         sys.stderr = self._stderr_tee
 
@@ -108,30 +112,13 @@ class ScopedComputeLogCapture:
                 self._report(error=error, channel="capture_flush")
         sys.stdout = self._original_stdout
         sys.stderr = self._original_stderr
-        if not self._remove_handler():
-            cleanup_succeeded = False
-        if self._handler is not None:
+        if self._routing is not None:
             try:
-                self._handler.close()
+                self._routing.__exit__(None, None, None)
             except Exception as error:
                 cleanup_succeeded = False
                 self._report(error=error, channel="capture_cleanup")
         return cleanup_succeeded
-
-    def _remove_handler(self) -> bool:
-        if self._handler is None:
-            return True
-        try:
-            self._root_logger.removeHandler(self._handler)
-            return True
-        except Exception as error:
-            try:
-                if self._handler in self._root_logger.handlers:
-                    self._root_logger.handlers.remove(self._handler)
-            except Exception as fallback_error:
-                self._report(error=fallback_error, channel="capture_cleanup")
-            self._report(error=error, channel="capture_cleanup")
-            return False
 
     def _finalize(self, *, exit_code: int) -> None:
         try:

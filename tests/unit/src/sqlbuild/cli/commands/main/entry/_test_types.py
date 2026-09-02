@@ -18,6 +18,14 @@ class CliCaptureOutcomeTestCase:
 
 
 @dataclass(frozen=True)
+class ProjectCreationRoutingTestCase:
+    description: str
+    argv: tuple[str, ...]
+    handler_name: str
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
 class ScopeArgumentMisuseCase:
     """One invalid scope argument combination."""
 

@@ -43,6 +43,20 @@ class DiagnosticTestCase:
 
 
 @dataclass(frozen=True)
+class DiagnosticRoutingTestCase:
+    description: str
+    debug: bool
+    include_sql_text: bool
+    expected_sql_in_diagnostics: bool
+    expected_sql_in_legacy: bool
+    expected_internal_console_count: int
+    expected_plain_console_count: int
+    expected_structured_console_count: int
+    expected_sql_run_id: str | None
+    expected_sql_statement_id: str | None
+
+
+@dataclass(frozen=True)
 class PartialWriteTestCase:
     description: str
     sink_result: int | None

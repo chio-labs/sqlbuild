@@ -2878,10 +2878,8 @@ def test_given_history_write_failure_when_dispatching_then_handler_output_and_re
 
     assert exit_code == test_case.expected_exit_code
     assert captured.out == "unchanged command output\n"
-    assert caplog.records[0].message == "local execution history persistence failed"
-    assert caplog.records[0].__dict__["error_type"] == "OSError"
-    assert caplog.records[0].__dict__["channel"] == "lifecycle"
-    assert str(caplog.records[0].__dict__["subscriber"]).endswith("<lambda>")
+    diagnostic_text: str = (tmp_path / "target" / "sqlbuild.log").read_text(encoding="utf-8")
+    assert "local execution history persistence failed" in diagnostic_text
 
 
 @pytest.mark.parametrize(
@@ -2921,10 +2919,8 @@ def test_given_history_open_failure_when_dispatching_then_handler_output_and_res
 
     assert exit_code == test_case.expected_exit_code
     assert captured.out == "output survives open failure\n"
-    assert caplog.records[0].message == "local execution history unavailable"
-    assert caplog.records[0].__dict__["error_type"] == "OSError"
-    assert caplog.records[0].__dict__["channel"] == "history_open"
-    assert caplog.records[0].__dict__["subscriber"] == "SQLiteExecutionHistory"
+    diagnostic_text: str = (tmp_path / "target" / "sqlbuild.log").read_text(encoding="utf-8")
+    assert "local execution history unavailable" in diagnostic_text
 
 
 @pytest.mark.parametrize(

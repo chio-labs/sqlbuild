@@ -445,6 +445,7 @@ def test_given_standalone_run_and_conflicting_ambient_context_when_logging_sql_t
     assert record_fields["sqlbuild_invocation_id"] != test_case.expected_invocation_id
     assert record_fields["sqlbuild_run_id"] == "SQLBuild Run / standalone"
     assert record_fields["sqlbuild_operation_id"] is None
-    assert record_fields["sqlbuild_sql"] == "SELECT 1"
+    assert "sqlbuild_sql" not in record_fields
+    assert str(record_fields["sqlbuild_sql_digest"]).startswith("sha256:")
     assert record_fields["sqlbuild_sql_action"] == "submit"
     assert record_fields["sqlbuild_phase"] == "execute"

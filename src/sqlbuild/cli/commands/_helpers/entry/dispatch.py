@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 from sqlbuild.cli.commands._helpers.diff.validation import parse_diff_name_range
@@ -46,12 +45,9 @@ from sqlbuild.cli.commands.models import (
     TestCommandRequest,
 )
 from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode
-from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
-from sqlbuild.diagnostics.main.configure import configure_diagnostics
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
-from sqlbuild.presentation.main.supports_color import supports_color
 
 
 def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers) -> int:
@@ -59,7 +55,6 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
 
     project_dir: Path | None = None if args.project_dir is None else Path(args.project_dir)
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
-    _configure_diagnostics(args=args, effective_project_dir=effective_project_dir)
     selector_inputs: SelectorInputs = read_selector_file_inputs(args.select_file)
     select: tuple[str, ...] = (*tuple(args.select), *selector_inputs.selectors)
     if args.command == CliCommand.COMPILE:
@@ -513,25 +508,6 @@ def _dispatch_kata_command(
             select=tuple(args.select),
             exclude=tuple(args.exclude),
         )
-    )
-
-
-def _configure_diagnostics(*, args: CliNamespace, effective_project_dir: Path) -> None:
-    """Configure diagnostics for commands that run inside a project."""
-
-    if args.command is None or (
-        args.command == CliCommand.DBT
-        and args.dbt_command != DBT_INIT_COMMAND
-        and not (effective_project_dir / PROJECT_CONFIG_FILENAME).exists()
-    ):
-        return
-    _ = configure_diagnostics(
-        target_dir=effective_project_dir / "target",
-        debug=args.debug,
-        use_color=(not args.no_color) and supports_color(),
-    )
-    logging.getLogger("sqlbuild.cli").debug(
-        "command=%s project_dir=%s", args.command, effective_project_dir
     )
 
 

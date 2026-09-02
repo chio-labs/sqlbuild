@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -30,6 +31,20 @@ class AccessFailureTextSink:
 class InvalidLogMessage:
     def __str__(self) -> str:
         raise ValueError("controlled invalid message")
+
+
+class HostRecordingLogHandler(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__(level=logging.DEBUG)
+        self.records: list[logging.LogRecord] = []
+        self.was_closed: bool = False
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+    def close(self) -> None:
+        self.was_closed = True
+        super().close()
 
 
 class FailOnceBinaryWriter:

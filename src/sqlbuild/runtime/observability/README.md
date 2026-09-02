@@ -52,8 +52,20 @@ metadata, and optional `log_stream_id` plus lifecycle correlation IDs. Logs expl
 are not lifecycle facts and cannot establish completion or failure semantics.
 
 SQLBuild's structured `log_sql` and `log_debug_event` helpers attach the current execution identity.
-Arbitrary raw calls to Python's `logging` API are not automatically correlated; that integration is
-deferred to CHI-176 rather than installing a global logging filter here.
+The CLI installs logging routes only for the active invocation. Internal diagnostics and user
+Python `INFO`-and-higher records are retained in that invocation's `diagnostics.jsonl`; internal
+debug records reach stderr only with `--debug`. SQL records always include an action and SHA256
+digest. Full SQL is omitted by default and an explicit programmatic diagnostic-routing opt-in can
+retain it only in diagnostic files, never stderr, metadata, or lifecycle facts.
+
+`target/sqlbuild.log` remains an append-only compatibility destination during the current
+deprecation window. New per-invocation `diagnostics.jsonl` files are authoritative for new
+captures. SQLBuild does not overwrite, move, archive, or import the legacy file as lifecycle
+evidence. Removal of new legacy writes requires a separately named future release change.
+
+Project-creation commands (`sqb init`, `sqb playground`, and `sqb dbt init`) intentionally bypass
+project-local compute and legacy diagnostic routing. Their command handlers must see the requested
+destination before SQLBuild creates `logs/`, `target/`, or any diagnostic file there.
 
 ## In-process publication
 
