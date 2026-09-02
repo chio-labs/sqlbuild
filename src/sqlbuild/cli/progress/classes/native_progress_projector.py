@@ -29,7 +29,34 @@ _VISIBLE_OPERATION_LABELS: Mapping[str, str] = {
     "python_hook": "Python hook",
     "python_task": "Python task attempt",
     "sql_hook": "SQL hook",
+    "retention_inspection": "Inspect retention",
+    "retention_application": "Apply retention",
+    "table_type_inspection": "Inspect table type",
+    "table_type_conversion": "Convert table type",
+    "schema_synchronization": "Synchronize schema",
+    "staging_creation": "Create staging relation",
+    "relation_promotion": "Promote relation",
 }
+_TTY_TRANSIENT_OWNER_OPERATIONS: frozenset[str] = frozenset(
+    {
+        "dbt_command",
+        "discovery_declaration_parse",
+        "discovery_filesystem_walk",
+        "discovery_project_assembly",
+        "discovery_python_import",
+        "external_manifest_discovery",
+        "external_source_load",
+        "ingestr_command",
+        "managed_source_load",
+        "project_compile",
+        "project_discovery",
+        "python_asset",
+        "python_check",
+        "python_hook",
+        "python_task",
+        "sql_hook",
+    }
+)
 _RESOURCE_START: str = "resource_attempt_started"
 _OPERATION_START: str = "operation_started"
 _OPERATION_TERMINALS: frozenset[str] = frozenset({"operation_completed", "operation_failed"})
@@ -286,7 +313,11 @@ class NativeProgressProjector:
             operation_id is None
             or not isinstance(operation_name, str)
             or operation_name not in _VISIBLE_OPERATION_LABELS
-            or (self._is_tty and event.resource_attempt_id is None)
+            or (
+                self._is_tty
+                and event.resource_attempt_id is None
+                and operation_name in _TTY_TRANSIENT_OWNER_OPERATIONS
+            )
         ):
             return
         self._operation_starts[operation_id] = event

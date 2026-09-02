@@ -11,6 +11,9 @@ from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,
 )
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
+from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
+    canonicalize_operation_adapter,
+)
 from sqlbuild.runtime.observability.main.create_lifecycle_event import (
     create_lifecycle_event as _create_lifecycle_event,
 )
@@ -63,6 +66,7 @@ from sqlbuild.runtime.observability.models import (
     ExecutionIdentity,
     LifecycleEvent,
     OpaqueLifecycleEvent,
+    OperationAttributes,
 )
 from sqlbuild.runtime.observability.types import (
     DiagnosticSubscriber,
@@ -84,11 +88,13 @@ __all__ = (
     "LifecycleEvent",
     "ObservabilityValidationError",
     "OperationLifecycle",
+    "OperationAttributes",
     "ResourceAttemptLifecycle",
     "OpaqueLifecycleEvent",
     "OpaqueLifecycleSubscriber",
     "Unsubscribe",
     "create_lifecycle_event",
+    "canonicalize_operation_adapter",
     "current_event_dispatcher",
     "diagnostic_log_from_json",
     "diagnostic_log_to_json",

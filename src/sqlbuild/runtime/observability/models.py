@@ -12,6 +12,16 @@ from sqlbuild.runtime.observability.types import JSONValue
 
 
 @dataclass(frozen=True)
+class OperationAttributes:
+    """Optional catalogued operation dimensions."""
+
+    phase: str | None = None
+    strategy: str | None = None
+    adapter: str | None = None
+    target_kind: str | None = None
+
+
+@dataclass(frozen=True)
 class ExecutionIdentity:
     """Immutable correlation identity for one point in an execution hierarchy."""
 

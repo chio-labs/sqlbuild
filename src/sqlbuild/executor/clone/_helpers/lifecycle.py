@@ -38,15 +38,12 @@ def prepare_clone_destination(
             adapter=inputs.adapter,
             destination_connection=inputs.destination_connection,
         )
-    with OperationLifecycle(
-        operation_kind="clone", operation_name="clone_retention_reconciliation"
-    ):
-        _ = apply_clone_namespace_retention_phase(
-            requests=inputs.destination_retention_requests,
-            adapter=inputs.adapter,
-            connection=inputs.destination_connection,
-            phase=RetentionPlanPhase.PRE,
-        )
+    _ = apply_clone_namespace_retention_phase(
+        requests=inputs.destination_retention_requests,
+        adapter=inputs.adapter,
+        connection=inputs.destination_connection,
+        phase=RetentionPlanPhase.PRE,
+    )
 
 
 def finish_clone(
@@ -55,15 +52,12 @@ def finish_clone(
     """Apply namespace decreases only after every clone item succeeds."""
 
     if results and all(result.status == CloneStatus.SUCCESS for result in results):
-        with OperationLifecycle(
-            operation_kind="clone", operation_name="clone_retention_reconciliation"
-        ):
-            _ = apply_clone_namespace_retention_phase(
-                requests=inputs.destination_retention_requests,
-                adapter=inputs.adapter,
-                connection=inputs.destination_connection,
-                phase=RetentionPlanPhase.POST,
-            )
+        _ = apply_clone_namespace_retention_phase(
+            requests=inputs.destination_retention_requests,
+            adapter=inputs.adapter,
+            connection=inputs.destination_connection,
+            phase=RetentionPlanPhase.POST,
+        )
     return CloneExecutionResult(item_results=tuple(results))
 
 

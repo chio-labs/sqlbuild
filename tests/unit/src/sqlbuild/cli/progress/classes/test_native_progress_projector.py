@@ -580,3 +580,121 @@ def test_given_enriched_resource_on_tty_when_projected_then_spinner_output_is_no
 
     assert duration == 10.0
     assert stream.getvalue() == test_case.expected_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CursorCleanupCase(
+            description="standalone warehouse operation is visible on tty",
+            expected_output=("Inspect retention  START\nInspect retention  OK  (0.01s)\n"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_standalone_warehouse_operation_on_tty_when_projected_then_progress_is_visible(
+    test_case: CursorCleanupCase,
+) -> None:
+    stream: _FlushRecordingStream = _FlushRecordingStream(tty=True)
+    projector: NativeProgressProjector = NativeProgressProjector(stream=stream, use_color=False)
+    start: LifecycleEvent = lifecycle_event(
+        "operation_started",
+        operation_id="retention",
+        payload={
+            "operation_kind": "warehouse",
+            "operation_name": "retention_inspection",
+            "phase": "inspect",
+            "adapter": "snowflake",
+            "target_kind": "relation",
+        },
+    )
+    terminal: LifecycleEvent = replace(
+        start,
+        event_id="retention-terminal",
+        event_type="operation_completed",
+        payload={**start.payload, "duration_ms": 10.0},
+    )
+
+    projector.consume(start)
+    projector.consume(terminal)
+
+    assert stream.getvalue() == test_case.expected_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CursorCleanupCase(
+            description="standalone warehouse operation is visible without tty",
+            expected_output="Promote relation  START\nPromote relation  OK  (0.01s)\n",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_standalone_warehouse_operation_without_tty_when_projected_then_progress_is_visible(
+    test_case: CursorCleanupCase,
+) -> None:
+    stream: _FlushRecordingStream = _FlushRecordingStream()
+    projector: NativeProgressProjector = NativeProgressProjector(stream=stream, use_color=False)
+    start: LifecycleEvent = lifecycle_event(
+        "operation_started",
+        operation_id="promotion",
+        payload={"operation_kind": "warehouse", "operation_name": "relation_promotion"},
+    )
+    terminal: LifecycleEvent = replace(
+        start,
+        event_id="promotion-terminal",
+        event_type="operation_completed",
+        payload={**start.payload, "duration_ms": 10.0},
+    )
+
+    projector.consume(start)
+    projector.consume(terminal)
+
+    assert stream.getvalue() == test_case.expected_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (CursorCleanupCase(description="runtime schema events stay silent", expected_output=""),),
+    ids=lambda case: case.description,
+)
+def test_given_many_runtime_schema_events_when_projected_then_output_does_not_grow(
+    test_case: CursorCleanupCase,
+) -> None:
+    stream: _FlushRecordingStream = _FlushRecordingStream(tty=True)
+    projector: NativeProgressProjector = NativeProgressProjector(stream=stream, use_color=False)
+    first_start: LifecycleEvent = replace(
+        lifecycle_event(
+            "operation_started",
+            operation_id="schema-1",
+            payload={
+                "operation_kind": "warehouse",
+                "operation_name": "runtime_schema_inspection",
+            },
+        ),
+        event_id="schema-start-1",
+    )
+    first_terminal: LifecycleEvent = replace(
+        first_start,
+        event_id="schema-terminal-1",
+        event_type="operation_completed",
+        payload={**first_start.payload, "duration_ms": 10.0},
+    )
+    second_start: LifecycleEvent = replace(
+        first_start,
+        event_id="schema-start-2",
+        operation_id="schema-2",
+    )
+    second_terminal: LifecycleEvent = replace(
+        first_terminal,
+        event_id="schema-terminal-2",
+        operation_id="schema-2",
+    )
+
+    projector.consume(first_start)
+    projector.consume(first_terminal)
+    projector.consume(second_start)
+    projector.consume(second_terminal)
+
+    assert stream.getvalue() == test_case.expected_output

@@ -7,6 +7,9 @@ import pytest
 
 from sqlbuild.runtime.observability.constants import LIFECYCLE_EVENT_CATALOGS
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
+from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
+    canonicalize_operation_adapter,
+)
 from sqlbuild.runtime.observability.main.is_terminal_event import is_terminal_event
 from sqlbuild.runtime.observability.main.validate_idempotent_duplicate import (
     validate_idempotent_duplicate,
@@ -16,6 +19,7 @@ from tests.unit.src.sqlbuild.runtime.observability._test_types import (
     CatalogVersionCase,
     IdempotencyCase,
     LifecycleErrorCase,
+    OperationAdapterCase,
     StatementPrivacyCase,
     TerminalEvidenceCase,
     TerminalSemanticsCase,
@@ -44,6 +48,24 @@ from tests.unit.src.sqlbuild.runtime.observability.helpers import lifecycle_even
             field_name="parameters",
             value={"token": "secret"},
             expected_error="parameters",
+        ),
+        StatementPrivacyCase(
+            description="operation phase is rejected from statements",
+            field_name="phase",
+            value="inspect",
+            expected_error="phase",
+        ),
+        StatementPrivacyCase(
+            description="operation strategy is rejected from statements",
+            field_name="strategy",
+            value="rename",
+            expected_error="strategy",
+        ),
+        StatementPrivacyCase(
+            description="operation target kind is rejected from statements",
+            field_name="target_kind",
+            value="relation",
+            expected_error="target_kind",
         ),
         StatementPrivacyCase(
             description="parameter values are rejected",
@@ -87,6 +109,28 @@ def test_given_nested_parameter_values_when_constructing_statement_fact_then_the
             statement_id=test_case.statement_id,
             payload=test_case.payload,
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        OperationAdapterCase(
+            description="built-in adapter remains identifiable",
+            adapter_name="snowflake",
+            expected_adapter="snowflake",
+        ),
+        OperationAdapterCase(
+            description="custom adapter name is bounded",
+            adapter_name="customer_secret_warehouse",
+            expected_adapter="custom",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_adapter_name_when_canonicalizing_then_only_catalogued_identity_is_returned(
+    test_case: OperationAdapterCase,
+) -> None:
+    assert canonicalize_operation_adapter(test_case.adapter_name) == test_case.expected_adapter
 
 
 @pytest.mark.parametrize(

@@ -29,6 +29,13 @@ class StatementPrivacyCase:
 
 
 @dataclass(frozen=True)
+class OperationAdapterCase:
+    description: str
+    adapter_name: object
+    expected_adapter: str
+
+
+@dataclass(frozen=True)
 class LifecycleErrorCase:
     description: str
     event_type: str

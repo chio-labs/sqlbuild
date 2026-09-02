@@ -12,6 +12,7 @@ from sqlbuild.observability import (
     ExecutionIdentity,
     LifecycleEvent,
     ObservabilityValidationError,
+    OperationAttributes,
     OperationLifecycle,
     current_event_dispatcher,
     current_execution_identity,
@@ -41,6 +42,38 @@ class _ObservedContextManager:
 
     def __exit__(self, *args: object) -> None:
         assert tuple(event.event_type for event in self._events) == ("operation_started",)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        OperationLifecycleCase(
+            description="terminal strategy resolved after inspection",
+            expected_event_types=("operation_started", "operation_completed"),
+            operation_kind="warehouse",
+            operation_name="relation_promotion",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_terminal_attributes_when_completing_then_start_remains_unchanged(
+    test_case: OperationLifecycleCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    with dispatcher_scope(dispatcher):
+        with OperationLifecycle(
+            operation_kind=test_case.operation_kind,
+            operation_name=test_case.operation_name,
+            attributes=OperationAttributes(phase="promote", target_kind="relation"),
+        ) as lifecycle:
+            lifecycle.completed(attributes=OperationAttributes(strategy="rename"))
+
+    assert tuple(event.event_type for event in events) == test_case.expected_event_types
+    assert "strategy" not in events[0].payload
+    assert events[1].payload["strategy"] == "rename"
 
 
 @pytest.mark.parametrize(

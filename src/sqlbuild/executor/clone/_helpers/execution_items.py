@@ -23,7 +23,6 @@ from sqlbuild.executor.clone.models import CloneExecutionInput, CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.executor.functions.main._execute import execute_function
 from sqlbuild.executor.scheduling.types import ExecutionStatus
-from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def execute_clone_function_item(
@@ -152,14 +151,11 @@ def _with_destination_retention(
     if request.scope == RetentionScope.NAMESPACE:
         return result
     try:
-        with OperationLifecycle(
-            operation_kind="clone", operation_name="clone_retention_reconciliation"
-        ):
-            statements: tuple[str, ...] = apply_clone_retention(
-                request=request,
-                adapter=inputs.adapter,
-                connection=inputs.destination_connection,
-            )
+        statements: tuple[str, ...] = apply_clone_retention(
+            request=request,
+            adapter=inputs.adapter,
+            connection=inputs.destination_connection,
+        )
     except Exception as error:
         return replace(
             result,

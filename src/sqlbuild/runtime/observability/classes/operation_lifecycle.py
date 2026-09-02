@@ -24,13 +24,17 @@ from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatc
 from sqlbuild.runtime.observability.constants import (
     HOOK_PHASES,
     HOOK_TYPES,
+    OPERATION_ADAPTERS,
     OPERATION_KINDS,
     OPERATION_METADATA_FIELDS,
     OPERATION_NAMES,
+    OPERATION_PHASES,
+    OPERATION_STRATEGIES,
+    OPERATION_TARGET_KINDS,
     RETRY_SCHEDULED_EVENT,
 )
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
-from sqlbuild.runtime.observability.models import ExecutionIdentity
+from sqlbuild.runtime.observability.models import ExecutionIdentity, OperationAttributes
 from sqlbuild.runtime.observability.types import JSONValue
 
 _ERROR_TOKEN_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
@@ -51,6 +55,7 @@ class OperationLifecycle:
         hook_index: int | None = None,
         hook_type: str | None = None,
         hook_name: str | None = None,
+        attributes: OperationAttributes | None = None,
         auto_fail_base_exceptions: bool = True,
     ) -> None:
         _validate_catalog_value(
@@ -69,6 +74,7 @@ class OperationLifecycle:
             hook_type=hook_type,
             hook_name=hook_name,
         )
+        self._catalog_fields: dict[str, JSONValue] = _validated_attribute_fields(attributes)
         self._auto_fail_base_exceptions: bool = auto_fail_base_exceptions
         self._stack: ExitStack = ExitStack()
         self._dispatcher: EventDispatcher | None = None
@@ -134,11 +140,14 @@ class OperationLifecycle:
         self,
         *,
         metadata: Mapping[str, int] | None = None,
+        attributes: OperationAttributes | None = None,
         exit_code: int | None = None,
         process_id: int | None = None,
         signal_number: int | None = None,
     ) -> None:
-        payload: dict[str, JSONValue] = self._terminal_payload(metadata=metadata)
+        payload: dict[str, JSONValue] = self._terminal_payload(
+            metadata=metadata, attributes=attributes
+        )
         payload = _with_process_metadata(
             payload=payload,
             exit_code=exit_code,
@@ -156,11 +165,14 @@ class OperationLifecycle:
         error: BaseException | None = None,
         error_code: str | None = None,
         metadata: Mapping[str, int] | None = None,
+        attributes: OperationAttributes | None = None,
         exit_code: int | None = None,
         process_id: int | None = None,
         signal_number: int | None = None,
     ) -> None:
-        payload: dict[str, JSONValue] = self._terminal_payload(metadata=metadata)
+        payload: dict[str, JSONValue] = self._terminal_payload(
+            metadata=metadata, attributes=attributes
+        )
         payload = _with_process_metadata(
             payload=payload,
             exit_code=exit_code,
@@ -204,12 +216,17 @@ class OperationLifecycle:
         if self._metadata:
             payload["metadata"] = self._metadata
         payload.update(self._hook_fields)
+        payload.update(self._catalog_fields)
         return payload
 
     def _terminal_payload(
-        self, *, metadata: Mapping[str, int] | None = None
+        self,
+        *,
+        metadata: Mapping[str, int] | None = None,
+        attributes: OperationAttributes | None = None,
     ) -> dict[str, JSONValue]:
         payload: dict[str, JSONValue] = self._base_payload()
+        payload.update(_validated_attribute_fields(attributes))
         terminal_metadata: dict[str, int] = _validated_metadata(metadata)
         if terminal_metadata:
             payload["metadata"] = {**self._metadata, **terminal_metadata}
@@ -260,6 +277,23 @@ def publish_retry_scheduled(
 def _validate_catalog_value(*, value: str, allowed: frozenset[str], field_name: str) -> None:
     if value not in allowed:
         raise ObservabilityValidationError(f"{field_name} must be a catalogued value")
+
+
+def _validated_attribute_fields(
+    attributes: OperationAttributes | None,
+) -> dict[str, JSONValue]:
+    resolved: OperationAttributes = attributes or OperationAttributes()
+    fields: dict[str, JSONValue] = {}
+    for field_name, value, allowed in (
+        ("phase", resolved.phase, OPERATION_PHASES),
+        ("strategy", resolved.strategy, OPERATION_STRATEGIES),
+        ("target_kind", resolved.target_kind, OPERATION_TARGET_KINDS),
+        ("adapter", resolved.adapter, OPERATION_ADAPTERS),
+    ):
+        if value is not None:
+            _validate_catalog_value(value=value, allowed=allowed, field_name=field_name)
+            fields[field_name] = value
+    return fields
 
 
 def _validated_metadata(metadata: Mapping[str, int] | None) -> dict[str, int]:

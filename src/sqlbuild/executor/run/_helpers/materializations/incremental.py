@@ -32,6 +32,7 @@ from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
 )
+from sqlbuild.executor.run._helpers.execution.schema import inspect_runtime_relation_schema
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run._helpers.validation.contracts import validate_runtime_contract
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
@@ -51,6 +52,13 @@ from sqlbuild.executor.run.models import (
 )
 from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.runtime.observability.classes.operation_lifecycle import (
+    OperationAttributes,
+    OperationLifecycle,
+)
+from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
+    canonicalize_operation_adapter,
+)
 from sqlbuild.spec.contracts.types import TableType
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
@@ -147,13 +155,15 @@ def execute_incremental_entry(
 
     try:
         with diagnostics_context(sqlbuild_phase="schema_change", sqlbuild_action_name="inspect"):
-            delta_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
+            delta_columns: tuple[ColumnInfo, ...] = inspect_runtime_relation_schema(
+                adapter=adapter,
                 connection=connection,
                 database=target_database,
                 schema=target_schema,
                 name=delta_table,
             )
-            target_columns: tuple[ColumnInfo, ...] = adapter.get_columns(
+            target_columns: tuple[ColumnInfo, ...] = inspect_runtime_relation_schema(
+                adapter=adapter,
                 connection=connection,
                 database=target_database,
                 schema=target_schema,
@@ -170,7 +180,8 @@ def execute_incremental_entry(
                     statement_recorder=statement_recorder,
                 )
             )
-            target_columns = adapter.get_columns(
+            target_columns = inspect_runtime_relation_schema(
+                adapter=adapter,
                 connection=connection,
                 database=target_database,
                 schema=target_schema,
@@ -216,7 +227,8 @@ def execute_incremental_entry(
 
     try:
         with diagnostics_context(sqlbuild_phase="contract", sqlbuild_action_name="validate_delta"):
-            delta_columns = adapter.get_columns(
+            delta_columns = inspect_runtime_relation_schema(
+                adapter=adapter,
                 connection=connection,
                 database=target_database,
                 schema=target_schema,
@@ -391,18 +403,28 @@ def _prepare_delta_relation(
             statement_recorder=statement_recorder,
         )
     with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_delta"):
-        adapter.drop(
-            connection=connection,
-            destination=delta_qualified,
-            if_exists=True,
-            statement_recorder=statement_recorder,
-        )
-        adapter.create_table_as(
-            connection=connection,
-            destination=delta_qualified,
-            sql=preparation.resolved_sql,
-            statement_recorder=statement_recorder,
-        )
+        with OperationLifecycle(
+            operation_kind="warehouse",
+            operation_name="staging_creation",
+            attributes=OperationAttributes(
+                phase="create",
+                adapter=canonicalize_operation_adapter(adapter.adapter_name),
+                target_kind="staging_relation",
+            ),
+        ) as lifecycle:
+            adapter.drop(
+                connection=connection,
+                destination=delta_qualified,
+                if_exists=True,
+                statement_recorder=statement_recorder,
+            )
+            adapter.create_table_as(
+                connection=connection,
+                destination=delta_qualified,
+                sql=preparation.resolved_sql,
+                statement_recorder=statement_recorder,
+            )
+            lifecycle.completed(metadata={"changed_count": 1})
 
 
 def _resolve_incremental_cursor_bounds(
@@ -526,41 +548,71 @@ def _apply_schema_change(
         return tuple(ignored_warnings)
 
     if on_schema_change == OnSchemaChange.APPEND_NEW_COLUMNS:
-        if added:
-            adapter.add_columns(
-                connection=connection,
-                destination=target_qualified,
-                columns=tuple(added),
-                statement_recorder=statement_recorder,
-            )
         if type_changed:
             raise ExecutorInputError(
                 f"append_new_columns does not support type changes: "
                 f"{', '.join(c.name for c in type_changed)}"
             )
-        return ()
-
-    if on_schema_change == OnSchemaChange.SYNC_ALL_COLUMNS:
-        if added:
+        if not added:
+            return ()
+        with OperationLifecycle(
+            operation_kind="warehouse",
+            operation_name="schema_synchronization",
+            attributes=OperationAttributes(
+                phase="apply",
+                strategy="append_new_columns",
+                adapter=canonicalize_operation_adapter(adapter.adapter_name),
+                target_kind="relation",
+            ),
+        ) as lifecycle:
             adapter.add_columns(
                 connection=connection,
                 destination=target_qualified,
                 columns=tuple(added),
                 statement_recorder=statement_recorder,
             )
-        if removed:
-            adapter.drop_columns(
-                connection=connection,
-                destination=target_qualified,
-                column_names=tuple(removed),
-                statement_recorder=statement_recorder,
-            )
-        if type_changed:
-            adapter.alter_column_types(
-                connection=connection,
-                destination=target_qualified,
-                columns=tuple(type_changed),
-                statement_recorder=statement_recorder,
+            lifecycle.completed(metadata={"changed_count": len(added), "added_count": len(added)})
+        return ()
+
+    if on_schema_change == OnSchemaChange.SYNC_ALL_COLUMNS:
+        with OperationLifecycle(
+            operation_kind="warehouse",
+            operation_name="schema_synchronization",
+            attributes=OperationAttributes(
+                phase="apply",
+                strategy="sync_all_columns",
+                adapter=canonicalize_operation_adapter(adapter.adapter_name),
+                target_kind="relation",
+            ),
+        ) as lifecycle:
+            if added:
+                adapter.add_columns(
+                    connection=connection,
+                    destination=target_qualified,
+                    columns=tuple(added),
+                    statement_recorder=statement_recorder,
+                )
+            if removed:
+                adapter.drop_columns(
+                    connection=connection,
+                    destination=target_qualified,
+                    column_names=tuple(removed),
+                    statement_recorder=statement_recorder,
+                )
+            if type_changed:
+                adapter.alter_column_types(
+                    connection=connection,
+                    destination=target_qualified,
+                    columns=tuple(type_changed),
+                    statement_recorder=statement_recorder,
+                )
+            lifecycle.completed(
+                metadata={
+                    "changed_count": len(added) + len(removed) + len(type_changed),
+                    "added_count": len(added),
+                    "removed_count": len(removed),
+                    "altered_count": len(type_changed),
+                }
             )
         return ()
 

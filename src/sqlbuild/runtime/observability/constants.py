@@ -35,9 +35,14 @@ OPERATION_FIELDS: frozenset[str] = frozenset(
         "hook_index",
         "hook_type",
         "hook_name",
+        "phase",
+        "strategy",
+        "adapter",
+        "target_kind",
     }
 )
 OPERATION_EVENT_PREFIX: str = "operation_"
+RENAME_OPERATION_STRATEGY: str = "rename"
 RETRY_SCHEDULED_EVENT: str = "retry_scheduled"
 OPERATION_KINDS: frozenset[str] = frozenset(
     {
@@ -50,6 +55,7 @@ OPERATION_KINDS: frozenset[str] = frozenset(
         "quality",
         "scenario",
         "subprocess",
+        "warehouse",
     }
 )
 OPERATION_NAMES: frozenset[str] = frozenset(
@@ -95,10 +101,57 @@ OPERATION_NAMES: frozenset[str] = frozenset(
         "scenario_snapshot_write",
         "scenario_target_connection",
         "source_freshness_observation",
+        "retention_inspection",
+        "retention_application",
+        "table_type_inspection",
+        "table_type_conversion",
+        "runtime_schema_inspection",
+        "schema_synchronization",
+        "staging_creation",
+        "relation_promotion",
     }
 )
 OPERATION_METADATA_FIELDS: frozenset[str] = frozenset(
-    {"attempt_number", "byte_count", "item_count", "row_count"}
+    {
+        "attempt_number",
+        "byte_count",
+        "item_count",
+        "row_count",
+        "changed_count",
+        "added_count",
+        "removed_count",
+        "altered_count",
+    }
+)
+OPERATION_PHASES: frozenset[str] = frozenset(
+    {"inspect", "apply", "convert", "create", "promote", "reconcile"}
+)
+OPERATION_STRATEGIES: frozenset[str] = frozenset(
+    {
+        "atomic_replace",
+        "atomic_swap",
+        RENAME_OPERATION_STRATEGY,
+        "build_aside",
+        "create_new",
+        "virtual",
+        "append_new_columns",
+        "sync_all_columns",
+    }
+)
+OPERATION_TARGET_KINDS: frozenset[str] = frozenset(
+    {"namespace", "relation", "staging_relation", "virtual_environment"}
+)
+OPERATION_ADAPTERS: frozenset[str] = frozenset(
+    {
+        "bigquery",
+        "custom",
+        "databricks",
+        "duckdb",
+        "motherduck",
+        "postgres",
+        "snowflake",
+        "sqlserver",
+    }
 )
 STATEMENT_FIELDS: frozenset[str] = frozenset(
     {

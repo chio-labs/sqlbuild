@@ -13,6 +13,12 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import ModelPlanOve
 
 
 @dataclass(frozen=True)
+class LifecycleProgressTestCase:
+    description: str
+    expected_event_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class BuildOutputTestCase:
     """Test case for build output formatting."""
 

@@ -19,10 +19,14 @@ from sqlbuild.runtime.observability.constants import (
     MAX_METADATA_BYTES,
     METADATA_FIELD,
     NONNEGATIVE_INTEGER_PAYLOAD_FIELDS,
+    OPERATION_ADAPTERS,
     OPERATION_EVENT_PREFIX,
     OPERATION_KINDS,
     OPERATION_METADATA_FIELDS,
     OPERATION_NAMES,
+    OPERATION_PHASES,
+    OPERATION_STRATEGIES,
+    OPERATION_TARGET_KINDS,
     RESOURCE_ATTEMPT_SKIPPED_EVENT,
     RESOURCE_SKIP_CODES,
     RESOURCE_SKIP_MODES,
@@ -177,6 +181,15 @@ def _validate_operation_payload(*, payload: Mapping[str, JSONValue]) -> None:
         not isinstance(operation_name, str) or operation_name not in OPERATION_NAMES
     ):
         raise ObservabilityValidationError("operation_name must be a catalogued value")
+    for field_name, allowed in (
+        ("phase", OPERATION_PHASES),
+        ("strategy", OPERATION_STRATEGIES),
+        ("target_kind", OPERATION_TARGET_KINDS),
+        ("adapter", OPERATION_ADAPTERS),
+    ):
+        value: JSONValue | None = payload.get(field_name)
+        if value is not None and (not isinstance(value, str) or value not in allowed):
+            raise ObservabilityValidationError(f"{field_name} must be a catalogued value")
     hook_phase: JSONValue | None = payload.get("hook_phase")
     hook_type: JSONValue | None = payload.get("hook_type")
     hook_index: JSONValue | None = payload.get("hook_index")
@@ -202,8 +215,12 @@ def _validate_operation_payload(*, payload: Mapping[str, JSONValue]) -> None:
         raise ObservabilityValidationError("operation metadata must be a JSON object")
     if set(metadata) - OPERATION_METADATA_FIELDS:
         raise ObservabilityValidationError("operation metadata contains a non-allowlisted field")
-    for value in metadata.values():
-        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+    for metadata_value in metadata.values():
+        if (
+            isinstance(metadata_value, bool)
+            or not isinstance(metadata_value, int)
+            or metadata_value < 0
+        ):
             raise ObservabilityValidationError(
                 "operation metadata values must be nonnegative integers excluding bool"
             )
