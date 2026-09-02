@@ -98,6 +98,7 @@ def compile_plan_pipeline(
             external_sql_reference_resolver=external_sql_reference_resolver,
             resolve_python_run_selectors=request.include_python,
             max_microbatches=request.max_microbatches,
+            selection_diagnostics=request.selection_diagnostics,
         ),
         hooks=ConnectionHooks(
             on_progress=invocation.planning_progress.on_progress,

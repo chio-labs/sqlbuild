@@ -221,6 +221,7 @@ class BuildCommandRequest:
     event_output_path: Path | None = None
     no_cache: bool = False
     max_microbatches: int | None = None
+    selection_diagnostics: bool = False
     selector_files: tuple[SelectorFileSummary, ...] = ()
 
 
@@ -1018,6 +1019,7 @@ class PlanCommandRequest:
     changes_only: bool = False
     no_cache: bool = False
     max_microbatches: int | None = None
+    selection_diagnostics: bool = False
 
 
 @dataclass(frozen=True)

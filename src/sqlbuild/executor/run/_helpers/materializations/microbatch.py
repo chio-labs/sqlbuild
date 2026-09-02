@@ -27,6 +27,7 @@ from sqlbuild.compiler.planner.main.execution.effective_microbatch_batch_size im
 )
 from sqlbuild.compiler.planner.main.execution.future_cursor_warning import future_cursor_cap_warning
 from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
+from sqlbuild.compiler.planner.main.execution.maximum_start_warning import maximum_start_cap_warning
 from sqlbuild.compiler.planner.main.execution.microbatch_limit import microbatch_limit_warning
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
@@ -476,6 +477,9 @@ def execute_microbatch_entry(  # noqa: PLR0915
         cursor_type=context.entry.cursor_type,
         cursor_grain=context.entry.cursor_grain,
         future_cursor_safety=(resolved_range.future_safety if resolved_range is not None else None),
+        maximum_start_safety=(
+            resolved_range.maximum_start_safety if resolved_range is not None else None
+        ),
         audit_results=tuple(state.audit_results),
         warning_messages=tuple(state.warnings),
         lifecycle_events=state.statement_recorder.snapshot(),
@@ -541,10 +545,14 @@ def _enforce_microbatch_limit(
 def _with_future_cursor_warning(
     *, state: MicrobatchLifecycleState, bounds: CursorBounds | None
 ) -> MicrobatchLifecycleState:
-    warning: str | None = future_cursor_cap_warning(bounds)
-    if warning is None:
+    warnings: list[str] = [
+        warning
+        for warning in (future_cursor_cap_warning(bounds), maximum_start_cap_warning(bounds))
+        if warning is not None
+    ]
+    if not warnings:
         return state
-    return replace(state, warnings=[*state.warnings, warning])
+    return replace(state, warnings=[*state.warnings, *warnings])
 
 
 def _run_microbatch_reconciliation(
@@ -2677,7 +2685,7 @@ def _plan_microbatch_windows(
                 early_exit=build_failed_result(
                     entry=entry,
                     phase=ExecutionPhase.STAGING,
-                    error=f"failed to discover runtime microbatch cursor range: {exc}",
+                    error=exc,
                     warnings=warnings,
                     audit_results=audit_results,
                     statement_recorder=statement_recorder,

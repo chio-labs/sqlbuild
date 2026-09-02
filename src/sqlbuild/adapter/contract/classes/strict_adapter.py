@@ -170,6 +170,19 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_max_cursor_at_or_before(
+        self,
+        *,
+        relation: str,
+        cursor_column: str,
+        maximum_allowed: str,
+        cursor_type: str | None,
+        is_date: bool,
+    ) -> str:
+        """Render an eligible-cursor MAX query."""
+        ...
+
+    @abstractmethod
     def build_cursor_filter(
         self,
         *,

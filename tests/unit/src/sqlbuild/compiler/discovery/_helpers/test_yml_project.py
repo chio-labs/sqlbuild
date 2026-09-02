@@ -28,6 +28,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     LoadRetentionConfigTestCase,
     MicrobatchLimitConfigErrorTestCase,
     MicrobatchLimitConfigTestCase,
+    StartCursorConfigTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
     write_project_config_test_files,
@@ -84,6 +85,32 @@ def test_given_future_cursor_config_when_loading_project_then_policy_is_typed(
 
     assert config.cursors.future.max_distance == test_case.expected_max_distance
     assert config.cursors.future.action == test_case.expected_action
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StartCursorConfigTestCase(
+            description="zero-ahead cap policy is typed",
+            start_toml='max_ahead = "0d"\naction = "cap"',
+            expected_max_ahead="0d",
+            expected_action="cap",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_start_cursor_config_when_loading_project_then_policy_is_typed(
+    test_case: StartCursorConfigTestCase, tmp_path: Path
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "demo"\nadapter = "duckdb"\n[cursors.start]\n{test_case.start_toml}\n',
+        encoding="utf-8",
+    )
+
+    config: ProjectConfig = load_project_config(project_dir=tmp_path)
+
+    assert config.cursors.start.max_ahead == test_case.expected_max_ahead
+    assert config.cursors.start.action == test_case.expected_action
 
 
 @pytest.mark.parametrize(

@@ -17,16 +17,22 @@ from sqlbuild.compiler.planner.main.execution.bounded_cursor_override import (
 )
 from sqlbuild.compiler.planner.main.execution.cursor_replay_policy import apply_cursor_replay_policy
 from sqlbuild.compiler.planner.main.execution.future_cursor_safety import apply_future_cursor_safety
+from sqlbuild.compiler.planner.main.execution.maximum_start_safety import apply_maximum_start_policy
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
     CursorInputEvidence,
     CursorInputRelation,
+    Duration,
+    MaximumStartPolicyInputs,
+    ModelCursorSnapshot,
     ModelPlanEntry,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, CursorGrain, CursorType
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run.models import RuntimeCursorSpec
 from sqlbuild.executor.run.types import WatermarkResolver
+from sqlbuild.spec.contracts.constants import ZERO_DAY_CURSOR_DURATION
+from sqlbuild.spec.contracts.models import StartCursorsConfig
 
 _TIMESTAMP_GRAIN_ORDER: dict[str, int] = {
     CursorGrain.SECOND: 0,
@@ -65,6 +71,8 @@ def build_runtime_cursor_spec(
         cursor_grain=entry.cursor_grain,
         cursor_start=entry.cursor_start,
         cursor_input_relations=entry.cursor_input_relations,
+        incremental_strategy=entry.incremental_strategy,
+        incremental_mode=entry.incremental_mode,
         start_cursor_override=entry.start_cursor_override,
         end_cursor_override=entry.end_cursor_override,
         lookback=entry.lookback,
@@ -73,6 +81,7 @@ def build_runtime_cursor_spec(
         ),
         read_destination_cursor=read_destination_cursor,
         future_cursor_config=entry.future_cursor_config,
+        start_cursor_config=entry.start_cursor_config,
         invocation_time=entry.invocation_time,
     )
 
@@ -110,6 +119,11 @@ def resolve_runtime_cursor_bounds(
     )
     if not physical_inputs:
         return None
+    effective_grain: str | None = resolve_effective_timestamp_grain(
+        cursor_type=cursor_type,
+        downstream_grain=spec.cursor_grain,
+        cursor_input_relations=spec.cursor_input_relations,
+    )
 
     target_max_raw: object | None = None
     if spec.read_destination_cursor:
@@ -122,6 +136,16 @@ def resolve_runtime_cursor_bounds(
             target_name=target_name,
             cursor_column=spec.cursor_column,
         )
+    target_eligible_max_raw: object | None = _query_eligible_target_max_raw(
+        adapter=adapter,
+        connection=connection,
+        target_relation=target_relation,
+        cursor_column=spec.cursor_column,
+        cursor_type=cursor_type,
+        cursor_grain=effective_grain,
+        target_max_raw=target_max_raw,
+        spec=spec,
+    )
 
     read_minimum: bool = target_max_raw is None
     upstream_mins: list[object] = []
@@ -162,11 +186,6 @@ def resolve_runtime_cursor_bounds(
             )
     if not upstream_maxes:
         return None
-    effective_grain: str | None = resolve_effective_timestamp_grain(
-        cursor_type=cursor_type,
-        downstream_grain=spec.cursor_grain,
-        cursor_input_relations=spec.cursor_input_relations,
-    )
     upstream_min_raw: object | None = (
         _minimum_bound_raw(
             values=upstream_mins,
@@ -224,8 +243,48 @@ def resolve_runtime_cursor_bounds(
         backfill_duration=spec.backfill_duration,
         has_start_override=spec.start_cursor_override is not None,
     )
-    return apply_future_cursor_safety(
+    bounds: CursorBounds = apply_maximum_start_policy(
         bounds=CursorBounds(start=start, end=end),
+        snapshot=ModelCursorSnapshot(
+            target_max=_normalize_bound(value=target_max_raw, is_end=False),
+            upstream_mins=_normalize_bounds(
+                values=upstream_mins,
+                cursor_type=cursor_type,
+                effective_grain=effective_grain,
+            ),
+            upstream_maxes=_normalize_bounds(
+                values=upstream_maxes,
+                cursor_type=cursor_type,
+                effective_grain=effective_grain,
+            ),
+            physical_target_max=_normalize_bound(value=target_max_raw, is_end=False),
+            target_eligible_max=(
+                _normalize_effective_timestamp_bound(
+                    value=target_eligible_max_raw,
+                    cursor_type=cursor_type,
+                    effective_grain=effective_grain,
+                )
+                if target_eligible_max_raw is not None
+                else None
+            ),
+            target_relation=target_relation,
+            destination_cursor_column=spec.cursor_column,
+        ),
+        cursor_type=cursor_type,
+        cursor_grain=effective_grain,
+        cursor_start=spec.cursor_start,
+        lookback=spec.lookback,
+        backfill_duration=spec.backfill_duration,
+        policy=MaximumStartPolicyInputs(
+            config=spec.start_cursor_config,
+            invocation_time=spec.invocation_time,
+            incremental_strategy=spec.incremental_strategy,
+            incremental_mode=spec.incremental_mode,
+        ),
+        has_start_override=spec.start_cursor_override is not None,
+    )
+    return apply_future_cursor_safety(
+        bounds=bounds,
         cursor_type=cursor_type,
         cursor_grain=effective_grain,
         config=spec.future_cursor_config,
@@ -235,6 +294,31 @@ def resolve_runtime_cursor_bounds(
         ),
         input_evidence=tuple(input_evidence),
     )
+
+
+def _normalize_bounds(
+    *, values: list[object], cursor_type: str | None, effective_grain: str | None
+) -> tuple[str, ...]:
+    normalized: list[str] = []
+    item: object
+    for item in values:
+        value: str | None = _normalize_effective_timestamp_bound(
+            value=item,
+            cursor_type=cursor_type,
+            effective_grain=effective_grain,
+        )
+        if value is not None:
+            normalized.append(value)
+    return tuple(normalized)
+
+
+def _normalize_effective_timestamp_bound(
+    *, value: object, cursor_type: str | None, effective_grain: str | None
+) -> str | None:
+    normalized_value: object = value
+    if cursor_type == CursorType.TIMESTAMP and effective_grain is not None:
+        normalized_value = _floor_timestamp_bound(value=value, grain=effective_grain)
+    return _normalize_bound(value=normalized_value, is_end=False)
 
 
 def _query_watermark_raw(
@@ -393,6 +477,85 @@ def _query_target_max_raw(
     if row is None or row[0] is None:
         return None
     return row[0]
+
+
+def _query_eligible_target_max_raw(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    target_relation: str,
+    cursor_column: str,
+    cursor_type: str | None,
+    cursor_grain: str | None,
+    target_max_raw: object | None,
+    spec: RuntimeCursorSpec,
+) -> object | None:
+    """Read the target MAX at or below the automatic-start horizon when recovery is needed."""
+
+    config: StartCursorsConfig | None = spec.start_cursor_config
+    target_max: str | None = _normalize_bound(value=target_max_raw, is_end=False)
+    if (
+        config is None
+        or config.max_ahead is None
+        or cursor_type != CursorType.TIMESTAMP
+        or spec.invocation_time is None
+        or target_max is None
+        or spec.start_cursor_override is not None
+    ):
+        return None
+    horizon: str = _maximum_allowed_start(
+        discovered_value=target_max,
+        cursor_grain=cursor_grain,
+        invocation_time=spec.invocation_time,
+        max_ahead=config.max_ahead,
+    )
+    if datetime.fromisoformat(target_max) <= datetime.fromisoformat(horizon):
+        return None
+    eligible_sql: str = adapter.render_max_cursor_at_or_before(
+        relation=target_relation,
+        cursor_column=cursor_column,
+        maximum_allowed=horizon,
+        cursor_type=cursor_type,
+        is_date=_is_plain_date(target_max_raw),
+    )
+    cursor: Any = adapter.execute(
+        connection=connection,
+        sql=eligible_sql,
+    )
+    row: Any = cursor.fetchone()
+    return None if row is None else row[0]
+
+
+def _maximum_allowed_start(
+    *, discovered_value: str, cursor_grain: str | None, invocation_time: datetime, max_ahead: str
+) -> str:
+    duration: Duration | None = Duration.parse(max_ahead)
+    if duration is None and max_ahead == ZERO_DAY_CURSOR_DURATION:
+        duration = Duration()
+    if duration is None:
+        raise ExecutorInputError(f"invalid cursors.start.max_ahead '{max_ahead}'")
+    maximum: datetime = duration.add_to(invocation_time.astimezone(UTC).replace(tzinfo=None))
+    floored: object = _floor_timestamp_bound(
+        value=maximum, grain=cursor_grain or CursorGrain.SECOND
+    )
+    if not isinstance(floored, datetime):
+        raise ExecutorInputError("maximum automatic start could not be normalized")
+    if _is_plain_date_string(discovered_value):
+        return floored.date().isoformat()
+    parsed: datetime = datetime.fromisoformat(discovered_value)
+    return (
+        floored.replace(tzinfo=UTC).isoformat()
+        if parsed.tzinfo is not None
+        else floored.isoformat()
+    )
+
+
+def _is_plain_date_string(value: str) -> bool:
+    try:
+        date.fromisoformat(value)
+        return True
+    except ValueError:
+        return False
 
 
 def _is_plain_date(value: object) -> bool:

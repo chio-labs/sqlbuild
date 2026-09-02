@@ -94,8 +94,15 @@ def test_given_selected_downstream_when_building_with_defer_clone_then_clones_bo
             description="out of selection changed upstream warns without rerunning leaf",
             project_name="selection_aware_staleness_build",
             initial_command=("--no-color", "build"),
-            mixed_command=("--no-color", "build", "--select", "b", "c"),
-            replan_command=("--no-color", "build", "--select", "c"),
+            mixed_command=(
+                "--no-color",
+                "build",
+                "--selection-diagnostics",
+                "--select",
+                "b",
+                "c",
+            ),
+            replan_command=("--no-color", "build", "--selection-diagnostics", "--select", "c"),
             expected_mixed_stdout_fragments=(
                 "selected model 'c' will build on",
                 "- a",

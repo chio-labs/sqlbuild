@@ -67,6 +67,20 @@ class _IncrementalModelSpec:
     extra_config: dict[str, object] = field(default_factory=dict)
 
 
+class _FailEligibleCursorAdapter(DuckDbAdapter):
+    def render_max_cursor_at_or_before(
+        self,
+        *,
+        relation: str,
+        cursor_column: str,
+        maximum_allowed: str,
+        cursor_type: str | None,
+        is_date: bool,
+    ) -> str:
+        del relation, cursor_column, maximum_allowed, cursor_type, is_date
+        return "SELECT missing_eligible_cursor_function()"
+
+
 def build_project_with_targets(
     *,
     model_locations: dict[str, str | None] | None = None,

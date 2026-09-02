@@ -15,6 +15,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerEntryResults,
     PlannerIdentityContext,
     PlannerOverrides,
+    PlannerPolicies,
     PlannerRuntime,
     PlannerScopePruningResult,
     PlannerScopeResolution,
@@ -77,9 +78,12 @@ def with_plan_warnings(
     pruning: PlannerScopePruningResult,
     source_freshness: DirectSourceFreshnessPlanningResult,
     plan_output: PlanOutput,
+    policies: PlannerPolicies,
 ) -> PlanOutput:
     """Append stale-out-of-selection warnings to the plan."""
 
+    if not policies.selection_diagnostics:
+        return plan_output
     stale_out_of_selection_warnings: tuple[PlanWarning, ...] = (
         build_stale_out_of_selection_warnings(
             original_scope=scopes.stale_warning_scope,
@@ -104,6 +108,7 @@ def with_plan_metadata(
     plan_output: PlanOutput,
     pruning: PlannerScopePruningResult,
     source_freshness: DirectSourceFreshnessPlanningResult,
+    policies: PlannerPolicies,
 ) -> PlanOutput:
     """Attach direct source-freshness metadata to the plan output."""
 
@@ -131,6 +136,10 @@ def with_plan_metadata(
             "direct_run_despite_unchanged": _serialize_run_despite_unchanged_metadata(
                 pruning.run_despite_unchanged
             ),
+            "selection_diagnostics": {
+                "mode": "direct",
+                "enabled": policies.selection_diagnostics,
+            },
         },
     )
     return plan_output
