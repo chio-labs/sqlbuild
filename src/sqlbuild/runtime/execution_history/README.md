@@ -77,3 +77,6 @@ failure internally. The caller must discard the failed backend, construct a new 
 secret-resolved DSN, and retry the same deterministic `event_id`. Canonical-content comparison then
 returns the committed fact as an idempotent no-op or rejects conflicting reuse. Errors produced in
 this recovery path remain DSN- and credential-free.
+
+Selected public API examples and local/deployed operator walkthroughs are in
+[`docs/execution-history.md`](../../../../docs/execution-history.md).

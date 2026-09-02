@@ -23,8 +23,9 @@ The v1 event catalog is:
 - Invocation: `invocation_started`, `invocation_completed`, `invocation_failed`
 - Run: `run_started`, `run_completed`, `run_failed`
 - Resource attempt: `resource_attempt_started`, `resource_attempt_completed`,
-  `resource_attempt_failed`
+  `resource_attempt_failed`, `resource_attempt_skipped`
 - Operation: `operation_started`, `operation_completed`, `operation_failed`
+- Retry: `retry_scheduled`
 - Statement: `statement_started`, `statement_submitted`, `statement_completed`,
   `statement_failed`
 
@@ -58,10 +59,10 @@ debug records reach stderr only with `--debug`. SQL records always include an ac
 digest. Full SQL is omitted by default and an explicit programmatic diagnostic-routing opt-in can
 retain it only in diagnostic files, never stderr, metadata, or lifecycle facts.
 
-`target/sqlbuild.log` remains an append-only compatibility destination during the current
-deprecation window. New per-invocation `diagnostics.jsonl` files are authoritative for new
-captures. SQLBuild does not overwrite, move, archive, or import the legacy file as lifecycle
-evidence. Removal of new legacy writes requires a separately named future release change.
+`target/sqlbuild.log` remains an append-only compatibility write for existing local diagnostic
+workflows. There are no known external consumers, no promised compatibility period, and no
+scheduled removal release. New consumers must use the per-invocation `diagnostics.jsonl`; SQLBuild
+does not overwrite, move, archive, or import the legacy file as lifecycle evidence.
 
 Project-creation commands (`sqb init`, `sqb playground`, and `sqb dbt init`) intentionally bypass
 project-local compute and legacy diagnostic routing. Their command handlers must see the requested
@@ -103,8 +104,9 @@ separate versioned canonical integration-result envelope. Their shared lifecycle
   duplicate delivery or repeated callbacks do not duplicate integration results.
 - Result callbacks claim the latest exact terminal available for that resource and flush one
   envelope immediately. Physical JSONL order is callback order, while `event_sequence` records the
-  stable zero-based canonical publication order for sorting and reconciliation. Claiming a retry
-  can stale only earlier attempts of the same resource; unrelated terminals are never retired.
+  stable zero-based position among unique, known events observed by that invocation's in-memory
+  terminal index. It is not durable or cross-process ordering. Claiming a retry can stale only
+  earlier attempts of the same resource; unrelated terminals are never retired.
   Closing a writer never emits payloads.
 - A rich callback without matching canonical terminal evidence emits no JSONL terminal row. Final
   JSON omits that incomplete resource while preserving the existing envelope and summary fields.
@@ -120,3 +122,6 @@ cursor and microbatch evidence. Arbitrary error messages and help, skip reasons,
 check metadata, full SQL, raw process output, arbitrary user output, and unbounded metadata are
 never copied into the integration stream. They remain available through final aggregate output and
 compute logs after process exit.
+
+The complete operator contract, path ownership, migration mapping, and failure matrix are in
+[`docs/execution-observability.md`](../../../../docs/execution-observability.md).

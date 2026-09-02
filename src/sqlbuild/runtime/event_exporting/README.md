@@ -72,3 +72,6 @@ Startup first imports public Python modules under `event_exporters/` and collect
 declarations without discovering providers. If those modules contain only helpers, SQLBuild does
 not import project providers or construct exporter queue, dispatcher, or notification threads.
 Normal command-owned project discovery remains responsible for providers needed by nodes and hooks.
+
+The project declaration, configuration, delivery, security, and failure contract is documented in
+[`docs/event-exporters.md`](../../../../docs/event-exporters.md).
