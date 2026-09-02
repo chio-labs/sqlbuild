@@ -18,3 +18,12 @@ class PipelineIdentityTestCase:
     description: str
     expected_invocation_id: str
     expected_run_id: str
+    expected_event_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RunTerminalTestCase:
+    description: str
+    expected_event_type: str
+    expected_error_type: str | None
+    expected_failed_count: int | None

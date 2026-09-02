@@ -24,6 +24,7 @@ from sqlbuild.executor.build.models import (
     BuildRuntimeParams,
     ExternalSourceLoadResults,
 )
+from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.pipeline._helpers.auditing import (
     run_audit_pipeline as run_audit_pipeline,
 )
@@ -52,7 +53,12 @@ from sqlbuild.executor.pipeline._helpers.testing import (
     run_test_pipeline as run_test_pipeline,
 )
 from sqlbuild.executor.pipeline.models import BuildConnectionPreparation, ResolvedBuildInputs
-from sqlbuild.observability import run_scope
+from sqlbuild.observability import (
+    EventDispatcher,
+    create_lifecycle_event,
+    current_event_dispatcher,
+    run_scope,
+)
 from sqlbuild.spec.contracts.models import SettingsConfig
 
 
@@ -70,6 +76,12 @@ def run_build_pipeline(
     """Execute a full build pipeline: resolve settings, open connections, run plan, close."""
 
     with run_scope(runtime.run_id) as identity:
+        dispatcher: EventDispatcher | None = current_event_dispatcher()
+        started: float = time.monotonic()
+        if dispatcher is not None:
+            dispatcher.publish_lifecycle(
+                create_lifecycle_event(event_type="run_started", payload={"run_kind": "build"})
+            )
         with diagnostics_context(
             sqlbuild_invocation_id=identity.invocation_id,
             sqlbuild_run_id=identity.run_id,
@@ -84,16 +96,47 @@ def run_build_pipeline(
                     None if callbacks is None else callbacks.on_statement_complete
                 ),
             ):
-                return _run_build_pipeline(
-                    plan=plan,
-                    connection_config=connection_config,
-                    adapter=adapter,
-                    settings=settings,
-                    runtime=runtime,
-                    callbacks=callbacks,
-                    customizations=customizations,
-                    initial_state=initial_state,
-                )
+                try:
+                    result: BuildExecutionResult = _run_build_pipeline(
+                        plan=plan,
+                        connection_config=connection_config,
+                        adapter=adapter,
+                        settings=settings,
+                        runtime=runtime,
+                        callbacks=callbacks,
+                        customizations=customizations,
+                        initial_state=initial_state,
+                    )
+                except BaseException as error:
+                    if dispatcher is not None:
+                        dispatcher.publish_lifecycle(
+                            create_lifecycle_event(
+                                event_type="run_failed",
+                                payload={
+                                    "run_kind": "build",
+                                    "duration_ms": int((time.monotonic() - started) * 1000),
+                                    "error_type": type(error).__name__,
+                                },
+                            )
+                        )
+                    raise
+                if dispatcher is not None:
+                    event_type: str = (
+                        "run_completed" if result.status == BuildStatus.SUCCESS else "run_failed"
+                    )
+                    dispatcher.publish_lifecycle(
+                        create_lifecycle_event(
+                            event_type=event_type,
+                            payload={
+                                "run_kind": "build",
+                                "duration_ms": int((time.monotonic() - started) * 1000),
+                                "succeeded_count": result.success_count,
+                                "failed_count": result.failure_count,
+                                "skipped_count": result.skipped_count,
+                            },
+                        )
+                    )
+                return result
 
 
 def _run_build_pipeline(

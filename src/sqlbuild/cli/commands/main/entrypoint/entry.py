@@ -8,7 +8,6 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from sqlbuild.cli.commands._helpers.entry.dispatch import dispatch_cli_command
 from sqlbuild.cli.commands._helpers.entry.errors import (
     cli_error_use_color,
     format_expected_error,
@@ -19,6 +18,7 @@ from sqlbuild.cli.commands._helpers.entry.parsing import parse_cli_invocation
 from sqlbuild.cli.commands._helpers.skills.update import maintain_sqlbuild_skills
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.main.entrypoint._dispatch_with_history import dispatch_with_history
 from sqlbuild.cli.commands.models import (
     CliEntrypointHandlers,
     ParsedCliInvocation,
@@ -55,7 +55,7 @@ def _main_with_dependencies(
             if invocation.args is None:
                 return invocation.exit_code if invocation.exit_code is not None else 1
             try:
-                return dispatch_cli_command(args=invocation.args, handlers=handlers)
+                return dispatch_with_history(args=invocation.args, handlers=handlers)
             except SystemExit as error:
                 if isinstance(error.code, int):
                     return error.code

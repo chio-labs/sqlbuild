@@ -5,9 +5,11 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import tempfile
 import uuid
 from collections.abc import Callable, Iterable, Iterator
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import TracebackType
 from typing import Self, cast
 
@@ -39,6 +41,7 @@ from sqlbuild.runtime.execution_history.constants import (
 )
 from sqlbuild.runtime.observability.models import LifecycleEvent, OpaqueLifecycleEvent
 from sqlbuild.runtime.observability.types import JSONValue
+from sqlbuild.sqlite_history import SQLiteExecutionHistory
 from tests.unit.src.sqlbuild.runtime.execution_history.conformance._test_types import BackendCase
 
 BASE_TIME: datetime = datetime(2026, 1, 1, tzinfo=UTC)
@@ -269,6 +272,35 @@ class InMemoryRunStorage:
             raise ExecutionHistoryStorageError("injected atomic projection publication failure")
 
 
+class FailingSQLiteEventLog(SQLiteExecutionHistory):
+    """SQLite event storage with deterministic append failure."""
+
+    def append_events(self, events: Iterable[CanonicalLifecycleEvent]) -> tuple[StoredEvent, ...]:
+        raise ExecutionHistoryStorageError("injected append failure")
+
+
+class FailingSQLiteRunStorage(SQLiteExecutionHistory):
+    """SQLite run storage with deterministic projection failure."""
+
+    def project(self, stored_events: Iterable[StoredEvent]) -> tuple[RunRecord, ...]:
+        raise ExecutionHistoryStorageError("injected projection failure")
+
+
+class AtomicFailingSQLiteRunStorage(SQLiteExecutionHistory):
+    """SQLite run storage with one post-computation publication failure."""
+
+    def __init__(self, *, path: str) -> None:
+        self._publication_attempts = 0
+        super().__init__(path=path)
+        self._publication_attempts = 0
+
+    def _publish_projection(self, projected: tuple[RunRecord, ...]) -> None:
+        self._publication_attempts += 1
+        if self._publication_attempts == 2:
+            raise ExecutionHistoryStorageError("injected atomic projection publication failure")
+        super()._publish_projection(projected)
+
+
 def lifecycle_event(
     event_id: str,
     event_type: str = "run_started",
@@ -434,6 +466,36 @@ def atomic_failing_run_storage_factory() -> RunStorage:
     return storage
 
 
+def sqlite_path() -> str:
+    """Return an isolated persistent SQLite test path."""
+
+    return str(Path(tempfile.mkdtemp()) / "history.sqlite3")
+
+
+def sqlite_factory() -> SQLiteExecutionHistory:
+    """Build an isolated SQLite execution history backend."""
+
+    return SQLiteExecutionHistory(path=sqlite_path())
+
+
+def sqlite_append_failing_factory() -> EventLogStorage:
+    """Build SQLite event storage with append failure injection."""
+
+    return FailingSQLiteEventLog(path=sqlite_path())
+
+
+def sqlite_project_failing_factory() -> RunStorage:
+    """Build SQLite run storage with projection failure injection."""
+
+    return FailingSQLiteRunStorage(path=sqlite_path())
+
+
+def sqlite_atomic_failing_factory() -> RunStorage:
+    """Build SQLite run storage with atomic publication failure injection."""
+
+    return AtomicFailingSQLiteRunStorage(path=sqlite_path())
+
+
 BACKEND_CASES: tuple[BackendCase, ...] = (
     BackendCase(
         description="test-only in-memory backend",
@@ -444,6 +506,16 @@ BACKEND_CASES: tuple[BackendCase, ...] = (
         atomic_failing_run_storage_factory=atomic_failing_run_storage_factory,
         project_call_count=lambda storage: cast(InMemoryRunStorage, storage).project_calls,
         expected_backend="memory",
+    ),
+    BackendCase(
+        description="stdlib SQLite backend",
+        event_log_factory=sqlite_factory,
+        run_storage_factory=sqlite_factory,
+        append_failing_event_log_factory=sqlite_append_failing_factory,
+        project_failing_run_storage_factory=sqlite_project_failing_factory,
+        atomic_failing_run_storage_factory=sqlite_atomic_failing_factory,
+        project_call_count=lambda storage: cast(SQLiteExecutionHistory, storage).project_calls,
+        expected_backend="sqlite",
     ),
 )
 
