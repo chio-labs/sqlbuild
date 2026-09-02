@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.74.0](https://github.com/chio-labs/sqlbuild/compare/v0.73.0...v0.74.0) (2026-09-02)
+
+
+### Features
+
+* bound automatic cursor starts ([#464](https://github.com/chio-labs/sqlbuild/issues/464)) ([5b1d19a](https://github.com/chio-labs/sqlbuild/commit/5b1d19a196cc13fc391e2a689b3669e6406e7ec8))
+
 ## [0.73.0](https://github.com/chio-labs/sqlbuild/compare/v0.72.2...v0.73.0) (2026-09-01)
 
 
