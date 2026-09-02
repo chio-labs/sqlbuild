@@ -50,7 +50,6 @@ def run_audit_pipeline(
         results: list[AuditExecutionResult] = []
         entry: AuditPlanEntry
         for entry in plan.audit_entries:
-            resource_name: str = _audit_resource_name(entry)
             with ResourceAttemptLifecycle(
                 resource_id=audit_resource_id(
                     audit_name=entry.name,
@@ -59,7 +58,7 @@ def run_audit_pipeline(
                     attached_column_name=entry.attached_column_name,
                 ),
                 resource_kind="audit",
-                resource_name=resource_name,
+                resource_name=entry.name,
                 run_id=canonical_run_id,
             ) as lifecycle:
                 if on_audit_start is not None:
@@ -82,9 +81,3 @@ def run_audit_pipeline(
         return tuple(results)
     finally:
         adapter.close(connection)
-
-
-def _audit_resource_name(entry: AuditPlanEntry) -> str:
-    if entry.attached_column_name is None:
-        return entry.name
-    return f"{entry.name} ({entry.attached_column_name})"

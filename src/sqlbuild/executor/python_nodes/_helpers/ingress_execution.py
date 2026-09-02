@@ -202,6 +202,8 @@ def _execute_ingress_python_node(
             results=results,
         ),
     )
+    if callbacks.on_node_complete is not None:
+        callbacks.on_node_complete(result)
     return _python_result_to_lifecycle_result(result)
 
 

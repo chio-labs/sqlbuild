@@ -63,6 +63,7 @@ def test_given_warning_audit_when_run_then_start_and_completed_terminal_wrap_cal
         requested_run_scope=AuditRunScope.FINAL,
         effective_run_scope=AuditRunScope.FINAL,
         attached_target_name="orders",
+        attached_column_name="order_id",
     )
     result: AuditExecutionResult = AuditExecutionResult(
         audit_name="warn_audit",
@@ -72,6 +73,7 @@ def test_given_warning_audit_when_run_then_start_and_completed_terminal_wrap_cal
         row_count=1,
         executed_sql="SELECT 1",
         attached_target_name="orders",
+        attached_column_name="order_id",
     )
     monkeypatch.setattr(auditing_module, "execute_audit", lambda **_kwargs: result)
     order: list[str] = []
@@ -98,9 +100,14 @@ def test_given_warning_audit_when_run_then_start_and_completed_terminal_wrap_cal
     assert events[-1].event_type == test_case.expected_event_type
     assert tuple(event.run_id for event in events) == ("audit-run", "audit-run")
     assert tuple(event.resource_id for event in events) == (
-        "audit:warn_audit:model:orders",
-        "audit:warn_audit:model:orders",
+        "audit:warn_audit:model:orders:order_id",
+        "audit:warn_audit:model:orders:order_id",
     )
+    assert tuple(event.payload["resource_name"] for event in events) == (
+        "warn_audit",
+        "warn_audit",
+    )
+    assert results[0].attached_column_name == "order_id"
 
 
 @pytest.mark.parametrize(

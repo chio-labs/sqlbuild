@@ -1,4 +1,4 @@
-"""Invocation-scoped canonical event index for compatibility output."""
+"""Invocation-scoped canonical terminal event index."""
 
 from __future__ import annotations
 
@@ -7,10 +7,9 @@ from collections import defaultdict, deque
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from pathlib import Path
 
+from sqlbuild.cli.output.models import TerminalEventClaim
 from sqlbuild.runtime.observability.constants import RESOURCE_TERMINALS
-from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import LifecycleEvent
 
 _RUN_TERMINALS: frozenset[str] = frozenset({"run_completed", "run_failed"})
@@ -21,21 +20,18 @@ _AGGREGATE_OPERATION_NAMES: frozenset[str] = frozenset(
 )
 
 
-class CompatibilityEventProjector:
-    """Retain known canonical facts and correlate legacy result enrichment."""
+class TerminalEventIndex:
+    """Retain canonical facts and claim resource terminals for result projection."""
 
     def __init__(self) -> None:
         self._lock: threading.RLock = threading.RLock()
         self._output_lock: threading.RLock = threading.RLock()
         self._events: list[LifecycleEvent] = []
+        self._event_sequence_by_id: dict[str, int] = {}
         self._seen_event_ids: set[str] = set()
         self._resource_ids_by_name: defaultdict[str, set[str]] = defaultdict(set)
         self._pending_by_resource_id: defaultdict[str, deque[LifecycleEvent]] = defaultdict(deque)
         self._claimed_attempt_ids: set[str] = set()
-        self._v1_enrichment_by_event_id: dict[str, str] = {}
-        self._v1_emitted_event_ids: set[str] = set()
-        self._writer_count: int = 0
-        self._writer_path: Path | None = None
 
     def consume(self, event: LifecycleEvent) -> None:
         """Store a known fact once in dispatcher publication order."""
@@ -44,6 +40,7 @@ class CompatibilityEventProjector:
             if event.event_id in self._seen_event_ids:
                 return
             self._seen_event_ids.add(event.event_id)
+            self._event_sequence_by_id[event.event_id] = len(self._events)
             self._events.append(event)
             if event.event_type not in RESOURCE_TERMINALS:
                 return
@@ -61,8 +58,8 @@ class CompatibilityEventProjector:
         resource_id: str | None = None,
         resource_attempt_id: str | None = None,
         attempt_number: int | None = None,
-    ) -> LifecycleEvent | None:
-        """Claim one matching terminal for a streaming v1 enrichment callback."""
+    ) -> TerminalEventClaim | None:
+        """Claim the latest exact terminal available when a result callback arrives."""
 
         with self._lock:
             resolved_id: str | None = resource_id or self._single_resource_id(
@@ -79,8 +76,12 @@ class CompatibilityEventProjector:
             )
             if target is None or target.resource_attempt_id is None:
                 return None
+            self._retire_earlier_attempts(candidates=candidates, target=target)
             self._claimed_attempt_ids.add(target.resource_attempt_id)
-            return target
+            return TerminalEventClaim(
+                terminal=target,
+                event_sequence=self._event_sequence_by_id[target.event_id],
+            )
 
     def resource_terminal(
         self, *, resource_name: str, resource_id: str | None = None
@@ -121,51 +122,15 @@ class CompatibilityEventProjector:
                         failed_resource = event
             return invocation or run or operation or failed_resource or resource
 
-    def project_v1(self, *, terminal: LifecycleEvent, payload: str) -> str:
-        """Release enriched v1 rows in canonical resource-terminal order."""
-
-        with self._lock:
-            self._v1_enrichment_by_event_id[terminal.event_id] = payload
-            return self._drain_v1(finalize=False)
-
-    def finalize_v1(self) -> str:
-        """Omit unclaimed terminals and release all claimed v1 enrichment in order."""
-
-        with self._lock:
-            return self._drain_v1(finalize=True)
-
-    def register_writer(self, *, path: Path | None) -> None:
-        """Register one writer and enforce one compatibility side-channel path."""
-
-        with self._lock:
-            if self._writer_count and path != self._writer_path:
-                raise ObservabilityValidationError(
-                    "compatibility event writers must share one output path"
-                )
-            self._writer_path = path
-            self._writer_count += 1
-
     @contextmanager
     def output_serialization_scope(self) -> Iterator[None]:
-        """Serialize projection state transitions with physical compatibility output."""
+        """Serialize terminal claims with physical integration-result output."""
 
         with self._output_lock:
             yield
 
-    def unregister_writer(self) -> str:
-        """Unregister one writer and finalize only after the last writer closes."""
-
-        with self._lock:
-            if self._writer_count == 0:
-                return ""
-            self._writer_count -= 1
-            if self._writer_count:
-                return ""
-            self._writer_path = None
-            return self._drain_v1(finalize=True)
-
     def events(self) -> tuple[LifecycleEvent, ...]:
-        """Return the idempotent canonical facts in publication order."""
+        """Return idempotent canonical facts in publication order."""
 
         with self._lock:
             return tuple(self._events)
@@ -176,55 +141,37 @@ class CompatibilityEventProjector:
             return None
         return next(iter(resource_ids))
 
-    def _drain_v1(self, *, finalize: bool) -> str:
-        projected: list[str] = []
-        terminals: list[LifecycleEvent] = [
-            event for event in self._events if event.event_type in RESOURCE_TERMINALS
-        ]
-        for event in terminals:
-            if event.event_id in self._v1_emitted_event_ids:
-                continue
-            enrichment: str | None = self._v1_enrichment_by_event_id.get(event.event_id)
-            if enrichment is not None:
-                projected.append(enrichment)
-                self._v1_emitted_event_ids.add(event.event_id)
-                continue
-            attempt_id: str | None = event.resource_attempt_id
-            claimed: bool = attempt_id is not None and attempt_id in self._claimed_attempt_ids
-            if finalize and not claimed:
-                self._v1_emitted_event_ids.add(event.event_id)
-                continue
-            if _has_later_enriched_attempt(
-                event=event, terminals=terminals, enriched=self._v1_enrichment_by_event_id
-            ):
-                self._v1_emitted_event_ids.add(event.event_id)
-                continue
-            break
-        return "".join(projected)
+    def _retire_earlier_attempts(
+        self, *, candidates: deque[LifecycleEvent], target: LifecycleEvent
+    ) -> None:
+        target_sequence: int = self._event_sequence_by_id[target.event_id]
+        for event in candidates:
+            if self._event_sequence_by_id[event.event_id] >= target_sequence:
+                return
+            if event.resource_attempt_id is not None:
+                self._claimed_attempt_ids.add(event.resource_attempt_id)
 
 
-_CURRENT_PROJECTOR: ContextVar[CompatibilityEventProjector | None] = ContextVar(
-    "sqlbuild_compatibility_event_projector", default=None
+_CURRENT_TERMINAL_INDEX: ContextVar[TerminalEventIndex | None] = ContextVar(
+    "sqlbuild_terminal_event_index", default=None
 )
 
 
-def current_compatibility_event_projector() -> CompatibilityEventProjector | None:
-    """Return the compatibility projector installed for this invocation."""
+def current_terminal_event_index() -> TerminalEventIndex | None:
+    """Return the terminal event index installed for this invocation."""
 
-    return _CURRENT_PROJECTOR.get()
+    return _CURRENT_TERMINAL_INDEX.get()
 
 
 @contextmanager
-def compatibility_event_projector_scope(
-    projector: CompatibilityEventProjector,
-) -> Iterator[CompatibilityEventProjector]:
-    """Install and reliably restore one invocation compatibility projector."""
+def terminal_event_index_scope(index: TerminalEventIndex) -> Iterator[TerminalEventIndex]:
+    """Install and reliably restore one invocation terminal event index."""
 
-    token: Token[CompatibilityEventProjector | None] = _CURRENT_PROJECTOR.set(projector)
+    token: Token[TerminalEventIndex | None] = _CURRENT_TERMINAL_INDEX.set(index)
     try:
-        yield projector
+        yield index
     finally:
-        _CURRENT_PROJECTOR.reset(token)
+        _CURRENT_TERMINAL_INDEX.reset(token)
 
 
 def _claim_target(
@@ -255,18 +202,3 @@ def _claim_target(
             None,
         )
     return available[-1] if available else None
-
-
-def _has_later_enriched_attempt(
-    *,
-    event: LifecycleEvent,
-    terminals: list[LifecycleEvent],
-    enriched: dict[str, str],
-) -> bool:
-    event_index: int = next(
-        index for index, candidate in enumerate(terminals) if candidate is event
-    )
-    return any(
-        candidate.resource_id == event.resource_id and candidate.event_id in enriched
-        for candidate in terminals[event_index + 1 :]
-    )

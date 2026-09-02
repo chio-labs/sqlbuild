@@ -7,14 +7,13 @@ import sys
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
 from sqlbuild.cli.output._helpers.future_cursor_safety import serialize_future_cursor_safety
-from sqlbuild.cli.output.classes.compatibility_event_projector import (
-    CompatibilityEventProjector,
-    current_compatibility_event_projector,
+from sqlbuild.cli.output.classes.terminal_event_index import (
+    TerminalEventIndex,
+    current_terminal_event_index,
 )
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -207,70 +206,6 @@ def format_build_execution_json(
     )
 
 
-def format_build_item_execution_event(
-    *, result: object, plan: PlanOutput | None, command: str = "build"
-) -> str | None:
-    """Format one completed build asset or check as JSON Lines events."""
-
-    terminal: LifecycleEvent | None = _claim_result_terminal(result=result)
-    if current_compatibility_event_projector() is not None and terminal is None:
-        return None
-    result = _with_canonical_duration(result=result, terminal=terminal)
-    assets: tuple[dict[str, object], ...] = ()
-    checks: tuple[dict[str, object], ...] = ()
-    if isinstance(result, ModelExecutionResult):
-        assets = _format_model_assets(results=(result,), plan=plan)
-    elif isinstance(result, SeedExecutionResult):
-        assets = _format_seed_assets(results=(result,), plan=plan)
-    elif isinstance(result, FunctionExecutionResult):
-        assets = _format_function_assets(results=(result,), plan=plan)
-    elif isinstance(result, LoadExecutionResult):
-        assets = _format_load_assets(results=(result,))
-    elif isinstance(result, PythonNodeExecutionResult):
-        assets = _format_python_node_assets(results=(result,))
-    elif isinstance(result, SqlTestExecutionResult):
-        checks = _format_sql_test_checks((result,))
-    elif isinstance(result, AuditExecutionResult):
-        checks = _format_audit_checks(results=(result,))
-    elif isinstance(result, PythonCheckExecutionResult):
-        checks = _format_python_check_results(results=(result,))
-    if isinstance(result, ModelExecutionResult):
-        checks = _format_audit_checks(
-            results=result.audit_results,
-            terminal_evidence=terminal is not None,
-        )
-    if not assets and not checks:
-        return None
-    records: list[str] = []
-    for asset in assets:
-        records.append(
-            json.dumps(
-                {
-                    "version": _JSON_VERSION,
-                    "command": command,
-                    "event": "asset",
-                    "asset": asset,
-                }
-            )
-        )
-    for check in checks:
-        records.append(
-            json.dumps(
-                {
-                    "version": _JSON_VERSION,
-                    "command": command,
-                    "event": "check",
-                    "check": check,
-                }
-            )
-        )
-    payload: str = "\n".join(records) + "\n"
-    projector: CompatibilityEventProjector | None = current_compatibility_event_projector()
-    if projector is not None and terminal is not None:
-        return projector.project_v1(terminal=terminal, payload=payload)
-    return payload
-
-
 def format_run_execution_json(
     *,
     result: BuildExecutionResult,
@@ -425,31 +360,6 @@ def format_clone_execution_json(
             "total_count": len(item_results),
         },
     )
-
-
-def format_clone_item_execution_event(*, item: CloneItemResult, resource_type: str) -> str:
-    """Format one completed direct-clone item as a JSON Lines event."""
-
-    terminal: LifecycleEvent | None = _claim_resource_terminal(
-        resource_name=item.name,
-        resource_id=f"{resource_type}:{item.name}",
-    )
-    if current_compatibility_event_projector() is not None and terminal is None:
-        return ""
-    duration: object | None = None if terminal is None else terminal.payload.get("duration_ms")
-    if isinstance(duration, int | float):
-        item = replace(item, duration_seconds=float(duration) / 1000.0)
-    payload: dict[str, object] = {
-        "version": _JSON_VERSION,
-        "command": "clone",
-        "event": "asset",
-        "asset": _format_clone_asset(item=item, resource_type=resource_type),
-    }
-    encoded: str = json.dumps(payload) + "\n"
-    projector: CompatibilityEventProjector | None = current_compatibility_event_projector()
-    if projector is not None and terminal is not None:
-        return projector.project_v1(terminal=terminal, payload=encoded)
-    return encoded
 
 
 def _format_clone_asset(*, item: CloneItemResult, resource_type: str) -> dict[str, object]:
@@ -610,7 +520,7 @@ def _format_execution_json(
     run_id: str | None = None,
     cost: dict[str, object] | None = None,
 ) -> str:
-    projector: CompatibilityEventProjector | None = current_compatibility_event_projector()
+    projector: TerminalEventIndex | None = current_terminal_event_index()
     terminal: LifecycleEvent | None = None if projector is None else projector.lifecycle_terminal()
     if terminal is not None:
         status = "failed" if terminal.event_type.endswith("failed") else status
@@ -1150,13 +1060,6 @@ def _drop_none(value: dict[str, object]) -> dict[str, object]:
     return {key: item for key, item in value.items() if item is not None}
 
 
-def _claim_result_terminal(*, result: object) -> LifecycleEvent | None:
-    resource_name, resource_id = _result_resource_identity(result=result)
-    if resource_name is None:
-        return None
-    return _claim_resource_terminal(resource_name=resource_name, resource_id=resource_id)
-
-
 def _result_resource_identity(*, result: object) -> tuple[str | None, str | None]:
     resource_name: str | None = None
     resource_id: str | None = None
@@ -1202,7 +1105,7 @@ def _scenario_resource_namespace(scenario_name: str) -> Iterator[None]:
 def _result_has_terminal(*, result: object) -> bool:
     resource_name, resource_id = _result_resource_identity(result=result)
     if resource_name is None:
-        return current_compatibility_event_projector() is None
+        return current_terminal_event_index() is None
     return _resource_has_terminal(resource_name=resource_name, resource_id=resource_id)
 
 
@@ -1211,7 +1114,7 @@ def _terminal_results[RESULT](*, results: tuple[RESULT, ...]) -> tuple[RESULT, .
 
 
 def _resource_has_terminal(*, resource_name: str, resource_id: str | None) -> bool:
-    projector: CompatibilityEventProjector | None = current_compatibility_event_projector()
+    projector: TerminalEventIndex | None = current_terminal_event_index()
     if projector is None:
         return True
     terminal: LifecycleEvent | None = projector.resource_terminal(
@@ -1236,7 +1139,7 @@ def _result_duration(*, result: object, fallback: int | float | None) -> int | f
 def _resource_duration(
     *, resource_name: str, resource_id: str | None, fallback: float | None
 ) -> float | None:
-    projector: CompatibilityEventProjector | None = current_compatibility_event_projector()
+    projector: TerminalEventIndex | None = current_terminal_event_index()
     if projector is None:
         return fallback
     terminal: LifecycleEvent | None = projector.resource_terminal(
@@ -1247,31 +1150,3 @@ def _resource_duration(
         return None
     duration: object = terminal.payload.get("duration_ms")
     return float(duration) if isinstance(duration, int | float) else None
-
-
-def _claim_resource_terminal(
-    *, resource_name: str, resource_id: str | None
-) -> LifecycleEvent | None:
-    projector: CompatibilityEventProjector | None = current_compatibility_event_projector()
-    if projector is None:
-        return None
-    return projector.claim_resource_terminal(
-        resource_name=resource_name,
-        resource_id=resource_id,
-    )
-
-
-def _with_canonical_duration(*, result: object, terminal: LifecycleEvent | None) -> object:
-    duration: object | None = None if terminal is None else terminal.payload.get("duration_ms")
-    if not isinstance(duration, int | float):
-        return result
-    duration_ms: int = round(float(duration))
-    if isinstance(result, ModelExecutionResult):
-        return replace(result, duration_ms=duration_ms)
-    if isinstance(result, SeedExecutionResult):
-        return replace(result, duration_ms=duration_ms)
-    if isinstance(result, FunctionExecutionResult):
-        return replace(result, duration_ms=duration_ms)
-    if isinstance(result, LoadExecutionResult):
-        return replace(result, duration_ms=duration_ms)
-    return result

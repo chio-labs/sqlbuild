@@ -412,6 +412,12 @@ def prepare_ingress_orders(ctx: TaskContext) -> object:
     return ctx.result(payload={"prepared": True})
 
 
+@asset(depends_on=(prepare_ingress_orders,))
+def publish_ingress_orders(ctx: AssetContext) -> object:
+    INGRESS_CALLS.append("publish_ingress_orders")
+    return ctx.result(payload={"published": True}, materialized=True)
+
+
 def load_ingress_orders(_ctx: object) -> object:
     INGRESS_CALLS.append("load_ingress_orders")
     return None
@@ -428,6 +434,25 @@ def build_ingress_task_loader_graph() -> PythonNodeGraph:
             local_config=LocalConfig(),
             loader_functions=(ingress_loader_function(),),
             task_functions=(ingress_task_function(),),
+        )
+    )
+
+
+def build_ingress_task_asset_graph() -> PythonNodeGraph:
+    return build_python_node_graph(
+        discovered_inputs=DiscoveredProjectInputs(
+            project_config=ProjectConfig(name="demo", adapter="duckdb"),
+            local_config=LocalConfig(),
+            task_functions=(ingress_task_function(),),
+            asset_functions=(
+                DiscoveredAssetFunction(
+                    file_path=Path("/project/assets/orders.py"),
+                    relative_path=Path("assets/orders.py"),
+                    name="publish_ingress_orders",
+                    function=publish_ingress_orders,
+                    depends_on=(prepare_ingress_orders,),
+                ),
+            ),
         )
     )
 

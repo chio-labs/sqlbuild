@@ -15,9 +15,9 @@ from sqlbuild.cli.commands._helpers.entry.history_diagnostics import (
     log_history_open_failure,
 )
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
-from sqlbuild.cli.output.classes.compatibility_event_projector import (
-    CompatibilityEventProjector,
-    compatibility_event_projector_scope,
+from sqlbuild.cli.output.classes.terminal_event_index import (
+    TerminalEventIndex,
+    terminal_event_index_scope,
 )
 from sqlbuild.cli.output.main._execution_event_output_active import execution_event_output_active
 from sqlbuild.cli.progress.classes.native_progress_projector import NativeProgressProjector
@@ -48,9 +48,9 @@ def cli_observability_scope(
             accepts_opaque=True,
         )
     )
-    compatibility: CompatibilityEventProjector = CompatibilityEventProjector()
-    unsubscribe_compatibility: Unsubscribe = dispatcher.subscribe_lifecycle(
-        subscriber=compatibility.consume,
+    terminal_index: TerminalEventIndex = TerminalEventIndex()
+    unsubscribe_terminal_index: Unsubscribe = dispatcher.subscribe_lifecycle(
+        subscriber=terminal_index.consume,
         accepts_opaque=False,
     )
     machine_output: bool = (
@@ -68,10 +68,10 @@ def cli_observability_scope(
     )
     projector_token: Token[NativeProgressProjector | None] = projector.install()
     try:
-        with dispatcher_scope(dispatcher), compatibility_event_projector_scope(compatibility):
+        with dispatcher_scope(dispatcher), terminal_event_index_scope(terminal_index):
             yield dispatcher
     finally:
-        _run_cleanup(action=unsubscribe_compatibility, phase="compatibility_unsubscribe")
+        _run_cleanup(action=unsubscribe_terminal_index, phase="terminal_index_unsubscribe")
         _run_cleanup(action=unsubscribe_progress, phase="progress_unsubscribe")
         if unsubscribe_history is not None:
             _run_cleanup(action=unsubscribe_history, phase="history_unsubscribe")

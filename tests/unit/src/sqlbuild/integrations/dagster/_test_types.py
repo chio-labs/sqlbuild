@@ -123,6 +123,38 @@ class DagsterLiveFailureLoggingTestCase:
 
 
 @dataclass(frozen=True)
+class DagsterSelectedCheckTestCase:
+    """One exact selected-check projection expectation."""
+
+    description: str
+    expected_check_name: str
+    expected_output_path_retained: bool
+
+
+@dataclass(frozen=True)
+class DagsterAuditIdentityTestCase:
+    """Expected canonical identity for two audit check results."""
+
+    description: str
+    expected_event_ids: tuple[str, ...]
+    expected_attempt_ids: tuple[str, ...]
+    expected_resource_ids: tuple[str, ...]
+    expected_sequences: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class DagsterManagedLoaderRoutingTestCase:
+    """Expected source and loader projection identity."""
+
+    description: str
+    expected_asset_paths: tuple[tuple[str, ...], ...]
+    expected_loader_id: str
+    expected_loader_name: str
+    expected_source_name: str
+    expected_source_relation: str
+
+
+@dataclass(frozen=True)
 class DagsterCliCloneStreamTestCase:
     description: str
     command_stdout: str

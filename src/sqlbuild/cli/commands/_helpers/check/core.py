@@ -13,9 +13,9 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.output.classes.compatibility_event_projector import (
-    CompatibilityEventProjector,
-    current_compatibility_event_projector,
+from sqlbuild.cli.output.classes.terminal_event_index import (
+    TerminalEventIndex,
+    current_terminal_event_index,
 )
 from sqlbuild.cli.progress.classes.native_progress_projector import (
     NativeProgressProjector,
@@ -309,7 +309,7 @@ def write_check_results(
 def format_check_json(*, results: tuple[PythonCheckExecutionResult, ...]) -> str:
     """Format check execution JSON."""
 
-    projector: CompatibilityEventProjector | None = current_compatibility_event_projector()
+    projector: TerminalEventIndex | None = current_terminal_event_index()
     if projector is not None:
         results = tuple(
             result

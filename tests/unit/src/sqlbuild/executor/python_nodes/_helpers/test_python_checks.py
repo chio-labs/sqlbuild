@@ -9,12 +9,10 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.cli.commands._helpers.check.core import format_check_json
-from sqlbuild.cli.output.classes.compatibility_event_projector import (
-    CompatibilityEventProjector,
-    compatibility_event_projector_scope,
-)
-from sqlbuild.cli.output.main._build_item_execution_event import (
-    format_build_item_execution_event,
+from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
+from sqlbuild.cli.output.classes.terminal_event_index import (
+    TerminalEventIndex,
+    terminal_event_index_scope,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
@@ -404,8 +402,9 @@ def test_given_python_check_when_executing_then_returns_expected_result(
     ),
     ids=lambda case: case.description,
 )
-def test_given_blocked_python_check_when_persisted_then_terminal_precedes_compatible_outputs(
+def test_given_blocked_python_check_when_persisted_then_terminal_precedes_integration_outputs(
     test_case: BlockedPythonCheckLifecycleTestCase,
+    tmp_path: Path,
 ) -> None:
     check_function: DiscoveredCheckFunction = python_check_function_for_case(test_case.description)
     graph: PythonNodeGraph = build_python_check_graph(check_function=check_function)
@@ -417,8 +416,8 @@ def test_given_blocked_python_check_when_persisted_then_terminal_precedes_compat
         skip_reason="blocked",
     )
     events: list[LifecycleEvent] = []
-    projected_rows: list[str | None] = []
-    projector: CompatibilityEventProjector = CompatibilityEventProjector()
+    event_path: Path = tmp_path / "integration-results.jsonl"
+    projector: TerminalEventIndex = TerminalEventIndex()
     dispatcher: EventDispatcher = EventDispatcher()
     dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
     dispatcher.subscribe_lifecycle(subscriber=projector.consume, accepts_opaque=False)
@@ -426,8 +425,9 @@ def test_given_blocked_python_check_when_persisted_then_terminal_precedes_compat
     with (
         invocation_scope("blocked-check-invocation"),
         dispatcher_scope(dispatcher),
-        compatibility_event_projector_scope(projector),
+        terminal_event_index_scope(projector),
     ):
+        writer: ExecutionEventWriter = ExecutionEventWriter(path=event_path)
         results: tuple[PythonCheckExecutionResult, ...] = execute_python_check_nodes(
             check_functions=(check_function,),
             python_graph=graph,
@@ -444,14 +444,16 @@ def test_given_blocked_python_check_when_persisted_then_terminal_precedes_compat
                 is_reload=False,
             ),
             callbacks=PythonCheckCallbacks(
-                on_check_complete=lambda result: projected_rows.append(
-                    format_build_item_execution_event(result=result, plan=None, command="check")
+                on_check_complete=lambda result: writer.write_build_result(
+                    result=result, plan=None, command="check"
                 )
             ),
         )
+        writer.close()
         final_payload: dict[str, object] = json.loads(format_check_json(results=results))
 
-    v1_payload: dict[str, object] = json.loads(projected_rows[0] or "{}")
+    integration_payload: dict[str, object] = json.loads(event_path.read_text(encoding="utf-8"))
+    projected_check: dict[str, object] = integration_payload["checks"][0]  # type: ignore[index,assignment]
     assert len(events) == 2
     assert tuple(event.run_id for event in events) == (
         "blocked-check-run",
@@ -459,11 +461,11 @@ def test_given_blocked_python_check_when_persisted_then_terminal_precedes_compat
     )
     assert events[0].event_type == "resource_attempt_started"
     assert events[1].event_type == test_case.expected_terminal
-    assert v1_payload["check"]["status"] == test_case.expected_check_status  # type: ignore[index]
+    assert projected_check["status"] == test_case.expected_check_status
     assert final_payload["summary"] == test_case.expected_summary
     final_checks: list[dict[str, object]] = final_payload["checks"]  # type: ignore[assignment]
     assert len(final_checks) == 1
-    assert final_checks[0]["name"] == v1_payload["check"]["name"]  # type: ignore[index]
+    assert final_checks[0]["name"] == projected_check["name"]
     assert final_checks[0]["status"] == test_case.expected_check_status
 
 

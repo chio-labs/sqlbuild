@@ -517,6 +517,12 @@ class BuildProgressCallbacks:
             result=node_result,
             plan=self._plan,
         )
+        if isinstance(node_result, ModelExecutionResult):
+            for audit_result in node_result.audit_results:
+                self._event_writer.write_build_result(
+                    result=audit_result,
+                    plan=self._plan,
+                )
 
     def write_execution_event(self, result: object) -> None:
         """Write one result to the shared structured event channel."""

@@ -11,9 +11,15 @@ from unittest.mock import Mock
 
 import pytest
 
+from sqlbuild.cli.output.models import IntegrationResultEnvelope
 from sqlbuild.integrations.dagster import SqlBuildCliResource
+from sqlbuild.integrations.dagster._helpers.invocation import (
+    _build_results_from_execution_payload,
+    _build_results_from_integration_result,
+)
 from sqlbuild.integrations.dagster.classes.sqlbuild_cli_invocation import SqlBuildCliInvocation
 from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
+    DagsterAuditIdentityTestCase,
     DagsterCliCloneFailureTestCase,
     DagsterCliCloneStreamTestCase,
     DagsterCliFailureTestCase,
@@ -25,12 +31,17 @@ from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterCliStreamTestCase,
     DagsterFutureCursorMetadataTestCase,
     DagsterLiveFailureLoggingTestCase,
+    DagsterManagedLoaderRoutingTestCase,
     DagsterMicrobatchLimitMetadataTestCase,
+    DagsterSelectedCheckTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
     assert_json_output_file_behavior,
     assert_positional_selector_behavior,
     assert_select_file_selector_behavior,
+    build_check_integration_envelope,
+    build_dagster_test_dag,
+    integration_result_payload,
     write_blocking_execution_event_command,
     write_blocking_failed_execution_event_command,
     write_blocking_fake_sqb_command,
@@ -39,6 +50,417 @@ from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
 )
 
 dg: Any = pytest.importorskip("dagster")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagsterManagedLoaderRoutingTestCase(
+            description="same envelope loader satisfies source dependency",
+            expected_asset_paths=(("raw_orders_loader",), ("raw", "orders")),
+            expected_loader_id="loader:raw_orders_loader",
+            expected_loader_name="raw_orders_loader",
+            expected_source_name="raw_orders",
+            expected_source_relation="analytics.raw_orders",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_managed_source_live_envelope_when_projecting_then_related_loader_and_source_emit_once(
+    test_case: DagsterManagedLoaderRoutingTestCase,
+) -> None:
+    envelope: IntegrationResultEnvelope = IntegrationResultEnvelope.from_json(
+        json.dumps(
+            integration_result_payload(
+                command="load",
+                asset={
+                    "kind": "source",
+                    "name": "raw_orders",
+                    "status": "success",
+                    "loader": "raw_orders_loader",
+                    "target": test_case.expected_source_relation,
+                },
+            )
+        )
+    )
+
+    results: tuple[Any, ...] = _build_results_from_integration_result(
+        dg=dg,
+        dag=build_dagster_test_dag(),
+        envelope=envelope,
+        command=("sqb", "load"),
+        context=type("LoaderContext", (), {"selected_asset_keys": set()})(),
+        emitted_asset_paths=set(),
+    )
+
+    assert (
+        tuple(tuple(result.asset_key.path) for result in results) == test_case.expected_asset_paths
+    )
+    loader_metadata: Any = results[0].metadata
+    assert loader_metadata["sqlbuild_id"] == test_case.expected_loader_id
+    assert loader_metadata["resource_id"] == test_case.expected_loader_id
+    assert loader_metadata["kind"] == "loader"
+    assert loader_metadata["name"] == test_case.expected_loader_name
+    assert loader_metadata["source"] == test_case.expected_source_name
+    assert loader_metadata["source_relation"] == test_case.expected_source_relation
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagsterManagedLoaderRoutingTestCase(
+            description="final source resolves explicitly named loader",
+            expected_asset_paths=(("raw_orders_loader",), ("raw", "orders")),
+            expected_loader_id="loader:raw_orders_loader",
+            expected_loader_name="raw_orders_loader",
+            expected_source_name="raw_orders",
+            expected_source_relation="analytics.raw_orders",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_managed_source_final_payload_when_projecting_then_only_named_loader_and_source_emit(
+    test_case: DagsterManagedLoaderRoutingTestCase,
+) -> None:
+    payload: dict[str, object] = {
+        "version": 1,
+        "command": "load",
+        "assets": [
+            {
+                "kind": "loader",
+                "name": "raw_orders",
+                "status": "success",
+                "loader": test_case.expected_loader_name,
+                "target": test_case.expected_source_relation,
+            }
+        ],
+        "checks": [],
+    }
+
+    results: tuple[Any, ...] = _build_results_from_execution_payload(
+        dg=dg,
+        dag=build_dagster_test_dag(),
+        payload=payload,
+        command=("sqb", "load"),
+        context=type("LoaderContext", (), {"selected_asset_keys": set()})(),
+    )
+
+    assert (
+        tuple(tuple(result.asset_key.path) for result in results) == test_case.expected_asset_paths
+    )
+    assert results[0].metadata["sqlbuild_id"] == test_case.expected_loader_id
+    assert results[0].metadata["name"] == test_case.expected_loader_name
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (DagsterSelectedCheckTestCase("model-only final payload omits unrelated source", "", False),),
+    ids=lambda case: case.description,
+)
+def test_given_model_only_final_payload_when_projecting_then_no_source_observation_is_synthesized(
+    test_case: DagsterSelectedCheckTestCase,
+) -> None:
+    results: tuple[Any, ...] = _build_results_from_execution_payload(
+        dg=dg,
+        dag=build_dagster_test_dag(),
+        payload={
+            "version": 1,
+            "command": "build",
+            "assets": [{"kind": "model", "name": "customers", "status": "success"}],
+            "checks": [],
+        },
+        command=("sqb", "build"),
+        context=type("ModelContext", (), {"selected_asset_keys": set()})(),
+    )
+
+    assert tuple(tuple(result.asset_key.path) for result in results) == (
+        ("analytics", "customers"),
+    )
+    assert test_case.expected_output_path_retained is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagsterAuditIdentityTestCase(
+            description="two audit checks retain independent canonical identity",
+            expected_event_ids=("event-not-null", "event-unique"),
+            expected_attempt_ids=("attempt-not-null", "attempt-unique"),
+            expected_resource_ids=(
+                "audit:not_null:model:orders:order_id",
+                "audit:unique:model:orders:order_id",
+            ),
+            expected_sequences=(3, 4),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_two_audit_envelopes_when_projecting_then_each_check_keeps_own_canonical_identity(
+    test_case: DagsterAuditIdentityTestCase,
+) -> None:
+    dag: dict[str, Any] = dict(build_dagster_test_dag())
+    dag["checks"] = [
+        *dag["checks"],
+        {
+            "id": "audit:unique:model:orders:order_id",
+            "kind": "audit",
+            "name": "unique",
+            "checked_asset_ids": ["model:orders"],
+            "attached_column_name": "order_id",
+        },
+    ]
+    envelopes: tuple[IntegrationResultEnvelope, ...] = (
+        build_check_integration_envelope(
+            check_id=test_case.expected_resource_ids[0],
+            name="not_null",
+            event_id=test_case.expected_event_ids[0],
+            attempt_id=test_case.expected_attempt_ids[0],
+            event_sequence=test_case.expected_sequences[0],
+        ),
+        build_check_integration_envelope(
+            check_id=test_case.expected_resource_ids[1],
+            name="unique",
+            event_id=test_case.expected_event_ids[1],
+            attempt_id=test_case.expected_attempt_ids[1],
+            event_sequence=test_case.expected_sequences[1],
+        ),
+    )
+    context: Any = type("AuditContext", (), {"selected_asset_keys": set()})()
+    results: list[Any] = []
+    for envelope in envelopes:
+        results.extend(
+            _build_results_from_integration_result(
+                dg=dg,
+                dag=dag,
+                envelope=envelope,
+                command=("sqb", "audit"),
+                context=context,
+                emitted_asset_paths={("analytics", "orders")},
+            )
+        )
+
+    assert tuple(result.metadata["event_id"].value for result in results) == (
+        test_case.expected_event_ids
+    )
+    assert tuple(result.metadata["resource_attempt_id"].value for result in results) == (
+        test_case.expected_attempt_ids
+    )
+    assert tuple(result.metadata["resource_id"].value for result in results) == (
+        test_case.expected_resource_ids
+    )
+    assert tuple(result.metadata["event_sequence"].value for result in results) == (
+        test_case.expected_sequences
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (DagsterSelectedCheckTestCase("model envelope does not synthesize sources", "", False),),
+    ids=lambda case: case.description,
+)
+def test_given_model_live_envelope_when_projecting_then_only_canonical_asset_is_routed(
+    test_case: DagsterSelectedCheckTestCase,
+) -> None:
+    envelope: IntegrationResultEnvelope = IntegrationResultEnvelope.from_json(
+        json.dumps(
+            integration_result_payload(
+                command="build",
+                asset={"kind": "model", "name": "orders", "status": "success"},
+            )
+        )
+    )
+
+    results: tuple[Any, ...] = _build_results_from_integration_result(
+        dg=dg,
+        dag=build_dagster_test_dag(),
+        envelope=envelope,
+        command=("sqb", "build"),
+        context=type("AssetContext", (), {"selected_asset_keys": set()})(),
+        emitted_asset_paths={("raw", "orders"), ("analytics", "normalize_email")},
+    )
+
+    assert tuple(tuple(result.asset_key.path) for result in results) == (("analytics", "orders"),)
+    assert test_case.expected_output_path_retained is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (DagsterSelectedCheckTestCase("malformed live record logs bounded warning", "", False),),
+    ids=lambda case: case.description,
+)
+def test_given_malformed_complete_live_record_when_parsing_then_warning_omits_record_contents(
+    test_case: DagsterSelectedCheckTestCase, tmp_path: Path
+) -> None:
+    logger: Mock = Mock()
+    context: Any = type("WarningContext", (), {"log": logger})()
+    invocation: SqlBuildCliInvocation = SqlBuildCliInvocation(
+        process=Mock(),
+        command=("sqb", "build"),
+        project_dir=tmp_path,
+        context=context,
+    )
+
+    results: list[Any] = list(
+        invocation._results_from_live_event_line(
+            dg=dg,
+            dag=build_dagster_test_dag(),
+            line='{"schema_version":"secret-line-content"}',
+            logged_failed_assets=set(),
+            emitted_asset_keys=set(),
+        )
+    )
+
+    assert results == []
+    logger.warning.assert_called_once_with("Ignored invalid SQLBuild integration result record")
+    assert "secret-line-content" not in str(logger.warning.call_args)
+    assert test_case.expected_output_path_retained is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagsterSelectedCheckTestCase(
+            "json stdout selects one attachment", "audit__unique__order_id", False
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_json_stdout_with_two_checks_when_one_check_selected_then_only_selected_check_yields(
+    test_case: DagsterSelectedCheckTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    dag: dict[str, Any] = dict(build_dagster_test_dag())
+    dag["checks"] = [
+        *dag["checks"],
+        {
+            "id": "audit:unique:model:orders:order_id",
+            "kind": "audit",
+            "name": "unique",
+            "checked_asset_ids": ["model:orders"],
+            "attached_column_name": "order_id",
+        },
+    ]
+    dag_path: Path = tmp_path / "dag.json"
+    dag_path.write_text(json.dumps(dag), encoding="utf-8")
+    payload: str = json.dumps(
+        {
+            "version": 1,
+            "command": "build",
+            "status": "success",
+            "summary": {},
+            "assets": [],
+            "checks": [
+                {
+                    "kind": "audit",
+                    "name": "not_null",
+                    "check_id": "audit:not_null:model:orders:order_id",
+                    "passed": True,
+                    "status": "pass",
+                },
+                {
+                    "kind": "audit",
+                    "name": "unique",
+                    "check_id": "audit:unique:model:orders:order_id",
+                    "passed": True,
+                    "status": "pass",
+                },
+            ],
+        }
+    )
+    selected_key: Any = dg.AssetCheckKey(
+        asset_key=dg.AssetKey(["analytics", "orders"]),
+        name=test_case.expected_check_name,
+    )
+    context: Any = type(
+        "SelectedCheckContext",
+        (),
+        {"selected_asset_keys": set(), "selected_asset_check_keys": {selected_key}},
+    )()
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_fake_sqb_command(root=tmp_path, stdout=payload),
+        dag_path=str(dag_path),
+    )
+
+    results: list[Any] = list(resource.cli(args=["build", "--json"], context=context).stream())
+
+    assert [result.check_name for result in results] == [test_case.expected_check_name]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (DagsterSelectedCheckTestCase("caller json output is retained", "", True),),
+    ids=lambda case: case.description,
+)
+def test_given_caller_json_output_path_when_streaming_then_payload_is_loaded_without_deleting_file(
+    test_case: DagsterSelectedCheckTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    output_path: Path = tmp_path / "caller.json"
+    payload: str = json.dumps(
+        {
+            "version": 1,
+            "command": "build",
+            "status": "success",
+            "summary": {},
+            "assets": [{"kind": "model", "name": "customers", "status": "success"}],
+            "checks": [],
+        }
+    )
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_fake_sqb_command(root=tmp_path, stdout=payload),
+        dag_path=str(write_dagster_test_dag(root=tmp_path)),
+    )
+    context: Any = type("CallerOutputContext", (), {"selected_asset_keys": set()})()
+
+    results: list[Any] = list(
+        resource.cli(args=["build", "--json-output", str(output_path)], context=context).stream()
+    )
+
+    assert tuple(results[0].asset_key.path) == ("analytics", "customers")
+    assert output_path.exists() is test_case.expected_output_path_retained
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (DagsterSelectedCheckTestCase("caller equals json output is retained", "", True),),
+    ids=lambda case: case.description,
+)
+def test_given_equals_json_output_path_when_streaming_then_option_is_not_duplicated_and_file_remains(
+    test_case: DagsterSelectedCheckTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    output_path: Path = tmp_path / "caller-equals.json"
+    payload: str = json.dumps(
+        {
+            "version": 1,
+            "command": "build",
+            "status": "success",
+            "summary": {},
+            "assets": [{"kind": "model", "name": "customers", "status": "success"}],
+            "checks": [],
+        }
+    )
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_fake_sqb_command(root=tmp_path, stdout=payload),
+        dag_path=str(write_dagster_test_dag(root=tmp_path)),
+    )
+    context: Any = type("EqualsOutputContext", (), {"selected_asset_keys": set()})()
+
+    invocation: SqlBuildCliInvocation = resource.cli(
+        args=["build", f"--json-output={output_path}"], context=context
+    )
+    results: list[Any] = list(invocation.stream())
+
+    assert invocation.command.count("--json-output") == 0
+    assert invocation.command.count(f"--json-output={output_path}") == 1
+    assert tuple(results[0].asset_key.path) == ("analytics", "customers")
+    assert output_path.exists() is test_case.expected_output_path_retained
 
 
 @pytest.mark.parametrize(
@@ -522,63 +944,55 @@ def test_given_clone_execution_json_when_streaming_then_yields_asset_materializa
             description="completed clone item materializes while subprocess remains blocked",
             command="clone",
             command_args=("clone", "--from", "prod"),
-            expected_asset_key=("analytics", "orders"),
+            expected_asset_key=("analytics", "customers"),
         ),
         DagsterCliLiveCloneEventTestCase(
             description="completed build item materializes while subprocess remains blocked",
             command="build",
             command_args=("build",),
-            expected_asset_key=("analytics", "orders"),
-            expected_remaining_asset_keys=(("raw", "orders"),),
+            expected_asset_key=("analytics", "customers"),
         ),
         DagsterCliLiveCloneEventTestCase(
             description="partial JSONL writes are buffered until their record is complete",
             command="build",
             command_args=("build",),
-            expected_asset_key=("analytics", "orders"),
-            expected_remaining_asset_keys=(("raw", "orders"),),
+            expected_asset_key=("analytics", "customers"),
         ),
         DagsterCliLiveCloneEventTestCase(
             description="run uses the shared live execution event transport",
             command="run",
             command_args=("run",),
-            expected_asset_key=("analytics", "orders"),
-            expected_remaining_asset_keys=(("raw", "orders"),),
+            expected_asset_key=("analytics", "customers"),
         ),
         DagsterCliLiveCloneEventTestCase(
             description="test uses the shared live execution event transport",
             command="test",
             command_args=("test",),
-            expected_asset_key=("analytics", "orders"),
-            expected_remaining_asset_keys=(("raw", "orders"),),
+            expected_asset_key=("analytics", "customers"),
         ),
         DagsterCliLiveCloneEventTestCase(
             description="check uses the shared live execution event transport",
             command="check",
             command_args=("check",),
-            expected_asset_key=("analytics", "orders"),
-            expected_remaining_asset_keys=(("raw", "orders"),),
+            expected_asset_key=("analytics", "customers"),
         ),
         DagsterCliLiveCloneEventTestCase(
             description="audit uses the shared live execution event transport",
             command="audit",
             command_args=("audit",),
-            expected_asset_key=("analytics", "orders"),
-            expected_remaining_asset_keys=(("raw", "orders"),),
+            expected_asset_key=("analytics", "customers"),
         ),
         DagsterCliLiveCloneEventTestCase(
             description="seed uses the shared live execution event transport",
             command="seed",
             command_args=("seed",),
-            expected_asset_key=("analytics", "orders"),
-            expected_remaining_asset_keys=(("raw", "orders"),),
+            expected_asset_key=("analytics", "customers"),
         ),
         DagsterCliLiveCloneEventTestCase(
             description="load uses the shared live execution event transport",
             command="load",
             command_args=("load",),
-            expected_asset_key=("analytics", "orders"),
-            expected_remaining_asset_keys=(("raw", "orders"),),
+            expected_asset_key=("analytics", "customers"),
         ),
     ),
     ids=lambda case: case.description,
@@ -604,12 +1018,15 @@ def test_given_running_clone_when_item_completes_then_materializes_before_proces
 
     materialization: Any = next(stream)
 
-    assert tuple(materialization.asset_key.path) == test_case.expected_asset_key
     assert invocation.process.poll() is None
     release_path.touch()
     remaining_results: list[Any] = list(stream)
-    assert tuple(tuple(result.asset_key.path) for result in remaining_results) == (
-        test_case.expected_remaining_asset_keys
+    assert (
+        tuple(materialization.asset_key.path),
+        *(tuple(result.asset_key.path) for result in remaining_results),
+    ) == (
+        test_case.expected_asset_key,
+        *test_case.expected_remaining_asset_keys,
     )
     assert invocation.returncode == 0
 
@@ -618,7 +1035,10 @@ def test_given_running_clone_when_item_completes_then_materializes_before_proces
     "test_case",
     [
         DagsterLiveFailureLoggingTestCase(
-            "live failed asset logging", "staging", "R002", "invalid identifier CUSTOMER_ID"
+            "live failed asset logging",
+            "staging",
+            "R002",
+            "SQLBuild resource attempt failed; see final execution diagnostics",
         )
     ],
     ids=lambda case: case.description,
@@ -669,11 +1089,10 @@ def test_given_live_failed_asset_when_event_arrives_then_logs_error_before_proce
         "sqlbuild_asset_name": "customers",
         "sqlbuild_phase": "staging",
         "sqlbuild_error_code": "R002",
-        "sqlbuild_error_message": "invalid identifier CUSTOMER_ID",
+        "sqlbuild_error_message": test_case.expected_error_message,
         "sqlbuild_command": expected_command,
         "sqlbuild_staging_relation": "analytics.customers__staging",
         "sqlbuild_duration_ms": 123,
-        "sqlbuild_error_help": "Check the projected columns.",
     }
 
 
@@ -684,7 +1103,7 @@ def test_given_live_failed_asset_when_event_arrives_then_logs_error_before_proce
             description="closing a live event stream terminates its blocked subprocess",
             command="build",
             command_args=("build",),
-            expected_asset_key=("analytics", "orders"),
+            expected_asset_key=("analytics", "customers"),
         ),
     ),
     ids=lambda case: case.description,

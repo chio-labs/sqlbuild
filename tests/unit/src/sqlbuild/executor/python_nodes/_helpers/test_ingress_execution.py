@@ -37,6 +37,7 @@ from tests.unit.src.sqlbuild.executor.python_nodes._helpers._test_types import (
 from tests.unit.src.sqlbuild.executor.python_nodes._helpers.helpers import (
     PythonNodeContextTestAdapter,
     PythonNodeContextTestResultStore,
+    build_ingress_task_asset_graph,
     build_ingress_task_loader_graph,
     ingress_calls,
     ingress_loader_function,
@@ -95,7 +96,8 @@ def test_given_ingress_task_to_loader_when_executing_then_runs_in_lifecycle_orde
             callbacks=IngressCallbacks(
                 on_node_start=lambda name, resource_kind: callback_order.append(f"start:{name}"),
                 on_node_complete=lambda completed: callback_order.append(
-                    f"complete:{completed.source_name}"
+                    "complete:"
+                    f"{completed.__dict__.get('source_name') or completed.__dict__.get('node_name')}"
                 ),
             ),
         )
@@ -131,6 +133,76 @@ def test_given_ingress_task_to_loader_when_executing_then_runs_in_lifecycle_orde
     assert callback_order.index("event:resource_attempt_completed:raw_orders") < (
         callback_order.index("complete:raw_orders")
     )
+    assert callback_order.index("event:resource_attempt_completed:prepare_ingress_orders") < (
+        callback_order.index("complete:prepare_ingress_orders")
+    )
+    assert callback_order.count("complete:prepare_ingress_orders") == 1
+    assert callback_order.count("complete:raw_orders") == 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        PythonIngressLoaderExecutorTestCase(
+            description="ingress task and asset complete once after canonical terminals",
+            selected_names=frozenset({"prepare_ingress_orders", "publish_ingress_orders"}),
+            expected_python_names=("prepare_ingress_orders", "publish_ingress_orders"),
+            expected_load_names=(),
+            expected_python_statuses=(PythonNodeStatus.SUCCESS, PythonNodeStatus.SUCCESS),
+            expected_load_statuses=(),
+            expected_call_order=("prepare_ingress_orders", "publish_ingress_orders"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_ingress_task_and_asset_when_executing_then_each_completion_follows_own_terminal_once(
+    test_case: PythonIngressLoaderExecutorTestCase,
+) -> None:
+    graph: PythonNodeGraph = build_ingress_task_asset_graph()
+    reset_ingress_calls()
+    callback_order: list[str] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(
+        subscriber=lambda event: callback_order.append(
+            f"event:{event.event_type}:{event.payload.get('resource_name', '')}"
+        ),
+        accepts_opaque=False,
+    )
+
+    with invocation_scope("ingress-asset-invocation"), dispatcher_scope(dispatcher):
+        result: PythonIngressLoaderExecutorResult = execute_ingress_python_loader_nodes(
+            python_graph=graph,
+            selected_python_names=test_case.selected_names,
+            loader_functions=(),
+            source_map={},
+            runtime=PythonNodeRuntime(
+                adapter=PythonNodeContextTestAdapter(),
+                connection_config={},
+                connection=object(),
+                run_id="test_run",
+                target="dev",
+                vars={},
+                is_reload=False,
+            ),
+            callbacks=IngressCallbacks(
+                on_node_complete=lambda completed: callback_order.append(
+                    f"complete:{completed.node_name}"
+                )
+            ),
+        )
+
+    assert (
+        tuple(item.node_name for item in result.python_results) == test_case.expected_python_names
+    )
+    assert (
+        tuple(item.status for item in result.python_results) == test_case.expected_python_statuses
+    )
+    assert ingress_calls() == test_case.expected_call_order
+    for node_name in test_case.expected_python_names:
+        assert callback_order.count(f"complete:{node_name}") == 1
+        assert callback_order.index(f"event:resource_attempt_completed:{node_name}") < (
+            callback_order.index(f"complete:{node_name}")
+        )
 
 
 @pytest.mark.parametrize(
