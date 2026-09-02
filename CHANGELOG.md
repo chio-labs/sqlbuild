@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.74.3](https://github.com/chio-labs/sqlbuild/compare/v0.74.2...v0.74.3) (2026-09-02)
+
+
+### Bug Fixes
+
+* align incremental writes by column name ([#470](https://github.com/chio-labs/sqlbuild/issues/470)) ([361ab15](https://github.com/chio-labs/sqlbuild/commit/361ab15deb857e711746e324f1b11fa657a30a3a))
+
 ## [0.74.2](https://github.com/chio-labs/sqlbuild/compare/v0.74.1...v0.74.2) (2026-09-02)
 
 
