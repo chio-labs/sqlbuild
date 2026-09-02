@@ -30,6 +30,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotManifest,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.observability import run_scope
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
@@ -39,20 +40,23 @@ def execute_scenario_snapshot_capture_steps(
     scenario_plan: ScenarioExecutionPlan,
     adapter: BaseAdapter,
     connection: Any,
+    run_id: str,
     settings: ScenarioCaptureSettings,
     local_type_overrides: dict[str, str] | None = None,
 ) -> ScenarioSnapshotCaptureRunResult:
     """Materialize scenario inputs, capture JSONL snapshots, and apply cleanup policy."""
 
-    with OperationLifecycle(operation_kind="scenario", operation_name="scenario_capture"):
-        return _execute_scenario_snapshot_capture_steps(
-            project_dir=project_dir,
-            scenario_plan=scenario_plan,
-            adapter=adapter,
-            connection=connection,
-            settings=settings,
-            local_type_overrides=local_type_overrides,
-        )
+    with run_scope(run_id):
+        with OperationLifecycle(operation_kind="scenario", operation_name="scenario_capture"):
+            return _execute_scenario_snapshot_capture_steps(
+                project_dir=project_dir,
+                scenario_plan=scenario_plan,
+                adapter=adapter,
+                connection=connection,
+                run_id=run_id,
+                settings=settings,
+                local_type_overrides=local_type_overrides,
+            )
 
 
 def _execute_scenario_snapshot_capture_steps(
@@ -61,6 +65,7 @@ def _execute_scenario_snapshot_capture_steps(
     scenario_plan: ScenarioExecutionPlan,
     adapter: BaseAdapter,
     connection: Any,
+    run_id: str,
     settings: ScenarioCaptureSettings,
     local_type_overrides: dict[str, str] | None,
 ) -> ScenarioSnapshotCaptureRunResult:
@@ -104,9 +109,11 @@ def _execute_scenario_snapshot_capture_steps(
         )
 
     seed_results: tuple[SeedExecutionResult, ...] = execute_scenario_seed_entries(
+        scenario_name=scenario_plan.name,
         seed_entries=scenario_plan.seed_entries,
         adapter=adapter,
         connection=connection,
+        run_id=run_id,
     )
     seed_error: str | None = _first_error(seed_results)
     if seed_error is not None:

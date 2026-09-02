@@ -15,6 +15,11 @@ from sqlbuild.cli.commands._helpers.entry.history_diagnostics import (
     log_history_open_failure,
 )
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
+from sqlbuild.cli.output.classes.compatibility_event_projector import (
+    CompatibilityEventProjector,
+    compatibility_event_projector_scope,
+)
+from sqlbuild.cli.output.main._execution_event_output_active import execution_event_output_active
 from sqlbuild.cli.progress.classes.native_progress_projector import NativeProgressProjector
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.execution_history import CanonicalLifecycleEvent
@@ -43,7 +48,16 @@ def cli_observability_scope(
             accepts_opaque=True,
         )
     )
-    machine_output: bool = args.json
+    compatibility: CompatibilityEventProjector = CompatibilityEventProjector()
+    unsubscribe_compatibility: Unsubscribe = dispatcher.subscribe_lifecycle(
+        subscriber=compatibility.consume,
+        accepts_opaque=False,
+    )
+    machine_output: bool = (
+        args.json
+        or getattr(args, "event_output", None) is not None
+        or execution_event_output_active()
+    )
     projector: NativeProgressProjector = NativeProgressProjector(
         stream=sys.stderr if machine_output or args.debug else sys.stdout,
         use_color=not machine_output and not args.no_color and supports_color(),
@@ -54,9 +68,10 @@ def cli_observability_scope(
     )
     projector_token: Token[NativeProgressProjector | None] = projector.install()
     try:
-        with dispatcher_scope(dispatcher):
+        with dispatcher_scope(dispatcher), compatibility_event_projector_scope(compatibility):
             yield dispatcher
     finally:
+        _run_cleanup(action=unsubscribe_compatibility, phase="compatibility_unsubscribe")
         _run_cleanup(action=unsubscribe_progress, phase="progress_unsubscribe")
         if unsubscribe_history is not None:
             _run_cleanup(action=unsubscribe_history, phase="history_unsubscribe")

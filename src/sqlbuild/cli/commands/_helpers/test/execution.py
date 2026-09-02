@@ -15,7 +15,6 @@ from sqlbuild.cli.commands.models import (
     TestInvocation,
 )
 from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
-from sqlbuild.cli.output.main._build_item_execution_event import format_build_item_execution_event
 from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )
@@ -151,12 +150,10 @@ def _build_on_complete(
             canonical_resource_name=result.test_name,
             canonical_resource_id=f"sql_test:{result.test_name}",
         )
-        event_writer.write(
-            format_build_item_execution_event(
-                result=result,
-                plan=pipeline_result.plan_output,
-                command="test",
-            )
+        event_writer.write_build_result(
+            result=result,
+            plan=pipeline_result.plan_output,
+            command="test",
         )
 
     return _on_complete

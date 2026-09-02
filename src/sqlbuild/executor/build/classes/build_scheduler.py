@@ -272,6 +272,7 @@ class BuildScheduler:
                 model_locations=self._plan.model_locations,
                 seed_locations=self._plan.seed_locations,
                 source_map=self._plan.source_map,
+                run_id=self._run_id,
             )
 
         return (
@@ -690,6 +691,7 @@ class BuildScheduler:
                 adapter=self._adapter,
                 connection=self._scheduler_connection,
                 fail_fast=self._fail_fast,
+                run_id=self._run_id,
             )
             self._executed_source_audits.update(audit_run.executed_source_names)
             self._failed_sources.update(audit_run.failed_source_names)
@@ -697,10 +699,11 @@ class BuildScheduler:
             self._source_audit_results.extend(audit_run.audit_results)
             if audit_run.blocked:
                 self._blocked_keys.add(key)
-                self._model_results.append(
-                    ModelExecutionResult(
+                self._record_skipped_result(
+                    key=key,
+                    result=ModelExecutionResult(
                         model_name=model_entry.name, status=ExecutionStatus.SKIPPED
-                    )
+                    ),
                 )
                 if self._fail_fast:
                     self._stop = True
@@ -1172,35 +1175,70 @@ class BuildScheduler:
         if key.resource_type == CompiledResourceType.MODEL:
             entry: ModelPlanEntry | None = self._indexes.model_entries_by_key.get(key)
             if entry is not None:
-                self._model_results.append(
-                    ModelExecutionResult(model_name=entry.name, status=ExecutionStatus.SKIPPED)
+                self._record_skipped_result(
+                    key=key,
+                    result=ModelExecutionResult(
+                        model_name=entry.name, status=ExecutionStatus.SKIPPED
+                    ),
                 )
         elif key.resource_type == CompiledResourceType.SEED:
             seed_entry: SeedPlanEntry | None = self._indexes.seed_entries_by_key.get(key)
             if seed_entry is not None:
-                self._seed_results.append(
-                    SeedExecutionResult(seed_name=seed_entry.name, status=ExecutionStatus.SKIPPED)
+                self._record_skipped_result(
+                    key=key,
+                    result=SeedExecutionResult(
+                        seed_name=seed_entry.name, status=ExecutionStatus.SKIPPED
+                    ),
                 )
         elif key.resource_type in {CompiledResourceType.UDF, CompiledResourceType.TABLE_FN}:
             function_entry: FunctionPlanEntry | None = self._indexes.function_entries_by_key.get(
                 key
             )
             if function_entry is not None:
-                self._function_results.append(
-                    FunctionExecutionResult(
+                self._record_skipped_result(
+                    key=key,
+                    result=FunctionExecutionResult(
                         function_name=function_entry.name,
                         status=ExecutionStatus.SKIPPED,
                         function_kind=str(key.resource_type),
-                    )
+                    ),
                 )
         elif key.resource_type == CompiledResourceType.SOURCE:
             load_entry: SourceLoadPlanEntry | None = self._indexes.source_load_entries_by_key.get(
                 key
             )
             if load_entry is not None:
-                self._load_results.append(
-                    skipped_load_result(source=self._plan.source_map[load_entry.name])
+                self._record_skipped_result(
+                    key=key,
+                    result=skipped_load_result(source=self._plan.source_map[load_entry.name]),
                 )
+
+    def _record_skipped_result(
+        self,
+        *,
+        key: CompiledObjectKey,
+        result: ModelExecutionResult
+        | SeedExecutionResult
+        | FunctionExecutionResult
+        | LoadExecutionResult,
+    ) -> None:
+        with ResourceAttemptLifecycle(
+            resource_id=f"{key.resource_type}:{key.name}",
+            resource_kind=self._canonical_resource_kind(key=key),
+            resource_name=key.name,
+            run_id=self._run_id,
+        ):
+            pass
+        if isinstance(result, ModelExecutionResult):
+            self._model_results.append(result)
+        elif isinstance(result, SeedExecutionResult):
+            self._seed_results.append(result)
+        elif isinstance(result, FunctionExecutionResult):
+            self._function_results.append(result)
+        else:
+            self._load_results.append(result)
+        if self._on_node_complete is not None:
+            self._on_node_complete(result)
 
     def _skip_remaining(self) -> None:
         """Skip all nodes that were never dispatched."""

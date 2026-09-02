@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 
 import pytest
 
+from sqlbuild.cli.commands._helpers.check.core import format_check_json
+from sqlbuild.cli.output.classes.compatibility_event_projector import (
+    CompatibilityEventProjector,
+    compatibility_event_projector_scope,
+)
+from sqlbuild.cli.output.main._build_item_execution_event import (
+    format_build_item_execution_event,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode
@@ -16,6 +25,7 @@ from sqlbuild.executor.node_results.models import NodeResultEnvelope
 from sqlbuild.executor.python_nodes._helpers.python_checks import execute_python_check_nodes
 from sqlbuild.executor.python_nodes.models import (
     CheckContext,
+    PythonCheckCallbacks,
     PythonCheckExecutionResult,
     PythonNodeExecutionResult,
     PythonNodeRunState,
@@ -31,6 +41,7 @@ from sqlbuild.provider.classes.container import ProviderContainer
 from sqlbuild.provider.classes.session import ProviderSession
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from tests.unit.src.sqlbuild.executor.python_nodes._helpers._test_types import (
+    BlockedPythonCheckLifecycleTestCase,
     MalformedPythonOperationTestCase,
     PythonCheckExecutorTestCase,
 )
@@ -223,6 +234,101 @@ def test_given_python_check_when_executing_then_returns_expected_result(
     assert result.message == test_case.expected_message
     expected_error_fragment: str = test_case.expected_error_fragment or ""
     assert expected_error_fragment in (result.error_message or "")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        BlockedPythonCheckLifecycleTestCase(
+            description="failed upstream produces failed blocked check terminal",
+            upstream_status=PythonNodeStatus.FAILED,
+            upstream_skip_mode=None,
+            expected_terminal="resource_attempt_failed",
+            expected_check_status="fail",
+            expected_summary={
+                "pass_count": 0,
+                "warn_count": 0,
+                "fail_count": 1,
+                "total_count": 1,
+            },
+        ),
+        BlockedPythonCheckLifecycleTestCase(
+            description="skipped upstream produces completed warning check terminal",
+            upstream_status=PythonNodeStatus.SKIPPED,
+            upstream_skip_mode=SkipMode.HARD,
+            expected_terminal="resource_attempt_completed",
+            expected_check_status="warn",
+            expected_summary={
+                "pass_count": 0,
+                "warn_count": 1,
+                "fail_count": 0,
+                "total_count": 1,
+            },
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_blocked_python_check_when_persisted_then_terminal_precedes_compatible_outputs(
+    test_case: BlockedPythonCheckLifecycleTestCase,
+) -> None:
+    check_function: DiscoveredCheckFunction = python_check_function_for_case(test_case.description)
+    graph: PythonNodeGraph = build_python_check_graph(check_function=check_function)
+    upstream_result: PythonNodeExecutionResult = PythonNodeExecutionResult(
+        node_name="upstream_task",
+        kind=PythonNodeKind.TASK,
+        status=test_case.upstream_status,
+        skip_mode=test_case.upstream_skip_mode,
+        skip_reason="blocked",
+    )
+    events: list[LifecycleEvent] = []
+    projected_rows: list[str | None] = []
+    projector: CompatibilityEventProjector = CompatibilityEventProjector()
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+    dispatcher.subscribe_lifecycle(subscriber=projector.consume, accepts_opaque=False)
+
+    with (
+        invocation_scope("blocked-check-invocation"),
+        dispatcher_scope(dispatcher),
+        compatibility_event_projector_scope(projector),
+    ):
+        results: tuple[PythonCheckExecutionResult, ...] = execute_python_check_nodes(
+            check_functions=(check_function,),
+            python_graph=graph,
+            upstream_python_results=(upstream_result,),
+            upstream_load_results=(),
+            run_state=PythonNodeRunState(),
+            runtime=PythonNodeRuntime(
+                adapter=PythonNodeContextTestAdapter(),
+                connection_config={},
+                connection=object(),
+                run_id="blocked-check-run",
+                target="dev",
+                vars={},
+                is_reload=False,
+            ),
+            callbacks=PythonCheckCallbacks(
+                on_check_complete=lambda result: projected_rows.append(
+                    format_build_item_execution_event(result=result, plan=None, command="check")
+                )
+            ),
+        )
+        final_payload: dict[str, object] = json.loads(format_check_json(results=results))
+
+    v1_payload: dict[str, object] = json.loads(projected_rows[0] or "{}")
+    assert len(events) == 2
+    assert tuple(event.run_id for event in events) == (
+        "blocked-check-run",
+        "blocked-check-run",
+    )
+    assert events[0].event_type == "resource_attempt_started"
+    assert events[1].event_type == test_case.expected_terminal
+    assert v1_payload["check"]["status"] == test_case.expected_check_status  # type: ignore[index]
+    assert final_payload["summary"] == test_case.expected_summary
+    final_checks: list[dict[str, object]] = final_payload["checks"]  # type: ignore[assignment]
+    assert len(final_checks) == 1
+    assert final_checks[0]["name"] == v1_payload["check"]["name"]  # type: ignore[index]
+    assert final_checks[0]["status"] == test_case.expected_check_status
 
 
 @pytest.mark.parametrize(

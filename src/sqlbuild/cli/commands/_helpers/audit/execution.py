@@ -9,7 +9,6 @@ from sqlbuild.cli.commands.models import (
     AuditInvocation,
 )
 from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
-from sqlbuild.cli.output.main._build_item_execution_event import format_build_item_execution_event
 from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )
@@ -137,12 +136,10 @@ def _build_on_complete(
                 attached_column_name=result.attached_column_name,
             ),
         )
-        event_writer.write(
-            format_build_item_execution_event(
-                result=result,
-                plan=pipeline_result.plan_output,
-                command="audit",
-            )
+        event_writer.write_build_result(
+            result=result,
+            plan=pipeline_result.plan_output,
+            command="audit",
         )
 
     return _on_complete

@@ -99,9 +99,11 @@ def _execute_scenario_run_steps(
         )
 
     seed_results: tuple[SeedExecutionResult, ...] = execute_scenario_seed_entries(
+        scenario_name=scenario_plan.name,
         seed_entries=scenario_plan.seed_entries,
         adapter=adapter,
         connection=connection,
+        run_id=run_id,
     )
     if _has_failed(seed_results):
         return _finish_scenario(

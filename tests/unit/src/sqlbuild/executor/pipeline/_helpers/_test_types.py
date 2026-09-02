@@ -68,6 +68,14 @@ class ScenarioLocalPipelineTestCase:
 
 
 @dataclass(frozen=True)
+class ScenarioPlanningLifecycleTestCase:
+    description: str
+    expected_resource_id: str
+    expected_run_id: str
+    expected_terminal: str
+
+
+@dataclass(frozen=True)
 class SeedPipelineConcurrencyTestCase:
     """One seed pipeline concurrency orchestration case."""
 

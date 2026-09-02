@@ -116,11 +116,19 @@ def execute_python_check_nodes(
                 resource_type=PythonNodeKind.CHECK.value,
                 resource_name=check_function.name,
             ):
-                _persist_check_result(
-                    result_store=resolved_result_store,
-                    result=blocked,
+                with ResourceAttemptLifecycle(
+                    resource_id=f"check:{check_function.name}",
+                    resource_kind="check",
+                    resource_name=check_function.name,
                     run_id=run_id,
-                )
+                ) as lifecycle:
+                    _persist_check_result(
+                        result_store=resolved_result_store,
+                        result=blocked,
+                        run_id=run_id,
+                    )
+                    if blocked.failed:
+                        lifecycle.failed()
             results.append(blocked)
             if resolved_callbacks.on_check_complete is not None:
                 resolved_callbacks.on_check_complete(blocked)

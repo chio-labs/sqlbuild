@@ -207,6 +207,16 @@ class PythonCheckExecutorTestCase:
 
 
 @dataclass(frozen=True)
+class BlockedPythonCheckLifecycleTestCase:
+    description: str
+    upstream_status: PythonNodeStatus
+    upstream_skip_mode: SkipMode | None
+    expected_terminal: str
+    expected_check_status: str
+    expected_summary: dict[str, int]
+
+
+@dataclass(frozen=True)
 class PythonIdentityFingerprintWriteTestCase:
     description: str
     schema: str | None

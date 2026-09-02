@@ -36,6 +36,9 @@ from sqlbuild.executor.scenario.models import (
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.contracts.models import ConnectionHooks
+from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
+    ResourceAttemptLifecycle,
+)
 from sqlbuild.spec.contracts.main.scenario_local_type_overrides_for_dialect import (
     scenario_local_type_overrides_for_dialect,
 )
@@ -88,32 +91,40 @@ def run_scenario_test_pipeline(
         results: list[ScenarioRunResult] = []
         scenario: CompiledSqlScenario
         for scenario in scenarios:
-            if on_scenario_start is not None:
-                on_scenario_start(scenario)
             scenario_plan: ScenarioExecutionPlan | None = None
-            try:
-                scenario_plan = build_scenario_plan(
-                    scenario=scenario,
-                    pipeline_result=pipeline_result,
-                    adapter=adapter,
-                    project_name=project_name,
-                )
-                result: ScenarioRunResult = execute_scenario_run(
-                    scenario_plan=scenario_plan,
-                    adapter=adapter,
-                    connection=connection,
-                    run_id=pipeline_result.project.run_id,
-                    retain=retain,
-                )
-            except Exception as exc:
-                result = ScenarioRunResult(
-                    scenario_name=scenario.name,
-                    status=ExecutionStatus.FAILED,
-                    retained=retain,
-                    error_code=error_code(error=exc, fallback_code=SCENARIO_EXEC_INTERNAL),
-                    error_help=_scenario_failure_help(exc),
-                    error_message=error_message(exc),
-                )
+            with ResourceAttemptLifecycle(
+                resource_id=f"sql_scenario:{scenario.name}",
+                resource_kind="scenario",
+                resource_name=scenario.name,
+                run_id=pipeline_result.project.run_id,
+            ) as lifecycle:
+                if on_scenario_start is not None:
+                    on_scenario_start(scenario)
+                try:
+                    scenario_plan = build_scenario_plan(
+                        scenario=scenario,
+                        pipeline_result=pipeline_result,
+                        adapter=adapter,
+                        project_name=project_name,
+                    )
+                    result: ScenarioRunResult = execute_scenario_run(
+                        scenario_plan=scenario_plan,
+                        adapter=adapter,
+                        connection=connection,
+                        run_id=pipeline_result.project.run_id,
+                        retain=retain,
+                    )
+                except Exception as exc:
+                    result = ScenarioRunResult(
+                        scenario_name=scenario.name,
+                        status=ExecutionStatus.FAILED,
+                        retained=retain,
+                        error_code=error_code(error=exc, fallback_code=SCENARIO_EXEC_INTERNAL),
+                        error_help=_scenario_failure_help(exc),
+                        error_message=error_message(exc),
+                    )
+                if result.status == ExecutionStatus.FAILED:
+                    lifecycle.failed(error_code=result.error_code)
             results.append(result)
             if on_scenario_complete is not None:
                 on_scenario_complete(scenario, scenario_plan, result)
@@ -143,34 +154,42 @@ def run_scenario_local_test_pipeline(
     results: list[ScenarioRunResult] = []
     scenario: CompiledSqlScenario
     for scenario in scenarios:
-        if on_scenario_start is not None:
-            on_scenario_start(scenario)
         scenario_plan: ScenarioExecutionPlan | None = None
-        try:
-            scenario_plan = build_scenario_plan(
-                scenario=scenario,
-                pipeline_result=pipeline_result,
-                adapter=adapter,
-                project_name=project_name,
-            )
-            result: ScenarioRunResult = execute_local_scenario_load_only_run(
-                project_dir=project_dir,
-                scenario_plan=scenario_plan,
-                adapter=adapter,
-                strict=strict,
-                capture_adapter=capture_adapter,
-                capture_dialect=capture_dialect,
-            )
-        except Exception as exc:
-            result = ScenarioRunResult(
-                scenario_name=scenario.name,
-                status=ExecutionStatus.FAILED,
-                local_status=ScenarioLocalRunStatus.ERROR,
-                retained=False,
-                error_code=error_code(error=exc, fallback_code=SCENARIO_LOCAL_INTERNAL),
-                error_help=_scenario_failure_help(exc),
-                error_message=error_message(exc),
-            )
+        with ResourceAttemptLifecycle(
+            resource_id=f"sql_scenario:{scenario.name}",
+            resource_kind="scenario",
+            resource_name=scenario.name,
+            run_id=pipeline_result.project.run_id,
+        ) as lifecycle:
+            if on_scenario_start is not None:
+                on_scenario_start(scenario)
+            try:
+                scenario_plan = build_scenario_plan(
+                    scenario=scenario,
+                    pipeline_result=pipeline_result,
+                    adapter=adapter,
+                    project_name=project_name,
+                )
+                result: ScenarioRunResult = execute_local_scenario_load_only_run(
+                    project_dir=project_dir,
+                    scenario_plan=scenario_plan,
+                    adapter=adapter,
+                    strict=strict,
+                    capture_adapter=capture_adapter,
+                    capture_dialect=capture_dialect,
+                )
+            except Exception as exc:
+                result = ScenarioRunResult(
+                    scenario_name=scenario.name,
+                    status=ExecutionStatus.FAILED,
+                    local_status=ScenarioLocalRunStatus.ERROR,
+                    retained=False,
+                    error_code=error_code(error=exc, fallback_code=SCENARIO_LOCAL_INTERNAL),
+                    error_help=_scenario_failure_help(exc),
+                    error_message=error_message(exc),
+                )
+            if result.status == ExecutionStatus.FAILED:
+                lifecycle.failed(error_code=result.error_code)
         results.append(result)
         if on_scenario_complete is not None:
             on_scenario_complete(scenario, scenario_plan, result)
@@ -226,6 +245,7 @@ def run_scenario_capture_pipeline(
                     scenario_plan=scenario_plan,
                     adapter=adapter,
                     connection=connection,
+                    run_id=pipeline_result.project.run_id,
                     settings=settings,
                     local_type_overrides=scenario_local_type_overrides_for_dialect(
                         scenario_config=pipeline_result.project.scenario,

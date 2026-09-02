@@ -15,9 +15,6 @@ from sqlbuild.cli.commands.models import (
     CloneRunOutcome,
 )
 from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
-from sqlbuild.cli.output.main._clone_item_execution_event import (
-    format_clone_item_execution_event,
-)
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
@@ -177,11 +174,9 @@ def _build_on_clone_item(
             render_clone_item_line(index=index, total=total, item=item, use_color=use_color) + "\n"
         )
         stream.flush()
-        event_writer.write(
-            format_clone_item_execution_event(
-                item=item,
-                resource_type=resource_types_by_name[item.name],
-            )
+        event_writer.write_clone_result(
+            item=item,
+            resource_type=resource_types_by_name[item.name],
         )
 
     return _on_clone_item

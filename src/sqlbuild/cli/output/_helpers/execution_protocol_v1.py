@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar, Token
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
 from sqlbuild.cli.output._helpers.future_cursor_safety import serialize_future_cursor_safety
+from sqlbuild.cli.output.classes.compatibility_event_projector import (
+    CompatibilityEventProjector,
+    current_compatibility_event_projector,
+)
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
@@ -17,6 +24,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.python_nodes.types import PythonNodeStatus
 from sqlbuild.executor.auditing.main.resource_id import audit_resource_id
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.build.main.aggregate_result import aggregate_build_result
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
     FunctionExecutionResult,
@@ -41,6 +49,7 @@ from sqlbuild.executor.scenario.models import (
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 from sqlbuild.virtual.executor.constants import (
@@ -51,6 +60,14 @@ from sqlbuild.virtual.executor.constants import (
 from sqlbuild.virtual.executor.models import VirtualCloneResult
 
 _JSON_VERSION: int = 1
+_SUCCESS_STATUS: str = "success"
+_FAILED_STATUS: str = "failed"
+_SKIPPED_STATUS: str = "skipped"
+_WARNING_STATUS: str = "warning"
+_WARN_STATUS: str = "warn"
+_SCENARIO_RESOURCE_NAMESPACE: ContextVar[str | None] = ContextVar(
+    "sqlbuild_scenario_resource_namespace", default=None
+)
 
 
 def write_execution_json_output(
@@ -79,6 +96,27 @@ def format_build_execution_json(
 ) -> str:
     """Format build command execution results as JSON."""
 
+    python_node_result_count: int = len(python_node_results)
+    python_check_result_count: int = len(python_check_results)
+    model_results: tuple[ModelExecutionResult, ...] = _terminal_results(
+        results=result.model_results
+    )
+    seed_results: tuple[SeedExecutionResult, ...] = _terminal_results(results=result.seed_results)
+    function_results: tuple[FunctionExecutionResult, ...] = _terminal_results(
+        results=result.function_results
+    )
+    load_results: tuple[LoadExecutionResult, ...] = _terminal_results(results=result.load_results)
+    test_results: tuple[SqlTestExecutionResult, ...] = _terminal_results(
+        results=result.test_results
+    )
+    source_audit_results: tuple[AuditExecutionResult, ...] = _terminal_results(
+        results=result.source_audit_results
+    )
+    end_audit_results: tuple[AuditExecutionResult, ...] = _terminal_results(
+        results=result.end_audit_results
+    )
+    python_node_results = _terminal_results(results=python_node_results)
+    python_check_results = _terminal_results(results=python_check_results)
     python_fail_count: int = _python_node_result_count(
         results=python_node_results, status=PythonNodeStatus.FAILED
     )
@@ -96,33 +134,74 @@ def format_build_execution_json(
         if result.status == BuildStatus.FAILED or python_fail_count or python_check_fail_count
         else result.status
     )
+    retained_result: BuildExecutionResult = aggregate_build_result(
+        model_results=model_results,
+        seed_results=seed_results,
+        function_results=function_results,
+        load_results=load_results,
+        test_results=test_results,
+        source_audit_results=source_audit_results,
+        end_audit_results=end_audit_results,
+    )
     checks: list[dict[str, object]] = []
-    checks.extend(_format_sql_test_checks(result.test_results))
-    checks.extend(_format_audit_checks(result.source_audit_results))
-    checks.extend(_format_audit_checks(result.end_audit_results))
-    for model_result in result.model_results:
-        checks.extend(_format_audit_checks(model_result.audit_results))
+    checks.extend(_format_sql_test_checks(test_results))
+    checks.extend(_format_audit_checks(results=source_audit_results))
+    checks.extend(_format_audit_checks(results=end_audit_results))
+    for model_result in model_results:
+        checks.extend(
+            _format_audit_checks(
+                results=model_result.audit_results,
+                terminal_evidence=_result_has_terminal(result=model_result),
+            )
+        )
     checks.extend(_format_python_check_results(results=python_check_results))
-    return _format_execution_json(
-        command=command,
-        status=status.value,
-        assets=(
-            *_format_model_assets(results=result.model_results, plan=plan),
-            *_format_seed_assets(results=result.seed_results, plan=plan),
-            *_format_function_assets(results=result.function_results, plan=plan),
-            *_format_load_assets(results=result.load_results),
-            *_format_python_node_assets(results=python_node_results),
-        ),
-        checks=tuple(checks),
-        summary={
-            "success_count": result.success_count + python_success_count,
-            "failure_count": result.failure_count + python_fail_count + python_check_fail_count,
-            "skipped_count": result.skipped_count + python_skipped_count,
-            "warning_count": result.warning_count + python_check_warn_count,
+    assets: tuple[dict[str, object], ...] = (
+        *_format_model_assets(results=model_results, plan=plan),
+        *_format_seed_assets(results=seed_results, plan=plan),
+        *_format_function_assets(results=function_results, plan=plan),
+        *_format_load_assets(results=load_results),
+        *_format_python_node_assets(results=python_node_results),
+    )
+    summary: dict[str, object] = {
+        "success_count": result.success_count + python_success_count,
+        "failure_count": result.failure_count + python_fail_count + python_check_fail_count,
+        "skipped_count": result.skipped_count + python_skipped_count,
+        "warning_count": result.warning_count + python_check_warn_count,
+        "python_check_pass_count": python_check_pass_count,
+        "python_check_warn_count": python_check_warn_count,
+        "python_check_fail_count": python_check_fail_count,
+    }
+    if (
+        _build_projection_is_partial(
+            result=result,
+            model_results=model_results,
+            seed_results=seed_results,
+            function_results=function_results,
+            load_results=load_results,
+            test_results=test_results,
+            source_audit_results=source_audit_results,
+            end_audit_results=end_audit_results,
+        )
+        or len(python_node_results) != python_node_result_count
+        or len(python_check_results) != python_check_result_count
+    ):
+        summary = {
+            "success_count": retained_result.success_count + python_success_count,
+            "failure_count": (
+                retained_result.failure_count + python_fail_count + python_check_fail_count
+            ),
+            "skipped_count": retained_result.skipped_count + python_skipped_count,
+            "warning_count": retained_result.warning_count + python_check_warn_count,
             "python_check_pass_count": python_check_pass_count,
             "python_check_warn_count": python_check_warn_count,
             "python_check_fail_count": python_check_fail_count,
-        },
+        }
+    return _format_execution_json(
+        command=command,
+        status=status.value,
+        assets=assets,
+        checks=tuple(checks),
+        summary=summary,
         run_id=run_id,
         cost=cost,
     )
@@ -133,6 +212,10 @@ def format_build_item_execution_event(
 ) -> str | None:
     """Format one completed build asset or check as JSON Lines events."""
 
+    terminal: LifecycleEvent | None = _claim_result_terminal(result=result)
+    if current_compatibility_event_projector() is not None and terminal is None:
+        return None
+    result = _with_canonical_duration(result=result, terminal=terminal)
     assets: tuple[dict[str, object], ...] = ()
     checks: tuple[dict[str, object], ...] = ()
     if isinstance(result, ModelExecutionResult):
@@ -148,11 +231,14 @@ def format_build_item_execution_event(
     elif isinstance(result, SqlTestExecutionResult):
         checks = _format_sql_test_checks((result,))
     elif isinstance(result, AuditExecutionResult):
-        checks = _format_audit_checks((result,))
+        checks = _format_audit_checks(results=(result,))
     elif isinstance(result, PythonCheckExecutionResult):
         checks = _format_python_check_results(results=(result,))
     if isinstance(result, ModelExecutionResult):
-        checks = _format_audit_checks(result.audit_results)
+        checks = _format_audit_checks(
+            results=result.audit_results,
+            terminal_evidence=terminal is not None,
+        )
     if not assets and not checks:
         return None
     records: list[str] = []
@@ -178,7 +264,11 @@ def format_build_item_execution_event(
                 }
             )
         )
-    return "\n".join(records) + "\n"
+    payload: str = "\n".join(records) + "\n"
+    projector: CompatibilityEventProjector | None = current_compatibility_event_projector()
+    if projector is not None and terminal is not None:
+        return projector.project_v1(terminal=terminal, payload=payload)
+    return payload
 
 
 def format_run_execution_json(
@@ -189,6 +279,16 @@ def format_run_execution_json(
 ) -> str:
     """Format run command execution results as JSON."""
 
+    python_node_result_count: int = len(python_node_results)
+    model_results: tuple[ModelExecutionResult, ...] = _terminal_results(
+        results=result.model_results
+    )
+    seed_results: tuple[SeedExecutionResult, ...] = _terminal_results(results=result.seed_results)
+    function_results: tuple[FunctionExecutionResult, ...] = _terminal_results(
+        results=result.function_results
+    )
+    load_results: tuple[LoadExecutionResult, ...] = _terminal_results(results=result.load_results)
+    python_node_results = _terminal_results(results=python_node_results)
     python_fail_count: int = _python_node_result_count(
         results=python_node_results, status=PythonNodeStatus.FAILED
     )
@@ -203,23 +303,50 @@ def format_run_execution_json(
         if result.status == BuildStatus.FAILED or python_fail_count
         else result.status
     )
+    retained_result: BuildExecutionResult = aggregate_build_result(
+        model_results=model_results,
+        seed_results=seed_results,
+        function_results=function_results,
+        load_results=load_results,
+        test_results=(),
+        source_audit_results=(),
+        end_audit_results=(),
+    )
+    assets: tuple[dict[str, object], ...] = (
+        *_format_model_assets(results=model_results, plan=plan),
+        *_format_seed_assets(results=seed_results, plan=plan),
+        *_format_function_assets(results=function_results, plan=plan),
+        *_format_load_assets(results=load_results),
+        *_format_python_node_assets(results=python_node_results),
+    )
+    partial: bool = any(
+        (
+            len(model_results) != len(result.model_results),
+            len(seed_results) != len(result.seed_results),
+            len(function_results) != len(result.function_results),
+            len(load_results) != len(result.load_results),
+            len(python_node_results) != python_node_result_count,
+        )
+    )
+    summary: dict[str, object] = {
+        "success_count": result.success_count + python_success_count,
+        "failure_count": result.failure_count + python_fail_count,
+        "skipped_count": result.skipped_count + python_skipped_count,
+        "warning_count": result.warning_count,
+    }
+    if partial:
+        summary = {
+            "success_count": retained_result.success_count + python_success_count,
+            "failure_count": retained_result.failure_count + python_fail_count,
+            "skipped_count": retained_result.skipped_count + python_skipped_count,
+            "warning_count": retained_result.warning_count,
+        }
     return _format_execution_json(
         command="run",
         status=status.value,
-        assets=(
-            *_format_model_assets(results=result.model_results, plan=plan),
-            *_format_seed_assets(results=result.seed_results, plan=plan),
-            *_format_function_assets(results=result.function_results, plan=plan),
-            *_format_load_assets(results=result.load_results),
-            *_format_python_node_assets(results=python_node_results),
-        ),
+        assets=assets,
         checks=(),
-        summary={
-            "success_count": result.success_count + python_success_count,
-            "failure_count": result.failure_count + python_fail_count,
-            "skipped_count": result.skipped_count + python_skipped_count,
-            "warning_count": result.warning_count,
-        },
+        summary=summary,
     )
 
 
@@ -228,6 +355,7 @@ def format_seed_execution_json(
 ) -> str:
     """Format seed command execution results as JSON."""
 
+    results = _terminal_results(results=results)
     fail_count: int = sum(1 for result in results if result.status == ExecutionStatus.FAILED)
     return _format_execution_json(
         command="seed",
@@ -247,6 +375,7 @@ def format_seed_execution_json(
 def format_load_execution_json(*, results: tuple[LoadExecutionResult, ...]) -> str:
     """Format load command execution results as JSON."""
 
+    results = _terminal_results(results=results)
     fail_count: int = sum(1 for result in results if result.status == ExecutionStatus.FAILED)
     return _format_execution_json(
         command="load",
@@ -271,23 +400,29 @@ def format_clone_execution_json(
 ) -> str:
     """Format direct clone command execution results as JSON."""
 
-    failure_count: int = sum(1 for item in result.item_results if item.status == CloneStatus.FAILED)
-    warning_count: int = sum(
-        1 for item in result.item_results if item.status == CloneStatus.WARNING
+    item_results: tuple[CloneItemResult, ...] = tuple(
+        item
+        for item in result.item_results
+        if _resource_has_terminal(
+            resource_name=item.name,
+            resource_id=f"{resource_types_by_name[item.name]}:{item.name}",
+        )
     )
+    failure_count: int = sum(1 for item in item_results if item.status == CloneStatus.FAILED)
+    warning_count: int = sum(1 for item in item_results if item.status == CloneStatus.WARNING)
     return _format_execution_json(
         command="clone",
         status=BuildStatus.SUCCESS.value if failure_count == 0 else BuildStatus.FAILED.value,
         assets=tuple(
             _format_clone_asset(item=item, resource_type=resource_types_by_name[item.name])
-            for item in result.item_results
+            for item in item_results
         ),
         checks=(),
         summary={
-            "success_count": len(result.item_results) - failure_count - warning_count,
+            "success_count": len(item_results) - failure_count - warning_count,
             "failure_count": failure_count,
             "warning_count": warning_count,
-            "total_count": len(result.item_results),
+            "total_count": len(item_results),
         },
     )
 
@@ -295,25 +430,41 @@ def format_clone_execution_json(
 def format_clone_item_execution_event(*, item: CloneItemResult, resource_type: str) -> str:
     """Format one completed direct-clone item as a JSON Lines event."""
 
+    terminal: LifecycleEvent | None = _claim_resource_terminal(
+        resource_name=item.name,
+        resource_id=f"{resource_type}:{item.name}",
+    )
+    if current_compatibility_event_projector() is not None and terminal is None:
+        return ""
+    duration: object | None = None if terminal is None else terminal.payload.get("duration_ms")
+    if isinstance(duration, int | float):
+        item = replace(item, duration_seconds=float(duration) / 1000.0)
     payload: dict[str, object] = {
         "version": _JSON_VERSION,
         "command": "clone",
         "event": "asset",
         "asset": _format_clone_asset(item=item, resource_type=resource_type),
     }
-    return json.dumps(payload) + "\n"
+    encoded: str = json.dumps(payload) + "\n"
+    projector: CompatibilityEventProjector | None = current_compatibility_event_projector()
+    if projector is not None and terminal is not None:
+        return projector.project_v1(terminal=terminal, payload=encoded)
+    return encoded
 
 
 def _format_clone_asset(*, item: CloneItemResult, resource_type: str) -> dict[str, object]:
+    canonical_duration: float | None = _resource_duration(
+        resource_name=item.name,
+        resource_id=f"{resource_type}:{item.name}",
+        fallback=(item.duration_seconds * 1000 if item.duration_seconds is not None else None),
+    )
     return _drop_none(
         {
             "kind": resource_type,
             "name": item.name,
             "status": item.status.value,
             "action": item.action.value,
-            "duration_ms": (
-                round(item.duration_seconds * 1000) if item.duration_seconds is not None else None
-            ),
+            "duration_ms": round(canonical_duration) if canonical_duration is not None else None,
             "origin_relation": item.origin_relation,
             "target": item.destination_relation,
             "message": item.message,
@@ -365,6 +516,7 @@ def _virtual_clone_item_status(*, action: str) -> str:
 def format_test_execution_json(*, results: tuple[SqlTestExecutionResult, ...]) -> str:
     """Format test command execution results as JSON."""
 
+    results = _terminal_results(results=results)
     fail_count: int = sum(1 for result in results if result.outcome != SqlTestOutcome.PASS)
     return _format_execution_json(
         command="test",
@@ -382,12 +534,13 @@ def format_test_execution_json(*, results: tuple[SqlTestExecutionResult, ...]) -
 def format_audit_execution_json(*, results: tuple[AuditExecutionResult, ...]) -> str:
     """Format audit command execution results as JSON."""
 
+    results = _terminal_results(results=results)
     fail_count: int = sum(1 for result in results if result.outcome == AuditOutcome.ERROR)
     return _format_execution_json(
         command="audit",
         status=BuildStatus.SUCCESS.value if fail_count == 0 else BuildStatus.FAILED.value,
         assets=(),
-        checks=_format_audit_checks(results),
+        checks=_format_audit_checks(results=results),
         summary={
             "pass_count": sum(1 for result in results if result.outcome == AuditOutcome.PASS),
             "warn_count": sum(1 for result in results if result.outcome == AuditOutcome.WARN),
@@ -402,13 +555,15 @@ def format_scenario_execution_json(
 ) -> str:
     """Format scenario test command execution results as JSON."""
 
+    results = tuple(result for result in results if _scenario_result_has_terminal(result=result))
     fail_count: int = sum(1 for result in results if _scenario_failed(result=result, local=local))
     assets: list[dict[str, object]] = []
     checks: list[dict[str, object]] = []
     for result in results:
-        assets.extend(_format_seed_assets(results=result.seed_results, plan=None))
-        assets.extend(_format_function_assets(results=result.function_results, plan=None))
-        assets.extend(_format_model_assets(results=result.model_results, plan=None))
+        with _scenario_resource_namespace(result.scenario_name):
+            assets.extend(_format_seed_assets(results=result.seed_results, plan=None))
+            assets.extend(_format_function_assets(results=result.function_results, plan=None))
+            assets.extend(_format_model_assets(results=result.model_results, plan=None))
         checks.extend(_format_scenario_checks(result))
     return _format_execution_json(
         command="scenario test",
@@ -455,6 +610,10 @@ def _format_execution_json(
     run_id: str | None = None,
     cost: dict[str, object] | None = None,
 ) -> str:
+    projector: CompatibilityEventProjector | None = current_compatibility_event_projector()
+    terminal: LifecycleEvent | None = None if projector is None else projector.lifecycle_terminal()
+    if terminal is not None:
+        status = "failed" if terminal.event_type.endswith("failed") else status
     payload: dict[str, object] = {
         "version": _JSON_VERSION,
         "command": command,
@@ -478,6 +637,39 @@ def _python_node_result_count(
     return sum(1 for python_result in results if python_result.status == status)
 
 
+def _build_projection_is_partial(
+    *,
+    result: BuildExecutionResult,
+    model_results: tuple[ModelExecutionResult, ...],
+    seed_results: tuple[SeedExecutionResult, ...],
+    function_results: tuple[FunctionExecutionResult, ...],
+    load_results: tuple[LoadExecutionResult, ...],
+    test_results: tuple[SqlTestExecutionResult, ...],
+    source_audit_results: tuple[AuditExecutionResult, ...],
+    end_audit_results: tuple[AuditExecutionResult, ...],
+) -> bool:
+    return any(
+        (
+            len(model_results) != len(result.model_results),
+            len(seed_results) != len(result.seed_results),
+            len(function_results) != len(result.function_results),
+            len(load_results) != len(result.load_results),
+            len(test_results) != len(result.test_results),
+            len(source_audit_results) != len(result.source_audit_results),
+            len(end_audit_results) != len(result.end_audit_results),
+        )
+    )
+
+
+def _projected_asset_summary(*, assets: tuple[dict[str, object], ...]) -> dict[str, int]:
+    return {
+        "success_count": sum(1 for asset in assets if asset.get("status") == _SUCCESS_STATUS),
+        "failure_count": sum(1 for asset in assets if asset.get("status") == _FAILED_STATUS),
+        "skipped_count": sum(1 for asset in assets if asset.get("status") == _SKIPPED_STATUS),
+        "warning_count": sum(1 for asset in assets if asset.get("status") == _WARNING_STATUS),
+    }
+
+
 def _format_model_assets(
     *, results: tuple[ModelExecutionResult, ...], plan: PlanOutput | None
 ) -> tuple[dict[str, object], ...]:
@@ -490,7 +682,7 @@ def _format_model_assets(
                 "kind": CompiledResourceType.MODEL.value,
                 "name": result.model_name,
                 "status": result.status.value,
-                "duration_ms": result.duration_ms,
+                "duration_ms": _result_duration(result=result, fallback=result.duration_ms),
                 "target": targets.get(result.model_name) or result.promoted_relation,
                 "staging_relation": result.staging_relation,
                 "failed_phase": result.failed_phase.value if result.failed_phase else None,
@@ -505,6 +697,7 @@ def _format_model_assets(
             }
         )
         for result in results
+        if _result_has_terminal(result=result)
     )
 
 
@@ -572,7 +765,7 @@ def _format_seed_assets(
                 "kind": CompiledResourceType.SEED.value,
                 "name": result.seed_name,
                 "status": result.status.value,
-                "duration_ms": result.duration_ms,
+                "duration_ms": _result_duration(result=result, fallback=result.duration_ms),
                 "target": targets.get(result.seed_name),
                 "reason": reasons.get(result.seed_name),
                 "error_code": result.error_code,
@@ -581,6 +774,7 @@ def _format_seed_assets(
             }
         )
         for result in results
+        if _result_has_terminal(result=result)
     )
 
 
@@ -593,7 +787,7 @@ def _format_load_assets(
                 "kind": result.resource_kind.value,
                 "name": result.source_name,
                 "status": result.status.value,
-                "duration_ms": result.duration_ms,
+                "duration_ms": _result_duration(result=result, fallback=result.duration_ms),
                 "target": result.target,
                 "staging_relation": result.staging_relation,
                 "loader": result.loader_name,
@@ -604,6 +798,7 @@ def _format_load_assets(
             }
         )
         for result in results
+        if _result_has_terminal(result=result)
     )
 
 
@@ -624,6 +819,7 @@ def _format_python_node_assets(
             }
         )
         for result in results
+        if _result_has_terminal(result=result)
     )
 
 
@@ -639,7 +835,7 @@ def _format_function_assets(
                 "kind": result.function_kind,
                 "name": result.function_name,
                 "status": result.status.value,
-                "duration_ms": result.duration_ms,
+                "duration_ms": _result_duration(result=result, fallback=result.duration_ms),
                 "target": targets.get(result.function_name),
                 "error_code": result.error_code,
                 "error_help": result.error_help,
@@ -648,6 +844,7 @@ def _format_function_assets(
             }
         )
         for result in results
+        if _result_has_terminal(result=result)
     )
 
 
@@ -656,6 +853,8 @@ def _format_sql_test_checks(
 ) -> tuple[dict[str, object], ...]:
     checks: list[dict[str, object]] = []
     for result in results:
+        if not _result_has_terminal(result=result):
+            continue
         steps: list[dict[str, object]] = []
         for step in result.step_results:
             steps.append(_format_sql_test_step(step))
@@ -754,6 +953,7 @@ def _format_python_check_results(
             }
         )
         for result in results
+        if _result_has_terminal(result=result)
     )
 
 
@@ -779,7 +979,9 @@ def _sql_test_asset_name(result: SqlTestExecutionResult) -> str | None:
 
 
 def _format_audit_checks(
+    *,
     results: tuple[AuditExecutionResult, ...],
+    terminal_evidence: bool = False,
 ) -> tuple[dict[str, object], ...]:
     return tuple(
         _drop_none(
@@ -799,6 +1001,7 @@ def _format_audit_checks(
             }
         )
         for result in results
+        if terminal_evidence or _result_has_terminal(result=result)
     )
 
 
@@ -936,5 +1139,139 @@ def _scenario_failed(*, result: ScenarioRunResult, local: bool) -> bool:
     return result.status == ExecutionStatus.FAILED
 
 
+def _scenario_result_has_terminal(*, result: ScenarioRunResult) -> bool:
+    return _resource_has_terminal(
+        resource_name=result.scenario_name,
+        resource_id=f"sql_scenario:{result.scenario_name}",
+    )
+
+
 def _drop_none(value: dict[str, object]) -> dict[str, object]:
     return {key: item for key, item in value.items() if item is not None}
+
+
+def _claim_result_terminal(*, result: object) -> LifecycleEvent | None:
+    resource_name, resource_id = _result_resource_identity(result=result)
+    if resource_name is None:
+        return None
+    return _claim_resource_terminal(resource_name=resource_name, resource_id=resource_id)
+
+
+def _result_resource_identity(*, result: object) -> tuple[str | None, str | None]:
+    resource_name: str | None = None
+    resource_id: str | None = None
+    if isinstance(result, ModelExecutionResult):
+        resource_name = result.model_name
+        resource_id = f"model:{result.model_name}"
+    elif isinstance(result, SeedExecutionResult):
+        resource_name = result.seed_name
+        resource_id = f"seed:{result.seed_name}"
+    elif isinstance(result, FunctionExecutionResult):
+        resource_name = result.function_name
+        resource_id = f"{result.function_kind}:{result.function_name}"
+    elif isinstance(result, LoadExecutionResult):
+        resource_name = result.source_name
+        resource_id = f"source:{result.source_name}"
+    elif isinstance(result, PythonNodeExecutionResult):
+        resource_name = result.node_name
+        resource_id = f"{result.kind.value}:{result.node_name}"
+    elif isinstance(result, PythonCheckExecutionResult):
+        resource_name = result.node_name
+        resource_id = f"check:{result.node_name}"
+    elif isinstance(result, SqlTestExecutionResult):
+        resource_name = result.test_name
+        resource_id = f"sql_test:{result.test_name}"
+    elif isinstance(result, AuditExecutionResult):
+        resource_name = result.audit_name
+        resource_id = _audit_check_id(result)
+    scenario_name: str | None = _SCENARIO_RESOURCE_NAMESPACE.get()
+    if scenario_name is not None and resource_id is not None:
+        resource_id = f"scenario:{scenario_name}:{resource_id}"
+    return resource_name, resource_id
+
+
+@contextmanager
+def _scenario_resource_namespace(scenario_name: str) -> Iterator[None]:
+    token: Token[str | None] = _SCENARIO_RESOURCE_NAMESPACE.set(scenario_name)
+    try:
+        yield
+    finally:
+        _SCENARIO_RESOURCE_NAMESPACE.reset(token)
+
+
+def _result_has_terminal(*, result: object) -> bool:
+    resource_name, resource_id = _result_resource_identity(result=result)
+    if resource_name is None:
+        return current_compatibility_event_projector() is None
+    return _resource_has_terminal(resource_name=resource_name, resource_id=resource_id)
+
+
+def _terminal_results[RESULT](*, results: tuple[RESULT, ...]) -> tuple[RESULT, ...]:
+    return tuple(result for result in results if _result_has_terminal(result=result))
+
+
+def _resource_has_terminal(*, resource_name: str, resource_id: str | None) -> bool:
+    projector: CompatibilityEventProjector | None = current_compatibility_event_projector()
+    if projector is None:
+        return True
+    terminal: LifecycleEvent | None = projector.resource_terminal(
+        resource_name=resource_name,
+        resource_id=resource_id,
+    )
+    return terminal is not None
+
+
+def _result_duration(*, result: object, fallback: int | float | None) -> int | float | None:
+    resource_name, resource_id = _result_resource_identity(result=result)
+    if resource_name is None:
+        return fallback
+    duration: float | None = _resource_duration(
+        resource_name=resource_name,
+        resource_id=resource_id,
+        fallback=None if fallback is None else float(fallback),
+    )
+    return round(duration) if duration is not None else None
+
+
+def _resource_duration(
+    *, resource_name: str, resource_id: str | None, fallback: float | None
+) -> float | None:
+    projector: CompatibilityEventProjector | None = current_compatibility_event_projector()
+    if projector is None:
+        return fallback
+    terminal: LifecycleEvent | None = projector.resource_terminal(
+        resource_name=resource_name,
+        resource_id=resource_id,
+    )
+    if terminal is None:
+        return None
+    duration: object = terminal.payload.get("duration_ms")
+    return float(duration) if isinstance(duration, int | float) else None
+
+
+def _claim_resource_terminal(
+    *, resource_name: str, resource_id: str | None
+) -> LifecycleEvent | None:
+    projector: CompatibilityEventProjector | None = current_compatibility_event_projector()
+    if projector is None:
+        return None
+    return projector.claim_resource_terminal(
+        resource_name=resource_name,
+        resource_id=resource_id,
+    )
+
+
+def _with_canonical_duration(*, result: object, terminal: LifecycleEvent | None) -> object:
+    duration: object | None = None if terminal is None else terminal.payload.get("duration_ms")
+    if not isinstance(duration, int | float):
+        return result
+    duration_ms: int = round(float(duration))
+    if isinstance(result, ModelExecutionResult):
+        return replace(result, duration_ms=duration_ms)
+    if isinstance(result, SeedExecutionResult):
+        return replace(result, duration_ms=duration_ms)
+    if isinstance(result, FunctionExecutionResult):
+        return replace(result, duration_ms=duration_ms)
+    if isinstance(result, LoadExecutionResult):
+        return replace(result, duration_ms=duration_ms)
+    return result

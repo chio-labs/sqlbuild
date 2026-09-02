@@ -86,3 +86,37 @@ Framework boundaries may install an explicit dispatcher with `dispatcher_scope`;
 dispatcher is ContextVar-backed and defaults to `None`, avoiding mutable process-global lifecycle
 state. `create_lifecycle_event` copies lifecycle correlation fields from the current execution
 identity but intentionally excludes diagnostic-only `log_stream_id` and does not dispatch.
+
+## Compatibility projections
+
+The CLI installs one invocation-scoped compatibility projector before command work starts. It
+retains known lifecycle facts once by `event_id` in dispatcher publication order and indexes
+resource attempts by `resource_id` and `resource_attempt_id`. Opaque or future events are not
+interpreted by this projector and cannot break version 1 output.
+
+Final execution JSON and the Dagster version 1 JSONL stream keep their existing public schemas;
+they are compatibility views, not canonical event envelopes. Their lifecycle mapping is:
+
+- Invocation, run, or command-operation terminals determine aggregate failure when available.
+- Resource-attempt terminals authorize asset and check rows and supply canonical monotonic
+  `duration_ms` where that field already exists in version 1.
+- Stable resource and attempt IDs correlate retries. A terminal can be claimed only once by the
+  streaming JSONL projection, so duplicate delivery or repeated callbacks do not duplicate rows.
+- Concurrent enrichments wait behind earlier canonical terminals. Writer finalization marks
+  canonical-only, unclaimed terminals omitted and flushes all claimed enrichments in canonical
+  order, preventing unrelated internal work from blocking the version 1 stream permanently.
+- A rich callback without matching canonical terminal evidence emits no JSONL terminal row. Final
+  JSON omits that incomplete resource while preserving the existing envelope and summary fields.
+
+The event side-channel is an output-routing signal, not `--json`. When active, human progress is
+uncolored and routed to stderr while version 1 JSONL is written and flushed to its configured file.
+It does not request aggregate JSON or change command semantics; aggregate JSON remains exclusive to
+an explicit `--json` or `--json-output` option.
+
+Existing executor results remain compatibility-only enrichment for fields that canonical lifecycle
+facts deliberately do not own: relations, row counts, cursor windows, warning and error text,
+hooks, audits, tests, query IDs, Python metadata, and legacy scenario details. Parameterized SQL
+test values remain only because the established version 1 check schema requires them. Full SQL,
+raw process output, callback lifecycle records, and arbitrary result objects are never copied into
+canonical lifecycle history. Internal event IDs, timestamps, producer metadata, statement facts,
+and diagnostic records are intentionally omitted from the version 1 compatibility payloads.
