@@ -2767,9 +2767,7 @@ def _plan_microbatch_windows(
     )
     runtime_entry: ModelPlanEntry = replace(
         entry,
-        cursor_input_relations=(
-            causal_relations if has_outstanding_causal_work else entry.cursor_input_relations
-        ),
+        cursor_input_relations=causal_relations,
         lookback=(
             resolve_effective_microbatch_batch_size(
                 batch_size=entry.batch_size or "",

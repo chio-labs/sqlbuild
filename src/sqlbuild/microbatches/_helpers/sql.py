@@ -174,4 +174,8 @@ def _literal(value: object | None) -> str:
 
 def _column_literal(*, column: str, value: object | None) -> str:
     literal: str = _literal(value)
-    return f"CAST({literal} AS TIMESTAMP)" if column.endswith("_at") else literal
+    if column in MICROBATCH_INTEGER_COLUMNS:
+        return f"CAST({literal} AS BIGINT)"
+    if column.endswith("_at"):
+        return f"CAST({literal} AS TIMESTAMP)"
+    return literal

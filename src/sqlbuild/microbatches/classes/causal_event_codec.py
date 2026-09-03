@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from typing import Any, cast
 
 from sqlbuild.microbatches.exceptions import MicrobatchStateError
@@ -113,7 +114,7 @@ class CausalEventCodec:
                 run_type=event.run_type,
                 completion_kind=CausalCompletionKind(payload["completion_kind"]),
                 fingerprint_status=event.fingerprint_status,
-                created_at=event.created_at,
+                created_at=_utc_datetime(event.created_at),
             )
         return ConsumerFrontier(
             event_id=event.event_id,
@@ -132,7 +133,7 @@ class CausalEventCodec:
                 )
                 for item in payload.get("consumed_intervals", ())
             ),
-            created_at=event.created_at,
+            created_at=_utc_datetime(event.created_at),
         )
 
 
@@ -182,3 +183,7 @@ def _scope_from_payload(payload: object) -> MicrobatchScope:
 
 def _optional_str(value: object) -> str | None:
     return None if value is None else str(value)
+
+
+def _utc_datetime(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)

@@ -145,7 +145,7 @@ def test_given_completion_when_building_insert_then_provenance_and_numeric_rows_
     assert "'recovery'" in sql
     assert "'F2'" in sql
     assert "'fingerprint''definition'" in sql
-    assert ", 0," in sql
+    assert "CAST(0 AS BIGINT)" in sql
     assert len((sql,)) == test_case.expected_statement_count
 
 
@@ -183,7 +183,7 @@ def test_given_completion_when_building_insert_then_provenance_and_numeric_rows_
     ],
     ids=lambda case: case.description,
 )
-def test_given_builtin_adapter_when_rendering_direct_event_inserts_then_timestamps_are_typed(
+def test_given_builtin_adapter_when_rendering_direct_event_inserts_then_typed_columns_are_cast(
     test_case: MicrobatchDdlAdapterTestCase,
 ) -> None:
     event: MicrobatchEvent = completion_for_sql()
@@ -196,10 +196,12 @@ def test_given_builtin_adapter_when_rendering_direct_event_inserts_then_timestam
         render_qualified_name=test_case.adapter.render_qualified_name,
     )
 
-    for sql, expected_null_timestamp_count in ((single_sql, 4), (bulk_sql, 8)):
+    for sql, expected_row_count in ((single_sql, 1), (bulk_sql, 2)):
         assert test_case.expected_table_name in sql
         assert "CAST('2026-01-01T00:00:00' AS TIMESTAMP)" in sql
-        assert sql.count("CAST(NULL AS TIMESTAMP)") == expected_null_timestamp_count
+        assert sql.count("CAST(NULL AS TIMESTAMP)") == 4 * expected_row_count
+        assert sql.count("CAST(0 AS BIGINT)") == expected_row_count
+        assert sql.count("CAST(NULL AS BIGINT)") == expected_row_count
 
 
 @pytest.mark.parametrize(

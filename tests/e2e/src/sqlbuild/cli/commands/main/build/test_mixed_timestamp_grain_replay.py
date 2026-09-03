@@ -22,7 +22,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     "test_case",
     [
         MixedTimestampGrainBuildE2ETestCase(
-            description="coarser upstream timestamp bucket reruns at largest bucket",
+            description="known current upstream reruns at consumer grain",
             repo_files={
                 "sqlbuild_project.toml": dedent(
                     """
@@ -179,13 +179,13 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             initial_command=("--no-color", "build"),
             rerun_command=("--debug", "build", "--select", "hourly_activity_with_daily_context"),
             expected_exit_code=0,
-            expected_window_fragment="window=2026-04-04T00:00:00..2026-04-05T00:00:00",
+            expected_window_fragment="window=2026-04-03T14:00:00..2026-04-04T01:00:00",
             expected_row_count=1,
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_coarser_upstream_timestamp_bucket_when_rerunning_then_cli_replays_largest_bucket(
+def test_given_known_current_upstream_when_rerunning_then_cli_uses_consumer_grain(
     test_case: MixedTimestampGrainBuildE2ETestCase,
     tmp_path: Path,
 ) -> None:
