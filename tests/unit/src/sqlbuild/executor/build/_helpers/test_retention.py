@@ -53,6 +53,13 @@ _COPY: RelationInfo = RelationInfo(
     relation_type="BASE TABLE",
     is_transient=False,
 )
+_TRANSIENT_COPY: RelationInfo = RelationInfo(
+    database="warehouse",
+    schema="analytics",
+    name="__sqb_type_swap__orders",
+    relation_type="BASE TABLE",
+    is_transient=True,
+)
 
 
 @pytest.mark.parametrize(
@@ -196,18 +203,37 @@ def test_given_successful_model_when_reconciling_retention_then_defers_decreases
     "test_case",
     [
         TableTypeConversionTestCase(
-            description="undesired target with stale copy recreates before swap",
+            description="transient target upgrades through grant-preserving permanent copy",
             relation_snapshots=(
                 (_TRANSIENT_TARGET, _COPY),
                 (_COPY,),
             ),
             expected_statements=(
-                "CREATE OR REPLACE TABLE warehouse.analytics.__sqb_type_swap__orders AS SELECT * "
-                "FROM warehouse.analytics.orders",
+                "DROP TABLE IF EXISTS warehouse.analytics.__sqb_type_swap__orders",
+                "CREATE TABLE warehouse.analytics.__sqb_type_swap__orders LIKE "
+                "warehouse.analytics.orders COPY GRANTS",
+                "INSERT INTO warehouse.analytics.__sqb_type_swap__orders SELECT * FROM "
+                "warehouse.analytics.orders",
                 "ALTER TABLE warehouse.analytics.orders SWAP WITH "
                 "warehouse.analytics.__sqb_type_swap__orders",
                 "DROP TABLE IF EXISTS warehouse.analytics.__sqb_type_swap__orders",
             ),
+        ),
+        TableTypeConversionTestCase(
+            description="permanent target downgrades through transient zero-copy clone with grants",
+            relation_snapshots=(
+                (_TARGET,),
+                (_TRANSIENT_COPY,),
+            ),
+            expected_statements=(
+                "CREATE TRANSIENT TABLE warehouse.analytics.__sqb_type_swap__orders CLONE "
+                "warehouse.analytics.orders COPY GRANTS",
+                "ALTER TABLE warehouse.analytics.orders SWAP WITH "
+                "warehouse.analytics.__sqb_type_swap__orders",
+                "DROP TABLE IF EXISTS warehouse.analytics.__sqb_type_swap__orders",
+            ),
+            desired_type="transient",
+            actual_type="permanent",
         ),
         TableTypeConversionTestCase(
             description="desired target with leftover copy only cleans copy",
@@ -237,8 +263,8 @@ def test_given_recoverable_table_type_state_when_converting_then_uses_inspection
             qualified_name="warehouse.analytics.orders",
         ),
         copy_name="__sqb_type_swap__orders",
-        desired_type="permanent",
-        actual_type="transient",
+        desired_type=test_case.desired_type,
+        actual_type=test_case.actual_type,
         source="model",
         downgrade=False,
         downgrade_policy="require_confirmation",
@@ -332,8 +358,10 @@ def test_given_unknown_live_table_type_when_converting_then_fails_closed(
             ),
             expected_error_fragment="not created with the desired type",
             expected_statements=(
-                "CREATE OR REPLACE TABLE warehouse.analytics.__sqb_type_swap__orders AS SELECT * "
-                "FROM warehouse.analytics.orders",
+                "CREATE TABLE warehouse.analytics.__sqb_type_swap__orders LIKE "
+                "warehouse.analytics.orders COPY GRANTS",
+                "INSERT INTO warehouse.analytics.__sqb_type_swap__orders SELECT * FROM "
+                "warehouse.analytics.orders",
             ),
         ),
     ],
