@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.9](https://github.com/chio-labs/sqlbuild/compare/v0.76.8...v0.76.9) (2026-09-03)
+
+
+### Bug Fixes
+
+* collect standalone audit execution errors ([#496](https://github.com/chio-labs/sqlbuild/issues/496)) ([b4d196c](https://github.com/chio-labs/sqlbuild/commit/b4d196c1726debb6d4ac9eea5e959a0a792ac326))
+
 ## [0.76.8](https://github.com/chio-labs/sqlbuild/compare/v0.76.7...v0.76.8) (2026-09-03)
 
 
