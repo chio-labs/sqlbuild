@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.4](https://github.com/chio-labs/sqlbuild/compare/v0.76.3...v0.76.4) (2026-09-03)
+
+
+### Bug Fixes
+
+* preserve grants during table type conversion ([#486](https://github.com/chio-labs/sqlbuild/issues/486)) ([55c866c](https://github.com/chio-labs/sqlbuild/commit/55c866cbe03a72431b1195c531af232a82a86527))
+
 ## [0.76.3](https://github.com/chio-labs/sqlbuild/compare/v0.76.2...v0.76.3) (2026-09-03)
 
 
