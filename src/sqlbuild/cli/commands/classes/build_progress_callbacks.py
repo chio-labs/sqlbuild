@@ -13,7 +13,6 @@ from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.cli.commands._helpers.test.sql_progress import format_parameterized_test_label
 from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
-from sqlbuild.cli.output.main._execution_event_output_active import execution_event_output_active
 from sqlbuild.cli.progress.classes.native_progress_projector import (
     NativeProgressProjector,
     current_native_progress_projector,
@@ -172,18 +171,12 @@ class BuildProgressCallbacks:
             )
         )
         self._counter: int = 0
-        machine_output: bool = execution_event_output_active(path=event_output_path)
-        self._use_color: bool = use_color and not machine_output
+        self._use_color: bool = use_color
         self._style: CliStyle = CliStyle(use_color=self._use_color)
         self._verbose: bool = verbose
         self._debug: bool = debug
-        self._is_tty: bool = (
-            hasattr(sys.stdout, "isatty")
-            and sys.stdout.isatty()
-            and not debug
-            and not machine_output
-        )
-        self._stream = sys.stderr if debug or machine_output else sys.stdout
+        self._is_tty: bool = hasattr(sys.stdout, "isatty") and sys.stdout.isatty() and not debug
+        self._stream = sys.stderr if debug else sys.stdout
         self._start_time: float = time.monotonic()
         self._current_node_name: str = ""
         self._current_node_type: ExecutionResourceKind = ExecutionResourceKind.TABLE

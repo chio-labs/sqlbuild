@@ -45,6 +45,7 @@ from sqlbuild.compiler.planner._helpers.resolve.cursor import (
     resolve_effective_timestamp_grain,
 )
 from sqlbuild.compiler.planner._helpers.resolve.cursor_policies import resolve_start_cursor_config
+from sqlbuild.compiler.planner._helpers.resolve.lineage import resolve_lineage_reference
 from sqlbuild.compiler.planner._helpers.resolve.maximum_start import maximum_allowed_start
 from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -633,6 +634,9 @@ def _collect_cursor_models(
         else None
     )
     seed_map: dict[str, CompiledSeed] = {seed.name: seed for seed in project.seeds}
+    function_map: dict[str, CompiledFunction] = {
+        function.name: function for function in project.functions
+    }
     runtime_producer_names: frozenset[str] = _selected_runtime_producer_names(
         project=project,
         selected_keys=effective_runtime_producer_keys,
@@ -673,10 +677,11 @@ def _collect_cursor_models(
         input_name: str
         upstream_cursor_col: str
         for input_name, upstream_cursor_col in cursor_watermark_inputs.items():
-            ref: CompileSqlReference = _resolve_lineage_reference(
+            ref: CompileSqlReference = resolve_lineage_reference(
                 model=model,
                 input_name=input_name,
-                model_map=model_map,
+                models_by_name=model_map,
+                functions_by_name=function_map,
             )
             _validate_watermark_contract_column(
                 model=model,
@@ -1091,33 +1096,6 @@ def _selected_runtime_producer_names(
         elif key.resource_type == CompiledResourceType.SOURCE and key.name in source_load_names:
             names.add(key.name)
     return frozenset(names)
-
-
-def _resolve_lineage_reference(
-    *,
-    model: CompiledModel,
-    input_name: str,
-    model_map: dict[str, CompiledModel],
-) -> CompileSqlReference:
-    """Resolve one watermark input from transitive upstream lineage."""
-
-    pending: list[CompileSqlReference] = list(model.references)
-    visited_models: set[str] = set()
-    while pending:
-        reference: CompileSqlReference = pending.pop(0)
-        if reference.ref_name == input_name:
-            return reference
-        if reference.ref_kind != SqlReferenceKind.REF or reference.ref_name in visited_models:
-            continue
-        visited_models.add(reference.ref_name)
-        upstream_model: CompiledModel | None = model_map.get(reference.ref_name)
-        if upstream_model is not None:
-            pending.extend(upstream_model.references)
-    raise PlannerInputError(
-        f"model '{model.name}': cursor_watermark_inputs references '{input_name}', but it is "
-        "not in the model's upstream lineage",
-        code="S302",
-    )
 
 
 def _validate_watermark_contract_column(

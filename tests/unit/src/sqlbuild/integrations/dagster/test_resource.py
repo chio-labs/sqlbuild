@@ -10,6 +10,7 @@ from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
+from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.output._helpers.maximum_start_safety import serialize_maximum_start_safety
 from sqlbuild.cli.output.models import IntegrationResultEnvelope
@@ -280,7 +281,7 @@ def test_given_model_live_envelope_when_projecting_then_only_canonical_asset_is_
         envelope=envelope,
         command=("sqb", "build"),
         context=type("AssetContext", (), {"selected_asset_keys": set()})(),
-        emitted_asset_paths={("raw", "orders"), ("analytics", "normalize_email")},
+        emitted_asset_paths=set(),
     )
 
     assert tuple(tuple(result.asset_key.path) for result in results) == (("analytics", "orders"),)
@@ -631,16 +632,15 @@ def test_given_sqlbuild_cli_resource_when_waiting_invocation_then_captures_proce
     ],
     ids=lambda case: case.description,
 )
-def test_given_running_sqlbuild_command_when_output_arrives_then_dagster_logs_it_immediately(
+def test_given_running_sqlbuild_command_when_output_arrives_then_only_compute_streams_receive_it(
     test_case: DagsterCliLiveLogTestCase,
     tmp_path: Path,
+    capfd: pytest.CaptureFixture[str],
 ) -> None:
     project_dir: Path = tmp_path / "project"
     project_dir.mkdir()
     release_path: Path = tmp_path / "release"
-    first_log_received: Event = Event()
     logger: Mock = Mock()
-    logger.info.side_effect = lambda *_args: first_log_received.set()
     context: Any = type("LoggingContext", (), {"log": logger})()
     resource: SqlBuildCliResource = SqlBuildCliResource(
         project_dir=str(project_dir),
@@ -653,17 +653,16 @@ def test_given_running_sqlbuild_command_when_output_arrives_then_dagster_logs_it
         ["build"], context=context, raise_on_error=False
     )
 
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        wait_future: Future[SqlBuildCliInvocation] = executor.submit(invocation.wait)
-        assert first_log_received.wait(timeout=3)
-        assert not wait_future.done()
-        release_path.write_text("continue", encoding="utf-8")
-        completed_invocation: SqlBuildCliInvocation = wait_future.result(timeout=3)
+    release_path.write_text("continue", encoding="utf-8")
+    completed_invocation: SqlBuildCliInvocation = invocation.wait()
+    captured: CaptureResult[str] = capfd.readouterr()
 
     for line in test_case.expected_stdout_lines:
-        logger.info.assert_any_call("SQLBuild: %s", line)
+        assert line in captured.out
     for line in test_case.expected_stderr_lines:
-        logger.warning.assert_any_call("SQLBuild: %s", line)
+        assert line in captured.err
+    assert not logger.info.called
+    assert not logger.warning.called
     assert completed_invocation.stdout == "".join(
         f"{line}\n" for line in test_case.expected_stdout_lines
     )
@@ -1120,10 +1119,10 @@ def test_given_clone_execution_json_when_streaming_then_yields_asset_materializa
             expected_asset_key=("analytics", "customers"),
         ),
         DagsterCliLiveCloneEventTestCase(
-            description="completed build item materializes while subprocess remains blocked",
+            description="build item with reused parents materializes while subprocess remains blocked",
             command="build",
             command_args=("build",),
-            expected_asset_key=("analytics", "customers"),
+            expected_asset_key=("analytics", "orders"),
         ),
         DagsterCliLiveCloneEventTestCase(
             description="partial JSONL writes are buffered until their record is complete",
@@ -1183,6 +1182,7 @@ def test_given_running_clone_when_item_completes_then_materializes_before_proces
             root=tmp_path,
             release_path=release_path,
             command=test_case.command,
+            asset_name=test_case.expected_asset_key[-1],
         ),
         dag_path=str(write_dagster_test_dag(root=tmp_path)),
     )

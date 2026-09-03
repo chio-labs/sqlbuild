@@ -11,7 +11,6 @@ from sqlbuild.cli.commands._helpers.load.selection import (
     select_load_reference_entries,
 )
 from sqlbuild.cli.commands.models import LoadCommandRequest, LoadInvocation
-from sqlbuild.cli.output.main._execution_event_output_active import execution_event_output_active
 from sqlbuild.compiler.compile.main.effective_target import build_effective_target_config
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -43,7 +42,7 @@ def resolve_load_invocation(*, request: LoadCommandRequest) -> LoadInvocation:
         selected_sources=selected_sources,
         target_config=target_config,
     )
-    machine_output: bool = request.json_output or execution_event_output_active()
+    machine_output: bool = request.json_output
     use_color: bool = not request.no_color and not machine_output and supports_color()
     progress_stream: TextIO = sys.stderr if machine_output else sys.stdout
     return LoadInvocation(

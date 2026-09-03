@@ -40,6 +40,7 @@ def build_empty_model_plan_context() -> ModelPlanContext:
     return ModelPlanContext(
         model_locations={},
         models_by_name={},
+        functions_by_name={},
         seed_locations={},
         function_locations={},
         source_map={},

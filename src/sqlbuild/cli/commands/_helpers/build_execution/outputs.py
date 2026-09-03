@@ -17,7 +17,6 @@ from sqlbuild.cli.commands.models import (
     BuildRunOutcome,
 )
 from sqlbuild.cli.output.main._build_execution_json import format_build_execution_json
-from sqlbuild.cli.output.main._execution_event_output_active import execution_event_output_active
 from sqlbuild.cli.output.main._write_execution_json_output import write_execution_json_output
 from sqlbuild.cli.output.main.plan import format_plan
 from sqlbuild.cli.target_artifacts.main._write_python_check_runtime_target import (
@@ -40,10 +39,7 @@ def write_build_plan_text(
 ) -> None:
     """Write the formatted plan text to the plan stream."""
 
-    machine_output: bool = request.json_output or execution_event_output_active(
-        path=request.event_output_path
-    )
-    plan_stream: TextIO = sys.stderr if request.debug or machine_output else sys.stdout
+    plan_stream: TextIO = sys.stderr if request.debug or request.json_output else sys.stdout
     plan_text: str = format_plan(
         plan=pipeline_result.plan_output,
         full_refresh=request.full_refresh,

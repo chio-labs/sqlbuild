@@ -12,6 +12,7 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
+    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -46,6 +47,7 @@ from sqlbuild.compiler.planner._helpers.resolve.cursor_policies import (
     resolve_future_cursor_config,
     resolve_start_cursor_config,
 )
+from sqlbuild.compiler.planner._helpers.resolve.lineage import resolve_lineage_reference
 from sqlbuild.compiler.planner._helpers.resolve.refs import (
     apply_deferred_locations,
     build_function_locations,
@@ -318,6 +320,7 @@ def build_plan_entries(
             context=ModelPlanContext(
                 model_locations=relations.model_locations,
                 models_by_name=scope.models_by_name,
+                functions_by_name={function.name: function for function in project.functions},
                 seed_locations=relations.seed_locations,
                 function_locations=relations.function_locations,
                 source_map=relations.source_read_map,
@@ -513,6 +516,7 @@ def plan_model_from_change(
         model=model,
         cursor_column=cursor_column,
         models_by_name=context.models_by_name,
+        functions_by_name=context.functions_by_name,
         source_map=context.source_map,
         source_warehouse_columns=context.source_warehouse_columns,
     )
@@ -578,6 +582,7 @@ def plan_model_from_change(
             adapter=adapter,
             model_locations=context.model_locations,
             models_by_name=context.models_by_name,
+            functions_by_name=context.functions_by_name,
             seed_locations=context.seed_locations,
             source_map=context.source_map,
             cursor_column=cursor_column,
@@ -1339,6 +1344,7 @@ def _build_cursor_input_relations(
     adapter: BaseAdapter,
     model_locations: dict[str, CompiledRelationLocation],
     models_by_name: dict[str, CompiledModel],
+    functions_by_name: dict[str, CompiledFunction] | None = None,
     seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     cursor_column: str | None,
@@ -1358,10 +1364,11 @@ def _build_cursor_input_relations(
     input_name: str
     input_cursor_column: str
     for input_name, input_cursor_column in cursor_watermark_inputs.items():
-        ref: CompileSqlReference = _resolve_lineage_reference(
+        ref: CompileSqlReference = resolve_lineage_reference(
             model=model,
             input_name=input_name,
             models_by_name=models_by_name,
+            functions_by_name=functions_by_name or {},
         )
         producer_model: CompiledModel | None = (
             models_by_name.get(ref.ref_name) if ref.ref_kind == SqlReferenceKind.REF else None
@@ -1417,38 +1424,12 @@ def _is_compatible_causal_producer(
     )
 
 
-def _resolve_lineage_reference(
-    *,
-    model: CompiledModel,
-    input_name: str,
-    models_by_name: dict[str, CompiledModel],
-) -> CompileSqlReference:
-    """Resolve one named input from the model's transitive upstream lineage."""
-
-    pending: list[CompileSqlReference] = list(model.references)
-    visited_models: set[str] = set()
-    while pending:
-        reference: CompileSqlReference = pending.pop(0)
-        if reference.ref_name == input_name:
-            return reference
-        if reference.ref_kind != SqlReferenceKind.REF or reference.ref_name in visited_models:
-            continue
-        visited_models.add(reference.ref_name)
-        upstream_model: CompiledModel | None = models_by_name.get(reference.ref_name)
-        if upstream_model is not None:
-            pending.extend(upstream_model.references)
-    raise PlannerInputError(
-        f"model '{model.name}': cursor_watermark_inputs references '{input_name}', but it is "
-        "not in the model's upstream lineage",
-        code="S302",
-    )
-
-
 def validate_source_cursor_input_columns(
     *,
     model: CompiledModel,
     cursor_column: str | None,
     models_by_name: dict[str, CompiledModel] | None = None,
+    functions_by_name: dict[str, CompiledFunction] | None = None,
     source_map: dict[str, SourceEntry] | None = None,
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
 ) -> None:
@@ -1472,10 +1453,11 @@ def validate_source_cursor_input_columns(
     input_name: str
     input_cursor_column: str
     for config_field, input_name, input_cursor_column in authored_inputs:
-        ref: CompileSqlReference = _resolve_lineage_reference(
+        ref: CompileSqlReference = resolve_lineage_reference(
             model=model,
             input_name=input_name,
             models_by_name=effective_models_by_name,
+            functions_by_name=functions_by_name or {},
         )
         if ref.ref_kind == SqlReferenceKind.REF:
             upstream_model: CompiledModel | None = effective_models_by_name.get(ref.ref_name)

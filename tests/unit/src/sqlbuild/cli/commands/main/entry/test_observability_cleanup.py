@@ -12,6 +12,7 @@ from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands._helpers.entry.observability import cli_observability_scope
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
+from sqlbuild.cli.output.constants import INTEGRATION_RESULT_PATH_ENV
 from sqlbuild.cli.progress.classes.native_progress_projector import (
     NativeProgressProjector,
     current_native_progress_projector,
@@ -152,6 +153,38 @@ def test_given_json_routing_options_when_operation_runs_then_human_stream_contra
     captured: CaptureResult[str] = capsys.readouterr()
     assert test_case.expected_stdout_fragment in captured.out
     assert test_case.expected_stderr_fragment in captured.err
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MachineProgressRoutingCase(
+            description="integration result file retains human stdout progress",
+            json=False,
+            json_output=None,
+            expected_stdout_fragment="Project compile  START",
+            expected_stderr_fragment="",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_integration_result_file_when_operation_runs_then_human_progress_uses_stdout(
+    tmp_path: Path,
+    test_case: MachineProgressRoutingCase,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    args: CliNamespace = CliNamespace()
+    args.event_output = tmp_path / "events.jsonl"
+    monkeypatch.setenv(INTEGRATION_RESULT_PATH_ENV, str(tmp_path / "integration.jsonl"))
+
+    with cli_observability_scope(args=args, project_dir=tmp_path):
+        with OperationLifecycle(operation_kind="project", operation_name="project_compile"):
+            pass
+
+    captured: CaptureResult[str] = capsys.readouterr()
+    assert test_case.expected_stdout_fragment in captured.out
+    assert captured.err == test_case.expected_stderr_fragment
 
 
 @pytest.mark.parametrize(

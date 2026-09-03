@@ -21,7 +21,6 @@ from sqlbuild.cli.output.classes.terminal_event_index import (
     TerminalEventIndex,
     terminal_event_index_scope,
 )
-from sqlbuild.cli.output.main._execution_event_output_active import execution_event_output_active
 from sqlbuild.cli.progress.classes.native_progress_projector import NativeProgressProjector
 from sqlbuild.compiler.discovery.main.runtime_extensions import discover_runtime_extensions
 from sqlbuild.compiler.discovery.models import DiscoveredEventExporter, DiscoveredProvider
@@ -54,8 +53,6 @@ def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> Iterato
     )
     machine_output: bool = (
         args.json
-        or getattr(args, "event_output", None) is not None
-        or execution_event_output_active()
         or (args.command == LINEAGE_COMMAND and args.lineage_format == JSON_OUTPUT_FORMAT)
         or (
             args.command == QUERY_COMMAND

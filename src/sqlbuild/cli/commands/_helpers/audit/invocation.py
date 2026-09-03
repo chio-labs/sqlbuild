@@ -14,7 +14,6 @@ from sqlbuild.cli.commands.models import (
     AuditCommandRequest,
     AuditInvocation,
 )
-from sqlbuild.cli.output.main._execution_event_output_active import execution_event_output_active
 from sqlbuild.cli.progress.main._build_command_progress_reporters import (
     build_command_progress_reporters,
 )
@@ -39,7 +38,7 @@ def resolve_audit_invocation(*, request: AuditCommandRequest) -> AuditInvocation
         selected_target=request.selected_target,
         cli_vars=request.cli_vars,
     )
-    machine_output: bool = request.json_output or execution_event_output_active()
+    machine_output: bool = request.json_output
     use_color: bool = not request.no_color and not machine_output and supports_color()
     progress_stream: TextIO = sys.stderr if machine_output else sys.stdout
     reporters: CommandProgressReporters = build_command_progress_reporters(

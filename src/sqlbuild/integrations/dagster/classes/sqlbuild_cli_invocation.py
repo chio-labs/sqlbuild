@@ -25,7 +25,6 @@ from sqlbuild.integrations.dagster._helpers.invocation import (
 from sqlbuild.integrations.dagster.constants import (
     COMPLETED_EXECUTION_STATUSES,
     FAILED_EXECUTION_STATUS,
-    VERBOSE_FLAGS,
 )
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 
@@ -96,16 +95,12 @@ class SqlBuildCliInvocation:
                 source=self.process.stdout,
                 sink=sys.stdout,
                 mirror_sink=sys.__stdout__,
-                context=self._stdout_log_context(),
-                stream_name="stdout",
             )
             stderr_future: Future[str] | None = _start_stream_future(
                 executor=executor,
                 source=self.process.stderr,
                 sink=sys.stderr,
                 mirror_sink=sys.__stderr__,
-                context=self.context,
-                stream_name="stderr",
             )
             self.returncode = self.process.wait()
             self.stdout = stdout_future.result() if stdout_future is not None else ""
@@ -144,11 +139,6 @@ class SqlBuildCliInvocation:
         if self.returncode is None:
             return False
         return self.returncode == 0
-
-    def _stdout_log_context(self) -> Any:
-        if VERBOSE_FLAGS.isdisjoint(self.command):
-            return self.context
-        return None
 
     def get_error(self) -> Exception | None:
         """Return a Dagster failure if the process failed."""
@@ -263,16 +253,12 @@ class SqlBuildCliInvocation:
                     source=self.process.stdout,
                     sink=sys.stdout,
                     mirror_sink=sys.__stdout__,
-                    context=self._stdout_log_context(),
-                    stream_name="stdout",
                 )
                 stderr_future: Future[str] | None = _start_stream_future(
                     executor=executor,
                     source=self.process.stderr,
                     sink=sys.stderr,
                     mirror_sink=sys.__stderr__,
-                    context=self.context,
-                    stream_name="stderr",
                 )
                 try:
                     with event_path.open(mode="r", encoding="utf-8") as event_stream:
