@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 from types import MappingProxyType
 
 from sqlbuild.runtime.observability.constants import (
+    AUDIT_RUN_COUNT_FIELDS,
+    CONFIGURED_CONCURRENCY_FIELD,
     DURATION_MS_FIELD,
     EXIT_CODE_FIELD,
     FORBIDDEN_STATEMENT_PAYLOAD_FIELDS,
@@ -32,6 +34,8 @@ from sqlbuild.runtime.observability.constants import (
     RESOURCE_SKIP_CODES,
     RESOURCE_SKIP_MODES,
     RETRY_SCHEDULED_EVENT,
+    RUN_STARTED_EVENT,
+    RUN_TERMINALS,
     STATEMENT_EVENT_PREFIX,
     STRING_PAYLOAD_FIELDS,
 )
@@ -297,3 +301,49 @@ def validate_known_lifecycle_event(*, event: LifecycleEvent) -> None:
             )
     for field_name, value in event.payload.items():
         _validate_payload_field(field_name=field_name, value=value)
+    _validate_run_payload(event=event)
+
+
+def _validate_run_payload(*, event: LifecycleEvent) -> None:
+    payload: Mapping[str, JSONValue] = event.payload
+    if event.event_type == RUN_STARTED_EVENT and CONFIGURED_CONCURRENCY_FIELD in payload:
+        configured: JSONValue = payload[CONFIGURED_CONCURRENCY_FIELD]
+        selected: JSONValue | None = payload.get("selected_count")
+        workers: JSONValue | None = payload.get("worker_count")
+        if not isinstance(configured, int) or isinstance(configured, bool) or configured < 1:
+            raise ObservabilityValidationError(
+                "configured_concurrency must be a positive integer excluding bool"
+            )
+        if not isinstance(selected, int) or isinstance(selected, bool) or selected < 0:
+            raise ObservabilityValidationError(
+                "selected_count must be a nonnegative integer excluding bool"
+            )
+        if not isinstance(workers, int) or isinstance(workers, bool):
+            raise ObservabilityValidationError("worker_count must be an integer excluding bool")
+        if workers != min(configured, selected):
+            raise ObservabilityValidationError(
+                "worker_count must equal min(configured_concurrency, selected_count)"
+            )
+    if event.event_type in RUN_TERMINALS and AUDIT_RUN_COUNT_FIELDS & set(payload):
+        if not AUDIT_RUN_COUNT_FIELDS <= set(payload):
+            raise ObservabilityValidationError(
+                "audit run terminals must include pass_count, warn_count, and fail_count together"
+            )
+        pass_count: int = _required_run_count(payload=payload, field_name="pass_count")
+        warn_count: int = _required_run_count(payload=payload, field_name="warn_count")
+        fail_count: int = _required_run_count(payload=payload, field_name="fail_count")
+        succeeded_count: int = _required_run_count(payload=payload, field_name="succeeded_count")
+        failed_count: int = _required_run_count(payload=payload, field_name="failed_count")
+        if succeeded_count != pass_count + warn_count:
+            raise ObservabilityValidationError("succeeded_count must equal pass_count + warn_count")
+        if failed_count != fail_count:
+            raise ObservabilityValidationError("failed_count must equal fail_count")
+
+
+def _required_run_count(*, payload: Mapping[str, JSONValue], field_name: str) -> int:
+    value: JSONValue | None = payload.get(field_name)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ObservabilityValidationError(
+            f"{field_name} must be a nonnegative integer excluding bool"
+        )
+    return value

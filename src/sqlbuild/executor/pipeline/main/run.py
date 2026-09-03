@@ -28,6 +28,9 @@ from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.pipeline._helpers.auditing import (
     run_audit_pipeline as run_audit_pipeline,
 )
+from sqlbuild.executor.pipeline._helpers.auditing import (
+    run_audit_pipeline_with_callbacks as run_audit_pipeline_with_callbacks,
+)
 from sqlbuild.executor.pipeline._helpers.connections import (
     close_connections,
     prepare_build_connections,
@@ -52,7 +55,13 @@ from sqlbuild.executor.pipeline._helpers.settings import resolve_build_inputs
 from sqlbuild.executor.pipeline._helpers.testing import (
     run_test_pipeline as run_test_pipeline,
 )
-from sqlbuild.executor.pipeline.models import BuildConnectionPreparation, ResolvedBuildInputs
+from sqlbuild.executor.pipeline.models import (
+    AuditPipelineCallbacks as AuditPipelineCallbacks,
+)
+from sqlbuild.executor.pipeline.models import (
+    BuildConnectionPreparation,
+    ResolvedBuildInputs,
+)
 from sqlbuild.observability import (
     EventDispatcher,
     create_lifecycle_event,

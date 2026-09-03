@@ -98,6 +98,15 @@ class SchemaVersionCase:
 
 
 @dataclass(frozen=True)
+class RunLifecycleErrorCase:
+    description: str
+    selected_count: object
+    configured_concurrency: object
+    worker_count: object
+    expected_error: str
+
+
+@dataclass(frozen=True)
 class ExactJsonCase:
     description: str
     payload: Mapping[str, JSONValue]

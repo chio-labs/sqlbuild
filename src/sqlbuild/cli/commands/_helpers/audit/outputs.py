@@ -15,6 +15,8 @@ def write_audit_completion_output(
     request: AuditCommandRequest,
     invocation: AuditInvocation,
     results: tuple[AuditExecutionResult, ...],
+    configured_concurrency: int,
+    worker_count: int,
 ) -> None:
     """Write the audit summary footer and optional JSON output."""
 
@@ -36,7 +38,11 @@ def write_audit_completion_output(
     )
     invocation.progress_stream.flush()
     write_execution_json_output(
-        payload=format_audit_execution_json(results=results),
+        payload=format_audit_execution_json(
+            results=results,
+            configured_concurrency=configured_concurrency,
+            worker_count=worker_count,
+        ),
         json_output=request.json_output,
         json_output_path=request.json_output_path,
     )

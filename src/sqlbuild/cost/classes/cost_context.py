@@ -32,7 +32,11 @@ class CostContext:
             run_id=run_id,
             resource_type=resource_type,
             resource_name=resource_name,
-            ledger_path=ledger_path,
+            ledger_path=(
+                ledger_path
+                if ledger_path is not None
+                else (None if current is None else current.ledger_path)
+            ),
             phase=phase,
             attempt=attempt,
             on_statement_complete=(

@@ -1012,6 +1012,17 @@ concurrency = "nope"
             expected_error_fragment="Expected 'concurrency' to be an integer when provided",
         ),
         LoadProjectConfigErrorTestCase(
+            description="raises when settings concurrency is below one",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+concurrency = 0
+""".strip(),
+            expected_error_fragment="settings.concurrency must be >= 1",
+        ),
+        LoadProjectConfigErrorTestCase(
             description="raises when microbatch concurrency setting is not a boolean",
             project_file_contents="""
 name = "demo"

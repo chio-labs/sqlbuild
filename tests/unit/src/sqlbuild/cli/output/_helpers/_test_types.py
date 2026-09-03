@@ -35,3 +35,5 @@ class AuditExecutionProtocolTestCase:
     expected_check_id: str
     expected_attachment_kind: str
     expected_target_kind: str
+    expected_configured_concurrency: int = 1
+    expected_worker_count: int = 1
