@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.2](https://github.com/chio-labs/sqlbuild/compare/v0.76.1...v0.76.2) (2026-09-03)
+
+
+### Bug Fixes
+
+* align clone progress output ([#474](https://github.com/chio-labs/sqlbuild/issues/474)) ([0031034](https://github.com/chio-labs/sqlbuild/commit/0031034763344b88cb883e30097a00941cb02ba2))
+
 ## [0.76.1](https://github.com/chio-labs/sqlbuild/compare/v0.76.0...v0.76.1) (2026-09-03)
 
 
