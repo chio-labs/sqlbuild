@@ -675,6 +675,15 @@ class PlanAuditTestCase:
 
 
 @dataclass(frozen=True)
+class PlanAttachedAuditTestCase:
+    description: str
+    attached_target_name: str
+    referenced_model_names: tuple[str, ...]
+    upstream_edges: dict[str, tuple[str, ...]]
+    expected_attachment_kind: AuditAttachmentKind
+
+
+@dataclass(frozen=True)
 class ApplyDeferredTargetsTestCase:
     description: str
     model_target_names: tuple[str, ...]

@@ -26,7 +26,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     FunctionReturnColumn,
 )
-from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, FunctionLanguage
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, SqlTestParameterDeclaration
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -901,6 +901,7 @@ class AuditPlanEntry:
     requested_run_scope: AuditRunScope
     effective_run_scope: AuditRunScope
     scope_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
+    attached_target_kind: AttachedAuditTargetKind | None = None
     attached_target_name: str | None = None
     attached_column_name: str | None = None
     always_run: bool = False

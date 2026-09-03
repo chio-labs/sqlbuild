@@ -906,6 +906,11 @@ def _format_audit_checks(
                 "severity": result.severity.value,
                 "row_count": result.row_count,
                 "attachment_kind": result.attachment_kind.value,
+                "attached_target_kind": (
+                    result.attached_target_kind.value
+                    if result.attached_target_kind is not None
+                    else None
+                ),
                 "asset_name": result.attached_target_name,
                 "attached_column_name": result.attached_column_name,
                 "run_scope_phase": result.run_scope_phase.value,
@@ -921,6 +926,7 @@ def _audit_check_id(result: AuditExecutionResult) -> str:
     return audit_resource_id(
         audit_name=result.audit_name,
         attachment_kind=result.attachment_kind,
+        attached_target_kind=result.attached_target_kind,
         attached_target_name=result.attached_target_name,
         attached_column_name=result.attached_column_name,
     )

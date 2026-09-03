@@ -36,6 +36,7 @@ def run_end_audits(
             resource_id=audit_resource_id(
                 audit_name=audit.name,
                 attachment_kind=audit.attachment_kind,
+                attached_target_kind=audit.attached_target_kind,
                 attached_target_name=audit.attached_target_name,
                 attached_column_name=audit.attached_column_name,
             ),
