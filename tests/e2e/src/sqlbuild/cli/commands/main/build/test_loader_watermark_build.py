@@ -79,10 +79,7 @@ def test_given_managed_loader_watermark_when_reloaded_then_incremental_consumes_
                   incremental_strategy delete_insert,
                   cursor id,
                   cursor_type integer,
-                  cursor_filter_inputs (
-                    raw_orders id,
-                  ),
-                  cursor_watermark_inputs (
+                  cursor_inputs (
                     raw_orders id,
                   ),
                 );

@@ -36,12 +36,14 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
 )
 from sqlbuild.executor.run._helpers.materializations.microbatch import execute_microbatch_entry
+from sqlbuild.executor.run._helpers.validation.cursor_bounds import resolve_runtime_cursor_bounds
 from sqlbuild.executor.run.models import (
     BatchWindow,
     HookContext,
     HookSkipResult,
     ModelExecutionResult,
     ModelMaterializationContext,
+    RuntimeCursorSpec,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.microbatches.models import (
@@ -64,6 +66,44 @@ _STRATEGY_TO_ACTION: dict[str, PlanAction] = {
 }
 
 
+def resolve_nonempty_terminal_bounds(
+    *, adapter: DuckDbAdapter, connection: Any, mode: str
+) -> CursorBounds | None:
+    connection.execute("CREATE TABLE main.target_events (event_time TIMESTAMP)")
+    connection.execute("CREATE TABLE main.archive_events (event_time TIMESTAMP)")
+    connection.execute("CREATE TABLE main.live_events (event_time TIMESTAMP)")
+    connection.execute("INSERT INTO main.archive_events VALUES ('2025-11-15'), ('2026-02-01')")
+    connection.execute("INSERT INTO main.live_events VALUES ('2026-07-02')")
+    return resolve_runtime_cursor_bounds(
+        adapter=adapter,
+        connection=connection,
+        target_relation="main.target_events",
+        target_database=None,
+        target_schema="main",
+        target_name="target_events",
+        spec=RuntimeCursorSpec(
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            cursor_grain="day",
+            cursor_start="2025-01-01",
+            cursor_input_relations=(
+                CursorInputRelation(
+                    "main.archive_events",
+                    "event_time",
+                    terminal_cursor_start="2025-01-01",
+                    terminal_cursor_end="2025-12-01",
+                ),
+                CursorInputRelation("main.live_events", "event_time"),
+            ),
+            cursor_watermark_mode=mode,
+        ),
+    )
+
+
+def messages_with_prefix(*, messages: list[str], prefix: str) -> tuple[str, ...]:
+    return tuple(filter(lambda message: message.startswith(prefix), messages))
+
+
 def insert_microbatch_hook_log(ctx: HookContext, phase: str) -> None:
     ctx.execute_sql(f"INSERT INTO {ctx.destination.schema}.hook_log VALUES ('{phase}')")
 
@@ -77,9 +117,9 @@ def skip_microbatch_hook(ctx: HookContext, reason: str) -> HookSkipResult:
 
 
 def reconcile_microbatch_batches(
-    *, history: Any, reconciled_batches: tuple[BatchWindow, ...], **_: Any
-) -> tuple[Any, tuple[BatchWindow, ...]]:
-    return history, reconciled_batches
+    *, state: Any, history: Any, reconciled_batches: tuple[BatchWindow, ...], **_: Any
+) -> tuple[Any, Any, tuple[BatchWindow, ...]]:
+    return state, history, reconciled_batches
 
 
 def causal_dependencies_for_intervals(

@@ -94,6 +94,7 @@ def build_plan_output_from_model_changes_phase(
                     else None
                 )
             ),
+            max_microbatches_is_override=resolved.max_microbatches is not None,
             microbatch_limit_action=(
                 resolved.project_config.microbatches.limits.action
                 if resolved.project_config is not None

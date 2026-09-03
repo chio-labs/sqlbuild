@@ -475,7 +475,7 @@ def test_given_orphan_virtual_replay_target_when_janitor_runs_then_only_active_r
     )
     execute_duckdb(
         db_path=warehouse_path,
-        sql="UPDATE raw.raw_events SET payload = 'bad' WHERE id = 2",
+        sql="UPDATE raw.raw_events SET payload = 'bad' WHERE id = 3",
     )
     (project_dir / "models" / "orders.sql").write_text(
         timestamp_microbatch_model_sql(

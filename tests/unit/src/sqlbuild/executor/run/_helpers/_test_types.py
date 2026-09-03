@@ -205,6 +205,13 @@ class RuntimeCursorPolicyTestCase:
 
 
 @dataclass(frozen=True)
+class RuntimeCursorFailureTestCase:
+    description: str
+    slow_input_setup_sql: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class SnapshotAdapterRenderingTestCase:
     description: str
     expected_rendered_marker: str

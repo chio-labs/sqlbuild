@@ -73,6 +73,8 @@ def build_failed_result(
         microbatch_limit_count=entry.microbatch_limit_count,
         microbatch_limit_action=entry.microbatch_limit_action,
         microbatch_limit_warning=entry.microbatch_limit_warning,
+        microbatch_strategy=entry.microbatch_strategy,
+        microbatch_plan_reason=entry.reason.value,
     )
 
 

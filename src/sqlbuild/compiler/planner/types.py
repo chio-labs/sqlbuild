@@ -18,6 +18,11 @@ class GraphIdentityComposer(Protocol):
     ) -> str: ...
 
 
+class CursorInputRole(StrEnum):
+    FILTER = "filter"
+    WATERMARK = "watermark"
+
+
 class LocalNodePlanAction(StrEnum):
     """Action for one locally classified planner graph node."""
 
@@ -158,6 +163,20 @@ class IncrementalStrategy(StrEnum):
     APPEND = "append"
     DELETE_INSERT = "delete_insert"
     MERGE = "merge"
+
+
+class MicrobatchStrategy(StrEnum):
+    """How an ordinary microbatch range is selected."""
+
+    ROLLING_WINDOW = "rolling_window"
+    WATERMARK = "watermark"
+
+
+class CursorWatermarkMode(StrEnum):
+    """How multiple watermark inputs contribute availability."""
+
+    ALL = "all"
+    ANY = "any"
 
 
 class IncrementalMode(StrEnum):

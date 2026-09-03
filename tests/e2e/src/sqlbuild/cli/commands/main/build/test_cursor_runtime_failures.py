@@ -73,8 +73,8 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             command=("--no-color", "build", "--select", "+customer_status_snapshot"),
             expected_exit_code=1,
             expected_stderr_fragments=(
-                "error[S302]: model 'customer_status_snapshot': cursor_watermark_inputs "
-                "references 'fact_orders' column 'missing_column', but its enforced contract "
+                "error[S302]: model 'customer_status_snapshot': cursor_inputs "
+                "watermark references 'fact_orders' column 'missing_column', but its enforced contract "
                 "does not expose the column. Declared contract columns: order_id, ordered_at",
             ),
             verification_sql="SELECT COUNT(*) FROM main.customer_status_snapshot",
