@@ -349,7 +349,6 @@ def test_given_operation_exception_when_capturing_then_original_exception_and_te
             debug=False,
             include_sql_text=False,
             expected_sql_in_diagnostics=False,
-            expected_sql_in_legacy=False,
             expected_internal_console_count=0,
             expected_plain_console_count=0,
             expected_structured_console_count=0,
@@ -361,7 +360,6 @@ def test_given_operation_exception_when_capturing_then_original_exception_and_te
             debug=True,
             include_sql_text=False,
             expected_sql_in_diagnostics=False,
-            expected_sql_in_legacy=False,
             expected_internal_console_count=1,
             expected_plain_console_count=1,
             expected_structured_console_count=1,
@@ -369,11 +367,10 @@ def test_given_operation_exception_when_capturing_then_original_exception_and_te
             expected_sql_statement_id=None,
         ),
         DiagnosticRoutingTestCase(
-            description="SQL opt in without debug remains file only",
+            description="SQL opt in without debug remains diagnostics only",
             debug=False,
             include_sql_text=True,
             expected_sql_in_diagnostics=True,
-            expected_sql_in_legacy=True,
             expected_internal_console_count=0,
             expected_plain_console_count=0,
             expected_structured_console_count=0,
@@ -385,7 +382,6 @@ def test_given_operation_exception_when_capturing_then_original_exception_and_te
             debug=True,
             include_sql_text=True,
             expected_sql_in_diagnostics=True,
-            expected_sql_in_legacy=True,
             expected_internal_console_count=1,
             expected_plain_console_count=1,
             expected_structured_console_count=1,
@@ -409,9 +405,6 @@ def test_given_internal_user_and_sql_records_when_routing_then_policy_is_destina
         started_at=datetime.now(UTC),
     )
     storage.start_capture(metadata)
-    legacy_path: Path = tmp_path / "target" / "sqlbuild.log"
-    legacy_path.parent.mkdir()
-    legacy_path.write_text("existing line\n", encoding="utf-8")
     capture: ScopedComputeLogCapture = ScopedComputeLogCapture(
         storage=storage,
         metadata=metadata,
@@ -477,12 +470,11 @@ def test_given_internal_user_and_sql_records_when_routing_then_policy_is_destina
         for line in (capture_dir / "diagnostics.jsonl").read_text(encoding="utf-8").splitlines()
     ]
     diagnostic_text: str = json.dumps(diagnostic_lines)
-    legacy_text: str = legacy_path.read_text(encoding="utf-8")
 
     assert result == 0
     assert restored_root_level == logging.DEBUG
     assert diagnostic_text.count(_PRIVATE_SQL) == int(test_case.expected_sql_in_diagnostics)
-    assert legacy_text.count(_PRIVATE_SQL) == int(test_case.expected_sql_in_legacy)
+    assert not (tmp_path / "target" / "sqlbuild.log").exists()
     assert _PRIVATE_SQL not in console
     assert _PRIVATE_SQL not in repr([record.__dict__ for record in hostile_host.records])
     assert hostile_host.was_closed is False
@@ -527,9 +519,7 @@ def test_given_internal_user_and_sql_records_when_routing_then_policy_is_destina
         "nested-refresh-token",
     ):
         assert secret not in diagnostic_text
-        assert secret not in legacy_text
         assert secret not in console
-    assert "existing line" in legacy_text
     assert "sql_digest" in diagnostic_text
     diagnostic_loggers: list[object] = [line["logger"] for line in diagnostic_lines]
     assert diagnostic_loggers.count("sqlbuild.sql") == 1
@@ -537,10 +527,6 @@ def test_given_internal_user_and_sql_records_when_routing_then_policy_is_destina
     assert sql_diagnostic["invocation_id"] == metadata.invocation_id
     assert sql_diagnostic["run_id"] == test_case.expected_sql_run_id
     assert sql_diagnostic["statement_id"] == test_case.expected_sql_statement_id
-    assert legacy_text.count("SQL diagnostic omitted") == 1
     assert diagnostic_text.count("plain internal api_key=[REDACTED]") == 1
     assert diagnostic_text.count("structured internal client_secret=[REDACTED]") == 1
     assert diagnostic_text.count("user debug") == 0
-    assert legacy_text.count("plain internal api_key=[REDACTED]") == 1
-    assert legacy_text.count("structured internal client_secret=[REDACTED]") == 1
-    assert legacy_text.count("connected dsn=") == 0

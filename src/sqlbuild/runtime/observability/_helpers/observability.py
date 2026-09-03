@@ -9,6 +9,7 @@ from typing import Any, cast
 
 from sqlbuild.runtime.observability._helpers.validation import validate_schema_version
 from sqlbuild.runtime.observability.constants import (
+    CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION,
     DIAGNOSTIC_ENVELOPE_FIELDS,
     LIFECYCLE_ENVELOPE_FIELDS,
     LIFECYCLE_EVENT_CATALOGS,
@@ -172,7 +173,7 @@ def diagnostic_log_from_json(raw_json: str) -> DiagnosticLog:
     schema_version_raw: Any = data.get("schema_version")
     validate_schema_version(value=schema_version_raw)
     schema_version: int = cast(int, schema_version_raw)
-    if schema_version == 1:
+    if schema_version == CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION:
         _reject_unknown_fields(
             data=data, allowed=DIAGNOSTIC_ENVELOPE_FIELDS, envelope_name="v1 diagnostic log"
         )

@@ -1,4 +1,4 @@
-"""Version 1 structured JSON output protocol for execution commands."""
+"""Aggregate structured result documents for execution commands."""
 
 from __future__ import annotations
 

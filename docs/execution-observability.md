@@ -157,27 +157,10 @@ Set a restrictive umask and secure or encrypt the host volume. SQLite creates `.
 mode `0700` when new and applies mode `0600` to `history.sqlite3`; operators must still secure parent
 directories, SQLite sidecar files, backups, `logs/`, and `target/`.
 
-## Legacy log migration
-
-This release still appends internal diagnostics to `target/sqlbuild.log` solely as a compatibility
-write for existing local diagnostic workflows. There are no known external consumers, no promised
-compatibility period, and no scheduled removal release. It is not imported, rotated, moved, or
-accepted as lifecycle evidence, and new consumers must not depend on it.
-
-Migrate lookups as follows:
-
-| Legacy use | Current source |
-| --- | --- |
-| Invocation diagnostics | `logs/<UTC-date>/<invocation_id>/diagnostics.jsonl` |
-| Console output | The same invocation's `stdout.log` and `stderr.log` |
-| Completion/failure/skip/retry | `EventLogStorage`, locally `.sqlbuild/history.sqlite3` |
-| Current run list/status | `RunStorage`, while retaining the event log as authority |
-| Full executed SQL | `target/run/` (sensitive and not invocation-isolated) |
-| Statement/query IDs and SQL digest | `target/runs/<run_id>/statements.jsonl` or canonical statement facts |
-
-Project-creation commands (`sqb init`, `sqb playground`, and `sqb dbt init`) create none of these
-paths in the destination before project creation. A dbt command run before a SQLBuild project exists
-also suppresses the legacy compatibility write, while retaining normal fallback diagnostics.
+SQLBuild does not write a shared `target/sqlbuild.log`. Use the invocation-specific paths above so
+concurrent and historical command diagnostics remain isolated. Project-creation commands (`sqb
+init`, `sqb playground`, and `sqb dbt init`) create none of these runtime paths in the destination
+before project creation.
 
 ## Failure behavior
 

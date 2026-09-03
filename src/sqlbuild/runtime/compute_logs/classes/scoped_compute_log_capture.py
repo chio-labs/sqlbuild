@@ -6,7 +6,6 @@ import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from functools import partial
-from pathlib import Path
 from typing import Any
 
 from sqlbuild.diagnostics.classes.invocation_diagnostic_routing import InvocationDiagnosticRouting
@@ -90,7 +89,6 @@ class ScopedComputeLogCapture:
             failure_callback=write_failure,
         )
         self._routing = InvocationDiagnosticRouting(
-            target_dir=Path(self._metadata.project_dir) / "target",
             storage=self._storage,
             invocation_id=self._metadata.invocation_id,
             options=self._routing_options,

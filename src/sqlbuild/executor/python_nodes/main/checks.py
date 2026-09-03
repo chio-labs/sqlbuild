@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, cast
 
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
@@ -29,14 +28,9 @@ def execute_python_checks(
     upstream_load_results_by_loader_name: Mapping[str, LoadExecutionResult] | None = None,
     callbacks: PythonCheckCallbacks | None = None,
     require_upstream_results: bool = True,
-    **legacy_callbacks: Any,
 ) -> tuple[PythonCheckExecutionResult, ...]:
     """Execute check nodes after their selected Python dependencies have completed."""
 
-    resolved_callbacks: PythonCheckCallbacks = callbacks or PythonCheckCallbacks(
-        logger=cast("Any", legacy_callbacks.get("logger")),
-        identity_recorder=cast("Any", legacy_callbacks.get("identity_recorder")),
-    )
     return execute_python_check_nodes(
         check_functions=check_functions,
         python_graph=python_graph,
@@ -45,6 +39,6 @@ def execute_python_checks(
         runtime=runtime,
         run_state=run_state,
         upstream_load_results_by_loader_name=upstream_load_results_by_loader_name,
-        callbacks=resolved_callbacks,
+        callbacks=callbacks,
         require_upstream_results=require_upstream_results,
     )

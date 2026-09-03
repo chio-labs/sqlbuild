@@ -5,15 +5,12 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from contextvars import Token
-from pathlib import Path
 from types import TracebackType
 
 from sqlbuild.diagnostics._helpers.logging import set_sql_diagnostic_sink
 from sqlbuild.diagnostics.classes.diagnostics_console_formatter import DiagnosticsConsoleFormatter
-from sqlbuild.diagnostics.classes.diagnostics_file_formatter import DiagnosticsFileFormatter
 from sqlbuild.diagnostics.classes.dynamic_stderr_handler import DynamicStderrHandler
 from sqlbuild.diagnostics.classes.log_record_route_filter import LogRecordRouteFilter
-from sqlbuild.diagnostics.classes.safe_diagnostic_file_handler import SafeDiagnosticFileHandler
 from sqlbuild.diagnostics.constants import (
     SQL_PRIVATE_RECORD_FIELD,
     SQL_PRIVATE_RECORD_MARKER,
@@ -25,7 +22,6 @@ from sqlbuild.runtime.compute_logs.classes.diagnostic_log_handler import (
 )
 from sqlbuild.runtime.compute_logs.types import ComputeLogStorage
 
-_LEGACY_LOG_NAME: str = "sqlbuild.log"
 _ROUTE_OWNER_FIELD: str = "_sqlbuild_diagnostic_route_owner"
 
 
@@ -35,13 +31,11 @@ class InvocationDiagnosticRouting:
     def __init__(
         self,
         *,
-        target_dir: Path,
         invocation_id: str,
         options: DiagnosticRoutingOptions,
         storage: ComputeLogStorage | None = None,
         failure_callback: Callable[[Exception], None] | None = None,
     ) -> None:
-        self._target_dir: Path = target_dir
         self._invocation_id: str = invocation_id
         self._options: DiagnosticRoutingOptions = options
         self._storage: ComputeLogStorage | None = storage
@@ -148,28 +142,6 @@ class InvocationDiagnosticRouting:
             )
             handlers.append(diagnostic_handler)
             self._private_sql_handlers.append(diagnostic_handler)
-        if self._options.write_legacy_file:
-            try:
-                self._target_dir.mkdir(parents=True, exist_ok=True)
-                legacy_handler: SafeDiagnosticFileHandler = SafeDiagnosticFileHandler(
-                    filename=self._target_dir / _LEGACY_LOG_NAME,
-                    mode="a",
-                    encoding="utf-8",
-                    failure_callback=self._report,
-                )
-                legacy_handler.setLevel(logging.DEBUG)
-                legacy_handler.setFormatter(DiagnosticsFileFormatter())
-                legacy_handler.addFilter(
-                    LogRecordRouteFilter(
-                        internal_only=True,
-                        allow_internal=True,
-                        include_sql_text=self._options.include_sql_text,
-                    )
-                )
-                handlers.append(legacy_handler)
-                self._private_sql_handlers.append(legacy_handler)
-            except Exception as error:
-                self._report(error)
         console_handler: DynamicStderrHandler = DynamicStderrHandler()
         console_handler.setLevel(logging.DEBUG)
         console_handler.setFormatter(DiagnosticsConsoleFormatter(use_color=self._options.use_color))

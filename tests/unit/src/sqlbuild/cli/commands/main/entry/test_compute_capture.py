@@ -9,7 +9,7 @@ from _pytest.capture import CaptureResult
 from sqlbuild.cli.commands.main.entrypoint import _dispatch_with_compute_logs as compute_dispatch
 from sqlbuild.cli.commands.main.entrypoint.entry import _main_with_dependencies
 from sqlbuild.cli.commands.models import CompileCommandRequest
-from sqlbuild.diagnostics.classes.safe_diagnostic_file_handler import SafeDiagnosticFileHandler
+from sqlbuild.diagnostics.classes.dynamic_stderr_handler import DynamicStderrHandler
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.diagnostics.main.log_sql import log_sql
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
@@ -160,9 +160,8 @@ def test_given_unexpected_exception_when_cli_does_not_catch_then_exception_and_c
     assert (capture_dir / "complete").exists() is test_case.expected_complete
     assert metadata["exit_code"] == test_case.expected_exit_code
     diagnostics_text: str = (capture_dir / "diagnostics.jsonl").read_text(encoding="utf-8")
-    legacy_text: str = (tmp_path / "target" / "sqlbuild.log").read_text(encoding="utf-8")
     assert diagnostics_text.count("plain internal before exception") == 1
-    assert legacy_text.count("plain internal before exception") == 1
+    assert not (tmp_path / "target" / "sqlbuild.log").exists()
 
 
 @pytest.mark.parametrize(
@@ -207,7 +206,6 @@ def test_given_machine_json_and_all_log_families_when_cli_runs_then_stdout_remai
     captured: CaptureResult[str] = capsys.readouterr()
     capture_dir: Path = tuple((tmp_path / "logs").glob("*/*"))[0]
     diagnostics_text: str = (capture_dir / "diagnostics.jsonl").read_text(encoding="utf-8")
-    legacy_text: str = (tmp_path / "target" / "sqlbuild.log").read_text(encoding="utf-8")
 
     assert exit_code == test_case.expected_exit_code
     assert json.loads(captured.out) == {"status": "ok"}
@@ -220,40 +218,51 @@ def test_given_machine_json_and_all_log_families_when_cli_runs_then_stdout_remai
     assert diagnostics_text.count("CLI user info") == 1
     assert "CLI user debug" not in diagnostics_text
     assert private_sql not in diagnostics_text
-    assert private_sql not in legacy_text
+    assert not (tmp_path / "target" / "sqlbuild.log").exists()
 
 
 @pytest.mark.parametrize(
     "test_case",
     (
         CliCaptureOutcomeTestCase(
-            description="fallback routing cleanup preserves operation return",
+            description="fallback routing reports capture failures and preserves operation return",
             expected_exit_code=17,
             expected_complete=False,
         ),
     ),
     ids=lambda case: case.description,
 )
-def test_given_capture_open_and_route_close_failures_when_handler_returns_then_result_is_preserved(
-    tmp_path: Path, test_case: CliCaptureOutcomeTestCase, monkeypatch: pytest.MonkeyPatch
+def test_given_capture_and_cleanup_failures_when_handler_returns_then_reports_in_occurrence_order(
+    tmp_path: Path,
+    test_case: CliCaptureOutcomeTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
+    storage: Mock = Mock()
+    storage.start_capture.side_effect = OSError("controlled capture open failure")
+    storage.close.side_effect = OSError("controlled storage close failure")
     monkeypatch.setattr(
         compute_dispatch,
         "LocalFilesystemComputeLogStorage",
-        Mock(side_effect=OSError("controlled capture open failure")),
+        Mock(return_value=storage),
     )
 
     with patch.object(
-        SafeDiagnosticFileHandler,
+        DynamicStderrHandler,
         "close",
         Mock(side_effect=OSError("controlled route close failure")),
     ):
         exit_code: int = _main_with_dependencies(
-            argv=["--project-dir", str(tmp_path), "compile"],
+            argv=["--debug", "--project-dir", str(tmp_path), "compile"],
             handlers=build_handlers(run_compile=Mock(return_value=test_case.expected_exit_code)),
         )
 
+    stderr: str = capsys.readouterr().err
+    failure_channels: list[object] = [record.__dict__["channel"] for record in caplog.records]
     assert exit_code == test_case.expected_exit_code
+    assert stderr.count("local compute log capture unavailable") == 2
+    assert failure_channels == ["capture_open", "capture_close"]
     assert not (tmp_path / "logs").exists()
     assert test_case.expected_complete is False
 
@@ -284,7 +293,7 @@ def test_given_capture_open_and_route_close_failures_when_handler_raises_then_er
 
     with (
         patch.object(
-            SafeDiagnosticFileHandler,
+            DynamicStderrHandler,
             "close",
             Mock(side_effect=OSError("controlled route close failure")),
         ),

@@ -1,4 +1,4 @@
-"""Execution JSON protocol coverage for microbatch accounting."""
+"""Aggregate execution result document coverage."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.cli.commands._helpers.test.sql_progress import format_parameterized_test_label
-from sqlbuild.cli.output._helpers.execution_protocol_v1 import (
+from sqlbuild.cli.output._helpers.execution_result_document import (
     _format_model_assets,
     _format_sql_test_checks,
 )
