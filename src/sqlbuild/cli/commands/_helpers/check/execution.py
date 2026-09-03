@@ -7,7 +7,6 @@ from typing import Any
 
 from sqlbuild.cli.commands._helpers.check.core import (
     build_check_relation_targets,
-    check_dependency_closure,
     load_results_by_loader_name,
     record_python_run_state_results,
     resolve_selected_check_names,
@@ -67,11 +66,8 @@ def prepare_check_execution(
     )
     lifecycle_plan: PythonSqlRunLifecyclePlan = build_python_sql_run_lifecycle(
         selection=PythonSqlRunSelection(
-            sql_keys=pipeline_result.plan_output.selected_keys,
-            python_node_names=check_dependency_closure(
-                graph=python_graph,
-                check_names=check_names,
-            ),
+            sql_keys=frozenset(),
+            python_node_names=frozenset(),
         ),
         python_graph=python_graph,
     )

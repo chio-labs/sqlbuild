@@ -43,10 +43,8 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
             expected_ordered_stdout_fragments=(
                 "Execution  sqb test  (concurrency: 1)",
-                "Connecting to duckdb...",
-                "\u2713 Warehouse connected  duckdb  (<time>)",
-                "Inspecting warehouse state...",
-                "Generated plan. (<time>)",
+                "Compiling project...",
+                "Compiled project. (<time>)",
                 "Test ready  5 selected, 5 models",
                 "Connecting to duckdb...",
                 "\u2713 Warehouse connected  duckdb  (<time>)",
@@ -80,6 +78,8 @@ def test_given_waffle_shop_project_when_running_test_then_all_tests_pass(
     for expected_fragment in test_case.expected_stdout_fragments:
         assert expected_fragment in result.stdout
     assert_fragments_in_order(result.stdout, test_case.expected_ordered_stdout_fragments)
+    assert "Inspecting warehouse state..." not in result.stdout
+    assert "Generated plan." not in result.stdout
 
 
 @pytest.mark.parametrize(
