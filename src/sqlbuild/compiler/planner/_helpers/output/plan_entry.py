@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
@@ -31,6 +31,7 @@ from sqlbuild.compiler.planner._helpers.output.cursor_type_check import (
 from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
     resolve_bounded_cursor_override,
 )
+from sqlbuild.compiler.planner._helpers.output.microbatch_bounds import cap_microbatch_bounds
 from sqlbuild.compiler.planner._helpers.output.microbatch_count import count_microbatches
 from sqlbuild.compiler.planner._helpers.output.strategy import (
     build_model_warnings,
@@ -70,9 +71,7 @@ from sqlbuild.compiler.planner.main.execution.effective_microbatch_batch_size im
 from sqlbuild.compiler.planner.main.execution.future_cursor_safety import apply_future_cursor_safety
 from sqlbuild.compiler.planner.main.execution.future_cursor_warning import future_cursor_cap_warning
 from sqlbuild.compiler.planner.main.execution.maximum_start_warning import maximum_start_cap_warning
-from sqlbuild.compiler.planner.main.execution.microbatch_limit import (
-    microbatch_limit_warning,
-)
+from sqlbuild.compiler.planner.main.execution.microbatch_limit import microbatch_limit_warning
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,
@@ -415,24 +414,10 @@ def build_plan_entries(
                 ),
             )
             if entry.action != PlanAction.SKIP:
-                entry, limit_warning = _apply_microbatch_limit(
-                    entry=entry,
-                    max_batches=(
-                        inputs.max_microbatches
-                        if inputs.max_microbatches_is_override
-                        else (
-                            None
-                            if entry.microbatch_strategy == MicrobatchStrategy.ROLLING_WINDOW
-                            and entry.reason != PlanReason.FULL_REFRESH
-                            and entry.start_cursor_override is None
-                            and entry.end_cursor_override is None
-                            else entry.microbatch_limit or inputs.max_microbatches
-                        )
-                    ),
-                    action=inputs.microbatch_limit_action,
+                entry, limit_warnings = _apply_configured_microbatch_limits(
+                    entry=entry, inputs=inputs
                 )
-                if limit_warning is not None:
-                    warnings.append(limit_warning)
+                warnings.extend(limit_warnings)
         entries.append(entry)
         warnings.extend(entry_warnings)
     configured_concurrent_entries: tuple[ModelPlanEntry, ...] = tuple(
@@ -477,12 +462,67 @@ def build_plan_entries(
     return PlannerModelEntryResults(entries=tuple(entries), warnings=tuple(warnings))
 
 
+def _apply_configured_microbatch_limits(
+    *, entry: ModelPlanEntry, inputs: PlanEntryBuildInputs
+) -> tuple[ModelPlanEntry, tuple[PlanWarning, ...]]:
+    """Apply CLI, project, and model policies in their documented precedence order."""
+
+    if inputs.max_microbatches_is_override:
+        limited_entry, warning = _apply_microbatch_limit(
+            entry=entry,
+            max_batches=inputs.max_microbatches,
+            action=MicrobatchLimitAction.ERROR,
+        )
+        return limited_entry, (() if warning is None else (warning,))
+
+    if entry.declared_microbatch_limit_action is not None:
+        warnings: list[PlanWarning] = []
+        declared_action: MicrobatchLimitAction = entry.declared_microbatch_limit_action
+        if inputs.max_microbatches is not None:
+            _, safety_warning = _apply_microbatch_limit(
+                entry=entry,
+                max_batches=inputs.max_microbatches,
+                action=inputs.microbatch_limit_action,
+            )
+            entry = replace(
+                entry,
+                microbatch_safety_limit=inputs.max_microbatches,
+                microbatch_safety_limit_action=inputs.microbatch_limit_action,
+            )
+            if safety_warning is not None:
+                warnings.append(safety_warning)
+        entry, model_warning = _apply_microbatch_limit(
+            entry=entry,
+            max_batches=entry.microbatch_limit,
+            action=declared_action,
+        )
+        if model_warning is not None:
+            warnings.append(model_warning)
+        return entry, tuple(warnings)
+
+    max_batches: int | None = (
+        None
+        if entry.microbatch_strategy == MicrobatchStrategy.ROLLING_WINDOW
+        and entry.reason != PlanReason.FULL_REFRESH
+        and entry.start_cursor_override is None
+        and entry.end_cursor_override is None
+        else entry.microbatch_limit or inputs.max_microbatches
+    )
+    limited_entry, warning = _apply_microbatch_limit(
+        entry=entry,
+        max_batches=max_batches,
+        action=inputs.microbatch_limit_action,
+    )
+    return limited_entry, (() if warning is None else (warning,))
+
+
 def _apply_microbatch_limit(
     *, entry: ModelPlanEntry, max_batches: int | None, action: MicrobatchLimitAction
 ) -> tuple[ModelPlanEntry, PlanWarning | None]:
     if entry.action == PlanAction.SKIP:
         return entry, None
     batch_count: int | None = None
+    effective_batch_size: str | None = None
     if (
         entry.microbatch_range is not None
         and entry.batch_size is not None
@@ -499,7 +539,7 @@ def _apply_microbatch_limit(
                 relation.cursor_grain for relation in entry.cursor_input_relations
             ),
         )
-        effective_batch_size: str = (
+        effective_batch_size = (
             resolve_effective_microbatch_batch_size(
                 batch_size=entry.batch_size,
                 effective_grain=effective_grain,
@@ -523,8 +563,28 @@ def _apply_microbatch_limit(
             action=action,
         )
     )
+    limited_range: CursorBounds | None = entry.microbatch_range
+    if (
+        warning is not None
+        and effective_batch_size is not None
+        and entry.microbatch_range is not None
+        and max_batches is not None
+        and action
+        in {
+            MicrobatchLimitAction.CAP_FROM_END,
+            MicrobatchLimitAction.CAP_FROM_START,
+        }
+    ):
+        limited_range = cap_microbatch_bounds(
+            bounds=entry.microbatch_range,
+            batch_size=effective_batch_size,
+            cursor_type=entry.cursor_type or "",
+            max_batches=max_batches,
+            action=action,
+        )
     limited_entry: ModelPlanEntry = replace(
         entry,
+        microbatch_range=limited_range,
         microbatch_limit=max_batches,
         microbatch_limit_count=batch_count,
         microbatch_limit_action=action if max_batches is not None else None,
@@ -773,7 +833,8 @@ def plan_model_from_change(
             model=model, key="unaccounted_partition_policy"
         ),
         microbatch_range=microbatch_range,
-        microbatch_limit=_get_positive_config_int(model=model, key="max_microbatches"),
+        microbatch_limit=_get_model_microbatch_limit(model=model)[0],
+        declared_microbatch_limit_action=_get_model_microbatch_limit(model=model)[1],
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
         future_cursor_config=effective_future_cursor_config,
@@ -1050,6 +1111,24 @@ def _get_config_optional_bool(*, model: CompiledModel, key: str) -> bool | None:
 def _get_positive_config_int(*, model: CompiledModel, key: str) -> int | None:
     raw: object | None = model.config.values.get(key)
     return raw if isinstance(raw, int) and not isinstance(raw, bool) and raw > 0 else None
+
+
+def _get_model_microbatch_limit(
+    *, model: CompiledModel
+) -> tuple[int | None, MicrobatchLimitAction | None]:
+    raw: object | None = model.config.values.get("microbatch_limit")
+    if isinstance(raw, dict):
+        limit_mapping: dict[str, object] = cast(dict[str, object], raw)
+        max_batches: object | None = limit_mapping.get("max_batches")
+        action: object | None = limit_mapping.get("action")
+        if (
+            isinstance(max_batches, int)
+            and not isinstance(max_batches, bool)
+            and max_batches > 0
+            and isinstance(action, str)
+        ):
+            return max_batches, MicrobatchLimitAction(action)
+    return _get_positive_config_int(model=model, key="max_microbatches"), None
 
 
 def _get_check_columns(model: CompiledModel) -> tuple[str, ...]:

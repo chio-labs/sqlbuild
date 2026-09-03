@@ -400,7 +400,12 @@ def execute_microbatch_entry(
     state = _with_reconciliation_warnings(context=context, state=state, history=history_context)
     if not batch_plan.batches:
         state = replace(state, warnings=[*state.warnings, "no batches to process"])
-    context, state, limit_failure = _enforce_microbatch_limit(
+    state, safety_failure = _enforce_microbatch_safety_limit(
+        context=context, state=state, batch_plan=batch_plan
+    )
+    if safety_failure is not None:
+        return safety_failure
+    context, state, batch_plan, limit_failure = _enforce_microbatch_limit(
         context=context, state=state, batch_plan=batch_plan
     )
     if limit_failure is not None:
@@ -645,12 +650,61 @@ def _no_work_microbatch_result(
     )
 
 
+def _enforce_microbatch_safety_limit(
+    *,
+    context: ModelMaterializationContext,
+    state: MicrobatchLifecycleState,
+    batch_plan: _MicrobatchPlan,
+) -> tuple[MicrobatchLifecycleState, ModelExecutionResult | None]:
+    max_batches: int | None = context.entry.microbatch_safety_limit
+    action: MicrobatchLimitAction | None = context.entry.microbatch_safety_limit_action
+    warning: str | None = (
+        None
+        if action is None
+        else microbatch_limit_warning(
+            model_name=context.entry.name,
+            max_batches=max_batches,
+            batch_count=len(batch_plan.batches),
+            action=action,
+        )
+    )
+    if warning is None:
+        return state, None
+    if action == MicrobatchLimitAction.WARN:
+        return replace(state, warnings=[*state.warnings, warning]), None
+    safety_entry: ModelPlanEntry = replace(
+        context.entry,
+        microbatch_limit=max_batches,
+        microbatch_limit_count=len(batch_plan.batches),
+        microbatch_limit_action=action,
+        microbatch_limit_warning=warning,
+    )
+    safety_context: ModelMaterializationContext = replace(context, entry=safety_entry)
+    failure: ModelExecutionResult = build_failed_result(
+        entry=safety_entry,
+        phase=ExecutionPhase.STAGING,
+        error=warning,
+        warnings=state.warnings,
+        audit_results=state.audit_results,
+        statement_recorder=state.statement_recorder,
+    )
+    return state, replace(
+        failure,
+        microbatch_run_type=_microbatch_run_type(context=safety_context).value,
+    )
+
+
 def _enforce_microbatch_limit(
     *,
     context: ModelMaterializationContext,
     state: MicrobatchLifecycleState,
     batch_plan: _MicrobatchPlan,
-) -> tuple[ModelMaterializationContext, MicrobatchLifecycleState, ModelExecutionResult | None]:
+) -> tuple[
+    ModelMaterializationContext,
+    MicrobatchLifecycleState,
+    _MicrobatchPlan,
+    ModelExecutionResult | None,
+]:
     limit_count: int = len(batch_plan.batches)
     action: MicrobatchLimitAction | None = context.entry.microbatch_limit_action
     warning: str | None = (
@@ -663,20 +717,66 @@ def _enforce_microbatch_limit(
             action=action,
         )
     )
+    limited_plan: _MicrobatchPlan = batch_plan
+    if (
+        warning is not None
+        and context.entry.microbatch_limit is not None
+        and action
+        in {
+            MicrobatchLimitAction.CAP_FROM_END,
+            MicrobatchLimitAction.CAP_FROM_START,
+        }
+    ):
+        selected_batches: tuple[BatchWindow, ...] = (
+            batch_plan.batches[-context.entry.microbatch_limit :]
+            if action == MicrobatchLimitAction.CAP_FROM_END
+            else batch_plan.batches[: context.entry.microbatch_limit]
+        )
+        selected_batches = tuple(
+            replace(batch, index=index) for index, batch in enumerate(selected_batches)
+        )
+        selected_intervals: tuple[MicrobatchInterval, ...] = tuple(
+            MicrobatchInterval(start=batch.start, end=batch.end) for batch in selected_batches
+        )
+        limited_plan = replace(
+            batch_plan,
+            batches=selected_batches,
+            resolved_intervals=selected_intervals,
+            resolved_range=(
+                CursorBounds(start=selected_batches[0].start, end=selected_batches[-1].end)
+                if selected_batches
+                else None
+            ),
+        )
+    effective_warning: str | None = warning or context.entry.microbatch_limit_warning
+    effective_count: int = (
+        context.entry.microbatch_limit_count
+        if context.entry.microbatch_limit_count is not None
+        and context.entry.microbatch_limit_warning is not None
+        else limit_count
+    )
     limited_context: ModelMaterializationContext = replace(
         context,
         entry=replace(
             context.entry,
-            microbatch_limit_count=limit_count,
-            microbatch_limit_warning=warning,
+            microbatch_limit_count=effective_count,
+            microbatch_limit_warning=effective_warning,
         ),
     )
-    limited_context = _context_with_microbatch_range(context=limited_context, batch_plan=batch_plan)
+    limited_context = _context_with_microbatch_range(
+        context=limited_context, batch_plan=limited_plan
+    )
     if warning is None:
-        return limited_context, state, None
+        return limited_context, state, limited_plan, None
     if action == MicrobatchLimitAction.WARN:
         warned_state: MicrobatchLifecycleState = replace(state, warnings=[*state.warnings, warning])
-        return limited_context, warned_state, None
+        return limited_context, warned_state, limited_plan, None
+    if action in {
+        MicrobatchLimitAction.CAP_FROM_END,
+        MicrobatchLimitAction.CAP_FROM_START,
+    }:
+        warned_state = replace(state, warnings=[*state.warnings, warning])
+        return limited_context, warned_state, limited_plan, None
     failure: ModelExecutionResult = build_failed_result(
         entry=limited_context.entry,
         phase=ExecutionPhase.STAGING,
@@ -688,6 +788,7 @@ def _enforce_microbatch_limit(
     return (
         limited_context,
         state,
+        limited_plan,
         replace(
             failure,
             microbatch_run_type=_microbatch_run_type(context=limited_context).value,

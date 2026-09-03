@@ -617,6 +617,51 @@ def test_given_microbatch_model_when_executing_then_succeeds(
 @pytest.mark.parametrize(
     "test_case",
     [
+        MicrobatchSuccessTestCase(
+            description="runtime watermark cap executes latest batches only",
+            setup_sql=(
+                _TS_SOURCE_SQL,
+                _TS_SOURCE_DATA,
+                "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP, payload VARCHAR)",
+            ),
+            model_sql=_TS_MODEL_SQL,
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="delete_insert",
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            batch_size="1h",
+            microbatch_start="2026-01-01T00:00:00",
+            microbatch_end="2026-01-01T03:00:00",
+            expected_row_count=2,
+            expected_batch_count=2,
+            expected_warning_count=1,
+            expected_query_results=(("SELECT id FROM main.orders ORDER BY id", ((2,), (3,))),),
+            microbatch_limit=2,
+            microbatch_limit_action=MicrobatchLimitAction.CAP_FROM_END,
+            expected_microbatch_limit_count=3,
+            expected_microbatch_limit_warning=True,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_deferred_watermark_range_when_capping_from_end_then_latest_batches_execute(
+    test_case: MicrobatchSuccessTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    result: ModelExecutionResult = run_success_test(
+        test_case=test_case, adapter=adapter, connection=connection
+    )
+
+    assert result.microbatch_limit_count == test_case.expected_microbatch_limit_count
+    assert result.microbatch_limit_warning is not None
+    verify_success_state(result=result, test_case=test_case, connection=connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         MicrobatchFailureTestCase(
             description="warn limit survives failed pre-hook serialization",
             setup_sql=(

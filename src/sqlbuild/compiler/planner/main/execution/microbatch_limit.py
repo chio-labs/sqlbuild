@@ -15,5 +15,16 @@ def microbatch_limit_warning(
     return (
         f"MICROBATCH LIMIT EXCEEDED: model '{model_name}' planned {batch_count} batches, "
         f"above the per-model limit of {max_batches} (action={action.value}). "
-        "Use --max-microbatches with an intentional invocation-specific value for this backfill."
+        + (
+            f"Selected {max_batches} batches and deferred {batch_count - max_batches}."
+            if action
+            in {
+                MicrobatchLimitAction.CAP_FROM_END,
+                MicrobatchLimitAction.CAP_FROM_START,
+            }
+            else (
+                "Use --max-microbatches with an intentional invocation-specific value for "
+                "this backfill."
+            )
+        )
     )
