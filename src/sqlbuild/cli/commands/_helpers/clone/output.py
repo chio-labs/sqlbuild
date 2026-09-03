@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import re
+
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.completion_line import format_completion_line
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
 from sqlbuild.presentation.types import CompletionState
+
+_QUOTED_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(
+    r'("(?:[^"]|"")*"|`(?:[^`]|``)*`|\[(?:[^\]]|\]\])*\])'
+)
 
 
 def render_clone_header(
@@ -32,27 +38,66 @@ def _clone_status_text(status: CloneStatus) -> str:
     return "OK"
 
 
+def clone_relation_flow_text(
+    *, name: str, origin_relation: str | None, destination_relation: str | None
+) -> str:
+    """Return the normalized plain-text relation flow used for clone progress."""
+
+    if origin_relation is None or destination_relation is None:
+        return name.lower()
+    return (
+        f"{clone_relation_display_name(origin_relation)} -> "
+        f"{clone_relation_display_name(destination_relation)}"
+    )
+
+
+def clone_relation_display_name(relation: str) -> str:
+    """Normalize ordinary identifiers while preserving quoted identifier case."""
+
+    parts: list[str] = _QUOTED_IDENTIFIER_PATTERN.split(relation)
+    return "".join(
+        part if _QUOTED_IDENTIFIER_PATTERN.fullmatch(part) else part.lower() for part in parts
+    )
+
+
 def render_clone_item_line(
-    *, index: int, total: int, item: CloneItemResult, use_color: bool
+    *,
+    index: int,
+    total: int,
+    item: CloneItemResult,
+    use_color: bool,
+    relation_width: int | None = None,
 ) -> str:
     """Render one streamed clone line: position, action, origin to destination, and status."""
 
     style: CliStyle = CliStyle(use_color=use_color)
     position: str = f"{index:>{len(str(total))}}/{total}"
-    relation_flow: str = item.name
+    plain_relation_flow: str = clone_relation_flow_text(
+        name=item.name,
+        origin_relation=item.origin_relation,
+        destination_relation=item.destination_relation,
+    )
+    relation_flow: str = style.object_name(plain_relation_flow)
     if item.origin_relation is not None and item.destination_relation is not None:
         relation_flow = (
-            f"{style.object_name(item.origin_relation)} "
-            f"{style.muted('->')} {style.object_name(item.destination_relation)}"
+            f"{style.object_name(clone_relation_display_name(item.origin_relation))} "
+            f"{style.muted('->')} "
+            f"{style.object_name(clone_relation_display_name(item.destination_relation))}"
         )
+    effective_relation_width: int = max(len(plain_relation_flow), relation_width or 0)
+    relation_padding: str = " " * (effective_relation_width - len(plain_relation_flow))
+    action: str = item.action.value
+    action_width: int = max(len(value.value) for value in CloneAction)
+    action_padding: str = " " * (action_width - len(action))
     duration: str = (
         f"  {style.muted(f'{item.duration_seconds:.2f}s')}"
         if item.duration_seconds is not None
         else ""
     )
     return (
-        f"  {style.muted(position)}  {style.accent(item.action.value):<18} "
-        f"{relation_flow}  {style.status(status=_clone_status_text(status=item.status))}{duration}"
+        f"  {style.muted(position)}  {style.accent(action)}{action_padding}  "
+        f"{relation_flow}{relation_padding}  "
+        f"{style.status(status=_clone_status_text(status=item.status))}{duration}"
     )
 
 
