@@ -7,7 +7,7 @@ build-backend = "maturin"
 
 [project]
 name = "sqlbuild"
-version = "0.76.7"
+version = "0.76.8"
 description = "Typed, test-first SQL pipelines with local E2E testing"
 readme = "README.md"
 requires-python = ">=3.12"
