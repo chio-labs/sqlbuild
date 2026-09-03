@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.77.1](https://github.com/chio-labs/sqlbuild/compare/v0.77.0...v0.77.1) (2026-09-03)
+
+
+### Bug Fixes
+
+* restore Dagster integration contracts ([#500](https://github.com/chio-labs/sqlbuild/issues/500)) ([c02cfd0](https://github.com/chio-labs/sqlbuild/commit/c02cfd00feb3dfaccb54f4040666f6dc720c23df))
+
 ## [0.77.0](https://github.com/chio-labs/sqlbuild/compare/v0.76.9...v0.77.0) (2026-09-03)
 
 
