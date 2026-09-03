@@ -35,6 +35,9 @@ from sqlbuild.compiler.compile.models import (
     StaticMacroInventory,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
+from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
+    validate_resource_identity,
+)
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
@@ -147,6 +150,11 @@ def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[st
                 or attribute_value.__module__ != module.__name__
             ):
                 continue
+            validate_resource_identity(
+                name=attribute_name,
+                kind="macro",
+                path=macro_file.relative_path,
+            )
             existing_macro: LoadedMacro | None = loaded_macros.get(attribute_name)
             if existing_macro is not None:
                 raise CompileInputError(

@@ -4,7 +4,7 @@ MODEL (
   description "Daily revenue aggregation.",
   audits [
     expression_is_true (
-      name "revenue is non-negative",
+      name "revenue_is_non_negative",
       expression "total_revenue_cents >= 0",
     ),
   ],

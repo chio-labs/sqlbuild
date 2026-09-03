@@ -376,7 +376,7 @@ def build_real_warehouse_snapshot_project_files(*, project_toml: str) -> dict[st
             "  valid_to_column effective_to,\n"
             "  audits [\n"
             "    expression_is_true (\n"
-            '      name "plan is allowed",\n'
+            '      name "plan_is_allowed",\n'
             "      expression \"plan <> 'blocked'\",\n"
             "    ),\n"
             "  ],\n"

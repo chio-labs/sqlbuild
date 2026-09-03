@@ -20,6 +20,7 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
     SqlHookEntry,
 )
+from sqlbuild.compiler.resource_names.exceptions import ResourceIdentityError
 from sqlbuild.spec.contracts.exceptions import SpecConfigError
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.models import (
@@ -1706,6 +1707,7 @@ MODEL (
   alias orders_dev,
   post_hooks [
     inline_sql("select '@@CTX:destination.qualified' as target"),
+    inline_sql("create function @@CTX:destination.database.@@CTX:destination.schema.reconstruct_book() returns integer language sql as 'select 1'"),
     python("notify", message: "@@CTX:destination.qualified"),
   ],
 );
@@ -1734,6 +1736,12 @@ def notify(ctx, message):
                     "database": "analytics",
                     "post_hooks": [
                         SqlHookEntry(statement="select 'analytics.marts.orders_dev' as target"),
+                        SqlHookEntry(
+                            statement=(
+                                "create function analytics.marts.reconstruct_book() returns "
+                                "integer language sql as 'select 1'"
+                            )
+                        ),
                         PythonHookEntry(
                             name="notify",
                             kwargs={"message": "@@CTX:destination.qualified"},
@@ -1759,6 +1767,7 @@ name = "demo"
 adapter = "duckdb"
 
 [defaults]
+database = "analytics"
 schema = "marts"
 """.strip()
                 + "\n",
@@ -1774,6 +1783,7 @@ SELECT 1 AS id
 HOOK (description "Record model access");
 
 SELECT @'role' AS role, '@@CTX:destination.qualified' AS relation_name
+FROM @@CTX:destination.database.@@CTX:destination.schema.access_log
 """.strip()
                 + "\n",
             },
@@ -1783,17 +1793,21 @@ SELECT @'role' AS role, '@@CTX:destination.qualified' AS relation_name
             expected_model_schema_names=(None,),
             expected_model_config_values=(
                 {
+                    "database": "analytics",
                     "schema": "marts",
                     "post_hooks": [
                         SqlHookEntry(
                             statement=(
-                                "SELECT 'O''Brien' AS role, 'marts.orders' AS relation_name"
+                                "SELECT 'O''Brien' AS role, 'analytics.marts.orders' AS relation_name\n"
+                                "FROM analytics.marts.access_log"
                             ),
                             name="record_access",
                             relative_path=Path("hooks/sql/record_access.sql"),
                             definition_sql=(
                                 "SELECT @'role' AS role, "
-                                "'@@CTX:destination.qualified' AS relation_name"
+                                "'@@CTX:destination.qualified' AS relation_name\n"
+                                "FROM @@CTX:destination.database."
+                                "@@CTX:destination.schema.access_log"
                             ),
                             kwargs={"role": "O'Brien"},
                             description="Record model access",
@@ -3239,7 +3253,7 @@ SELECT customer_id AS order_id
 """.strip()
                 + "\n",
                 "tests/unit/test_customer_orders.sql": """
-TEST (mode table_fn, name "customer orders arity");
+TEST (mode table_fn, name "customer_orders_arity");
 
 WITH
 __table_fn_actual__ AS (
@@ -3799,6 +3813,20 @@ def project_columns() -> str:
             selected_target=None,
             run_id=None,
             expected_error_fragment="Macro name collision for 'project_columns'",
+        ),
+        BuildCompileInputsErrorTestCase(
+            description="raises when a macro identity is noncanonical",
+            repo_files=base_repo_files()
+            | {
+                "macros/orders.py": "def DailyOrders():\n    return 'order_id'\n",
+                "models/staging/orders.sql": "MODEL ();\n\nselect @DailyOrders()\n",
+            },
+            selected_target=None,
+            run_id=None,
+            expected_error_fragment=(
+                "Invalid macro identity 'DailyOrders'.*use snake_case 'daily_orders'"
+            ),
+            expected_error_type=ResourceIdentityError,
         ),
         BuildCompileInputsErrorTestCase(
             description="raises when model config field contains a macro call",

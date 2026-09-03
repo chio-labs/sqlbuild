@@ -53,11 +53,23 @@ def test_given_audit_mapping_when_parsing_then_always_run_is_reserved_option(
             description="rejects non-boolean always_run",
             raw_audit={"not_null": {"always_run": "true"}},
             expected_error_fragment="'always_run' must be a boolean",
-        )
+        ),
+        ParseAuditInstanceErrorTestCase(
+            description="rejects noncanonical definition identity",
+            raw_audit={"AcceptedValues": {"values": ["open"]}},
+            expected_error_fragment=(
+                "Invalid model orders audit definition identity 'AcceptedValues'"
+            ),
+        ),
+        ParseAuditInstanceErrorTestCase(
+            description="rejects noncanonical attachment identity",
+            raw_audit={"accepted_values": {"name": "OrderStatus", "values": ["open"]}},
+            expected_error_fragment=("Invalid model orders audit instance identity 'OrderStatus'"),
+        ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_non_boolean_always_run_when_parsing_then_raises_clear_error(
+def test_given_invalid_audit_option_when_parsing_then_raises_clear_error(
     test_case: ParseAuditInstanceErrorTestCase,
 ) -> None:
     with pytest.raises(ValueError) as error_info:

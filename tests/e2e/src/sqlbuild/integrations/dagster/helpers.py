@@ -221,11 +221,11 @@ def add_failing_daily_revenue_audits(*, project_dir: Path) -> None:
     contents: str = model_path.read_text(encoding="utf-8")
     contents = contents.replace(
         """    expression_is_true (
-      name "revenue is non-negative",
+      name "revenue_is_non_negative",
       expression "total_revenue_cents >= 0",
     ),""",
         """    expression_is_true (
-      name "revenue is non-negative",
+      name "revenue_is_non_negative",
       expression "total_revenue_cents >= 0",
     ),
     forced_warning_failure (

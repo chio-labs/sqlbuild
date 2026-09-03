@@ -62,7 +62,7 @@ def test_given_parameterized_model_test_when_compiled_and_executed_then_duckdb_p
             "models/orders.sql": ('MODEL ();\n\nSELECT order_id FROM __source("raw_orders")\n'),
             "tests/unit/orders.sql": f"""
 TEST (
-  name "parameterized orders",
+  name "parameterized_orders",
   parameters (order_id integer),
   cases (seven (order_id {test_case.parameter_value})),
 );
@@ -330,9 +330,9 @@ def test_given_macro_test_plan_when_executing_then_it_passes_direct_comparison(
     )
     test_block: DiscoveredSqlTestBlock = DiscoveredSqlTestBlock(
         test_index=1,
-        header_values={"mode": SqlTestMode.MACRO.value, "name": "normalizes status"},
+        header_values={"mode": SqlTestMode.MACRO.value, "name": "normalizes_status"},
         sql_body="",
-        name="normalizes status",
+        name="normalizes_status",
         mode=SqlTestMode.MACRO,
     )
     helper_ctes: tuple[CompileSqlTestCte, ...] = tuple(
@@ -341,10 +341,10 @@ def test_given_macro_test_plan_when_executing_then_it_passes_direct_comparison(
     sql_test: CompiledSqlTest = CompiledSqlTest(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.SQL_TEST,
-            name="normalizes status",
+            name="normalizes_status",
         ),
         scope_deps=(CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),),
-        name="normalizes status",
+        name="normalizes_status",
         test_file=test_file,
         test_block=test_block,
         sql_body="",
@@ -379,11 +379,11 @@ def test_given_macro_test_plan_when_executing_then_it_passes_direct_comparison(
     )
 
     assert warnings == ()
-    assert entry.chain[0].model_name == "macro normalizes status"
+    assert entry.chain[0].model_name == "macro normalizes_status"
     rows: list[Any] = connection.execute(entry.chain[0].resolved_sql).fetchall()
     assert tuple(tuple(row) for row in rows) == test_case.expected_rows
     assert result.outcome == SqlTestOutcome.PASS
-    assert result.step_results[0].model_name == "macro normalizes status"
+    assert result.step_results[0].model_name == "macro normalizes_status"
 
 
 @pytest.mark.parametrize(

@@ -61,7 +61,7 @@ def build_table_function_test_entry(
         name="customer_orders_table_fn",
         chain=(
             ChainStep(
-                model_name="table_fn returns customer orders",
+                model_name="table_fn returns_customer_orders",
                 resolved_sql=resolved_sql,
                 expected_cte_sql="SELECT 1 AS order_id",
             ),

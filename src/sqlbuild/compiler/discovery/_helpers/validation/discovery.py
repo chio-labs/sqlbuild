@@ -6,6 +6,9 @@ import csv
 from pathlib import Path
 
 from sqlbuild.compiler.discovery._helpers.integrations.loaders import integration_loader_name
+from sqlbuild.compiler.discovery._helpers.validation.identities import (
+    validate_discovered_resource_identities,
+)
 from sqlbuild.compiler.discovery.constants import CURRENT_DIRECTORY_PATH, RESERVED_MODEL_NAMES
 from sqlbuild.compiler.discovery.exceptions import DiscoveryConflictError, SeedDiscoveryError
 from sqlbuild.compiler.discovery.models import (
@@ -43,6 +46,7 @@ from sqlbuild.spec.contracts.models import SchemaModelEntry, SchemaSeedEntry, So
 def validate_discovered_inputs(discovered_inputs: DiscoveredProjectInputs) -> None:
     """Validate cross-file conflicts across discovered project inputs."""
 
+    validate_discovered_resource_identities(discovered_inputs)
     _validate_unique_model_file_names(discovered_inputs.model_files)
     _validate_unique_scenario_file_names(discovered_inputs.scenario_files)
     _validate_unique_source_names(discovered_inputs.source_files)
