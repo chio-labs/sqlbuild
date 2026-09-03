@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.7](https://github.com/chio-labs/sqlbuild/compare/v0.76.6...v0.76.7) (2026-09-03)
+
+
+### Bug Fixes
+
+* add bounded standalone audit concurrency ([#492](https://github.com/chio-labs/sqlbuild/issues/492)) ([16af9a4](https://github.com/chio-labs/sqlbuild/commit/16af9a4aecde35c27acd1e582b126ffcf08b2663))
+
 ## [0.76.6](https://github.com/chio-labs/sqlbuild/compare/v0.76.5...v0.76.6) (2026-09-03)
 
 
