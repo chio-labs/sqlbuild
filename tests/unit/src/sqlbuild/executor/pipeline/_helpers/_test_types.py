@@ -42,6 +42,14 @@ class AuditLogicalIdentityTestCase:
 
 
 @dataclass(frozen=True)
+class AuditConcurrencyTestCase:
+    description: str
+    expected_count: int = 0
+    expected_names: tuple[str, ...] = ()
+    expected_error: str = ""
+
+
+@dataclass(frozen=True)
 class ScenarioFailureHelpTestCase:
     """One scenario failure help resolution case."""
 

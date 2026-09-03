@@ -244,6 +244,7 @@ def _add_quality_parsers(
     audit_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     audit_parser.add_argument("--defer-to", default=None)
     audit_parser.add_argument("--target", default=None)
+    audit_parser.add_argument("--concurrency", type=int, default=None)
     audit_parser.add_argument("--json", action="store_true", default=False)
     _ = add_execution_json_output_arg(audit_parser)
     _ = add_select_args(audit_parser)

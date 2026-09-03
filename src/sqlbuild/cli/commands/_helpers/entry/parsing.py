@@ -41,6 +41,8 @@ def resolve_env_default_concurrency(explicit_concurrency: int | None) -> int | N
     """Return CLI concurrency, falling back to SQLBUILD_CONCURRENCY when unset."""
 
     if explicit_concurrency is not None:
+        if explicit_concurrency < 1:
+            raise argparse.ArgumentTypeError("--concurrency must be >= 1")
         return explicit_concurrency
     raw_value: str | None = os.environ.get(SQLBUILD_CONCURRENCY_ENV_VAR)
     if raw_value is None or raw_value == EMPTY_ENV_VALUE:
@@ -118,7 +120,7 @@ def parse_cli_invocation(
             and not any(option in args.dbt_args for option in DBT_VERBOSE_OPTIONS)
         ):
             args.dbt_args.append("--verbose")
-        if args.command in {CliCommand.BUILD, CliCommand.LOAD, CliCommand.SEED}:
+        if args.command in {CliCommand.AUDIT, CliCommand.BUILD, CliCommand.LOAD, CliCommand.SEED}:
             try:
                 args.concurrency = resolve_env_default_concurrency(args.concurrency)
             except argparse.ArgumentTypeError as error:

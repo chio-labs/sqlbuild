@@ -38,6 +38,12 @@ def test_given_parent_cost_context_when_scoping_resource_then_inherits_run_ledge
             attempt=test_case.expected_attempt,
         ):
             actual: CostResourceContext | None = CostContext.current()
+        with CostContext.scope(
+            run_id="child-run",
+            resource_type="run",
+            resource_name="audit",
+        ):
+            nested: CostResourceContext | None = CostContext.current()
 
         restored: CostResourceContext | None = CostContext.current()
 
@@ -50,6 +56,8 @@ def test_given_parent_cost_context_when_scoping_resource_then_inherits_run_ledge
     assert actual.attempt == test_case.expected_attempt
     assert restored is not None
     assert restored.resource_type == "run"
+    assert nested is not None
+    assert nested.ledger_path == test_case.ledger_path
     assert CostContext.current() is None
 
 

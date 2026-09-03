@@ -252,6 +252,7 @@ LIFECYCLE_FACTORY_OWNER_PATHS: frozenset[str] = frozenset(
         "src/sqlbuild/observability.py",
         "src/sqlbuild/runtime/observability/classes/operation_lifecycle.py",
         "src/sqlbuild/runtime/observability/classes/resource_attempt_lifecycle.py",
+        "src/sqlbuild/runtime/observability/classes/run_lifecycle.py",
         "src/sqlbuild/runtime/observability/classes/statement_lifecycle.py",
         "src/sqlbuild/runtime/observability/main/create_lifecycle_event.py",
     }

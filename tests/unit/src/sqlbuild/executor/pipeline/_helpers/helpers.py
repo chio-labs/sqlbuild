@@ -10,6 +10,12 @@ from typing import Any, ClassVar
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.compiler.auditing.types import (
+    AuditAttachmentKind,
+    AuditOutcome,
+    AuditRunScope,
+    AuditSeverity,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
@@ -20,6 +26,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredSqlScenarioFile
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import (
+    AuditPlanEntry,
     PlanOutput,
     ScenarioExecutionPlan,
     ScenarioGraphPlan,
@@ -28,6 +35,7 @@ from sqlbuild.compiler.planner.models import (
     SeedPlanEntry,
 )
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.scenario.constants import SCENARIO_LOCAL_JSONL_INVALID
 from sqlbuild.executor.scenario.models import (
     ScenarioLocalSnapshotLoadResult,
@@ -49,6 +57,35 @@ def lifecycle_events_with_prefix(
 
 def lifecycle_order_with_prefix(*, order: list[str], prefixes: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(filter(lambda item: item.startswith(prefixes), order))
+
+
+def audit_entry(
+    name: str,
+    *,
+    sql: str = "SELECT 1 WHERE FALSE",
+    severity: AuditSeverity = AuditSeverity.ERROR,
+) -> AuditPlanEntry:
+    return AuditPlanEntry(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=name),
+        name=name,
+        resolved_sql=sql,
+        unresolved_sql=sql,
+        attachment_kind=AuditAttachmentKind.END,
+        severity=severity,
+        requested_run_scope=AuditRunScope.FINAL,
+        effective_run_scope=AuditRunScope.FINAL,
+    )
+
+
+def audit_result(name: str) -> AuditExecutionResult:
+    return AuditExecutionResult(
+        audit_name=name,
+        attachment_kind=AuditAttachmentKind.END,
+        severity=AuditSeverity.ERROR,
+        outcome=AuditOutcome.PASS,
+        row_count=0,
+        executed_sql="SELECT 1 WHERE FALSE",
+    )
 
 
 class ScenarioPipelineTestAdapter(BaseAdapter):

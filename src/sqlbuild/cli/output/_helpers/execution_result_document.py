@@ -442,7 +442,12 @@ def format_test_execution_json(*, results: tuple[SqlTestExecutionResult, ...]) -
     )
 
 
-def format_audit_execution_json(*, results: tuple[AuditExecutionResult, ...]) -> str:
+def format_audit_execution_json(
+    *,
+    results: tuple[AuditExecutionResult, ...],
+    configured_concurrency: int = 1,
+    worker_count: int | None = None,
+) -> str:
     """Format audit command execution results as JSON."""
 
     results = _terminal_results(results=results)
@@ -457,6 +462,12 @@ def format_audit_execution_json(*, results: tuple[AuditExecutionResult, ...]) ->
             "warn_count": sum(1 for result in results if result.outcome == AuditOutcome.WARN),
             "fail_count": fail_count,
             "total_count": len(results),
+        },
+        execution={
+            "configured_concurrency": configured_concurrency,
+            "worker_count": min(configured_concurrency, len(results))
+            if worker_count is None
+            else worker_count,
         },
     )
 
@@ -520,6 +531,7 @@ def _format_execution_json(
     scenarios: tuple[dict[str, object], ...] = (),
     run_id: str | None = None,
     cost: dict[str, object] | None = None,
+    execution: dict[str, object] | None = None,
 ) -> str:
     projector: TerminalEventIndex | None = current_terminal_event_index()
     terminal: LifecycleEvent | None = None if projector is None else projector.lifecycle_terminal()
@@ -539,6 +551,8 @@ def _format_execution_json(
         payload["run_id"] = run_id
     if cost is not None:
         payload["cost"] = cost
+    if execution is not None:
+        payload["execution"] = execution
     return json.dumps(payload, indent=2) + "\n"
 
 

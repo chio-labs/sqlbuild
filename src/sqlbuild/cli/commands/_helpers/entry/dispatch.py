@@ -248,6 +248,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 defer_to=args.defer_to,
                 no_color=args.no_color,
                 selected_target=args.target,
+                concurrency=args.concurrency,
                 select=select,
                 exclude=tuple(args.exclude),
                 cli_vars=args.vars,

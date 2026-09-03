@@ -30,9 +30,9 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "\u2713 Warehouse connected  duckdb",
             ),
             expected_ordered_stdout_fragments=(
-                "Execution  sqb audit  (concurrency: 1)",
                 "Compiling project...",
                 "Compiled project. (<time>)",
+                "Execution  sqb audit  (concurrency: 1)",
                 "Audit (28 selected, 12 models)",
                 "Connecting to duckdb...",
                 "\u2713 Warehouse connected  duckdb  (<time>)",
@@ -63,6 +63,66 @@ def test_given_waffle_shop_project_when_running_audit_then_all_audits_pass(
     assert_fragments_in_order(result.stdout, test_case.expected_ordered_stdout_fragments)
     assert "Inspecting warehouse state..." not in result.stdout
     assert "Generated plan." not in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        AuditE2ETestCase(
+            description="serial and concurrent json equivalence",
+            expected_exit_code=0,
+            expected_stdout_fragment="",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_file_backed_project_when_auditing_serial_and_concurrent_then_json_is_equivalent(
+    test_case: AuditE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+    run_sqb(command=("--no-color", "build"), project_dir=project_dir)
+    serial_path: Path = tmp_path / "audit-serial.json"
+    concurrent_path: Path = tmp_path / "audit-concurrent.json"
+
+    serial_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "audit",
+            "--concurrency",
+            "1",
+            "--json-output",
+            str(serial_path),
+        ),
+        project_dir=project_dir,
+    )
+    concurrent_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "audit",
+            "--concurrency",
+            "2",
+            "--json-output",
+            str(concurrent_path),
+        ),
+        project_dir=project_dir,
+    )
+
+    assert serial_result.returncode == test_case.expected_exit_code, (
+        serial_result.stdout + serial_result.stderr
+    )
+    assert concurrent_result.returncode == test_case.expected_exit_code, (
+        concurrent_result.stdout + concurrent_result.stderr
+    )
+    serial_payload: dict[str, object] = json.loads(serial_path.read_text(encoding="utf-8"))
+    concurrent_payload: dict[str, object] = json.loads(concurrent_path.read_text(encoding="utf-8"))
+    assert concurrent_payload["checks"] == serial_payload["checks"]
+    assert concurrent_payload["summary"] == serial_payload["summary"]
+    assert serial_payload["execution"] == {"configured_concurrency": 1, "worker_count": 1}
+    assert concurrent_payload["execution"] == {
+        "configured_concurrency": 2,
+        "worker_count": 2,
+    }
 
 
 @pytest.mark.parametrize(

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from sqlbuild.runtime.observability.classes.run_lifecycle import RunLifecycle
 from sqlbuild.runtime.observability.constants import LIFECYCLE_EVENT_CATALOGS
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
@@ -20,6 +21,7 @@ from tests.unit.src.sqlbuild.runtime.observability._test_types import (
     IdempotencyCase,
     LifecycleErrorCase,
     OperationAdapterCase,
+    RunLifecycleErrorCase,
     StatementPrivacyCase,
     TerminalEvidenceCase,
     TerminalSemanticsCase,
@@ -328,6 +330,41 @@ def test_given_catalog_when_looking_up_events_then_authority_is_version_dimensio
             expected_error="excluding bool",
         ),
         LifecycleErrorCase(
+            description="zero configured concurrency is rejected",
+            event_type="run_started",
+            run_id="run-1",
+            payload={
+                "selected_count": 1,
+                "configured_concurrency": 0,
+                "worker_count": 0,
+            },
+            expected_error="configured_concurrency must be a positive integer",
+        ),
+        LifecycleErrorCase(
+            description="worker count above selected count is rejected",
+            event_type="run_started",
+            run_id="run-1",
+            payload={
+                "selected_count": 1,
+                "configured_concurrency": 2,
+                "worker_count": 2,
+            },
+            expected_error="worker_count must equal min",
+        ),
+        LifecycleErrorCase(
+            description="audit run count sum mismatch is rejected",
+            event_type="run_completed",
+            run_id="run-1",
+            payload={
+                "succeeded_count": 1,
+                "failed_count": 0,
+                "pass_count": 1,
+                "warn_count": 1,
+                "fail_count": 0,
+            },
+            expected_error="succeeded_count must equal",
+        ),
+        LifecycleErrorCase(
             description="non-string command is rejected",
             event_type="invocation_started",
             payload={"command": 7},
@@ -365,6 +402,45 @@ def test_given_invalid_catalogued_payload_value_when_constructing_then_it_is_rej
             run_id=test_case.run_id,
             statement_id=test_case.statement_id,
             payload=test_case.payload,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        RunLifecycleErrorCase(
+            description="boolean selected count",
+            selected_count=True,
+            configured_concurrency=1,
+            worker_count=1,
+            expected_error="selected_count must be an integer excluding bool",
+        ),
+        RunLifecycleErrorCase(
+            description="zero configured concurrency",
+            selected_count=1,
+            configured_concurrency=0,
+            worker_count=0,
+            expected_error="configured_concurrency must be positive",
+        ),
+        RunLifecycleErrorCase(
+            description="physical worker mismatch",
+            selected_count=1,
+            configured_concurrency=2,
+            worker_count=2,
+            expected_error="worker_count must equal min",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_invalid_run_bounds_when_constructing_run_lifecycle_then_it_is_rejected(
+    test_case: RunLifecycleErrorCase,
+) -> None:
+    with pytest.raises(ObservabilityValidationError, match=test_case.expected_error):
+        RunLifecycle(
+            run_kind="audit",
+            selected_count=test_case.selected_count,  # ty: ignore[invalid-argument-type]
+            configured_concurrency=test_case.configured_concurrency,  # ty: ignore[invalid-argument-type]
+            worker_count=test_case.worker_count,  # ty: ignore[invalid-argument-type]
         )
 
 

@@ -11,6 +11,7 @@ from sqlbuild.cli.commands._helpers.entry.parsing import read_selector_files
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.main.entrypoint.entry import _main_with_dependencies, main
 from sqlbuild.cli.commands.models import (
+    AuditCommandRequest,
     BuildCommandRequest,
     CloneCommandRequest,
     CompileCommandRequest,
@@ -44,6 +45,35 @@ from tests.unit.src.sqlbuild.cli.commands.main.entry.helpers import (
     build_handlers,
     build_json_recording_handler,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MainTestCase(
+            description="audit concurrency dispatch",
+            argv=["audit", "--concurrency", "4"],
+            expected_exit_code=0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_audit_concurrency_when_dispatching_then_request_retains_value(
+    test_case: MainTestCase,
+) -> None:
+    received: list[AuditCommandRequest] = []
+
+    def run_audit(request: AuditCommandRequest) -> int:
+        received.append(request)
+        return 0
+
+    exit_code: int = _main_with_dependencies(
+        argv=test_case.argv,
+        handlers=build_handlers(run_audit=run_audit),
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert received[0].concurrency == 4
 
 
 @pytest.mark.parametrize(
