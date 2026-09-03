@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.80.0](https://github.com/chio-labs/sqlbuild/compare/v0.79.0...v0.80.0) (2026-09-03)
+
+
+### Features
+
+* add watermark microbatch cap policies ([#508](https://github.com/chio-labs/sqlbuild/issues/508)) ([1b44742](https://github.com/chio-labs/sqlbuild/commit/1b447423729a289f04bbb543261dd02118856e18))
+
 ## [0.79.0](https://github.com/chio-labs/sqlbuild/compare/v0.78.0...v0.79.0) (2026-09-03)
 
 
