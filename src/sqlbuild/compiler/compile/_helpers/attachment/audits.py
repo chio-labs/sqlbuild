@@ -405,6 +405,7 @@ def build_attached_audit_input(
         audit_file=definition[0],
         audit_block=definition[1],
         sql_body=expanded_sql_body,
+        name=audit_instance.name,
         references=references,
         attached_target_kind=attached_target_kind,
         attached_target_name=attached_target_name,

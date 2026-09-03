@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.77.2](https://github.com/chio-labs/sqlbuild/compare/v0.77.1...v0.77.2) (2026-09-03)
+
+
+### Bug Fixes
+
+* preserve attached audit instance names ([#502](https://github.com/chio-labs/sqlbuild/issues/502)) ([6c19882](https://github.com/chio-labs/sqlbuild/commit/6c198829b61def6f1aee8a5ff5f3290f097b7fbe))
+
 ## [0.77.1](https://github.com/chio-labs/sqlbuild/compare/v0.77.0...v0.77.1) (2026-09-03)
 
 
