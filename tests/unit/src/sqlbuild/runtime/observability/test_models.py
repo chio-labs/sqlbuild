@@ -65,6 +65,14 @@ def test_given_lifecycle_fact_when_mutating_envelope_or_payload_then_it_remains_
             schema_version=-1,
             expected_error="positive integer excluding bool",
         ),
+        SchemaVersionCase(
+            description="unknown lifecycle version is rejected by the known event type",
+            schema_version=2,
+            expected_error=(
+                "LifecycleEvent only represents known schema version 1; "
+                "decode other versions as OpaqueLifecycleEvent"
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -112,6 +120,11 @@ def test_given_malformed_schema_version_when_constructing_lifecycle_event_then_i
             description="negative diagnostic version is rejected",
             schema_version=-2,
             expected_error="positive integer excluding bool",
+        ),
+        SchemaVersionCase(
+            description="unknown diagnostic version is rejected",
+            schema_version=2,
+            expected_error="diagnostic schema_version must be 1",
         ),
     ],
     ids=lambda case: case.description,

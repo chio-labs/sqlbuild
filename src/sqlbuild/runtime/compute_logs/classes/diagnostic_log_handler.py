@@ -20,6 +20,7 @@ from sqlbuild.diagnostics.constants import (
 from sqlbuild.observability import DiagnosticLog
 from sqlbuild.runtime.compute_logs.constants import SQL_LOG_RECORD_FIELD
 from sqlbuild.runtime.compute_logs.types import ComputeLogStorage
+from sqlbuild.runtime.observability.constants import CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION
 from sqlbuild.runtime.observability.types import JSONValue
 
 _IDENTITY_FIELDS: tuple[str, ...] = (
@@ -112,7 +113,7 @@ class ComputeDiagnosticLogHandler(logging.Handler):
             elif not internal:
                 fields = cast(dict[str, JSONValue], DiagnosticRecordRedactor.extras(record))
             diagnostic: DiagnosticLog = DiagnosticLog(
-                schema_version=1,
+                schema_version=CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION,
                 producer="sqlbuild",
                 producer_version=_sqlbuild_version(),
                 occurred_at=datetime.fromtimestamp(record.created, tz=UTC),

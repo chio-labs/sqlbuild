@@ -102,7 +102,6 @@ class PartitionTrackingTestCase:
     expected_partition_values: tuple[str, ...]
     expected_statement_fragments: tuple[str, ...] = ()
     expected_log_fragments: tuple[str, ...] = ()
-    expected_diagnostic_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from typing import Any, cast
+from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -54,14 +54,10 @@ def execute_python_check_nodes(
     upstream_load_results_by_loader_name: Mapping[str, LoadExecutionResult] | None = None,
     callbacks: PythonCheckCallbacks | None = None,
     require_upstream_results: bool = True,
-    **legacy_callbacks: Any,
 ) -> tuple[PythonCheckExecutionResult, ...]:
     """Execute check nodes after their selected Python dependencies have completed."""
 
-    resolved_callbacks: PythonCheckCallbacks = callbacks or PythonCheckCallbacks(
-        logger=cast("Any", legacy_callbacks.get("logger")),
-        identity_recorder=cast("Any", legacy_callbacks.get("identity_recorder")),
-    )
+    resolved_callbacks: PythonCheckCallbacks = callbacks or PythonCheckCallbacks()
     adapter: BaseAdapter = runtime.adapter
     connection: Any = runtime.connection
     default_database: str | None = runtime.default_database

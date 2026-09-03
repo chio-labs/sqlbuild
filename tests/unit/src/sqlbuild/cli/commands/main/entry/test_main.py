@@ -2896,7 +2896,8 @@ def test_given_history_write_failure_when_dispatching_then_handler_output_and_re
 
     assert exit_code == test_case.expected_exit_code
     assert captured.out == "unchanged command output\n"
-    diagnostic_text: str = (tmp_path / "target" / "sqlbuild.log").read_text(encoding="utf-8")
+    capture_dir: Path = tuple((tmp_path / "logs").glob("*/*"))[0]
+    diagnostic_text: str = (capture_dir / "diagnostics.jsonl").read_text(encoding="utf-8")
     assert "local execution history persistence failed" in diagnostic_text
 
 
@@ -2937,7 +2938,8 @@ def test_given_history_open_failure_when_dispatching_then_handler_output_and_res
 
     assert exit_code == test_case.expected_exit_code
     assert captured.out == "output survives open failure\n"
-    diagnostic_text: str = (tmp_path / "target" / "sqlbuild.log").read_text(encoding="utf-8")
+    capture_dir: Path = tuple((tmp_path / "logs").glob("*/*"))[0]
+    diagnostic_text: str = (capture_dir / "diagnostics.jsonl").read_text(encoding="utf-8")
     assert "local execution history unavailable" in diagnostic_text
 
 

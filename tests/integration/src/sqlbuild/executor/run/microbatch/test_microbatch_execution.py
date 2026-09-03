@@ -11,7 +11,7 @@ from typing import Any, cast
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.cli.output._helpers.execution_protocol_v1 import _format_model_assets
+from sqlbuild.cli.output._helpers.execution_result_document import _format_model_assets
 from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.planner.constants import (

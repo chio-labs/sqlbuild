@@ -7,6 +7,7 @@ from types import MappingProxyType
 from uuid import uuid4
 
 from sqlbuild.runtime.observability._helpers.identity import current_execution_identity
+from sqlbuild.runtime.observability.constants import CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import ExecutionIdentity, LifecycleEvent
 from sqlbuild.runtime.observability.types import JSONValue
@@ -35,7 +36,7 @@ def create_lifecycle_event(
     return LifecycleEvent(
         event_id=uuid4().hex if event_id is None else event_id,
         event_type=event_type,
-        schema_version=1,
+        schema_version=CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION,
         producer=producer,
         producer_version=(
             version(_DEFAULT_PRODUCER) if producer_version is None else producer_version
