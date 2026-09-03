@@ -84,7 +84,6 @@ def _apply_table_type_entry(
                 adapter.execute(connection=connection, sql=f"DROP TABLE IF EXISTS {copy}")
                 lifecycle.completed(metadata={"changed_count": 1})
         return
-    table_kind: str = "TRANSIENT TABLE" if desired_transient else "TABLE"
     with OperationLifecycle(
         operation_kind="warehouse",
         operation_name="table_type_conversion",
@@ -94,10 +93,22 @@ def _apply_table_type_entry(
             target_kind="relation",
         ),
     ) as lifecycle:
-        adapter.execute(
-            connection=connection,
-            sql=f"CREATE OR REPLACE {table_kind} {copy} AS SELECT * FROM {destination}",
-        )
+        if entry.copy_name.lower() in relations:
+            adapter.execute(connection=connection, sql=f"DROP TABLE IF EXISTS {copy}")
+        if desired_transient:
+            adapter.execute(
+                connection=connection,
+                sql=f"CREATE TRANSIENT TABLE {copy} CLONE {destination} COPY GRANTS",
+            )
+        else:
+            adapter.execute(
+                connection=connection,
+                sql=f"CREATE TABLE {copy} LIKE {destination} COPY GRANTS",
+            )
+            adapter.execute(
+                connection=connection,
+                sql=f"INSERT INTO {copy} SELECT * FROM {destination}",
+            )
         copy_info: RelationInfo | None = _inspect_table_type_entry(
             entry=entry, adapter=adapter, connection=connection
         ).get(entry.copy_name.lower())
