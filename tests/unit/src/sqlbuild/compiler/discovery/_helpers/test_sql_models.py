@@ -356,7 +356,7 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
             python("notify", channel: "#data", attempts: 2, urgent: true),
           ],
           post_hooks [
-            python("notify success", message: "@@CTX:destination.qualified"),
+            python("notify_success", message: "@@CTX:destination.qualified"),
             inline_sql("grant select on @@CTX:destination.qualified to role analytics"),
           ],
         );
@@ -374,7 +374,7 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
                 ],
                 "post_hooks": [
                     PythonHookEntry(
-                        name="notify success",
+                        name="notify_success",
                         kwargs={"message": "@@CTX:destination.qualified"},
                     ),
                     SqlHookEntry(

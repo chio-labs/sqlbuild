@@ -8,6 +8,7 @@ import pytest
 from sqlbuild.compiler.discovery._helpers.filesystem.core import discover_provider_classes
 from sqlbuild.compiler.discovery.exceptions import ProviderDiscoveryError
 from sqlbuild.compiler.discovery.models import DiscoveredProvider
+from sqlbuild.compiler.resource_names.exceptions import ResourceIdentityError
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DiscoverProviderCacheIsolationTestCase,
     DiscoverProviderClassesErrorTestCase,
@@ -266,6 +267,7 @@ class SecondProvider(Provider):
                 + "\n",
             },
             expected_error_fragment="Duplicate provider name 'alerts'",
+            expected_error_type=ProviderDiscoveryError,
         ),
         DiscoverProviderClassesErrorTestCase(
             description="duplicate provider names in same file fail",
@@ -286,6 +288,7 @@ class SecondProvider(Provider):
                 + "\n",
             },
             expected_error_fragment="Duplicate provider name 'alerts' found in providers/duplicates.py",
+            expected_error_type=ProviderDiscoveryError,
         ),
         DiscoverProviderClassesErrorTestCase(
             description="provider import failure identifies file",
@@ -296,6 +299,7 @@ from missing_package import missing_provider
                 + "\n",
             },
             expected_error_fragment="Failed to import provider file providers/broken.py",
+            expected_error_type=ProviderDiscoveryError,
         ),
         DiscoverProviderClassesErrorTestCase(
             description="provider settings failure identifies provider",
@@ -312,6 +316,7 @@ class SlackProvider(Provider):
             expected_error_fragment=(
                 "Provider 'slack_provider' in providers/slack.py has invalid settings"
             ),
+            expected_error_type=ProviderDiscoveryError,
         ),
         DiscoverProviderClassesErrorTestCase(
             description="invalid provider name identifies provider",
@@ -327,9 +332,8 @@ class SlackProvider(Provider):
 """.strip()
                 + "\n",
             },
-            expected_error_fragment=(
-                "Provider class SlackProvider in providers/slack.py has an invalid provider name"
-            ),
+            expected_error_fragment="Invalid provider identity 'bad-name'",
+            expected_error_type=ResourceIdentityError,
         ),
     ),
     ids=lambda case: case.description,
@@ -341,7 +345,7 @@ def test_given_invalid_provider_files_when_discovering_then_raises(
 ) -> None:
     write_repo_files(tmp_path, test_case.repo_files)
 
-    with pytest.raises(ProviderDiscoveryError, match=test_case.expected_error_fragment):
+    with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
         discover_provider_classes(project_dir=tmp_path)
 
 

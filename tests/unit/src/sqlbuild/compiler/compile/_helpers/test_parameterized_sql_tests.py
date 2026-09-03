@@ -70,7 +70,7 @@ SELECT customer_id
                 ),
                 "tests/unit/a_model_cases.sql": """
 TEST (
-  name "status mapping",
+  name "status_mapping",
   parameters (
     status string,
     count integer,
@@ -126,7 +126,7 @@ SELECT 1
                 + "\n",
                 "tests/unit/b_macro_cases.sql": """
 TEST (
-  name "identity macro",
+  name "identity_macro",
   mode macro,
   parameters (value string),
   cases (first (value "one"), second (value "two")),
@@ -140,7 +140,7 @@ SELECT 1
                 + "\n",
                 "tests/unit/c_udf_cases.sql": """
 TEST (
-  name "add one udf",
+  name "add_one_udf",
   mode udf,
   parameters (value integer),
   cases (small (value 2), large (value 9)),
@@ -154,7 +154,7 @@ SELECT 1
                 + "\n",
                 "tests/unit/d_table_fn_cases.sql": """
 TEST (
-  name "by customer table function",
+  name "by_customer_table_function",
   mode table_fn,
   parameters (customer_id integer),
   cases (first (customer_id 11), second (customer_id 22)),
@@ -179,14 +179,14 @@ SELECT 1
                 + "\n",
             },
             expected_names=(
-                "status mapping [open_case]",
-                "status mapping [closed_case]",
-                "identity macro [first]",
-                "identity macro [second]",
-                "add one udf [small]",
-                "add one udf [large]",
-                "by customer table function [first]",
-                "by customer table function [second]",
+                "status_mapping [open_case]",
+                "status_mapping [closed_case]",
+                "identity_macro [first]",
+                "identity_macro [second]",
+                "add_one_udf [small]",
+                "add_one_udf [large]",
+                "by_customer_table_function [first]",
+                "by_customer_table_function [second]",
             ),
             expected_case_names=(
                 "open_case",
@@ -253,14 +253,14 @@ def test_given_parameterized_sql_tests_when_compiling_then_cases_have_typed_uniq
     assert tuple(test.case_name for test in compiled.sql_tests) == test_case.expected_case_names
     assert tuple(test.case_index for test in compiled.sql_tests) == (0, 1, 0, 1, 0, 1, 0, 1)
     assert tuple(test.parent_name for test in compiled.sql_tests) == (
-        "status mapping",
-        "status mapping",
-        "identity macro",
-        "identity macro",
-        "add one udf",
-        "add one udf",
-        "by customer table function",
-        "by customer table function",
+        "status_mapping",
+        "status_mapping",
+        "identity_macro",
+        "identity_macro",
+        "add_one_udf",
+        "add_one_udf",
+        "by_customer_table_function",
+        "by_customer_table_function",
     )
     compiled_test: CompiledSqlTest
     expected_fragments: tuple[str, ...]

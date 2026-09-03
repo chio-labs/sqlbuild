@@ -17,7 +17,7 @@ MODEL (
   ),
   audits [
     expression_is_true (
-      name "waffles ordered is positive",
+      name "waffles_ordered_is_positive",
       expression "waffles_ordered > 0",
     ),
   ],

@@ -23,7 +23,7 @@ pub(crate) fn evaluate_project(
         faults.extend(canonical_roots(rule, &tests, &scenarios));
     }
     if let Some(rule) = evaluation.selected.get("SQBKT002") {
-        faults.extend(filenames(rule, &tests, &scenarios));
+        faults.extend(filenames(rule, &evaluation, &tests, &scenarios));
     }
     if let Some(rule) = evaluation.selected.get("SQBKT003") {
         faults.extend(mirroring(rule, &evaluation, &tests));
@@ -73,16 +73,18 @@ fn canonical_roots(
 
 fn filenames(
     rule: &RuleMetadata,
+    evaluation: &ProjectEvaluationRequest<'_>,
     tests: &[&SqlTestFact],
     scenarios: &[&SqlScenarioFact],
 ) -> Vec<Fault> {
     let mut faults: Vec<Fault> = Vec::new();
     for test in tests {
         let stem = file_stem(&test.source_path);
+        let allowed = allowed_subjects(evaluation, test);
         let valid = stem.strip_prefix("test_").is_some_and(valid_unit_filename);
         let behavior_matches = test.explicit_name.as_deref().is_none_or(|name| {
-            filename_behavior(stem)
-                .zip(structured_name(name).map(|(_, behavior)| behavior))
+            filename_behavior(stem, &allowed)
+                .zip(structured_name(name, &allowed).map(|(_, behavior)| behavior))
                 .is_none_or(|(slug, behavior)| behavior_slug_matches(slug, behavior))
         });
         if !valid || !behavior_matches {
@@ -95,7 +97,7 @@ fn filenames(
                 ),
                 test.explicit_name
                     .as_deref()
-                    .and_then(structured_name)
+                    .and_then(|name| structured_name(name, &allowed))
                     .map_or_else(
                         || "Rename this file to test_<subject>__<behavior>.sql.".to_owned(),
                         |(subject, behavior)| {
@@ -167,11 +169,12 @@ fn structured_names(
             ));
             continue;
         };
-        let Some((subject, behavior)) = structured_name(name) else {
+        let allowed = allowed_subjects(evaluation, test);
+        let Some((subject, behavior)) = structured_name(name, &allowed) else {
             faults.push(name_fault(
                 rule,
                 test,
-                "the TEST name must contain a nonempty subject and behavior separated by ':'",
+                "the TEST name must contain a nonempty subject and behavior separated by '__'",
                 None,
             ));
             continue;
@@ -185,7 +188,6 @@ fn structured_names(
             ));
             continue;
         }
-        let allowed = allowed_subjects(evaluation, test);
         if !allowed.is_empty() && !subject_matches(subject, &allowed) {
             faults.push(name_fault(
                 rule,
@@ -404,8 +406,8 @@ fn name_fault(
         &test.source_path,
         format!("unit test block {} {detail}", test.block_index),
         format!(
-            "Add name \"{}: <expected behavior>\" to this TEST header.",
-            proposed_subject.unwrap_or("<resolved subject>")
+            "Add name \"{}__<expected_behavior>\" to this TEST header.",
+            proposed_subject.unwrap_or("<resolved_subject>")
         ),
     )
 }
@@ -432,31 +434,60 @@ fn file_stem(path: &str) -> &str {
 }
 
 fn valid_filename_parts(value: &str) -> bool {
-    let Some((subject, behavior)) = value.split_once("__") else {
-        return false;
-    };
-    !subject.is_empty()
-        && !behavior.is_empty()
-        && slug(subject) == subject
-        && slug(behavior) == behavior
+    value.contains("__") && canonical_identity(value)
 }
 
 fn valid_unit_filename(value: &str) -> bool {
-    if value.contains("__") {
-        return valid_filename_parts(value);
-    }
-    !value.is_empty() && slug(value) == value
+    canonical_identity(value)
 }
 
-fn filename_behavior(stem: &str) -> Option<&str> {
-    stem.split_once("__").map(|(_, behavior)| behavior)
+fn canonical_identity(value: &str) -> bool {
+    value
+        .chars()
+        .next()
+        .is_some_and(|character| character.is_ascii_lowercase())
+        && value
+            .chars()
+            .last()
+            .is_some_and(|character| character.is_ascii_lowercase() || character.is_ascii_digit())
+        && value.chars().all(|character| {
+            character.is_ascii_lowercase() || character.is_ascii_digit() || character == '_'
+        })
 }
 
-fn structured_name(name: &str) -> Option<(&str, &str)> {
-    let (subject, behavior) = name.split_once(':')?;
+fn filename_behavior<'a>(stem: &'a str, allowed_subjects: &[String]) -> Option<&'a str> {
+    structured_name(stem.strip_prefix("test_").unwrap_or(stem), allowed_subjects)
+        .map(|(_, behavior)| behavior)
+}
+
+fn structured_name<'a>(name: &'a str, allowed_subjects: &[String]) -> Option<(&'a str, &'a str)> {
+    let matched_subject_length = longest_subject_prefix(name, allowed_subjects);
+    let (subject, behavior) = matched_subject_length.map_or_else(
+        || name.split_once("__"),
+        |length| Some((&name[..length], &name[length + 2..])),
+    )?;
     let subject = subject.trim();
     let behavior = behavior.trim();
     (!subject.is_empty() && !behavior.is_empty()).then_some((subject, behavior))
+}
+
+fn longest_subject_prefix(name: &str, allowed_subjects: &[String]) -> Option<usize> {
+    let mut longest: Option<usize> = None;
+    for subject in allowed_subjects {
+        let Some(suffix) = name.strip_prefix(subject) else {
+            continue;
+        };
+        let Some(behavior) = suffix.strip_prefix("__") else {
+            continue;
+        };
+        if behavior.is_empty() {
+            continue;
+        }
+        if longest.is_none_or(|length| subject.len() > length) {
+            longest = Some(subject.len());
+        }
+    }
+    longest
 }
 
 fn behavior_slug_matches(filename: &str, behavior: &str) -> bool {

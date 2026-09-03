@@ -322,8 +322,8 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
             "SQBKT004",
             "sql-tests",
             "structured-test-name",
-            "every SQL unit-test block must have a target-aware subject: expected behavior name",
-            "Add name \"<resolved subject>: <expected behavior>\" to this TEST header.",
+            "every SQL unit-test block must have a target-aware subject__expected_behavior name",
+            "Add name \"<resolved_subject>__<expected_behavior>\" to this TEST header.",
         ),
         rule!(
             "SQBKT101",

@@ -15,7 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
     "test_case",
     [
         InitE2ETestCase(
-            description="init scaffolds language-specific hook directories",
+            description="init scaffolds typed hook and audit directories",
             expected_exit_code=0,
             expected_paths=(
                 "sqlbuild_project.toml",
@@ -23,16 +23,22 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
                 "hooks/sql/.gitkeep",
                 "hooks/python",
                 "hooks/python/.gitkeep",
+                "audits/generic",
+                "audits/generic/.gitkeep",
+                "audits/singular",
+                "audits/singular/.gitkeep",
             ),
             expected_output_fragments=(
                 "SQLBuild project created",
                 "Add SQL hooks to hooks/sql/, Python hooks to hooks/python/",
+                "reusable audits to audits/generic/",
+                "standalone audits to audits/singular/",
             ),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_empty_project_directory_when_running_init_then_hooks_directory_is_scaffolded(
+def test_given_empty_project_directory_when_running_init_then_typed_resource_directories_are_scaffolded(
     test_case: InitE2ETestCase,
     tmp_path: Path,
 ) -> None:

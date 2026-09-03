@@ -27,7 +27,8 @@ def scaffold_blank_project(*, base_dir: Path, project_name: str) -> None:
         "functions/sql",
         "functions/python",
         "macros",
-        "audits",
+        "audits/generic",
+        "audits/singular",
     )
     for directory in directories:
         (base_dir / directory).mkdir(parents=True, exist_ok=True)

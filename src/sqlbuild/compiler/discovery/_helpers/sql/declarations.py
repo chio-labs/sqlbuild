@@ -20,6 +20,9 @@ from sqlbuild.compiler.discovery.models import (
     EnumMember,
     ModelSchemaDeclaration,
 )
+from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
+    validate_resource_identity,
+)
 from sqlbuild.sql_values.constants import MISSING_SQL_VALUE
 from sqlbuild.sql_values.exceptions import SqlValueValidationError
 from sqlbuild.sql_values.main.normalize import normalize_sql_value
@@ -463,10 +466,12 @@ def _parse_declaration_name(
     *, raw_name: object | None, file_path: Path, kind: str, model_name: str | None
 ) -> str:
     name: str = _parse_identifier(raw_value=raw_name, file_path=file_path, label=kind)
-    if model_name is None and name.startswith("_"):
-        raise DeclarationParseError(f"{file_path} public {kind} '{name}' must not start with '_'")
-    if model_name is not None and not name.startswith("_"):
-        raise DeclarationParseError(f"{file_path} model-local {kind} '{name}' must start with '_'")
+    validate_resource_identity(
+        name=name,
+        kind=f"{'model-local' if model_name is not None else 'public'} {kind}",
+        path=file_path,
+        private_identity=model_name is not None,
+    )
     return name
 
 

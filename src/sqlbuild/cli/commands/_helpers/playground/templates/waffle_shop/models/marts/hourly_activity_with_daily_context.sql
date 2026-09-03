@@ -19,7 +19,7 @@ MODEL (
   ),
   audits [
     expression_is_true (
-      name "day orders cover hourly orders",
+      name "day_orders_cover_hourly_orders",
       expression "day_orders_placed >= orders_placed",
       run_scope delta_and_final,
     ),

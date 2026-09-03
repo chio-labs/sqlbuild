@@ -23,6 +23,7 @@ from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query
 from sqlbuild.compiler.planner.main.identity.version_identity_model_metadata import (
     build_model_version_identity_metadata_json,
 )
+from sqlbuild.compiler.resource_names.exceptions import ResourceIdentityError
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     CompileDeclarationsErrorTestCase,
     CompileDeclarationsTestCase,
@@ -572,7 +573,9 @@ def test_given_declaration_change_when_compiling_then_updates_dependent_identity
             repo_files={
                 "models/orders.sql": "MODEL (constants (limit 7));\nSELECT 1 AS value\n",
             },
-            expected_error_fragment="model-local constant 'limit' must start with '_'",
+            expected_error_fragment=(
+                "Invalid model-local constant identity 'limit'.*use snake_case '_limit'"
+            ),
         ),
         CompileDeclarationsErrorTestCase(
             description="duplicate public enum name",
@@ -606,7 +609,7 @@ def test_given_invalid_declaration_usage_when_compiling_then_raises_compile_erro
         {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.repo_files,
     )
     with pytest.raises(
-        (CompileInputError, DeclarationParseError),
+        (CompileInputError, DeclarationParseError, ResourceIdentityError),
         match=test_case.expected_error_fragment,
     ):
         discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)

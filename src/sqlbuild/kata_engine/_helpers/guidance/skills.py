@@ -115,7 +115,7 @@ def _rule_example(*, rule: KataRule) -> str:
         "SQBKT001": "Keep unit tests in tests/unit/ and scenarios in tests/scenarios/.",
         "SQBKT002": "test_stg_orders__excludes_cancelled.sql and daily_revenue__minimal.sql.",
         "SQBKT003": "models/staging/stg_orders.sql maps to tests/unit/staging/.",
-        "SQBKT004": 'TEST (name "stg_orders: excludes cancelled orders");',
+        "SQBKT004": 'TEST (name "stg_orders__excludes_cancelled_orders");',
         "SQBKT101": 'SCENARIO (description "Daily revenue includes successful payments");',
         "SQBKX001": "Attach not_null/unique audits to the model key.",
     }

@@ -32,7 +32,8 @@ from tests.unit.src.sqlbuild.cli.commands.main.init._test_types import InitScaff
                 "functions/sql",
                 "functions/python",
                 "macros",
-                "audits",
+                "audits/generic",
+                "audits/singular",
             ),
             expected_gitkeep_files=(
                 "models/staging/.gitkeep",
@@ -51,7 +52,8 @@ from tests.unit.src.sqlbuild.cli.commands.main.init._test_types import InitScaff
                 "functions/sql/.gitkeep",
                 "functions/python/.gitkeep",
                 "macros/.gitkeep",
-                "audits/.gitkeep",
+                "audits/generic/.gitkeep",
+                "audits/singular/.gitkeep",
             ),
             expected_config_fragment=(
                 '[connections.developer]\ndatabase = "demo_project.duckdb"\n\n[settings]'
@@ -65,6 +67,8 @@ from tests.unit.src.sqlbuild.cli.commands.main.init._test_types import InitScaff
                 "2. Add seeds to seeds/ or loaders to loaders/",
                 "3. Add tasks to tasks/, assets to assets/, or checks to checks/",
                 "4. Add SQL hooks to hooks/sql/, Python hooks to hooks/python/",
+                "reusable audits to audits/generic/",
+                "standalone audits to audits/singular/",
                 "7. sqb compile",
                 "8. sqb build",
             ),

@@ -6,6 +6,36 @@ from sqlbuild.sql_values.types import CollectionRendering
 
 
 @dataclass(frozen=True)
+class CanonicalResourceIdentityTestCase:
+    description: str
+    name: str
+    private_identity: bool
+    expected_name: str
+
+
+@dataclass(frozen=True)
+class InvalidResourceIdentityTestCase:
+    description: str
+    name: str
+    expected_corrected_name: str
+    private_identity: bool = False
+
+
+@dataclass(frozen=True)
+class DiscoveredResourceIdentityErrorTestCase:
+    description: str
+    project_files: dict[str, str]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DeclarationResourceIdentityErrorTestCase:
+    description: str
+    contents: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class EventExporterDiscoveryTestCase:
     description: str
     expected_name: str
@@ -381,6 +411,7 @@ class DiscoverProviderClassesErrorTestCase:
     description: str
     repo_files: dict[str, str]
     expected_error_fragment: str
+    expected_error_type: type[Exception]
 
 
 @dataclass(frozen=True)

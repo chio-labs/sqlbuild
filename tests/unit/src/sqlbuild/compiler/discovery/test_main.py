@@ -94,7 +94,7 @@ def export_customers_exists(ctx):
                 "hooks/python/notifications.py": """
 from sqlbuild.hooks import hook
 
-@hook(name="notify success")
+@hook(name="notify_success")
 def notify_success(ctx):
     return None
 """,
@@ -139,7 +139,7 @@ class SlackProvider(Provider):
             expected_task_names=("fetch_window",),
             expected_asset_names=("export_customers",),
             expected_check_names=("export_customers_exists",),
-            expected_hook_names=("notify success",),
+            expected_hook_names=("notify_success",),
             expected_provider_names=("slack_provider",),
             expected_provider_paths=("providers/slack.py",),
             expected_provider_class_names=("SlackProvider",),

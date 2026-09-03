@@ -1,0 +1,1 @@
+"""Resource name validation entrypoints."""

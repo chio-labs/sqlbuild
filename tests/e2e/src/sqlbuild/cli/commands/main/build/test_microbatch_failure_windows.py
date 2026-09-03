@@ -169,7 +169,7 @@ def test_given_concurrent_delta_audit_failure_when_fixed_then_rejected_partition
                 replay_policy="forward_only",
                 extra_config=(
                     "audits [expression_is_true ("
-                    'name "positive value", expression "value > 0", severity error, '
+                    'name "positive_value", expression "value > 0", severity error, '
                     "run_scope delta_and_final,)],"
                 ),
             ),
@@ -260,7 +260,7 @@ def test_given_concurrent_batches_when_audit_and_hooks_wrap_model_then_aggregate
             "pre_hooks [inline_sql(\"INSERT INTO main.hook_log VALUES ('pre')\")], "
             "post_hooks [inline_sql(\"INSERT INTO main.hook_log VALUES ('post')\")],"
             "audits [expression_is_true ("
-            'name "value present", expression "value IS NOT NULL", severity error, '
+            'name "value_present", expression "value IS NOT NULL", severity error, '
             "run_scope final,)],"
         ),
     )

@@ -97,6 +97,19 @@ _FILE_PATH: Path = Path("models/test_model.sql")
             expected_sql="SELECT 'orders' AS model_name",
         ),
         SubstituteSqlVarsTestCase(
+            description="replaces context components inside a qualified identifier",
+            sql=(
+                "CREATE FUNCTION @@CTX:destination.database."
+                "@@CTX:destination.schema.reconstruct_book()"
+            ),
+            effective_vars={},
+            context_values={
+                "destination.database": "analytics",
+                "destination.schema": "market",
+            },
+            expected_sql="CREATE FUNCTION analytics.market.reconstruct_book()",
+        ),
+        SubstituteSqlVarsTestCase(
             description="renders scalar json var values as SQL text",
             sql="SELECT @@limit AS limit, @@enabled AS enabled, '@@optional' AS optional",
             effective_vars={"limit": 10, "enabled": True, "optional": None},

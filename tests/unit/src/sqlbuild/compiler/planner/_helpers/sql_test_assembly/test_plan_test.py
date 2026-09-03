@@ -526,9 +526,9 @@ def test_given_macro_sql_test_when_planning_then_compares_actual_to_expected_dir
     )
     test_block: DiscoveredSqlTestBlock = DiscoveredSqlTestBlock(
         test_index=1,
-        header_values={"mode": "macro", "name": "normalizes status"},
+        header_values={"mode": "macro", "name": "normalizes_status"},
         sql_body="",
-        name="normalizes status",
+        name="normalizes_status",
         mode=SqlTestMode.MACRO,
     )
     helper_ctes: tuple[CompileSqlTestCte, ...] = tuple(
@@ -537,10 +537,10 @@ def test_given_macro_sql_test_when_planning_then_compares_actual_to_expected_dir
     sql_test: CompiledSqlTest = CompiledSqlTest(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.SQL_TEST,
-            name="normalizes status",
+            name="normalizes_status",
         ),
         scope_deps=(CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),),
-        name="normalizes status",
+        name="normalizes_status",
         test_file=test_file,
         test_block=test_block,
         sql_body="",
@@ -573,7 +573,7 @@ def test_given_macro_sql_test_when_planning_then_compares_actual_to_expected_dir
 
     assert warnings == ()
     assert len(entry.chain) == 1
-    assert entry.chain[0].model_name == "macro normalizes status"
+    assert entry.chain[0].model_name == "macro normalizes_status"
     assert test_case.expected_actual_fragment in entry.chain[0].resolved_sql
     assert entry.chain[0].expected_cte_sql is not None
     assert test_case.expected_expected_fragment in entry.chain[0].expected_cte_sql
@@ -604,9 +604,9 @@ def test_given_udf_sql_test_when_planning_then_compares_resolved_actual_to_expec
     )
     test_block: DiscoveredSqlTestBlock = DiscoveredSqlTestBlock(
         test_index=1,
-        header_values={"mode": "udf", "name": "formats cents"},
+        header_values={"mode": "udf", "name": "formats_cents"},
         sql_body="",
-        name="formats cents",
+        name="formats_cents",
         mode=SqlTestMode.UDF,
     )
     helper_ctes: tuple[CompileSqlTestCte, ...] = tuple(
@@ -615,12 +615,12 @@ def test_given_udf_sql_test_when_planning_then_compares_resolved_actual_to_expec
     sql_test: CompiledSqlTest = CompiledSqlTest(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.SQL_TEST,
-            name="formats cents",
+            name="formats_cents",
         ),
         scope_deps=(
             CompiledObjectKey(resource_type=CompiledResourceType.UDF, name="format_cents"),
         ),
-        name="formats cents",
+        name="formats_cents",
         test_file=test_file,
         test_block=test_block,
         sql_body="",
@@ -681,7 +681,7 @@ def test_given_udf_sql_test_when_planning_then_compares_resolved_actual_to_expec
 
     assert warnings == ()
     assert len(entry.chain) == 1
-    assert entry.chain[0].model_name == "udf formats cents"
+    assert entry.chain[0].model_name == "udf formats_cents"
     assert test_case.expected_actual_fragment in entry.chain[0].resolved_sql
     assert entry.chain[0].expected_cte_sql is not None
     assert test_case.expected_expected_fragment in entry.chain[0].expected_cte_sql
@@ -731,20 +731,20 @@ def test_given_table_function_sql_test_when_planning_then_compares_resolved_actu
     )
     test_block: DiscoveredSqlTestBlock = DiscoveredSqlTestBlock(
         test_index=1,
-        header_values={"mode": "table_fn", "name": "returns customer orders"},
+        header_values={"mode": "table_fn", "name": "returns_customer_orders"},
         sql_body="",
-        name="returns customer orders",
+        name="returns_customer_orders",
         mode=SqlTestMode.TABLE_FN,
     )
     sql_test: CompiledSqlTest = CompiledSqlTest(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.SQL_TEST,
-            name="returns customer orders",
+            name="returns_customer_orders",
         ),
         scope_deps=(
             CompiledObjectKey(resource_type=CompiledResourceType.TABLE_FN, name="customer_orders"),
         ),
-        name="returns customer orders",
+        name="returns_customer_orders",
         test_file=test_file,
         test_block=test_block,
         sql_body="",
@@ -805,7 +805,7 @@ def test_given_table_function_sql_test_when_planning_then_compares_resolved_actu
 
     assert warnings == ()
     assert len(entry.chain) == 1
-    assert entry.chain[0].model_name == "table_fn returns customer orders"
+    assert entry.chain[0].model_name == "table_fn returns_customer_orders"
     assert test_case.expected_actual_fragment in entry.chain[0].resolved_sql
     assert entry.chain[0].expected_cte_sql is not None
     assert test_case.expected_expected_fragment in entry.chain[0].expected_cte_sql

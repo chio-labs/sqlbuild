@@ -6,6 +6,9 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild.compiler.auditing.constants import SCHEMA_AUDIT_OPTION_KEYS
+from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
+    validate_resource_identity,
+)
 from sqlbuild.spec.contracts.models import SchemaAuditInstance
 
 
@@ -21,6 +24,11 @@ def parse_audit_instance_impl(
     if isinstance(raw_audit, str):
         if not raw_audit.strip():
             raise error_class(f"{file_path} {label} audits must not contain empty names")
+        validate_resource_identity(
+            name=raw_audit,
+            kind=f"{label} audit definition",
+            path=file_path,
+        )
         return SchemaAuditInstance(definition_name=raw_audit)
 
     if not isinstance(raw_audit, dict) or len(raw_audit) != 1:
@@ -30,6 +38,11 @@ def parse_audit_instance_impl(
     definition_name: str = next(iter(typed_audit_mapping))
     if not isinstance(definition_name, str) or not definition_name.strip():
         raise error_class(f"{file_path} {label} audit names must be non-empty strings")
+    validate_resource_identity(
+        name=definition_name,
+        kind=f"{label} audit definition",
+        path=file_path,
+    )
 
     raw_arguments: object = typed_audit_mapping[definition_name]
     if raw_arguments is None:
@@ -48,6 +61,12 @@ def parse_audit_instance_impl(
         key="name",
         error_class=error_class,
     )
+    if name is not None:
+        validate_resource_identity(
+            name=name,
+            kind=f"{label} audit instance",
+            path=file_path,
+        )
     description: str | None = _optional_named_string(
         raw_value=argument_mapping.get("description"),
         file_path=file_path,

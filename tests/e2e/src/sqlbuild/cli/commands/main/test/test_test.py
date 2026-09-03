@@ -37,9 +37,9 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "\u2713 Warehouse connected  duckdb",
                 "expect  expected stg_orders",
                 "expect  expected fact_orders",
-                "expect  expected macro calculates line total cents",
-                "expect  expected udf detects completed orders",
-                "expect  expected table_fn returns customer orders",
+                "expect  expected macro calculates_line_total_cents",
+                "expect  expected udf detects_completed_orders",
+                "expect  expected table_fn returns_customer_orders",
             ),
             expected_ordered_stdout_fragments=(
                 "Execution  sqb test  (concurrency: 1)",
@@ -185,8 +185,8 @@ def test_given_chain_sql_test_when_running_test_then_generated_sql_is_valid(
             expected_exit_code=0,
             expected_stdout_fragment="PASS=1",
             expected_stdout_fragments=(
-                "normalizes status",
-                "expect  expected macro normalizes status",
+                "normalizes_status",
+                "expect  expected macro normalizes_status",
             ),
         )
     ],
@@ -225,8 +225,8 @@ def test_given_macro_sql_test_when_running_test_then_actual_and_expected_are_com
         / "target"
         / "run"
         / "tests"
-        / "macro normalizes status"
-        / "normalizes status.sql"
+        / "macro normalizes_status"
+        / "normalizes_status.sql"
     ).read_text(encoding="utf-8")
     assert "__actual__macro_normalizes_status" in runtime_artifact_sql
     assert "LOWER(TRIM(raw_status)) AS status" in runtime_artifact_sql

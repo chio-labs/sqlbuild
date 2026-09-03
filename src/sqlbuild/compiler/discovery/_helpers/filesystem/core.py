@@ -86,6 +86,9 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveryFileFault,
     EnumDeclaration,
 )
+from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
+    validate_resource_identity,
+)
 from sqlbuild.compiler.scopes.constants import (
     DECLARATION_DIRECTORY_FACTS,
     GLOBAL_DECLARATION_DIRECTORIES,
@@ -1196,13 +1199,27 @@ def _public_python_files(*, root: Path) -> tuple[Path, ...]:
 
 
 def _provider_name(*, provider_class: type[Provider], file_path: Path, project_dir: Path) -> str:
+    relative_path: Path = file_path.relative_to(project_dir)
+    explicit_name: str | None = provider_class.provider_name
+    if explicit_name is not None:
+        validate_resource_identity(
+            name=explicit_name,
+            kind="provider",
+            path=relative_path,
+        )
     try:
-        return provider_class.name()
+        provider_name: str = provider_class.name()
     except ProviderInputError as error:
         raise ProviderDiscoveryError(
-            f"Provider class {provider_class.__name__} in {file_path.relative_to(project_dir)} "
+            f"Provider class {provider_class.__name__} in {relative_path} "
             f"has an invalid provider name: {error}"
         ) from error
+    validate_resource_identity(
+        name=provider_name,
+        kind="provider",
+        path=relative_path,
+    )
+    return provider_name
 
 
 def _provider_instance(

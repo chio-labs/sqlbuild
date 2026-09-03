@@ -407,7 +407,7 @@ def test_given_snapshot_hooks_when_building_then_hooks_execute_and_history_is_va
                       updated_at updated_at,
                       audits [
                         expression_is_true (
-                          name "plan is allowed",
+                          name "plan_is_allowed",
                           expression "plan <> 'bad'",
                           severity error,
                           run_scope final,
@@ -787,7 +787,7 @@ def test_given_advanced_snapshot_edges_when_building_then_history_remains_valid(
                   updated_at updated_at,
                   audits [
                     expression_is_true (
-                      name "plan is allowed",
+                      name "plan_is_allowed",
                       expression "plan <> 'bad'",
                     ),
                   ],
@@ -881,7 +881,7 @@ def test_given_advanced_snapshot_edges_when_building_then_history_remains_valid(
                   updated_at updated_at,
                   audits [
                     expression_is_true (
-                      name "plan is not blocked",
+                      name "plan_is_not_blocked",
                       expression "plan <> 'blocked' OR valid_to IS NOT NULL",
                       severity error,
                       run_scope final,
