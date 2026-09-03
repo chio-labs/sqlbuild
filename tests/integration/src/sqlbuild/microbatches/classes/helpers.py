@@ -62,3 +62,15 @@ def build_events(*, count: int, start_at: int = 0) -> tuple[MicrobatchEvent, ...
             )
         )
     return tuple(events)
+
+
+def causal_scope(*, model_name: str, generation: str) -> MicrobatchScope:
+    return MicrobatchScope(
+        scope_kind="direct_logical",
+        scope_key=f"duckdb:main.{model_name}",
+        model_name=model_name,
+        target_database=None,
+        target_schema="main",
+        target_name=model_name,
+        physical_generation_id=generation,
+    )

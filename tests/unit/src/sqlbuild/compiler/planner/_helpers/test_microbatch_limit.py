@@ -11,7 +11,12 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.output.plan_entry import _apply_microbatch_limit
-from sqlbuild.compiler.planner.models import CursorBounds, ModelPlanEntry, PlanWarning
+from sqlbuild.compiler.planner.models import (
+    CursorBounds,
+    CursorInputRelation,
+    ModelPlanEntry,
+    PlanWarning,
+)
 from sqlbuild.compiler.planner.types import (
     IncrementalMode,
     MaterializationType,
@@ -20,9 +25,66 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
+    EffectiveMicrobatchLimitPlanningTestCase,
     MicrobatchLimitPlanningErrorTestCase,
     MicrobatchLimitPlanningTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        EffectiveMicrobatchLimitPlanningTestCase(
+            description="effective batch uses coarse replay grain for limit",
+            batch_size="effective",
+            expected_count=3,
+            expected_warning=False,
+        ),
+        EffectiveMicrobatchLimitPlanningTestCase(
+            description="fixed daily batch stays fixed for coarse replay grain limit",
+            batch_size="1d",
+            expected_count=90,
+            expected_warning=True,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_coarse_effective_grain_when_applying_limit_then_authored_batch_semantics_are_used(
+    test_case: EffectiveMicrobatchLimitPlanningTestCase,
+) -> None:
+    entry: ModelPlanEntry = ModelPlanEntry(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="events"),
+        name="events",
+        relative_path=Path("models/events.sql"),
+        materialization_type=MaterializationType.INCREMENTAL,
+        action=PlanAction.INCREMENTAL_DELETE_INSERT,
+        reason=PlanReason.NORMAL_INCREMENTAL,
+        destination=CompiledRelationLocation(None, "main", "events", "main.events"),
+        fingerprint_query_sql="SELECT 1",
+        resolved_sql="SELECT 1",
+        logical_ddl="",
+        incremental_mode=IncrementalMode.MICROBATCH,
+        cursor_type="timestamp",
+        cursor_grain="day",
+        cursor_input_relations=(
+            CursorInputRelation(
+                relation="monthly_events",
+                cursor_column="event_time",
+                cursor_grain="month",
+            ),
+        ),
+        batch_size=test_case.batch_size,
+        microbatch_range=CursorBounds(start="2026-01-01", end="2026-04-01"),
+    )
+
+    limited_entry, warning = _apply_microbatch_limit(
+        entry=entry,
+        max_batches=3,
+        action=MicrobatchLimitAction.WARN,
+    )
+
+    assert limited_entry.microbatch_limit_count == test_case.expected_count
+    assert (warning is not None) is test_case.expected_warning
 
 
 @pytest.mark.parametrize(

@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.microbatches._helpers.sql import (
     build_existing_event_ids_sql,
@@ -125,31 +126,48 @@ def direct_microbatch_scope(
 ) -> MicrobatchScope:
     """Build the direct logical scope for one destination relation."""
 
+    return direct_microbatch_scope_for_location(
+        adapter=adapter,
+        connection=connection,
+        model_name=entry.name,
+        destination=entry.destination,
+    )
+
+
+def direct_microbatch_scope_for_location(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    model_name: str,
+    destination: CompiledRelationLocation,
+) -> MicrobatchScope:
+    """Build a direct logical scope from non-executable model metadata."""
+
     qualified: str = (
-        entry.destination.qualified_name
+        destination.qualified_name
         or adapter.render_qualified_name(
-            database=entry.destination.database,
-            schema=entry.destination.schema,
-            name=entry.destination.name,
+            database=destination.database,
+            schema=destination.schema,
+            name=destination.name,
         )
-        or entry.destination.name
+        or destination.name
     )
     scope_key: str = f"{type(adapter).__module__}.{type(adapter).__name__}:{qualified}"
     generation: str = (
         adapter.physical_relation_generation(
             connection=connection,
-            database=entry.destination.database,
-            schema=entry.destination.schema,
-            name=entry.destination.name,
+            database=destination.database,
+            schema=destination.schema,
+            name=destination.name,
         )
         or MICROBATCH_GENERATION_WILDCARD
     )
     return MicrobatchScope(
         scope_kind=DIRECT_MICROBATCH_SCOPE_KIND,
         scope_key=scope_key,
-        model_name=entry.name,
-        target_database=entry.destination.database,
-        target_schema=entry.destination.schema,
-        target_name=entry.destination.name,
+        model_name=model_name,
+        target_database=destination.database,
+        target_schema=destination.schema,
+        target_name=destination.name,
         physical_generation_id=generation,
     )

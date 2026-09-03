@@ -31,6 +31,7 @@ from sqlbuild.compiler.planner.main.execution.maximum_start_warning import maxim
 from sqlbuild.compiler.planner.main.execution.microbatch_limit import microbatch_limit_warning
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
+    CursorInputRelation,
     Duration,
     ModelPlanEntry,
 )
@@ -93,6 +94,8 @@ from sqlbuild.executor.run.models import (
 )
 from sqlbuild.executor.run.types import ExecutionPhase, MicrobatchBatchRunner
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.microbatches.classes.causal_event_codec import CausalEventCodec
+from sqlbuild.microbatches.classes.causal_event_store import CausalMicrobatchEventStore
 from sqlbuild.microbatches.classes.direct_store import (
     DirectMicrobatchEventStore,
     direct_microbatch_scope,
@@ -103,24 +106,30 @@ from sqlbuild.microbatches.constants import (
     MICROBATCH_REPLAY_GENERATION_PREFIX,
 )
 from sqlbuild.microbatches.exceptions import MicrobatchStateError
+from sqlbuild.microbatches.main.causal_input_relations import resolve_causal_input_relations
 from sqlbuild.microbatches.main.deterministic_event_id import (
     deterministic_microbatch_event_id,
 )
 from sqlbuild.microbatches.main.latest_replay_requirement import (
     latest_active_replay_requirement,
 )
+from sqlbuild.microbatches.main.merge_causal_intervals import merge_causal_intervals
+from sqlbuild.microbatches.main.physical_causal_completion import physical_producer_completion
 from sqlbuild.microbatches.main.project_coverage import project_microbatch_coverage
 from sqlbuild.microbatches.main.project_replay import project_replay_requirement
 from sqlbuild.microbatches.models import (
+    CausalDependencySnapshot,
     MicrobatchCoverageProjection,
     MicrobatchEvent,
     MicrobatchInterval,
     MicrobatchScope,
     MicrobatchWriteResult,
+    ProducerCompletion,
     ProjectedMicrobatchInterval,
     ReplayRequirementProjection,
 )
 from sqlbuild.microbatches.types import (
+    CausalHistoryStatus,
     MicrobatchCompletionType,
     MicrobatchEventStore,
     MicrobatchFingerprintStatus,
@@ -156,6 +165,8 @@ class _MicrobatchPlan:
     resolved_range: CursorBounds | None = None
     early_exit: ModelExecutionResult | None = None
     runtime_discovery: bool = False
+    causal_history_status: CausalHistoryStatus | None = None
+    causal_replay_intervals: tuple[MicrobatchInterval, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -185,6 +196,8 @@ class _MicrobatchHistoryContext:
     batch_concurrency: int = 1
     global_concurrency: int = 1
     recovery_origins: dict[tuple[str, str], _RecoveryOrigin] = field(default_factory=dict)
+    causal_history_status: CausalHistoryStatus | None = None
+    causal_replay_intervals: tuple[MicrobatchInterval, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -398,6 +411,7 @@ def execute_microbatch_entry(  # noqa: PLR0915
             batch_count=batch_outcome.completed_batches,
             batch_size=batch_plan.effective_batch_size,
             rows_affected=batch_outcome.rows_affected,
+            microbatch_applied_intervals=batch_outcome.applied_intervals,
             **_microbatch_result_fields(history=history_context, succeeded=False),
         )
     final_audit_run: FinalAuditRun = run_final_scope_audits(
@@ -430,6 +444,8 @@ def execute_microbatch_entry(  # noqa: PLR0915
             context=context,
             state=state,
             relations=full_refresh_relations,
+            history=history_context,
+            applied_intervals=batch_outcome.applied_intervals,
         )
         if promotion_failure is not None:
             return replace(
@@ -480,6 +496,7 @@ def execute_microbatch_entry(  # noqa: PLR0915
         batch_count=batch_outcome.completed_batches,
         batch_size=batch_plan.effective_batch_size,
         rows_affected=batch_outcome.rows_affected,
+        microbatch_applied_intervals=batch_outcome.applied_intervals,
         cursor_range_start=None if resolved_range is None else resolved_range.start,
         cursor_range_end=None if resolved_range is None else resolved_range.end,
         cursor_type=context.entry.cursor_type,
@@ -687,6 +704,7 @@ def _execute_microbatch_batches(
         )
     schema_checked: bool = False
     completed_batches: int = 0
+    applied_intervals: list[tuple[str, str]] = []
     total_rows: int = 0
     row_count_known: bool = False
     total_batches: int = len(batches)
@@ -788,6 +806,7 @@ def _execute_microbatch_batches(
                     total_rows=total_rows,
                     row_count_known=row_count_known,
                 ),
+                applied_intervals=tuple(applied_intervals),
             )
         if isinstance(dml_result, int):
             total_rows += dml_result
@@ -807,6 +826,7 @@ def _execute_microbatch_batches(
                     total_rows=total_rows,
                     row_count_known=row_count_known,
                 ),
+                applied_intervals=tuple(applied_intervals),
             )
         completion_failure: ModelExecutionResult | None = (
             None
@@ -837,6 +857,7 @@ def _execute_microbatch_batches(
             state=state,
         )
         completed_batches += 1
+        applied_intervals.append((batch.start, batch.end))
         if on_progress is not None:
             batch_elapsed: float = time.monotonic() - batch_start_time
             on_progress(
@@ -849,6 +870,7 @@ def _execute_microbatch_batches(
             total_rows=total_rows,
             row_count_known=row_count_known,
         ),
+        applied_intervals=tuple(applied_intervals),
     )
 
 
@@ -896,6 +918,7 @@ def _execute_microbatch_batches_concurrently(
         if (batch.start, batch.end) not in history_context.recovery_intervals
     )
     completed_batches: int = 0
+    applied_intervals: list[tuple[str, str]] = []
     total_rows: int = 0
     row_count_known: bool = False
     for phase_batches in (recovery_batches, ordinary_batches):
@@ -912,6 +935,7 @@ def _execute_microbatch_batches_concurrently(
         )
         state = phase_outcome.state
         completed_batches += phase_outcome.completed_batches
+        applied_intervals.extend(phase_outcome.applied_intervals)
         if phase_outcome.rows_affected is not None:
             total_rows += phase_outcome.rows_affected
             row_count_known = True
@@ -923,6 +947,7 @@ def _execute_microbatch_batches_concurrently(
                 rows_affected=_reported_rows_affected(
                     total_rows=total_rows, row_count_known=row_count_known
                 ),
+                applied_intervals=tuple(applied_intervals),
             )
     return MicrobatchPhaseOutcome(
         state=state,
@@ -930,6 +955,7 @@ def _execute_microbatch_batches_concurrently(
         rows_affected=_reported_rows_affected(
             total_rows=total_rows, row_count_known=row_count_known
         ),
+        applied_intervals=tuple(applied_intervals),
     )
 
 
@@ -995,12 +1021,14 @@ def _execute_concurrent_microbatch_phase(
         lambda batch, connection: execute(batch=batch, connection=connection),
     )
     completed_batches: int = first_outcome.completed_batches
+    applied_intervals: list[tuple[str, str]] = list(first_outcome.applied_intervals)
     total_rows: int = first_outcome.rows_affected or 0
     row_count_known: bool = first_outcome.rows_affected is not None
     failure: ModelExecutionResult | None = None
     for outcome in outcomes:
         aggregate_state = _merge_microbatch_states(target=aggregate_state, source=outcome.state)
         completed_batches += outcome.completed_batches
+        applied_intervals.extend(outcome.applied_intervals)
         if outcome.rows_affected is not None:
             total_rows += outcome.rows_affected
             row_count_known = True
@@ -1013,6 +1041,7 @@ def _execute_concurrent_microbatch_phase(
         rows_affected=_reported_rows_affected(
             total_rows=total_rows, row_count_known=row_count_known
         ),
+        applied_intervals=tuple(applied_intervals),
     )
 
 
@@ -1184,6 +1213,8 @@ def _serial_microbatch_context(
         unaccounted_partition_policy=context.microbatch_unaccounted_partition_policy,
         batch_concurrency=1,
         global_concurrency=context.microbatch_global_concurrency,
+        causal_history_status=batch_plan.causal_history_status,
+        causal_replay_intervals=batch_plan.causal_replay_intervals,
     )
 
 
@@ -1322,6 +1353,8 @@ def _prepare_microbatch_history(
         concurrent_enabled=context.microbatch_batch_runner is not None,
         batch_concurrency=context.entry.batch_concurrency,
         global_concurrency=context.microbatch_global_concurrency,
+        causal_history_status=batch_plan.causal_history_status,
+        causal_replay_intervals=batch_plan.causal_replay_intervals,
     )
 
 
@@ -1407,6 +1440,7 @@ def _record_microbatch_completion(
                     ),
                     _expected_model_version_hash(context=context),
                     history.replay_requirement_id or "",
+                    context.run_id,
                 )
             ),
         ),
@@ -1449,8 +1483,19 @@ def _record_microbatch_completion(
         ),
         execution_run_started_at=history.execution_run_started_at,
     )
+    records: tuple[MicrobatchEvent, ...] = (event,)
+    if not is_full_refresh and batch.start != batch.end:
+        producer: ProducerCompletion = physical_producer_completion(
+            scope=completion_scope,
+            model_version_hash=_expected_model_version_hash(context=context),
+            interval=MicrobatchInterval(start=batch.start, end=batch.end),
+            run_id=context.run_id,
+            run_type=history.run_type,
+            created_at=now,
+        )
+        records = (event, CausalEventCodec.to_event(producer))
     try:
-        _append_microbatch_event(store=history.store, event=event)
+        history.store.write_many(records)
     except Exception as exc:
         return build_failed_result(
             entry=context.entry,
@@ -1491,10 +1536,10 @@ def _current_completion_scope(
     context: ModelMaterializationContext,
     scope: MicrobatchScope,
     physical_target_name: str | None = None,
+    preserve_replay_generation: bool = True,
 ) -> MicrobatchScope:
-    if (
-        scope.physical_generation_id.startswith(MICROBATCH_REPLAY_GENERATION_PREFIX)
-        or context.entry.reason == PlanReason.FULL_REFRESH
+    if preserve_replay_generation and scope.physical_generation_id.startswith(
+        MICROBATCH_REPLAY_GENERATION_PREFIX
     ):
         return scope
     generation: str | None = context.adapter.physical_relation_generation(
@@ -1514,6 +1559,31 @@ def _current_completion_scope(
         scope,
         physical_generation_id=f"{scope.physical_generation_id}:{generation_hash}",
     )
+
+
+def _publish_promoted_full_refresh_completions(
+    *,
+    context: ModelMaterializationContext,
+    history: _MicrobatchHistoryContext,
+    applied_intervals: tuple[tuple[str, str], ...],
+) -> None:
+    scope: MicrobatchScope = _current_completion_scope(
+        context=context, scope=history.scope, preserve_replay_generation=False
+    )
+    created_at: datetime = datetime.now(tz=UTC)
+    completions: tuple[ProducerCompletion, ...] = tuple(
+        physical_producer_completion(
+            scope=scope,
+            model_version_hash=_expected_model_version_hash(context=context),
+            interval=MicrobatchInterval(start=start, end=end),
+            run_id=context.run_id,
+            run_type=history.run_type,
+            created_at=created_at,
+        )
+        for start, end in applied_intervals
+        if start != end
+    )
+    CausalMicrobatchEventStore(history.store).write_many(completions)
 
 
 def _reconcile_microbatch_history(
@@ -2126,9 +2196,7 @@ def _microbatch_result_fields(
         ),
         "microbatch_replay_requirement_id": history.replay_requirement_id,
         "microbatch_required_model_version_hash": history.required_model_version_hash,
-        "microbatch_physical_generation_id": (
-            history.scope.physical_generation_id if history.concurrent_enabled else None
-        ),
+        "microbatch_physical_generation_id": (history.scope.physical_generation_id),
         "microbatch_concurrent_enabled": history.concurrent_enabled,
         "microbatch_batch_concurrency": history.batch_concurrency,
         "microbatch_global_concurrency": history.global_concurrency,
@@ -2136,6 +2204,12 @@ def _microbatch_result_fields(
             None if replay_state is None else replay_state.value
         ),
         "microbatch_accounting_intervals": history.accounting_intervals,
+        "microbatch_causal_history_status": (
+            None if history.causal_history_status is None else history.causal_history_status.value
+        ),
+        "microbatch_causal_replay_intervals": tuple(
+            (interval.start, interval.end) for interval in history.causal_replay_intervals
+        ),
     }
 
 
@@ -2609,6 +2683,8 @@ def _promote_microbatch_full_refresh(
     context: ModelMaterializationContext,
     state: MicrobatchLifecycleState,
     relations: FullRefreshRelations,
+    history: _MicrobatchHistoryContext,
+    applied_intervals: tuple[tuple[str, str], ...],
 ) -> ModelExecutionResult | None:
     """Promote a complete rebuild while retaining the outgoing generation."""
 
@@ -2637,6 +2713,12 @@ def _promote_microbatch_full_refresh(
             warnings=state.warnings,
             audit_results=state.audit_results,
             statement_recorder=state.statement_recorder,
+        )
+    if context.microbatch_event_store is not None:
+        _publish_promoted_full_refresh_completions(
+            context=context,
+            history=history,
+            applied_intervals=applied_intervals,
         )
     return None
 
@@ -2670,9 +2752,38 @@ def _plan_microbatch_windows(
     runtime_owned_cursor_bounds: bool = has_runtime_owned_cursor_watermarks(
         entry.cursor_input_relations
     )
+    causal_relations: tuple[CursorInputRelation, ...] = resolve_causal_input_relations(
+        relations=entry.cursor_input_relations,
+        downstream_grain=entry.cursor_grain,
+        dependencies=context.microbatch_causal_dependencies,
+    )
+    causal_effective_grain: str | None = resolve_effective_timestamp_grain(
+        cursor_type=entry.cursor_type,
+        downstream_grain=entry.cursor_grain,
+        cursor_input_relations=causal_relations,
+    )
+    has_outstanding_causal_work: bool = any(
+        dependency.outstanding.intervals for dependency in context.microbatch_causal_dependencies
+    )
+    runtime_entry: ModelPlanEntry = replace(
+        entry,
+        cursor_input_relations=causal_relations,
+        lookback=(
+            resolve_effective_microbatch_batch_size(
+                batch_size=entry.batch_size or "",
+                effective_grain=causal_effective_grain,
+            )
+            if entry.lookback_is_default
+            and causal_effective_grain is not None
+            and has_outstanding_causal_work
+            else entry.lookback
+        ),
+    )
     has_authoritative_override: bool = has_authoritative_cursor_override(entry=entry)
     runtime_discovery: bool = not has_authoritative_override and (
-        runtime_owned_cursor_bounds or is_full_refresh
+        runtime_owned_cursor_bounds
+        or is_full_refresh
+        or bool(context.microbatch_causal_dependencies)
     )
     microbatch_range: CursorBounds | None = entry.microbatch_range
     if runtime_discovery:
@@ -2696,7 +2807,7 @@ def _plan_microbatch_windows(
                 target_schema=entry.destination.schema,
                 target_name=entry.destination.name,
                 spec=build_runtime_cursor_spec(
-                    entry=entry,
+                    entry=runtime_entry,
                     read_destination_cursor=not is_full_refresh,
                 ),
                 on_progress=on_progress,
@@ -2731,35 +2842,110 @@ def _plan_microbatch_windows(
         microbatch_range = CursorBounds(start=empty_bound, end=empty_bound)
 
     effective_batch_size: str = batch_size
-    if runtime_discovery:
-        effective_timestamp_grain: str | None = resolve_effective_timestamp_grain(
-            cursor_type=cursor_type,
-            downstream_grain=entry.cursor_grain,
-            cursor_input_relations=entry.cursor_input_relations,
+    if causal_effective_grain is not None:
+        effective_batch_size = resolve_effective_microbatch_batch_size(
+            batch_size=batch_size,
+            effective_grain=causal_effective_grain,
         )
-        if effective_timestamp_grain is not None:
-            effective_batch_size = resolve_effective_microbatch_batch_size(
-                batch_size=batch_size,
-                effective_grain=effective_timestamp_grain,
-            )
 
+    causal_intervals: tuple[MicrobatchInterval, ...] = _bounded_causal_replay_intervals(
+        context=context,
+        availability=microbatch_range,
+    )
+    work_intervals: tuple[MicrobatchInterval, ...] = merge_causal_intervals(
+        intervals=(
+            *(
+                (MicrobatchInterval(start=microbatch_range.start, end=microbatch_range.end),)
+                if microbatch_range.start != microbatch_range.end
+                else ()
+            ),
+            *causal_intervals,
+        ),
+        cursor_type=cursor_type,
+    )
+    computed_batches: tuple[BatchWindow, ...] = _batches_for_intervals(
+        intervals=work_intervals,
+        batch_size=effective_batch_size,
+        cursor_type=cursor_type,
+    )
     batches: tuple[BatchWindow, ...] = (
         (BatchWindow(start=microbatch_range.start, end=microbatch_range.end, index=0),)
         if is_full_refresh and microbatch_range.start == microbatch_range.end
-        else compute_batch_windows(
-            start=microbatch_range.start,
-            end=microbatch_range.end,
-            batch_size=effective_batch_size,
-            cursor_type=cursor_type,
+        else tuple(replace(batch, index=index) for index, batch in enumerate(computed_batches))
+    )
+    resolved_range: CursorBounds = (
+        replace(
+            microbatch_range,
+            start=work_intervals[0].start,
+            end=work_intervals[-1].end,
         )
+        if work_intervals
+        else microbatch_range
     )
 
     return _MicrobatchPlan(
         batches=batches,
         effective_batch_size=effective_batch_size,
-        resolved_range=microbatch_range,
+        resolved_range=resolved_range,
         runtime_discovery=runtime_discovery,
+        causal_history_status=_causal_history_status(context=context),
+        causal_replay_intervals=causal_intervals,
     )
+
+
+def _causal_history_status(*, context: ModelMaterializationContext) -> CausalHistoryStatus | None:
+    dependencies: tuple[CausalDependencySnapshot, ...] = context.microbatch_causal_dependencies
+    if not dependencies:
+        return None
+    if any(dependency.history_status == CausalHistoryStatus.UNKNOWN for dependency in dependencies):
+        return CausalHistoryStatus.UNKNOWN
+    return CausalHistoryStatus.KNOWN
+
+
+def _bounded_causal_replay_intervals(
+    *, context: ModelMaterializationContext, availability: CursorBounds
+) -> tuple[MicrobatchInterval, ...]:
+    interval_values: list[MicrobatchInterval] = []
+    for dependency in context.microbatch_causal_dependencies:
+        if dependency.history_status == CausalHistoryStatus.KNOWN:
+            interval_values.extend(dependency.outstanding.intervals)
+    intervals: tuple[MicrobatchInterval, ...] = tuple(interval_values)
+    floor: str | None = context.entry.start_cursor_override or context.entry.cursor_start
+    ceiling: str | None = availability.end
+    bounded: list[MicrobatchInterval] = []
+    for interval in intervals:
+        start: str = interval.start
+        end: str = interval.end
+        if floor is not None and _cursor_lte(
+            left=start, right=floor, cursor_type=context.entry.cursor_type or ""
+        ):
+            start = floor
+        if ceiling is not None and _cursor_lte(
+            left=ceiling, right=end, cursor_type=context.entry.cursor_type or ""
+        ):
+            end = ceiling
+        if _cursor_lte(left=end, right=start, cursor_type=context.entry.cursor_type or ""):
+            continue
+        bounded.append(MicrobatchInterval(start=start, end=end))
+    return merge_causal_intervals(
+        intervals=tuple(bounded), cursor_type=context.entry.cursor_type or ""
+    )
+
+
+def _batches_for_intervals(
+    *, intervals: tuple[MicrobatchInterval, ...], batch_size: str, cursor_type: str
+) -> tuple[BatchWindow, ...]:
+    batches: list[BatchWindow] = []
+    for interval in intervals:
+        batches.extend(
+            compute_batch_windows(
+                start=interval.start,
+                end=interval.end,
+                batch_size=batch_size,
+                cursor_type=cursor_type,
+            )
+        )
+    return tuple(batches)
 
 
 def _empty_microbatch_bound(*, entry: ModelPlanEntry) -> str:

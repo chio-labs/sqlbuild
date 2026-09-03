@@ -353,6 +353,21 @@ def _model_microbatch(result: ModelExecutionResult) -> Mapping[str, JSONValue]:
             else None
         ),
     }
+    if (
+        result.microbatch_causal_history_status is not None
+        or result.microbatch_producer_completion_event_ids
+        or result.microbatch_consumer_frontier_event_ids
+    ):
+        values.update(
+            {
+                "causal_history_status": result.microbatch_causal_history_status,
+                "causal_replay_interval_count": len(result.microbatch_causal_replay_intervals),
+                "producer_completion_event_count": len(
+                    result.microbatch_producer_completion_event_ids
+                ),
+                "consumer_frontier_event_count": len(result.microbatch_consumer_frontier_event_ids),
+            }
+        )
     return _bounded_metadata({key: value for key, value in values.items() if value is not None})
 
 
