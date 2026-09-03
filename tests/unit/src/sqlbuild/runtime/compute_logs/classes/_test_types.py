@@ -48,7 +48,6 @@ class DiagnosticRoutingTestCase:
     debug: bool
     include_sql_text: bool
     expected_sql_in_diagnostics: bool
-    expected_sql_in_legacy: bool
     expected_internal_console_count: int
     expected_plain_console_count: int
     expected_structured_console_count: int

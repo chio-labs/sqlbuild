@@ -5,6 +5,8 @@ from types import MappingProxyType
 
 from sqlbuild.runtime.observability.models import LifecycleEventDefinition
 
+CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION: int = 1
+CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION: int = 1
 DURATION_MS_FIELD: str = "duration_ms"
 EXIT_CODE_FIELD: str = "exit_code"
 PROCESS_ID_FIELD: str = "process_id"
@@ -394,6 +396,6 @@ LIFECYCLE_EVENT_CATALOG_V1: Mapping[str, LifecycleEventDefinition] = MappingProx
     }
 )
 LIFECYCLE_EVENT_CATALOGS: Mapping[int, Mapping[str, LifecycleEventDefinition]] = MappingProxyType(
-    {1: LIFECYCLE_EVENT_CATALOG_V1}
+    {CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION: LIFECYCLE_EVENT_CATALOG_V1}
 )
 LIFECYCLE_EVENT_CATALOG: Mapping[str, LifecycleEventDefinition] = LIFECYCLE_EVENT_CATALOG_V1

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from collections import defaultdict
 from pathlib import Path
@@ -1418,17 +1419,23 @@ def test_given_waffle_shop_when_running_full_build_on_bigquery_then_expected_tab
         order_status_sql: str = (run_dir / "intermediate" / "order_status_index.sql").read_text(
             encoding="utf-8"
         )
-        log_sql: str = (project_dir / "target" / "sqlbuild.log").read_text(encoding="utf-8")
-        fact_orders_relation: str = relation_name(dataset_name=dataset_name, name="fact_orders")
-        project_prefix: str = fact_orders_relation.removesuffix(".fact_orders`")
+        diagnostic_path: Path = tuple((project_dir / "logs").glob("*/*/diagnostics.jsonl"))[0]
+        diagnostic_records: tuple[dict[str, object], ...] = tuple(
+            map(json.loads, diagnostic_path.read_text(encoding="utf-8").splitlines())
+        )
         assert "TIMESTAMP_TRUNC(" in hourly_sql
         assert "TIMESTAMP_TRUNC(" in daily_sql
         assert "TIMESTAMP_TRUNC(" in contextual_sql
         assert "`" in order_status_sql
-        assert project_prefix in log_sql
-        assert f"{project_prefix}._sqlbuild_fingerprints`" in log_sql
-        assert "__delta`" in log_sql
-        assert "TIMESTAMP '" in log_sql
+        sql_diagnostics: tuple[dict[str, object], ...] = tuple(
+            filter(lambda record: record["logger"] == "sqlbuild.sql", diagnostic_records)
+        )
+        assert sql_diagnostics
+        for diagnostic in sql_diagnostics:
+            fields: object = diagnostic["fields"]
+            assert isinstance(fields, dict)
+            assert "sql_digest" in fields
+            assert "sql_text" not in fields
     finally:
         cleanup_bigquery_dataset(dataset_name=dataset_name)
 

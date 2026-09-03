@@ -102,6 +102,7 @@ class LifecycleEvent:
             validate_schema_version,
             validate_timestamp,
         )
+        from sqlbuild.runtime.observability.constants import CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION
 
         for field_name in (
             "event_id",
@@ -112,10 +113,11 @@ class LifecycleEvent:
         ):
             validate_required_text(value=getattr(self, field_name), field_name=field_name)
         validate_schema_version(value=self.schema_version)
-        if self.schema_version != 1:
+        if self.schema_version != CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION:
             raise ObservabilityValidationError(
-                "LifecycleEvent only represents known schema version 1; "
-                "decode newer versions as OpaqueLifecycleEvent"
+                "LifecycleEvent only represents known schema version "
+                f"{CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION}; "
+                "decode other versions as OpaqueLifecycleEvent"
             )
         validate_timestamp(value=self.occurred_at)
         for field_name in (
@@ -177,11 +179,16 @@ class DiagnosticLog:
             validate_schema_version,
             validate_timestamp,
         )
-        from sqlbuild.runtime.observability.constants import DIAGNOSTIC_SEVERITIES
+        from sqlbuild.runtime.observability.constants import (
+            CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION,
+            DIAGNOSTIC_SEVERITIES,
+        )
 
         validate_schema_version(value=self.schema_version)
-        if self.schema_version != 1:
-            raise ObservabilityValidationError("diagnostic schema_version must be 1")
+        if self.schema_version != CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION:
+            raise ObservabilityValidationError(
+                f"diagnostic schema_version must be {CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION}"
+            )
         for field_name in (
             "producer",
             "producer_version",

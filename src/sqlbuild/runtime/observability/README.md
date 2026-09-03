@@ -56,16 +56,14 @@ SQLBuild's structured `log_sql` and `log_debug_event` helpers attach the current
 The CLI installs logging routes only for the active invocation. Internal diagnostics and user
 Python `INFO`-and-higher records are retained in that invocation's `diagnostics.jsonl`; internal
 debug records reach stderr only with `--debug`. SQL records always include an action and SHA256
-digest. Full SQL is omitted by default and an explicit programmatic diagnostic-routing opt-in can
-retain it only in diagnostic files, never stderr, metadata, or lifecycle facts.
+digest. Full SQL is omitted from diagnostics, stderr, metadata, and lifecycle facts; sensitive SQL
+artifacts remain under `target/run/`.
 
-`target/sqlbuild.log` remains an append-only compatibility write for existing local diagnostic
-workflows. There are no known external consumers, no promised compatibility period, and no
-scheduled removal release. New consumers must use the per-invocation `diagnostics.jsonl`; SQLBuild
-does not overwrite, move, archive, or import the legacy file as lifecycle evidence.
+SQLBuild does not write a shared `target/sqlbuild.log`; diagnostics are isolated in each
+invocation's `diagnostics.jsonl`.
 
 Project-creation commands (`sqb init`, `sqb playground`, and `sqb dbt init`) intentionally bypass
-project-local compute and legacy diagnostic routing. Their command handlers must see the requested
+project-local compute and diagnostic routing. Their command handlers must see the requested
 destination before SQLBuild creates `logs/`, `target/`, or any diagnostic file there.
 
 ## In-process publication
