@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.3](https://github.com/chio-labs/sqlbuild/compare/v0.76.2...v0.76.3) (2026-09-03)
+
+
+### Bug Fixes
+
+* remove execution observability compatibility shims ([#483](https://github.com/chio-labs/sqlbuild/issues/483)) ([eefccf6](https://github.com/chio-labs/sqlbuild/commit/eefccf6cf2dd3b66b7194eb43e5897693918bb50))
+
 ## [0.76.2](https://github.com/chio-labs/sqlbuild/compare/v0.76.1...v0.76.2) (2026-09-03)
 
 
