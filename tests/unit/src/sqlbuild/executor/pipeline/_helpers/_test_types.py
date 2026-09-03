@@ -36,6 +36,12 @@ class AuditResourceIdentityTestCase:
 
 
 @dataclass(frozen=True)
+class AuditLogicalIdentityTestCase:
+    description: str
+    expected_id: str
+
+
+@dataclass(frozen=True)
 class ScenarioFailureHelpTestCase:
     """One scenario failure help resolution case."""
 

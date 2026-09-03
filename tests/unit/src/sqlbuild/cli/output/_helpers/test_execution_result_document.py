@@ -9,15 +9,23 @@ import pytest
 
 from sqlbuild.cli.commands._helpers.test.sql_progress import format_parameterized_test_label
 from sqlbuild.cli.output._helpers.execution_result_document import (
+    _format_audit_checks,
     _format_model_assets,
     _format_sql_test_checks,
 )
+from sqlbuild.compiler.auditing.types import (
+    AuditAttachmentKind,
+    AuditOutcome,
+    AuditSeverity,
+)
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.discovery.models import SqlTestParameterDeclaration
 from sqlbuild.compiler.planner.models import (
     CursorInputEvidence,
     FutureCursorSafetyEvidence,
     MaximumStartSafetyEvidence,
 )
+from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.models import (
     MicrobatchAccountingInterval,
     ModelExecutionResult,
@@ -29,10 +37,45 @@ from sqlbuild.spec.contracts.types import FutureCursorAction
 from sqlbuild.sql_values.models import SqlLogicalType, SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 from tests.unit.src.sqlbuild.cli.output._helpers._test_types import (
+    AuditExecutionProtocolTestCase,
     FutureCursorExecutionProtocolTestCase,
     MicrobatchExecutionProtocolTestCase,
     SqlTestCaseExecutionProtocolTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AuditExecutionProtocolTestCase(
+            description="end-scheduled audit retains logical model identity",
+            expected_check_id="audit:cross_model_consistency:model:orders",
+            expected_attachment_kind="end",
+            expected_target_kind="model",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_end_scheduled_model_audit_when_formatting_json_then_logical_identity_is_preserved(
+    test_case: AuditExecutionProtocolTestCase,
+) -> None:
+    result: AuditExecutionResult = AuditExecutionResult(
+        audit_name="cross_model_consistency",
+        attachment_kind=AuditAttachmentKind.END,
+        attached_target_kind=AttachedAuditTargetKind.MODEL,
+        attached_target_name="orders",
+        severity=AuditSeverity.ERROR,
+        outcome=AuditOutcome.PASS,
+        row_count=0,
+        executed_sql="SELECT 1 WHERE FALSE",
+    )
+
+    check: dict[str, object] = _format_audit_checks(results=(result,))[0]
+
+    assert check["check_id"] == test_case.expected_check_id
+    assert check["attachment_kind"] == test_case.expected_attachment_kind
+    assert check["attached_target_kind"] == test_case.expected_target_kind
+    assert check["asset_name"] == "orders"
 
 
 @pytest.mark.parametrize(

@@ -11,6 +11,7 @@ from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.models import (
+    CompiledAudit,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -19,7 +20,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
     CursorInputRoles,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.graph.source_load_nodes import build_source_load_map
 from sqlbuild.compiler.planner._helpers.output.cursor_type_check import (
@@ -147,9 +148,13 @@ def build_planner_relations_context(
             deferred_locations=effective_deferral.deferred_locations,
             selected_keys=scope.selected_keys,
         )
-    source_map: dict[str, SourceEntry] = build_source_load_map(
+    audit_relation_keys: frozenset[CompiledObjectKey] = _selected_audit_relation_keys(
         project=project,
         selected_keys=scope.selected_keys,
+    )
+    source_map: dict[str, SourceEntry] = build_source_load_map(
+        project=project,
+        selected_keys=scope.selected_keys | audit_relation_keys,
         upstream_deps=scope.upstream_deps if scope.all_keys else None,
     )
     source_read_map: dict[str, SourceEntry] = (
@@ -1528,6 +1533,42 @@ def scope_overlaps(
         if dep in selected_keys:
             return True
     return False
+
+
+def audit_is_selected(
+    *,
+    audit: CompiledAudit,
+    selected_keys: frozenset[CompiledObjectKey],
+) -> bool:
+    """Return whether an audit belongs to the selected logical target scope."""
+
+    if audit.attached_target_kind is not None and audit.attached_target_name is not None:
+        resource_type: CompiledResourceType = (
+            CompiledResourceType.SOURCE
+            if audit.attached_target_kind == AttachedAuditTargetKind.SOURCE
+            else CompiledResourceType.MODEL
+        )
+        target_key: CompiledObjectKey = CompiledObjectKey(
+            resource_type=resource_type,
+            name=audit.attached_target_name,
+        )
+        return target_key in selected_keys
+    return scope_overlaps(scope_deps=audit.scope_deps, selected_keys=selected_keys)
+
+
+def _selected_audit_relation_keys(
+    *,
+    project: CompiledProject,
+    selected_keys: frozenset[CompiledObjectKey],
+) -> frozenset[CompiledObjectKey]:
+    """Return relation keys needed to render selected audits without selecting those relations."""
+
+    relation_keys: set[CompiledObjectKey] = set()
+    audit: CompiledAudit
+    for audit in project.audits:
+        if audit_is_selected(audit=audit, selected_keys=selected_keys):
+            relation_keys.update(audit.scope_deps)
+    return frozenset(relation_keys)
 
 
 def build_model_materializations(
