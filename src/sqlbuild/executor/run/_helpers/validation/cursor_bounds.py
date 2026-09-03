@@ -86,6 +86,7 @@ def build_runtime_cursor_spec(
                 else "legacy"
             )
         ),
+        microbatch_strategy=entry.microbatch_strategy,
         incremental_strategy=entry.incremental_strategy,
         incremental_mode=entry.incremental_mode,
         start_cursor_override=entry.start_cursor_override,
@@ -141,6 +142,7 @@ def resolve_runtime_cursor_bounds(
         cursor_type=cursor_type,
         downstream_grain=spec.cursor_grain,
         cursor_input_relations=spec.cursor_input_relations,
+        microbatch_strategy=spec.microbatch_strategy,
     )
 
     target_max_raw: object | None = None
@@ -527,11 +529,14 @@ def resolve_effective_timestamp_grain(
     cursor_type: str | None,
     downstream_grain: str | None,
     cursor_input_relations: tuple[CursorInputRelation, ...],
+    microbatch_strategy: str | None = None,
 ) -> str | None:
     """Return the coarsest timestamp grain participating in runtime-owned replay."""
 
     if cursor_type != CursorType.TIMESTAMP:
         return None
+    if microbatch_strategy == MicrobatchStrategy.WATERMARK:
+        return downstream_grain or CursorGrain.SECOND
     effective: str = downstream_grain or CursorGrain.SECOND
     cursor_input: CursorInputRelation
     for cursor_input in cursor_input_relations:

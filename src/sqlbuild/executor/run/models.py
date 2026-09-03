@@ -244,6 +244,7 @@ class RuntimeCursorSpec:
     cursor_input_relations: tuple[CursorInputRelation, ...]
     cursor_end: str | None = None
     cursor_watermark_mode: str = "all"
+    microbatch_strategy: str | None = None
     incremental_strategy: str | None = None
     incremental_mode: str | None = None
     start_cursor_override: str | None = None

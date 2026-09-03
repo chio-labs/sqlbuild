@@ -60,14 +60,21 @@ def test_given_project_capability_disabled_when_batch_concurrency_exceeds_one_th
                   cursor event_time,
                   cursor_type timestamp,
                   cursor_grain hour,
+                  cursor_inputs (
+                    raw_events (column event_time, roles [filter, watermark]),
+                  ),
                   batch_size 1h,
                   batch_concurrency 2,
                 );
 
                 SELECT 1 AS id, TIMESTAMP '2026-01-01 00:00:00' AS event_time
+                FROM __source("raw_events")
                 """
             ).strip()
             + "\n",
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_events\n    schema: main\n    table: raw_events\n"
+            ),
         },
     )
 

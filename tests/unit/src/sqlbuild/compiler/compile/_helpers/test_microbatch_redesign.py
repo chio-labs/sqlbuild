@@ -7,13 +7,66 @@ from sqlbuild.compiler.compile._helpers.config.model_validation import (
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileModelConfig
-from sqlbuild.compiler.planner._helpers.resolve.cursor import compute_cursor_bounds
+from sqlbuild.compiler.planner._helpers.resolve.cursor import (
+    compute_cursor_bounds,
+    resolve_effective_timestamp_grain,
+)
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import _watermark_type_is_compatible
-from sqlbuild.compiler.planner.models import CursorBounds, ModelCursorSnapshot
+from sqlbuild.compiler.planner.models import CursorBounds, CursorInputRelation, ModelCursorSnapshot
+from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
+    resolve_effective_timestamp_grain as resolve_runtime_effective_timestamp_grain,
+)
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     MicrobatchCursorTypeTestCase,
+    MicrobatchGrainOwnershipTestCase,
     MicrobatchRedesignBehaviorTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchGrainOwnershipTestCase(
+            description="watermark consumer owns execution grain",
+            consumer_grain="hour",
+            producer_grain="month",
+            microbatch_strategy="watermark",
+            expected_grain="hour",
+        ),
+        MicrobatchGrainOwnershipTestCase(
+            description="legacy cursor retains coarsest grain behavior",
+            consumer_grain="hour",
+            producer_grain="month",
+            microbatch_strategy=None,
+            expected_grain="month",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_consumer_and_producer_grains_when_resolving_then_strategy_owns_coarsening(
+    test_case: MicrobatchGrainOwnershipTestCase,
+) -> None:
+    planner_grain: str | None = resolve_effective_timestamp_grain(
+        cursor_type="timestamp",
+        downstream_grain=test_case.consumer_grain,
+        cursor_input_grains=(test_case.producer_grain,),
+        microbatch_strategy=test_case.microbatch_strategy,
+    )
+    runtime_grain: str | None = resolve_runtime_effective_timestamp_grain(
+        cursor_type="timestamp",
+        downstream_grain=test_case.consumer_grain,
+        cursor_input_relations=(
+            CursorInputRelation(
+                relation="main.producer",
+                cursor_column="event_time",
+                cursor_grain=test_case.producer_grain,
+            ),
+        ),
+        microbatch_strategy=test_case.microbatch_strategy,
+    )
+
+    assert planner_grain == test_case.expected_grain
+    assert runtime_grain == test_case.expected_grain
 
 
 @pytest.mark.parametrize(

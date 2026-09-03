@@ -2990,6 +2990,7 @@ def _plan_microbatch_windows(
         cursor_type=entry.cursor_type,
         downstream_grain=entry.cursor_grain,
         cursor_input_relations=entry.cursor_input_relations,
+        microbatch_strategy=entry.microbatch_strategy,
     )
     has_authoritative_override: bool = has_authoritative_cursor_override(entry=entry)
     runtime_discovery: bool = not has_authoritative_override and (

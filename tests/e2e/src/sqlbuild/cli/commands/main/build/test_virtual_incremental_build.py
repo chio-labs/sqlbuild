@@ -67,8 +67,6 @@ MODEL (
   materialized incremental,
   incremental_strategy delete_insert,
   incremental_mode microbatch,
-          microbatch_strategy watermark,
-          cursor_watermark_mode all,
   cursor event_time,
   cursor_type timestamp,
   cursor_grain hour,

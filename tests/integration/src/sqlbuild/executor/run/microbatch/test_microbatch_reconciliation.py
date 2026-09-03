@@ -45,6 +45,7 @@ from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 from tests.integration.src.sqlbuild.executor.run.microbatch._test_types import (
     MicrobatchBehaviorTestCase,
     MicrobatchReconciliationChunkTestCase,
+    RuntimeWatermarkGrainTestCase,
 )
 from tests.integration.src.sqlbuild.executor.run.microbatch.helpers import (
     build_integer_reconciliation_plan_entry,
@@ -79,6 +80,55 @@ class _RecordingEventStore:
 
     def read_model_history(self, scope: MicrobatchScope) -> tuple[MicrobatchEvent, ...]:
         return ()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        RuntimeWatermarkGrainTestCase(
+            description="watermark producer grain does not coarsen runtime consumer",
+            consumer_grain="hour",
+            producer_grain="month",
+            expected_end="2026-04-04T15:00:00",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_watermark_model_with_coarse_producer_when_resolving_then_consumer_grain_wins(
+    test_case: RuntimeWatermarkGrainTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    connection.execute("CREATE TABLE main.target_events (event_time TIMESTAMP)")
+    connection.execute("CREATE TABLE main.producer_events (event_time TIMESTAMP)")
+    connection.execute("INSERT INTO main.producer_events VALUES ('2026-04-04 14:30:00')")
+
+    bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
+        adapter=adapter,
+        connection=connection,
+        target_relation="main.target_events",
+        target_database=None,
+        target_schema="main",
+        target_name="target_events",
+        spec=RuntimeCursorSpec(
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            cursor_grain=test_case.consumer_grain,
+            cursor_start="2026-04-01",
+            cursor_input_relations=(
+                CursorInputRelation(
+                    "main.producer_events",
+                    "event_time",
+                    cursor_grain=test_case.producer_grain,
+                ),
+            ),
+            cursor_watermark_mode="all",
+            microbatch_strategy="watermark",
+        ),
+    )
+
+    assert bounds is not None
+    assert bounds.end == test_case.expected_end
 
 
 @pytest.mark.parametrize(

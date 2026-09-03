@@ -748,3 +748,12 @@ class MicrobatchCursorTypeTestCase:
     declared_type: str
     cursor_type: str
     expected_compatible: bool
+
+
+@dataclass(frozen=True)
+class MicrobatchGrainOwnershipTestCase:
+    description: str
+    consumer_grain: str
+    producer_grain: str
+    microbatch_strategy: str | None
+    expected_grain: str

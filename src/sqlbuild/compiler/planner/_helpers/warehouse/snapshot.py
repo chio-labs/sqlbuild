@@ -768,6 +768,7 @@ def _collect_cursor_models(
                 effective_cursor_grain=resolve_effective_timestamp_grain(
                     cursor_type=cursor_type,
                     downstream_grain=cursor_grain,
+                    microbatch_strategy=_get_config_str(model=model, key="microbatch_strategy"),
                     cursor_input_grains=tuple(upstream.cursor_grain for upstream in upstreams),
                 ),
                 start_cursor_config=resolve_start_cursor_config(

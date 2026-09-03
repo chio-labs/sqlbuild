@@ -30,6 +30,14 @@ class MicrobatchBehaviorTestCase:
 
 
 @dataclass(frozen=True)
+class RuntimeWatermarkGrainTestCase:
+    description: str
+    consumer_grain: str
+    producer_grain: str
+    expected_end: str
+
+
+@dataclass(frozen=True)
 class MicrobatchSuccessTestCase:
     """Test case where microbatch execution succeeds."""
 

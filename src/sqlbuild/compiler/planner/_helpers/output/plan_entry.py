@@ -494,6 +494,7 @@ def _apply_microbatch_limit(
         effective_grain: str | None = resolve_effective_timestamp_grain(
             cursor_type=entry.cursor_type,
             downstream_grain=entry.cursor_grain,
+            microbatch_strategy=entry.microbatch_strategy,
             cursor_input_grains=tuple(
                 relation.cursor_grain for relation in entry.cursor_input_relations
             ),
@@ -751,6 +752,7 @@ def plan_model_from_change(
                 effective_grain=resolve_effective_timestamp_grain(
                     cursor_type=cursor_type,
                     downstream_grain=cursor_grain,
+                    microbatch_strategy=plan_config.microbatch_strategy,
                     cursor_input_grains=tuple(
                         relation.cursor_grain for relation in cursor_input_relations
                     ),
@@ -1156,6 +1158,7 @@ def _compute_microbatch_range(
     effective_grain: str | None = resolve_effective_timestamp_grain(
         cursor_type=cursor_type,
         downstream_grain=downstream_grain,
+        microbatch_strategy=_get_config_str(model=model, key="microbatch_strategy"),
         cursor_input_grains=tuple(
             relation.cursor_grain for relation in inputs.cursor_input_relations
         ),

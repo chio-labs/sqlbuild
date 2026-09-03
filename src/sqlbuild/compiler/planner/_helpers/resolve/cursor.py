@@ -16,7 +16,12 @@ from sqlbuild.compiler.planner.models import (
     MaximumStartPolicyInputs,
     ModelCursorSnapshot,
 )
-from sqlbuild.compiler.planner.types import CursorGrain, CursorType, CursorWatermarkMode
+from sqlbuild.compiler.planner.types import (
+    CursorGrain,
+    CursorType,
+    CursorWatermarkMode,
+    MicrobatchStrategy,
+)
 
 _TIMESTAMP_GRAIN_ORDER: dict[str, int] = {
     CursorGrain.SECOND: 0,
@@ -100,11 +105,14 @@ def resolve_effective_timestamp_grain(
     cursor_type: str | None,
     downstream_grain: str | None,
     cursor_input_grains: tuple[str | None, ...],
+    microbatch_strategy: str | None = None,
 ) -> str | None:
     """Return the coarsest timestamp grain participating in cursor replay."""
 
     if cursor_type != CursorType.TIMESTAMP:
         return None
+    if microbatch_strategy == MicrobatchStrategy.WATERMARK:
+        return downstream_grain or CursorGrain.SECOND
     effective: str = downstream_grain or CursorGrain.SECOND
     input_grain: str | None
     for input_grain in cursor_input_grains:
