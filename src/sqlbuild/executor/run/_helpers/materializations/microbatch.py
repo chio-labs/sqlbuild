@@ -31,7 +31,6 @@ from sqlbuild.compiler.planner.main.execution.maximum_start_warning import maxim
 from sqlbuild.compiler.planner.main.execution.microbatch_limit import microbatch_limit_warning
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
-    CursorInputRelation,
     Duration,
     ModelPlanEntry,
 )
@@ -40,6 +39,7 @@ from sqlbuild.compiler.planner.types import (
     CursorGrain,
     CursorType,
     IncrementalStrategy,
+    MicrobatchStrategy,
     OnSchemaChange,
     PlanReason,
 )
@@ -106,7 +106,6 @@ from sqlbuild.microbatches.constants import (
     MICROBATCH_REPLAY_GENERATION_PREFIX,
 )
 from sqlbuild.microbatches.exceptions import MicrobatchStateError
-from sqlbuild.microbatches.main.causal_input_relations import resolve_causal_input_relations
 from sqlbuild.microbatches.main.deterministic_event_id import (
     deterministic_microbatch_event_id,
 )
@@ -167,6 +166,7 @@ class _MicrobatchPlan:
     runtime_discovery: bool = False
     causal_history_status: CausalHistoryStatus | None = None
     causal_replay_intervals: tuple[MicrobatchInterval, ...] = ()
+    resolved_intervals: tuple[MicrobatchInterval, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -198,6 +198,8 @@ class _MicrobatchHistoryContext:
     recovery_origins: dict[tuple[str, str], _RecoveryOrigin] = field(default_factory=dict)
     causal_history_status: CausalHistoryStatus | None = None
     causal_replay_intervals: tuple[MicrobatchInterval, ...] = ()
+    pending_events: tuple[MicrobatchEvent, ...] = ()
+    resolution_reason: str = "normal"
 
 
 @dataclass(frozen=True)
@@ -208,6 +210,15 @@ class _RecoveryOrigin:
     run_end: str
     run_type: MicrobatchRunType
     replay_requirement_id: str | None
+
+
+@dataclass(frozen=True)
+class _PreparedMicrobatchExecution:
+    targets: MicrobatchTargets
+    full_refresh_relations: FullRefreshRelations | None
+    state: MicrobatchLifecycleState
+    batch_plan: _MicrobatchPlan
+    history: _MicrobatchHistoryContext
 
 
 class _SerialMicrobatchEventStore:
@@ -226,15 +237,12 @@ class _SerialMicrobatchEventStore:
         raise MicrobatchStateError("serial microbatch execution does not use durable event state")
 
 
-def execute_microbatch_entry(  # noqa: PLR0915
+def _prepare_microbatch_execution(
     *,
     context: ModelMaterializationContext,
-    declared_columns: tuple[ColumnInfo, ...],
-    is_full_refresh: bool = False,
-    on_progress: Callable[[str], None] | None = None,
-) -> ModelExecutionResult:
-    """Execute one microbatch incremental model through batched delta/DML."""
-
+    is_full_refresh: bool,
+    on_progress: Callable[[str], None] | None,
+) -> _PreparedMicrobatchExecution | ModelExecutionResult:
     targets: MicrobatchTargets = _resolve_microbatch_targets(context=context)
     full_refresh_relations: FullRefreshRelations | None = None
     if is_full_refresh:
@@ -290,7 +298,7 @@ def execute_microbatch_entry(  # noqa: PLR0915
     if isinstance(history_read, ModelExecutionResult):
         return history_read
     event_store, event_scope, event_history, model_history = history_read
-    history_context: _MicrobatchHistoryContext | ModelExecutionResult = (
+    history: _MicrobatchHistoryContext | ModelExecutionResult = (
         _serial_microbatch_context(
             context=context,
             batch_plan=batch_plan,
@@ -308,23 +316,54 @@ def execute_microbatch_entry(  # noqa: PLR0915
             transition_history=model_history,
         )
     )
-    if isinstance(history_context, ModelExecutionResult):
-        return history_context
-    if history_context.run_type == MicrobatchRunType.REPLAY_ON_CHANGE:
+    if isinstance(history, ModelExecutionResult):
+        return history
+    if history.run_type == MicrobatchRunType.REPLAY_ON_CHANGE:
         replay_batches: tuple[BatchWindow, ...] = compute_batch_windows(
-            start=history_context.run_start,
-            end=history_context.run_end,
-            batch_size=history_context.batch_size,
+            start=history.run_start,
+            end=history.run_end,
+            batch_size=history.batch_size,
             cursor_type=context.entry.cursor_type or "",
         )
         batch_plan = replace(
             batch_plan,
             batches=replay_batches,
-            resolved_range=CursorBounds(
-                start=history_context.run_start, end=history_context.run_end
-            ),
+            resolved_range=CursorBounds(start=history.run_start, end=history.run_end),
         )
-    reconciliation: tuple[_MicrobatchHistoryContext, tuple[BatchWindow, ...]] | ModelExecutionResult
+    return _PreparedMicrobatchExecution(
+        targets=targets,
+        full_refresh_relations=full_refresh_relations,
+        state=state,
+        batch_plan=batch_plan,
+        history=history,
+    )
+
+
+def execute_microbatch_entry(
+    *,
+    context: ModelMaterializationContext,
+    declared_columns: tuple[ColumnInfo, ...],
+    is_full_refresh: bool = False,
+    on_progress: Callable[[str], None] | None = None,
+) -> ModelExecutionResult:
+    """Execute one microbatch incremental model through batched delta/DML."""
+
+    prepared: _PreparedMicrobatchExecution | ModelExecutionResult = _prepare_microbatch_execution(
+        context=context,
+        is_full_refresh=is_full_refresh,
+        on_progress=on_progress,
+    )
+    if isinstance(prepared, ModelExecutionResult):
+        return prepared
+    targets: MicrobatchTargets = prepared.targets
+    full_refresh_relations: FullRefreshRelations | None = prepared.full_refresh_relations
+    state: MicrobatchLifecycleState = prepared.state
+    batch_plan: _MicrobatchPlan = prepared.batch_plan
+    history_context: _MicrobatchHistoryContext = prepared.history
+    reconciliation: (
+        tuple[MicrobatchLifecycleState, _MicrobatchHistoryContext, tuple[BatchWindow, ...]]
+        | ModelExecutionResult
+    )
     reconciliation = _run_microbatch_reconciliation(
         context=context,
         state=state,
@@ -336,8 +375,28 @@ def execute_microbatch_entry(  # noqa: PLR0915
     )
     if isinstance(reconciliation, ModelExecutionResult):
         return reconciliation
-    history_context, reconciled_batches = reconciliation
-    batch_plan = replace(batch_plan, batches=reconciled_batches)
+    state, history_context, reconciled_batches = reconciliation
+    resolved_intervals: tuple[MicrobatchInterval, ...] = merge_causal_intervals(
+        intervals=tuple(
+            MicrobatchInterval(start=batch.start, end=batch.end) for batch in reconciled_batches
+        ),
+        cursor_type=context.entry.cursor_type or "",
+    )
+    resolved_range: CursorBounds | None = (
+        CursorBounds(start=resolved_intervals[0].start, end=resolved_intervals[-1].end)
+        if resolved_intervals
+        else batch_plan.resolved_range
+    )
+    batch_plan = replace(
+        batch_plan,
+        batches=reconciled_batches,
+        resolved_intervals=resolved_intervals,
+        resolved_range=resolved_range,
+    )
+    resolution_reason: str = _runtime_resolution_reason(
+        context=context, history=history_context, batches=reconciled_batches
+    )
+    history_context = replace(history_context, resolution_reason=resolution_reason)
     state = _with_reconciliation_warnings(context=context, state=state, history=history_context)
     if not batch_plan.batches:
         state = replace(state, warnings=[*state.warnings, "no batches to process"])
@@ -351,7 +410,6 @@ def execute_microbatch_entry(  # noqa: PLR0915
         )
     if (
         on_progress is not None
-        and batch_plan.runtime_discovery
         and batch_plan.resolved_range is not None
         and batch_plan.effective_batch_size is not None
     ):
@@ -362,8 +420,29 @@ def execute_microbatch_entry(  # noqa: PLR0915
                 batch_size=batch_plan.effective_batch_size,
                 cursor_type=context.entry.cursor_type,
                 cursor_grain=context.entry.cursor_grain,
+                strategy=context.entry.microbatch_strategy or "unknown",
+                reason=resolution_reason,
+                limit=context.entry.microbatch_limit,
+                intervals=resolved_intervals,
             )
         )
+    publication_failure: ModelExecutionResult | None = _publish_pending_reconciliation_events(
+        context=context, state=state, history=history_context
+    )
+    if publication_failure is not None:
+        return replace(
+            publication_failure,
+            **_microbatch_result_fields(history=history_context, succeeded=False),
+        )
+    no_work_result: ModelExecutionResult | None = _no_work_microbatch_result(
+        context=context,
+        state=state,
+        history=history_context,
+        batch_plan=batch_plan,
+        is_full_refresh=is_full_refresh,
+    )
+    if no_work_result is not None:
+        return no_work_result
     pre_hook_exit: ModelExecutionResult | None = run_pre_hook_phase(
         context=context,
         warnings=state.warnings,
@@ -513,7 +592,56 @@ def execute_microbatch_entry(  # noqa: PLR0915
         microbatch_limit_count=context.entry.microbatch_limit_count,
         microbatch_limit_action=context.entry.microbatch_limit_action,
         microbatch_limit_warning=context.entry.microbatch_limit_warning,
+        microbatch_strategy=context.entry.microbatch_strategy,
         **_microbatch_result_fields(history=history_context, succeeded=True),
+    )
+
+
+def _no_work_microbatch_result(
+    *,
+    context: ModelMaterializationContext,
+    state: MicrobatchLifecycleState,
+    history: _MicrobatchHistoryContext,
+    batch_plan: _MicrobatchPlan,
+    is_full_refresh: bool,
+) -> ModelExecutionResult | None:
+    if batch_plan.batches:
+        return None
+    destination_exists: bool = context.adapter.relation_exists(
+        connection=context.connection,
+        database=context.entry.destination.database,
+        schema=context.entry.destination.schema,
+        name=context.entry.destination.name,
+    )
+    if destination_exists and not is_full_refresh:
+        return None
+    resolved_range: CursorBounds | None = batch_plan.resolved_range
+    promoted_relation: str | None = (
+        context.entry.destination.qualified_name if destination_exists else None
+    )
+    return ModelExecutionResult(
+        model_name=context.entry.name,
+        status=ExecutionStatus.SUCCESS if destination_exists else ExecutionStatus.SKIPPED,
+        promoted_relation=promoted_relation,
+        batch_count=0,
+        batch_size=batch_plan.effective_batch_size,
+        cursor_range_start=None if resolved_range is None else resolved_range.start,
+        cursor_range_end=None if resolved_range is None else resolved_range.end,
+        cursor_type=context.entry.cursor_type,
+        cursor_grain=context.entry.cursor_grain,
+        warning_messages=tuple(state.warnings),
+        lifecycle_events=state.statement_recorder.snapshot(),
+        skip_reason=(
+            None
+            if destination_exists
+            else "no microbatch work and destination relation does not exist"
+        ),
+        microbatch_limit=context.entry.microbatch_limit,
+        microbatch_limit_count=context.entry.microbatch_limit_count,
+        microbatch_limit_action=context.entry.microbatch_limit_action,
+        microbatch_limit_warning=context.entry.microbatch_limit_warning,
+        microbatch_strategy=context.entry.microbatch_strategy,
+        **_microbatch_result_fields(history=history, succeeded=True),
     )
 
 
@@ -589,13 +717,17 @@ def _run_microbatch_reconciliation(
     normal_batches: tuple[BatchWindow, ...],
     is_full_refresh: bool,
     on_progress: Callable[[str], None] | None,
-) -> tuple[_MicrobatchHistoryContext, tuple[BatchWindow, ...]] | ModelExecutionResult:
+) -> (
+    tuple[MicrobatchLifecycleState, _MicrobatchHistoryContext, tuple[BatchWindow, ...]]
+    | ModelExecutionResult
+):
     if context.microbatch_event_store is None:
-        return history, normal_batches
+        return state, history, normal_batches
     started: float = time.monotonic()
     with diagnostics_context(sqlbuild_phase="microbatch_state", sqlbuild_action_name="reconcile"):
         reconciliation: (
-            tuple[_MicrobatchHistoryContext, tuple[BatchWindow, ...]] | ModelExecutionResult
+            tuple[MicrobatchLifecycleState, _MicrobatchHistoryContext, tuple[BatchWindow, ...]]
+            | ModelExecutionResult
         ) = _reconcile_microbatch_history(
             context=context,
             state=state,
@@ -606,7 +738,7 @@ def _run_microbatch_reconciliation(
         )
     if isinstance(reconciliation, ModelExecutionResult):
         return reconciliation
-    reconciled_history, batches = reconciliation
+    state, reconciled_history, batches = reconciliation
     duration: float = time.monotonic() - started
     covered_through: str = reconciled_history.contiguous_frontier or "none"
     if on_progress is not None:
@@ -627,7 +759,7 @@ def _run_microbatch_reconciliation(
         sqlbuild_covered_through=covered_through,
         sqlbuild_duration_ms=int(duration * 1000),
     )
-    return reconciled_history, batches
+    return state, reconciled_history, batches
 
 
 def _with_reconciliation_warnings(
@@ -657,6 +789,54 @@ def _with_reconciliation_warnings(
             "synthetic coverage and unknown fingerprints"
         )
     return replace(state, warnings=[*state.warnings, *warnings])
+
+
+def _runtime_resolution_reason(
+    *,
+    context: ModelMaterializationContext,
+    history: _MicrobatchHistoryContext,
+    batches: tuple[BatchWindow, ...],
+) -> str:
+    if history.run_type == MicrobatchRunType.REPLAY_ON_CHANGE:
+        return "definition recovery"
+    if history.recovery_intervals:
+        return "partition recovery"
+    if batches and context.entry.lookback is not None:
+        return "normal lookback"
+    return "normal"
+
+
+def _publish_pending_reconciliation_events(
+    *,
+    context: ModelMaterializationContext,
+    state: MicrobatchLifecycleState,
+    history: _MicrobatchHistoryContext,
+) -> ModelExecutionResult | None:
+    if not history.pending_events:
+        return None
+    try:
+        result: MicrobatchWriteResult = history.store.write_many(history.pending_events)
+        log_debug_event(
+            logger=_DEBUG_LOGGER,
+            message="",
+            sqlbuild_subject="model",
+            sqlbuild_name=context.entry.name,
+            sqlbuild_event="reconciliation_events_published",
+            sqlbuild_phase="microbatch_state",
+            sqlbuild_event_count=result.total,
+            sqlbuild_inserted_count=result.inserted,
+            sqlbuild_already_existing_count=result.already_existing,
+        )
+    except Exception as exc:
+        return build_failed_result(
+            entry=context.entry,
+            phase=ExecutionPhase.MICROBATCH_STATE,
+            error=f"failed to append microbatch reconciliation state: {exc}",
+            warnings=state.warnings,
+            audit_results=state.audit_results,
+            statement_recorder=state.statement_recorder,
+        )
+    return None
 
 
 def _resolve_microbatch_targets(*, context: ModelMaterializationContext) -> MicrobatchTargets:
@@ -1309,17 +1489,6 @@ def _prepare_microbatch_history(
                 origin_run_started_at=execution_run_started_at,
                 execution_run_started_at=execution_run_started_at,
             )
-            try:
-                store = _append_microbatch_event(store=store, event=requirement)
-            except Exception as exc:
-                return build_failed_result(
-                    entry=context.entry,
-                    phase=ExecutionPhase.MICROBATCH_STATE,
-                    error=f"failed to append replay requirement: {exc}",
-                    warnings=state.warnings,
-                    audit_results=state.audit_results,
-                    statement_recorder=state.statement_recorder,
-                )
     effective_history: tuple[MicrobatchEvent, ...] = (
         (*history, requirement)
         if requirement is not None and requirement not in history
@@ -1355,6 +1524,9 @@ def _prepare_microbatch_history(
         global_concurrency=context.microbatch_global_concurrency,
         causal_history_status=batch_plan.causal_history_status,
         causal_replay_intervals=batch_plan.causal_replay_intervals,
+        pending_events=(
+            (requirement,) if requirement is not None and requirement not in history else ()
+        ),
     )
 
 
@@ -1594,19 +1766,23 @@ def _reconcile_microbatch_history(
     history: _MicrobatchHistoryContext,
     normal_batches: tuple[BatchWindow, ...],
     is_full_refresh: bool,
-) -> tuple[_MicrobatchHistoryContext, tuple[BatchWindow, ...]] | ModelExecutionResult:
+) -> (
+    tuple[MicrobatchLifecycleState, _MicrobatchHistoryContext, tuple[BatchWindow, ...]]
+    | ModelExecutionResult
+):
     if is_full_refresh:
-        return history, normal_batches
+        return state, history, normal_batches
     cursor_type: str = context.entry.cursor_type or ""
     if cursor_type not in {CursorType.TIMESTAMP, CursorType.INTEGER}:
-        return history, normal_batches
+        return state, history, normal_batches
     envelope: CursorBounds | None | ModelExecutionResult = _physical_cursor_envelope(
         context=context, state=state, targets=targets
     )
     if isinstance(envelope, ModelExecutionResult):
         return envelope
-    expected_intervals: tuple[MicrobatchInterval, ...] = _accounting_intervals(
-        context=context, history=history, envelope=envelope
+    expected_intervals: tuple[MicrobatchInterval, ...] = _clamp_intervals_to_model_domain(
+        context=context,
+        intervals=_accounting_intervals(context=context, history=history, envelope=envelope),
     )
     coverage: MicrobatchCoverageProjection = project_microbatch_coverage(
         events=history.history,
@@ -1614,7 +1790,12 @@ def _reconcile_microbatch_history(
         cursor_type=cursor_type,
     )
     policy_result: (
-        tuple[tuple[MicrobatchInterval, ...], tuple[MicrobatchInterval, ...]] | ModelExecutionResult
+        tuple[
+            tuple[MicrobatchInterval, ...],
+            tuple[MicrobatchInterval, ...],
+            tuple[MicrobatchEvent, ...],
+        ]
+        | ModelExecutionResult
     ) = _apply_unaccounted_policy(
         context=context,
         state=state,
@@ -1624,7 +1805,7 @@ def _reconcile_microbatch_history(
     )
     if isinstance(policy_result, ModelExecutionResult):
         return policy_result
-    policy_recovery, synthetic_intervals = policy_result
+    policy_recovery, synthetic_intervals, synthetic_events = policy_result
     (
         replay_recovery,
         replay_requirement_state,
@@ -1634,8 +1815,25 @@ def _reconcile_microbatch_history(
         history=history,
         synthetic_intervals=synthetic_intervals,
     )
-    recovery: tuple[MicrobatchInterval, ...] = _deduplicate_intervals(
-        (*coverage.known_missing, *policy_recovery, *replay_recovery)
+    known_missing: tuple[MicrobatchInterval, ...] = coverage.known_missing
+    if history.batch_concurrency == 1:
+        known_missing, inherited_interior = _serial_trailing_recovery_only(
+            history=history, intervals=known_missing, cursor_type=cursor_type
+        )
+        if inherited_interior:
+            state = replace(
+                state,
+                warnings=[
+                    *state.warnings,
+                    f"serial microbatch history for '{context.entry.name}' contains "
+                    f"{len(inherited_interior)} inherited interior gap(s); continuing from the "
+                    "ordinary frontier and leaving older gaps unprocessed. Use an explicit "
+                    "bounded backfill to repair them",
+                ],
+            )
+    recovery: tuple[MicrobatchInterval, ...] = _clamp_intervals_to_model_domain(
+        context=context,
+        intervals=_deduplicate_intervals((*known_missing, *policy_recovery, *replay_recovery)),
     )
     recovery_keys: frozenset[tuple[str, str]] = frozenset(
         (interval.start, interval.end) for interval in recovery
@@ -1670,6 +1868,7 @@ def _reconcile_microbatch_history(
         cursor_type=cursor_type,
     )
     return (
+        state,
         replace(
             history,
             recovery_intervals=recovery_keys,
@@ -1684,9 +1883,41 @@ def _reconcile_microbatch_history(
             ),
             contiguous_frontier=coverage.contiguous_frontier,
             recovery_origins=recovery_origins,
+            pending_events=(*history.pending_events, *synthetic_events),
         ),
         all_batches,
     )
+
+
+def _serial_trailing_recovery_only(
+    *,
+    history: _MicrobatchHistoryContext,
+    intervals: tuple[MicrobatchInterval, ...],
+    cursor_type: str,
+) -> tuple[tuple[MicrobatchInterval, ...], tuple[MicrobatchInterval, ...]]:
+    completed_ends: tuple[str, ...] = tuple(
+        event.partition_end
+        for event in history.history
+        if event.record_type == MicrobatchRecordType.PARTITION_COMPLETION
+        and event.partition_end is not None
+    )
+    if not completed_ends:
+        return intervals, ()
+    latest_end: str = _cursor_bound(
+        values=list(completed_ends), cursor_type=cursor_type, maximum=True
+    )
+    interior: tuple[MicrobatchInterval, ...] = tuple(
+        interval
+        for interval in intervals
+        if not _cursor_lte(left=latest_end, right=interval.end, cursor_type=cursor_type)
+    )
+    interior_keys: frozenset[tuple[str, str]] = frozenset(
+        (interval.start, interval.end) for interval in interior
+    )
+    trailing: tuple[MicrobatchInterval, ...] = tuple(
+        interval for interval in intervals if (interval.start, interval.end) not in interior_keys
+    )
+    return trailing, interior
 
 
 def _accounting_intervals(
@@ -1737,16 +1968,23 @@ def _apply_unaccounted_policy(
     targets: MicrobatchTargets,
     history: _MicrobatchHistoryContext,
     intervals: tuple[MicrobatchInterval, ...],
-) -> tuple[tuple[MicrobatchInterval, ...], tuple[MicrobatchInterval, ...]] | ModelExecutionResult:
+) -> (
+    tuple[
+        tuple[MicrobatchInterval, ...],
+        tuple[MicrobatchInterval, ...],
+        tuple[MicrobatchEvent, ...],
+    ]
+    | ModelExecutionResult
+):
     if not intervals:
-        return (), ()
+        return (), (), ()
     policy: UnaccountedPartitionPolicy = UnaccountedPartitionPolicy(
         context.microbatch_unaccounted_partition_policy
     )
     if policy == UnaccountedPartitionPolicy.RECOVER_ALL:
-        return intervals, ()
+        return intervals, (), ()
     if policy == UnaccountedPartitionPolicy.SYNTHESIZE:
-        failure: ModelExecutionResult | None = _append_synthetic_completions(
+        events: tuple[MicrobatchEvent, ...] = _build_synthetic_completions(
             context=context,
             state=state,
             history=history,
@@ -1754,7 +1992,7 @@ def _apply_unaccounted_policy(
             policy=policy,
             row_counts=None,
         )
-        return failure if failure is not None else ((), intervals)
+        return (), intervals, events
     counts: dict[tuple[str, str], int] | ModelExecutionResult = _count_unaccounted_intervals(
         context=context,
         state=state,
@@ -1769,7 +2007,7 @@ def _apply_unaccounted_policy(
     non_empty: tuple[MicrobatchInterval, ...] = tuple(
         interval for interval in intervals if counts[(interval.start, interval.end)] > 0
     )
-    failure = _append_synthetic_completions(
+    events = _build_synthetic_completions(
         context=context,
         state=state,
         history=history,
@@ -1777,7 +2015,7 @@ def _apply_unaccounted_policy(
         policy=policy,
         row_counts=counts,
     )
-    return failure if failure is not None else (empty, non_empty)
+    return empty, non_empty, events
 
 
 def _replay_recovery_intervals(
@@ -1825,14 +2063,39 @@ def _replay_recovery_intervals(
     if projection.state == ReplayRequirementState.SUPERSEDED:
         return (), projection.state, len(projection.unknown_fingerprints)
     return (
-        tuple(
-            interval
-            for interval in projection.missing
-            if (interval.start, interval.end) not in synthetic_keys
+        _clamp_intervals_to_model_domain(
+            context=context,
+            intervals=tuple(
+                interval
+                for interval in projection.missing
+                if (interval.start, interval.end) not in synthetic_keys
+            ),
         ),
         projection.state,
         len(projection.unknown_fingerprints) + len(synthetic_intervals),
     )
+
+
+def _clamp_intervals_to_model_domain(
+    *, context: ModelMaterializationContext, intervals: tuple[MicrobatchInterval, ...]
+) -> tuple[MicrobatchInterval, ...]:
+    cursor_type: str = context.entry.cursor_type or ""
+    floor: str | None = context.entry.cursor_start
+    ceiling: str | None = context.entry.cursor_end
+    bounded: list[MicrobatchInterval] = []
+    for interval in intervals:
+        start: str = interval.start
+        end: str = interval.end
+        if floor is not None and _cursor_lte(left=start, right=floor, cursor_type=cursor_type):
+            start = floor
+        if ceiling is not None and _cursor_lte(left=ceiling, right=end, cursor_type=cursor_type):
+            end = ceiling
+        if ceiling is not None and _cursor_lte(left=ceiling, right=start, cursor_type=cursor_type):
+            continue
+        if _cursor_lte(left=end, right=start, cursor_type=cursor_type):
+            continue
+        bounded.append(MicrobatchInterval(start=start, end=end))
+    return _deduplicate_intervals(tuple(bounded))
 
 
 def _physical_cursor_envelope(
@@ -1937,7 +2200,7 @@ def _increment_temporal_bound(*, value: datetime | date, grain: str) -> datetime
     return value
 
 
-def _append_synthetic_completions(
+def _build_synthetic_completions(
     *,
     context: ModelMaterializationContext,
     state: MicrobatchLifecycleState,
@@ -1945,71 +2208,48 @@ def _append_synthetic_completions(
     intervals: tuple[MicrobatchInterval, ...],
     policy: UnaccountedPartitionPolicy,
     row_counts: dict[tuple[str, str], int] | None,
-) -> ModelExecutionResult | None:
+) -> tuple[MicrobatchEvent, ...]:
     if not intervals:
-        return None
+        return ()
     now: datetime = datetime.now(tz=UTC)
-    try:
-        events: tuple[MicrobatchEvent, ...] = tuple(
-            MicrobatchEvent(
-                event_id=deterministic_microbatch_event_id(
-                    scope=history.scope,
-                    record_type=MicrobatchRecordType.SYNTHETIC_COMPLETION,
-                    partition_start=interval.start,
-                    partition_end=interval.end,
-                    completion_reason=f"completion_history_missing:{policy.value}",
-                ),
-                record_type=MicrobatchRecordType.SYNTHETIC_COMPLETION,
+    return tuple(
+        MicrobatchEvent(
+            event_id=deterministic_microbatch_event_id(
                 scope=history.scope,
-                origin_run_id=context.run_id,
-                origin_run_started_at=history.execution_run_started_at,
-                execution_run_id=context.run_id,
-                execution_run_started_at=history.execution_run_started_at,
-                run_type=history.run_type,
-                completion_type=MicrobatchCompletionType.RECOVERY,
-                run_start=history.run_start,
-                run_end=history.run_end,
+                record_type=MicrobatchRecordType.SYNTHETIC_COMPLETION,
                 partition_start=interval.start,
                 partition_end=interval.end,
-                batch_size=history.batch_size,
-                cursor_column=context.entry.cursor_column or "",
-                cursor_type=context.entry.cursor_type or "",
-                cursor_grain=context.entry.cursor_grain,
-                model_version_hash=None,
-                definition_hash=None,
-                fingerprint_status=MicrobatchFingerprintStatus.UNKNOWN,
-                coverage_source="synthetic",
-                observed_row_count=(
-                    None if row_counts is None else row_counts[(interval.start, interval.end)]
-                ),
-                observed_at=now,
-                synthetic_reason="completion_history_missing",
-                unaccounted_policy=policy,
-            )
-            for interval in intervals
+                completion_reason=f"completion_history_missing:{policy.value}",
+            ),
+            record_type=MicrobatchRecordType.SYNTHETIC_COMPLETION,
+            scope=history.scope,
+            origin_run_id=context.run_id,
+            origin_run_started_at=history.execution_run_started_at,
+            execution_run_id=context.run_id,
+            execution_run_started_at=history.execution_run_started_at,
+            run_type=history.run_type,
+            completion_type=MicrobatchCompletionType.RECOVERY,
+            run_start=history.run_start,
+            run_end=history.run_end,
+            partition_start=interval.start,
+            partition_end=interval.end,
+            batch_size=history.batch_size,
+            cursor_column=context.entry.cursor_column or "",
+            cursor_type=context.entry.cursor_type or "",
+            cursor_grain=context.entry.cursor_grain,
+            model_version_hash=None,
+            definition_hash=None,
+            fingerprint_status=MicrobatchFingerprintStatus.UNKNOWN,
+            coverage_source="synthetic",
+            observed_row_count=(
+                None if row_counts is None else row_counts[(interval.start, interval.end)]
+            ),
+            observed_at=now,
+            synthetic_reason="completion_history_missing",
+            unaccounted_policy=policy,
         )
-        result: MicrobatchWriteResult = history.store.write_many(events)
-        log_debug_event(
-            logger=_DEBUG_LOGGER,
-            message="",
-            sqlbuild_subject="model",
-            sqlbuild_name=context.entry.name,
-            sqlbuild_event="reconciliation_events_published",
-            sqlbuild_phase="microbatch_state",
-            sqlbuild_event_count=result.total,
-            sqlbuild_inserted_count=result.inserted,
-            sqlbuild_already_existing_count=result.already_existing,
-        )
-    except Exception as exc:
-        return build_failed_result(
-            entry=context.entry,
-            phase=ExecutionPhase.MICROBATCH_STATE,
-            error=f"failed to append synthetic microbatch coverage: {exc}",
-            warnings=state.warnings,
-            audit_results=state.audit_results,
-            statement_recorder=state.statement_recorder,
-        )
-    return None
+        for interval in intervals
+    )
 
 
 def _count_unaccounted_intervals(
@@ -2210,6 +2450,7 @@ def _microbatch_result_fields(
         "microbatch_causal_replay_intervals": tuple(
             (interval.start, interval.end) for interval in history.causal_replay_intervals
         ),
+        "microbatch_plan_reason": history.resolution_reason,
     }
 
 
@@ -2302,13 +2543,6 @@ def _reported_rows_affected(*, total_rows: int, row_count_known: bool) -> int | 
     """Preserve a known zero row count while keeping unavailable counts as None."""
 
     return total_rows if row_count_known else None
-
-
-def _append_microbatch_event(
-    *, store: MicrobatchEventStore, event: MicrobatchEvent
-) -> MicrobatchEventStore:
-    store.write(event)
-    return store
 
 
 def _stage_microbatch_delta(
@@ -2752,38 +2986,15 @@ def _plan_microbatch_windows(
     runtime_owned_cursor_bounds: bool = has_runtime_owned_cursor_watermarks(
         entry.cursor_input_relations
     )
-    causal_relations: tuple[CursorInputRelation, ...] = resolve_causal_input_relations(
-        relations=entry.cursor_input_relations,
-        downstream_grain=entry.cursor_grain,
-        dependencies=context.microbatch_causal_dependencies,
-    )
-    causal_effective_grain: str | None = resolve_effective_timestamp_grain(
+    effective_grain: str | None = resolve_effective_timestamp_grain(
         cursor_type=entry.cursor_type,
         downstream_grain=entry.cursor_grain,
-        cursor_input_relations=causal_relations,
-    )
-    has_outstanding_causal_work: bool = any(
-        dependency.outstanding.intervals for dependency in context.microbatch_causal_dependencies
-    )
-    runtime_entry: ModelPlanEntry = replace(
-        entry,
-        cursor_input_relations=causal_relations,
-        lookback=(
-            resolve_effective_microbatch_batch_size(
-                batch_size=entry.batch_size or "",
-                effective_grain=causal_effective_grain,
-            )
-            if entry.lookback_is_default
-            and causal_effective_grain is not None
-            and has_outstanding_causal_work
-            else entry.lookback
-        ),
+        cursor_input_relations=entry.cursor_input_relations,
     )
     has_authoritative_override: bool = has_authoritative_cursor_override(entry=entry)
     runtime_discovery: bool = not has_authoritative_override and (
         runtime_owned_cursor_bounds
-        or is_full_refresh
-        or bool(context.microbatch_causal_dependencies)
+        or (is_full_refresh and entry.microbatch_strategy != MicrobatchStrategy.ROLLING_WINDOW)
     )
     microbatch_range: CursorBounds | None = entry.microbatch_range
     if runtime_discovery:
@@ -2807,7 +3018,7 @@ def _plan_microbatch_windows(
                 target_schema=entry.destination.schema,
                 target_name=entry.destination.name,
                 spec=build_runtime_cursor_spec(
-                    entry=runtime_entry,
+                    entry=entry,
                     read_destination_cursor=not is_full_refresh,
                 ),
                 on_progress=on_progress,
@@ -2842,16 +3053,11 @@ def _plan_microbatch_windows(
         microbatch_range = CursorBounds(start=empty_bound, end=empty_bound)
 
     effective_batch_size: str = batch_size
-    if causal_effective_grain is not None:
+    if effective_grain is not None:
         effective_batch_size = resolve_effective_microbatch_batch_size(
             batch_size=batch_size,
-            effective_grain=causal_effective_grain,
+            effective_grain=effective_grain,
         )
-
-    causal_intervals: tuple[MicrobatchInterval, ...] = _bounded_causal_replay_intervals(
-        context=context,
-        availability=microbatch_range,
-    )
     work_intervals: tuple[MicrobatchInterval, ...] = merge_causal_intervals(
         intervals=(
             *(
@@ -2859,7 +3065,6 @@ def _plan_microbatch_windows(
                 if microbatch_range.start != microbatch_range.end
                 else ()
             ),
-            *causal_intervals,
         ),
         cursor_type=cursor_type,
     )
@@ -2870,7 +3075,9 @@ def _plan_microbatch_windows(
     )
     batches: tuple[BatchWindow, ...] = (
         (BatchWindow(start=microbatch_range.start, end=microbatch_range.end, index=0),)
-        if is_full_refresh and microbatch_range.start == microbatch_range.end
+        if is_full_refresh
+        and microbatch_range.start == microbatch_range.end
+        and microbatch_range.start != entry.cursor_end
         else tuple(replace(batch, index=index) for index, batch in enumerate(computed_batches))
     )
     resolved_range: CursorBounds = (
@@ -2888,8 +3095,8 @@ def _plan_microbatch_windows(
         effective_batch_size=effective_batch_size,
         resolved_range=resolved_range,
         runtime_discovery=runtime_discovery,
-        causal_history_status=_causal_history_status(context=context),
-        causal_replay_intervals=causal_intervals,
+        causal_history_status=None,
+        causal_replay_intervals=(),
     )
 
 
@@ -2963,6 +3170,10 @@ def _format_resolved_microbatch_progress(
     batch_size: str,
     cursor_type: str | None,
     cursor_grain: str | None,
+    strategy: str,
+    reason: str,
+    limit: int | None,
+    intervals: tuple[MicrobatchInterval, ...],
 ) -> str:
     """Format the concrete runtime-owned range before its first batch starts."""
 
@@ -2977,7 +3188,13 @@ def _format_resolved_microbatch_progress(
         cursor_grain=cursor_grain,
     )
     batch_noun: str = "batch" if batch_count == 1 else "batches"
-    return f"resolved runtime range {start} -> {end} ({batch_count} {batch_noun} x {batch_size})"
+    limit_text: str = "none" if limit is None else str(limit)
+    interval_text: str = ", ".join(f"[{item.start}, {item.end})" for item in intervals)
+    return (
+        f"runtime plan resolved: strategy {strategy}; range {start} -> {end}; "
+        f"intervals {interval_text or 'none'}; reason {reason}; "
+        f"{batch_count} {batch_noun} x {batch_size}; limit {limit_text}"
+    )
 
 
 def compute_batch_windows(
@@ -3043,8 +3260,8 @@ def _validate_cursor_output_columns(
         return
     raise ExecutorInputError(
         f"microbatch cursor column '{cursor_column}' is not produced by model output; "
-        "use cursor_filter_inputs for upstream cursor columns and set cursor to the target output "
-        "cursor column"
+        "use cursor_inputs filter roles for upstream cursor columns and set cursor to the "
+        "target output cursor column"
     )
 
 

@@ -734,3 +734,17 @@ class ExpandWithSpansTestCase:
     probe_expanded_offset: int
     expected_authored_offset: int
     expected_generated: bool
+
+
+@dataclass(frozen=True)
+class MicrobatchRedesignBehaviorTestCase:
+    description: str
+    expected_outcome: object
+
+
+@dataclass(frozen=True)
+class MicrobatchCursorTypeTestCase:
+    description: str
+    declared_type: str
+    cursor_type: str
+    expected_compatible: bool

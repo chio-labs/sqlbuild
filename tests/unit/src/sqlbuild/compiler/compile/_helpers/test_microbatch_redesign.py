@@ -1,0 +1,317 @@
+"""Behavior-focused coverage for the explicit microbatch cursor contract."""
+
+import pytest
+
+from sqlbuild.compiler.compile._helpers.config.model_validation import (
+    validate_incremental_config,
+)
+from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.models import CompileModelConfig
+from sqlbuild.compiler.planner._helpers.resolve.cursor import compute_cursor_bounds
+from sqlbuild.compiler.planner._helpers.warehouse.snapshot import _watermark_type_is_compatible
+from sqlbuild.compiler.planner.models import CursorBounds, ModelCursorSnapshot
+from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
+    MicrobatchCursorTypeTestCase,
+    MicrobatchRedesignBehaviorTestCase,
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchRedesignBehaviorTestCase(
+            description="explicit watermark roles", expected_outcome=None
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_watermark_strategy_when_inputs_have_explicit_roles_then_config_is_valid(
+    test_case: MicrobatchRedesignBehaviorTestCase,
+) -> None:
+    validate_incremental_config(
+        config=CompileModelConfig(
+            values={
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "incremental_mode": "microbatch",
+                "microbatch_strategy": "watermark",
+                "cursor_watermark_mode": "any",
+                "cursor": "event_time",
+                "cursor_type": "timestamp",
+                "cursor_grain": "day",
+                "cursor_start": "2026-01-01",
+                "cursor_end": "2030-01-01",
+                "cursor_inputs": {
+                    "archive": {"column": "event_time", "roles": ["watermark"]},
+                    "live": {"column": "event_time", "roles": ["filter", "watermark"]},
+                },
+                "batch_size": "1d",
+                "lookback": "4d",
+                "max_microbatches": 7,
+            }
+        ),
+        model_name="events",
+        ref_count=2,
+        known_input_names=frozenset({"archive", "live"}),
+    )
+    assert test_case.expected_outcome is None
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchRedesignBehaviorTestCase(
+            description="watermark shorthand rejected", expected_outcome="must use .*column .*roles"
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_watermark_strategy_when_cursor_inputs_use_shorthand_then_compilation_fails(
+    test_case: MicrobatchRedesignBehaviorTestCase,
+) -> None:
+    with pytest.raises(CompileInputError, match=str(test_case.expected_outcome)):
+        validate_incremental_config(
+            config=CompileModelConfig(
+                values={
+                    "materialized": "incremental",
+                    "incremental_strategy": "delete_insert",
+                    "incremental_mode": "microbatch",
+                    "microbatch_strategy": "watermark",
+                    "cursor_watermark_mode": "all",
+                    "cursor": "event_time",
+                    "cursor_type": "timestamp",
+                    "cursor_grain": "day",
+                    "cursor_inputs": {"events": "event_time"},
+                    "batch_size": "1d",
+                }
+            ),
+            model_name="events",
+            ref_count=1,
+            known_input_names=frozenset({"events"}),
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchRedesignBehaviorTestCase(
+            description="watermark limit below lookback",
+            expected_outcome="below the ordinary lookback requirement of 5 batches",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_model_limit_below_lookback_when_validating_then_compilation_fails(
+    test_case: MicrobatchRedesignBehaviorTestCase,
+) -> None:
+    with pytest.raises(CompileInputError, match=str(test_case.expected_outcome)):
+        validate_incremental_config(
+            config=CompileModelConfig(
+                values={
+                    "materialized": "incremental",
+                    "incremental_strategy": "delete_insert",
+                    "incremental_mode": "microbatch",
+                    "microbatch_strategy": "watermark",
+                    "cursor_watermark_mode": "all",
+                    "cursor": "event_time",
+                    "cursor_type": "timestamp",
+                    "cursor_grain": "day",
+                    "cursor_inputs": {
+                        "events": {
+                            "column": "event_time",
+                            "roles": ["filter", "watermark"],
+                        }
+                    },
+                    "batch_size": "1d",
+                    "lookback": "4d",
+                    "max_microbatches": 4,
+                }
+            ),
+            model_name="events",
+            ref_count=1,
+            known_input_names=frozenset({"events"}),
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchRedesignBehaviorTestCase(
+            description="any uses furthest watermark", expected_outcome="2026-07-21"
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_any_watermarks_when_computing_bounds_then_furthest_usable_input_wins(
+    test_case: MicrobatchRedesignBehaviorTestCase,
+) -> None:
+    bounds: CursorBounds | None = compute_cursor_bounds(
+        cursor_snapshot=ModelCursorSnapshot(
+            target_max="2026-07-15",
+            upstream_mins=("2026-07-01", "2026-07-02"),
+            upstream_maxes=("2026-07-16", "2026-07-20"),
+            cursor_watermark_mode="any",
+        ),
+        cursor_type="timestamp",
+        cursor_start="2026-01-01",
+        lookback=None,
+        backfill_duration=None,
+        start_cursor_override=None,
+        end_cursor_override=None,
+        is_microbatch=False,
+        cursor_grain="day",
+    )
+
+    assert bounds is not None
+    assert bounds.end == test_case.expected_outcome
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchRedesignBehaviorTestCase(
+            description="empty terminal domain", expected_outcome="2025-12-01"
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_empty_terminal_model_when_computing_bounds_then_cursor_end_is_available(
+    test_case: MicrobatchRedesignBehaviorTestCase,
+) -> None:
+    bounds: CursorBounds | None = compute_cursor_bounds(
+        cursor_snapshot=ModelCursorSnapshot(
+            target_max=None,
+            upstream_mins=(),
+            upstream_maxes=(),
+            upstream_terminal_starts=("2025-01-01",),
+            upstream_terminal_ends=("2025-12-01",),
+        ),
+        cursor_type="timestamp",
+        cursor_start="2025-01-01",
+        lookback=None,
+        backfill_duration=None,
+        start_cursor_override=None,
+        end_cursor_override=None,
+        is_microbatch=False,
+        cursor_grain="day",
+    )
+
+    assert bounds is not None
+    assert bounds.start == "2025-01-01T00:00:00"
+    assert bounds.end == test_case.expected_outcome
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchRedesignBehaviorTestCase(
+            description="all terminal end replaces physical maximum", expected_outcome="2025-12-01"
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_nonempty_terminal_and_live_inputs_when_mode_all_then_terminal_end_replaces_physical_max(
+    test_case: MicrobatchRedesignBehaviorTestCase,
+) -> None:
+    bounds: CursorBounds | None = compute_cursor_bounds(
+        cursor_snapshot=ModelCursorSnapshot(
+            target_max="2025-11-01",
+            upstream_mins=("2025-01-01", "2026-01-01"),
+            upstream_maxes=("2025-11-15", "2026-07-02"),
+            upstream_end_inputs=(
+                ("2025-11-15", "2025-12-01"),
+                ("2026-07-02", None),
+            ),
+            cursor_watermark_mode="all",
+        ),
+        cursor_type="timestamp",
+        cursor_start="2025-01-01",
+        lookback=None,
+        backfill_duration=None,
+        start_cursor_override=None,
+        end_cursor_override=None,
+        is_microbatch=False,
+        cursor_grain="day",
+    )
+
+    assert bounds is not None
+    assert bounds.end == test_case.expected_outcome
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchRedesignBehaviorTestCase(
+            description="any live end wins", expected_outcome="2026-07-03"
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_nonempty_terminal_and_live_inputs_when_mode_any_then_live_end_wins(
+    test_case: MicrobatchRedesignBehaviorTestCase,
+) -> None:
+    bounds: CursorBounds | None = compute_cursor_bounds(
+        cursor_snapshot=ModelCursorSnapshot(
+            target_max="2025-11-01",
+            upstream_mins=("2025-01-01", "2026-01-01"),
+            upstream_maxes=("2026-02-01", "2026-07-02"),
+            upstream_end_inputs=(
+                ("2026-02-01", "2025-12-01"),
+                ("2026-07-02", None),
+            ),
+            cursor_watermark_mode="any",
+        ),
+        cursor_type="timestamp",
+        cursor_start="2025-01-01",
+        lookback=None,
+        backfill_duration=None,
+        start_cursor_override=None,
+        end_cursor_override=None,
+        is_microbatch=False,
+        cursor_grain="day",
+    )
+
+    assert bounds is not None
+    assert bounds.end == test_case.expected_outcome
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchCursorTypeTestCase("timestamp_ntz", "TIMESTAMP_NTZ", "timestamp", True),
+        MicrobatchCursorTypeTestCase("datetime2", "DATETIME2", "timestamp", True),
+        MicrobatchCursorTypeTestCase("datetime64", "DATETIME64(6)", "timestamp", True),
+        MicrobatchCursorTypeTestCase("smalldatetime", "SMALLDATETIME", "timestamp", True),
+        MicrobatchCursorTypeTestCase("date", "DATE", "timestamp", True),
+        MicrobatchCursorTypeTestCase("date32", "DATE32", "timestamp", True),
+        MicrobatchCursorTypeTestCase("bigint", "BIGINT", "integer", True),
+        MicrobatchCursorTypeTestCase("mediumint", "MEDIUMINT", "integer", True),
+        MicrobatchCursorTypeTestCase("int128", "INT128", "integer", True),
+        MicrobatchCursorTypeTestCase("int256", "INT256", "integer", True),
+        MicrobatchCursorTypeTestCase("uint", "UINT", "integer", True),
+        MicrobatchCursorTypeTestCase("umediumint", "UMEDIUMINT", "integer", True),
+        MicrobatchCursorTypeTestCase("decimal zero scale", "DECIMAL(18, 0)", "integer", True),
+        MicrobatchCursorTypeTestCase("numeric default scale", "NUMERIC(20)", "integer", True),
+        MicrobatchCursorTypeTestCase("number default scale", "NUMBER", "integer", True),
+        MicrobatchCursorTypeTestCase("time only rejected", "TIME", "timestamp", False),
+        MicrobatchCursorTypeTestCase("scaled decimal rejected", "DECIMAL(18, 2)", "integer", False),
+        MicrobatchCursorTypeTestCase("scaled numeric rejected", "NUMERIC(18, 4)", "integer", False),
+        MicrobatchCursorTypeTestCase("scaled number rejected", "NUMBER(18, 2)", "integer", False),
+        MicrobatchCursorTypeTestCase("integer not timestamp", "BIGINT", "timestamp", False),
+        MicrobatchCursorTypeTestCase("timestamp not integer", "TIMESTAMP", "integer", False),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_known_watermark_contract_type_when_validating_then_cursor_domain_must_match(
+    test_case: MicrobatchCursorTypeTestCase,
+) -> None:
+    assert (
+        _watermark_type_is_compatible(
+            declared_type=test_case.declared_type, cursor_type=test_case.cursor_type
+        )
+        is test_case.expected_compatible
+    )
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-vv"])

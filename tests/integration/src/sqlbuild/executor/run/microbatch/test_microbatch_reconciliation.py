@@ -2,28 +2,55 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 import pytest
 
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.executor.run._helpers.materializations.microbatch import (
-    _count_unaccounted_intervals,
+from sqlbuild.compiler.planner.models import (
+    BackfillResult,
+    CursorBounds,
+    CursorInputRelation,
+    ModelPlanEntry,
 )
+from sqlbuild.compiler.planner.types import BackfillAction
+from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.run._helpers.materializations.microbatch import (
+    _clamp_intervals_to_model_domain,
+    _count_unaccounted_intervals,
+    _MicrobatchHistoryContext,
+    _MicrobatchPlan,
+    _plan_microbatch_windows,
+    _serial_trailing_recovery_only,
+    execute_microbatch_entry,
+)
+from sqlbuild.executor.run._helpers.validation.cursor_bounds import resolve_runtime_cursor_bounds
 from sqlbuild.executor.run.models import (
     MicrobatchLifecycleState,
     MicrobatchTargets,
     ModelExecutionResult,
     ModelMaterializationContext,
+    RuntimeCursorSpec,
 )
-from sqlbuild.microbatches.models import MicrobatchInterval
+from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.microbatches.models import (
+    MicrobatchEvent,
+    MicrobatchInterval,
+    MicrobatchScope,
+    MicrobatchWriteResult,
+)
+from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 from tests.integration.src.sqlbuild.executor.run.microbatch._test_types import (
+    MicrobatchBehaviorTestCase,
     MicrobatchReconciliationChunkTestCase,
 )
 from tests.integration.src.sqlbuild.executor.run.microbatch.helpers import (
     build_integer_reconciliation_plan_entry,
+    resolve_nonempty_terminal_bounds,
 )
+from tests.unit.src.sqlbuild.microbatches.helpers import SCOPE, completion_event
 
 
 class _CountTrackingDuckDbAdapter(DuckDbAdapter):
@@ -34,6 +61,24 @@ class _CountTrackingDuckDbAdapter(DuckDbAdapter):
         if "AS __sqb_count_" in sql:
             self.count_sqls.append(sql)
         return super()._execute(connection=connection, sql=sql)
+
+
+class _RecordingEventStore:
+    def __init__(self) -> None:
+        self.writes: list[MicrobatchEvent] = []
+
+    def write(self, event: MicrobatchEvent) -> None:
+        self.writes.append(event)
+
+    def write_many(self, events: tuple[MicrobatchEvent, ...]) -> MicrobatchWriteResult:
+        self.writes.extend(events)
+        return MicrobatchWriteResult(total=len(events), inserted=len(events), already_existing=0)
+
+    def read_scope_history(self, scope: MicrobatchScope) -> tuple[MicrobatchEvent, ...]:
+        return ()
+
+    def read_model_history(self, scope: MicrobatchScope) -> tuple[MicrobatchEvent, ...]:
+        return ()
 
 
 @pytest.mark.parametrize(
@@ -116,6 +161,469 @@ def test_given_many_unaccounted_intervals_when_counting_then_queries_are_chunked
         (str(value), str(value + 1)): int(value in occupied)
         for value in range(test_case.interval_count)
     }
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchBehaviorTestCase(
+            description="any_watermarks_when_one_input_is_empty_then_runtime_uses_populated_alternative",
+            expected_outcome="2026-07-03T00:00:00",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_any_watermarks_when_one_input_is_empty_then_runtime_uses_populated_alternative(
+    adapter: DuckDbAdapter,
+    connection: Any,
+    test_case: MicrobatchBehaviorTestCase,
+) -> None:
+    connection.execute("CREATE TABLE main.target_events (event_time TIMESTAMP)")
+    connection.execute("CREATE TABLE main.empty_events (event_time TIMESTAMP)")
+    connection.execute("CREATE TABLE main.live_events (event_time TIMESTAMP)")
+    connection.execute("INSERT INTO main.live_events VALUES ('2026-07-01'), ('2026-07-02')")
+
+    bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
+        adapter=adapter,
+        connection=connection,
+        target_relation="main.target_events",
+        target_database=None,
+        target_schema="main",
+        target_name="target_events",
+        spec=RuntimeCursorSpec(
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            cursor_grain="day",
+            cursor_start="2026-01-01",
+            cursor_input_relations=(
+                CursorInputRelation("main.empty_events", "event_time"),
+                CursorInputRelation("main.live_events", "event_time"),
+            ),
+            cursor_watermark_mode="any",
+        ),
+    )
+
+    assert bounds is not None
+    assert bounds.start == "2026-07-01T00:00:00"
+    assert bounds.end == test_case.expected_outcome
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchBehaviorTestCase(
+            description="all_watermarks_when_one_input_is_empty_then_runtime_fails_closed",
+            expected_outcome="required cursor watermark is empty",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_all_watermarks_when_one_input_is_empty_then_runtime_fails_closed(
+    adapter: DuckDbAdapter,
+    connection: Any,
+    test_case: MicrobatchBehaviorTestCase,
+) -> None:
+    connection.execute("CREATE TABLE main.target_events (event_time TIMESTAMP)")
+    connection.execute("CREATE TABLE main.empty_events (event_time TIMESTAMP)")
+    connection.execute("CREATE TABLE main.live_events (event_time TIMESTAMP)")
+    connection.execute("INSERT INTO main.live_events VALUES ('2026-07-02')")
+
+    with pytest.raises(ExecutorInputError, match=str(test_case.expected_outcome)):
+        resolve_runtime_cursor_bounds(
+            adapter=adapter,
+            connection=connection,
+            target_relation="main.target_events",
+            target_database=None,
+            target_schema="main",
+            target_name="target_events",
+            spec=RuntimeCursorSpec(
+                cursor_column="event_time",
+                cursor_type="timestamp",
+                cursor_grain="day",
+                cursor_start="2026-01-01",
+                cursor_input_relations=(
+                    CursorInputRelation("main.empty_events", "event_time"),
+                    CursorInputRelation("main.live_events", "event_time"),
+                ),
+                cursor_watermark_mode="all",
+            ),
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchBehaviorTestCase(
+            description="terminal_model_watermark_when_relation_is_empty_then_runtime_uses_declared_domain",
+            expected_outcome="2025-12-01T00:00:00",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_terminal_model_watermark_when_relation_is_empty_then_runtime_uses_declared_domain(
+    adapter: DuckDbAdapter,
+    connection: Any,
+    test_case: MicrobatchBehaviorTestCase,
+) -> None:
+    connection.execute("CREATE TABLE main.target_events (event_time TIMESTAMP)")
+    connection.execute("CREATE TABLE main.archive_events (event_time TIMESTAMP)")
+
+    bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
+        adapter=adapter,
+        connection=connection,
+        target_relation="main.target_events",
+        target_database=None,
+        target_schema="main",
+        target_name="target_events",
+        spec=RuntimeCursorSpec(
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            cursor_grain="day",
+            cursor_start="2025-01-01",
+            cursor_input_relations=(
+                CursorInputRelation(
+                    "main.archive_events",
+                    "event_time",
+                    terminal_cursor_start="2025-01-01",
+                    terminal_cursor_end="2025-12-01",
+                ),
+            ),
+            cursor_watermark_mode="all",
+        ),
+    )
+
+    assert bounds is not None
+    assert bounds.start == "2025-01-01T00:00:00"
+    assert bounds.end == test_case.expected_outcome
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchBehaviorTestCase(
+            description="nonempty_terminal_and_live_watermarks_when_mode_all_then_archive_end_wins",
+            expected_outcome="2025-12-01T00:00:00",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_nonempty_terminal_and_live_watermarks_when_mode_all_then_archive_end_wins(
+    adapter: DuckDbAdapter,
+    connection: Any,
+    test_case: MicrobatchBehaviorTestCase,
+) -> None:
+    bounds: CursorBounds | None = resolve_nonempty_terminal_bounds(
+        adapter=adapter, connection=connection, mode="all"
+    )
+
+    assert bounds is not None
+    assert bounds.end == test_case.expected_outcome
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchBehaviorTestCase(
+            description="nonempty_terminal_and_live_watermarks_when_mode_any_then_live_end_wins",
+            expected_outcome="2026-07-03T00:00:00",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_nonempty_terminal_and_live_watermarks_when_mode_any_then_live_end_wins(
+    adapter: DuckDbAdapter,
+    connection: Any,
+    test_case: MicrobatchBehaviorTestCase,
+) -> None:
+    bounds: CursorBounds | None = resolve_nonempty_terminal_bounds(
+        adapter=adapter, connection=connection, mode="any"
+    )
+
+    assert bounds is not None
+    assert bounds.end == test_case.expected_outcome
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchBehaviorTestCase(
+            description="replay_and_synthetic_facts_when_final_limit_fails_then_state_is_unchanged",
+            expected_outcome=0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_replay_and_synthetic_facts_when_final_limit_fails_then_state_is_unchanged(
+    adapter: DuckDbAdapter,
+    connection: Any,
+    test_case: MicrobatchBehaviorTestCase,
+) -> None:
+    connection.execute("CREATE TABLE main.orders (id INTEGER)")
+    connection.execute("INSERT INTO main.orders VALUES (0), (10), (20)")
+    store: _RecordingEventStore = _RecordingEventStore()
+    scope: MicrobatchScope = MicrobatchScope(
+        scope_kind="direct",
+        scope_key="main.orders",
+        model_name="orders",
+        target_database=None,
+        target_schema="main",
+        target_name="orders",
+        physical_generation_id="generation-1",
+    )
+    entry: ModelPlanEntry = replace(
+        build_integer_reconciliation_plan_entry(),
+        resolved_sql="SELECT id FROM main.orders WHERE id >= __SQLBUILD_MICROBATCH_START__ "
+        "AND id < __SQLBUILD_MICROBATCH_END__",
+        fingerprint_query_sql="SELECT id FROM main.orders",
+        microbatch_range=CursorBounds(start="0", end="30"),
+        microbatch_limit=2,
+        microbatch_limit_action=MicrobatchLimitAction.ERROR,
+        fingerprint_version_hash="new-version",
+        previous_version_hash="old-version",
+        backfill=BackfillResult(action=BackfillAction.FULL),
+    )
+
+    progress: list[str] = []
+    result: ModelExecutionResult = execute_microbatch_entry(
+        context=ModelMaterializationContext(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            model_locations={},
+            seed_locations={},
+            source_map={},
+            model_audits=(),
+            run_id="limited-replay",
+            query_change_tracking=False,
+            microbatch_event_store=store,
+            microbatch_scope=scope,
+            microbatch_model_version_hash="new-version",
+        ),
+        declared_columns=(),
+        on_progress=progress.append,
+    )
+
+    assert result.error_message is not None
+    assert "MICROBATCH LIMIT EXCEEDED" in result.error_message
+    assert len(store.writes) == test_case.expected_outcome
+    assert not any(message.startswith("runtime plan resolved:") for message in progress)
+    assert connection.execute("SELECT COUNT(*) FROM main.orders").fetchone() == (3,)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchBehaviorTestCase(
+            description="legacy_recovery_outside_model_domain_when_clamping_then_only_overlap_remains",
+            expected_outcome=2,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_legacy_recovery_outside_model_domain_when_clamping_then_only_overlap_remains(
+    adapter: DuckDbAdapter,
+    connection: Any,
+    test_case: MicrobatchBehaviorTestCase,
+) -> None:
+    context: ModelMaterializationContext = ModelMaterializationContext(
+        entry=replace(
+            build_integer_reconciliation_plan_entry(), cursor_start="10", cursor_end="30"
+        ),
+        adapter=adapter,
+        connection=connection,
+        model_locations={},
+        seed_locations={},
+        source_map={},
+        model_audits=(),
+        run_id="domain-clamp",
+        query_change_tracking=False,
+    )
+
+    intervals: tuple[MicrobatchInterval, ...] = _clamp_intervals_to_model_domain(
+        context=context,
+        intervals=(
+            MicrobatchInterval("0", "20"),
+            MicrobatchInterval("20", "40"),
+            MicrobatchInterval("30", "40"),
+        ),
+    )
+
+    assert len(intervals) == test_case.expected_outcome
+    assert intervals == (
+        MicrobatchInterval("10", "20"),
+        MicrobatchInterval("20", "30"),
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchBehaviorTestCase(
+            description="full_refresh_wholly_after_cursor_end_when_planning_then_no_batch_is_generated",
+            expected_outcome=0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_full_refresh_wholly_after_cursor_end_when_planning_then_no_batch_is_generated(
+    adapter: DuckDbAdapter,
+    connection: Any,
+    test_case: MicrobatchBehaviorTestCase,
+) -> None:
+    connection.execute("CREATE TABLE main.orders (id INTEGER)")
+    connection.execute("INSERT INTO main.orders VALUES (29)")
+    context: ModelMaterializationContext = ModelMaterializationContext(
+        entry=replace(
+            build_integer_reconciliation_plan_entry(),
+            microbatch_strategy="rolling_window",
+            cursor_end="30",
+            microbatch_range=CursorBounds("30", "30"),
+        ),
+        adapter=adapter,
+        connection=connection,
+        model_locations={},
+        seed_locations={},
+        source_map={},
+        model_audits=(),
+        run_id="terminal-full-refresh",
+        query_change_tracking=False,
+    )
+
+    plan: _MicrobatchPlan = _plan_microbatch_windows(
+        context=context,
+        is_full_refresh=True,
+        target_qualified="main.orders",
+        warnings=[],
+        audit_results=[],
+        statement_recorder=StatementRecorder(),
+        on_progress=None,
+    )
+
+    assert len(plan.batches) == test_case.expected_outcome
+    assert plan.resolved_range == CursorBounds("30", "30")
+    result: ModelExecutionResult = execute_microbatch_entry(
+        context=context, declared_columns=(), is_full_refresh=True
+    )
+    assert result.batch_count == 0
+    assert connection.execute("SELECT id FROM main.orders").fetchall() == [(29,)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchBehaviorTestCase(
+            description="no_work_full_refresh_with_absent_destination_when_executing_then_result_is_skipped",
+            expected_outcome=ExecutionStatus.SKIPPED,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_no_work_full_refresh_with_absent_destination_when_executing_then_result_is_skipped(
+    adapter: DuckDbAdapter,
+    connection: Any,
+    test_case: MicrobatchBehaviorTestCase,
+) -> None:
+    context: ModelMaterializationContext = ModelMaterializationContext(
+        entry=replace(
+            build_integer_reconciliation_plan_entry(),
+            microbatch_strategy="rolling_window",
+            cursor_end="30",
+            microbatch_range=CursorBounds("30", "30"),
+        ),
+        adapter=adapter,
+        connection=connection,
+        model_locations={},
+        seed_locations={},
+        source_map={},
+        model_audits=(),
+        run_id="absent-terminal-full-refresh",
+        query_change_tracking=False,
+    )
+
+    result: ModelExecutionResult = execute_microbatch_entry(
+        context=context, declared_columns=(), is_full_refresh=True
+    )
+
+    assert result.status == test_case.expected_outcome
+    assert result.promoted_relation is None
+    assert result.skip_reason == "no microbatch work and destination relation does not exist"
+    assert not adapter.relation_exists(
+        connection=connection, database=None, schema="main", name="orders"
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchBehaviorTestCase(
+            description="no_work_first_run_with_absent_destination_when_executing_then_result_is_skipped",
+            expected_outcome=ExecutionStatus.SKIPPED,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_no_work_first_run_with_absent_destination_when_executing_then_result_is_skipped(
+    adapter: DuckDbAdapter,
+    connection: Any,
+    test_case: MicrobatchBehaviorTestCase,
+) -> None:
+    context: ModelMaterializationContext = ModelMaterializationContext(
+        entry=replace(
+            build_integer_reconciliation_plan_entry(),
+            microbatch_range=CursorBounds("10", "10"),
+        ),
+        adapter=adapter,
+        connection=connection,
+        model_locations={},
+        seed_locations={},
+        source_map={},
+        model_audits=(),
+        run_id="absent-first-run",
+        query_change_tracking=False,
+    )
+
+    result: ModelExecutionResult = execute_microbatch_entry(context=context, declared_columns=())
+
+    assert result.status == test_case.expected_outcome
+    assert result.promoted_relation is None
+    assert not adapter.relation_exists(
+        connection=connection, database=None, schema="main", name="orders"
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchBehaviorTestCase(
+            description="serial_history_with_interior_and_trailing_gaps_when_detecting_then_only_trailing_recovers",
+            expected_outcome=MicrobatchInterval("3", "4"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_serial_history_with_interior_and_trailing_gaps_when_detecting_then_only_trailing_recovers(
+    test_case: MicrobatchBehaviorTestCase,
+) -> None:
+    store: _RecordingEventStore = _RecordingEventStore()
+    history: _MicrobatchHistoryContext = _MicrobatchHistoryContext(
+        store=store,
+        scope=SCOPE,
+        history=(completion_event(event_id="later", start="2", end="3"),),
+        run_type=completion_event(event_id="kind", start="2", end="3").run_type,
+        run_start="0",
+        run_end="4",
+        batch_size="1",
+        batch_concurrency=1,
+    )
+
+    trailing, interior = _serial_trailing_recovery_only(
+        history=history,
+        intervals=(MicrobatchInterval("1", "2"), MicrobatchInterval("3", "4")),
+        cursor_type="integer",
+    )
+
+    assert trailing == (test_case.expected_outcome,)
+    assert interior == (MicrobatchInterval("1", "2"),)
 
 
 if __name__ == "__main__":

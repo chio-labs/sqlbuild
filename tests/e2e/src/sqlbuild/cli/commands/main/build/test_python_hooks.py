@@ -526,9 +526,11 @@ def test_given_python_hooks_lifecycle_matrix_when_building_then_all_materializat
                   cursor_type timestamp,
                   cursor_grain hour,
                   cursor_inputs (
-                    fact_orders ordered_at,
-                  ),
+            fact_orders (column ordered_at, roles [filter, watermark]),
+          ),
                   incremental_mode microbatch,
+          microbatch_strategy watermark,
+          cursor_watermark_mode all,
                   batch_size 1d,
                   pre_hooks [python("log_hook")],
                   post_hooks [python("log_hook")]

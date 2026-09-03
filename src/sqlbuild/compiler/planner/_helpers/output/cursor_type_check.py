@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from sqlbuild.adapter.contract.models import ColumnInfo
@@ -69,6 +70,9 @@ _POLYGLOT_INTEGER_TYPE_NAMES: frozenset[str] = frozenset(
         "UINT128",
         "UINT256",
     }
+)
+_DECIMAL_INTEGER_TYPE_PATTERN: re.Pattern[str] = re.compile(
+    r"^(?:DECIMAL|NUMERIC|NUMBER)(?:\(\s*\d+\s*(?:,\s*(\d+)\s*)?\))?$"
 )
 
 
@@ -143,7 +147,7 @@ def _check_with_polyglot(
 ) -> PlanWarning | None:
     """Classify warehouse type via sql_analysis and return error on clear mismatch."""
 
-    detected: CursorType | None = _classify_type_with_polyglot(warehouse_type)
+    detected: CursorType | None = classify_cursor_sql_type(warehouse_type)
     if detected is None:
         return None
 
@@ -169,7 +173,7 @@ def _check_with_heuristic(
 ) -> PlanWarning | None:
     """Classify warehouse type via substring heuristic and warn on mismatch."""
 
-    detected: CursorType | None = _classify_type_heuristic(warehouse_type)
+    detected: CursorType | None = classify_cursor_sql_type(warehouse_type)
     if detected is None:
         return None
 
@@ -201,6 +205,23 @@ def _classify_type_heuristic(warehouse_type: str) -> CursorType | None:
             return CursorType.INTEGER
 
     return None
+
+
+def classify_cursor_sql_type(sql_type: str) -> CursorType | None:
+    """Classify a supported cross-adapter SQL cursor type."""
+
+    normalized: str = " ".join(sql_type.upper().split())
+    decimal_match: re.Match[str] | None = _DECIMAL_INTEGER_TYPE_PATTERN.fullmatch(normalized)
+    if decimal_match is not None:
+        return CursorType.INTEGER if int(decimal_match.group(1) or 0) == 0 else None
+
+    base_name: str = normalized.partition("(")[0].strip().replace(" ", "_")
+    if base_name in _POLYGLOT_TIMESTAMP_TYPE_NAMES:
+        return CursorType.TIMESTAMP
+    if base_name in _POLYGLOT_INTEGER_TYPE_NAMES:
+        return CursorType.INTEGER
+
+    return _classify_type_with_polyglot(normalized)
 
 
 def _classify_type_with_polyglot(warehouse_type: str) -> CursorType | None:

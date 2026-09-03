@@ -26,6 +26,7 @@ from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
     CursorSentinelSubstitutionErrorTestCase,
     MixedTemporalWatermarkTestCase,
     RuntimeCursorEndBoundTestCase,
+    RuntimeCursorFailureTestCase,
     RuntimeCursorOverrideTestCase,
     RuntimeCursorPolicyTestCase,
     RuntimeCursorStartTestCase,
@@ -700,11 +701,6 @@ def test_given_target_max_query_failure_when_resolving_bounds_then_propagates_er
             description="multiple inputs use the slowest common watermark",
             expected_bounds=CursorBounds(start="10", end="101"),
         ),
-        RuntimeCursorPolicyTestCase(
-            description="an empty input has no common watermark",
-            expected_bounds=None,
-            slow_input_setup_sql="SELECT 1",
-        ),
     ],
     ids=lambda case: case.description,
 )
@@ -737,6 +733,47 @@ def test_given_multiple_runtime_inputs_when_resolving_then_uses_common_watermark
     )
 
     assert bounds == test_case.expected_bounds
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RuntimeCursorFailureTestCase(
+            description="all mode fails closed for an empty required input",
+            slow_input_setup_sql="SELECT 1",
+            expected_error_fragment="required cursor watermark is empty",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_all_runtime_inputs_when_one_is_empty_then_resolution_fails_closed(
+    test_case: RuntimeCursorFailureTestCase,
+) -> None:
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
+    connection.execute("CREATE TABLE fast_input (cursor_value INTEGER)")
+    connection.execute("INSERT INTO fast_input VALUES (10), (200)")
+    connection.execute("CREATE TABLE slow_input (cursor_value INTEGER)")
+    connection.execute(test_case.slow_input_setup_sql)
+
+    with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
+        resolve_runtime_cursor_bounds(
+            adapter=cast(BaseAdapter, FakeCursorAdapter()),
+            connection=connection,
+            target_relation="target_data",
+            target_database=None,
+            target_schema=None,
+            target_name="target_data",
+            spec=RuntimeCursorSpec(
+                cursor_column="cursor_value",
+                cursor_type=CursorType.INTEGER,
+                cursor_grain=None,
+                cursor_start=None,
+                cursor_input_relations=(
+                    CursorInputRelation(relation="fast_input", cursor_column="cursor_value"),
+                    CursorInputRelation(relation="slow_input", cursor_column="cursor_value"),
+                ),
+            ),
+        )
 
 
 @pytest.mark.parametrize(

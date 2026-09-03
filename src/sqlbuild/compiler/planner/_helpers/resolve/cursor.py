@@ -16,7 +16,7 @@ from sqlbuild.compiler.planner.models import (
     MaximumStartPolicyInputs,
     ModelCursorSnapshot,
 )
-from sqlbuild.compiler.planner.types import CursorGrain, CursorType
+from sqlbuild.compiler.planner.types import CursorGrain, CursorType, CursorWatermarkMode
 
 _TIMESTAMP_GRAIN_ORDER: dict[str, int] = {
     CursorGrain.SECOND: 0,
@@ -48,15 +48,11 @@ def compute_cursor_bounds(
     if not cursor_snapshot.watermarks_available:
         return None
 
-    raw_end: str | None = _compute_raw_end(cursor_snapshot)
+    raw_end: str | None = _compute_raw_end(
+        snapshot=cursor_snapshot, cursor_type=cursor_type, cursor_grain=cursor_grain
+    )
     if raw_end is None:
         return None
-    if cursor_type in {CursorType.INTEGER, CursorType.TIMESTAMP}:
-        raw_end = _advance_discovered_end(
-            value=raw_end,
-            cursor_type=cursor_type,
-            cursor_grain=cursor_grain,
-        )
 
     raw_start: str | None = _compute_raw_start(cursor_snapshot)
     if raw_start is None:
@@ -155,6 +151,18 @@ def normalize_cursor_snapshot_grain(
         input_evidence=cursor_snapshot.input_evidence,
         expected_watermark_count=cursor_snapshot.expected_watermark_count,
         unavailable_watermark_tags=cursor_snapshot.unavailable_watermark_tags,
+        cursor_watermark_mode=cursor_snapshot.cursor_watermark_mode,
+        upstream_terminal_starts=cursor_snapshot.upstream_terminal_starts,
+        upstream_terminal_ends=cursor_snapshot.upstream_terminal_ends,
+        upstream_end_inputs=tuple(
+            (
+                _floor_timestamp_string(value=physical, grain=effective_grain)
+                if physical is not None
+                else None,
+                terminal,
+            )
+            for physical, terminal in cursor_snapshot.upstream_end_inputs
+        ),
     )
 
 
@@ -204,6 +212,8 @@ def _advance_inclusive_operator_end(
 def _advance_discovered_end(
     *, value: str, cursor_type: str | None, cursor_grain: str | None
 ) -> str:
+    if cursor_type is None:
+        return value
     if cursor_type == CursorType.TIMESTAMP and cursor_grain in {
         CursorGrain.MONTH,
         CursorGrain.YEAR,
@@ -236,17 +246,42 @@ def _compute_raw_start(snapshot: ModelCursorSnapshot) -> str | None:
 
     if snapshot.target_max is not None:
         return snapshot.target_max
-    if not snapshot.upstream_mins:
+    starts: tuple[str, ...] = (*snapshot.upstream_mins, *snapshot.upstream_terminal_starts)
+    if not starts:
         return None
-    return min(snapshot.upstream_mins)
+    return min(starts)
 
 
-def _compute_raw_end(snapshot: ModelCursorSnapshot) -> str | None:
+def _compute_raw_end(
+    *, snapshot: ModelCursorSnapshot, cursor_type: str | None, cursor_grain: str | None
+) -> str | None:
     """Derive the raw end bound from snapshot data."""
 
-    if not snapshot.upstream_maxes:
+    if snapshot.upstream_end_inputs:
+        exclusive_ends: tuple[str, ...] = tuple(
+            terminal
+            if terminal is not None
+            else _advance_discovered_end(
+                value=physical or "", cursor_type=cursor_type, cursor_grain=cursor_grain
+            )
+            for physical, terminal in snapshot.upstream_end_inputs
+            if terminal is not None or physical is not None
+        )
+    else:
+        exclusive_ends = (
+            tuple(
+                _advance_discovered_end(
+                    value=value, cursor_type=cursor_type, cursor_grain=cursor_grain
+                )
+                for value in snapshot.upstream_maxes
+            )
+            + snapshot.upstream_terminal_ends
+        )
+    if not exclusive_ends:
         return None
-    return min(snapshot.upstream_maxes)
+    if snapshot.cursor_watermark_mode == CursorWatermarkMode.ANY:
+        return max(exclusive_ends)
+    return min(exclusive_ends)
 
 
 def _subtract_duration(*, value: str, duration: str) -> str | None:

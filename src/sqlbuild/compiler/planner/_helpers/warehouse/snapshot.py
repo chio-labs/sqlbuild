@@ -37,6 +37,8 @@ from sqlbuild.compiler.planner._helpers.graph.core import build_execution_upstre
 from sqlbuild.compiler.planner._helpers.graph.loader_dag import (
     build_upstream_intermediate_source_map,
 )
+from sqlbuild.compiler.planner._helpers.output.cursor_type_check import classify_cursor_sql_type
+from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import inclusive_cursor_end
 from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
     effectively_full_refreshed_model_names,
 )
@@ -59,7 +61,12 @@ from sqlbuild.compiler.planner.models import (
     WarehouseFingerprints,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import ContractPolicy, CursorType, MaterializationType
+from sqlbuild.compiler.planner.types import (
+    ContractPolicy,
+    CursorType,
+    CursorWatermarkMode,
+    MaterializationType,
+)
 from sqlbuild.compiler.references.main._render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
@@ -88,6 +95,8 @@ class _UpstreamCursorInfo:
     relation: str
     cursor_column: str
     cursor_grain: str | None = None
+    terminal_cursor_start: str | None = None
+    terminal_cursor_end: str | None = None
 
 
 @dataclass(frozen=True)
@@ -104,6 +113,7 @@ class _CursorModelInfo:
     effective_cursor_grain: str | None = None
     start_cursor_config: StartCursorsConfig | None = None
     has_start_override: bool = False
+    cursor_watermark_mode: str = "all"
 
 
 @dataclass(frozen=True)
@@ -644,8 +654,6 @@ def _collect_cursor_models(
     cursor_models: list[_CursorModelInfo] = []
     model: CompiledModel
     for model in project.models:
-        if model.name in inputs.full_refresh_model_names:
-            continue
         if inputs.selected_keys is not None:
             model_key: CompiledObjectKey = CompiledObjectKey(
                 resource_type=CompiledResourceType.MODEL, name=model.name
@@ -661,6 +669,23 @@ def _collect_cursor_models(
         cursor_watermark_inputs: dict[str, str] = resolve_cursor_input_roles(
             model=model
         ).watermark_inputs
+        if model.name in inputs.full_refresh_model_names:
+            for input_name, upstream_cursor_col in cursor_watermark_inputs.items():
+                ref: CompileSqlReference = resolve_lineage_reference(
+                    model=model,
+                    input_name=input_name,
+                    models_by_name=model_map,
+                    functions_by_name=function_map,
+                )
+                _validate_watermark_contract_column(
+                    model=model,
+                    ref=ref,
+                    cursor_column=upstream_cursor_col,
+                    model_map=model_map,
+                    source_map=source_map,
+                    seed_map=seed_map,
+                )
+            continue
 
         target_tag: str | None = None
         target_relation: str | None = None
@@ -716,6 +741,16 @@ def _collect_cursor_models(
                     relation=upstream_relation,
                     cursor_column=upstream_cursor_col,
                     cursor_grain=_cursor_input_grain(ref=ref, model_map=model_map),
+                    terminal_cursor_start=(
+                        _get_config_str(model=model_map[ref.ref_name], key="cursor_start")
+                        if ref.ref_kind == SqlReferenceKind.REF and ref.ref_name in model_map
+                        else None
+                    ),
+                    terminal_cursor_end=(
+                        _get_config_str(model=model_map[ref.ref_name], key="cursor_end")
+                        if ref.ref_kind == SqlReferenceKind.REF and ref.ref_name in model_map
+                        else None
+                    ),
                 )
             )
 
@@ -742,6 +777,8 @@ def _collect_cursor_models(
                     model=model,
                     cursor_overrides=inputs.cursor_overrides,
                 ),
+                cursor_watermark_mode=_get_config_str(model=model, key="cursor_watermark_mode")
+                or "all",
             )
         )
 
@@ -1002,26 +1039,49 @@ def _assemble_cursor_snapshots(
         upstream_maxes: list[str] = []
         input_evidence: list[CursorInputEvidence] = []
         unavailable_watermark_tags: list[str] = []
+        terminal_starts: list[str] = []
+        terminal_ends: list[str] = []
+        end_inputs: list[tuple[str | None, str | None]] = []
         upstream: _UpstreamCursorInfo
         for upstream in info.upstreams:
             min_val: str | None = results.get(upstream.tag_min)
             max_val: str | None = results.get(upstream.tag_max)
+            effective_max: str | None = (
+                inclusive_cursor_end(
+                    end=upstream.terminal_cursor_end,
+                    cursor_type=info.cursor_type,
+                    cursor_grain=info.effective_cursor_grain,
+                )
+                if upstream.terminal_cursor_end is not None
+                else max_val
+            )
             if min_val is not None:
                 upstream_mins.append(min_val)
-            elif target_max is None:
+            elif upstream.terminal_cursor_start is not None:
+                upstream_mins.append(upstream.terminal_cursor_start)
+            elif target_max is None and info.cursor_watermark_mode == CursorWatermarkMode.ALL:
                 unavailable_watermark_tags.append(upstream.tag_min)
-            if max_val is not None:
-                upstream_maxes.append(max_val)
+            if effective_max is not None:
+                if max_val is not None:
+                    upstream_maxes.append(max_val)
                 input_evidence.append(
                     CursorInputEvidence(
                         relation=upstream.relation,
                         cursor_column=upstream.cursor_column,
-                        minimum=min_val,
-                        maximum=max_val,
+                        minimum=min_val or upstream.terminal_cursor_start,
+                        maximum=effective_max,
                     )
                 )
-            else:
+            elif (
+                upstream.terminal_cursor_end is None
+                and info.cursor_watermark_mode == CursorWatermarkMode.ALL
+            ):
                 unavailable_watermark_tags.append(upstream.tag_max)
+            if upstream.terminal_cursor_start is not None:
+                terminal_starts.append(upstream.terminal_cursor_start)
+            if upstream.terminal_cursor_end is not None:
+                terminal_ends.append(upstream.terminal_cursor_end)
+            end_inputs.append((max_val, upstream.terminal_cursor_end))
 
         snapshots[info.model_name] = ModelCursorSnapshot(
             target_max=target_max,
@@ -1034,6 +1094,10 @@ def _assemble_cursor_snapshots(
             input_evidence=tuple(input_evidence),
             expected_watermark_count=len(info.upstreams),
             unavailable_watermark_tags=tuple(unavailable_watermark_tags),
+            cursor_watermark_mode=info.cursor_watermark_mode,
+            upstream_terminal_starts=tuple(terminal_starts),
+            upstream_terminal_ends=tuple(terminal_ends),
+            upstream_end_inputs=tuple(end_inputs) if terminal_ends else (),
         )
 
     return snapshots
@@ -1110,15 +1174,37 @@ def _validate_watermark_contract_column(
     """Validate reliable watermark column contracts before warehouse inspection."""
 
     declared_names: tuple[str, ...] = ()
+    declared_types: dict[str, str] = {}
     if ref.ref_kind == SqlReferenceKind.REF:
         upstream_model: CompiledModel | None = model_map.get(ref.ref_name)
         if upstream_model is None:
             return
+        upstream_cursor: str | None = _get_config_str(model=upstream_model, key="cursor")
+        upstream_cursor_type: str | None = _get_config_str(model=upstream_model, key="cursor_type")
+        consumer_cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
+        if (
+            upstream_cursor is not None
+            and upstream_cursor.lower() == cursor_column.lower()
+            and upstream_cursor_type is not None
+            and consumer_cursor_type is not None
+            and upstream_cursor_type != consumer_cursor_type
+        ):
+            raise PlannerInputError(
+                f"model '{model.name}': cursor_inputs watermark '{ref.ref_name}."
+                f"{cursor_column}' has cursor_type={upstream_cursor_type}, incompatible with "
+                f"model cursor_type={consumer_cursor_type}",
+                code="S302",
+            )
         if upstream_model.config.values.get("contract") == ContractPolicy.ENFORCED:
             if upstream_model.schema_entry is not None:
                 declared_names = tuple(
                     column.name for column in upstream_model.schema_entry.columns
                 )
+                declared_types = {
+                    column.name.lower(): column.type
+                    for column in upstream_model.schema_entry.columns
+                    if column.type is not None
+                }
         else:
             return
     elif ref.ref_kind == SqlReferenceKind.SOURCE:
@@ -1129,22 +1215,51 @@ def _validate_watermark_contract_column(
         ):
             return
         declared_names = tuple(column.name for column in upstream_source.source_entry.columns)
+        declared_types = {
+            column.name.lower(): column.type
+            for column in upstream_source.source_entry.columns
+            if column.type is not None
+        }
     elif ref.ref_kind == SqlReferenceKind.SEED:
         upstream_seed: CompiledSeed | None = seed_map.get(ref.ref_name)
         if upstream_seed is None:
             return
         declared_names = tuple(column.name for column in upstream_seed.schema_entry.columns)
+        declared_types = {
+            column.name.lower(): column.type
+            for column in upstream_seed.schema_entry.columns
+            if column.type is not None
+        }
     else:
         return
     if cursor_column.lower() in {name.lower() for name in declared_names}:
+        declared_type: str | None = declared_types.get(cursor_column.lower())
+        cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
+        if declared_type is not None and not _watermark_type_is_compatible(
+            declared_type=declared_type, cursor_type=cursor_type
+        ):
+            raise PlannerInputError(
+                f"model '{model.name}': cursor_inputs watermark '{ref.ref_name}."
+                f"{cursor_column}' type {declared_type} is incompatible with "
+                f"cursor_type={cursor_type}",
+                code="S302",
+            )
         return
     declared_display: str = ", ".join(declared_names) or "none"
     raise PlannerInputError(
-        f"model '{model.name}': cursor_watermark_inputs references '{ref.ref_name}' column "
+        f"model '{model.name}': cursor_inputs watermark references '{ref.ref_name}' column "
         f"'{cursor_column}', but its enforced contract does not expose the column. "
         f"Declared contract columns: {declared_display}",
         code="S302",
     )
+
+
+def _watermark_type_is_compatible(*, declared_type: str, cursor_type: str | None) -> bool:
+    try:
+        expected: CursorType = CursorType(cursor_type)
+    except (TypeError, ValueError):
+        return True
+    return classify_cursor_sql_type(declared_type) == expected
 
 
 def _get_config_str(*, model: CompiledModel, key: str) -> str | None:

@@ -27,7 +27,13 @@ from sqlbuild.compiler.planner.models import (
     ModelCursorSnapshot,
     ModelPlanEntry,
 )
-from sqlbuild.compiler.planner.types import BackfillAction, CursorGrain, CursorType
+from sqlbuild.compiler.planner.types import (
+    BackfillAction,
+    CursorGrain,
+    CursorType,
+    CursorWatermarkMode,
+    MicrobatchStrategy,
+)
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run.models import RuntimeCursorSpec
 from sqlbuild.executor.run.types import WatermarkResolver
@@ -70,7 +76,16 @@ def build_runtime_cursor_spec(
         cursor_type=entry.cursor_type,
         cursor_grain=entry.cursor_grain,
         cursor_start=entry.cursor_start,
+        cursor_end=entry.cursor_end,
         cursor_input_relations=entry.cursor_input_relations,
+        cursor_watermark_mode=(
+            entry.cursor_watermark_mode
+            or (
+                CursorWatermarkMode.ALL
+                if entry.microbatch_strategy == MicrobatchStrategy.WATERMARK
+                else "legacy"
+            )
+        ),
         incremental_strategy=entry.incremental_strategy,
         incremental_mode=entry.incremental_mode,
         start_cursor_override=entry.start_cursor_override,
@@ -109,12 +124,15 @@ def resolve_runtime_cursor_bounds(
     )
     if bounded_override is not None:
         return bounded_override
-    physical_inputs: tuple[tuple[str, str], ...] = tuple(
+    physical_inputs: tuple[tuple[tuple[str, str], tuple[str | None, str | None]], ...] = tuple(
         sorted(
             {
-                (cursor_input.relation, cursor_input.cursor_column)
+                (cursor_input.relation, cursor_input.cursor_column): (
+                    cursor_input.terminal_cursor_start,
+                    cursor_input.terminal_cursor_end,
+                )
                 for cursor_input in spec.cursor_input_relations
-            }
+            }.items()
         )
     )
     if not physical_inputs:
@@ -152,21 +170,36 @@ def resolve_runtime_cursor_bounds(
     upstream_maxes: list[object] = []
     input_evidence: list[CursorInputEvidence] = []
     input_index: int
-    physical_input: tuple[str, str]
+    physical_input: tuple[tuple[str, str], tuple[str | None, str | None]]
     for input_index, physical_input in enumerate(physical_inputs, start=1):
+        relation_column, terminal_bounds = physical_input
+        terminal_start, terminal_end = terminal_bounds
+        minimum: object | None
+        maximum: object | None
         minimum, maximum = _query_watermark_raw(
             adapter=adapter,
             connection=connection,
-            relation=physical_input[0],
-            cursor_column=physical_input[1],
+            relation=relation_column[0],
+            cursor_column=relation_column[1],
             read_minimum=read_minimum,
             query_index=input_index,
             total=len(physical_inputs),
             on_progress=on_progress,
             watermark_resolver=watermark_resolver,
         )
+        terminal_maximum: object | None = _terminal_inclusive_maximum(
+            value=terminal_end, cursor_type=cursor_type, cursor_grain=effective_grain
+        )
+        if terminal_maximum is not None:
+            maximum = terminal_maximum
+        if read_minimum and minimum is None and terminal_start is not None:
+            minimum = _raw_terminal_bound(value=terminal_start, cursor_type=cursor_type)
         if maximum is None or (read_minimum and minimum is None):
-            return None
+            if spec.cursor_watermark_mode == CursorWatermarkMode.ALL:
+                raise ExecutorInputError(
+                    f"required cursor watermark is empty: {relation_column[0]}.{relation_column[1]}"
+                )
+            continue
         if minimum is not None:
             upstream_mins.append(minimum)
         upstream_maxes.append(maximum)
@@ -174,8 +207,8 @@ def resolve_runtime_cursor_bounds(
         if normalized_maximum is not None:
             input_evidence.append(
                 CursorInputEvidence(
-                    relation=physical_input[0],
-                    cursor_column=physical_input[1],
+                    relation=relation_column[0],
+                    cursor_column=relation_column[1],
                     minimum=(
                         _normalize_bound(value=minimum, is_end=False)
                         if minimum is not None
@@ -195,10 +228,13 @@ def resolve_runtime_cursor_bounds(
         if upstream_mins
         else None
     )
-    upstream_max_raw: object = _minimum_bound_raw(
-        values=upstream_maxes,
-        cursor_type=cursor_type,
-        effective_grain=effective_grain,
+    aggregate: Callable[..., object] = (
+        _maximum_bound_raw
+        if spec.cursor_watermark_mode == CursorWatermarkMode.ANY
+        else _minimum_bound_raw
+    )
+    upstream_max_raw: object = aggregate(
+        values=upstream_maxes, cursor_type=cursor_type, effective_grain=effective_grain
     )
     if cursor_type == CursorType.TIMESTAMP and effective_grain is not None:
         start_raw: object | None = (
@@ -283,17 +319,43 @@ def resolve_runtime_cursor_bounds(
         ),
         has_start_override=spec.start_cursor_override is not None,
     )
-    return apply_future_cursor_safety(
-        bounds=bounds,
-        cursor_type=cursor_type,
-        cursor_grain=effective_grain,
-        config=spec.future_cursor_config,
-        invocation_time=spec.invocation_time,
-        has_complete_override=(
-            spec.start_cursor_override is not None and spec.end_cursor_override is not None
+    return _clamp_cursor_end(
+        bounds=apply_future_cursor_safety(
+            bounds=bounds,
+            cursor_type=cursor_type,
+            cursor_grain=effective_grain,
+            config=spec.future_cursor_config,
+            invocation_time=spec.invocation_time,
+            has_complete_override=(
+                spec.start_cursor_override is not None and spec.end_cursor_override is not None
+            ),
+            input_evidence=tuple(input_evidence),
         ),
-        input_evidence=tuple(input_evidence),
+        cursor_end=spec.cursor_end,
+        cursor_type=cursor_type,
     )
+
+
+def _clamp_cursor_end(
+    *, bounds: CursorBounds, cursor_end: str | None, cursor_type: str | None
+) -> CursorBounds:
+    if cursor_end is None:
+        return bounds
+    end_key: Decimal = _normalized_comparison_key(value=cursor_end, cursor_type=cursor_type)
+    if _normalized_comparison_key(value=bounds.start, cursor_type=cursor_type) >= end_key:
+        return CursorBounds(start=cursor_end, end=cursor_end)
+    if _normalized_comparison_key(value=bounds.end, cursor_type=cursor_type) > end_key:
+        return CursorBounds(start=bounds.start, end=cursor_end)
+    return bounds
+
+
+def _normalized_comparison_key(*, value: str, cursor_type: str | None) -> Decimal:
+    if cursor_type == CursorType.INTEGER:
+        return Decimal(value)
+    parsed: datetime = datetime.fromisoformat(value)
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+    return Decimal(str(parsed.replace(tzinfo=UTC).timestamp()))
 
 
 def _normalize_bounds(
@@ -405,6 +467,44 @@ def _minimum_bound_raw(
         return min(values)
     grain: str = effective_grain or CursorGrain.SECOND
     return min(values, key=lambda value: _timestamp_comparison_key(value=value, grain=grain))
+
+
+def _maximum_bound_raw(
+    *, values: list[object], cursor_type: str | None, effective_grain: str | None
+) -> object:
+    """Choose the furthest usable alternative watermark value."""
+
+    if cursor_type != CursorType.TIMESTAMP:
+        return max(values)
+    grain: str = effective_grain or CursorGrain.SECOND
+    return max(values, key=lambda value: _timestamp_comparison_key(value=value, grain=grain))
+
+
+def _raw_terminal_bound(*, value: str, cursor_type: str | None) -> object:
+    if cursor_type == CursorType.INTEGER:
+        return Decimal(value)
+    return datetime.fromisoformat(value)
+
+
+def _terminal_inclusive_maximum(
+    *, value: str | None, cursor_type: str | None, cursor_grain: str | None
+) -> object | None:
+    if value is None:
+        return None
+    if cursor_type == CursorType.INTEGER:
+        return Decimal(value) - 1
+    duration_by_grain: dict[str, str] = {
+        CursorGrain.SECOND: "1s",
+        CursorGrain.MINUTE: "1m",
+        CursorGrain.HOUR: "1h",
+        CursorGrain.DAY: "1d",
+        CursorGrain.MONTH: "1mo",
+        CursorGrain.YEAR: "1y",
+    }
+    duration: Duration | None = Duration.parse(
+        duration_by_grain.get(cursor_grain or CursorGrain.SECOND, "1s")
+    )
+    return None if duration is None else duration.subtract_from(datetime.fromisoformat(value))
 
 
 def _timestamp_comparison_key(*, value: object, grain: str) -> datetime:

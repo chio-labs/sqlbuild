@@ -17,6 +17,8 @@ MODEL_FULL_REFRESH_CONFIG_KEY: str = "full_refresh"
 CURSOR_INPUTS_CONFIG_KEY: str = "cursor_inputs"
 CURSOR_FILTER_INPUTS_CONFIG_KEY: str = "cursor_filter_inputs"
 CURSOR_WATERMARK_INPUTS_CONFIG_KEY: str = "cursor_watermark_inputs"
+MAX_MICROBATCHES_CONFIG_KEY: str = "max_microbatches"
+WATERMARK_CURSOR_INPUT_BLOCK_KEYS: frozenset[str] = frozenset({"column", "roles"})
 MODEL_HEADER_METADATA_KEYS: frozenset[str] = frozenset(
     {"description", "columns", "model_schema", "audits", "enums", "constants"}
 )

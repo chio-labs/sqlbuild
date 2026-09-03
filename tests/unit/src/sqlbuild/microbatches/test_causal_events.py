@@ -15,7 +15,7 @@ from sqlbuild.microbatches._helpers.causal_projection import (
     snapshot_producer_completions,
 )
 from sqlbuild.microbatches.classes.causal_event_codec import CausalEventCodec
-from sqlbuild.microbatches.main.causal_input_relations import resolve_causal_input_relations
+from sqlbuild.microbatches.main._causal_input_relations import resolve_causal_input_relations
 from sqlbuild.microbatches.main.project_coverage import project_microbatch_coverage
 from sqlbuild.microbatches.models import (
     ConsumedProducerInterval,

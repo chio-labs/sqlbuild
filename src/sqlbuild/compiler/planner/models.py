@@ -208,6 +208,10 @@ class ModelCursorSnapshot:
     input_evidence: tuple[CursorInputEvidence, ...] = field(default=(), compare=False)
     expected_watermark_count: int = field(default=0, compare=False)
     unavailable_watermark_tags: tuple[str, ...] = ()
+    cursor_watermark_mode: str = "all"
+    upstream_terminal_starts: tuple[str, ...] = ()
+    upstream_terminal_ends: tuple[str, ...] = ()
+    upstream_end_inputs: tuple[tuple[str | None, str | None], ...] = ()
 
     @property
     def watermarks_available(self) -> bool:
@@ -381,6 +385,8 @@ class CursorInputRelation:
     producer_model_version_hash: str | None = None
     is_model_backed: bool = False
     is_runtime_produced: bool = False
+    terminal_cursor_start: str | None = None
+    terminal_cursor_end: str | None = None
 
     @property
     def is_runtime_owned(self) -> bool:
@@ -632,6 +638,7 @@ class PlanEntryBuildInputs:
     start_cursor_config: StartCursorsConfig | None = None
     invocation_time: datetime | None = None
     max_microbatches: int | None = None
+    max_microbatches_is_override: bool = False
     microbatch_limit_action: MicrobatchLimitAction = MicrobatchLimitAction.ERROR
 
 
@@ -764,10 +771,13 @@ class ModelPlanEntry:
     logical_ddl: str
     incremental_strategy: str | None = None
     incremental_mode: str | None = None
+    microbatch_strategy: str | None = None
+    cursor_watermark_mode: str | None = None
     cursor_column: str | None = None
     cursor_type: str | None = None
     cursor_grain: str | None = None
     cursor_start: str | None = None
+    cursor_end: str | None = None
     lookback: str | None = None
     lookback_is_default: bool = False
     cursor_bounds: CursorBounds | None = None

@@ -22,6 +22,14 @@ class MicrobatchReconciliationChunkTestCase:
 
 
 @dataclass(frozen=True)
+class MicrobatchBehaviorTestCase:
+    """Named single-path microbatch regression case."""
+
+    description: str
+    expected_outcome: object
+
+
+@dataclass(frozen=True)
 class MicrobatchSuccessTestCase:
     """Test case where microbatch execution succeeds."""
 

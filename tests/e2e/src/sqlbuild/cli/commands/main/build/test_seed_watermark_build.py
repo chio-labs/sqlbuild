@@ -69,10 +69,7 @@ def test_given_seed_watermark_when_seed_changes_then_incremental_consumes_new_hi
                   incremental_strategy delete_insert,
                   cursor id,
                   cursor_type integer,
-                  cursor_filter_inputs (
-                    order_events id,
-                  ),
-                  cursor_watermark_inputs (
+                  cursor_inputs (
                     order_events id,
                   ),
                 );

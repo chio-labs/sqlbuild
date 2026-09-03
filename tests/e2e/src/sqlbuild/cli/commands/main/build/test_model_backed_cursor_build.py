@@ -130,13 +130,15 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                       cursor activity_hour,
                       cursor_type timestamp,
                       cursor_grain hour,
-                      cursor_filter_inputs (
-                        fact_orders_view ordered_at,
-                      ),
-                      cursor_watermark_inputs (
-                        fact_orders ordered_at,
+                      microbatch_strategy watermark,
+                      cursor_watermark_mode all,
+                      cursor_inputs (
+                        fact_orders_view (column ordered_at, roles [filter]),
+                        fact_orders (column ordered_at, roles [watermark]),
                       ),
                       incremental_mode microbatch,
+          microbatch_strategy watermark,
+          cursor_watermark_mode all,
                       batch_size 1d,
                     );
 

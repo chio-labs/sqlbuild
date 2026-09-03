@@ -13,6 +13,7 @@ from typing import cast
 import yaml
 from yaml import YAMLError
 
+from sqlbuild.compiler.compile.constants import MAX_MICROBATCHES_CONFIG_KEY
 from sqlbuild.compiler.discovery.constants import (
     CONFIG_CONCURRENCY_KEY,
     DBT_DEFER_CLONE_CONFIG_KEY,
@@ -742,6 +743,8 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
         contract=_optional_contract_policy(mapping=mapping, key="contract"),
         incremental_strategy=_optional_str(payload=mapping, key="incremental_strategy"),
         incremental_mode=_optional_str(payload=mapping, key="incremental_mode"),
+        microbatch_strategy=_optional_str(payload=mapping, key="microbatch_strategy"),
+        cursor_watermark_mode=_optional_str(payload=mapping, key="cursor_watermark_mode"),
         merge_exclude_columns=merge_exclude_columns,
         full_refresh=_optional_nullable_bool(mapping=mapping, key="full_refresh"),
         append_cursor_inclusive=_optional_templated_bool(
@@ -749,6 +752,7 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
             key="append_cursor_inclusive",
         ),
         cursor_start=_optional_cursor_start(mapping=mapping, key="cursor_start"),
+        cursor_end=_optional_cursor_start(mapping=mapping, key="cursor_end"),
         cursor_start_max_ahead=_optional_str(payload=mapping, key="cursor_start_max_ahead"),
         cursor_start_max_action=_optional_str(payload=mapping, key="cursor_start_max_action"),
         cursor_future_max_distance=_optional_str(payload=mapping, key="cursor_future_max_distance"),
@@ -758,6 +762,11 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
         batch_concurrency=(
             _optional_int(mapping=mapping, key=_BATCH_CONCURRENCY_CONFIG_KEY, default=1)
             if _BATCH_CONCURRENCY_CONFIG_KEY in mapping
+            else None
+        ),
+        max_microbatches=(
+            _optional_int(mapping=mapping, key=MAX_MICROBATCHES_CONFIG_KEY, default=1)
+            if MAX_MICROBATCHES_CONFIG_KEY in mapping
             else None
         ),
         unaccounted_partition_policy=_optional_str(
