@@ -1202,6 +1202,8 @@ def _assemble_compiled_sql_scenario(
 
 
 def _resolve_audit_name(audit_input: CompileAuditInput) -> str:
+    if audit_input.name is not None:
+        return audit_input.name
     if audit_input.audit_block.name is not None:
         return audit_input.audit_block.name
     return audit_input.audit_file.file_path.stem

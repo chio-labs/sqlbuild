@@ -425,6 +425,12 @@ class AssembleCompiledProjectTestCase:
 
 
 @dataclass(frozen=True)
+class AttachedAuditNameTestCase:
+    description: str
+    expected_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class AssembleCompiledProjectEffectiveTargetTestCase:
     description: str
     project_toml: str

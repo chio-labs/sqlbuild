@@ -584,6 +584,7 @@ class CompileAuditInput:
     run_scope: str | None = None
     always_run: bool = False
     declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+    name: str | None = None
 
     def __post_init__(self) -> None:
         if self.attached_target_kind is not None:

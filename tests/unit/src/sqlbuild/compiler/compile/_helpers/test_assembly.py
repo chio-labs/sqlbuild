@@ -25,6 +25,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     AssembleCompiledProjectEffectiveTargetTestCase,
     AssembleCompiledProjectTestCase,
     AssembleSqlHookValidationTestCase,
+    AttachedAuditNameTestCase,
     PreservedSeedTargetTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
@@ -552,6 +553,55 @@ def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expe
         tuple(compiled_sql_test_expected_model_names(t) for t in compiled.sql_tests)
         == test_case.expected_test_expected_model_names
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AttachedAuditNameTestCase(
+            description="named instances of one generic audit",
+            expected_names=("positive revenue", "bounded revenue"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_named_generic_audit_instances_when_assembling_then_each_name_is_preserved(
+    test_case: AttachedAuditNameTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        base_repo_files()
+        | {
+            "models/orders.sql": """
+MODEL (
+  audits [
+    expression_is_true (name "positive revenue", expression "revenue > 0"),
+    expression_is_true (name "bounded revenue", expression "revenue < 1000"),
+  ],
+);
+
+SELECT 1 AS revenue
+""".strip()
+            + "\n",
+            "audits/generic/expression_is_true.sql": """
+AUDIT ();
+
+SELECT * FROM @relation WHERE NOT (@expression)
+""".strip()
+            + "\n",
+        },
+    )
+    compile_inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discover_project_inputs(project_dir=tmp_path),
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+        run_id="test_run_id",
+    )
+
+    compiled: CompiledProject = assemble_compiled_project(inputs=compile_inputs)
+
+    assert tuple(audit.name for audit in compiled.audits) == test_case.expected_names
 
 
 @pytest.mark.parametrize(
