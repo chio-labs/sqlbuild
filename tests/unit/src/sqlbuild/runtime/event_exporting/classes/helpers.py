@@ -86,11 +86,15 @@ def lifecycle_event(index: int = 1, event_type: str = "invocation_started") -> L
 
 
 def queued_event(
-    *, sequence: int, priority: int, eligible: tuple[int, ...] = (0,)
+    *,
+    sequence: int,
+    priority: int,
+    eligible: tuple[int, ...] = (0,),
+    event_type: str = "invocation_started",
 ) -> QueuedLifecycleEvent:
     return QueuedLifecycleEvent(
         sequence,
-        lifecycle_event(sequence),
+        lifecycle_event(sequence, event_type=event_type),
         LifecycleExportPolicy("invocation", "debug", priority),
         eligible,
     )

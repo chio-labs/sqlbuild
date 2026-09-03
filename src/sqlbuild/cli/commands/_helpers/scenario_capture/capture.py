@@ -35,20 +35,18 @@ from sqlbuild.cli.commands.models import (
     ScenarioRunOutputContext,
     ScenarioSnapshotLimitInputs,
 )
-from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
+from sqlbuild.compiler.pipeline.main.compile_only import run_compile_only_pipeline
 from sqlbuild.compiler.pipeline.models import (
     CompilePipelineOptions,
     CompilePipelineResult,
 )
 from sqlbuild.executor.scenario.models import ScenarioSnapshotCaptureLimits
 from sqlbuild.presentation.main.supports_color import supports_color
-from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
@@ -101,11 +99,6 @@ def run_scenario_capture(request: ScenarioCaptureCommandRequest) -> int:
     use_color: bool = not no_color and supports_color()
     progress_stream: TextIO = sys.stdout
     target_label: str | None = " ".join(selectors) if selectors else None
-    connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
-        adapter_name=adapter_name,
-        stream=progress_stream,
-        use_color=use_color,
-    )
     planning_progress: PlanningProgressReporter = PlanningProgressReporter(
         stream=progress_stream,
         use_color=use_color,
@@ -122,7 +115,7 @@ def run_scenario_capture(request: ScenarioCaptureCommandRequest) -> int:
     progress_stream.flush()
 
     with OperationLifecycle(operation_kind="project", operation_name="project_compile"):
-        pipeline_result: CompilePipelineResult = run_compile_pipeline(
+        pipeline_result: CompilePipelineResult = run_compile_only_pipeline(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
             options=CompilePipelineOptions(
@@ -133,20 +126,7 @@ def run_scenario_capture(request: ScenarioCaptureCommandRequest) -> int:
                     discovered_inputs=discovered_inputs,
                 ),
             ),
-            hooks=ConnectionHooks(
-                on_progress=planning_progress.on_progress,
-                on_connection_start=connection_progress.on_connection_start,
-                on_connection_complete=lambda connection_count, elapsed_seconds: (
-                    connection_progress.on_connection_complete(
-                        connection_count=connection_count, elapsed_seconds=elapsed_seconds
-                    )
-                ),
-                on_connection_error=lambda connection_count, elapsed_seconds: (
-                    connection_progress.on_connection_error(
-                        connection_count=connection_count, elapsed_seconds=elapsed_seconds
-                    )
-                ),
-            ),
+            on_progress=planning_progress.on_progress,
         )
     scenarios: tuple[CompiledSqlScenario, ...] = select_scenarios(
         project=pipeline_result.project,

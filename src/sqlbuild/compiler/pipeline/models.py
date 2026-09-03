@@ -16,6 +16,8 @@ from sqlbuild.compiler.planner.models import (
     CursorOverrides,
     FunctionPlanEntry,
     ModelPlanEntry,
+    PlannerRelationsContext,
+    PlannerScope,
     PlanOutput,
     SeedPlanEntry,
 )
@@ -86,6 +88,26 @@ class CompilePipelineResult:
     python_plan_entries: tuple[PythonPlanEntry, ...] = field(default_factory=tuple)
     compile_seconds: float | None = None
     planning_seconds: float | None = None
+
+
+@dataclass(frozen=True)
+class CompiledProjectPhaseResult:
+    """Canonical project compilation output before command-specific planning."""
+
+    project: CompiledProject
+    connection_config: dict[str, object]
+    compile_seconds: float
+
+
+@dataclass(frozen=True)
+class StaticCommandContext:
+    """Shared compile, selection, and relation phases for focused commands."""
+
+    project: CompiledProject
+    scope: PlannerScope
+    relations: PlannerRelationsContext
+    connection_config: dict[str, object]
+    compile_seconds: float
 
 
 @dataclass(frozen=True)

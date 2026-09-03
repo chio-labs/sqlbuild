@@ -4,6 +4,7 @@ import queue
 import threading
 import time
 
+from sqlbuild.runtime.event_exporting.constants import INVOCATION_TERMINAL_EVENT_TYPES
 from sqlbuild.runtime.event_exporting.exceptions import EventExporterInputError
 from sqlbuild.runtime.event_exporting.models import QueuedLifecycleEvent
 
@@ -46,9 +47,14 @@ class FinitePriorityEventQueue:
                 if remaining <= 0:
                     raise queue.Empty
                 self._condition.wait(timeout=remaining)
-            highest: int = max(item.policy.priority for item in self._items)
+            selectable: list[QueuedLifecycleEvent] = [
+                item for item in self._items if not _is_invocation_terminal(item)
+            ]
+            if not selectable:
+                selectable = self._items
+            highest: int = max(item.policy.priority for item in selectable)
             selected: QueuedLifecycleEvent = min(
-                (item for item in self._items if item.policy.priority == highest),
+                (item for item in selectable if item.policy.priority == highest),
                 key=lambda item: item.sequence,
             )
             self._items.remove(selected)
@@ -65,3 +71,7 @@ class FinitePriorityEventQueue:
     def __len__(self) -> int:
         with self._condition:
             return len(self._items)
+
+
+def _is_invocation_terminal(item: QueuedLifecycleEvent) -> bool:
+    return item.event.event_type in INVOCATION_TERMINAL_EVENT_TYPES

@@ -33,6 +33,13 @@ class HookFunctionPlanOutputTestCase:
 
 
 @dataclass(frozen=True)
+class StaticCommandPlanningTestCase:
+    description: str
+    expected_names: tuple[str, ...] = ()
+    expected_reason: str | None = None
+
+
+@dataclass(frozen=True)
 class MaximumStartCapTestCase:
     description: str
     target_max: str

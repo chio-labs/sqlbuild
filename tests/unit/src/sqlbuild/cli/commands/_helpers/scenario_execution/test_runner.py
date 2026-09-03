@@ -11,7 +11,6 @@ from sqlbuild.cli.commands.models import ScenarioTestCommandRequest
 from sqlbuild.cli.progress.classes.native_progress_projector import NativeProgressProjector
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.observability import EventDispatcher, LifecycleEvent, dispatcher_scope
-from sqlbuild.runtime.contracts.models import ConnectionHooks
 from tests.unit.src.sqlbuild.cli.commands._helpers.scenario_execution._test_types import (
     ScenarioCompilePresentationTestCase,
 )
@@ -50,9 +49,9 @@ def test_given_scenario_compile_when_running_then_presentation_has_one_owner(
     pipeline_result.project.sql_scenarios = ()
 
     def compile_project(**kwargs: Any) -> CompilePipelineResult:
-        hooks: ConnectionHooks = cast(ConnectionHooks, kwargs["hooks"])
-        cast(Any, hooks.on_progress)("Compiling project...")
-        cast(Any, hooks.on_progress)("Compiled project.")
+        on_progress: Any = kwargs["on_progress"]
+        on_progress("Compiling project...")
+        on_progress("Compiled project.")
         return cast(CompilePipelineResult, pipeline_result)
 
     configure_scenario_runner(
@@ -107,8 +106,8 @@ def test_given_scenario_compile_failure_when_running_then_lifecycle_fails_and_pr
     stream: ScenarioProgressStream = ScenarioProgressStream(tty=test_case.tty)
 
     def fail_compile(**kwargs: Any) -> CompilePipelineResult:
-        hooks: ConnectionHooks = cast(ConnectionHooks, kwargs["hooks"])
-        cast(Any, hooks.on_progress)("Compiling project...")
+        on_progress: Any = kwargs["on_progress"]
+        on_progress("Compiling project...")
         raise RuntimeError("compile failed")
 
     configure_scenario_runner(monkeypatch=monkeypatch, stream=stream, compile_project=fail_compile)
