@@ -15,6 +15,7 @@ from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapt
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.microbatches._helpers.sql import (
     build_create_table_sql,
+    build_insert_many_sql,
     build_insert_sql,
     build_read_scope_sql,
 )
@@ -146,6 +147,59 @@ def test_given_completion_when_building_insert_then_provenance_and_numeric_rows_
     assert "'fingerprint''definition'" in sql
     assert ", 0," in sql
     assert len((sql,)) == test_case.expected_statement_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MicrobatchDdlAdapterTestCase(
+            description="duckdb", adapter=DuckDbAdapter(), expected_table_name=MICROBATCH_TABLE_NAME
+        ),
+        MicrobatchDdlAdapterTestCase(
+            description="snowflake",
+            adapter=SnowflakeAdapter(),
+            expected_table_name=MICROBATCH_TABLE_NAME,
+        ),
+        MicrobatchDdlAdapterTestCase(
+            description="bigquery",
+            adapter=BigQueryAdapter(),
+            expected_table_name=MICROBATCH_TABLE_NAME,
+        ),
+        MicrobatchDdlAdapterTestCase(
+            description="databricks",
+            adapter=DatabricksAdapter(),
+            expected_table_name=MICROBATCH_TABLE_NAME,
+        ),
+        MicrobatchDdlAdapterTestCase(
+            description="postgres",
+            adapter=PostgresAdapter(),
+            expected_table_name=MICROBATCH_TABLE_NAME,
+        ),
+        MicrobatchDdlAdapterTestCase(
+            description="sqlserver",
+            adapter=SqlServerAdapter(),
+            expected_table_name=MICROBATCH_TABLE_NAME,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_builtin_adapter_when_rendering_direct_event_inserts_then_timestamps_are_typed(
+    test_case: MicrobatchDdlAdapterTestCase,
+) -> None:
+    event: MicrobatchEvent = completion_for_sql()
+
+    single_sql: str = build_insert_sql(
+        event=event, render_qualified_name=test_case.adapter.render_qualified_name
+    )
+    bulk_sql: str = build_insert_many_sql(
+        events=(event, replace(event, event_id="second-event")),
+        render_qualified_name=test_case.adapter.render_qualified_name,
+    )
+
+    for sql, expected_null_timestamp_count in ((single_sql, 4), (bulk_sql, 8)):
+        assert test_case.expected_table_name in sql
+        assert "CAST('2026-01-01T00:00:00' AS TIMESTAMP)" in sql
+        assert sql.count("CAST(NULL AS TIMESTAMP)") == expected_null_timestamp_count
 
 
 @pytest.mark.parametrize(

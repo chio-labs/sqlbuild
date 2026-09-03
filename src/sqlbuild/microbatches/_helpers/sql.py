@@ -50,9 +50,13 @@ def build_insert_sql(
         render_qualified_name=render_qualified_name,
     )
     values: tuple[object | None, ...] = MicrobatchEventCodec.values(event)
+    literals: str = ", ".join(
+        _column_literal(column=column, value=value)
+        for column, value in zip(MICROBATCH_COLUMNS, values, strict=True)
+    )
     return (
         f"INSERT INTO {table} ({', '.join(MICROBATCH_COLUMNS)}) SELECT "
-        f"{', '.join(_literal(value) for value in values)} "
+        f"{literals} "
         f"WHERE NOT EXISTS (SELECT 1 FROM {table} "
         f"WHERE event_id = {_literal(event.event_id)})"
     )
@@ -79,12 +83,16 @@ def build_insert_many_sql(
             if index > 0
             else " "
             + ", ".join(
-                f"{_literal(value)} AS {column}"
+                f"{_column_literal(column=column, value=value)} AS {column}"
                 for column, value in zip(MICROBATCH_COLUMNS, values, strict=True)
             )
         )
         selections.append(
-            f"SELECT {', '.join(_literal(value) for value in values)}"
+            "SELECT "
+            + ", ".join(
+                _column_literal(column=column, value=value)
+                for column, value in zip(MICROBATCH_COLUMNS, values, strict=True)
+            )
             if index > 0
             else f"SELECT{aliases}"
         )
@@ -162,3 +170,8 @@ def _literal(value: object | None) -> str:
         return str(value)
     normalized: str = value.isoformat() if isinstance(value, date | datetime) else str(value)
     return "'" + normalized.replace("'", "''") + "'"
+
+
+def _column_literal(*, column: str, value: object | None) -> str:
+    literal: str = _literal(value)
+    return f"CAST({literal} AS TIMESTAMP)" if column.endswith("_at") else literal

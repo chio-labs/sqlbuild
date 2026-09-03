@@ -2762,15 +2762,22 @@ def _plan_microbatch_windows(
         downstream_grain=entry.cursor_grain,
         cursor_input_relations=causal_relations,
     )
+    has_outstanding_causal_work: bool = any(
+        dependency.outstanding.intervals for dependency in context.microbatch_causal_dependencies
+    )
     runtime_entry: ModelPlanEntry = replace(
         entry,
-        cursor_input_relations=causal_relations,
+        cursor_input_relations=(
+            causal_relations if has_outstanding_causal_work else entry.cursor_input_relations
+        ),
         lookback=(
             resolve_effective_microbatch_batch_size(
                 batch_size=entry.batch_size or "",
                 effective_grain=causal_effective_grain,
             )
-            if entry.lookback_is_default and causal_effective_grain is not None
+            if entry.lookback_is_default
+            and causal_effective_grain is not None
+            and has_outstanding_causal_work
             else entry.lookback
         ),
     )
