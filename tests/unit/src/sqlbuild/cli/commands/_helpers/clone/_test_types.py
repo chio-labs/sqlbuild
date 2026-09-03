@@ -30,6 +30,8 @@ class RenderCloneItemLineTestCase:
     total: int
     item: CloneItemResult
     expected_fragments: tuple[str, ...]
+    expected_line: str
+    relation_width: int | None = None
     unexpected_fragments: tuple[str, ...] = ()
 
 

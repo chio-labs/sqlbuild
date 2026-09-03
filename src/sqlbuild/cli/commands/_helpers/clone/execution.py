@@ -6,7 +6,10 @@ import time
 from typing import TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.clone.output import render_clone_item_line
+from sqlbuild.cli.commands._helpers.clone.output import (
+    clone_relation_flow_text,
+    render_clone_item_line,
+)
 from sqlbuild.cli.commands.models import (
     CloneCommandRequest,
     CloneConnectionContext,
@@ -52,11 +55,13 @@ def execute_clone_plan(
     clone_start: float = time.monotonic()
     resource_types_by_name: dict[str, str] = _clone_resource_types_by_name(preparation=preparation)
     event_writer: ExecutionEventWriter = ExecutionEventWriter(path=request.event_output_path)
+    relation_width: int = _clone_relation_width(preparation=preparation)
     on_item: CloneItemCallback = _build_on_clone_item(
         stream=invocation.progress_stream,
         use_color=invocation.use_color,
         event_writer=event_writer,
         resource_types_by_name=resource_types_by_name,
+        relation_width=relation_width,
     )
     try:
         result: CloneExecutionResult = execute_clone(
@@ -170,10 +175,18 @@ def _build_on_clone_item(
     use_color: bool,
     event_writer: ExecutionEventWriter,
     resource_types_by_name: dict[str, str],
+    relation_width: int,
 ) -> CloneItemCallback:
     def _on_clone_item(*, index: int, total: int, item: CloneItemResult) -> None:
         stream.write(
-            render_clone_item_line(index=index, total=total, item=item, use_color=use_color) + "\n"
+            render_clone_item_line(
+                index=index,
+                total=total,
+                item=item,
+                use_color=use_color,
+                relation_width=relation_width,
+            )
+            + "\n"
         )
         stream.flush()
         event_writer.write_clone_result(
@@ -182,3 +195,32 @@ def _build_on_clone_item(
         )
 
     return _on_clone_item
+
+
+def _clone_relation_width(*, preparation: CloneExecutionPreparation) -> int:
+    origin_entries: tuple[CloneSourcePlanEntry | ModelPlanEntry | SeedPlanEntry, ...] = (
+        *preparation.pipeline_result.origin_source_entries,
+        *preparation.pipeline_result.origin_model_entries,
+        *preparation.pipeline_result.origin_seed_entries,
+    )
+    origin_relations: dict[str, str | None] = {
+        entry.name: entry.destination.qualified_name or entry.destination.name
+        for entry in origin_entries
+    }
+    destination_entries: tuple[
+        CloneSourcePlanEntry | ModelPlanEntry | SeedPlanEntry | FunctionPlanEntry, ...
+    ] = (
+        *preparation.pipeline_result.destination_source_entries,
+        *preparation.pipeline_result.destination_model_entries,
+        *preparation.pipeline_result.destination_seed_entries,
+        *preparation.pipeline_result.destination_function_entries,
+    )
+    flows: tuple[str, ...] = tuple(
+        clone_relation_flow_text(
+            name=entry.name,
+            origin_relation=origin_relations.get(entry.name),
+            destination_relation=entry.destination.qualified_name or entry.destination.name,
+        )
+        for entry in destination_entries
+    )
+    return max((len(flow) for flow in flows), default=0)
