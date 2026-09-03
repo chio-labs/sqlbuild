@@ -12,6 +12,8 @@ class SkillUpdateTestCase:
     force: bool = False
     expected_written_paths: tuple[Path, ...] = ()
     expected_content_fragment: str = "# SQLBuild Skill"
+    project_path: Path = Path(".")
+    git_marker_is_file: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -29,3 +31,5 @@ class SkillMaintenanceTestCase:
     existing_files: dict[Path, str] = field(default_factory=dict)
     expected_message_fragment: str = ""
     expected_written_paths: tuple[Path, ...] = ()
+    project_path: Path = Path(".")
+    git_marker_is_file: bool | None = None

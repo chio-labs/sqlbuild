@@ -21,6 +21,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.skills._test_types import (
 from tests.unit.src.sqlbuild.cli.commands.main.skills.helpers import (
     prepare_skill_update_project,
     read_relative_file,
+    write_git_marker,
     write_project_files,
 )
 
@@ -53,6 +54,24 @@ from tests.unit.src.sqlbuild.cli.commands.main.skills.helpers import (
             force=True,
             expected_written_paths=(Path(".opencode/skills/sqlbuild/SKILL.md"),),
         ),
+        SkillUpdateTestCase(
+            description="nested project installs skills at repository root",
+            project_path=Path("repository/sqlbuild_project"),
+            git_marker_is_file=False,
+            expected_written_paths=(
+                Path("repository/.agents/skills/sqlbuild/SKILL.md"),
+                Path("repository/.claude/skills/sqlbuild/SKILL.md"),
+            ),
+        ),
+        SkillUpdateTestCase(
+            description="nested worktree project installs skills at repository root",
+            project_path=Path("worktree/sqlbuild_project"),
+            git_marker_is_file=True,
+            expected_written_paths=(
+                Path("worktree/.agents/skills/sqlbuild/SKILL.md"),
+                Path("worktree/.claude/skills/sqlbuild/SKILL.md"),
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -60,14 +79,19 @@ def test_given_skill_update_options_when_updating_then_writes_expected_targets(
     test_case: SkillUpdateTestCase,
     tmp_path: Path,
 ) -> None:
+    project_dir: Path = tmp_path / test_case.project_path
+    write_git_marker(
+        repository_dir=project_dir.parent,
+        marker_is_file=test_case.git_marker_is_file,
+    )
     prepare_skill_update_project(
-        project_dir=tmp_path,
+        project_dir=project_dir,
         project_config=test_case.project_config,
         existing_files=test_case.existing_files,
     )
 
     result: SkillUpdateResult = update_sqlbuild_skills(
-        project_dir=tmp_path,
+        project_dir=project_dir,
         requested_targets=test_case.requested_targets,
         global_install=test_case.global_install,
         force=test_case.force,
@@ -197,6 +221,17 @@ def test_given_skill_frontmatter_when_adding_generated_marker_then_marker_follow
             description="project without configured or installed skills remains quiet",
             project_config='name = "demo"\nadapter = "duckdb"\n',
         ),
+        SkillMaintenanceTestCase(
+            description="nested project auto updates skill at repository root",
+            project_config=(
+                'name = "demo"\nadapter = "duckdb"\n\n[skills]\n'
+                'targets = ["agents"]\nauto_update = true\n'
+            ),
+            project_path=Path("repository/sqlbuild_project"),
+            git_marker_is_file=False,
+            expected_message_fragment="Updated stale SQLBuild skill files",
+            expected_written_paths=(Path("repository/.agents/skills/sqlbuild/SKILL.md"),),
+        ),
     ),
     ids=lambda case: case.description,
 )
@@ -204,13 +239,18 @@ def test_given_project_skill_state_when_maintaining_then_reports_or_updates_owne
     test_case: SkillMaintenanceTestCase,
     tmp_path: Path,
 ) -> None:
+    project_dir: Path = tmp_path / test_case.project_path
+    write_git_marker(
+        repository_dir=project_dir.parent,
+        marker_is_file=test_case.git_marker_is_file,
+    )
     prepare_skill_update_project(
-        project_dir=tmp_path,
+        project_dir=project_dir,
         project_config=test_case.project_config,
         existing_files=test_case.existing_files,
     )
 
-    result: SkillMaintenanceResult = maintain_sqlbuild_skills(project_dir=tmp_path)
+    result: SkillMaintenanceResult = maintain_sqlbuild_skills(project_dir=project_dir)
 
     assert test_case.expected_message_fragment in result.message
     for relative_path in test_case.expected_written_paths:
