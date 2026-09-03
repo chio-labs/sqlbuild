@@ -54,6 +54,7 @@ def run_audit_pipeline(
                 resource_id=audit_resource_id(
                     audit_name=entry.name,
                     attachment_kind=entry.attachment_kind,
+                    attached_target_kind=entry.attached_target_kind,
                     attached_target_name=entry.attached_target_name,
                     attached_column_name=entry.attached_column_name,
                 ),

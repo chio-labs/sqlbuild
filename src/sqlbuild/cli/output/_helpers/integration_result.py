@@ -300,6 +300,7 @@ def _audit_check_id(result: AuditExecutionResult) -> str:
     return audit_resource_id(
         audit_name=result.audit_name,
         attachment_kind=result.attachment_kind,
+        attached_target_kind=result.attached_target_kind,
         attached_target_name=result.attached_target_name,
         attached_column_name=result.attached_column_name,
     )

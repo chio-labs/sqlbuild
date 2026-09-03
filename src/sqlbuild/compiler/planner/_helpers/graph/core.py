@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
     CompiledObjectKey,
     CompiledProject,
     CompiledSqlTest,
 )
 from sqlbuild.compiler.compile.types import (
-    AttachedAuditTargetKind,
     CompiledResourceType,
     SqlTestMode,
 )
@@ -26,24 +24,13 @@ def _key_sort_key(key: CompiledObjectKey) -> tuple[str, str]:
 def build_execution_upstream_deps(
     project: CompiledProject,
 ) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]:
-    """Return EXECUTION-order edges: lineage plus audit scope-deps and woven SQL test nodes."""
+    """Return execution-order edges from lineage and woven SQL test nodes."""
 
     upstream: dict[CompiledObjectKey, list[CompiledObjectKey]] = {}
     upstream.update({model.key: list(model.deps) for model in project.models})
     upstream.update({source.key: list(source.deps) for source in project.sources})
     upstream.update({seed.key: list(seed.deps) for seed in project.seeds})
     upstream.update({function.key: list(function.deps) for function in project.functions})
-
-    audit: CompiledAudit
-    for audit in project.audits:
-        target_key: CompiledObjectKey | None = _attached_audit_target_key(audit=audit)
-        if target_key is None or target_key not in upstream:
-            continue
-        dep_key: CompiledObjectKey
-        for dep_key in audit.scope_deps:
-            if dep_key == target_key or dep_key in upstream[target_key]:
-                continue
-            upstream[target_key].append(dep_key)
 
     test: CompiledSqlTest
     for test in project.sql_tests:
@@ -64,18 +51,6 @@ def build_execution_edge_origins(
     """Return human-readable origins for execution edges injected beyond pure lineage."""
 
     origins: dict[tuple[CompiledObjectKey, CompiledObjectKey], str] = {}
-    audit: CompiledAudit
-    for audit in project.audits:
-        target_key: CompiledObjectKey | None = _attached_audit_target_key(audit=audit)
-        if target_key is None:
-            continue
-        dep_key: CompiledObjectKey
-        for dep_key in audit.scope_deps:
-            if dep_key == target_key:
-                continue
-            origins[(target_key, dep_key)] = (
-                f"audit '{audit.name}' on '{target_key.name}' reads '{dep_key.name}'"
-            )
     test: CompiledSqlTest
     for test in project.sql_tests:
         for target_key in test.scope_deps:
@@ -83,23 +58,6 @@ def build_execution_edge_origins(
                 f"SQL test '{test.name}' runs before '{target_key.name}'"
             )
     return origins
-
-
-def _attached_audit_target_key(*, audit: CompiledAudit) -> CompiledObjectKey | None:
-    if audit.attached_target_kind is None or audit.attached_target_name is None:
-        return None
-    target_kind: AttachedAuditTargetKind = AttachedAuditTargetKind(audit.attached_target_kind)
-    if target_kind == AttachedAuditTargetKind.MODEL:
-        return CompiledObjectKey(
-            resource_type=CompiledResourceType.MODEL,
-            name=audit.attached_target_name,
-        )
-    if target_kind == AttachedAuditTargetKind.SOURCE:
-        return CompiledObjectKey(
-            resource_type=CompiledResourceType.SOURCE,
-            name=audit.attached_target_name,
-        )
-    return None
 
 
 def _function_scope_deps_for_test(*, test: CompiledSqlTest) -> tuple[CompiledObjectKey, ...]:

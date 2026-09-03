@@ -14,6 +14,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
 )
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.planner._helpers.output.audit_scheduling import (
     resolve_attachment_kind,
     resolve_effective_run_scope,
@@ -73,6 +74,11 @@ def plan_audit(
         requested_run_scope=requested_run_scope,
         attached_model_materialization=attached_materialization,
     )
+    attached_target_kind: AttachedAuditTargetKind | None = audit.attached_target_kind
+    if attached_target_kind is None and attachment_kind == AuditAttachmentKind.MODEL:
+        attached_target_kind = AttachedAuditTargetKind.MODEL
+    elif attached_target_kind is None and attachment_kind == AuditAttachmentKind.SOURCE:
+        attached_target_kind = AttachedAuditTargetKind.SOURCE
 
     return AuditPlanEntry(
         key=audit.key,
@@ -84,6 +90,7 @@ def plan_audit(
         requested_run_scope=requested_run_scope,
         effective_run_scope=effective_run_scope,
         scope_deps=audit.scope_deps,
+        attached_target_kind=attached_target_kind,
         attached_target_name=attached_target_name,
         attached_column_name=audit.attached_column_name,
         always_run=audit.always_run,

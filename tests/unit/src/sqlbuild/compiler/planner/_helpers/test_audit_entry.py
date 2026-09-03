@@ -2,14 +2,20 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.compiler.auditing.types import AuditAttachmentKind, AuditRunScope
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
+    CompiledObjectKey,
     CompiledRelationLocation,
+    CompileSqlReference,
 )
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.planner._helpers.output.audit_entry import plan_audit
 from sqlbuild.compiler.planner.models import AuditPlanEntry
+from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
+    PlanAttachedAuditTestCase,
     PlanAuditTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
@@ -17,7 +23,64 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     build_audit_from_test_case,
     build_audit_model_locations,
     build_audit_source_map,
+    build_scheduling_audit,
+    build_scheduling_graph,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PlanAttachedAuditTestCase(
+            description="safe attached audit retains model lifecycle scheduling",
+            attached_target_name="orders",
+            referenced_model_names=("orders", "stg_orders"),
+            upstream_edges={"orders": ("stg_orders",), "stg_orders": ()},
+            expected_attachment_kind=AuditAttachmentKind.MODEL,
+        ),
+        PlanAttachedAuditTestCase(
+            description="downstream-reading attached audit moves to end scheduling",
+            attached_target_name="stg_orders",
+            referenced_model_names=("stg_orders", "orders"),
+            upstream_edges={"orders": ("stg_orders",), "stg_orders": ()},
+            expected_attachment_kind=AuditAttachmentKind.END,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_logically_attached_audit_when_planning_then_scheduling_and_identity_are_independent(
+    test_case: PlanAttachedAuditTestCase,
+) -> None:
+    references: tuple[CompileSqlReference, ...] = tuple(
+        CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name=name)
+        for name in test_case.referenced_model_names
+    )
+    audit: CompiledAudit = build_scheduling_audit(
+        references=references,
+        attached_target_kind=AttachedAuditTargetKind.MODEL,
+        attached_target_name=test_case.attached_target_name,
+    )
+    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+    upstream, downstream = build_scheduling_graph(test_case.upstream_edges)
+
+    result: AuditPlanEntry = plan_audit(
+        audit=audit,
+        model_locations=build_audit_model_locations(
+            {name: f"analytics.{name}" for name in test_case.referenced_model_names}
+        ),
+        seed_locations={},
+        source_map={},
+        adapter=PlannerTestAdapter(),
+        upstream_deps=upstream,
+        downstream_deps=downstream,
+        model_materializations={test_case.attached_target_name: "incremental"},
+    )
+
+    assert result.attachment_kind == test_case.expected_attachment_kind
+    assert result.attached_target_kind == AttachedAuditTargetKind.MODEL
+    assert result.attached_target_name == test_case.attached_target_name
+    assert result.effective_run_scope == AuditRunScope.FINAL
 
 
 @pytest.mark.parametrize(

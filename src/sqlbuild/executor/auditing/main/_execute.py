@@ -100,6 +100,7 @@ def execute_audit(
         row_count=row_count,
         executed_sql=executed_sql,
         run_scope_phase=run_scope_phase,
+        attached_target_kind=audit.attached_target_kind,
         attached_target_name=audit.attached_target_name,
         attached_column_name=audit.attached_column_name,
     )

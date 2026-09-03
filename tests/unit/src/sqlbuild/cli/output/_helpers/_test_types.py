@@ -27,3 +27,11 @@ class SqlTestCaseExecutionProtocolTestCase:
     expected_decimal_value: str
     expected_fingerprint: str
     expected_text_label: str
+
+
+@dataclass(frozen=True)
+class AuditExecutionProtocolTestCase:
+    description: str
+    expected_check_id: str
+    expected_attachment_kind: str
+    expected_target_kind: str

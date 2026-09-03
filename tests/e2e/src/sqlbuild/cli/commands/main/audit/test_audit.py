@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -102,3 +104,92 @@ def test_given_failing_audit_when_running_audit_then_exit_code_is_nonzero(
     expected_fragment: str
     for expected_fragment in test_case.expected_stdout_fragments:
         assert expected_fragment in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AuditE2ETestCase(
+            description="attached audit reading downstream model runs after its dependencies",
+            expected_exit_code=0,
+            expected_stdout_fragment="PASS=29",
+            expected_stdout_fragments=("stg_orders", "cross_model_consistency"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_attached_audit_reads_downstream_model_when_building_and_auditing_then_it_runs_once_at_end(
+    test_case: AuditE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+    model_path: Path = project_dir / "models" / "staging" / "stg_orders.sql"
+    model_sql: str = model_path.read_text(encoding="utf-8")
+    model_path.write_text(
+        model_sql.replace(
+            "  columns (",
+            "  audits [cross_model_consistency (severity error)],\n  columns (",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    audit_path: Path = project_dir / "audits" / "generic" / "cross_model_consistency.sql"
+    audit_path.parent.mkdir(parents=True, exist_ok=True)
+    audit_path.write_text(
+        'AUDIT (name "cross_model_consistency");\n\n'
+        "SELECT stg.order_id\n"
+        "FROM @relation stg\n"
+        'LEFT JOIN __ref("fact_orders") fact USING (order_id)\n'
+        "WHERE fact.order_id IS NULL\n",
+        encoding="utf-8",
+    )
+
+    build_output_path: Path = tmp_path / "build.json"
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--json-output", str(build_output_path)),
+        project_dir=project_dir,
+    )
+    audit_output_path: Path = tmp_path / "audit.json"
+    audit_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "audit", "--json-output", str(audit_output_path)),
+        project_dir=project_dir,
+    )
+
+    assert build_result.returncode == test_case.expected_exit_code, (
+        build_result.stdout + build_result.stderr
+    )
+    build_payload: dict[str, object] = json.loads(build_output_path.read_text(encoding="utf-8"))
+    build_checks: list[dict[str, object]] = cast(list[dict[str, object]], build_payload["checks"])
+    build_check_names: tuple[object, ...] = tuple(check["name"] for check in build_checks)
+    assert build_check_names.count("cross_model_consistency") == 1
+    matching_build_check: dict[str, object] = build_checks[
+        build_check_names.index("cross_model_consistency")
+    ]
+    assert matching_build_check == {
+        "kind": "audit",
+        "name": "cross_model_consistency",
+        "check_id": "audit:cross_model_consistency:model:stg_orders",
+        "passed": True,
+        "status": "pass",
+        "severity": "error",
+        "row_count": 0,
+        "attachment_kind": "end",
+        "attached_target_kind": "model",
+        "asset_name": "stg_orders",
+        "run_scope_phase": "final",
+        "reused": False,
+    }
+    assert audit_result.returncode == test_case.expected_exit_code, (
+        audit_result.stdout + audit_result.stderr
+    )
+    assert test_case.expected_stdout_fragment in audit_result.stdout
+    audit_payload: dict[str, object] = json.loads(audit_output_path.read_text(encoding="utf-8"))
+    audit_checks: list[dict[str, object]] = cast(list[dict[str, object]], audit_payload["checks"])
+    audit_check_names: tuple[object, ...] = tuple(check["name"] for check in audit_checks)
+    assert audit_check_names.count("cross_model_consistency") == 1
+    matching_audit_check: dict[str, object] = audit_checks[
+        audit_check_names.index("cross_model_consistency")
+    ]
+    assert matching_audit_check == matching_build_check
+    for expected_fragment in test_case.expected_stdout_fragments:
+        assert expected_fragment in audit_result.stdout

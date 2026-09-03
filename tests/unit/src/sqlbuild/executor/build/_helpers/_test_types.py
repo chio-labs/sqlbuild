@@ -13,6 +13,13 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import ModelPlanOve
 
 
 @dataclass(frozen=True)
+class AuditExecutionIndexTestCase:
+    description: str
+    expected_model_audit_count: int
+    expected_end_audit_count: int
+
+
+@dataclass(frozen=True)
 class LifecycleProgressTestCase:
     description: str
     expected_event_types: tuple[str, ...]

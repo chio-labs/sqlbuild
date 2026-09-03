@@ -48,6 +48,24 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
             expected_attached_name="raw_orders",
         ),
         ResolveAttachmentTestCase(
+            description="source-attached audit with seed dependency moves to END",
+            references=(
+                CompileSqlReference(
+                    ref_kind=SqlReferenceKind.SOURCE,
+                    ref_name="raw_orders",
+                ),
+                CompileSqlReference(
+                    ref_kind=SqlReferenceKind.SEED,
+                    ref_name="valid_order_statuses",
+                ),
+            ),
+            attached_target_kind=AttachedAuditTargetKind.SOURCE,
+            attached_target_name="raw_orders",
+            upstream_edges={},
+            expected_attachment_kind=AuditAttachmentKind.END,
+            expected_attached_name="raw_orders",
+        ),
+        ResolveAttachmentTestCase(
             description="model-attached audit with upstream refs returns MODEL",
             references=(
                 CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
@@ -57,6 +75,30 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
             attached_target_name="orders",
             upstream_edges={"orders": ("stg_orders",), "stg_orders": ()},
             expected_attachment_kind=AuditAttachmentKind.MODEL,
+            expected_attached_name="orders",
+        ),
+        ResolveAttachmentTestCase(
+            description="model-attached audit with downstream ref moves to END",
+            references=(
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="stg_orders"),
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
+            ),
+            attached_target_kind=AttachedAuditTargetKind.MODEL,
+            attached_target_name="stg_orders",
+            upstream_edges={"orders": ("stg_orders",), "stg_orders": ()},
+            expected_attachment_kind=AuditAttachmentKind.END,
+            expected_attached_name="stg_orders",
+        ),
+        ResolveAttachmentTestCase(
+            description="model-attached audit with unrelated ref moves to END",
+            references=(
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="customers"),
+            ),
+            attached_target_kind=AttachedAuditTargetKind.MODEL,
+            attached_target_name="orders",
+            upstream_edges={"orders": (), "customers": ()},
+            expected_attachment_kind=AuditAttachmentKind.END,
             expected_attached_name="orders",
         ),
         ResolveAttachmentTestCase(
@@ -165,28 +207,6 @@ def test_given_audit_refs_when_resolving_attachment_then_returns_expected(
             attached_target_name="raw_orders",
             upstream_edges={"orders": ()},
             expected_error_fragment="must not reference models",
-        ),
-        ResolveAttachmentErrorTestCase(
-            description="model-attached audit referencing downstream model raises",
-            references=(
-                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="stg_orders"),
-                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
-            ),
-            attached_target_kind=AttachedAuditTargetKind.MODEL,
-            attached_target_name="stg_orders",
-            upstream_edges={"orders": ("stg_orders",), "stg_orders": ()},
-            expected_error_fragment="not upstream of",
-        ),
-        ResolveAttachmentErrorTestCase(
-            description="model-attached audit referencing unrelated model raises",
-            references=(
-                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
-                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="customers"),
-            ),
-            attached_target_kind=AttachedAuditTargetKind.MODEL,
-            attached_target_name="orders",
-            upstream_edges={"orders": (), "customers": ()},
-            expected_error_fragment="not upstream of",
         ),
     ],
     ids=lambda case: case.description,

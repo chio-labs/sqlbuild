@@ -37,12 +37,12 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     "test_case",
     [
         BuildUpstreamDepsTestCase(
-            description="adds attached audit source refs to audited model deps",
+            description="keeps attached audit refs out of model deps",
             model_deps={"stg_payments": ("raw_payments",)},
             source_names=("raw_payments", "raw_orders"),
             seed_names=(),
             expected_upstream_keys={
-                "stg_payments": ("raw_payments", "raw_orders"),
+                "stg_payments": ("raw_payments",),
                 "raw_payments": (),
                 "raw_orders": (),
             },
@@ -238,13 +238,11 @@ def test_given_injected_edge_cycle_when_ordering_topologically_then_error_names_
     "test_case",
     [
         ExecutionEdgeOriginsTestCase(
-            description="records audit scope-dep edges with audit and target names",
+            description="does not record audit scope deps as execution edges",
             model_deps={"stg_payments": ("raw_payments",)},
             source_names=("raw_payments", "raw_orders"),
             audit_model_source_deps={"stg_payments": ("raw_orders",)},
-            expected_origin_fragments=(
-                "audit 'stg_payments_audit' on 'stg_payments' reads 'raw_orders'",
-            ),
+            expected_origin_fragments=(),
         ),
     ],
     ids=lambda case: case.description,
@@ -261,9 +259,7 @@ def test_given_audit_scope_deps_when_building_edge_origins_then_names_the_audit(
     )
 
     origin_values: tuple[str, ...] = tuple(sorted(origins.values()))
-    expected_fragment: str
-    for expected_fragment in test_case.expected_origin_fragments:
-        assert any(expected_fragment in value for value in origin_values)
+    assert origin_values == test_case.expected_origin_fragments
 
 
 @pytest.mark.parametrize(
