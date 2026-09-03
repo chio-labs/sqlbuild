@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import queue
 import threading
 import time
 from collections.abc import Callable
+from concurrent.futures import CancelledError as FutureCancelledError
 from dataclasses import replace
 from datetime import UTC, datetime
 from io import StringIO
@@ -34,8 +36,12 @@ from sqlbuild.cost.models import CostResourceContext, StatementLedgerEntry
 from sqlbuild.executor.auditing.main.resource_id import audit_resource_id
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.pipeline._helpers import auditing
-from sqlbuild.executor.pipeline.exceptions import AuditOutcomeError
-from sqlbuild.executor.pipeline.main.run import run_audit_pipeline
+from sqlbuild.executor.pipeline.exceptions import AuditExecutionError, AuditOutcomeError
+from sqlbuild.executor.pipeline.main.run import (
+    AuditPipelineCallbacks,
+    run_audit_pipeline,
+    run_audit_pipeline_with_callbacks,
+)
 from sqlbuild.observability import (
     EventDispatcher,
     LifecycleEvent,
@@ -44,15 +50,19 @@ from sqlbuild.observability import (
 )
 from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import (
     AuditConcurrencyTestCase,
+    AuditErrorFormattingTestCase,
     AuditLogicalIdentityTestCase,
+    AuditPhysicalCallbackTestCase,
     AuditPipelineLifecycleTestCase,
     AuditResourceIdentityTestCase,
+    AuditStopErrorTestCase,
 )
 from tests.unit.src.sqlbuild.executor.pipeline._helpers.helpers import (
     audit_entry,
     audit_result,
     lifecycle_events_with_prefix,
     lifecycle_order_with_prefix,
+    unprintable_audit_error,
 )
 
 
@@ -319,42 +329,160 @@ def test_given_reversed_completion_when_run_concurrently_then_results_remain_pla
     (AuditConcurrencyTestCase(description="multiple errors", expected_error="failure-first"),),
     ids=lambda case: case.description,
 )
-def test_given_multiple_worker_errors_when_run_then_earliest_plan_error_is_raised_after_drain(
+def test_given_multiple_worker_errors_when_run_then_all_failures_are_plan_ordered_after_drain(
     test_case: AuditConcurrencyTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     entries: tuple[AuditPlanEntry, ...] = tuple(
-        audit_entry(name) for name in ("first", "second", "never_started")
+        audit_entry(name) for name in ("first", "second", "later_success", "fourth")
     )
     adapter: Mock = Mock(spec=BaseAdapter)
     adapter.connect.side_effect = (object(), object())
     started: list[str] = []
     finished: list[str] = []
     lock: threading.Lock = threading.Lock()
+    actions: dict[str, Callable[[], AuditExecutionResult]] = {
+        "first": Mock(side_effect=RuntimeError("failure-first")),
+        "second": Mock(side_effect=RuntimeError("failure-second")),
+        "later_success": lambda: audit_result("later_success"),
+        "fourth": Mock(side_effect=RuntimeError("failure-fourth")),
+    }
 
     def execute_audit(**kwargs: object) -> AuditExecutionResult:
         entry: object = kwargs["audit"]
         assert isinstance(entry, AuditPlanEntry)
         with lock:
             started.append(entry.name)
-        time.sleep({"first": 0.06, "second": 0.01}[entry.name])
+        time.sleep(
+            {"first": 0.06, "second": 0.01, "later_success": 0.01, "fourth": 0.01}[entry.name]
+        )
         with lock:
             finished.append(entry.name)
-        raise RuntimeError(f"failure-{entry.name}")
+        return actions[entry.name]()
 
     monkeypatch.setattr(auditing, "execute_audit", execute_audit)
 
-    with pytest.raises(RuntimeError, match=test_case.expected_error):
+    completed: list[str] = []
+    with pytest.raises(AuditExecutionError) as raised:
         run_audit_pipeline(
             plan=PlanOutput(audit_entries=entries),
             connection_config={},
             adapter=adapter,
             max_concurrency=2,
+            on_audit_complete=lambda result: completed.append(result.audit_name),
         )
 
-    assert set(started) == {"first", "second"}
-    assert set(finished) == {"first", "second"}
+    assert set(started) == {"first", "second", "later_success", "fourth"}
+    assert set(finished) == set(started)
+    assert tuple(failure.audit_name for failure in raised.value.failures) == (
+        "first",
+        "second",
+        "fourth",
+    )
+    assert test_case.expected_error in str(raised.value)
+    assert str(raised.value).index("failure-first") < str(raised.value).index("failure-second")
+    assert completed == ["later_success"]
     assert adapter.close.call_count == 2
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (AuditConcurrencyTestCase(description="serial runtime errors", expected_count=1),),
+    ids=lambda case: case.description,
+)
+def test_given_serial_runtime_errors_when_run_then_all_entries_execute_and_failures_order(
+    test_case: AuditConcurrencyTestCase,
+) -> None:
+    entries: tuple[AuditPlanEntry, ...] = tuple(
+        audit_entry(name) for name in ("first", "later_success", "third")
+    )
+    adapter: Mock = Mock(spec=BaseAdapter)
+    adapter.connect.return_value = object()
+    started: list[str] = []
+    completed: list[str] = []
+    actions: dict[str, Callable[[], AuditExecutionResult]] = {
+        "first": Mock(side_effect=LookupError("failure-first")),
+        "later_success": lambda: audit_result("later_success"),
+        "third": Mock(side_effect=LookupError("failure-third")),
+    }
+
+    def execute_audit(**kwargs: object) -> AuditExecutionResult:
+        entry: object = kwargs["audit"]
+        assert isinstance(entry, AuditPlanEntry)
+        started.append(entry.name)
+        return actions[entry.name]()
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(auditing, "execute_audit", execute_audit)
+        with pytest.raises(AuditExecutionError) as raised:
+            run_audit_pipeline(
+                plan=PlanOutput(audit_entries=entries),
+                connection_config={},
+                adapter=adapter,
+                max_concurrency=1,
+                on_audit_complete=lambda result: completed.append(result.audit_name),
+            )
+
+    assert started == ["first", "later_success", "third"]
+    assert completed == ["later_success"]
+    assert tuple(failure.audit_name for failure in raised.value.failures) == ("first", "third")
+    assert adapter.close.call_count == test_case.expected_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AuditErrorFormattingTestCase(
+            description="unprintable error",
+            error=unprintable_audit_error(),
+            expected_message="Unable to stringify RuntimeError",
+        ),
+        AuditErrorFormattingTestCase(
+            description="uri and api key",
+            error=RuntimeError(
+                "connection postgresql://user:hunter2@host failed api_key=super-secret"
+            ),
+            expected_message=(
+                "connection postgresql://user:[REDACTED]@host failed api_key=[REDACTED]"
+            ),
+        ),
+        AuditErrorFormattingTestCase(
+            description="sql and raw row suppression",
+            error=RuntimeError("SELECT secret FROM raw_table\nrow={'password': 'hunter2'}"),
+            expected_message="Error detail redacted",
+        ),
+        AuditErrorFormattingTestCase(
+            description="single line length bound",
+            error=RuntimeError("x" * 300 + "\n" + "y" * 300),
+            expected_message="x" * 240,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_runtime_error_when_aggregated_then_message_is_safe_and_bounded(
+    test_case: AuditErrorFormattingTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter: Mock = Mock(spec=BaseAdapter)
+    adapter.connect.return_value = object()
+    monkeypatch.setattr(
+        auditing,
+        "execute_audit",
+        Mock(side_effect=test_case.error),
+    )
+
+    with pytest.raises(AuditExecutionError) as raised:
+        run_audit_pipeline(
+            plan=PlanOutput(audit_entries=(audit_entry("safe_name"),)),
+            connection_config={},
+            adapter=adapter,
+        )
+
+    report: str = str(raised.value)
+    assert "safe_name" in report
+    assert raised.value.failures[0].message == test_case.expected_message
+    assert "\n" not in raised.value.failures[0].message
+    assert len(raised.value.failures[0].message) <= 240
 
 
 @pytest.mark.parametrize(
@@ -396,6 +524,269 @@ def test_given_worker_keyboard_interrupt_when_run_then_stops_submission_and_clos
 
     assert finished_running.is_set()
     assert adapter.close.call_count == test_case.expected_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        AuditStopErrorTestCase(
+            description="serial system exit",
+            error=SystemExit(17),
+            expected_started_names=("stop",),
+            expected_connection_count=1,
+        ),
+        AuditStopErrorTestCase(
+            description="serial asyncio cancellation",
+            error=asyncio.CancelledError("cancel serial"),
+            expected_started_names=("stop",),
+            expected_connection_count=1,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_serial_stop_error_when_run_then_later_audits_are_not_started(
+    test_case: AuditStopErrorTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter: Mock = Mock(spec=BaseAdapter)
+    adapter.connect.return_value = object()
+    started: list[str] = []
+
+    def execute_audit(**kwargs: object) -> AuditExecutionResult:
+        entry: object = kwargs["audit"]
+        assert isinstance(entry, AuditPlanEntry)
+        started.append(entry.name)
+        raise test_case.error
+
+    monkeypatch.setattr(auditing, "execute_audit", execute_audit)
+
+    with pytest.raises(BaseException) as raised:
+        run_audit_pipeline(
+            plan=PlanOutput(audit_entries=(audit_entry("stop"), audit_entry("never_started"))),
+            connection_config={},
+            adapter=adapter,
+            max_concurrency=1,
+        )
+
+    assert raised.value is test_case.error
+    assert tuple(started) == test_case.expected_started_names
+    assert adapter.close.call_count == test_case.expected_connection_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        AuditStopErrorTestCase(
+            description="concurrent system exit",
+            error=SystemExit(19),
+            expected_started_names=("stop", "running"),
+            expected_connection_count=2,
+        ),
+        AuditStopErrorTestCase(
+            description="concurrent asyncio cancellation",
+            error=asyncio.CancelledError("cancel concurrent"),
+            expected_started_names=("stop", "running"),
+            expected_connection_count=2,
+        ),
+        AuditStopErrorTestCase(
+            description="concurrent future cancellation",
+            error=FutureCancelledError("cancel future"),
+            expected_started_names=("stop", "running"),
+            expected_connection_count=2,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_concurrent_stop_error_when_run_then_active_drains_and_new_work_is_not_submitted(
+    test_case: AuditStopErrorTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter: Mock = Mock(spec=BaseAdapter)
+    adapter.connect.side_effect = (object(), object())
+    running_started: threading.Event = threading.Event()
+    started: list[str] = []
+
+    def stop_action() -> AuditExecutionResult:
+        running_started.wait(timeout=1)
+        raise test_case.error
+
+    def running_action() -> AuditExecutionResult:
+        running_started.set()
+        time.sleep(0.05)
+        return audit_result("running")
+
+    actions: dict[str, Callable[[], AuditExecutionResult]] = {
+        "stop": stop_action,
+        "running": running_action,
+    }
+
+    def execute_audit(**kwargs: object) -> AuditExecutionResult:
+        entry: object = kwargs["audit"]
+        assert isinstance(entry, AuditPlanEntry)
+        started.append(entry.name)
+        return actions[entry.name]()
+
+    monkeypatch.setattr(auditing, "execute_audit", execute_audit)
+
+    with pytest.raises(BaseException) as raised:
+        run_audit_pipeline(
+            plan=PlanOutput(
+                audit_entries=(
+                    audit_entry("stop"),
+                    audit_entry("running"),
+                    audit_entry("never_started"),
+                )
+            ),
+            connection_config={},
+            adapter=adapter,
+            max_concurrency=2,
+        )
+
+    assert raised.value is test_case.error
+    assert set(started) == set(test_case.expected_started_names)
+    assert adapter.close.call_count == test_case.expected_connection_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        AuditConcurrencyTestCase(
+            description="audit start callback failure",
+            expected_names=("running",),
+            expected_error="callback failure",
+            expected_count=2,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_start_callback_error_when_run_concurrently_then_it_stops_new_submissions(
+    test_case: AuditConcurrencyTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter: Mock = Mock(spec=BaseAdapter)
+    adapter.connect.side_effect = (object(), object())
+    running_started: threading.Event = threading.Event()
+    executed: list[str] = []
+
+    def stop_callback() -> None:
+        running_started.wait(timeout=1)
+        raise LookupError(test_case.expected_error)
+
+    callbacks: dict[str, Callable[[], None]] = {
+        "stop": stop_callback,
+        "running": lambda: None,
+    }
+
+    def execute_audit(**kwargs: object) -> AuditExecutionResult:
+        entry: object = kwargs["audit"]
+        assert isinstance(entry, AuditPlanEntry)
+        running_started.set()
+        executed.append(entry.name)
+        time.sleep(0.05)
+        return audit_result(entry.name)
+
+    monkeypatch.setattr(auditing, "execute_audit", execute_audit)
+
+    with pytest.raises(LookupError, match=test_case.expected_error):
+        run_audit_pipeline(
+            plan=PlanOutput(
+                audit_entries=(
+                    audit_entry("stop"),
+                    audit_entry("running"),
+                    audit_entry("never_started"),
+                )
+            ),
+            connection_config={},
+            adapter=adapter,
+            max_concurrency=2,
+            on_audit_start=lambda entry: callbacks[entry.name](),
+        )
+
+    assert tuple(executed) == test_case.expected_names
+    assert adapter.close.call_count == test_case.expected_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        AuditPhysicalCallbackTestCase(
+            description="serial physical callback failure",
+            max_concurrency=1,
+            expected_started_names=("first",),
+            expected_possible_started_names=("first",),
+            expected_connection_count=1,
+            expected_pass_count=1,
+        ),
+        AuditPhysicalCallbackTestCase(
+            description="concurrent physical callback failure",
+            max_concurrency=2,
+            expected_started_names=("first",),
+            expected_possible_started_names=("first", "second"),
+            expected_connection_count=2,
+            expected_pass_count=1,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_physical_callback_error_when_running_then_success_projects_and_counts_in_both_modes(
+    test_case: AuditPhysicalCallbackTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter: Mock = Mock(spec=BaseAdapter)
+    adapter.connect.side_effect = tuple(
+        object() for _ in range(test_case.expected_connection_count)
+    )
+    physical_error: LookupError = LookupError("physical callback failure")
+    physical_seen: threading.Event = threading.Event()
+    started: list[str] = []
+    completed: list[str] = []
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    def second_action() -> AuditExecutionResult:
+        physical_seen.wait(timeout=1)
+        raise RuntimeError("drained second failure")
+
+    actions: dict[str, Callable[[], AuditExecutionResult]] = {
+        "first": lambda: audit_result("first"),
+        "second": second_action,
+    }
+
+    def execute_audit(**kwargs: object) -> AuditExecutionResult:
+        entry: object = kwargs["audit"]
+        assert isinstance(entry, AuditPlanEntry)
+        started.append(entry.name)
+        return actions[entry.name]()
+
+    def physical_complete(_result: AuditExecutionResult) -> None:
+        physical_seen.set()
+        raise physical_error
+
+    monkeypatch.setattr(auditing, "execute_audit", execute_audit)
+
+    with invocation_scope("audit-invocation"), dispatcher_scope(dispatcher):
+        with pytest.raises(LookupError) as raised:
+            run_audit_pipeline_with_callbacks(
+                plan=PlanOutput(audit_entries=(audit_entry("first"), audit_entry("second"))),
+                connection_config={},
+                adapter=adapter,
+                max_concurrency=test_case.max_concurrency,
+                callbacks=AuditPipelineCallbacks(
+                    on_audit_physical_complete=physical_complete,
+                    on_audit_complete=lambda result: completed.append(result.audit_name),
+                ),
+            )
+
+    terminal: LifecycleEvent = tuple(
+        filter(lambda event: event.event_type == "run_failed", events)
+    )[0]
+    assert raised.value is physical_error
+    assert set(test_case.expected_started_names).issubset(started)
+    assert set(started).issubset(test_case.expected_possible_started_names)
+    assert completed == ["first"]
+    assert terminal.payload["pass_count"] == test_case.expected_pass_count
+    assert adapter.close.call_count == test_case.expected_connection_count
 
 
 @pytest.mark.parametrize(
@@ -538,7 +929,7 @@ def test_given_execution_and_close_errors_when_running_then_execution_error_wins
     adapter.close.side_effect = RuntimeError("close failure")
     monkeypatch.setattr(auditing, "execute_audit", Mock(side_effect=LookupError("execute failure")))
 
-    with pytest.raises(LookupError, match="execute failure"):
+    with pytest.raises(AuditExecutionError, match="execute failure"):
         run_audit_pipeline(
             plan=PlanOutput(audit_entries=(audit_entry("first"),)),
             connection_config={},
@@ -776,7 +1167,7 @@ def test_given_success_before_fatal_when_draining_then_success_projects_and_run_
 
     monkeypatch.setattr(auditing, "execute_audit", execute_audit)
     with invocation_scope("audit-invocation"), dispatcher_scope(dispatcher):
-        with pytest.raises(RuntimeError, match=test_case.expected_error):
+        with pytest.raises(AuditExecutionError, match=test_case.expected_error):
             run_audit_pipeline(
                 plan=PlanOutput(audit_entries=(audit_entry("success"), audit_entry("fatal"))),
                 connection_config={},
@@ -791,7 +1182,7 @@ def test_given_success_before_fatal_when_draining_then_success_projects_and_run_
     assert tuple(completed) == test_case.expected_names
     assert terminal.payload["pass_count"] == 1
     assert terminal.payload["warn_count"] == 0
-    assert terminal.payload["fail_count"] == 0
+    assert terminal.payload["fail_count"] == 1
 
 
 @pytest.mark.parametrize(
@@ -828,7 +1219,7 @@ def test_given_fatal_before_later_started_success_when_draining_then_gap_allows_
 
     monkeypatch.setattr(auditing, "execute_audit", execute_audit)
     with invocation_scope("audit-invocation"), dispatcher_scope(dispatcher):
-        with pytest.raises(RuntimeError, match=test_case.expected_error):
+        with pytest.raises(AuditExecutionError, match=test_case.expected_error):
             run_audit_pipeline(
                 plan=PlanOutput(audit_entries=(audit_entry("fatal"), audit_entry("later_success"))),
                 connection_config={},
@@ -843,7 +1234,7 @@ def test_given_fatal_before_later_started_success_when_draining_then_gap_allows_
     assert tuple(completed) == test_case.expected_names
     assert terminal.payload["pass_count"] == 1
     assert terminal.payload["warn_count"] == 0
-    assert terminal.payload["fail_count"] == 0
+    assert terminal.payload["fail_count"] == 1
 
 
 @pytest.mark.parametrize(
@@ -853,6 +1244,7 @@ def test_given_fatal_before_later_started_success_when_draining_then_gap_allows_
             description="multiple failures with drained success",
             expected_names=("third_success",),
             expected_error="failure-first",
+            expected_count=3,
         ),
     ),
     ids=lambda case: case.description,
@@ -881,7 +1273,7 @@ def test_given_multiple_failures_and_success_when_drained_then_earliest_error_an
 
     monkeypatch.setattr(auditing, "execute_audit", execute_audit)
     with invocation_scope("audit-invocation"), dispatcher_scope(dispatcher):
-        with pytest.raises(RuntimeError, match=test_case.expected_error):
+        with pytest.raises(AuditExecutionError) as raised:
             run_audit_pipeline(
                 plan=PlanOutput(
                     audit_entries=(
@@ -900,9 +1292,15 @@ def test_given_multiple_failures_and_success_when_drained_then_earliest_error_an
         filter(lambda event: event.event_type == "run_failed", events)
     )[0]
     assert tuple(completed) == test_case.expected_names
+    assert tuple(failure.audit_name for failure in raised.value.failures) == ("first", "second")
     assert terminal.payload["pass_count"] == 1
     assert terminal.payload["warn_count"] == 0
-    assert terminal.payload["fail_count"] == 0
+    assert terminal.payload["fail_count"] == 2
+    attempts: tuple[LifecycleEvent, ...] = lifecycle_events_with_prefix(
+        events=events, prefixes=("resource_attempt_",)
+    )
+    assert len(attempts) == test_case.expected_count * 2
+    assert len({event.resource_attempt_id for event in attempts}) == test_case.expected_count
 
 
 @pytest.mark.parametrize(

@@ -123,6 +123,14 @@ class MainErrorRenderingTestCase:
 
 
 @dataclass(frozen=True)
+class AuditAggregateRenderingTestCase:
+    description: str
+    expected_exit_code: int
+    expected_failure_ids: tuple[str, ...]
+    expected_json_filename: str
+
+
+@dataclass(frozen=True)
 class ObservabilityCleanupCase:
     description: str
     expected_original_error: str

@@ -34,9 +34,12 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
+from sqlbuild.executor.pipeline.exceptions import AuditExecutionError
+from sqlbuild.executor.pipeline.models import AuditExecutionFailure
 from sqlbuild.observability import EventDispatcher, ExecutionIdentity, current_execution_identity
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
+    AuditAggregateRenderingTestCase,
     MainErrorRenderingTestCase,
     MainTestCase,
     SkillFreshnessNoticeTestCase,
@@ -2727,6 +2730,64 @@ def test_given_expected_cli_errors_when_running_main_then_it_renders_stderr_and_
     assert exit_code == test_case.expected_exit_code
     assert test_case.expected_stderr_fragment in rendered_stderr
     assert rendered_stderr.endswith("\n\n")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        AuditAggregateRenderingTestCase(
+            description="plan ordered aggregate in json mode",
+            expected_exit_code=1,
+            expected_failure_ids=("audit:first:end", "audit:third:end"),
+            expected_json_filename="audit.json",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_audit_aggregate_in_json_mode_when_running_main_then_only_stderr_report_is_written(
+    test_case: AuditAggregateRenderingTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    json_output_path: Path = tmp_path / test_case.expected_json_filename
+    error: AuditExecutionError = AuditExecutionError(
+        failures=tuple(
+            AuditExecutionFailure(
+                audit_name=resource_id.split(":")[1],
+                resource_id=resource_id,
+                error_type="RuntimeError",
+                message=f"failure {index}",
+            )
+            for index, resource_id in enumerate(test_case.expected_failure_ids, start=1)
+        )
+    )
+
+    def run_audit(request: AuditCommandRequest) -> int:
+        assert request.json_output
+        assert request.json_output_path == json_output_path
+        raise error
+
+    exit_code: int = _main_with_dependencies(
+        argv=[
+            "--project-dir",
+            str(tmp_path),
+            "--no-color",
+            "audit",
+            "--json",
+            "--json-output",
+            str(json_output_path),
+        ],
+        handlers=build_handlers(run_audit=run_audit),
+    )
+    captured: CaptureResult[str] = capsys.readouterr()
+
+    assert exit_code == test_case.expected_exit_code
+    assert captured.out == ""
+    assert captured.err.count("Standalone audit execution failed") == 1
+    assert captured.err.index(test_case.expected_failure_ids[0]) < captured.err.index(
+        test_case.expected_failure_ids[1]
+    )
+    assert not json_output_path.exists()
 
 
 @pytest.mark.parametrize(
