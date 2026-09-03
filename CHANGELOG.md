@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.5](https://github.com/chio-labs/sqlbuild/compare/v0.76.4...v0.76.5) (2026-09-03)
+
+
+### Bug Fixes
+
+* make execution history persistence explicit ([#488](https://github.com/chio-labs/sqlbuild/issues/488)) ([8f2928d](https://github.com/chio-labs/sqlbuild/commit/8f2928db95486512a0898eae255c7ae3af4b80c6))
+
 ## [0.76.4](https://github.com/chio-labs/sqlbuild/compare/v0.76.3...v0.76.4) (2026-09-03)
 
 
