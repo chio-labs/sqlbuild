@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.77.0](https://github.com/chio-labs/sqlbuild/compare/v0.76.9...v0.77.0) (2026-09-03)
+
+
+### Features
+
+* add causal microbatch replay propagation ([#498](https://github.com/chio-labs/sqlbuild/issues/498)) ([9c49381](https://github.com/chio-labs/sqlbuild/commit/9c493817d97815873c0efde9effed6d83d2f517b))
+
 ## [0.76.9](https://github.com/chio-labs/sqlbuild/compare/v0.76.8...v0.76.9) (2026-09-03)
 
 
