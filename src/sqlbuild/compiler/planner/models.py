@@ -212,6 +212,7 @@ class ModelCursorSnapshot:
     upstream_terminal_starts: tuple[str, ...] = ()
     upstream_terminal_ends: tuple[str, ...] = ()
     upstream_end_inputs: tuple[tuple[str | None, str | None], ...] = ()
+    upstream_availability_ends: tuple[str, ...] = ()
 
     @property
     def watermarks_available(self) -> bool:

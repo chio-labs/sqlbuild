@@ -34,6 +34,7 @@ class RuntimeWatermarkGrainTestCase:
     description: str
     consumer_grain: str
     producer_grain: str
+    producer_maximum: str
     expected_end: str
 
 

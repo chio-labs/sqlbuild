@@ -171,6 +171,7 @@ def normalize_cursor_snapshot_grain(
             )
             for physical, terminal in cursor_snapshot.upstream_end_inputs
         ),
+        upstream_availability_ends=cursor_snapshot.upstream_availability_ends,
     )
 
 
@@ -217,7 +218,7 @@ def _advance_inclusive_operator_end(
     )
 
 
-def _advance_discovered_end(
+def advance_discovered_cursor_end(
     *, value: str, cursor_type: str | None, cursor_grain: str | None
 ) -> str:
     if cursor_type is None:
@@ -265,11 +266,18 @@ def _compute_raw_end(
 ) -> str | None:
     """Derive the raw end bound from snapshot data."""
 
-    if snapshot.upstream_end_inputs:
+    if snapshot.upstream_availability_ends:
+        exclusive_ends: tuple[str, ...] = tuple(
+            _floor_timestamp_string(value=value, grain=cursor_grain)
+            if cursor_type == CursorType.TIMESTAMP and cursor_grain is not None
+            else value
+            for value in snapshot.upstream_availability_ends
+        )
+    elif snapshot.upstream_end_inputs:
         exclusive_ends: tuple[str, ...] = tuple(
             terminal
             if terminal is not None
-            else _advance_discovered_end(
+            else advance_discovered_cursor_end(
                 value=physical or "", cursor_type=cursor_type, cursor_grain=cursor_grain
             )
             for physical, terminal in snapshot.upstream_end_inputs
@@ -278,7 +286,7 @@ def _compute_raw_end(
     else:
         exclusive_ends = (
             tuple(
-                _advance_discovered_end(
+                advance_discovered_cursor_end(
                     value=value, cursor_type=cursor_type, cursor_grain=cursor_grain
                 )
                 for value in snapshot.upstream_maxes

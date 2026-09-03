@@ -43,6 +43,7 @@ from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
     effectively_full_refreshed_model_names,
 )
 from sqlbuild.compiler.planner._helpers.resolve.cursor import (
+    advance_discovered_cursor_end,
     normalize_cursor_snapshot_grain,
     resolve_effective_timestamp_grain,
 )
@@ -66,6 +67,7 @@ from sqlbuild.compiler.planner.types import (
     CursorType,
     CursorWatermarkMode,
     MaterializationType,
+    MicrobatchStrategy,
 )
 from sqlbuild.compiler.references.main._render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import SqlReferenceKind
@@ -114,6 +116,7 @@ class _CursorModelInfo:
     start_cursor_config: StartCursorsConfig | None = None
     has_start_override: bool = False
     cursor_watermark_mode: str = "all"
+    microbatch_strategy: str | None = None
 
 
 @dataclass(frozen=True)
@@ -780,6 +783,7 @@ def _collect_cursor_models(
                 ),
                 cursor_watermark_mode=_get_config_str(model=model, key="cursor_watermark_mode")
                 or "all",
+                microbatch_strategy=_get_config_str(model=model, key="microbatch_strategy"),
             )
         )
 
@@ -1043,6 +1047,7 @@ def _assemble_cursor_snapshots(
         terminal_starts: list[str] = []
         terminal_ends: list[str] = []
         end_inputs: list[tuple[str | None, str | None]] = []
+        availability_ends: list[str] = []
         upstream: _UpstreamCursorInfo
         for upstream in info.upstreams:
             min_val: str | None = results.get(upstream.tag_min)
@@ -1051,7 +1056,7 @@ def _assemble_cursor_snapshots(
                 inclusive_cursor_end(
                     end=upstream.terminal_cursor_end,
                     cursor_type=info.cursor_type,
-                    cursor_grain=info.effective_cursor_grain,
+                    cursor_grain=upstream.cursor_grain or info.effective_cursor_grain,
                 )
                 if upstream.terminal_cursor_end is not None
                 else max_val
@@ -1083,6 +1088,16 @@ def _assemble_cursor_snapshots(
             if upstream.terminal_cursor_end is not None:
                 terminal_ends.append(upstream.terminal_cursor_end)
             end_inputs.append((max_val, upstream.terminal_cursor_end))
+            if info.microbatch_strategy == MicrobatchStrategy.WATERMARK:
+                availability_end: str | None = upstream.terminal_cursor_end
+                if availability_end is None and max_val is not None:
+                    availability_end = advance_discovered_cursor_end(
+                        value=max_val,
+                        cursor_type=info.cursor_type,
+                        cursor_grain=upstream.cursor_grain or info.effective_cursor_grain,
+                    )
+                if availability_end is not None:
+                    availability_ends.append(availability_end)
 
         snapshots[info.model_name] = ModelCursorSnapshot(
             target_max=target_max,
@@ -1099,6 +1114,7 @@ def _assemble_cursor_snapshots(
             upstream_terminal_starts=tuple(terminal_starts),
             upstream_terminal_ends=tuple(terminal_ends),
             upstream_end_inputs=tuple(end_inputs) if terminal_ends else (),
+            upstream_availability_ends=tuple(availability_ends),
         )
 
     return snapshots

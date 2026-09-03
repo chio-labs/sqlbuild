@@ -161,8 +161,9 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                   cursor_type timestamp,
                   cursor_grain hour,
                   cursor_inputs (
-            daily_activity_rollup (column activity_day, roles [filter, watermark]),
-          ),
+                    hourly_order_activity (column activity_hour, roles [filter]),
+                    daily_activity_rollup (column activity_day, roles [filter, watermark]),
+                  ),
                   incremental_mode microbatch,
           microbatch_strategy watermark,
           cursor_watermark_mode all,
@@ -185,7 +186,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             initial_command=("--no-color", "build"),
             rerun_command=("--debug", "build", "--select", "hourly_activity_with_daily_context"),
             expected_exit_code=0,
-            expected_window_fragment="window=2026-04-03T14:00:00..2026-04-04T01:00:00",
+            expected_window_fragment="window=2026-04-03T11:00:00..2026-04-04T00:00:00",
             expected_row_count=1,
         )
     ],

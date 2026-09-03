@@ -125,13 +125,10 @@ def resolve_runtime_cursor_bounds(
     )
     if bounded_override is not None:
         return bounded_override
-    physical_inputs: tuple[tuple[tuple[str, str], tuple[str | None, str | None]], ...] = tuple(
+    physical_inputs: tuple[tuple[tuple[str, str], CursorInputRelation], ...] = tuple(
         sorted(
             {
-                (cursor_input.relation, cursor_input.cursor_column): (
-                    cursor_input.terminal_cursor_start,
-                    cursor_input.terminal_cursor_end,
-                )
+                (cursor_input.relation, cursor_input.cursor_column): cursor_input
                 for cursor_input in spec.cursor_input_relations
             }.items()
         )
@@ -170,12 +167,15 @@ def resolve_runtime_cursor_bounds(
     read_minimum: bool = target_max_raw is None
     upstream_mins: list[object] = []
     upstream_maxes: list[object] = []
+    upstream_availability_ends: list[object] = []
     input_evidence: list[CursorInputEvidence] = []
     input_index: int
-    physical_input: tuple[tuple[str, str], tuple[str | None, str | None]]
+    physical_input: tuple[tuple[str, str], CursorInputRelation]
     for input_index, physical_input in enumerate(physical_inputs, start=1):
-        relation_column, terminal_bounds = physical_input
-        terminal_start, terminal_end = terminal_bounds
+        relation_column, cursor_input = physical_input
+        terminal_start: str | None = cursor_input.terminal_cursor_start
+        terminal_end: str | None = cursor_input.terminal_cursor_end
+        input_grain: str | None = cursor_input.cursor_grain or effective_grain
         minimum: object | None
         maximum: object | None
         minimum, maximum = _query_watermark_raw(
@@ -190,7 +190,7 @@ def resolve_runtime_cursor_bounds(
             watermark_resolver=watermark_resolver,
         )
         terminal_maximum: object | None = _terminal_inclusive_maximum(
-            value=terminal_end, cursor_type=cursor_type, cursor_grain=effective_grain
+            value=terminal_end, cursor_type=cursor_type, cursor_grain=input_grain
         )
         if terminal_maximum is not None:
             maximum = terminal_maximum
@@ -205,6 +205,22 @@ def resolve_runtime_cursor_bounds(
         if minimum is not None:
             upstream_mins.append(minimum)
         upstream_maxes.append(maximum)
+        if (
+            cursor_type == CursorType.TIMESTAMP
+            and spec.microbatch_strategy == MicrobatchStrategy.WATERMARK
+        ):
+            availability_end: object = (
+                _raw_terminal_bound(value=terminal_end, cursor_type=cursor_type)
+                if terminal_end is not None
+                else _increment_timestamp_bound(
+                    value=_floor_timestamp_bound(
+                        value=maximum,
+                        grain=input_grain or CursorGrain.SECOND,
+                    ),
+                    grain=input_grain or CursorGrain.SECOND,
+                )
+            )
+            upstream_availability_ends.append(availability_end)
         normalized_maximum: str | None = _normalize_bound(value=maximum, is_end=False)
         if normalized_maximum is not None:
             input_evidence.append(
@@ -235,8 +251,14 @@ def resolve_runtime_cursor_bounds(
         if spec.cursor_watermark_mode == CursorWatermarkMode.ANY
         else _minimum_bound_raw
     )
+    watermark_timestamp: bool = (
+        cursor_type == CursorType.TIMESTAMP
+        and spec.microbatch_strategy == MicrobatchStrategy.WATERMARK
+    )
     upstream_max_raw: object = aggregate(
-        values=upstream_maxes, cursor_type=cursor_type, effective_grain=effective_grain
+        values=(upstream_availability_ends if watermark_timestamp else upstream_maxes),
+        cursor_type=cursor_type,
+        effective_grain=(CursorGrain.SECOND if watermark_timestamp else effective_grain),
     )
     if cursor_type == CursorType.TIMESTAMP and effective_grain is not None:
         start_raw: object | None = (
@@ -248,9 +270,13 @@ def resolve_runtime_cursor_bounds(
             value=_floor_timestamp_bound(value=start_raw, grain=effective_grain), is_end=False
         )
         end: str | None = _normalize_bound(
-            value=_increment_timestamp_bound(
-                value=_floor_timestamp_bound(value=upstream_max_raw, grain=effective_grain),
-                grain=effective_grain,
+            value=(
+                _floor_timestamp_bound(value=upstream_max_raw, grain=effective_grain)
+                if watermark_timestamp
+                else _increment_timestamp_bound(
+                    value=_floor_timestamp_bound(value=upstream_max_raw, grain=effective_grain),
+                    grain=effective_grain,
+                )
             ),
             is_end=False,
         )

@@ -86,22 +86,25 @@ class _RecordingEventStore:
     "test_case",
     (
         RuntimeWatermarkGrainTestCase(
-            description="watermark producer grain does not coarsen runtime consumer",
+            description="monthly producer exposes an exclusive monthly availability end",
             consumer_grain="hour",
             producer_grain="month",
-            expected_end="2026-04-04T15:00:00",
+            producer_maximum="2026-04-01 00:00:00",
+            expected_end="2026-05-01T00:00:00",
         ),
     ),
     ids=lambda case: case.description,
 )
-def test_given_watermark_model_with_coarse_producer_when_resolving_then_consumer_grain_wins(
+def test_given_watermark_model_with_coarse_producer_when_resolving_then_producer_grain_sets_availability(
     test_case: RuntimeWatermarkGrainTestCase,
     adapter: DuckDbAdapter,
     connection: Any,
 ) -> None:
     connection.execute("CREATE TABLE main.target_events (event_time TIMESTAMP)")
     connection.execute("CREATE TABLE main.producer_events (event_time TIMESTAMP)")
-    connection.execute("INSERT INTO main.producer_events VALUES ('2026-04-04 14:30:00')")
+    connection.execute(
+        "INSERT INTO main.producer_events VALUES (?)", parameters=[test_case.producer_maximum]
+    )
 
     bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
         adapter=adapter,

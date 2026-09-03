@@ -331,6 +331,41 @@ def test_given_nonempty_terminal_and_live_inputs_when_mode_any_then_live_end_win
 @pytest.mark.parametrize(
     "test_case",
     (
+        MicrobatchRedesignBehaviorTestCase(
+            description="all mode uses earliest exclusive input availability",
+            expected_outcome="2026-04-05T00:00:00",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_precomputed_watermark_availability_when_computing_bounds_then_it_is_not_readvanced(
+    test_case: MicrobatchRedesignBehaviorTestCase,
+) -> None:
+    bounds: CursorBounds | None = compute_cursor_bounds(
+        cursor_snapshot=ModelCursorSnapshot(
+            target_max="2026-04-04T00:00:00",
+            upstream_mins=("2026-04-01T00:00:00",),
+            upstream_maxes=("2026-04-04T00:00:00",),
+            upstream_availability_ends=("2026-04-05T00:00:00", "2026-05-01T00:00:00"),
+            cursor_watermark_mode="all",
+        ),
+        cursor_type="timestamp",
+        cursor_start="2026-04-01T00:00:00",
+        lookback=None,
+        backfill_duration=None,
+        start_cursor_override=None,
+        end_cursor_override=None,
+        is_microbatch=False,
+        cursor_grain="hour",
+    )
+
+    assert bounds is not None
+    assert bounds.end == test_case.expected_outcome
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
         MicrobatchCursorTypeTestCase("timestamp_ntz", "TIMESTAMP_NTZ", "timestamp", True),
         MicrobatchCursorTypeTestCase("datetime2", "DATETIME2", "timestamp", True),
         MicrobatchCursorTypeTestCase("datetime64", "DATETIME64(6)", "timestamp", True),

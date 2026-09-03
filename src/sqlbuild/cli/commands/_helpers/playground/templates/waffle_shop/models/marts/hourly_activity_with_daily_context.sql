@@ -7,6 +7,7 @@ MODEL (
   microbatch_strategy watermark,
   cursor_watermark_mode all,
   cursor_inputs (
+    hourly_order_activity (column activity_hour, roles [filter]),
     daily_activity_rollup (column activity_day, roles [filter, watermark]),
   ),
   incremental_mode microbatch,
