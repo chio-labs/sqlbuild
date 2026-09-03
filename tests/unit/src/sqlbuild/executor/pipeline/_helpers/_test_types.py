@@ -50,6 +50,31 @@ class AuditConcurrencyTestCase:
 
 
 @dataclass(frozen=True)
+class AuditStopErrorTestCase:
+    description: str
+    error: BaseException
+    expected_started_names: tuple[str, ...]
+    expected_connection_count: int
+
+
+@dataclass(frozen=True)
+class AuditErrorFormattingTestCase:
+    description: str
+    error: Exception
+    expected_message: str
+
+
+@dataclass(frozen=True)
+class AuditPhysicalCallbackTestCase:
+    description: str
+    max_concurrency: int
+    expected_started_names: tuple[str, ...]
+    expected_possible_started_names: tuple[str, ...]
+    expected_connection_count: int
+    expected_pass_count: int
+
+
+@dataclass(frozen=True)
 class ScenarioFailureHelpTestCase:
     """One scenario failure help resolution case."""
 

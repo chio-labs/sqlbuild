@@ -18,6 +18,7 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.cli.commands.types import CliCommand
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
+from sqlbuild.executor.pipeline.exceptions import AuditExecutionError
 from sqlbuild.kata_engine.exceptions import KataError
 from sqlbuild.lint.exceptions import LintError
 from sqlbuild.virtual.state.exceptions import StateBackendError
@@ -50,7 +51,7 @@ def dispatch_and_handle_errors(
             file=sys.stderr,
         )
         return 1
-    except (DiscoveryError, StateBackendError, ValueError) as error:
+    except (AuditExecutionError, DiscoveryError, StateBackendError, ValueError) as error:
         logging.getLogger("sqlbuild.cli").exception("command failed")
         print(
             format_expected_error(error=error, fallback_code="E001", use_color=use_color),
