@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.78.0](https://github.com/chio-labs/sqlbuild/compare/v0.77.2...v0.78.0) (2026-09-03)
+
+
+### Features
+
+* redesign microbatch cursor semantics ([#504](https://github.com/chio-labs/sqlbuild/issues/504)) ([c438447](https://github.com/chio-labs/sqlbuild/commit/c438447541f8131b8da2ce32ee4877775f7a335d))
+
 ## [0.77.2](https://github.com/chio-labs/sqlbuild/compare/v0.77.1...v0.77.2) (2026-09-03)
 
 
