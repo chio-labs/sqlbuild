@@ -8,7 +8,10 @@ from collections import Counter
 from collections.abc import Callable, Sequence
 from typing import cast
 
-from sqlbuild.cli.output._helpers.cursor_plan import build_cursor_plan_details
+from sqlbuild.cli.output._helpers.cursor_plan import (
+    append_microbatch_plan_detail,
+    build_cursor_plan_details,
+)
 from sqlbuild.cli.output._helpers.selection_diagnostics import direct_selection_diagnostics_enabled
 from sqlbuild.cli.output.models import CursorPlanDetails
 from sqlbuild.cli.output.types import CursorBoundsOwner, CursorResolutionStatus, PlanRowKind
@@ -1009,39 +1012,11 @@ def _append_cursor_detail(
             f"    range: {_format_cursor_range(bounds=details.resolved_bounds, entry=entry)}"
         )
     if entry.incremental_mode == IncrementalMode.MICROBATCH:
-        lines = _append_microbatch_plan_detail(lines=lines, details=details, entry=entry)
+        lines = append_microbatch_plan_detail(lines=lines, details=details, entry=entry)
     if details.bounds_owner == CursorBoundsOwner.RUNTIME:
         lines.append("    bounds: runtime-owned (model-backed cursor input)")
     elif details.resolution_status == CursorResolutionStatus.RESOLVED:
         lines.append("    bounds: planner-resolved")
-    return lines
-
-
-def _append_microbatch_plan_detail(
-    *, lines: list[str], details: CursorPlanDetails, entry: ModelPlanEntry
-) -> list[str]:
-    """Append grain, batch size, and known-or-deferred batch count."""
-
-    if details.declared_grain is not None:
-        grain_text: str = details.declared_grain
-        if details.effective_grain != details.declared_grain:
-            grain_text = f"{details.declared_grain} -> {details.effective_grain} (effective)"
-        lines.append(f"    grain: {grain_text}")
-    if details.declared_batch_size is not None:
-        batch_size_text: str = details.declared_batch_size
-        if details.effective_batch_size != details.declared_batch_size:
-            batch_size_text = (
-                f"{details.declared_batch_size} -> "
-                f"{details.effective_batch_size} (coarsened by upstream grain)"
-            )
-        lines.append(f"    batch size: {batch_size_text}")
-    if details.planned_batch_count is not None and details.effective_batch_size is not None:
-        lines.append(f"    batches: {details.planned_batch_count} x {details.effective_batch_size}")
-    elif details.resolution_status == CursorResolutionStatus.DEFERRED:
-        lines.append("    batches: resolved at runtime after upstream models complete")
-    lines.append(f"    batch concurrency: {entry.batch_concurrency}")
-    if entry.unaccounted_partition_policy is not None:
-        lines.append(f"    unaccounted partition policy: {entry.unaccounted_partition_policy}")
     return lines
 
 
@@ -1983,7 +1958,6 @@ def _format_schema_findings(findings: tuple[SchemaFinding, ...]) -> list[str]:
 
 def _schema_kind_label(kind: SchemaChangeKind) -> str:
     """Human-readable schema change kind."""
-
     if kind == SchemaChangeKind.COLUMN_ADDED:
         return "added"
     if kind == SchemaChangeKind.COLUMN_REMOVED:
@@ -1995,5 +1969,4 @@ def _schema_kind_label(kind: SchemaChangeKind) -> str:
 
 def _strip_ansi(text: str) -> str:
     """Remove ANSI escape sequences from text."""
-
     return _ANSI_ESCAPE_PATTERN.sub("", text)

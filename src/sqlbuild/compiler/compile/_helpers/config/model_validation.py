@@ -22,7 +22,11 @@ from sqlbuild.compiler.planner.types import (
     SnapshotSchemaChangePolicy,
     SnapshotStrategy,
 )
-from sqlbuild.spec.contracts.constants import CURSOR_POLICY_DISABLED, ZERO_DAY_CURSOR_DURATION
+from sqlbuild.spec.contracts.constants import (
+    CURSOR_POLICY_DISABLED,
+    EFFECTIVE_BATCH_SIZE_TOKEN,
+    ZERO_DAY_CURSOR_DURATION,
+)
 from sqlbuild.spec.contracts.models import (
     ResolvedTimeTravelRetention,
     SchemaColumn,
@@ -246,10 +250,14 @@ def validate_incremental_config(
             f"model '{model_name}': unknown incremental_mode '{incremental_mode}'; "
             f"valid values: {', '.join(sorted(_VALID_INCREMENTAL_MODES))}"
         )
-    if batch_size is not None and incremental_mode != IncrementalMode.MICROBATCH:
-        raise CompileInputError(
-            f"model '{model_name}': batch_size is only valid with incremental_mode=microbatch"
-        )
+    _validate_microbatch_batch_size(
+        model_name=model_name,
+        batch_size=batch_size,
+        incremental_mode=incremental_mode,
+        cursor=cursor,
+        cursor_type=cursor_type,
+        cursor_grain=cursor_grain,
+    )
     _validate_microbatch_state_config(
         model_name=model_name,
         strategy=strategy,
@@ -257,6 +265,28 @@ def validate_incremental_config(
         batch_concurrency=batch_concurrency,
         unaccounted_partition_policy=unaccounted_partition_policy,
     )
+
+
+def _validate_microbatch_batch_size(
+    *,
+    model_name: str,
+    batch_size: object | None,
+    incremental_mode: str | None,
+    cursor: str | None,
+    cursor_type: str | None,
+    cursor_grain: str | None,
+) -> None:
+    if batch_size is not None and incremental_mode != IncrementalMode.MICROBATCH:
+        raise CompileInputError(
+            f"model '{model_name}': batch_size is only valid with incremental_mode=microbatch"
+        )
+    if batch_size == EFFECTIVE_BATCH_SIZE_TOKEN and (
+        cursor is None or cursor_type != CursorType.TIMESTAMP or cursor_grain is None
+    ):
+        raise CompileInputError(
+            f"model '{model_name}': batch_size=effective requires a timestamp cursor "
+            "with cursor_grain"
+        )
 
 
 def _validate_cursor_input_config(

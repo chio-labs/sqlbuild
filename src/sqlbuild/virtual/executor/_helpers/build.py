@@ -1163,6 +1163,18 @@ def _execute_virtual_build_plan(
                 model_version_hash=reads.semantics.expected_version_hashes.get(entry.name),
                 operation_lock=microbatch_state_lock,
             ),
+            microbatch_location_state_resolver=(
+                lambda model_name, destination, version_hash, connection: (
+                    _resolve_virtual_microbatch_location_state(
+                        runtime=runtime,
+                        model_name=model_name,
+                        destination=destination,
+                        connection=connection,
+                        model_version_hash=version_hash,
+                        operation_lock=microbatch_state_lock,
+                    )
+                )
+            ),
             microbatch_lease_check=microbatch_lease_check,
         ),
         callbacks=BuildCallbacks(
@@ -1225,12 +1237,33 @@ def _resolve_virtual_microbatch_state(
         or entry.fingerprint_version_hash
         or compute_query_hash(entry.fingerprint_query_sql)
     )
+    return _resolve_virtual_microbatch_location_state(
+        runtime=runtime,
+        model_name=entry.name,
+        destination=entry.destination,
+        connection=connection,
+        model_version_hash=version_hash,
+        operation_lock=operation_lock,
+    )
+
+
+def _resolve_virtual_microbatch_location_state(
+    *,
+    runtime: _VirtualBuildRuntime,
+    model_name: str,
+    destination: CompiledRelationLocation,
+    connection: Any,
+    model_version_hash: str | None,
+    operation_lock: threading.Lock,
+) -> tuple[MicrobatchEventStore, MicrobatchScope]:
+    if model_version_hash is None:
+        raise ExecutorInputError(f"virtual microbatch model '{model_name}' has no version identity")
     destination_identity: str = ".".join(
         part
         for part in (
-            entry.destination.database,
-            entry.destination.schema,
-            entry.destination.name,
+            destination.database,
+            destination.schema,
+            destination.name,
         )
         if part is not None
     )
@@ -1239,15 +1272,15 @@ def _resolve_virtual_microbatch_state(
         json.dumps(runtime.connection_config, sort_keys=True, default=str).encode()
     ).hexdigest()
     scope_key: str = (
-        f"{state_realm}:{warehouse_realm}:{entry.name}:{version_hash}:{destination_identity}"
+        f"{state_realm}:{warehouse_realm}:{model_name}:{model_version_hash}:{destination_identity}"
     )
     relation_generation: str | None = runtime.adapter.physical_relation_generation(
         connection=connection,
-        database=entry.destination.database,
-        schema=entry.destination.schema,
-        name=entry.destination.name,
+        database=destination.database,
+        schema=destination.schema,
+        name=destination.name,
     )
-    physical_generation_id: str = f"{warehouse_realm}:{version_hash}:{destination_identity}"
+    physical_generation_id: str = f"{warehouse_realm}:{model_version_hash}:{destination_identity}"
     if relation_generation is not None:
         relation_generation_hash: str = hashlib.sha256(relation_generation.encode()).hexdigest()
         physical_generation_id += f":{relation_generation_hash}"
@@ -1261,13 +1294,13 @@ def _resolve_virtual_microbatch_state(
         MicrobatchScope(
             scope_kind=VIRTUAL_MICROBATCH_SCOPE_KIND,
             scope_key=scope_key,
-            model_name=entry.name,
-            target_database=entry.destination.database,
-            target_schema=entry.destination.schema,
-            target_name=entry.destination.name,
+            model_name=model_name,
+            target_database=destination.database,
+            target_schema=destination.schema,
+            target_name=destination.name,
             physical_generation_id=physical_generation_id,
             virtual_environment_name=runtime.names.target_vde_name,
-            virtual_model_version_hash=version_hash,
+            virtual_model_version_hash=model_version_hash,
         ),
     )
 

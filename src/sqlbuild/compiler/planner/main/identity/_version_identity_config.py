@@ -15,6 +15,7 @@ def build_version_identity_config(config_values: dict[str, object]) -> dict[str,
         identity["cursor_watermark_inputs"] = watermark_inputs
     version_identity_config_keys: tuple[str, ...] = (
         "append_cursor_inclusive",
+        "batch_size",
         "check_columns",
         "cursor",
         "cursor_grain",

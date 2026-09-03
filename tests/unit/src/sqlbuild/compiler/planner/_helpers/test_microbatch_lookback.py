@@ -46,6 +46,14 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
             lookback="2d",
             expected_lookback="2d",
         ),
+        MicrobatchLookbackTestCase(
+            description="effective batch defaults to concrete effective grain size",
+            incremental_strategy=IncrementalStrategy.DELETE_INSERT,
+            batch_size="effective",
+            lookback=None,
+            expected_lookback="1mo",
+            effective_grain="month",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -58,6 +66,8 @@ def test_given_microbatch_model_when_resolving_lookback_then_returns_expected_va
         lookback=test_case.lookback,
     )
 
-    result: str | None = resolve_microbatch_lookback(model)
+    result: str | None = resolve_microbatch_lookback(
+        model=model, effective_grain=test_case.effective_grain
+    )
 
     assert result == test_case.expected_lookback

@@ -6,6 +6,7 @@ from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.planner.types import OnSchemaChange
 from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.microbatches.models import CausalDependencySnapshot
 from sqlbuild.spec.contracts.models import FutureCursorsConfig
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
@@ -40,6 +41,7 @@ class MicrobatchSuccessTestCase:
     cursor_grain: str | None = None
     use_plan_microbatch_range: bool = True
     cursor_input_relations: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    cursor_input_grain: str | None = None
     cursor_inputs_model_backed: bool = False
     unique_key: tuple[str, ...] = field(default_factory=tuple)
     on_schema_change: OnSchemaChange | None = None
@@ -73,6 +75,8 @@ class MicrobatchSuccessTestCase:
     microbatch_limit_action: MicrobatchLimitAction | None = None
     expected_microbatch_limit_count: int | None = None
     expected_microbatch_limit_warning: bool = False
+    causal_dependencies: tuple[CausalDependencySnapshot, ...] = field(default_factory=tuple)
+    expected_causal_replay_intervals: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -94,6 +98,7 @@ class MicrobatchFailureTestCase:
     cursor_grain: str | None = None
     use_plan_microbatch_range: bool = True
     cursor_input_relations: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    cursor_input_grain: str | None = None
     cursor_inputs_model_backed: bool = False
     unique_key: tuple[str, ...] = field(default_factory=tuple)
     on_schema_change: OnSchemaChange | None = None

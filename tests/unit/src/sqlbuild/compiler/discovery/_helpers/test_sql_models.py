@@ -170,6 +170,24 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
             expected_query="SELECT 1",
         ),
         ParseModelSqlHeaderTestCase(
+            description="accepts effective batch size token",
+            contents="""
+        MODEL (
+          materialized incremental,
+          incremental_mode microbatch,
+          batch_size effective,
+        );
+
+        SELECT 1
+        """,
+            expected_header_values={
+                "materialized": "incremental",
+                "incremental_mode": "microbatch",
+                "batch_size": "effective",
+            },
+            expected_query="SELECT 1",
+        ),
+        ParseModelSqlHeaderTestCase(
             description="accepts quoted, unquoted, and mixed string lists",
             contents="""
         MODEL (

@@ -4,8 +4,21 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchInterval, MicrobatchScope
+from sqlbuild.microbatches._helpers.causal_event_identity import producer_completion_event_id
+from sqlbuild.microbatches.models import (
+    CausalDependencySnapshot,
+    ConsumedProducerInterval,
+    ConsumerFrontier,
+    MicrobatchEvent,
+    MicrobatchInterval,
+    MicrobatchScope,
+    OutstandingProducerCompletions,
+    ProducerCompletion,
+    ProducerCompletionSnapshot,
+)
 from sqlbuild.microbatches.types import (
+    CausalCompletionKind,
+    CausalHistoryStatus,
     MicrobatchCompletionType,
     MicrobatchFingerprintStatus,
     MicrobatchRecordType,
@@ -21,6 +34,25 @@ SCOPE: MicrobatchScope = MicrobatchScope(
     target_schema="main",
     target_name="orders",
     physical_generation_id="generation-1",
+)
+CAUSAL_CREATED_AT: datetime = datetime(2026, 7, 1, tzinfo=UTC)
+PRODUCER_SCOPE: MicrobatchScope = MicrobatchScope(
+    scope_kind="direct_logical",
+    scope_key="duckdb:main.upstream",
+    model_name="upstream",
+    target_database=None,
+    target_schema="main",
+    target_name="upstream",
+    physical_generation_id="producer-generation-1",
+)
+CONSUMER_SCOPE: MicrobatchScope = MicrobatchScope(
+    scope_kind="direct_logical",
+    scope_key="duckdb:main.downstream",
+    model_name="downstream",
+    target_database=None,
+    target_schema="main",
+    target_name="downstream",
+    physical_generation_id="consumer-generation-1",
 )
 
 
@@ -178,4 +210,73 @@ def completion_for_sql() -> MicrobatchEvent:
         fingerprint_status=MicrobatchFingerprintStatus.KNOWN,
         rows_affected=0,
         created_at=datetime(2026, 1, 1),
+    )
+
+
+def causal_completion(
+    *, event_id: str, start: str, end: str, created_at: datetime = CAUSAL_CREATED_AT
+) -> ProducerCompletion:
+    return ProducerCompletion(
+        event_id=event_id,
+        producer_scope=PRODUCER_SCOPE,
+        producer_model_version_hash="producer-v1",
+        interval=MicrobatchInterval(start=start, end=end),
+        producer_run_id=f"run-{event_id}",
+        run_type=MicrobatchRunType.NORMAL,
+        completion_kind=CausalCompletionKind.PHYSICAL,
+        fingerprint_status=MicrobatchFingerprintStatus.KNOWN,
+        created_at=created_at,
+    )
+
+
+def causal_frontier(
+    *,
+    captured: frozenset[str],
+    event_id: str,
+    consumed: tuple[ConsumedProducerInterval, ...] = (),
+) -> ConsumerFrontier:
+    return ConsumerFrontier(
+        event_id=event_id,
+        consumer_scope=CONSUMER_SCOPE,
+        consumer_model_version_hash="consumer-v1",
+        producer_scope=PRODUCER_SCOPE,
+        producer_model_version_hash="producer-v1",
+        captured_producer_event_ids=captured,
+        consumer_run_id="consumer-run",
+        consumed_intervals=consumed,
+        created_at=CAUSAL_CREATED_AT,
+    )
+
+
+def causal_completion_id(*, producer_run_id: str) -> str:
+    return producer_completion_event_id(
+        producer_scope=PRODUCER_SCOPE,
+        producer_model_version_hash="producer-v1",
+        interval_start="2026-07-01",
+        interval_end="2026-08-01",
+        producer_run_id=producer_run_id,
+        completion_kind=CausalCompletionKind.PHYSICAL,
+        fingerprint_status=MicrobatchFingerprintStatus.KNOWN,
+    )
+
+
+def causal_dependency(
+    *, history_status: CausalHistoryStatus, intervals: tuple[MicrobatchInterval, ...]
+) -> CausalDependencySnapshot:
+    snapshot: ProducerCompletionSnapshot = ProducerCompletionSnapshot(
+        producer_scope=PRODUCER_SCOPE,
+        producer_model_version_hash="producer-v1",
+        completions=(),
+        event_ids=frozenset(),
+    )
+    return CausalDependencySnapshot(
+        producer_model_name="upstream",
+        producer_cursor_grain="month",
+        history_status=history_status,
+        outstanding=OutstandingProducerCompletions(
+            snapshot=snapshot,
+            acknowledged_event_ids=frozenset(),
+            completions=(),
+            intervals=intervals,
+        ),
     )

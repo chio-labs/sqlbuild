@@ -16,3 +16,11 @@ class VirtualLeaseAcquireBoundaryTestCase:
     description: str
     expected_error_type: type[BaseException]
     expected_active_lock_count: int
+
+
+@dataclass(frozen=True)
+class VirtualMicrobatchResolverTestCase:
+    description: str
+    expected_environment_name: str
+    expected_scope_kind: str
+    expected_selected_model_names: tuple[str, ...]

@@ -44,6 +44,14 @@ from sqlbuild.executor.run.models import (
     ModelMaterializationContext,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.microbatches.models import (
+    CausalDependencySnapshot,
+    MicrobatchInterval,
+    MicrobatchScope,
+    OutstandingProducerCompletions,
+    ProducerCompletionSnapshot,
+)
+from sqlbuild.microbatches.types import CausalHistoryStatus
 from tests.integration.src.sqlbuild.executor.run.microbatch._test_types import (
     MicrobatchFailureTestCase,
     MicrobatchSuccessTestCase,
@@ -74,6 +82,43 @@ def reconcile_microbatch_batches(
     return history, reconciled_batches
 
 
+def causal_dependencies_for_intervals(
+    *, intervals: tuple[tuple[str, str], ...]
+) -> tuple[CausalDependencySnapshot, ...]:
+    """Build known causal dependency evidence for runtime window tests."""
+
+    scope: MicrobatchScope = MicrobatchScope(
+        scope_kind="direct_logical",
+        scope_key="duckdb:main.upstream_events",
+        model_name="upstream_events",
+        target_database=None,
+        target_schema="main",
+        target_name="upstream_events",
+        physical_generation_id="upstream-generation",
+    )
+    snapshot: ProducerCompletionSnapshot = ProducerCompletionSnapshot(
+        producer_scope=scope,
+        producer_model_version_hash="upstream-v1",
+        completions=(),
+        event_ids=frozenset(),
+    )
+    return (
+        CausalDependencySnapshot(
+            producer_model_name="upstream_events",
+            producer_cursor_grain="day",
+            history_status=CausalHistoryStatus.KNOWN,
+            outstanding=OutstandingProducerCompletions(
+                snapshot=snapshot,
+                acknowledged_event_ids=frozenset(),
+                completions=(),
+                intervals=tuple(
+                    MicrobatchInterval(start=start, end=end) for start, end in intervals
+                ),
+            ),
+        ),
+    )
+
+
 def build_microbatch_plan_entry(
     *,
     test_case: MicrobatchSuccessTestCase | MicrobatchFailureTestCase,
@@ -99,6 +144,7 @@ def build_microbatch_plan_entry(
         CursorInputRelation(
             relation=relation,
             cursor_column=cursor_column,
+            cursor_grain=test_case.cursor_input_grain,
             is_model_backed=test_case.cursor_inputs_model_backed,
             is_runtime_produced=test_case.cursor_inputs_model_backed,
         )
@@ -355,6 +401,7 @@ def _execute_test(
             hook_functions=cast(
                 tuple[DiscoveredHookFunction, ...], getattr(test_case, "hook_functions", ())
             ),
+            microbatch_causal_dependencies=getattr(test_case, "causal_dependencies", ()),
         ),
         declared_columns=(),
         is_full_refresh=test_case.is_full_refresh,

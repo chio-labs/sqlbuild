@@ -376,6 +376,8 @@ class CursorInputRelation:
     relation: str
     cursor_column: str
     cursor_grain: str | None = None
+    producer_model_name: str | None = None
+    producer_model_version_hash: str | None = None
     is_model_backed: bool = False
     is_runtime_produced: bool = False
 
@@ -765,6 +767,7 @@ class ModelPlanEntry:
     cursor_grain: str | None = None
     cursor_start: str | None = None
     lookback: str | None = None
+    lookback_is_default: bool = False
     cursor_bounds: CursorBounds | None = None
     cursor_input_relations: tuple[CursorInputRelation, ...] = field(default_factory=tuple)
     batch_size: str | None = None

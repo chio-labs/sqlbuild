@@ -64,6 +64,13 @@ class MicrobatchLimitConfigErrorTestCase:
 
 
 @dataclass(frozen=True)
+class EffectiveBatchDefaultTestCase:
+    description: str
+    project_file_contents: str
+    expected_batch_size: str
+
+
+@dataclass(frozen=True)
 class ColumnContractModeConfigTestCase:
     description: str
     settings_toml: str

@@ -328,6 +328,15 @@ class CursorRuntimeOwnershipTestCase:
 
 
 @dataclass(frozen=True)
+class UnsupportedCausalModelEdgeTestCase:
+    description: str
+    producer_config: dict[str, object]
+    expected_grain: str
+    expected_batch_size: str
+    expected_batch_count: int
+
+
+@dataclass(frozen=True)
 class BuildDownstreamDepsTestCase:
     description: str
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
@@ -725,6 +734,7 @@ class MicrobatchLookbackTestCase:
     batch_size: str
     lookback: str | None
     expected_lookback: str | None
+    effective_grain: str | None = None
 
 
 @dataclass(frozen=True)
@@ -745,6 +755,14 @@ class MicrobatchLimitPlanningErrorTestCase:
     max_batches: int
     action: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class EffectiveMicrobatchLimitPlanningTestCase:
+    description: str
+    batch_size: str
+    expected_count: int
+    expected_warning: bool
 
 
 @dataclass(frozen=True)

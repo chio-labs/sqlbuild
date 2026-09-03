@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from sqlbuild.microbatches.types import (
+    CausalCompletionKind,
+    CausalHistoryStatus,
     MicrobatchCompletionType,
     MicrobatchFingerprintStatus,
     MicrobatchRecordType,
@@ -83,6 +85,82 @@ class MicrobatchInterval:
 
     start: str
     end: str
+
+
+@dataclass(frozen=True)
+class ProducerCompletion:
+    """One terminally successful producer interval in one physical generation."""
+
+    event_id: str
+    producer_scope: MicrobatchScope
+    producer_model_version_hash: str | None
+    interval: MicrobatchInterval
+    producer_run_id: str
+    run_type: MicrobatchRunType
+    completion_kind: CausalCompletionKind
+    fingerprint_status: MicrobatchFingerprintStatus
+    created_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
+
+
+@dataclass(frozen=True)
+class ConsumerFrontier:
+    """Immutable acknowledgement of producer events observed by a consumer."""
+
+    event_id: str
+    consumer_scope: MicrobatchScope
+    consumer_model_version_hash: str | None
+    producer_scope: MicrobatchScope
+    producer_model_version_hash: str | None
+    captured_producer_event_ids: frozenset[str]
+    consumer_run_id: str
+    consumed_intervals: tuple[ConsumedProducerInterval, ...] = ()
+    created_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
+
+
+@dataclass(frozen=True)
+class ConsumedProducerInterval:
+    """Exact portion of one producer event durably consumed by a model run."""
+
+    producer_event_id: str
+    interval: MicrobatchInterval
+
+
+@dataclass(frozen=True)
+class ProducerCompletionSnapshot:
+    """Stable producer event-ID set for one exact physical generation."""
+
+    producer_scope: MicrobatchScope
+    producer_model_version_hash: str | None
+    completions: tuple[ProducerCompletion, ...]
+    event_ids: frozenset[str]
+
+
+@dataclass(frozen=True)
+class OutstandingProducerCompletions:
+    """Producer completions not acknowledged by matching consumer frontiers."""
+
+    snapshot: ProducerCompletionSnapshot
+    acknowledged_event_ids: frozenset[str]
+    completions: tuple[ProducerCompletion, ...]
+    intervals: tuple[MicrobatchInterval, ...]
+
+
+@dataclass(frozen=True)
+class CausalDependencySnapshot:
+    """Captured causal state for one cursor-aware producer dependency."""
+
+    producer_model_name: str
+    producer_cursor_grain: str | None
+    history_status: CausalHistoryStatus
+    outstanding: OutstandingProducerCompletions
+
+
+@dataclass(frozen=True)
+class CausalPublicationResult:
+    """Causal event IDs durably published at model-terminal success."""
+
+    producer_completion_event_ids: tuple[str, ...] = ()
+    consumer_frontier_event_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

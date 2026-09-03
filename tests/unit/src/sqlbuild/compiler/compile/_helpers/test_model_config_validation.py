@@ -174,6 +174,19 @@ def test_given_invalid_contract_config_when_validating_then_raises(
             ref_count=1,
         ),
         IncrementalConfigValidTestCase(
+            description="valid timestamp microbatch with effective batch_size",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "event_time",
+                "cursor_type": "timestamp",
+                "cursor_grain": "day",
+                "incremental_mode": "microbatch",
+                "batch_size": "effective",
+            },
+            ref_count=1,
+        ),
+        IncrementalConfigValidTestCase(
             description="valid concurrent delete_insert microbatch with reconciliation policy",
             config_values={
                 "materialized": "incremental",
@@ -597,6 +610,36 @@ def test_given_valid_config_when_validating_then_passes(
             },
             ref_count=1,
             expected_error_fragment="batch_size is only valid with",
+        ),
+        IncrementalConfigErrorTestCase(
+            description="effective batch_size with integer cursor raises",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "event_id",
+                "cursor_type": "integer",
+                "incremental_mode": "microbatch",
+                "batch_size": "effective",
+            },
+            ref_count=1,
+            expected_error_fragment=(
+                "batch_size=effective requires a timestamp cursor with cursor_grain"
+            ),
+        ),
+        IncrementalConfigErrorTestCase(
+            description="effective batch_size without cursor raises",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "unique_key": "event_id",
+                "cursor_type": "timestamp",
+                "incremental_mode": "microbatch",
+                "batch_size": "effective",
+            },
+            ref_count=1,
+            expected_error_fragment=(
+                "batch_size=effective requires a timestamp cursor with cursor_grain"
+            ),
         ),
         IncrementalConfigErrorTestCase(
             description="zero batch concurrency raises",

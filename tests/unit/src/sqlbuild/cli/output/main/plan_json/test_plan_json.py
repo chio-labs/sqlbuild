@@ -302,7 +302,7 @@ def test_given_direct_diagnostics_policy_when_formatting_plan_json_then_evidence
                         cursor_column="event_date",
                         cursor_type="timestamp",
                         cursor_grain="day",
-                        batch_size="1mo",
+                        batch_size="effective",
                         cursor_input_relations=(
                             CursorInputRelation(
                                 relation="stg_events",
@@ -310,6 +310,7 @@ def test_given_direct_diagnostics_policy_when_formatting_plan_json_then_evidence
                                 cursor_grain="month",
                                 is_model_backed=True,
                                 is_runtime_produced=True,
+                                producer_model_name="stg_events",
                             ),
                         ),
                     ),
@@ -323,13 +324,52 @@ def test_given_direct_diagnostics_policy_when_formatting_plan_json_then_evidence
                 '"end": null',
                 '"resolved_bounds": null',
                 '"declared_grain": "day"',
-                '"effective_grain": "month"',
-                '"declared_batch_size": "1mo"',
-                '"effective_batch_size": "1mo"',
+                '"effective_grain": null',
+                '"declared_batch_size": "effective"',
+                '"effective_batch_size": null',
                 '"planned_batch_count": null',
+                '"causal_resolution": "runtime producer-event snapshot',
                 '"completion_tracking": "universal"',
                 '"batch_concurrency": 1',
                 '"reconciliation": "runtime"',
+            ),
+        ),
+        JsonOutputTestCase(
+            description="plan json preserves fixed batch size at coarser effective grain",
+            plan_output=build_plan_output(
+                model_entries=(
+                    build_model_entry(
+                        name="daily_events",
+                        action=PlanAction.INCREMENTAL_DELETE_INSERT,
+                        reason=PlanReason.NORMAL_INCREMENTAL,
+                        materialization_type=MaterializationType.INCREMENTAL,
+                        incremental_strategy="delete_insert",
+                        incremental_mode="microbatch",
+                        cursor_column="event_date",
+                        cursor_type="timestamp",
+                        cursor_grain="day",
+                        batch_size="1d",
+                        microbatch_range=CursorBounds(
+                            start="2026-01-01",
+                            end="2026-04-01",
+                        ),
+                        cursor_input_relations=(
+                            CursorInputRelation(
+                                relation="monthly_events",
+                                cursor_column="event_date",
+                                cursor_grain="month",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            expected_keys=("models",),
+            expected_fragments=(
+                '"declared_grain": "day"',
+                '"effective_grain": "month"',
+                '"declared_batch_size": "1d"',
+                '"effective_batch_size": "1d"',
+                '"planned_batch_count": 90',
             ),
         ),
         JsonOutputTestCase(

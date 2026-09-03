@@ -42,7 +42,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     ],
     ids=lambda case: case.description,
 )
-def test_given_serial_microbatch_when_building_then_event_table_is_not_created(
+def test_given_serial_microbatch_when_building_then_partition_and_producer_events_are_durable(
     test_case: SerialMicrobatchLedgerE2ETestCase, tmp_path: Path
 ) -> None:
     project_name: str = "serial_microbatch_ledger"
@@ -96,10 +96,20 @@ def test_given_serial_microbatch_when_building_then_event_table_is_not_created(
         ),
     )[0]
     assert maximum_timestamps[0] == maximum_timestamps[1]
-    assert query_duckdb(
+    history: list[tuple[object, ...]] = query_duckdb(
         db_path=db_path,
-        sql="SELECT COUNT(*) FROM main._sqlbuild_microbatches",
-    ) == [(0,)]
+        sql=(
+            "SELECT record_type, fingerprint_status, COUNT(*) "
+            "FROM main._sqlbuild_microbatches "
+            "GROUP BY record_type, fingerprint_status ORDER BY record_type"
+        ),
+    )
+    completion_count: int = int(history[0][2])
+    assert completion_count >= test_case.expected_minimum_completion_count
+    assert history == [
+        ("partition_completion", "known", completion_count),
+        ("producer_completion", "known", completion_count),
+    ]
 
 
 @pytest.mark.parametrize(
