@@ -10,6 +10,7 @@ from sqlbuild.runtime.observability.classes.operation_lifecycle import Operation
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,
 )
+from sqlbuild.runtime.observability.classes.run_lifecycle import RunLifecycle as RunLifecycle
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
     canonicalize_operation_adapter,

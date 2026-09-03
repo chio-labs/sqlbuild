@@ -440,6 +440,8 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         else CONFIG_CONCURRENCY_KEY
     )
     concurrency: int = _optional_int(mapping=mapping, key=concurrency_key, default=1)
+    if concurrency < 1:
+        raise ProjectConfigError("settings.concurrency must be >= 1")
     table_promotion_mode: str | None = _optional_str(payload=mapping, key="table_promotion_mode")
     default_audit_severity: str | None = _optional_str(
         payload=mapping, key="default_audit_severity"

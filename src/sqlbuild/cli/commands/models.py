@@ -121,6 +121,7 @@ class AuditCommandRequest:
     defer_to: str | None = None
     no_color: bool = False
     selected_target: str | None = None
+    concurrency: int | None = None
     select: tuple[str, ...] = ()
     exclude: tuple[str, ...] = ()
     cli_vars: dict[str, object] | None = None
@@ -147,8 +148,10 @@ class AuditInvocation:
 class AuditExecutionPreparation:
     """Prepared nested progress and execution reporters for audit runs."""
 
-    progress: NestedCommandProgressCallbacks
+    progress: AuditProgressReporter
     execution_connection_progress: ConnectionProgressReporter
+    effective_concurrency: int
+    worker_count: int
 
 
 @dataclass(frozen=True)
@@ -1418,3 +1421,6 @@ from sqlbuild.cli.commands.classes.build_progress_callbacks import (  # noqa: E4
     BuildProgressCallbacks,
 )
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace  # noqa: E402,F401
+from sqlbuild.cli.progress.classes.audit_progress_reporter import (  # noqa: E402,F401
+    AuditProgressReporter,
+)

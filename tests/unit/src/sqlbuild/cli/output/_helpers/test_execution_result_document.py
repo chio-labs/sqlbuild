@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from sqlbuild.cli.output._helpers.execution_result_document import (
     _format_audit_checks,
     _format_model_assets,
     _format_sql_test_checks,
+    format_audit_execution_json,
 )
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
@@ -76,6 +78,51 @@ def test_given_end_scheduled_model_audit_when_formatting_json_then_logical_ident
     assert check["attachment_kind"] == test_case.expected_attachment_kind
     assert check["attached_target_kind"] == test_case.expected_target_kind
     assert check["asset_name"] == "orders"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        AuditExecutionProtocolTestCase(
+            description="ordered concurrent audit json",
+            expected_check_id="audit:first",
+            expected_attachment_kind="end",
+            expected_target_kind="",
+            expected_configured_concurrency=8,
+            expected_worker_count=2,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_ordered_audits_when_formatting_json_then_metadata_and_check_order_are_preserved(
+    test_case: AuditExecutionProtocolTestCase,
+) -> None:
+    results: tuple[AuditExecutionResult, ...] = tuple(
+        AuditExecutionResult(
+            audit_name=name,
+            attachment_kind=AuditAttachmentKind.END,
+            severity=AuditSeverity.ERROR,
+            outcome=AuditOutcome.PASS,
+            row_count=0,
+            executed_sql="SELECT 1 WHERE FALSE",
+        )
+        for name in ("first", "second")
+    )
+
+    payload: dict[str, object] = json.loads(
+        format_audit_execution_json(
+            results=results,
+            configured_concurrency=test_case.expected_configured_concurrency,
+            worker_count=test_case.expected_worker_count,
+        )
+    )
+
+    assert payload["version"] == 1
+    assert payload["execution"] == {
+        "configured_concurrency": test_case.expected_configured_concurrency,
+        "worker_count": test_case.expected_worker_count,
+    }
+    assert [check["name"] for check in payload["checks"]] == ["first", "second"]  # type: ignore[index]
 
 
 @pytest.mark.parametrize(

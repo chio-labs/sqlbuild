@@ -12,6 +12,10 @@ EXIT_CODE_FIELD: str = "exit_code"
 PROCESS_ID_FIELD: str = "process_id"
 SIGNAL_NUMBER_FIELD: str = "signal_number"
 METADATA_FIELD: str = "metadata"
+CONFIGURED_CONCURRENCY_FIELD: str = "configured_concurrency"
+RUN_STARTED_EVENT: str = "run_started"
+RUN_TERMINALS: frozenset[str] = frozenset({"run_completed", "run_failed"})
+AUDIT_RUN_COUNT_FIELDS: frozenset[str] = frozenset({"pass_count", "warn_count", "fail_count"})
 STATEMENT_EVENT_PREFIX: str = "statement_"
 MAX_METADATA_BYTES: int = 4096
 DIAGNOSTIC_SEVERITIES: frozenset[str] = frozenset(
@@ -231,15 +235,20 @@ NONNEGATIVE_INTEGER_PAYLOAD_FIELDS: frozenset[str] = frozenset(
         "batch_size",
         "delay_ms",
         "failed_count",
+        "fail_count",
         "failed_attempt_number",
         "hook_index",
         "next_attempt_number",
         PROCESS_ID_FIELD,
         "row_count",
         "selected_count",
+        "configured_concurrency",
+        "pass_count",
         SIGNAL_NUMBER_FIELD,
         "skipped_count",
         "succeeded_count",
+        "warn_count",
+        "worker_count",
     }
 )
 FORBIDDEN_STATEMENT_PAYLOAD_FIELDS: frozenset[str] = frozenset(
@@ -303,17 +312,39 @@ LIFECYCLE_EVENT_CATALOG_V1: Mapping[str, LifecycleEventDefinition] = MappingProx
         ),
         "run_started": LifecycleEventDefinition.create(
             required_correlations=frozenset({"run_id"}),
-            allowed=frozenset({"run_kind", "selected_count"}),
+            allowed=frozenset(
+                {"run_kind", "selected_count", "configured_concurrency", "worker_count"}
+            ),
         ),
         "run_completed": LifecycleEventDefinition.create(
             required_correlations=frozenset({"run_id"}),
-            allowed=frozenset({"run_kind", "succeeded_count", "failed_count", "skipped_count"})
+            allowed=frozenset(
+                {
+                    "run_kind",
+                    "succeeded_count",
+                    "failed_count",
+                    "skipped_count",
+                    "pass_count",
+                    "warn_count",
+                    "fail_count",
+                }
+            )
             | DURATION_FIELDS,
             terminal=True,
         ),
         "run_failed": LifecycleEventDefinition.create(
             required_correlations=frozenset({"run_id"}),
-            allowed=frozenset({"run_kind", "succeeded_count", "failed_count", "skipped_count"})
+            allowed=frozenset(
+                {
+                    "run_kind",
+                    "succeeded_count",
+                    "failed_count",
+                    "skipped_count",
+                    "pass_count",
+                    "warn_count",
+                    "fail_count",
+                }
+            )
             | DURATION_FIELDS
             | ERROR_FIELDS,
             terminal=True,
