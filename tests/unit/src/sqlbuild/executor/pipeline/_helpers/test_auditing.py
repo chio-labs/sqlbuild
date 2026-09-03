@@ -14,7 +14,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditSeverity,
 )
 from sqlbuild.compiler.compile.models import CompiledObjectKey
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput
 from sqlbuild.executor.auditing.main.resource_id import audit_resource_id
 from sqlbuild.executor.auditing.models import AuditExecutionResult
@@ -26,6 +26,7 @@ from sqlbuild.observability import (
     invocation_scope,
 )
 from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import (
+    AuditLogicalIdentityTestCase,
     AuditPipelineLifecycleTestCase,
     AuditResourceIdentityTestCase,
 )
@@ -165,3 +166,27 @@ def test_given_same_audit_and_column_on_two_targets_when_formatted_then_ids_rema
     assert first_id == test_case.expected_first_id
     assert second_id == test_case.expected_second_id
     assert first_id != second_id
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        AuditLogicalIdentityTestCase(
+            description="end-scheduled model audit retains logical target identity",
+            expected_id="audit:cross_model_consistency:model:orders",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_end_scheduled_attached_audit_when_formatted_then_logical_target_defines_identity(
+    test_case: AuditLogicalIdentityTestCase,
+) -> None:
+    resource_id: str = audit_resource_id(
+        audit_name="cross_model_consistency",
+        attachment_kind=AuditAttachmentKind.END,
+        attached_target_kind=AttachedAuditTargetKind.MODEL,
+        attached_target_name="orders",
+        attached_column_name=None,
+    )
+
+    assert resource_id == test_case.expected_id

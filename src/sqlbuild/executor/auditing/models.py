@@ -10,6 +10,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,7 @@ class AuditExecutionResult:
     row_count: int
     executed_sql: str
     run_scope_phase: AuditRunScope = AuditRunScope.FINAL
+    attached_target_kind: AttachedAuditTargetKind | None = None
     attached_target_name: str | None = None
     attached_column_name: str | None = None
     reused: bool = False
