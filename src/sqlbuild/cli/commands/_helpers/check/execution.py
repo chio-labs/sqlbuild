@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlbuild.cli.commands._helpers.check.core import (
     build_check_relation_targets,
+    check_dependency_closure,
     load_results_by_loader_name,
     record_python_run_state_results,
     resolve_selected_check_names,
@@ -66,8 +67,11 @@ def prepare_check_execution(
     )
     lifecycle_plan: PythonSqlRunLifecyclePlan = build_python_sql_run_lifecycle(
         selection=PythonSqlRunSelection(
-            sql_keys=frozenset(),
-            python_node_names=frozenset(),
+            sql_keys=pipeline_result.plan_output.selected_keys,
+            python_node_names=check_dependency_closure(
+                graph=python_graph,
+                check_names=check_names,
+            ),
         ),
         python_graph=python_graph,
     )
@@ -77,11 +81,15 @@ def prepare_check_execution(
         python_graph=python_graph,
         selected_python_names=check_names,
     )
+    relation_refs: frozenset[SqlResourceRef] = python_graph.selected_sql_refs(
+        selected_names=check_names
+    )
     return CheckExecutionPreparation(
         python_graph=python_graph,
         check_functions=check_functions,
         lifecycle_plan=lifecycle_plan,
         relation_targets=relation_targets,
+        relation_refs=relation_refs,
         default_database=_default_database(invocation=invocation, pipeline_result=pipeline_result),
         default_schema=_default_schema(invocation=invocation, pipeline_result=pipeline_result),
     )
@@ -228,6 +236,7 @@ def _execute_check_read_side(
         python_graph=preparation.python_graph,
         lifecycle_plan=preparation.lifecycle_plan,
         relation_targets=preparation.relation_targets,
+        validation_refs=preparation.relation_refs,
         providers=providers,
     )
     record_python_run_state_results(

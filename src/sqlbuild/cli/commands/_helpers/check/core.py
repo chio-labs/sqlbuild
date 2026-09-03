@@ -73,6 +73,23 @@ def resolve_selected_check_names(
     return frozenset(check_names - excluded)
 
 
+def check_dependency_closure(
+    *, graph: PythonNodeGraph, check_names: frozenset[str]
+) -> frozenset[str]:
+    """Return transitive executable Python dependencies of selected checks."""
+
+    dependencies: set[str] = set()
+    pending: list[str] = list(check_names)
+    while pending:
+        name: str = pending.pop()
+        for upstream_name in graph.upstream_deps.get(name, ()):
+            if upstream_name in dependencies:
+                continue
+            dependencies.add(upstream_name)
+            pending.append(upstream_name)
+    return frozenset(dependencies - check_names)
+
+
 def _validate_check_selectors(*, select: tuple[str, ...]) -> None:
     raw_selector: str
     for raw_selector in select:
@@ -174,33 +191,21 @@ def run_check_read_side_dependencies(
     python_graph: PythonNodeGraph,
     lifecycle_plan: PythonSqlRunLifecyclePlan,
     relation_targets: dict[SqlResourceRef, str],
+    validation_refs: frozenset[SqlResourceRef] | None = None,
     providers: ProviderContainer | None = None,
 ) -> tuple[PythonNodeExecutionResult, ...]:
     """Run read-side Python dependencies for checks against existing SQL relations."""
 
     read_side_names: frozenset[str] = lifecycle_plan.read_side_python_node_names
-    if not read_side_names:
-        return ()
-    tracker: Any = create_read_side_python_execution_tracker(
-        python_graph=python_graph,
-        selected_python_names=read_side_names,
-        runtime=PythonNodeRuntime(
-            adapter=adapter,
-            connection_config=connection_config,
-            connection=connection,
-            run_id=pipeline_result.project.run_id,
-            target=pipeline_result.project.effective_target_name,
-            vars=pipeline_result.project.effective_vars,
-            is_reload=False,
-            default_database=adapter.default_database(),
-            default_schema=adapter.default_schema(),
-            relation_targets=relation_targets,
-            providers=providers,
-        ),
+    read_side_refs: frozenset[SqlResourceRef] = _read_side_sql_refs(
+        read_side_names=read_side_names, python_graph=python_graph
+    )
+    refs_to_validate: frozenset[SqlResourceRef] = (
+        validation_refs if validation_refs is not None else read_side_refs
     )
     sql_refs: tuple[SqlResourceRef, ...] = tuple(
         sorted(
-            _read_side_sql_refs(read_side_names=read_side_names, python_graph=python_graph),
+            refs_to_validate,
             key=_sql_ref_sort_key,
         )
     )
@@ -223,6 +228,26 @@ def run_check_read_side_dependencies(
             relation_lookup=relation_lookup,
             ref=sql_ref,
         )
+    if not read_side_names:
+        return ()
+    tracker: Any = create_read_side_python_execution_tracker(
+        python_graph=python_graph,
+        selected_python_names=read_side_names,
+        runtime=PythonNodeRuntime(
+            adapter=adapter,
+            connection_config=connection_config,
+            connection=connection,
+            run_id=pipeline_result.project.run_id,
+            target=pipeline_result.project.effective_target_name,
+            vars=pipeline_result.project.effective_vars,
+            is_reload=False,
+            default_database=adapter.default_database(),
+            default_schema=adapter.default_schema(),
+            relation_targets=relation_targets,
+            providers=providers,
+        ),
+    )
+    for sql_ref in sorted(read_side_refs, key=_sql_ref_sort_key):
         if sql_ref.kind == SqlResourceRefKind.MODEL:
             tracker.record_sql_result(
                 ModelExecutionResult(model_name=sql_ref.name, status=ExecutionStatus.SUCCESS)

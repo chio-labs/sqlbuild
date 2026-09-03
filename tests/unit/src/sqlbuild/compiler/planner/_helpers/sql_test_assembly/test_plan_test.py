@@ -19,8 +19,14 @@ from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
 from sqlbuild.compiler.planner._helpers.sql_tests import assembly as sql_test_assembly
 from sqlbuild.compiler.planner._helpers.sql_tests.assembly import plan_test
+from sqlbuild.compiler.planner.main.commands._relations import resolve_static_relation_context
+from sqlbuild.compiler.planner.main.commands._scope import resolve_static_command_scope
+from sqlbuild.compiler.planner.main.commands.sql_test import build_test_command_plan
 from sqlbuild.compiler.planner.models import (
     ChainStep,
+    PlannerScope,
+    PlannerSelection,
+    PlanOutput,
     PlanWarning,
     SqlAnalysisResolvedTestSql,
     SqlTestPlanEntry,
@@ -611,7 +617,9 @@ def test_given_udf_sql_test_when_planning_then_compares_resolved_actual_to_expec
             resource_type=CompiledResourceType.SQL_TEST,
             name="formats cents",
         ),
-        scope_deps=(CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),),
+        scope_deps=(
+            CompiledObjectKey(resource_type=CompiledResourceType.UDF, name="format_cents"),
+        ),
         name="formats cents",
         test_file=test_file,
         test_block=test_block,
@@ -632,41 +640,43 @@ def test_given_udf_sql_test_when_planning_then_compares_resolved_actual_to_expec
         ),
     )
 
-    entry, warnings = plan_test(
-        test=sql_test,
-        adapter=DuckDbAdapter(),
-        project=CompiledProject(
-            run_id="test_run",
-            effective_target_name=None,
-            effective_connection={},
-            effective_vars={},
-            functions=(
-                CompiledFunction(
-                    key=CompiledObjectKey(
-                        resource_type=CompiledResourceType.UDF,
-                        name="format_cents",
-                    ),
-                    deps=(),
+    project: CompiledProject = CompiledProject(
+        run_id="test_run",
+        effective_target_name=None,
+        effective_connection={},
+        effective_vars={},
+        functions=(
+            CompiledFunction(
+                key=CompiledObjectKey(
+                    resource_type=CompiledResourceType.UDF,
                     name="format_cents",
-                    relative_path=Path("functions/sql/format_cents.sql"),
-                    arguments=(),
-                    returns="VARCHAR",
-                    body_sql="",
-                    destination=CompiledRelationLocation(
-                        database=None,
-                        schema="main",
-                        name="format_cents",
-                        qualified_name="main.format_cents",
-                    ),
-                    fingerprint_destination=CompiledRelationLocation(
-                        database=None,
-                        schema="main",
-                        name="format_cents__fingerprint",
-                        qualified_name="main.format_cents__fingerprint",
-                    ),
+                ),
+                deps=(),
+                name="format_cents",
+                relative_path=Path("functions/sql/format_cents.sql"),
+                arguments=(),
+                returns="VARCHAR",
+                body_sql="",
+                destination=CompiledRelationLocation(
+                    database=None,
+                    schema="main",
+                    name="format_cents",
+                    qualified_name="main.format_cents",
+                ),
+                fingerprint_destination=CompiledRelationLocation(
+                    database=None,
+                    schema="main",
+                    name="format_cents__fingerprint",
+                    qualified_name="main.format_cents__fingerprint",
                 ),
             ),
         ),
+        sql_tests=(sql_test,),
+    )
+    entry, warnings = plan_test(
+        test=sql_test,
+        adapter=DuckDbAdapter(),
+        project=project,
     )
 
     assert warnings == ()
@@ -675,6 +685,23 @@ def test_given_udf_sql_test_when_planning_then_compares_resolved_actual_to_expec
     assert test_case.expected_actual_fragment in entry.chain[0].resolved_sql
     assert entry.chain[0].expected_cte_sql is not None
     assert test_case.expected_expected_fragment in entry.chain[0].expected_cte_sql
+    assert entry.function_deps == (
+        CompiledObjectKey(resource_type=CompiledResourceType.UDF, name="format_cents"),
+    )
+    scope: PlannerScope = resolve_static_command_scope(
+        project=project, selection=PlannerSelection()
+    )
+    command_plan: PlanOutput = build_test_command_plan(
+        project=project,
+        adapter=DuckDbAdapter(),
+        scope=scope,
+        relations=resolve_static_relation_context(
+            project=project,
+            adapter=DuckDbAdapter(),
+            scope=scope,
+        ),
+    )
+    assert tuple(function.name for function in command_plan.function_entries) == ("format_cents",)
 
 
 @pytest.mark.parametrize(
@@ -737,41 +764,43 @@ def test_given_table_function_sql_test_when_planning_then_compares_resolved_actu
         ),
     )
 
-    entry, warnings = plan_test(
-        test=sql_test,
-        adapter=DuckDbAdapter(),
-        project=CompiledProject(
-            run_id="test_run",
-            effective_target_name=None,
-            effective_connection={},
-            effective_vars={},
-            functions=(
-                CompiledFunction(
-                    key=CompiledObjectKey(
-                        resource_type=CompiledResourceType.TABLE_FN,
-                        name="customer_orders",
-                    ),
-                    deps=(),
+    project: CompiledProject = CompiledProject(
+        run_id="test_run",
+        effective_target_name=None,
+        effective_connection={},
+        effective_vars={},
+        functions=(
+            CompiledFunction(
+                key=CompiledObjectKey(
+                    resource_type=CompiledResourceType.TABLE_FN,
                     name="customer_orders",
-                    relative_path=Path("functions/sql/customer_orders.sql"),
-                    arguments=(),
-                    returns="TABLE",
-                    body_sql="",
-                    destination=CompiledRelationLocation(
-                        database=None,
-                        schema="main",
-                        name="customer_orders",
-                        qualified_name="main.customer_orders",
-                    ),
-                    fingerprint_destination=CompiledRelationLocation(
-                        database=None,
-                        schema="main",
-                        name="customer_orders__fingerprint",
-                        qualified_name="main.customer_orders__fingerprint",
-                    ),
+                ),
+                deps=(),
+                name="customer_orders",
+                relative_path=Path("functions/sql/customer_orders.sql"),
+                arguments=(),
+                returns="TABLE",
+                body_sql="",
+                destination=CompiledRelationLocation(
+                    database=None,
+                    schema="main",
+                    name="customer_orders",
+                    qualified_name="main.customer_orders",
+                ),
+                fingerprint_destination=CompiledRelationLocation(
+                    database=None,
+                    schema="main",
+                    name="customer_orders__fingerprint",
+                    qualified_name="main.customer_orders__fingerprint",
                 ),
             ),
         ),
+        sql_tests=(sql_test,),
+    )
+    entry, warnings = plan_test(
+        test=sql_test,
+        adapter=DuckDbAdapter(),
+        project=project,
     )
 
     assert warnings == ()
@@ -780,6 +809,28 @@ def test_given_table_function_sql_test_when_planning_then_compares_resolved_actu
     assert test_case.expected_actual_fragment in entry.chain[0].resolved_sql
     assert entry.chain[0].expected_cte_sql is not None
     assert test_case.expected_expected_fragment in entry.chain[0].expected_cte_sql
+    assert entry.function_deps == (
+        CompiledObjectKey(
+            resource_type=CompiledResourceType.TABLE_FN,
+            name="customer_orders",
+        ),
+    )
+    scope: PlannerScope = resolve_static_command_scope(
+        project=project, selection=PlannerSelection()
+    )
+    command_plan: PlanOutput = build_test_command_plan(
+        project=project,
+        adapter=DuckDbAdapter(),
+        scope=scope,
+        relations=resolve_static_relation_context(
+            project=project,
+            adapter=DuckDbAdapter(),
+            scope=scope,
+        ),
+    )
+    assert tuple(function.name for function in command_plan.function_entries) == (
+        "customer_orders",
+    )
 
 
 @pytest.mark.parametrize(

@@ -75,6 +75,7 @@ def plan_test(
             _plan_direct_logic_test(
                 test=test,
                 function_locations=function_locations,
+                function_deps=_direct_function_deps(test=test, project=project),
                 adapter=adapter,
                 sql_analysis_enabled=sql_analysis_enabled,
             ),
@@ -335,6 +336,7 @@ def _plan_direct_logic_test(
     *,
     test: CompiledSqlTest,
     function_locations: dict[str, CompiledRelationLocation],
+    function_deps: tuple[CompiledObjectKey, ...],
     adapter: BaseAdapter,
     sql_analysis_enabled: bool,
 ) -> SqlTestPlanEntry:
@@ -381,7 +383,30 @@ def _plan_direct_logic_test(
             ),
         ),
         scope_deps=test.scope_deps,
+        function_deps=function_deps,
         sql_analysis_enabled=sql_analysis_enabled,
+    )
+
+
+def _direct_function_deps(
+    *, test: CompiledSqlTest, project: CompiledProject
+) -> tuple[CompiledObjectKey, ...]:
+    if not isinstance(test.payload, CompiledDirectLogicSqlTestPayload):
+        return ()
+    resource_type: CompiledResourceType | None = (
+        CompiledResourceType.UDF
+        if test.payload.mode == SqlTestMode.UDF
+        else CompiledResourceType.TABLE_FN
+        if test.payload.mode == SqlTestMode.TABLE_FN
+        else None
+    )
+    if resource_type is None:
+        return ()
+    tested_names: frozenset[str] = frozenset(test.payload.tested_resource_names)
+    return tuple(
+        function.key
+        for function in project.functions
+        if function.key.resource_type == resource_type and function.name in tested_names
     )
 
 

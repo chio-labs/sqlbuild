@@ -132,6 +132,7 @@ def build_planner_relations_context(
     project_config: ProjectConfig | None = None,
     local_config: LocalConfig | None = None,
     known_source_columns: dict[str, tuple[ColumnInfo, ...]] | None = None,
+    relation_keys: frozenset[CompiledObjectKey] | None = None,
 ) -> PlannerRelationsContext:
     """Resolve relation locations and source metadata for plan entry construction."""
 
@@ -154,7 +155,11 @@ def build_planner_relations_context(
     )
     source_map: dict[str, SourceEntry] = build_source_load_map(
         project=project,
-        selected_keys=scope.selected_keys | audit_relation_keys,
+        selected_keys=(
+            relation_keys
+            if relation_keys is not None
+            else scope.selected_keys | audit_relation_keys
+        ),
         upstream_deps=scope.upstream_deps if scope.all_keys else None,
     )
     source_read_map: dict[str, SourceEntry] = (
