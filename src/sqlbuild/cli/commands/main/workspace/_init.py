@@ -48,7 +48,10 @@ def run_init(project_dir: Path | None) -> int:
         "functions to functions/, or macros to macros/"
     )
     doc.line("  5. Add models to models/staging/ and models/marts/")
-    doc.line("  6. Add tests to tests/unit/ or tests/scenarios/")
+    doc.line(
+        "  6. Add tests to tests/unit/ or tests/scenarios/, reusable audits to "
+        "audits/generic/, or standalone audits to audits/singular/"
+    )
     doc.command_line(prefix="  7. ", command="sqb compile")
     doc.command_line(prefix="  8. ", command="sqb build")
     print(doc.render(), end="")

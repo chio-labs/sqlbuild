@@ -18,6 +18,7 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/dbt-compatibility/selection`
 - `concepts/dbt-compatibility/adding-sqlbuild-models`
 - `concepts/project-configuration`
+- `concepts/resource-identities`
 - `concepts/adapters`
 - `concepts/adapters/duckdb`
 - `concepts/adapters/motherduck`
@@ -1492,6 +1493,62 @@ connection still fails offline during configuration loading.
 This replaces the common dbt pattern of switching profiles or setting environment variables
 to change targets. Each developer sets their target, named connection, and preferences once in
 `sqlbuild_local.toml` and it persists across sessions.
+
+## Resource Identities
+
+Source: `concepts/resource-identities.mdx`
+
+Canonical names for SQLBuild resources, selectors, state, and integrations.
+
+SQLBuild resource identities use lowercase ASCII snake_case. A name must start with a lowercase
+letter, end with a lowercase letter or digit, and contain only lowercase letters, digits, and
+underscores. Consecutive underscores are valid, so established names such as
+`race__mart_v_entry` remain canonical.
+
+This contract applies to models, seeds, sources, SQL and Python functions, generic and singular
+audits, attached audit definitions and instance names, SQL tests and parameterized cases,
+scenarios, SQL and Python hooks, macros, model schemas, enums, constants, materializations,
+providers, event exporters, loaders, tasks, assets, and checks. Private scoped declarations use
+exactly one leading underscore, such as `_country_codes`; public declarations must not use a
+leading underscore.
+
+Provider classes are the one conventional derivation: when `provider_name` is omitted,
+`AnalyticsApiProvider` resolves to `analytics_api_provider`. An explicit `provider_name` is an
+authored identity and must already be canonical snake_case; SQLBuild does not normalize it.
+
+Names derived from files use the filename stem. For example, `models/daily_orders.sql` defines
+the model identity `daily_orders`, while `audits/generic/expression_is_true.sql` defines the
+generic audit identity `expression_is_true`. Directories organize resources but do not change
+their names.
+
+Physical warehouse identifiers are separate from SQLBuild resource identities. Database, schema,
+table, model alias, column, tag, group, and directory names retain their existing adapter-specific
+contracts and do not need to follow this profile.
+
+### Invalid names
+
+Compilation fails during discovery with `D016` when an authored identity is not canonical:
+
+```text
+error[D016]: Invalid model identity 'DailyOrders' in models/DailyOrders.sql;
+use snake_case 'daily_orders'
+```
+
+SQLBuild suggests a corrected spelling but never silently normalizes an identity. Silent
+normalization would make selectors, manifests, persisted execution state, and integration keys
+disagree about which resource ran.
+
+### Migrating existing projects
+
+1. Rename file-derived resources and explicit `name` values to snake_case.
+2. Update `__ref`, `__seed`, `__source`, function, hook, macro, audit, test, and dependency
+   references.
+3. Update selectors and external integrations, including Dagster asset/check keys, that use the
+   old identity.
+4. Compile before building.
+
+A rename intentionally creates a new resource identity. Existing fingerprints, audit history,
+and other persisted state under the old name are not silently reassigned to the new resource.
 
 ## Overview
 
@@ -3142,6 +3199,18 @@ available to its own file under `hooks/sql/`. See
 | `@@CTX:run.target` | Active target name |
 | `@@CTX:run.id` | Current run ID |
 
+Context components can be combined into qualified identifiers without whitespace or a Python
+wrapper:
+
+```sql
+HOOK ();
+
+CREATE FUNCTION @@CTX:destination.database.@@CTX:destination.schema.reconstruct_book()
+RETURNS INTEGER
+LANGUAGE SQL
+AS 'SELECT 1'
+```
+
 ### Validation and diagnostics
 
 SQLBuild strictly validates hook resource syntax, arguments, interpolation, macros, metadata, and non-empty payloads. It does not classify executable statement kinds or implement vendor SQL grammar. Each rendered hook payload is passed to the adapter in one `execute` call; whether a driver accepts multiple statements or client-side batch separators is adapter and warehouse behavior. Use separate hook entries when portable ordering between statements matters.
@@ -4206,6 +4275,16 @@ Context variables provide access to the current model's destination relation, ac
 
 ```sql
 post_hooks [inline_sql('GRANT SELECT ON @@CTX:destination.qualified TO analyst_role')],
+```
+
+Context components can appear directly beside qualification dots. SQLBuild resolves the longest
+available context key before treating the dot as SQL punctuation:
+
+```sql
+CREATE FUNCTION @@CTX:destination.database.@@CTX:destination.schema.reconstruct_book()
+RETURNS INTEGER
+LANGUAGE SQL
+AS 'SELECT 1'
 ```
 
 **In TOML/YAML config values** (`${CTX:...}` syntax):
@@ -5502,7 +5581,7 @@ MODEL (
   materialized table,
   audits [
     expression_is_true (
-      name "revenue is non-negative",
+      name "revenue_is_non_negative",
       expression "total_revenue_cents >= 0",
     ),
   ],
@@ -5511,12 +5590,15 @@ MODEL (
 
 ### Singular audits
 
-Singular audits are standalone SQL files under `audits/` (outside the `generic/` directory) that reference models directly. They're useful for one-off checks that don't fit a reusable template.
+Singular audits are standalone SQL files. Their canonical home is `audits/singular/`, and they
+reference models directly. They're useful for one-off checks that don't fit a reusable template.
+For backward compatibility, singular audits directly under `audits/` or another non-`generic`
+child directory continue to compile.
 
 ```sql
--- audits/orders_have_payments.sql
+-- audits/singular/orders_have_payments.sql
 AUDIT (
-  name "completed orders have payments",
+  name "completed_orders_have_payments",
   severity error
 );
 
@@ -5543,7 +5625,7 @@ sources:
           - unique
     audits:
       - expression_is_true:
-          name: no future orders
+          name: no_future_orders
           expression: "ordered_at <= CURRENT_TIMESTAMP"
 ```
 
@@ -5589,7 +5671,7 @@ MODEL (
   ),
   audits [
     expression_is_true (
-      name "orders placed is non-negative",
+      name "orders_placed_is_non_negative",
       expression "orders_placed >= 0",
       run_scope delta_and_final,
     ),
@@ -5618,6 +5700,12 @@ sqb audit
 ```
 
 This runs all audits without rebuilding any models.
+
+Standalone audits run serially unless concurrency is configured explicitly, through
+`SQLBUILD_CONCURRENCY`, or in project settings. For example, `sqb audit --concurrency 8` runs up
+to eight selected audits at once, using one warehouse connection per active worker. Increase this
+limit deliberately because parallel queries can increase warehouse load and cost. See
+[`sqb audit`](/cli/audit) for precedence, ordering, and cancellation details.
 
 ## Testing
 
@@ -5887,7 +5975,7 @@ By default, `TEST()` runs in model mode - mocking sources/refs and comparing mod
 Test macro output by calling the macro in `__macro_actual__` and comparing against `__macro_expected__`:
 
 ```sql
-TEST (mode macro, name "calculates line total cents");
+TEST (mode macro, name "calculates_line_total_cents");
 
 WITH
 input_values AS (
@@ -5910,7 +5998,7 @@ Macros are compile-time code, so macro tests expand the macro at compile time an
 Test scalar UDFs by calling them in `__udf_actual__` and comparing against `__udf_expected__`:
 
 ```sql
-TEST (mode udf, name "detects completed orders");
+TEST (mode udf, name "detects_completed_orders");
 
 WITH
 input_values AS (
@@ -5939,7 +6027,7 @@ UDFs are warehouse objects, so the function is created before the test runs. Dur
 Test table functions by calling them in `__table_fn_actual__` and comparing against `__table_fn_expected__`:
 
 ```sql
-TEST (mode table_fn, name "returns customer orders");
+TEST (mode table_fn, name "returns_customer_orders");
 
 WITH
 __table_fn_actual__ AS (
@@ -5974,7 +6062,7 @@ CTE prefixes from other modes are not allowed. For example, `__source__` in a ma
 A single test file can contain multiple `TEST()` blocks. Each block must have a unique `name`:
 
 ```sql
-TEST (name "completed orders only");
+TEST (name "completed_orders_only");
 
 WITH
 __source__raw__orders AS (
@@ -5985,7 +6073,7 @@ __expected__stg_orders AS (
 )
 SELECT 1
 
-TEST (name "cancelled orders excluded");
+TEST (name "cancelled_orders_excluded");
 
 WITH
 __source__raw__orders AS (
@@ -6015,7 +6103,7 @@ Declare a typed schema and ordered named cases in one header:
 
 ```sql
 TEST (
-  name "order status: maps source states",
+  name "order_status_maps_source_states",
   parameters (
     source_status string,
     expected_status string,
@@ -7781,7 +7869,7 @@ or repeat compiler diagnostics for malformed tests.
 | `SQBKT001` | Unit tests and scenarios use their compiler-owned canonical roots |
 | `SQBKT002` | Unit and scenario filenames identify their subject and behavior |
 | `SQBKT003` | Unit tests mirror resolved model, macro, UDF, or table-function ownership |
-| `SQBKT004` | Every `TEST` block has an explicit target-aware `subject: expected behavior` name |
+| `SQBKT004` | Every `TEST` block has an explicit target-aware `subject__expected_behavior` name |
 | `SQBKT101` | Scenario descriptions identify a concrete business behavior rather than generic case numbering |
 
 Select the family independently when adopting these conventions:
@@ -7795,19 +7883,20 @@ Every unit-test block, including the only block in a file, has an explicit name:
 
 ```sql
 TEST (
-  name "stg_orders: excludes cancelled orders",
+  name "stg_orders__excludes_cancelled_orders",
 );
 ```
 
-The first colon separates a nonempty subject from nonempty behavior. Later colons are ordinary
-behavior prose. Single-model subjects match the resolved expected model, direct-mode subjects match
-the tested macro, UDF, or table function, and multi-model subjects name the common domain or an
-explicit pipeline. Generic values such as `test`, `works`, `basic`, and `case 1` are rejected without
-maintaining a verb allowlist.
+The double underscore immediately following the resolved subject separates it from nonempty
+behavior. This keeps identities such as `race__mart_v_entry` valid as complete subjects.
+Single-model subjects match the resolved expected model, direct-mode subjects match the tested
+macro, UDF, or table function, and multi-model subjects name the common domain or an explicit
+pipeline. Single underscores separate words within either part. Generic values such as `test`,
+`works`, `basic`, and `case_1` are rejected without maintaining a verb allowlist.
 
 Unit filenames use either `test_<subject>.sql` or `test_<subject>__<behavior>.sql`. When a behavior
-suffix is present, it corresponds to the normalized behavior text; concise prefixes such as
-`excludes_cancelled` for `excludes cancelled orders` are valid. Scenario filenames omit the
+suffix is present, it corresponds to the behavior portion; concise prefixes such as
+`excludes_cancelled` for `excludes_cancelled_orders` are valid. Scenario filenames omit the
 redundant prefix and use `<subject>__<behavior>.sql`:
 
 ```text
@@ -11522,9 +11611,14 @@ my-project/
     python/
   macros/
   audits/
+    generic/
+    singular/
 ```
 
-Empty directories contain `.gitkeep` files so the scaffold can be committed. Add reusable SQL lifecycle hooks to `hooks/sql/` and decorated Python lifecycle hooks to `hooks/python/`; see [Hooks](/concepts/models/hooks).
+Empty directories contain `.gitkeep` files so the scaffold can be committed. Reusable attached
+audit definitions belong in `audits/generic/`; standalone audits belong in `audits/singular/`.
+Add reusable SQL lifecycle hooks to `hooks/sql/` and decorated Python lifecycle hooks to
+`hooks/python/`; see [Hooks](/concepts/models/hooks).
 
 The generated project uses DuckDB, creates a named `local` connection shared by `dev` and
 `prod`, and defaults models to table materialization. Its configuration follows this shape:
@@ -13017,6 +13111,34 @@ sqb --project-dir <path> audit [flags]
 | `--defer-to` | Resolve model references against another target |
 | `--select`, `-s` | Select audits attached to specific models |
 | `--exclude` | Exclude audits attached to specific models |
+| `--concurrency` | Maximum number of audits to run concurrently (default: `1`) |
+
+### Concurrency
+
+Standalone audits run serially by default. Use `--concurrency` to opt into parallel warehouse
+queries:
+
+```bash
+sqb audit --concurrency 8
+```
+
+SQLBuild resolves the limit in this order: an explicit `--concurrency` value, the
+`SQLBUILD_CONCURRENCY` environment variable, the effective project `settings.concurrency`, then
+the product default of `1`. Values must be at least `1`.
+
+The physical worker count is bounded by the number of selected audits. Each active worker opens
+and exclusively uses one warehouse connection, so higher concurrency can increase warehouse load
+and cost. Results and final JSON remain in plan order even when queries finish in a different
+order.
+
+If an audit query raises a runtime, adapter, or framework error, SQLBuild records that failure and
+continues running the remaining independent audits. After all selected audits have been attempted,
+it reports every query failure in plan order and exits nonzero. Failed queries do not produce
+fabricated audit results.
+
+Interruption and cancellation are different: SQLBuild stops scheduling new audits, drains queries
+that have already started, and then closes every worker connection. Generic adapters cannot
+guarantee immediate cancellation of a query already running in the warehouse.
 
 ### Examples
 
@@ -13026,6 +13148,9 @@ sqb audit
 
 # Run audits for marts only
 sqb audit --select path:models/marts
+
+# Run up to 8 audit queries concurrently
+sqb audit --concurrency 8
 ```
 
 ## freshness

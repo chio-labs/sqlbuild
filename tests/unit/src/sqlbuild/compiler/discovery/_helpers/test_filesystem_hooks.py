@@ -37,7 +37,7 @@ def notify(ctx):
     return None
 
 
-@hook(name="notify success", description="Explicit success hook")
+@hook(name="notify_success", description="Explicit success hook")
 def notify_success(ctx):
     return None
 
@@ -70,7 +70,7 @@ def publish(ctx):
                 "catalog-publish",
                 "description_only",
                 "notify",
-                "notify success",
+                "notify_success",
                 "plain_call",
             ),
             expected_hook_paths=(

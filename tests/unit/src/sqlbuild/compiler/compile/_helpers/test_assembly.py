@@ -286,7 +286,7 @@ seeds:
                 ),
                 "models/customers.sql": "MODEL ();\n\nSELECT 'active' AS status\n",
                 "tests/unit/test_normalize_status.sql": """
-TEST (mode macro, name "normalizes status");
+TEST (mode macro, name "normalizes_status");
 
 WITH
 input_values AS (SELECT '  PAID  ' AS raw_status),
@@ -306,7 +306,7 @@ SELECT 1
             expected_seed_names=(),
             expected_audit_names=(),
             expected_audit_scope_deps=(),
-            expected_test_names=("normalizes status",),
+            expected_test_names=("normalizes_status",),
             expected_test_scope_deps=(
                 (CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),),
             ),
@@ -382,7 +382,7 @@ FUNCTION (
                 ),
                 "models/customers.sql": "MODEL ();\n\nSELECT 'active' AS status\n",
                 "tests/unit/test_format_cents.sql": """
-TEST (mode udf, name "formats cents");
+TEST (mode udf, name "formats_cents");
 
 WITH
 input_values AS (SELECT 1250 AS amount_cents),
@@ -405,7 +405,7 @@ SELECT 1
             expected_seed_names=(),
             expected_audit_names=(),
             expected_audit_scope_deps=(),
-            expected_test_names=("formats cents",),
+            expected_test_names=("formats_cents",),
             expected_test_scope_deps=(
                 (CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),),
             ),
@@ -436,7 +436,7 @@ SELECT p_customer_id AS customer_id, 1 AS order_id
                     'FROM __table_fn("customer_orders")(42)\n'
                 ),
                 "tests/unit/test_customer_orders.sql": """
-TEST (mode table_fn, name "returns customer orders");
+TEST (mode table_fn, name "returns_customer_orders");
 
 WITH
 __table_fn_actual__ AS (
@@ -462,7 +462,7 @@ SELECT 1
             expected_seed_names=(),
             expected_audit_names=(),
             expected_audit_scope_deps=(),
-            expected_test_names=("returns customer orders",),
+            expected_test_names=("returns_customer_orders",),
             expected_test_scope_deps=(
                 (
                     CompiledObjectKey(
@@ -560,7 +560,7 @@ def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expe
     [
         AttachedAuditNameTestCase(
             description="named instances of one generic audit",
-            expected_names=("positive revenue", "bounded revenue"),
+            expected_names=("positive_revenue", "bounded_revenue"),
         )
     ],
     ids=lambda case: case.description,
@@ -577,8 +577,8 @@ def test_given_named_generic_audit_instances_when_assembling_then_each_name_is_p
             "models/orders.sql": """
 MODEL (
   audits [
-    expression_is_true (name "positive revenue", expression "revenue > 0"),
-    expression_is_true (name "bounded revenue", expression "revenue < 1000"),
+    expression_is_true (name "positive_revenue", expression "revenue > 0"),
+    expression_is_true (name "bounded_revenue", expression "revenue < 1000"),
   ],
 );
 

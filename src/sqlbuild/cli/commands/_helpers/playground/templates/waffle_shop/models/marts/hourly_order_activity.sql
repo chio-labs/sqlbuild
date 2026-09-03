@@ -18,7 +18,7 @@ MODEL (
   ),
   audits [
     expression_is_true (
-      name "orders placed is non-negative",
+      name "orders_placed_is_non_negative",
       expression "orders_placed >= 0",
       run_scope delta_and_final,
     ),

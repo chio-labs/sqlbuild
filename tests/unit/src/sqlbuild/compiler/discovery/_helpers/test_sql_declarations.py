@@ -18,8 +18,10 @@ from sqlbuild.compiler.discovery.models import (
     EnumDeclaration,
     ModelSchemaDeclaration,
 )
+from sqlbuild.compiler.resource_names.exceptions import ResourceIdentityError
 from sqlbuild.sql_values.models import AuthoredSqlValueCall, SqlValue
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
+    DeclarationResourceIdentityErrorTestCase,
     ParseDeclarationFileErrorTestCase,
     ParseDeclarationFileTestCase,
     ParseLocalTypedConstantsTestCase,
@@ -259,11 +261,6 @@ def test_given_invalid_typed_constant_when_parsing_then_raises_contextual_error(
             expected_error_fragment="one consistent scalar type",
         ),
         ParseDeclarationFileErrorTestCase(
-            description="public private-style name",
-            contents="ENUM (name _state, members [OPEN]);",
-            expected_error_fragment="must not start with '_'",
-        ),
-        ParseDeclarationFileErrorTestCase(
             description="numeric shorthand member",
             contents="ENUM (name priority, members [1, 2]);",
             expected_error_fragment="shorthand members must be identifiers",
@@ -305,6 +302,35 @@ def test_given_invalid_enum_declaration_when_parsing_then_raises_declaration_err
             file_path=Path("enums/domain.sql"),
             relative_path=Path("enums/domain.sql"),
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DeclarationResourceIdentityErrorTestCase(
+            description="public enum uses private spelling",
+            contents="ENUM (name _state, members [OPEN]);",
+            expected_error_fragment=(
+                "Invalid public enum identity '_state'.*use snake_case 'state'"
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_noncanonical_declaration_identity_when_parsing_then_d016_suggests_canonical_identity(
+    test_case: DeclarationResourceIdentityErrorTestCase,
+) -> None:
+    with pytest.raises(
+        ResourceIdentityError,
+        match=test_case.expected_error_fragment,
+    ) as error_info:
+        parse_enum_declaration_file(
+            contents=test_case.contents,
+            file_path=Path("enums/domain.sql"),
+            relative_path=Path("enums/domain.sql"),
+        )
+
+    assert error_info.value.code == "D016"
 
 
 @pytest.mark.parametrize(

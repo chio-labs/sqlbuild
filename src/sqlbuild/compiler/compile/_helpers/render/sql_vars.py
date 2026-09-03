@@ -369,6 +369,13 @@ def _render_interpolation_token(
         context_name: str = sql[context_name_start:context_name_end]
         if context_values is None:
             raise CompileInputError(f"SQL text in '{file_path}' does not allow @@CTX templates")
+        context_name_end = _known_context_name_end(
+            sql=sql,
+            start=context_name_start,
+            greedy_end=context_name_end,
+            context_values=context_values,
+        )
+        context_name = sql[context_name_start:context_name_end]
         if context_name not in context_values:
             raise CompileInputError(
                 f"SQL text in '{file_path}' references unknown CTX key '{context_name}'"
@@ -423,3 +430,21 @@ def _consume_context_name(*, sql: str, start: int) -> int:
     ):
         cursor += 1
     return cursor
+
+
+def _known_context_name_end(
+    *,
+    sql: str,
+    start: int,
+    greedy_end: int,
+    context_values: Mapping[str, str | None],
+) -> int:
+    greedy_name: str = sql[start:greedy_end]
+    if greedy_name in context_values:
+        return greedy_end
+    matching_names: tuple[str, ...] = tuple(
+        name for name in context_values if greedy_name.startswith(f"{name}.")
+    )
+    if not matching_names:
+        return greedy_end
+    return start + len(max(matching_names, key=len))

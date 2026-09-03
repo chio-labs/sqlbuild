@@ -29,11 +29,17 @@ fn given_sql_test_facts_when_evaluating_project_policy_then_returns_expected_fau
             "identity": "model:daily_revenue", "kind": "model", "name": "daily_revenue",
             "path": "models/finance/marts/daily_revenue.sql", "ownership_root": "models",
             "ownership_root_kind": "model"
+        },
+        {
+            "identity": "model:race__mart_v_entry", "kind": "model",
+            "name": "race__mart_v_entry",
+            "path": "models/race/marts/race__mart_v_entry.sql", "ownership_root": "models",
+            "ownership_root_kind": "model"
         }
     ]);
     let mut macro_test = helpers::sql_test_fact(
         "tests/unit/macros/test_normalize__trims.sql",
-        Some("normalize: trims spaces"),
+        Some("normalize_status__trims_spaces"),
         json!([]),
     );
     macro_test["mode"] = json!("macro");
@@ -68,6 +74,11 @@ fn given_sql_test_facts_when_evaluating_project_policy_then_returns_expected_fau
                     "tests/unit/orders.sql",
                     Some("orders: excludes cancelled orders"),
                     json!([])
+                ),
+                helpers::sql_test_fact(
+                    "tests/unit/test_race__mart_v_entry__returns_current.sql",
+                    Some("race__mart_v_entry__returns_current_entries"),
+                    json!(["race__mart_v_entry"])
                 )
             ]),
             scenarios: json!([{
@@ -77,7 +88,7 @@ fn given_sql_test_facts_when_evaluating_project_policy_then_returns_expected_fau
                 "expected_model_names": [], "assertion_names": [],
                 "assertion_target_model_names": [], "target_model_names": []
             }]),
-            scope_index: helpers::scope_index(),
+            scope_index: scope.clone(),
             config: json!({}),
             expected_fault_count: 2,
             expected_evaluated_models: 0,
@@ -89,17 +100,17 @@ fn given_sql_test_facts_when_evaluating_project_policy_then_returns_expected_fau
             tests: json!([
                 helpers::sql_test_fact(
                     "tests/unit/commerce/staging/test_stg_orders__paid.sql",
-                    Some("stg_orders: keeps paid orders"),
+                    Some("stg_orders__keeps_paid_orders"),
                     json!(["stg_orders"])
                 ),
                 helpers::sql_test_fact(
                     "tests/unit/commerce/test_order_pipeline__paid.sql",
-                    Some("commerce: keeps paid orders"),
+                    Some("commerce__keeps_paid_orders"),
                     json!(["stg_orders", "fact_orders"])
                 ),
                 helpers::sql_test_fact(
                     "tests/unit/wrong/test_pipeline__revenue.sql",
-                    Some("pipeline: calculates revenue"),
+                    Some("pipeline__calculates_revenue"),
                     json!(["stg_orders", "daily_revenue"])
                 ),
                 macro_test
@@ -117,19 +128,24 @@ fn given_sql_test_facts_when_evaluating_project_policy_then_returns_expected_fau
             tests: json!([
                 helpers::sql_test_fact(
                     "tests/unit/test_orders__paid.sql",
-                    Some("orders: keeps paid orders: after capture"),
+                    Some("orders__keeps_paid_orders__after_capture"),
                     json!(["orders"])
                 ),
                 helpers::sql_test_fact(
                     "tests/unit/test_orders__basic.sql",
-                    Some("orders: basic"),
+                    Some("orders__basic"),
                     json!(["orders"])
                 ),
                 helpers::sql_test_fact("tests/unit/test_orders__paid.sql", None, json!(["orders"])),
                 helpers::sql_test_fact(
                     "tests/unit/test_orders__paid.sql",
-                    Some("payments: keeps paid orders"),
+                    Some("payments__keeps_paid_orders"),
                     json!(["orders"])
+                ),
+                helpers::sql_test_fact(
+                    "tests/unit/test_race__mart_v_entry__returns_current.sql",
+                    Some("race__mart_v_entry__returns_current_entries"),
+                    json!(["race__mart_v_entry"])
                 )
             ]),
             scenarios: json!([]),

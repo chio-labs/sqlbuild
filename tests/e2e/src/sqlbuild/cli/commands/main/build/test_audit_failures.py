@@ -66,7 +66,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                   unique_key [id],
                   audits [
                     expression_is_true (
-                      name "amount is negative",
+                      name "amount_is_negative",
                       expression "amount_cents < 0",
                       severity error,
                       run_scope delta_and_final,
@@ -140,7 +140,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                   unique_key [id],
                   audits [
                     expression_is_true (
-                      name "amount is negative",
+                      name "amount_is_negative",
                       expression "amount_cents < 0",
                       severity error,
                       run_scope final,
