@@ -5,7 +5,7 @@ from collections.abc import Callable
 from contextvars import Token
 from io import StringIO
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 from _pytest.capture import CaptureResult
@@ -29,7 +29,6 @@ from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     (
         ObservabilityCleanupCase(
             description="projector close failure preserves original exception and cleanup",
-            expected_history_close_count=1,
             expected_original_error="original command failure",
         ),
     ),
@@ -40,7 +39,6 @@ def test_given_projector_close_failure_when_command_fails_then_original_error_an
     test_case: ObservabilityCleanupCase,
 ) -> None:
     args: CliNamespace = CliNamespace()
-    history: Mock = Mock()
     outer: NativeProgressProjector = NativeProgressProjector(stream=StringIO(), use_color=False)
     outer_token: Token[NativeProgressProjector | None] = outer.install()
 
@@ -52,22 +50,17 @@ def test_given_projector_close_failure_when_command_fails_then_original_error_an
         ),
         pytest.raises(ValueError, match=test_case.expected_original_error),
     ):
-        with cli_observability_scope(
-            args=args,
-            project_dir=tmp_path,
-            history_factory=lambda **_kwargs: history,
-        ):
+        with cli_observability_scope(args=args, project_dir=tmp_path):
             assert current_native_progress_projector() is not outer
             raise ValueError(test_case.expected_original_error)
 
     assert current_native_progress_projector() is outer
-    assert history.close.call_count == test_case.expected_history_close_count
     outer.restore(outer_token)
 
 
 @pytest.mark.parametrize(
     "test_case",
-    (NoExporterFastPathTestCase("no public exporter skips providers and thread", 2),),
+    (NoExporterFastPathTestCase("no public exporter skips providers and thread", 0),),
     ids=lambda case: case.description,
 )
 def test_given_no_public_exporter_when_observability_runs_then_provider_import_is_skipped(
@@ -94,7 +87,6 @@ def test_given_no_public_exporter_when_observability_runs_then_provider_import_i
         },
     )
     args: CliNamespace = CliNamespace()
-    history: Mock = Mock()
     before_threads: int = sum(
         map(
             lambda thread: thread.name.startswith("sqlbuild-event-exporter-"),
@@ -102,11 +94,7 @@ def test_given_no_public_exporter_when_observability_runs_then_provider_import_i
         )
     )
 
-    with cli_observability_scope(
-        args=args,
-        project_dir=tmp_path,
-        history_factory=lambda **_kwargs: history,
-    ):
+    with cli_observability_scope(args=args, project_dir=tmp_path):
         with OperationLifecycle(operation_kind="project", operation_name="project_compile"):
             pass
         active_threads: int = sum(
@@ -118,8 +106,7 @@ def test_given_no_public_exporter_when_observability_runs_then_provider_import_i
 
     assert not marker_path.exists()
     assert helper_marker_path.exists()
-    assert active_threads == before_threads
-    assert history.append_and_project.call_count == test_case.expected_history_events
+    assert active_threads - before_threads == test_case.expected_thread_delta
 
 
 @pytest.mark.parametrize(
@@ -172,7 +159,6 @@ def test_given_json_routing_options_when_operation_runs_then_human_stream_contra
     (
         ObservabilityCleanupCase(
             description="projector close failure preserves successful scope result",
-            expected_history_close_count=1,
             expected_original_error="",
         ),
     ),
@@ -183,20 +169,14 @@ def test_given_projector_close_failure_when_scope_succeeds_then_cleanup_does_not
     test_case: ObservabilityCleanupCase,
 ) -> None:
     args: CliNamespace = CliNamespace()
-    history: Mock = Mock()
 
     with patch.object(
         NativeProgressProjector,
         "close",
         side_effect=OSError("controlled projector close failure"),
     ):
-        with cli_observability_scope(
-            args=args,
-            project_dir=tmp_path,
-            history_factory=lambda **_kwargs: history,
-        ):
+        with cli_observability_scope(args=args, project_dir=tmp_path):
             result: str = "command result"
 
     assert result == "command result"
     assert test_case.expected_original_error == ""
-    assert history.close.call_count == test_case.expected_history_close_count

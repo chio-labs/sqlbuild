@@ -520,7 +520,7 @@ class BuildScheduler:
                 run_id=self._run_id,
                 resource_type=str(key.resource_type),
                 resource_name=key.name,
-                ledger_path=(self._runtime_dir / "runs" / self._run_id / "statements.jsonl"),
+                ledger_path=(self._runtime_dir / "executions" / self._run_id / "statements.jsonl"),
                 on_statement_complete=self._on_statement_complete,
             ):
                 return self._execute_model_node(
@@ -732,7 +732,7 @@ class BuildScheduler:
                 run_id=self._run_id,
                 resource_type=str(key.resource_type),
                 resource_name=key.name,
-                ledger_path=(self._runtime_dir / "runs" / self._run_id / "statements.jsonl"),
+                ledger_path=(self._runtime_dir / "executions" / self._run_id / "statements.jsonl"),
                 on_statement_complete=self._on_statement_complete,
             ):
                 result: (

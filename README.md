@@ -194,8 +194,9 @@ These values are attributed compute credits and estimated cost, not Snowflake-bi
 invoice reconciliation. The estimate uses only query history visible to the executing role and
 does not reconstruct invisible concurrent work, warehouse resume or idle tail, the 60-second
 minimum, cloud-services credits, contract adjustments, or multi-cluster billing. Run metadata and
-query IDs are stored under `target/runs/<run_id>/`; that statement ledger stores only an SQL digest,
-not SQL text. Executed SQL artifacts are stored separately under the sensitive `target/run/` tree.
+query IDs are stored under `target/executions/<run_id>/`; that statement ledger stores only an SQL
+digest, not SQL text. Executed SQL artifacts are stored separately under the sensitive
+`target/run/` tree.
 
 ## Documentation
 

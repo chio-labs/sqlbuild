@@ -457,7 +457,11 @@ def _execute_leased_virtual_build(
         resource_type="run",
         resource_name=rewritten.project.effective_target_name or "virtual",
         ledger_path=(
-            runtime.project_dir / "target" / "runs" / rewritten.project.run_id / "statements.jsonl"
+            runtime.project_dir
+            / "target"
+            / "executions"
+            / rewritten.project.run_id
+            / "statements.jsonl"
         ),
         phase="virtual_ingress",
         on_statement_complete=exec_hooks.on_statement_complete,
@@ -500,7 +504,11 @@ def _execute_leased_virtual_build(
         resource_type="run",
         resource_name=rewritten.project.effective_target_name or "virtual",
         ledger_path=(
-            runtime.project_dir / "target" / "runs" / rewritten.project.run_id / "statements.jsonl"
+            runtime.project_dir
+            / "target"
+            / "executions"
+            / rewritten.project.run_id
+            / "statements.jsonl"
         ),
         phase="virtual_finalize",
         on_statement_complete=exec_hooks.on_statement_complete,

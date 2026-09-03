@@ -76,7 +76,7 @@ def read_cost_run(*, project_dir: Path, run_id: str) -> CostRunRecord | None:
 
 
 def list_cost_runs(*, project_dir: Path) -> tuple[CostRunRecord, ...]:
-    root: Path = project_dir / "target" / "runs"
+    root: Path = project_dir / "target" / "executions"
     if not root.is_dir():
         return ()
     records: list[CostRunRecord] = []
@@ -205,10 +205,10 @@ def _record_from_payload(payload: object) -> CostRunRecord:
 
 def _run_directory(*, project_dir: Path, run_id: str) -> Path:
     _validate_run_id(run_id=run_id)
-    root: Path = project_dir / "target" / "runs"
+    root: Path = project_dir / "target" / "executions"
     run_dir: Path = root / run_id
     if not run_dir.resolve().is_relative_to(root.resolve()):
-        raise CostArtifactError("cost run path must remain under the project run directory")
+        raise CostArtifactError("cost run path must remain under the project execution directory")
     return run_dir
 
 

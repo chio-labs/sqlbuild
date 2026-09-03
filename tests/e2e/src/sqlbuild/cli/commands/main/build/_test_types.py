@@ -806,6 +806,8 @@ class RuntimeArtifactPreservationBuildE2ETestCase:
     rerun_command: tuple[str, ...]
     expected_runtime_paths: tuple[str, ...]
     expected_exit_code: int
+    expected_compiler_cache_count: int
+    expected_local_history: bool
     expected_compiled_paths: tuple[str, ...] = field(default_factory=tuple)
 
 

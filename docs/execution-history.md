@@ -35,6 +35,9 @@ call publishes all changes or none.
 
 ## Local SQLite
 
+The CLI does not open local history implicitly. Construct and subscribe this backend only when an
+application has a concrete durable-history consumer.
+
 ```python
 from pathlib import Path
 
@@ -69,14 +72,14 @@ Schema v1 has `execution_history_metadata`, append-only `event_log`, and disposa
 `run_projection` tables plus run, invocation, type, and created-time indexes. SQLite uses WAL mode,
 foreign keys, a configurable 5000 ms default busy timeout, a process-local reentrant lock, and
 transactions for append/projection publication. Multiple processes may use SQLite subject to normal
-SQLite/WAL host-filesystem constraints and busy timeout; it is a host-local default, not a deployed
+SQLite/WAL host-filesystem constraints and busy timeout; it is a host-local backend, not a deployed
 coordination service. Startup refuses unknown future schema versions and never resets or downgrades
 data.
 
 ## Deployed PostgreSQL
 
 Install `sqlbuild[postgres]` only in deployed processes and construct the backend explicitly. The
-CLI never selects PostgreSQL implicitly.
+CLI never selects PostgreSQL implicitly. Neither backend is selected by ordinary CLI commands.
 
 ```python
 import os
