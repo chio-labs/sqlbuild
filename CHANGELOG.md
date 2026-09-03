@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.79.0](https://github.com/chio-labs/sqlbuild/compare/v0.78.0...v0.79.0) (2026-09-03)
+
+
+### Features
+
+* enforce canonical native project contracts ([#506](https://github.com/chio-labs/sqlbuild/issues/506)) ([500aae8](https://github.com/chio-labs/sqlbuild/commit/500aae8778293b5aee5cfedec40aa45ce36c921b))
+
 ## [0.78.0](https://github.com/chio-labs/sqlbuild/compare/v0.77.2...v0.78.0) (2026-09-03)
 
 
