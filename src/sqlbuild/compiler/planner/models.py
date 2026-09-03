@@ -20,6 +20,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditSeverity,
 )
 from sqlbuild.compiler.compile.models import (
+    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -585,6 +586,7 @@ class ModelPlanContext:
     source_map: dict[str, SourceEntry]
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
     star_exclude_keyword: str
+    functions_by_name: dict[str, CompiledFunction] = field(default_factory=dict)
     runtime_cursor_producer_names: frozenset[str] = frozenset()
     future_cursor_config: FutureCursorsConfig | None = None
     start_cursor_config: StartCursorsConfig | None = None

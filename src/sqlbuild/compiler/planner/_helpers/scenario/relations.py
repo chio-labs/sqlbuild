@@ -346,6 +346,7 @@ def build_scenario_execution_plan(
             context=ModelPlanContext(
                 model_locations=relation_plan.model_locations,
                 models_by_name=models_by_name,
+                functions_by_name={function.name: function for function in project.functions},
                 seed_locations=relation_plan.seed_locations,
                 function_locations=function_locations,
                 source_map=relation_plan.source_map,

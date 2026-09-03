@@ -145,7 +145,7 @@ def test_given_failing_build_test_when_canonical_terminal_arrives_then_rich_row_
     test_case: BuildSqlTestProjectionCase,
 ) -> None:
     stream: StringIO = StringIO()
-    monkeypatch.setattr("sys.stderr", stream)
+    monkeypatch.setattr("sys.stdout", stream)
     projector: NativeProgressProjector = NativeProgressProjector(stream=stream, use_color=False)
     token: Token[NativeProgressProjector | None] = projector.install()
     terminal_index: TerminalEventIndex = TerminalEventIndex()

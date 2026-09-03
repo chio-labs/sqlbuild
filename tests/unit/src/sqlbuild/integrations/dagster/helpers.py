@@ -355,7 +355,7 @@ def write_blocking_clone_event_command(
 
 
 def write_blocking_execution_event_command(
-    *, root: Path, release_path: Path, command: str
+    *, root: Path, release_path: Path, command: str, asset_name: str = "customers"
 ) -> list[str]:
     event_payload: str = (
         json.dumps(
@@ -363,7 +363,7 @@ def write_blocking_execution_event_command(
                 command=command,
                 asset={
                     "kind": "model",
-                    "name": "customers",
+                    "name": asset_name,
                     "status": "success",
                 },
             )
@@ -379,7 +379,7 @@ def write_blocking_execution_event_command(
             "assets": [
                 {
                     "kind": "model",
-                    "name": "customers",
+                    "name": asset_name,
                     "status": "success",
                 }
             ],
