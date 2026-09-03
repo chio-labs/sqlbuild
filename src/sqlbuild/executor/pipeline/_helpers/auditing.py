@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import queue
+import re
 import time
+from asyncio import CancelledError as AsyncCancelledError
 from collections.abc import Callable
+from concurrent.futures import CancelledError as FutureCancelledError
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextvars import copy_context
 from dataclasses import dataclass, replace
@@ -16,6 +19,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput
 from sqlbuild.cost.classes.cost_context import CostContext
+from sqlbuild.diagnostics.classes.diagnostic_record_redactor import DiagnosticRecordRedactor
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.main._execute import execute_audit
 from sqlbuild.executor.auditing.main.resource_id import audit_resource_id
@@ -24,8 +28,13 @@ from sqlbuild.executor.pipeline._helpers.connections import (
     close_connections,
     open_worker_connections,
 )
-from sqlbuild.executor.pipeline.exceptions import AuditConcurrencyError, AuditOutcomeError
-from sqlbuild.executor.pipeline.models import AuditPipelineCallbacks
+from sqlbuild.executor.pipeline.exceptions import (
+    AuditConcurrencyError,
+    AuditCoordinatorError,
+    AuditExecutionError,
+    AuditOutcomeError,
+)
+from sqlbuild.executor.pipeline.models import AuditExecutionFailure, AuditPipelineCallbacks
 from sqlbuild.executor.scheduling.main._run_worker import run_worker_with_completion
 from sqlbuild.observability import RunLifecycle, run_scope
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
@@ -187,6 +196,10 @@ def run_audit_pipeline_with_callbacks(
                         lifecycle=lifecycle,
                         callback=callbacks.on_audit_complete,
                     ),
+                    on_audit_error=_AuditErrorRecorder(
+                        lifecycle=lifecycle,
+                        callback=callbacks.on_audit_error,
+                    ),
                 )
                 results: tuple[AuditExecutionResult, ...] = _run_audits(
                     entries=entries,
@@ -222,6 +235,22 @@ class _AuditCompletionRecorder:
             raise AuditOutcomeError(f"unknown audit outcome: {result.outcome!r}")
         if self._callback is not None:
             self._callback(result)
+
+
+class _AuditErrorRecorder:
+    def __init__(
+        self,
+        *,
+        lifecycle: RunLifecycle,
+        callback: Callable[[AuditPlanEntry], None] | None,
+    ) -> None:
+        self._lifecycle: RunLifecycle = lifecycle
+        self._callback: Callable[[AuditPlanEntry], None] | None = callback
+
+    def __call__(self, entry: AuditPlanEntry) -> None:
+        self._lifecycle.record_failure()
+        if self._callback is not None:
+            self._callback(entry)
 
 
 def _run_audits(
@@ -296,8 +325,8 @@ def _run_serial_audits(
     callbacks: AuditPipelineCallbacks,
     run_id: str,
 ) -> tuple[AuditExecutionResult, ...]:
-    results: list[AuditExecutionResult] = []
-    for entry in entries:
+    projection: _AuditProjection = _AuditProjection(entry_count=len(entries))
+    for index, entry in enumerate(entries):
         try:
             result: AuditExecutionResult = _execute_entry(
                 entry=entry,
@@ -307,16 +336,28 @@ def _run_serial_audits(
                 on_audit_start=callbacks.on_audit_start,
                 run_id=run_id,
             )
-        except BaseException:
-            if callbacks.on_audit_error is not None:
-                callbacks.on_audit_error(entry)
-            raise
-        results.append(result)
-        if callbacks.on_audit_physical_complete is not None:
-            callbacks.on_audit_physical_complete(result)
-        if callbacks.on_audit_complete is not None:
-            callbacks.on_audit_complete(result)
-    return tuple(results)
+        except BaseException as error:
+            completion_error: BaseException | None = projection.consume(
+                completion=_AuditCompletion(index=index, error=error),
+                entries=entries,
+                callbacks=callbacks,
+            )
+            stop_error: BaseException | None = _coordinator_stop_error(error)
+            if stop_error is not None:
+                raise stop_error from None
+            if completion_error is not None:
+                raise completion_error from None
+            continue
+        completion_error = projection.consume(
+            completion=_AuditCompletion(index=index, result=result),
+            entries=entries,
+            callbacks=callbacks,
+        )
+        if completion_error is not None:
+            raise completion_error
+    if projection.errors:
+        raise _audit_execution_error(entries=entries, errors=projection.errors)
+    return projection.ordered_results()
 
 
 def _run_concurrent_audits(
@@ -367,9 +408,12 @@ def _run_concurrent_audits(
                 entries=entries,
                 callbacks=callbacks,
             )
+            stop_error: BaseException | None = _coordinator_stop_error(completion.error)
+            if stop_error is not None:
+                scheduler_error = stop_error
             if scheduler_error is None and completion_error is not None:
                 scheduler_error = completion_error
-            if not projection.errors and scheduler_error is None and next_index < len(entries):
+            if scheduler_error is None and next_index < len(entries):
                 futures[next_index] = _submit_audit(
                     pool=pool,
                     index=next_index,
@@ -383,7 +427,7 @@ def _run_concurrent_audits(
                 )
                 in_flight.add(next_index)
                 next_index += 1
-            elif projection.errors or scheduler_error is not None:
+            elif scheduler_error is not None:
                 in_flight, canceled = _cancel_not_started(futures=futures, in_flight=in_flight)
                 projection_error: BaseException | None = projection.add_gaps(
                     indexes=canceled,
@@ -426,7 +470,7 @@ def _run_concurrent_audits(
     if scheduler_error is not None:
         raise scheduler_error
     if projection.errors:
-        raise projection.errors[min(projection.errors)]
+        raise _audit_execution_error(entries=entries, errors=projection.errors)
     return projection.ordered_results()
 
 
@@ -490,7 +534,10 @@ def _execute_entry(
         run_id=run_id,
     ) as lifecycle:
         if on_audit_start is not None:
-            on_audit_start(entry)
+            try:
+                on_audit_start(entry)
+            except BaseException as error:
+                raise AuditCoordinatorError(error) from error
         result: AuditExecutionResult = execute_audit(
             audit=entry,
             adapter=adapter,
@@ -505,3 +552,52 @@ def _execute_entry(
         if result.outcome == AuditOutcome.ERROR:
             lifecycle.failed()
     return result
+
+
+def _audit_execution_error(
+    *, entries: tuple[AuditPlanEntry, ...], errors: dict[int, BaseException]
+) -> AuditExecutionError:
+    failures: tuple[AuditExecutionFailure, ...] = tuple(
+        AuditExecutionFailure(
+            audit_name=entries[index].name,
+            resource_id=audit_resource_id(
+                audit_name=entries[index].name,
+                attachment_kind=entries[index].attachment_kind,
+                attached_target_kind=entries[index].attached_target_kind,
+                attached_target_name=entries[index].attached_target_name,
+                attached_column_name=entries[index].attached_column_name,
+            ),
+            error_type=type(error).__name__,
+            message=_safe_audit_error_message(error),
+        )
+        for index, error in sorted(errors.items())
+    )
+    return AuditExecutionError(failures=failures)
+
+
+def _safe_audit_error_message(error: BaseException) -> str:
+    try:
+        raw_message: str = str(error)
+    except BaseException:
+        return f"Unable to stringify {type(error).__name__}"
+    message: str = " ".join(DiagnosticRecordRedactor.text(raw_message).split())
+    if not message:
+        return "No error detail provided"
+    if re.search(
+        r"\b(?:select|insert|update|delete|merge|with|password|credential|token|secret|rows?)\b",
+        message,
+        re.IGNORECASE,
+    ):
+        return "Error detail redacted"
+    return message[:240]
+
+
+def _coordinator_stop_error(error: BaseException | None) -> BaseException | None:
+    if isinstance(error, AuditCoordinatorError):
+        return error.error
+    if error is not None and (
+        not isinstance(error, Exception)
+        or isinstance(error, (AsyncCancelledError, FutureCancelledError))
+    ):
+        return error
+    return None

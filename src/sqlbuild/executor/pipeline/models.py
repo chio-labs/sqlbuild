@@ -31,6 +31,16 @@ class AuditPipelineCallbacks:
 
 
 @dataclass(frozen=True)
+class AuditExecutionFailure:
+    """Safe public description of one standalone audit runtime failure."""
+
+    audit_name: str
+    resource_id: str
+    error_type: str
+    message: str
+
+
+@dataclass(frozen=True)
 class ResolvedBuildInputs:
     """Fully-resolved runtime bundles for one build pipeline run."""
 

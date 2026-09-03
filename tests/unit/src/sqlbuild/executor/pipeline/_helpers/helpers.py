@@ -6,6 +6,7 @@ import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, ClassVar
+from unittest.mock import MagicMock
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -57,6 +58,12 @@ def lifecycle_events_with_prefix(
 
 def lifecycle_order_with_prefix(*, order: list[str], prefixes: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(filter(lambda item: item.startswith(prefixes), order))
+
+
+def unprintable_audit_error() -> RuntimeError:
+    value: MagicMock = MagicMock()
+    value.__str__.side_effect = KeyboardInterrupt
+    return RuntimeError(value)
 
 
 def audit_entry(
