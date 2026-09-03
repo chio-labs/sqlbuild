@@ -1835,6 +1835,10 @@ def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
         values["incremental_strategy"] = defaults.incremental_strategy
     if defaults.incremental_mode is not None:
         values["incremental_mode"] = defaults.incremental_mode
+    if defaults.microbatch_strategy is not None:
+        values["microbatch_strategy"] = defaults.microbatch_strategy
+    if defaults.cursor_watermark_mode is not None:
+        values["cursor_watermark_mode"] = defaults.cursor_watermark_mode
     if defaults.merge_exclude_columns:
         values["merge_exclude_columns"] = defaults.merge_exclude_columns
     if defaults.full_refresh is not None:
@@ -1843,6 +1847,8 @@ def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
         values["append_cursor_inclusive"] = defaults.append_cursor_inclusive
     if defaults.cursor_start is not None:
         values["cursor_start"] = defaults.cursor_start
+    if defaults.cursor_end is not None:
+        values["cursor_end"] = defaults.cursor_end
     if defaults.cursor_start_max_ahead is not None:
         values["cursor_start_max_ahead"] = defaults.cursor_start_max_ahead
     if defaults.cursor_start_max_action is not None:
@@ -1857,6 +1863,8 @@ def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
         values["batch_size"] = defaults.batch_size
     if defaults.batch_concurrency is not None:
         values["batch_concurrency"] = defaults.batch_concurrency
+    if defaults.max_microbatches is not None:
+        values["max_microbatches"] = defaults.max_microbatches
     if defaults.unaccounted_partition_policy is not None:
         values["unaccounted_partition_policy"] = defaults.unaccounted_partition_policy
     if defaults.replay_on_change is not None:

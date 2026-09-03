@@ -1019,12 +1019,6 @@ class BuildScheduler:
                     microbatch_event_store, microbatch_scope = self._resolve_microbatch_state(
                         model_entry=model_entry, connection=connection
                     )
-                    causal_dependencies = self._capture_causal_dependencies(
-                        model_entry=model_entry,
-                        connection=connection,
-                        consumer_store=microbatch_event_store,
-                        consumer_scope=microbatch_scope,
-                    )
                     if model_entry.batch_concurrency > 1:
                         microbatch_event_store_resolver = partial(
                             lambda connection, *, entry: self._microbatch_store_for_connection(
@@ -1085,12 +1079,11 @@ class BuildScheduler:
                         model_name=model_entry.name,
                     )
                     if microbatch_event_store is not None and microbatch_scope is not None:
-                        result = self._publish_terminal_causal_facts(
-                            model_entry=model_entry,
-                            result=result,
-                            connection=connection,
-                            store=microbatch_event_store,
-                            dependencies=causal_dependencies,
+                        result = dataclasses.replace(
+                            result,
+                            microbatch_physical_generation_id=(
+                                microbatch_scope.physical_generation_id
+                            ),
                         )
             except Exception as error:
                 result = ModelExecutionResult(

@@ -5,7 +5,7 @@ MODEL (
   cursor last_ordered_at,
   cursor_type timestamp,
   cursor_grain second,
-  cursor_filter_inputs (
+  cursor_inputs (
     fact_orders ordered_at,
   ),
   replay_on_change full,

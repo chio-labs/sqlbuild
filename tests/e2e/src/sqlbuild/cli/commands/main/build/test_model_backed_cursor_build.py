@@ -130,11 +130,11 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                       cursor activity_hour,
                       cursor_type timestamp,
                       cursor_grain hour,
-                      cursor_filter_inputs (
-                        fact_orders_view ordered_at,
-                      ),
-                      cursor_watermark_inputs (
-                        fact_orders ordered_at,
+                      microbatch_strategy watermark,
+                      cursor_watermark_mode all,
+                      cursor_inputs (
+                        fact_orders_view (column ordered_at, roles [filter]),
+                        fact_orders (column ordered_at, roles [watermark]),
                       ),
                       incremental_mode microbatch,
                       batch_size 1d,
@@ -184,6 +184,13 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 ),
             ),
             expected_absent_runtime_fragments=("__SQB_CURSOR_START__", "__SQB_CURSOR_END__"),
+            expected_full_refresh_exit_code=1,
+            expected_full_refresh_error_fragment="required cursor watermark is empty",
+            expected_full_refresh_counts=(
+                ("fact_orders", 0),
+                ("order_status_index", 0),
+                ("hourly_order_activity", 3),
+            ),
         )
     ],
     ids=lambda case: case.description,
@@ -249,11 +256,16 @@ def test_given_inline_project_when_building_model_backed_cursor_models_then_it_s
         command=("--no-color", "build", "--full-refresh"), project_dir=project_dir
     )
 
-    assert full_refresh_result.returncode == 0, (
+    assert full_refresh_result.returncode == test_case.expected_full_refresh_exit_code, (
         full_refresh_result.stdout + full_refresh_result.stderr
     )
-    for table_name in test_case.expected_table_names:
+    assert test_case.expected_full_refresh_error_fragment is not None
+    assert test_case.expected_full_refresh_error_fragment in (
+        full_refresh_result.stdout + full_refresh_result.stderr
+    )
+    expected_count: int
+    for table_name, expected_count in test_case.expected_full_refresh_counts:
         assert table_exists(db_path=db_path, table_name=table_name)
         assert query_duckdb(db_path=db_path, sql=f"SELECT COUNT(*) FROM main.{table_name}") == [
-            (0,)
+            (expected_count,)
         ]

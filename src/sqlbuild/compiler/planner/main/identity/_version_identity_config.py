@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
+from sqlbuild.compiler.compile.constants import CURSOR_INPUTS_CONFIG_KEY
+
 
 def build_version_identity_config(config_values: dict[str, object]) -> dict[str, object]:
     """Return config fields that affect produced model version identity."""
 
     identity: dict[str, object] = {}
-    legacy_filter_inputs: object | None = config_values.get("cursor_inputs")
-    filter_inputs: object | None = config_values.get("cursor_filter_inputs", legacy_filter_inputs)
-    watermark_inputs: object | None = config_values.get("cursor_watermark_inputs", filter_inputs)
-    if filter_inputs is not None:
-        identity["cursor_filter_inputs"] = filter_inputs
-        identity["cursor_watermark_inputs"] = watermark_inputs
+    if CURSOR_INPUTS_CONFIG_KEY in config_values:
+        identity[CURSOR_INPUTS_CONFIG_KEY] = config_values[CURSOR_INPUTS_CONFIG_KEY]
     version_identity_config_keys: tuple[str, ...] = (
         "append_cursor_inclusive",
         "batch_size",
@@ -20,6 +18,7 @@ def build_version_identity_config(config_values: dict[str, object]) -> dict[str,
         "cursor",
         "cursor_grain",
         "cursor_start",
+        "cursor_end",
         "cursor_start_max_ahead",
         "cursor_start_max_action",
         "cursor_future_max_distance",
@@ -27,6 +26,9 @@ def build_version_identity_config(config_values: dict[str, object]) -> dict[str,
         "cursor_type",
         "historical_input",
         "incremental_mode",
+        "microbatch_strategy",
+        "cursor_watermark_mode",
+        "max_microbatches",
         "incremental_strategy",
         "merge_exclude_columns",
         "full_refresh",

@@ -1088,9 +1088,11 @@ def test_given_view_model_python_hooks_with_provider_when_building_then_hooks_us
                   cursor_type timestamp,
                   cursor_grain hour,
                   cursor_inputs (
-                    fact_orders ordered_at,
-                  ),
+            fact_orders (column ordered_at, roles [filter, watermark]),
+          ),
                   incremental_mode microbatch,
+          microbatch_strategy watermark,
+          cursor_watermark_mode all,
                   batch_size 1d,
                   pre_hooks [python("mark_hook")],
                   post_hooks [python("mark_hook")]

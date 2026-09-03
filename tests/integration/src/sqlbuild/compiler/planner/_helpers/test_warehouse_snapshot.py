@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -8,6 +9,7 @@ import pytest
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
+    CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
@@ -25,6 +27,7 @@ from sqlbuild.compiler.planner.models import (
     ModelCursorSnapshot,
     WarehouseSnapshot,
 )
+from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry
 from tests.integration.src.sqlbuild.compiler.planner._helpers._test_types import (
     GatherCursorSnapshotTestCase,
     GatherEmptySnapshotTestCase,
@@ -35,6 +38,7 @@ from tests.integration.src.sqlbuild.compiler.planner._helpers._test_types import
     GatherSharedCursorSnapshotTestCase,
     GatherSourceColumnsTestCase,
     GatherWarehouseSnapshotTestCase,
+    GatherWatermarkTypeTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.planner._helpers.helpers import (
     RecordingDuckDbAdapter,
@@ -836,8 +840,14 @@ def test_given_broad_metadata_scope_when_gathering_selected_cursor_then_ignores_
                 cursor="event_time",
                 ref_names=("invalid_upstream",),
                 extra_config={
-                    "cursor_filter_inputs": {"invalid_upstream": "id"},
-                    "cursor_watermark_inputs": {"invalid_upstream": "meeting_date"},
+                    "microbatch_strategy": "watermark",
+                    "cursor_watermark_mode": "all",
+                    "cursor_inputs": {
+                        "invalid_upstream": {
+                            "column": "meeting_date",
+                            "roles": ["watermark"],
+                        }
+                    },
                 },
             ),
         ),
@@ -898,8 +908,14 @@ def test_given_selected_invalid_cursor_model_when_gathering_snapshot_then_raises
                 cursor="id",
                 ref_names=("invalid_upstream",),
                 extra_config={
-                    "cursor_filter_inputs": {"invalid_upstream": "id"},
-                    "cursor_watermark_inputs": {"invalid_upstream": "meeting_date"},
+                    "microbatch_strategy": "watermark",
+                    "cursor_watermark_mode": "all",
+                    "cursor_inputs": {
+                        "invalid_upstream": {
+                            "column": "meeting_date",
+                            "roles": ["watermark"],
+                        }
+                    },
                 },
             ),
         ),
@@ -927,6 +943,76 @@ def test_given_selected_invalid_cursor_model_when_gathering_snapshot_then_raises
         )
 
     assert exc_info.value.code == test_case.expected_error_code
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        GatherWatermarkTypeTestCase(
+            description="full refresh rejects time-only watermark",
+            declared_type="TIME",
+            expected_error_fragment="type TIME is incompatible",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_full_refresh_with_time_only_watermark_contract_when_gathering_then_type_validation_runs(
+    test_case: GatherWatermarkTypeTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+    execute: Any,
+) -> None:
+    project: CompiledProject = build_project_with_targets(
+        model_locations={"upstream_events": "staging"},
+        incremental_models=(
+            _IncrementalModelSpec(
+                name="daily_events",
+                schema="staging",
+                cursor="event_time",
+                ref_names=("upstream_events",),
+                extra_config={
+                    "incremental_mode": "microbatch",
+                    "microbatch_strategy": "watermark",
+                    "cursor_watermark_mode": "all",
+                    "cursor_type": "timestamp",
+                    "cursor_grain": "day",
+                    "cursor_inputs": {
+                        "upstream_events": {
+                            "column": "event_time",
+                            "roles": ["watermark"],
+                        }
+                    },
+                },
+            ),
+        ),
+    )
+    upstream: CompiledModel = replace(
+        project.models[0],
+        config=replace(
+            project.models[0].config,
+            values=project.models[0].config.values | {"contract": "enforced"},
+        ),
+        schema_entry=SchemaModelEntry(
+            name="upstream_events",
+            columns=(SchemaColumn(name="event_time", type=test_case.declared_type),),
+        ),
+    )
+    project = replace(project, models=(upstream, project.models[1]))
+    daily_key: CompiledObjectKey = project.models[1].key
+
+    with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):
+        gather_warehouse_snapshot(
+            project=project,
+            adapter=adapter,
+            connection=connection,
+            execute=execute,
+            selected_keys=frozenset(model.key for model in project.models),
+            full_refresh_model_names=frozenset({"daily_events"}),
+            cursor_scope=CursorSnapshotScope(
+                model_keys=frozenset({daily_key}),
+                runtime_producer_keys=frozenset({daily_key}),
+            ),
+        )
 
 
 if __name__ == "__main__":

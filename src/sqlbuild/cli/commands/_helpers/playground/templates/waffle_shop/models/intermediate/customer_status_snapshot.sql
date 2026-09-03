@@ -13,7 +13,7 @@ MODEL (
       ),
     ),
   ),
-  cursor_filter_inputs (
+  cursor_inputs (
     fact_orders ordered_at,
   ),
   on_schema_change sync_all_columns,

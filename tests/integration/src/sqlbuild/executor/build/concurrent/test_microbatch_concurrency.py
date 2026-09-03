@@ -115,12 +115,14 @@ def test_given_three_batch_ceiling_when_incremental_runs_then_batches_overlap(
               materialized incremental,
               incremental_strategy delete_insert,
               incremental_mode microbatch,
+          microbatch_strategy watermark,
+          cursor_watermark_mode all,
               cursor event_time,
               cursor_type timestamp,
               cursor_grain hour,
               cursor_inputs (
-                raw_events event_time,
-              ),
+            raw_events (column event_time, roles [filter, watermark]),
+          ),
               batch_size 1h,
               batch_concurrency 3,
             );
@@ -138,12 +140,14 @@ def test_given_three_batch_ceiling_when_incremental_runs_then_batches_overlap(
               materialized incremental,
               incremental_strategy delete_insert,
               incremental_mode microbatch,
+          microbatch_strategy watermark,
+          cursor_watermark_mode all,
               cursor event_time,
               cursor_type timestamp,
               cursor_grain hour,
               cursor_inputs (
-                raw_events event_time,
-              ),
+            raw_events (column event_time, roles [filter, watermark]),
+          ),
               batch_size 1h,
               batch_concurrency 3,
             );

@@ -107,9 +107,11 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                   cursor_type timestamp,
                   cursor_grain hour,
                   cursor_inputs (
-                    fact_orders ordered_at,
-                  ),
+            fact_orders (column ordered_at, roles [filter, watermark]),
+          ),
                   incremental_mode microbatch,
+          microbatch_strategy watermark,
+          cursor_watermark_mode all,
                   batch_size 1d,
                 );
 
@@ -132,9 +134,11 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                   cursor_type timestamp,
                   cursor_grain day,
                   cursor_inputs (
-                    hourly_order_activity activity_hour,
-                  ),
+            hourly_order_activity (column activity_hour, roles [filter, watermark]),
+          ),
                   incremental_mode microbatch,
+          microbatch_strategy watermark,
+          cursor_watermark_mode all,
                   batch_size 2d,
                 );
 
@@ -157,9 +161,12 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                   cursor_type timestamp,
                   cursor_grain hour,
                   cursor_inputs (
-                    daily_activity_rollup activity_day,
+                    hourly_order_activity (column activity_hour, roles [filter]),
+                    daily_activity_rollup (column activity_day, roles [filter, watermark]),
                   ),
                   incremental_mode microbatch,
+          microbatch_strategy watermark,
+          cursor_watermark_mode all,
                   batch_size 1d,
                 );
 
@@ -179,7 +186,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             initial_command=("--no-color", "build"),
             rerun_command=("--debug", "build", "--select", "hourly_activity_with_daily_context"),
             expected_exit_code=0,
-            expected_window_fragment="window=2026-04-03T14:00:00..2026-04-04T01:00:00",
+            expected_window_fragment="window=2026-04-03T11:00:00..2026-04-04T00:00:00",
             expected_row_count=1,
         )
     ],

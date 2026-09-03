@@ -285,6 +285,7 @@ def _build_cursor_subquery(
     """Wrap a qualified name in a cursor-filtered subquery."""
 
     lower_operator: str = ">=" if lower_bound_inclusive else ">"
+    upper_operator: str = "<=" if cursor_type is None else "<"
     start_literal: str = adapter.render_cursor_bound_literal(
         value=bounds.start, cursor_type=cursor_type
     )
@@ -297,7 +298,7 @@ def _build_cursor_subquery(
     return (
         f"(SELECT * FROM {qualified_name}"
         f" WHERE {cursor_column} {lower_operator} {start_literal}"
-        f" AND {cursor_column} < {end_literal}){derived_alias}"
+        f" AND {cursor_column} {upper_operator} {end_literal}){derived_alias}"
     )
 
 

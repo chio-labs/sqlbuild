@@ -246,10 +246,13 @@ class DefaultsConfig:
     function_schema: str | None = None
     incremental_strategy: str | None = None
     incremental_mode: str | None = None
+    microbatch_strategy: str | None = None
+    cursor_watermark_mode: str | None = None
     merge_exclude_columns: tuple[str, ...] = field(default_factory=tuple)
     full_refresh: bool | None = None
     append_cursor_inclusive: object | None = None
     cursor_start: object | None = None
+    cursor_end: object | None = None
     cursor_start_max_ahead: str | None = None
     cursor_start_max_action: str | None = None
     cursor_future_max_distance: str | None = None
@@ -257,6 +260,7 @@ class DefaultsConfig:
     lookback: str | None = None
     batch_size: str | int | None = None
     batch_concurrency: int | None = None
+    max_microbatches: int | None = None
     unaccounted_partition_policy: str | None = None
     replay_on_change: str | None = None
     run_despite_unchanged: str | None = None

@@ -82,6 +82,7 @@ def build_planner_entry_results(
                     else None
                 )
             ),
+            max_microbatches_is_override=overrides.max_microbatches is not None,
             microbatch_limit_action=(
                 runtime.project_config.microbatches.limits.action
                 if runtime.project_config is not None

@@ -291,10 +291,14 @@ def test_given_virtual_microbatch_history_when_running_janitor_then_events_remai
                   materialized incremental,
                   incremental_strategy delete_insert,
                   incremental_mode microbatch,
+          microbatch_strategy watermark,
+          cursor_watermark_mode all,
                   cursor event_time,
                   cursor_type timestamp,
                   cursor_grain hour,
-                  cursor_inputs (raw_events event_time,),
+                  cursor_inputs (
+            raw_events (column event_time, roles [filter, watermark]),
+          ),
                   batch_size 1h,
                   batch_concurrency 2,
                 );

@@ -480,6 +480,9 @@ class ModelBackedCursorBuildE2ETestCase:
     expected_table_names: tuple[str, ...]
     expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
     expected_absent_runtime_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_full_refresh_exit_code: int = 0
+    expected_full_refresh_error_fragment: str | None = None
+    expected_full_refresh_counts: tuple[tuple[str, int], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

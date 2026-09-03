@@ -22,6 +22,23 @@ class MicrobatchReconciliationChunkTestCase:
 
 
 @dataclass(frozen=True)
+class MicrobatchBehaviorTestCase:
+    """Named single-path microbatch regression case."""
+
+    description: str
+    expected_outcome: object
+
+
+@dataclass(frozen=True)
+class RuntimeWatermarkGrainTestCase:
+    description: str
+    consumer_grain: str
+    producer_grain: str
+    producer_maximum: str
+    expected_end: str
+
+
+@dataclass(frozen=True)
 class MicrobatchSuccessTestCase:
     """Test case where microbatch execution succeeds."""
 

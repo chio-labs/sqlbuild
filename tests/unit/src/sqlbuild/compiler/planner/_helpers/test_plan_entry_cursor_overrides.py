@@ -17,6 +17,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     _compute_microbatch_range,
     _compute_plan_cursor_bounds,
+    _MicrobatchRangeInputs,
 )
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
@@ -179,12 +180,18 @@ def test_given_runtime_owned_missing_snapshot_when_overrides_complete_then_all_r
     )
     microbatch_range: CursorBounds | None = _compute_microbatch_range(
         model=microbatch_model,
-        snapshot=snapshot,
-        backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
-        start_cursor_override=test_case.start_override,
-        end_cursor_override=test_case.end_override,
-        runtime_owned_cursor_bounds=True,
-        cursor_input_relations=(),
+        inputs=_MicrobatchRangeInputs(
+            snapshot=snapshot,
+            backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+            start_cursor_override=test_case.start_override,
+            end_cursor_override=test_case.end_override,
+            runtime_owned_cursor_bounds=True,
+            cursor_input_relations=(),
+            future_cursor_config=None,
+            start_cursor_config=None,
+            invocation_time=None,
+            full_refresh=False,
+        ),
     )
 
     assert plan_bounds == test_case.expected_bounds
@@ -250,19 +257,25 @@ def test_given_planner_owned_model_backed_input_when_grain_is_coarser_then_range
 
     microbatch_range: CursorBounds | None = _compute_microbatch_range(
         model=model,
-        snapshot=snapshot,
-        backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
-        start_cursor_override=None,
-        end_cursor_override=None,
-        runtime_owned_cursor_bounds=False,
-        cursor_input_relations=(
-            CursorInputRelation(
-                relation="main.daily_rollup",
-                cursor_column="activity_day",
-                cursor_grain=test_case.upstream_grain,
-                is_model_backed=True,
-                is_runtime_produced=False,
+        inputs=_MicrobatchRangeInputs(
+            snapshot=snapshot,
+            backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+            start_cursor_override=None,
+            end_cursor_override=None,
+            runtime_owned_cursor_bounds=False,
+            cursor_input_relations=(
+                CursorInputRelation(
+                    relation="main.daily_rollup",
+                    cursor_column="activity_day",
+                    cursor_grain=test_case.upstream_grain,
+                    is_model_backed=True,
+                    is_runtime_produced=False,
+                ),
             ),
+            future_cursor_config=None,
+            start_cursor_config=None,
+            invocation_time=None,
+            full_refresh=False,
         ),
     )
 

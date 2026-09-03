@@ -137,6 +137,8 @@ INTEGRATION_MICROBATCH_KEYS: frozenset[str] = frozenset(
         "replay_requirement_state",
         "required_model_version_hash",
         "run_type",
+        "strategy",
+        "reason",
         "synthetic_completion_count",
         "unaccounted_interval_count",
         "unaccounted_partition_policy",

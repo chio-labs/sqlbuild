@@ -632,6 +632,16 @@ def _format_microbatch_result(result: ModelExecutionResult) -> dict[str, object]
         return None
     microbatch: dict[str, object] = {
         "run_type": result.microbatch_run_type,
+        **(
+            {"strategy": result.microbatch_strategy}
+            if result.microbatch_strategy is not None
+            else {}
+        ),
+        **(
+            {"reason": result.microbatch_plan_reason}
+            if result.microbatch_plan_reason is not None
+            else {}
+        ),
         "batch_count": result.batch_count,
         "batch_size": result.batch_size,
         "recovery_batch_count": result.microbatch_recovery_batch_count,

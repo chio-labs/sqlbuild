@@ -22,15 +22,15 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     "test_case",
     [
         CursorAliasWarningTestCase(
-            description="multiple legacy models emit one project warning",
+            description="cursor inputs emit no legacy alias warning",
             config_values=(
                 {"cursor_inputs": {"orders": "event_time"}},
                 {"cursor_inputs": {"shipments": "event_time"}},
             ),
-            expected_warning_count=1,
+            expected_warning_count=0,
         ),
         CursorAliasWarningTestCase(
-            description="new cursor role names emit no deprecation warning",
+            description="removed cursor role names emit no deprecation warning",
             config_values=(
                 {"cursor_filter_inputs": {"orders": "event_time"}},
                 {"cursor_watermark_inputs": {"raw_orders": "loaded_at"}},

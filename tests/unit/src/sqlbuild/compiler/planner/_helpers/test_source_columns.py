@@ -827,6 +827,8 @@ def test_given_cursor_relation_metadata_when_checking_runtime_ownership_then_onl
             producer_config={
                 "materialized": "incremental",
                 "incremental_mode": "microbatch",
+                "microbatch_strategy": "watermark",
+                "cursor_watermark_mode": "all",
                 "cursor": "event_id",
                 "cursor_type": "integer",
                 "cursor_grain": "month",
@@ -868,10 +870,14 @@ def test_given_unsupported_selected_edge_when_planning_then_watermark_is_runtime
             values={
                 "materialized": "incremental",
                 "incremental_mode": "microbatch",
+                "microbatch_strategy": "watermark",
+                "cursor_watermark_mode": "all",
                 "cursor": "event_time",
                 "cursor_type": "timestamp",
                 "cursor_grain": "day",
-                "cursor_watermark_inputs": {"upstream_events": "event_time"},
+                "cursor_inputs": {
+                    "upstream_events": {"column": "event_time", "roles": ["watermark"]}
+                },
             }
         ),
         destination=CompiledRelationLocation(None, "main", "daily_events", "main.daily_events"),

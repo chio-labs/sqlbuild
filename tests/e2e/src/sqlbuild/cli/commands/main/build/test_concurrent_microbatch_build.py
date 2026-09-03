@@ -55,17 +55,26 @@ def test_given_project_capability_disabled_when_batch_concurrency_exceeds_one_th
                   materialized incremental,
                   incremental_strategy delete_insert,
                   incremental_mode microbatch,
+          microbatch_strategy watermark,
+          cursor_watermark_mode all,
                   cursor event_time,
                   cursor_type timestamp,
                   cursor_grain hour,
+                  cursor_inputs (
+                    raw_events (column event_time, roles [filter, watermark]),
+                  ),
                   batch_size 1h,
                   batch_concurrency 2,
                 );
 
                 SELECT 1 AS id, TIMESTAMP '2026-01-01 00:00:00' AS event_time
+                FROM __source("raw_events")
                 """
             ).strip()
             + "\n",
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_events\n    schema: main\n    table: raw_events\n"
+            ),
         },
     )
 
@@ -120,12 +129,14 @@ def test_given_opt_in_concurrent_microbatch_when_building_twice_then_records_all
                   materialized incremental,
                   incremental_strategy delete_insert,
                   incremental_mode microbatch,
+          microbatch_strategy watermark,
+          cursor_watermark_mode all,
                   cursor event_time,
                   cursor_type timestamp,
                   cursor_grain hour,
                   cursor_inputs (
-                    raw_events event_time,
-                  ),
+            raw_events (column event_time, roles [filter, watermark]),
+          ),
                   batch_size 1h,
                   batch_concurrency 3,
                 );
@@ -244,12 +255,14 @@ def test_given_later_batches_succeed_when_one_batch_fails_then_next_run_recovers
                   materialized incremental,
                   incremental_strategy delete_insert,
                   incremental_mode microbatch,
+          microbatch_strategy watermark,
+          cursor_watermark_mode all,
                   cursor event_time,
                   cursor_type timestamp,
                   cursor_grain hour,
                   cursor_inputs (
-                    raw_events event_time,
-                  ),
+            raw_events (column event_time, roles [filter, watermark]),
+          ),
                   batch_size 1h,
                   batch_concurrency 3,
                 );
@@ -422,12 +435,14 @@ def test_given_microbatch_history_is_lost_when_reconciling_then_policy_is_applie
                   materialized incremental,
                   incremental_strategy delete_insert,
                   incremental_mode microbatch,
+          microbatch_strategy watermark,
+          cursor_watermark_mode all,
                   cursor event_time,
                   cursor_type timestamp,
                   cursor_grain hour,
                   cursor_inputs (
-                    raw_events event_time,
-                  ),
+            raw_events (column event_time, roles [filter, watermark]),
+          ),
                   batch_size 1h,
                   batch_concurrency 2,
                 );
@@ -804,12 +819,14 @@ def test_given_historical_backfill_when_normal_run_resumes_then_gap_to_normal_fl
                   materialized incremental,
                   incremental_strategy delete_insert,
                   incremental_mode microbatch,
+          microbatch_strategy watermark,
+          cursor_watermark_mode all,
                   cursor event_time,
                   cursor_type timestamp,
                   cursor_grain day,
                   cursor_inputs (
-                    raw_events event_time,
-                  ),
+            raw_events (column event_time, roles [filter, watermark]),
+          ),
                   batch_size 1d,
                 );
 
@@ -909,12 +926,14 @@ def test_given_no_new_cursor_work_when_history_is_lost_then_reconciliation_still
                   materialized incremental,
                   incremental_strategy delete_insert,
                   incremental_mode microbatch,
+          microbatch_strategy watermark,
+          cursor_watermark_mode all,
                   cursor event_time,
                   cursor_type timestamp,
                   cursor_grain hour,
                   cursor_inputs (
-                    raw_events event_time,
-                  ),
+            raw_events (column event_time, roles [filter, watermark]),
+          ),
                   batch_size 1h,
                   batch_concurrency 2,
                 );

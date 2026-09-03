@@ -7,6 +7,13 @@ from sqlbuild.spec.contracts.models import SourceEntry
 
 
 @dataclass(frozen=True)
+class GatherWatermarkTypeTestCase:
+    description: str
+    declared_type: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class GatherWarehouseSnapshotTestCase:
     description: str
     setup_sql: tuple[str, ...]

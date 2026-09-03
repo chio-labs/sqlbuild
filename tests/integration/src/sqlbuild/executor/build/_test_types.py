@@ -5,6 +5,13 @@ from sqlbuild.executor.scheduling.types import ExecutionStatus
 
 
 @dataclass(frozen=True)
+class CausalExecutionTestCase:
+    description: str
+    expected_status: ExecutionStatus
+    expected_minimum_cursor_start: str
+
+
+@dataclass(frozen=True)
 class BuildExecutionTestCase:
     """Test case for build plan execution with a fake project."""
 

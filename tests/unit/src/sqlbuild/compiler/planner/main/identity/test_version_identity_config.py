@@ -15,8 +15,18 @@ from tests.unit.src.sqlbuild.compiler.planner.main.identity._test_types import (
     "test_case",
     [
         VersionIdentityConfigTestCase(
-            description="filter inputs participate in model version identity",
-            config_key="cursor_filter_inputs",
+            description="cursor inputs participate in model version identity",
+            config_key="cursor_inputs",
+            expected_in_identity=True,
+        ),
+        VersionIdentityConfigTestCase(
+            description="exclusive cursor end participates in model version identity",
+            config_key="cursor_end",
+            expected_in_identity=True,
+        ),
+        VersionIdentityConfigTestCase(
+            description="microbatch strategy participates in model version identity",
+            config_key="microbatch_strategy",
             expected_in_identity=True,
         ),
         VersionIdentityConfigTestCase(
@@ -61,17 +71,23 @@ def test_given_cursor_role_config_when_building_identity_then_field_participates
     "test_case",
     [
         CursorRoleIdentityTestCase(
-            description="legacy alias migration preserves semantic identity",
+            description="removed split field is not an alias for cursor inputs",
             original_config={"cursor_inputs": {"orders": "event_time"}},
             changed_config={"cursor_filter_inputs": {"orders": "event_time"}},
-            expected_equal=True,
+            expected_equal=False,
         ),
         CursorRoleIdentityTestCase(
-            description="explicit watermark change updates semantic identity",
-            original_config={"cursor_filter_inputs": {"orders": "event_time"}},
+            description="explicit watermark role change updates semantic identity",
+            original_config={
+                "cursor_inputs": {"orders": {"column": "event_time", "roles": ["filter"]}}
+            },
             changed_config={
-                "cursor_filter_inputs": {"orders": "event_time"},
-                "cursor_watermark_inputs": {"raw_orders": "loaded_at"},
+                "cursor_inputs": {
+                    "orders": {
+                        "column": "event_time",
+                        "roles": ["filter", "watermark"],
+                    }
+                },
             },
             expected_equal=False,
         ),

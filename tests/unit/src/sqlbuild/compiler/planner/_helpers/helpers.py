@@ -928,8 +928,13 @@ def build_transitive_watermark_models(
             values={
                 "materialized": "incremental",
                 "cursor": "event_time",
-                "cursor_filter_inputs": {"orders_view": "event_time"},
-                "cursor_watermark_inputs": {watermark_name: watermark_column},
+                "incremental_mode": "microbatch",
+                "microbatch_strategy": "watermark",
+                "cursor_watermark_mode": "all",
+                "cursor_inputs": {
+                    "orders_view": {"column": "event_time", "roles": ["filter"]},
+                    watermark_name: {"column": watermark_column, "roles": ["watermark"]},
+                },
             }
         ),
         destination=CompiledRelationLocation(

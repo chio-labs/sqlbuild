@@ -139,6 +139,8 @@ class ModelExecutionResult:
     error_help: str | None = None
     error_message: str | None = None
     microbatch_run_type: str | None = None
+    microbatch_strategy: str | None = None
+    microbatch_plan_reason: str | None = None
     microbatch_recovery_batch_count: int = 0
     microbatch_known_gap_count: int = 0
     microbatch_unaccounted_interval_count: int = 0
@@ -240,6 +242,9 @@ class RuntimeCursorSpec:
     cursor_grain: str | None
     cursor_start: str | None
     cursor_input_relations: tuple[CursorInputRelation, ...]
+    cursor_end: str | None = None
+    cursor_watermark_mode: str = "all"
+    microbatch_strategy: str | None = None
     incremental_strategy: str | None = None
     incremental_mode: str | None = None
     start_cursor_override: str | None = None
