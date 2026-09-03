@@ -45,7 +45,7 @@ def finalize_build_cost(finalization: BuildCostFinalization) -> CostRunRecord | 
                 statement_ledger_path=(
                     finalization.project_dir
                     / "target"
-                    / "runs"
+                    / "executions"
                     / finalization.run_id
                     / "statements.jsonl"
                 ),

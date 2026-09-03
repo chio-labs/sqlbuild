@@ -32,6 +32,8 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "target/run/functions/python/is_completed_order_py.sql",
             ),
             expected_exit_code=0,
+            expected_compiler_cache_count=2,
+            expected_local_history=False,
             expected_compiled_paths=(
                 "target/compiled/models/marts/fact_orders.sql",
                 "target/compiled/functions/sql/is_completed_order.sql",
@@ -70,3 +72,8 @@ def test_given_full_build_when_running_selected_rerun_then_existing_runtime_arti
     for relative_path in test_case.expected_compiled_paths:
         path = project_dir / relative_path
         assert path.exists(), f"expected compiled artifact to exist: {path}"
+    compiler_caches: tuple[Path, ...] = tuple(
+        (project_dir / "target" / "cache" / "compiler").rglob("*.sqlite3")
+    )
+    assert len(compiler_caches) == test_case.expected_compiler_cache_count
+    assert (project_dir / ".sqlbuild").exists() is test_case.expected_local_history

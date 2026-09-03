@@ -9,8 +9,6 @@ from textwrap import dedent
 
 import pytest
 
-from sqlbuild.execution_history import EventFilter, EventPage
-from sqlbuild.sqlite_history import SQLiteExecutionHistory
 from tests.e2e.src.sqlbuild.cli.commands.main.providers._test_types import (
     EventExporterE2ETestCase,
     NoExporterCommandE2ETestCase,
@@ -175,15 +173,4 @@ def test_given_no_exporters_and_exploding_provider_when_non_provider_command_run
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
     assert not marker_path.exists()
     assert helper_marker_path.exists()
-    history: SQLiteExecutionHistory = SQLiteExecutionHistory(project_dir=project_dir)
-    try:
-        started_page: EventPage = history.get_events(
-            event_filter=EventFilter(event_types=("invocation_started",))
-        )
-        completed_page: EventPage = history.get_events(
-            event_filter=EventFilter(event_types=("invocation_completed",))
-        )
-    finally:
-        history.close()
-    assert len(started_page.records) == 1
-    assert len(completed_page.records) == 1
+    assert not (project_dir / ".sqlbuild").exists()

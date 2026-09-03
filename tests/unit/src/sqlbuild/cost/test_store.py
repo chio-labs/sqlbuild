@@ -37,7 +37,7 @@ def test_given_cost_run_when_writing_then_record_round_trips_exact_decimals(
 
     path: Path = RunCostStore.write(project_dir=tmp_path, record=record)
 
-    assert path == tmp_path / "target" / "runs" / test_case.expected_run_ids[0] / "run.json"
+    assert path == (tmp_path / "target" / "executions" / test_case.expected_run_ids[0] / "run.json")
     assert RunCostStore.read(project_dir=tmp_path, run_id=test_case.expected_run_ids[0]) == record
     assert not (path.parent / ".run.json.tmp").exists()
 

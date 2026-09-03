@@ -12,7 +12,7 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 @dataclass(frozen=True)
 class NoExporterFastPathTestCase:
     description: str
-    expected_history_events: int
+    expected_thread_delta: int
 
 
 @dataclass(frozen=True)
@@ -125,7 +125,6 @@ class MainErrorRenderingTestCase:
 @dataclass(frozen=True)
 class ObservabilityCleanupCase:
     description: str
-    expected_history_close_count: int
     expected_original_error: str
 
 

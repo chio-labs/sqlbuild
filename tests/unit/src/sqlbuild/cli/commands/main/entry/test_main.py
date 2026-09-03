@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import cast
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 from _pytest.capture import CaptureResult
 
-import sqlbuild.cli.commands.main.entrypoint._dispatch_with_history as history_dispatch_module
 from sqlbuild.cli.commands._helpers.entry.parsing import read_selector_files
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.main.entrypoint.entry import _main_with_dependencies, main
@@ -36,10 +33,8 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.planner.models import CursorOverrides
-from sqlbuild.execution_history import EventFilter, EventPage
-from sqlbuild.observability import ExecutionIdentity, current_execution_identity
+from sqlbuild.observability import EventDispatcher, ExecutionIdentity, current_execution_identity
 from sqlbuild.runtime.observability.models import LifecycleEvent
-from sqlbuild.sqlite_history import SQLiteExecutionHistory
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     MainErrorRenderingTestCase,
     MainTestCase,
@@ -2837,110 +2832,22 @@ def test_given_root_help_when_cli_returns_then_invocation_identity_is_restored(
     "test_case",
     [
         MainTestCase(
-            description="local history records invocation facts", argv=[], expected_exit_code=0
+            description="ordinary command does not create local history",
+            argv=[],
+            expected_exit_code=0,
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_parsed_project_command_when_dispatching_then_invocation_facts_persist(
+def test_given_parsed_project_command_when_dispatching_then_local_history_is_not_created(
     tmp_path: Path, test_case: MainTestCase
 ) -> None:
     argv: list[str] = ["--project-dir", str(tmp_path), "compile"]
 
     exit_code: int = _main_with_dependencies(argv=argv, handlers=build_handlers())
-    history: SQLiteExecutionHistory = SQLiteExecutionHistory(project_dir=tmp_path)
-    page: EventPage = history.get_events(event_filter=EventFilter())
-    event_types: tuple[str, ...] = tuple(
-        cast(LifecycleEvent, record.event).event_type for record in page.records
-    )
-    history.close()
 
     assert exit_code == test_case.expected_exit_code
-    assert event_types == ("invocation_started", "invocation_completed")
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        MainTestCase(
-            description="history publication failure preserves handler result",
-            argv=[],
-            expected_exit_code=7,
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_history_write_failure_when_dispatching_then_handler_output_and_result_are_unchanged(
-    tmp_path: Path,
-    test_case: MainTestCase,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    caplog.set_level(logging.DEBUG, logger="sqlbuild.cli.execution_history")
-    monkeypatch.setattr(
-        SQLiteExecutionHistory,
-        "append_and_project",
-        Mock(side_effect=OSError("controlled storage failure")),
-    )
-
-    def run_compile(_request: CompileCommandRequest) -> int:
-        print("unchanged command output")
-        return test_case.expected_exit_code
-
-    exit_code: int = _main_with_dependencies(
-        argv=["--project-dir", str(tmp_path), "compile"],
-        handlers=build_handlers(run_compile=run_compile),
-    )
-    captured: CaptureResult[str] = capsys.readouterr()
-
-    assert exit_code == test_case.expected_exit_code
-    assert captured.out == "unchanged command output\n"
-    capture_dir: Path = tuple((tmp_path / "logs").glob("*/*"))[0]
-    diagnostic_text: str = (capture_dir / "diagnostics.jsonl").read_text(encoding="utf-8")
-    assert "local execution history persistence failed" in diagnostic_text
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        MainTestCase(
-            description="history constructor failure preserves handler result",
-            argv=[],
-            expected_exit_code=6,
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_history_open_failure_when_dispatching_then_handler_output_and_result_are_unchanged(
-    tmp_path: Path,
-    test_case: MainTestCase,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    caplog.set_level(logging.DEBUG, logger="sqlbuild.cli.execution_history")
-    monkeypatch.setattr(
-        history_dispatch_module,
-        "SQLiteExecutionHistory",
-        Mock(side_effect=OSError("controlled open failure")),
-    )
-
-    def run_compile(_request: CompileCommandRequest) -> int:
-        print("output survives open failure")
-        return test_case.expected_exit_code
-
-    exit_code: int = _main_with_dependencies(
-        argv=["--project-dir", str(tmp_path), "compile"],
-        handlers=build_handlers(run_compile=run_compile),
-    )
-    captured: CaptureResult[str] = capsys.readouterr()
-
-    assert exit_code == test_case.expected_exit_code
-    assert captured.out == "output survives open failure\n"
-    capture_dir: Path = tuple((tmp_path / "logs").glob("*/*"))[0]
-    diagnostic_text: str = (capture_dir / "diagnostics.jsonl").read_text(encoding="utf-8")
-    assert "local execution history unavailable" in diagnostic_text
+    assert not (tmp_path / ".sqlbuild").exists()
 
 
 @pytest.mark.parametrize(
@@ -2952,19 +2859,15 @@ def test_given_history_open_failure_when_dispatching_then_handler_output_and_res
     ],
     ids=lambda case: case.description,
 )
-def test_given_nonzero_handler_result_when_dispatching_then_exactly_one_failed_terminal_persists(
+def test_given_nonzero_handler_result_when_dispatching_then_exactly_one_failed_terminal_is_published(
     tmp_path: Path, test_case: MainTestCase
 ) -> None:
-    exit_code: int = _main_with_dependencies(
-        argv=["--project-dir", str(tmp_path), "compile"],
-        handlers=build_handlers(run_compile=lambda _request: test_case.expected_exit_code),
-    )
-    history: SQLiteExecutionHistory = SQLiteExecutionHistory(project_dir=tmp_path)
-    page: EventPage = history.get_events(event_filter=EventFilter())
-    events: tuple[LifecycleEvent, ...] = tuple(
-        cast(LifecycleEvent, record.event) for record in page.records
-    )
-    history.close()
+    with patch.object(EventDispatcher, "publish_lifecycle") as publish:
+        exit_code: int = _main_with_dependencies(
+            argv=["--project-dir", str(tmp_path), "compile"],
+            handlers=build_handlers(run_compile=lambda _request: test_case.expected_exit_code),
+        )
+    events: tuple[LifecycleEvent, ...] = tuple(call.args[0] for call in publish.call_args_list)
 
     assert exit_code == test_case.expected_exit_code
     assert tuple(event.event_type for event in events) == (
@@ -2989,16 +2892,12 @@ def test_given_handler_exception_when_dispatching_then_failed_terminal_has_origi
     def run_compile(_request: CompileCommandRequest) -> int:
         raise ValueError("controlled command exception")
 
-    exit_code: int = _main_with_dependencies(
-        argv=["--project-dir", str(tmp_path), "compile"],
-        handlers=build_handlers(run_compile=run_compile),
-    )
-    history: SQLiteExecutionHistory = SQLiteExecutionHistory(project_dir=tmp_path)
-    page: EventPage = history.get_events(event_filter=EventFilter())
-    events: tuple[LifecycleEvent, ...] = tuple(
-        cast(LifecycleEvent, record.event) for record in page.records
-    )
-    history.close()
+    with patch.object(EventDispatcher, "publish_lifecycle") as publish:
+        exit_code: int = _main_with_dependencies(
+            argv=["--project-dir", str(tmp_path), "compile"],
+            handlers=build_handlers(run_compile=run_compile),
+        )
+    events: tuple[LifecycleEvent, ...] = tuple(call.args[0] for call in publish.call_args_list)
 
     assert exit_code == test_case.expected_exit_code
     assert tuple(event.event_type for event in events) == (
@@ -3017,22 +2916,18 @@ def test_given_handler_exception_when_dispatching_then_failed_terminal_has_origi
     ],
     ids=lambda case: case.description,
 )
-def test_given_handler_system_exit_when_dispatching_then_failed_terminal_is_persisted_once(
+def test_given_handler_system_exit_when_dispatching_then_failed_terminal_is_published_once(
     tmp_path: Path, test_case: MainTestCase
 ) -> None:
     def run_compile(_request: CompileCommandRequest) -> int:
         raise SystemExit(test_case.expected_exit_code)
 
-    exit_code: int = _main_with_dependencies(
-        argv=["--project-dir", str(tmp_path), "compile"],
-        handlers=build_handlers(run_compile=run_compile),
-    )
-    history: SQLiteExecutionHistory = SQLiteExecutionHistory(project_dir=tmp_path)
-    page: EventPage = history.get_events(event_filter=EventFilter())
-    events: tuple[LifecycleEvent, ...] = tuple(
-        cast(LifecycleEvent, record.event) for record in page.records
-    )
-    history.close()
+    with patch.object(EventDispatcher, "publish_lifecycle") as publish:
+        exit_code: int = _main_with_dependencies(
+            argv=["--project-dir", str(tmp_path), "compile"],
+            handlers=build_handlers(run_compile=run_compile),
+        )
+    events: tuple[LifecycleEvent, ...] = tuple(call.args[0] for call in publish.call_args_list)
 
     assert exit_code == test_case.expected_exit_code
     assert tuple(event.event_type for event in events) == (

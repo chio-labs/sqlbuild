@@ -247,7 +247,7 @@ LIFECYCLE_CONSTRUCTION_OWNER_PATHS: frozenset[str] = frozenset(
 )
 LIFECYCLE_FACTORY_OWNER_PATHS: frozenset[str] = frozenset(
     {
-        "src/sqlbuild/cli/commands/main/entrypoint/_dispatch_with_history.py",
+        "src/sqlbuild/cli/commands/main/entrypoint/_dispatch_with_observability.py",
         "src/sqlbuild/executor/pipeline/main/run.py",
         "src/sqlbuild/observability.py",
         "src/sqlbuild/runtime/observability/classes/operation_lifecycle.py",

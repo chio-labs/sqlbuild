@@ -78,7 +78,7 @@ def refresh_pending_cost_run(request: CostCommandRequest) -> None:
             started_at=record.started_at,
             completed_at=record.completed_at,
             statement_ledger_path=(
-                project_dir / "target" / "runs" / record.run_id / "statements.jsonl"
+                project_dir / "target" / "executions" / record.run_id / "statements.jsonl"
             ),
             usd_per_credit=record.cost.usd_per_credit,
             rate_source=record.cost.rate_source,

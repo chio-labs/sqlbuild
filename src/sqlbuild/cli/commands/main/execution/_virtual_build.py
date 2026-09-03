@@ -171,7 +171,9 @@ def _complete_virtual_build(
         run_id=result.project.run_id,
         resource_type="run",
         resource_name=result.project.effective_target_name or adapter_name,
-        ledger_path=project_dir / "target" / "runs" / result.project.run_id / "statements.jsonl",
+        ledger_path=(
+            project_dir / "target" / "executions" / result.project.run_id / "statements.jsonl"
+        ),
         phase="post_build_checks",
     ):
         check_results: tuple[PythonCheckExecutionResult, ...] = run_post_virtual_build_checks(

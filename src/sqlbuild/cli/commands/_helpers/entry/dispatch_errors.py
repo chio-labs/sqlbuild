@@ -8,7 +8,9 @@ from sqlbuild.cli.commands._helpers.entry.errors import format_expected_error
 from sqlbuild.cli.commands._helpers.skills.update import maintain_sqlbuild_skills
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.main.entrypoint._dispatch_with_history import dispatch_with_history
+from sqlbuild.cli.commands.main.entrypoint._dispatch_with_observability import (
+    dispatch_with_observability,
+)
 from sqlbuild.cli.commands.models import (
     CliEntrypointHandlers,
     ParsedCliInvocation,
@@ -31,7 +33,7 @@ def dispatch_and_handle_errors(
     """Dispatch once and preserve the CLI's established error projection."""
 
     try:
-        return dispatch_with_history(args=args, handlers=handlers)
+        return dispatch_with_observability(args=args, handlers=handlers)
     except SystemExit as error:
         return error.code if isinstance(error.code, int) else 1
     except (CliUserError, KataError) as error:
