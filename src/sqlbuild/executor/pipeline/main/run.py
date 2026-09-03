@@ -90,7 +90,9 @@ def run_build_pipeline(
                 run_id=runtime.run_id,
                 resource_type="run",
                 resource_name=runtime.target,
-                ledger_path=runtime.runtime_dir / "runs" / runtime.run_id / "statements.jsonl",
+                ledger_path=(
+                    runtime.runtime_dir / "executions" / runtime.run_id / "statements.jsonl"
+                ),
                 phase="build",
                 on_statement_complete=(
                     None if callbacks is None else callbacks.on_statement_complete

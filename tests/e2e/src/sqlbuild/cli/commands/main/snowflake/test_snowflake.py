@@ -808,7 +808,7 @@ def test_given_snowflake_local_config_when_running_query_then_outputs_expected_r
             assert fragment in result.stdout
         assert "Cost" in result.stdout
         run_artifacts: tuple[Path, ...] = tuple(
-            (project_dir / "target" / "runs").glob("*/run.json")
+            (project_dir / "target" / "executions").glob("*/run.json")
         )
         assert len(run_artifacts) == 1
         run_payload: dict[str, Any] = json.loads(run_artifacts[0].read_text(encoding="utf-8"))
@@ -1346,7 +1346,7 @@ def test_given_snapshot_project_when_building_on_snowflake_then_scd2_history_is_
             assert fragment in failure_result.stdout + failure_result.stderr
         cost_run_payloads: tuple[dict[str, Any], ...] = tuple(
             json.loads(path.read_text(encoding="utf-8"))
-            for path in (project_dir / "target" / "runs").glob("*/run.json")
+            for path in (project_dir / "target" / "executions").glob("*/run.json")
         )
         assert any(payload["build_status"] == "failed" for payload in cost_run_payloads)
         assert_current_snowflake_snapshot_rows(

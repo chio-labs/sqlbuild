@@ -12,7 +12,7 @@ from tests.unit.src.sqlbuild.cost._test_types import CostResourceScopeTestCase
     [
         CostResourceScopeTestCase(
             description="inherits run ledger while overriding resource phase and attempt",
-            ledger_path=Path("target/runs/run-1/statements.jsonl"),
+            ledger_path=Path("target/executions/run-1/statements.jsonl"),
             expected_resource_type="task",
             expected_resource_name="refresh_orders",
             expected_phase="execute",

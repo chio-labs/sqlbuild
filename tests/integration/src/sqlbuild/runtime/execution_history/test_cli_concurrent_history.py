@@ -1,4 +1,4 @@
-"""Concurrent CLI publication tests for project-local SQLite history."""
+"""Concurrent explicit SQLite subscriptions to CLI lifecycle publication."""
 
 from __future__ import annotations
 
@@ -14,10 +14,17 @@ import pytest
 
 from sqlbuild.cli.commands._helpers.entry.observability import cli_observability_scope
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
-from sqlbuild.execution_history import EventFilter, EventPage, RunRecord, RunStatus
+from sqlbuild.execution_history import (
+    CanonicalLifecycleEvent,
+    EventFilter,
+    EventPage,
+    RunRecord,
+    RunStatus,
+)
 from sqlbuild.observability import (
     LifecycleEvent,
     ResourceAttemptLifecycle,
+    Unsubscribe,
     create_lifecycle_event,
     invocation_scope,
     run_scope,
@@ -41,13 +48,14 @@ from tests.integration.src.sqlbuild.runtime.execution_history.helpers import lif
     ),
     ids=lambda case: case.description,
 )
-def test_given_cli_history_when_two_workers_publish_then_all_events_and_projection_persist(
+def test_given_explicit_cli_history_when_two_workers_publish_then_events_and_projection_persist(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
     test_case: ConcurrentSQLiteHistoryCase,
 ) -> None:
     caplog.set_level(logging.DEBUG)
     args: CliNamespace = CliNamespace()
+    history: SQLiteExecutionHistory = SQLiteExecutionHistory(project_dir=tmp_path)
 
     def execute_attempt(resource_name: str) -> None:
         with ResourceAttemptLifecycle(
@@ -58,35 +66,46 @@ def test_given_cli_history_when_two_workers_publish_then_all_events_and_projecti
         ):
             pass
 
+    def persist_event(event: CanonicalLifecycleEvent) -> None:
+        _ = history.append_and_project((event,))
+
     with invocation_scope("concurrent-invocation"):
         with cli_observability_scope(args=args, project_dir=tmp_path) as dispatcher:
-            with run_scope("concurrent-run"):
-                dispatcher.publish_lifecycle(
-                    create_lifecycle_event(
-                        event_type="run_started",
-                        payload={"run_kind": "build", "selected_count": 2},
+            unsubscribe: Unsubscribe = dispatcher.subscribe_lifecycle(
+                subscriber=persist_event,
+                accepts_opaque=True,
+            )
+            try:
+                with run_scope("concurrent-run"):
+                    dispatcher.publish_lifecycle(
+                        create_lifecycle_event(
+                            event_type="run_started",
+                            payload={"run_kind": "build", "selected_count": 2},
+                        )
                     )
-                )
-                contexts: tuple[Context, Context] = (copy_context(), copy_context())
-                with ThreadPoolExecutor(max_workers=2) as pool:
-                    first: Future[Any] = pool.submit(contexts[0].run, execute_attempt, "first")
-                    second: Future[Any] = pool.submit(contexts[1].run, execute_attempt, "second")
-                    first.result()
-                    second.result()
-                dispatcher.publish_lifecycle(
-                    create_lifecycle_event(
-                        event_type="run_completed",
-                        payload={
-                            "run_kind": "build",
-                            "succeeded_count": 2,
-                            "failed_count": 0,
-                            "skipped_count": 0,
-                            "duration_ms": 1,
-                        },
+                    contexts: tuple[Context, Context] = (copy_context(), copy_context())
+                    with ThreadPoolExecutor(max_workers=2) as pool:
+                        first: Future[Any] = pool.submit(contexts[0].run, execute_attempt, "first")
+                        second: Future[Any] = pool.submit(
+                            contexts[1].run, execute_attempt, "second"
+                        )
+                        first.result()
+                        second.result()
+                    dispatcher.publish_lifecycle(
+                        create_lifecycle_event(
+                            event_type="run_completed",
+                            payload={
+                                "run_kind": "build",
+                                "succeeded_count": 2,
+                                "failed_count": 0,
+                                "skipped_count": 0,
+                                "duration_ms": 1,
+                            },
+                        )
                     )
-                )
+            finally:
+                unsubscribe()
 
-    history: SQLiteExecutionHistory = SQLiteExecutionHistory(project_dir=tmp_path)
     page: EventPage = history.get_events(event_filter=EventFilter(run_id="concurrent-run"))
     run: RunRecord | None = history.get_run("concurrent-run")
     history.close()
@@ -107,7 +126,7 @@ def test_given_cli_history_when_two_workers_publish_then_all_events_and_projecti
     assert run is not None
     assert run.status == RunStatus.COMPLETED
     assert not tuple(
-        filter(lambda record: "history persistence failed" in record.message, caplog.records)
+        filter(lambda record: "Lifecycle event subscriber failed" in record.message, caplog.records)
     )
 
 

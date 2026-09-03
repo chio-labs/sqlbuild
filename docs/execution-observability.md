@@ -7,11 +7,11 @@ record that answers the question instead of treating every JSON or log file as i
 
 | Record | Purpose | Authority and retention |
 | --- | --- | --- |
-| `LifecycleEvent` | Immutable facts about invocation, run, resource-attempt, operation, retry, and statement lifecycles | Canonical execution evidence. An `EventLogStorage` is authoritative once the fact is durable. Local SQLite and deployed PostgreSQL retain facts until an operator removes the database or applies an external retention policy. |
+| `LifecycleEvent` | Immutable facts about invocation, run, resource-attempt, operation, retry, and statement lifecycles | Canonical execution evidence. An explicitly attached `EventLogStorage` is authoritative once the fact is durable. SQLite and PostgreSQL retain facts until an operator removes the database or applies an external retention policy. |
 | `DiagnosticLog` | Structured framework and user diagnostics | Explanatory only. It cannot establish that work started, completed, failed, skipped, or retried. Local compute-log retention applies. |
 | `stdout.log` and `stderr.log` | Exact process output for one invocation | Troubleshooting data, not execution truth. Local compute-log retention applies. |
 | `target/run/` | Full executed model, function, and test SQL, Python-check output, and scenario artifacts | Sensitive, command-written runtime artifacts. This shared tree is not invocation-isolated and may be replaced by later commands. It is not lifecycle truth. |
-| `target/runs/<run_id>/statements.jsonl` | Best-effort run statement ledger with statement/resource identity, status, timing, query ID, and SQL SHA256 | A run-owned cost/query-ID input. It omits SQL text and does not establish lifecycle status. SQLBuild has no automatic retention for this tree. |
+| `target/executions/<run_id>/statements.jsonl` | Best-effort run statement ledger with statement/resource identity, status, timing, query ID, and SQL SHA256 | A run-owned cost/query-ID input. It omits SQL text and does not establish lifecycle status. SQLBuild has no automatic retention for this tree. |
 | `RunRecord` | Current run summary rebuilt from durable run facts | Disposable serving state. Rebuild it from the event log; never use it as the only lifecycle authority. |
 | Integration-result JSONL | Bounded resource terminal plus integration enrichment | Canonical SQLBuild-owned integration side channel, but still a projection/consumer of lifecycle facts rather than event history. |
 | Final `--json` or `--json-output` document | Aggregate command result | A separate end-of-command projection. It is not enabled by integration-result output and is not lifecycle authority. |
@@ -110,9 +110,8 @@ logs/2026-09-02/INVOCATION_ID/
   stderr.log
   diagnostics.jsonl
   complete
-.sqlbuild/history.sqlite3
 target/run/
-target/runs/<run_id>/statements.jsonl
+target/executions/<run_id>/statements.jsonl
 ```
 
 `metadata.json` initially records the invocation, command, resolved project directory, UTC start
@@ -153,21 +152,39 @@ users must call `prune()` themselves; setting `retention_count=None` makes that 
 
 The local files are host-local. The compute-log implementation rejects symlink roots and path
 escapes but does not force file modes; permissions follow directory ownership and the process umask.
-Set a restrictive umask and secure or encrypt the host volume. SQLite creates `.sqlbuild/` with
-mode `0700` when new and applies mode `0600` to `history.sqlite3`; operators must still secure parent
-directories, SQLite sidecar files, backups, `logs/`, and `target/`.
+Set a restrictive umask and secure or encrypt the host volume. Operators must secure parent
+directories, backups, `logs/`, and `target/`. An explicitly constructed SQLite history creates
+`.sqlbuild/` with mode `0700` when new and applies mode `0600` to `history.sqlite3`; the CLI does not
+construct execution-history storage implicitly.
 
 SQLBuild does not write a shared `target/sqlbuild.log`. Use the invocation-specific paths above so
 concurrent and historical command diagnostics remain isolated. Project-creation commands (`sqb
 init`, `sqb playground`, and `sqb dbt init`) create none of these runtime paths in the destination
 before project creation.
 
+## Target layout
+
+`target/` contains disposable generated artifacts and caches:
+
+| Path | Contents |
+| --- | --- |
+| `target/cache/compiler/` | Regenerable compiler analysis, SQL-reference, and declaration-scope caches. |
+| `target/compiled/` | Human-inspectable compiled models, functions, audits, and tests. |
+| `target/run/` | Latest command's executable SQL and runtime artifacts; shared and replaceable. |
+| `target/executions/<run_id>/` | Per-run statement ledgers and cost records. |
+| `target/manifest.json` | Compiled project manifest when requested. |
+| `target/sqlbuild_dag.json` | Dagster-facing project DAG artifact when requested. |
+
+All cache and execution paths under `target/` may be removed and regenerated. SQLBuild does not
+read compatibility paths such as `target/compile-cache/`, `target/runs/`, or the removed dbt reuse
+cache under `target/sqlbuild/`.
+
 ## Failure behavior
 
 | Failure | Evidence and command effect |
 | --- | --- |
-| Local SQLite unavailable | A sanitized diagnostic is attempted; the CLI continues without local durable history. Direct storage API calls raise `ExecutionHistoryStorageError`. |
-| Lifecycle storage append fails | The dispatcher isolates the history subscriber and command work continues. The missing fact cannot be recovered from a projection. |
+| Explicit lifecycle storage unavailable | Direct storage API calls raise `ExecutionHistoryStorageError`; the CLI does not select a backend implicitly. |
+| Lifecycle storage append fails | The dispatcher isolates the explicitly attached history subscriber and command work continues. The missing fact cannot be recovered from a projection. |
 | Compute-log open or write fails | SQLBuild reports best-effort diagnostics, preserves console operation, and preserves the command result. The capture may be absent or incomplete. |
 | Integration-result path creation, open, append, flush, or close fails | The error is not best effort and can fail the command or integration-output phase. The JSONL file may contain a valid prefix. |
 | Final `--json-output` directory creation or write fails | The error can fail the command output phase. SQLBuild does not claim that the aggregate document was published. |

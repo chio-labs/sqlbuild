@@ -1,4 +1,4 @@
-"""CLI dispatcher, native progress, and local history subscription scope."""
+"""CLI lifecycle dispatcher, native progress, and exporter scope."""
 
 from __future__ import annotations
 
@@ -8,12 +8,7 @@ from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from contextvars import Token
 from pathlib import Path
-from typing import Any
 
-from sqlbuild.cli.commands._helpers.entry.history_diagnostics import (
-    log_history_dispatch_failure,
-    log_history_open_failure,
-)
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.constants import (
     CSV_OUTPUT_FORMAT,
@@ -31,8 +26,7 @@ from sqlbuild.cli.progress.classes.native_progress_projector import NativeProgre
 from sqlbuild.compiler.discovery.main.runtime_extensions import discover_runtime_extensions
 from sqlbuild.compiler.discovery.models import DiscoveredEventExporter, DiscoveredProvider
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
-from sqlbuild.execution_history import CanonicalLifecycleEvent
-from sqlbuild.observability import EventDispatcher, Unsubscribe, dispatcher_scope
+from sqlbuild.observability import DispatchFailure, EventDispatcher, Unsubscribe, dispatcher_scope
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.runtime.event_exporting.classes.command_scope import EventExporterCommandScope
 from sqlbuild.runtime.event_exporting.classes.dispatcher import EventExporterDispatcher
@@ -44,29 +38,15 @@ from sqlbuild.runtime.event_exporting.models import (
     EventExporterFailure,
     EventExportSummary,
 )
-from sqlbuild.sqlite_history import SQLiteExecutionHistory
 
 _LOGGER: logging.Logger = logging.getLogger("sqlbuild.cli.observability")
 
 
 @contextmanager
-def cli_observability_scope(
-    *, args: CliNamespace, project_dir: Path, history_factory: Any = SQLiteExecutionHistory
-) -> Iterator[EventDispatcher]:
-    """Install coexisting history and native progress lifecycle subscribers."""
+def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> Iterator[EventDispatcher]:
+    """Install native progress, terminal indexing, and configured event exporters."""
 
-    dispatcher: EventDispatcher = EventDispatcher(health_callback=log_history_dispatch_failure)
-    history: SQLiteExecutionHistory | None = _open_history(
-        project_dir=project_dir, history_factory=history_factory
-    )
-    unsubscribe_history: Unsubscribe | None = (
-        None
-        if history is None
-        else dispatcher.subscribe_lifecycle(
-            subscriber=lambda event: _persist_event(history=history, event=event),
-            accepts_opaque=True,
-        )
-    )
+    dispatcher: EventDispatcher = EventDispatcher(health_callback=_log_dispatch_failure)
     terminal_index: TerminalEventIndex = TerminalEventIndex()
     unsubscribe_terminal_index: Unsubscribe = dispatcher.subscribe_lifecycle(
         subscriber=terminal_index.consume,
@@ -127,27 +107,11 @@ def cli_observability_scope(
             _run_cleanup(action=exporter_scope.close, phase="event_exporter_shutdown")
         _run_cleanup(action=unsubscribe_terminal_index, phase="terminal_index_unsubscribe")
         _run_cleanup(action=unsubscribe_progress, phase="progress_unsubscribe")
-        if unsubscribe_history is not None:
-            _run_cleanup(action=unsubscribe_history, phase="history_unsubscribe")
         _run_cleanup(action=projector.close, phase="progress_close")
         _run_cleanup(
             action=lambda: projector.restore(projector_token),
             phase="progress_context_restore",
         )
-        if history is not None:
-            _run_cleanup(action=history.close, phase="history_close")
-
-
-def _persist_event(*, history: SQLiteExecutionHistory, event: CanonicalLifecycleEvent) -> None:
-    _ = history.append_and_project((event,))
-
-
-def _open_history(*, project_dir: Path, history_factory: Any) -> SQLiteExecutionHistory | None:
-    try:
-        return history_factory(project_dir=project_dir)
-    except Exception as error:
-        log_history_open_failure(error=error)
-        return None
 
 
 def _run_cleanup(*, action: Callable[[], object], phase: str) -> None:
@@ -167,6 +131,16 @@ def _report_cleanup_failure(*, error: BaseException, phase: str) -> None:
         )
     except BaseException:
         pass
+
+
+def _log_dispatch_failure(failure: DispatchFailure) -> None:
+    log_debug_event(
+        logger=_LOGGER,
+        message="Lifecycle event subscriber failed",
+        error_type=failure.error_type,
+        channel=failure.channel,
+        subscriber=failure.subscriber,
+    )
 
 
 def _log_exporter_failure(failure: EventExporterFailure) -> None:

@@ -1,4 +1,4 @@
-"""Best-effort local execution history around parsed CLI dispatch."""
+"""Canonical lifecycle publication around parsed CLI dispatch."""
 
 from __future__ import annotations
 
@@ -12,11 +12,10 @@ from sqlbuild.cli.commands.constants import DBT_INIT_COMMAND
 from sqlbuild.cli.commands.models import CliEntrypointHandlers
 from sqlbuild.cli.commands.types import CliCommand
 from sqlbuild.observability import create_lifecycle_event
-from sqlbuild.sqlite_history import SQLiteExecutionHistory
 
 
-def dispatch_with_history(*, args: CliNamespace, handlers: CliEntrypointHandlers) -> int:
-    """Dispatch once while retaining canonical invocation and nested run facts locally."""
+def dispatch_with_observability(*, args: CliNamespace, handlers: CliEntrypointHandlers) -> int:
+    """Dispatch once while publishing canonical invocation and nested run facts."""
 
     if _creates_project(args=args):
         return dispatch_cli_command(args=args, handlers=handlers)
@@ -26,7 +25,6 @@ def dispatch_with_history(*, args: CliNamespace, handlers: CliEntrypointHandlers
     with cli_observability_scope(
         args=args,
         project_dir=project_dir,
-        history_factory=SQLiteExecutionHistory,
     ) as dispatcher:
         dispatcher.publish_lifecycle(
             create_lifecycle_event(event_type="invocation_started", payload={"command": command})

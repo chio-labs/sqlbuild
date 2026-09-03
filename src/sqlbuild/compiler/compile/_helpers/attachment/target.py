@@ -44,6 +44,8 @@ def build_compile_target_context(
     )
     project_dir: Path | None = discovered_inputs.project_dir
     cache_dir: Path | None = (
-        None if cache_disabled or project_dir is None else project_dir / "target" / "compile-cache"
+        None
+        if cache_disabled or project_dir is None
+        else project_dir / "target" / "cache" / "compiler"
     )
     return target_name, target_config, cache_dir

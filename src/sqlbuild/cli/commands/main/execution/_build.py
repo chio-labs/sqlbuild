@@ -234,7 +234,7 @@ def _execute_direct_build(
         ledger_path=(
             invocation.effective_project_dir
             / "target"
-            / "runs"
+            / "executions"
             / pipeline_result.project.run_id
             / "statements.jsonl"
         ),

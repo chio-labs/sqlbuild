@@ -1,4 +1,4 @@
-"""Best-effort local compute capture around the existing history dispatch."""
+"""Best-effort local compute capture around canonical lifecycle dispatch."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from sqlbuild.cli.commands._helpers.entry.compute_log_diagnostics import (
     log_compute_capture_failure,
 )
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
-from sqlbuild.cli.commands.main.entrypoint._dispatch_with_history import _creates_project
+from sqlbuild.cli.commands.main.entrypoint._dispatch_with_observability import _creates_project
 from sqlbuild.compute_logs import (
     COMPUTE_LOG_FORMAT_VERSION,
     CaptureMetadata,

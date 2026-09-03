@@ -97,7 +97,7 @@ def test_given_successful_analysis_when_compiling_again_then_reuses_identical_ca
     analyzer.assert_not_called()
     signature_builder.assert_not_called()
     reference_scanner.assert_not_called()
-    assert len(tuple((tmp_path / "target" / "compile-cache").rglob("*.sqlite3"))) == (
+    assert len(tuple((tmp_path / "target" / "cache" / "compiler").rglob("*.sqlite3"))) == (
         test_case.expected_count + 1
     )
 
@@ -139,7 +139,7 @@ def test_given_corrupt_analysis_when_compiling_then_reanalyzes_and_repairs_the_e
 ) -> None:
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = tmp_path / "target" / "compile-cache" / "v4" / "model-analysis.sqlite3"
+    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v4" / "model-analysis.sqlite3"
     with sqlite3.connect(cache_path) as connection:
         persisted_contents: str = connection.execute(
             "SELECT payload FROM model_analysis"
@@ -180,7 +180,7 @@ def test_given_non_text_analysis_cache_when_compiling_then_reanalyzes_safely(
 ) -> None:
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     _ = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = tmp_path / "target" / "compile-cache" / "v4" / "model-analysis.sqlite3"
+    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v4" / "model-analysis.sqlite3"
     with sqlite3.connect(cache_path) as connection:
         _ = connection.execute(
             "UPDATE model_analysis SET payload = ?",
@@ -208,7 +208,7 @@ def test_given_corrupt_reference_cache_when_compiling_then_rescans_and_repairs_t
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
     cache_path: Path = next(
-        (tmp_path / "target" / "compile-cache" / "references-v2").glob("*.sqlite3")
+        (tmp_path / "target" / "cache" / "compiler" / "references-v2").glob("*.sqlite3")
     )
     with sqlite3.connect(cache_path) as connection:
         persisted_contents: str = connection.execute(
@@ -248,7 +248,7 @@ def test_given_non_text_reference_cache_when_compiling_then_rescans_safely(
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     _ = compile_project_with_cache(project_dir=tmp_path)
     cache_path: Path = next(
-        (tmp_path / "target" / "compile-cache" / "references-v2").glob("*.sqlite3")
+        (tmp_path / "target" / "cache" / "compiler" / "references-v2").glob("*.sqlite3")
     )
     with sqlite3.connect(cache_path) as connection:
         _ = connection.execute(
