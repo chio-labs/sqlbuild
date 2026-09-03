@@ -11,7 +11,12 @@ from sqlbuild.compiler.planner.main.execution.effective_microbatch_batch_size im
     resolve_effective_microbatch_batch_size,
 )
 from sqlbuild.compiler.planner.models import CursorBounds, Duration, ModelPlanEntry
-from sqlbuild.compiler.planner.types import CursorGrain, CursorType, IncrementalMode
+from sqlbuild.compiler.planner.types import (
+    CursorGrain,
+    CursorType,
+    IncrementalMode,
+    MicrobatchStrategy,
+)
 from sqlbuild.spec.contracts.constants import EFFECTIVE_BATCH_SIZE_TOKEN
 
 _GRAIN_ORDER: dict[str, int] = {
@@ -91,6 +96,8 @@ def _effective_grain(*, entry: ModelPlanEntry) -> str | None:
     if entry.cursor_type != CursorType.TIMESTAMP:
         return entry.cursor_grain
     effective: str = entry.cursor_grain or CursorGrain.SECOND
+    if entry.microbatch_strategy == MicrobatchStrategy.WATERMARK:
+        return effective
     for relation in entry.cursor_input_relations:
         relation_grain: str = relation.cursor_grain or CursorGrain.SECOND
         if _GRAIN_ORDER[relation_grain] > _GRAIN_ORDER[effective]:

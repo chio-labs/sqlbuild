@@ -70,11 +70,10 @@ MODEL (
   cursor event_time,
   cursor_type timestamp,
   cursor_grain hour,
-  cursor_filter_inputs (
-    raw_events event_time,
-  ),
-  cursor_watermark_inputs (
-    raw_events event_time,
+  microbatch_strategy watermark,
+  cursor_watermark_mode all,
+  cursor_inputs (
+    raw_events (column event_time, roles [filter, watermark]),
   ),
   batch_size 1h,
   batch_concurrency 3,
@@ -229,11 +228,12 @@ def test_given_failed_first_virtual_microbatch_when_retried_then_provisional_map
                 "  materialized incremental,\n"
                 "  incremental_strategy delete_insert,\n"
                 "  incremental_mode microbatch,\n"
+                "  microbatch_strategy watermark,\n"
+                "  cursor_watermark_mode all,\n"
                 "  cursor event_time,\n"
                 "  cursor_type timestamp,\n"
                 "  cursor_grain hour,\n"
-                "  cursor_filter_inputs (raw_events event_time,),\n"
-                "  cursor_watermark_inputs (raw_events event_time,),\n"
+                "  cursor_inputs (raw_events (column event_time, roles [filter, watermark]),),\n"
                 "  batch_size 1h,\n"
                 "  batch_concurrency 2,\n"
                 ");\n"

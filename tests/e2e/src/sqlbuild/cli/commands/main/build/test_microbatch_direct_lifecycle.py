@@ -140,9 +140,11 @@ def test_given_integer_cursor_maximum_when_building_then_half_open_batches_inclu
                 "  materialized incremental,\n"
                 "  incremental_strategy delete_insert,\n"
                 "  incremental_mode microbatch,\n"
+                "  microbatch_strategy watermark,\n"
+                "  cursor_watermark_mode all,\n"
                 "  cursor id,\n"
                 "  cursor_type integer,\n"
-                "  cursor_inputs (raw_events id,),\n"
+                "  cursor_inputs (raw_events (column id, roles [filter, watermark]),),\n"
                 '  batch_size "2",\n'
                 "  batch_concurrency 3,\n"
                 ");\n\n"

@@ -504,7 +504,7 @@ def _cursor_override_without_snapshot_model_sql(*, amount_expression: str) -> st
               cursor ordered_at,
               cursor_type timestamp,
               cursor_grain day,
-              cursor_filter_inputs (raw_orders ordered_at,),
+              cursor_inputs (raw_orders ordered_at,),
               replay_on_change bounded-7d
             );
 
@@ -526,11 +526,13 @@ def replay_microbatch_model_sql(*, value_expression: str, replay_policy: str = "
               materialized incremental,
               incremental_strategy delete_insert,
               incremental_mode microbatch,
+              microbatch_strategy watermark,
+              cursor_watermark_mode all,
               cursor event_time,
               cursor_type timestamp,
               cursor_grain hour,
               cursor_inputs (
-                raw_events event_time,
+                raw_events (column event_time, roles [filter, watermark]),
               ),
               batch_size 1h,
               batch_concurrency 2,
@@ -583,11 +585,13 @@ def timestamp_microbatch_model_sql(
               materialized incremental,
               incremental_strategy delete_insert,
               incremental_mode microbatch,
+              microbatch_strategy watermark,
+              cursor_watermark_mode all,
               cursor event_time,
               cursor_type timestamp,
               cursor_grain hour,
               cursor_inputs (
-                raw_events event_time,
+                raw_events (column event_time, roles [filter, watermark]),
               ),
               batch_size 1h,
               batch_concurrency {batch_concurrency},

@@ -42,7 +42,7 @@ def resolve_lineage_reference(
             if upstream_function is not None:
                 pending.extend(upstream_function.references)
     raise PlannerInputError(
-        f"model '{model.name}': cursor_watermark_inputs references '{input_name}', but it is "
+        f"model '{model.name}': cursor_inputs watermark references '{input_name}', but it is "
         "not in the model's upstream lineage",
         code="S302",
     )

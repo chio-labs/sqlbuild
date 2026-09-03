@@ -3,21 +3,30 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from dataclasses import dataclass
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
+from typing import cast
 
-from sqlbuild.compiler.compile.constants import SQL_WILDCARD_TOKEN
+from sqlbuild.compiler.compile.constants import (
+    SQL_WILDCARD_TOKEN,
+    WATERMARK_CURSOR_INPUT_BLOCK_KEYS,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileModelConfig
+from sqlbuild.compiler.planner.models import Duration
 from sqlbuild.compiler.planner.types import (
     ContractPolicy,
     CursorGrain,
+    CursorInputRole,
     CursorType,
+    CursorWatermarkMode,
     HistoricalInput,
     IncrementalMode,
     IncrementalStrategy,
     InitialValidFrom,
     MaterializationType,
+    MicrobatchStrategy,
     SnapshotFullRefreshPolicy,
     SnapshotSchemaChangePolicy,
     SnapshotStrategy,
@@ -38,6 +47,9 @@ _VALID_STRATEGIES: frozenset[str] = frozenset(s.value for s in IncrementalStrate
 _VALID_CURSOR_TYPES: frozenset[str] = frozenset(ct.value for ct in CursorType)
 _VALID_CURSOR_GRAINS: frozenset[str] = frozenset(cg.value for cg in CursorGrain)
 _VALID_INCREMENTAL_MODES: frozenset[str] = frozenset(m.value for m in IncrementalMode)
+_VALID_MICROBATCH_STRATEGIES: frozenset[str] = frozenset(m.value for m in MicrobatchStrategy)
+_VALID_WATERMARK_MODES: frozenset[str] = frozenset(m.value for m in CursorWatermarkMode)
+_VALID_CURSOR_INPUT_ROLES: frozenset[str] = frozenset(role.value for role in CursorInputRole)
 _VALID_CONTRACT_POLICIES: frozenset[str] = frozenset(p.value for p in ContractPolicy)
 _VALID_SNAPSHOT_STRATEGIES: frozenset[str] = frozenset(s.value for s in SnapshotStrategy)
 _VALID_HISTORICAL_INPUTS: frozenset[str] = frozenset(h.value for h in HistoricalInput)
@@ -74,6 +86,10 @@ _SNAPSHOT_DISALLOWED_KEYS: tuple[str, ...] = (
     "cursor_inputs",
     "cursor_filter_inputs",
     "cursor_watermark_inputs",
+    "cursor_end",
+    "microbatch_strategy",
+    "cursor_watermark_mode",
+    "max_microbatches",
     "lookback",
 )
 _CUSTOM_MATERIALIZATION_DISALLOWED_KEYS: tuple[str, ...] = (
@@ -88,8 +104,48 @@ _CUSTOM_MATERIALIZATION_DISALLOWED_KEYS: tuple[str, ...] = (
     "cursor_inputs",
     "cursor_filter_inputs",
     "cursor_watermark_inputs",
+    "cursor_end",
+    "microbatch_strategy",
+    "cursor_watermark_mode",
+    "max_microbatches",
     "lookback",
 )
+
+
+@dataclass(frozen=True)
+class _IncrementalConfigValues:
+    strategy: str | None
+    cursor: str | None
+    cursor_type: str | None
+    cursor_start: object | None
+    cursor_end: object | None
+    cursor_start_max_ahead: object | None
+    cursor_start_max_action: object | None
+    cursor_future_max_distance: object | None
+    cursor_future_action: object | None
+    append_cursor_inclusive: object | None
+    unique_key: object | None
+    lookback: str | None
+    incremental_mode: str | None
+    batch_size: object | None
+    batch_concurrency: object | None
+    unaccounted_partition_policy: object | None
+    cursor_inputs: object | None
+    cursor_filter_inputs: object | None
+    cursor_watermark_inputs: object | None
+    microbatch_strategy: str | None
+    cursor_watermark_mode: str | None
+    max_microbatches: object | None
+    cursor_grain: str | None
+    replay_on_change: object | None
+    merge_exclude_columns: object | None
+    full_refresh: object | None
+
+
+@dataclass(frozen=True)
+class _CursorInputValidation:
+    values: _IncrementalConfigValues
+    ref_count: int
 
 
 def validate_incremental_config(
@@ -118,82 +174,124 @@ def validate_incremental_config(
     if materialized != MaterializationType.INCREMENTAL:
         return
 
-    strategy: str | None = _str(config=config, key="incremental_strategy")
-    cursor: str | None = _str(config=config, key="cursor")
-    cursor_type: str | None = _str(config=config, key="cursor_type")
-    cursor_start: object | None = config.values.get("cursor_start")
-    cursor_start_max_ahead: object | None = config.values.get("cursor_start_max_ahead")
-    cursor_start_max_action: object | None = config.values.get("cursor_start_max_action")
-    cursor_future_max_distance: object | None = config.values.get("cursor_future_max_distance")
-    cursor_future_action: object | None = config.values.get("cursor_future_action")
-    append_cursor_inclusive: object | None = config.values.get("append_cursor_inclusive")
-    unique_key: object | None = config.values.get("unique_key")
-    has_unique_key: bool = unique_key is not None and unique_key != () and unique_key != []
-    lookback: str | None = _str(config=config, key="lookback")
-    incremental_mode: str | None = _str(config=config, key="incremental_mode")
-    batch_size: object | None = config.values.get("batch_size")
-    batch_concurrency: object | None = config.values.get("batch_concurrency")
-    unaccounted_partition_policy: object | None = config.values.get("unaccounted_partition_policy")
-    legacy_cursor_inputs: object | None = config.values.get("cursor_inputs")
-    cursor_filter_inputs: object | None = config.values.get("cursor_filter_inputs")
-    cursor_watermark_inputs: object | None = config.values.get("cursor_watermark_inputs")
-    cursor_grain: str | None = _str(config=config, key="cursor_grain")
-    replay_on_change: object | None = config.values.get("replay_on_change")
-    merge_exclude_columns: object | None = config.values.get("merge_exclude_columns")
-    full_refresh: object | None = config.values.get("full_refresh")
-    if replay_on_change is not None and not isinstance(replay_on_change, str):
+    values: _IncrementalConfigValues = _resolve_incremental_config_values(config=config)
+    _validate_incremental_core(model_name=model_name, values=values)
+    _validate_incremental_batching(
+        model_name=model_name,
+        ref_count=ref_count,
+        known_input_names=known_input_names,
+        values=values,
+    )
+    _validate_incremental_write_strategy(model_name=model_name, values=values)
+    _validate_incremental_contract(
+        config=config,
+        model_name=model_name,
+        declared_columns=declared_columns,
+        values=values,
+    )
+    if values.lookback is not None and values.cursor is None:
+        raise CompileInputError(
+            f"model '{model_name}': lookback is only valid with cursor-based incremental"
+        )
+
+
+def _validate_incremental_core(*, model_name: str, values: _IncrementalConfigValues) -> None:
+    if values.replay_on_change is not None and not isinstance(values.replay_on_change, str):
         raise CompileInputError(f"model '{model_name}': replay_on_change must be a string")
-    if strategy is None:
+    if values.strategy is None:
         raise CompileInputError(
             f"model '{model_name}': incremental materialization requires incremental_strategy"
         )
-    if strategy not in _VALID_STRATEGIES:
+    if values.strategy not in _VALID_STRATEGIES:
         raise CompileInputError(
-            f"model '{model_name}': unknown incremental_strategy '{strategy}'; "
+            f"model '{model_name}': unknown incremental_strategy '{values.strategy}'; "
             f"valid values: {', '.join(sorted(_VALID_STRATEGIES))}"
         )
-
     _validate_incremental_cursor_rules(
         model_name=model_name,
-        cursor=cursor,
-        cursor_type=cursor_type,
-        cursor_grain=cursor_grain,
-        cursor_start=cursor_start,
-        append_cursor_inclusive=append_cursor_inclusive,
-        strategy=strategy,
+        cursor=values.cursor,
+        cursor_type=values.cursor_type,
+        cursor_grain=values.cursor_grain,
+        cursor_start=values.cursor_start,
+        cursor_end=values.cursor_end,
+        append_cursor_inclusive=values.append_cursor_inclusive,
+        strategy=values.strategy,
     )
     _validate_cursor_safety_overrides(
         model_name=model_name,
-        cursor=cursor,
-        cursor_start_max_ahead=cursor_start_max_ahead,
-        cursor_start_max_action=cursor_start_max_action,
-        cursor_future_max_distance=cursor_future_max_distance,
-        cursor_future_action=cursor_future_action,
+        cursor=values.cursor,
+        cursor_start_max_ahead=values.cursor_start_max_ahead,
+        cursor_start_max_action=values.cursor_start_max_action,
+        cursor_future_max_distance=values.cursor_future_max_distance,
+        cursor_future_action=values.cursor_future_action,
     )
 
+
+def _validate_incremental_batching(
+    *,
+    model_name: str,
+    ref_count: int,
+    known_input_names: frozenset[str],
+    values: _IncrementalConfigValues,
+) -> None:
+    if (
+        values.incremental_mode is not None
+        and values.incremental_mode not in _VALID_INCREMENTAL_MODES
+    ):
+        raise CompileInputError(
+            f"model '{model_name}': unknown incremental_mode '{values.incremental_mode}'; "
+            f"valid values: {', '.join(sorted(_VALID_INCREMENTAL_MODES))}"
+        )
+    _validate_microbatch_batch_size(
+        model_name=model_name,
+        batch_size=values.batch_size,
+        incremental_mode=values.incremental_mode,
+        cursor=values.cursor,
+        cursor_type=values.cursor_type,
+        cursor_grain=values.cursor_grain,
+    )
+    _validate_microbatch_state_config(
+        model_name=model_name,
+        strategy=values.strategy,
+        incremental_mode=values.incremental_mode,
+        batch_concurrency=values.batch_concurrency,
+        unaccounted_partition_policy=values.unaccounted_partition_policy,
+    )
     _validate_cursor_input_config(
         model_name=model_name,
-        cursor=cursor,
-        ref_count=ref_count,
         known_input_names=known_input_names,
-        legacy_cursor_inputs=legacy_cursor_inputs,
-        cursor_filter_inputs=cursor_filter_inputs,
-        cursor_watermark_inputs=cursor_watermark_inputs,
+        inputs=_CursorInputValidation(values=values, ref_count=ref_count),
     )
+    if isinstance(values.max_microbatches, int) and not isinstance(values.max_microbatches, bool):
+        _validate_static_watermark_limit(
+            model_name=model_name,
+            max_microbatches=values.max_microbatches,
+            lookback=values.lookback,
+            batch_size=values.batch_size,
+        )
 
-    if strategy == IncrementalStrategy.DELETE_INSERT and cursor is None and not has_unique_key:
+
+def _validate_incremental_write_strategy(
+    *, model_name: str, values: _IncrementalConfigValues
+) -> None:
+    has_unique_key: bool = values.unique_key not in (None, (), [])
+    if (
+        values.strategy == IncrementalStrategy.DELETE_INSERT
+        and values.cursor is None
+        and not has_unique_key
+    ):
         raise CompileInputError(
             f"model '{model_name}': delete_insert without cursor requires unique_key"
         )
-    if strategy == IncrementalStrategy.MERGE and not has_unique_key:
+    if values.strategy == IncrementalStrategy.MERGE and not has_unique_key:
         raise CompileInputError(f"model '{model_name}': merge strategy requires unique_key")
-    if merge_exclude_columns is not None:
+    if values.merge_exclude_columns is not None:
         excluded_columns: tuple[str, ...] = _validated_string_sequence(
-            value=merge_exclude_columns,
+            value=values.merge_exclude_columns,
             config_key="merge_exclude_columns",
             model_name=model_name,
         )
-        if strategy != IncrementalStrategy.MERGE:
+        if values.strategy != IncrementalStrategy.MERGE:
             raise CompileInputError(
                 f"model '{model_name}': merge_exclude_columns requires incremental_strategy=merge"
             )
@@ -202,7 +300,7 @@ def validate_incremental_config(
                 f"model '{model_name}': merge_exclude_columns contains duplicate columns"
             )
         unique_key_columns: frozenset[str] = frozenset(
-            column.lower() for column in _string_sequence(unique_key)
+            column.lower() for column in _string_sequence(values.unique_key)
         )
         overlap: tuple[str, ...] = tuple(
             column for column in excluded_columns if column.lower() in unique_key_columns
@@ -212,58 +310,71 @@ def validate_incremental_config(
                 f"model '{model_name}': merge_exclude_columns cannot include unique_key "
                 f"column(s): {', '.join(overlap)}"
             )
-    if full_refresh is not None and not isinstance(full_refresh, bool):
+    if values.full_refresh is not None and not isinstance(values.full_refresh, bool):
         raise CompileInputError(f"model '{model_name}': full_refresh must be a boolean")
 
+
+def _validate_incremental_contract(
+    *,
+    config: CompileModelConfig,
+    model_name: str,
+    declared_columns: tuple[SchemaColumn, ...] | None,
+    values: _IncrementalConfigValues,
+) -> None:
     declared_column_names: frozenset[str] | None = _contract_declared_column_names(
         config=config,
         declared_columns=declared_columns,
     )
     if declared_column_names is not None:
-        if cursor is not None:
+        if values.cursor is not None:
             _validate_declared_config_column(
-                column_name=cursor,
+                column_name=values.cursor,
                 config_key="cursor",
                 declared_column_names=declared_column_names,
                 model_name=model_name,
             )
         _validate_declared_config_columns(
-            column_names=_string_sequence(unique_key),
+            column_names=_string_sequence(values.unique_key),
             config_key="unique_key",
             declared_column_names=declared_column_names,
             model_name=model_name,
         )
         _validate_declared_config_columns(
-            column_names=_string_sequence(merge_exclude_columns),
+            column_names=_string_sequence(values.merge_exclude_columns),
             config_key="merge_exclude_columns",
             declared_column_names=declared_column_names,
             model_name=model_name,
         )
 
-    if lookback is not None and cursor is None:
-        raise CompileInputError(
-            f"model '{model_name}': lookback is only valid with cursor-based incremental"
-        )
 
-    if incremental_mode is not None and incremental_mode not in _VALID_INCREMENTAL_MODES:
-        raise CompileInputError(
-            f"model '{model_name}': unknown incremental_mode '{incremental_mode}'; "
-            f"valid values: {', '.join(sorted(_VALID_INCREMENTAL_MODES))}"
-        )
-    _validate_microbatch_batch_size(
-        model_name=model_name,
-        batch_size=batch_size,
-        incremental_mode=incremental_mode,
-        cursor=cursor,
-        cursor_type=cursor_type,
-        cursor_grain=cursor_grain,
-    )
-    _validate_microbatch_state_config(
-        model_name=model_name,
-        strategy=strategy,
-        incremental_mode=incremental_mode,
-        batch_concurrency=batch_concurrency,
-        unaccounted_partition_policy=unaccounted_partition_policy,
+def _resolve_incremental_config_values(*, config: CompileModelConfig) -> _IncrementalConfigValues:
+    return _IncrementalConfigValues(
+        strategy=_str(config=config, key="incremental_strategy"),
+        cursor=_str(config=config, key="cursor"),
+        cursor_type=_str(config=config, key="cursor_type"),
+        cursor_start=config.values.get("cursor_start"),
+        cursor_end=config.values.get("cursor_end"),
+        cursor_start_max_ahead=config.values.get("cursor_start_max_ahead"),
+        cursor_start_max_action=config.values.get("cursor_start_max_action"),
+        cursor_future_max_distance=config.values.get("cursor_future_max_distance"),
+        cursor_future_action=config.values.get("cursor_future_action"),
+        append_cursor_inclusive=config.values.get("append_cursor_inclusive"),
+        unique_key=config.values.get("unique_key"),
+        lookback=_str(config=config, key="lookback"),
+        incremental_mode=_str(config=config, key="incremental_mode"),
+        batch_size=config.values.get("batch_size"),
+        batch_concurrency=config.values.get("batch_concurrency"),
+        unaccounted_partition_policy=config.values.get("unaccounted_partition_policy"),
+        cursor_inputs=config.values.get("cursor_inputs"),
+        cursor_filter_inputs=config.values.get("cursor_filter_inputs"),
+        cursor_watermark_inputs=config.values.get("cursor_watermark_inputs"),
+        microbatch_strategy=_str(config=config, key="microbatch_strategy"),
+        cursor_watermark_mode=_str(config=config, key="cursor_watermark_mode"),
+        max_microbatches=config.values.get("max_microbatches"),
+        cursor_grain=_str(config=config, key="cursor_grain"),
+        replay_on_change=config.values.get("replay_on_change"),
+        merge_exclude_columns=config.values.get("merge_exclude_columns"),
+        full_refresh=config.values.get("full_refresh"),
     )
 
 
@@ -292,59 +403,211 @@ def _validate_microbatch_batch_size(
 def _validate_cursor_input_config(
     *,
     model_name: str,
-    cursor: str | None,
-    ref_count: int,
     known_input_names: frozenset[str],
-    legacy_cursor_inputs: object | None,
-    cursor_filter_inputs: object | None,
-    cursor_watermark_inputs: object | None,
+    inputs: _CursorInputValidation,
 ) -> None:
-    """Validate cursor filter, watermark, and deprecated alias combinations."""
+    """Validate the strategy-specific canonical cursor input contract."""
 
-    if legacy_cursor_inputs is not None and cursor_filter_inputs is not None:
-        raise CompileInputError(
-            f"model '{model_name}': cursor_inputs is the deprecated name for "
-            "cursor_filter_inputs and both cannot be declared"
-        )
-    filter_inputs: object | None = (
-        cursor_filter_inputs if cursor_filter_inputs is not None else legacy_cursor_inputs
-    )
-    cursor_field: str
-    cursor_value: object
-    for cursor_field, cursor_value in (
-        ("cursor_inputs", legacy_cursor_inputs),
-        ("cursor_filter_inputs", cursor_filter_inputs),
-        ("cursor_watermark_inputs", cursor_watermark_inputs),
+    for removed_field, value in (
+        ("cursor_filter_inputs", inputs.values.cursor_filter_inputs),
+        ("cursor_watermark_inputs", inputs.values.cursor_watermark_inputs),
     ):
-        if cursor_value is not None and cursor is None:
-            raise CompileInputError(f"model '{model_name}': {cursor_field} requires cursor")
-        if cursor_value is not None:
+        if value is not None:
+            raise CompileInputError(
+                f"model '{model_name}': {removed_field} has been removed; declare "
+                "microbatch_strategy and use strategy-specific cursor_inputs"
+            )
+    if (
+        inputs.values.microbatch_strategy is not None
+        and inputs.values.incremental_mode != IncrementalMode.MICROBATCH
+    ):
+        raise CompileInputError(
+            f"model '{model_name}': microbatch_strategy is only valid with "
+            "incremental_mode=microbatch"
+        )
+    if (
+        inputs.values.incremental_mode == IncrementalMode.MICROBATCH
+        and inputs.values.microbatch_strategy is None
+    ):
+        raise CompileInputError(
+            f"model '{model_name}': incremental_mode=microbatch requires explicit "
+            "microbatch_strategy (rolling_window or watermark)"
+        )
+    if (
+        inputs.values.microbatch_strategy is not None
+        and inputs.values.microbatch_strategy not in _VALID_MICROBATCH_STRATEGIES
+    ):
+        raise CompileInputError(
+            f"model '{model_name}': unknown microbatch_strategy "
+            f"'{inputs.values.microbatch_strategy}'; "
+            f"valid values: {', '.join(sorted(_VALID_MICROBATCH_STRATEGIES))}"
+        )
+    if (
+        inputs.values.microbatch_strategy == MicrobatchStrategy.ROLLING_WINDOW
+        and inputs.values.cursor_type != CursorType.TIMESTAMP
+    ):
+        raise CompileInputError(
+            f"model '{model_name}': rolling_window requires cursor_type=timestamp"
+        )
+    if inputs.values.cursor_inputs is not None and inputs.values.cursor is None:
+        raise CompileInputError(f"model '{model_name}': cursor_inputs requires cursor")
+    if (
+        inputs.values.microbatch_strategy == MicrobatchStrategy.WATERMARK
+        and inputs.values.cursor_inputs is None
+    ) or (
+        inputs.values.microbatch_strategy == MicrobatchStrategy.ROLLING_WINDOW
+        and inputs.ref_count > 0
+        and inputs.values.cursor_inputs is None
+    ):
+        raise CompileInputError(f"model '{model_name}': microbatch strategy requires cursor_inputs")
+    if inputs.values.cursor_inputs is not None:
+        if inputs.values.microbatch_strategy == MicrobatchStrategy.WATERMARK:
+            _validate_watermark_cursor_inputs(
+                model_name=model_name,
+                value=inputs.values.cursor_inputs,
+                known_input_names=known_input_names,
+            )
+        else:
             _validate_cursor_input_map(
                 model_name=model_name,
-                config_field=cursor_field,
-                value=cursor_value,
+                config_field="cursor_inputs",
+                value=inputs.values.cursor_inputs,
             )
-    if cursor_watermark_inputs is not None and filter_inputs is None:
+            _validate_known_cursor_inputs(
+                model_name=model_name,
+                value=inputs.values.cursor_inputs,
+                known_input_names=known_input_names,
+            )
+    if inputs.values.microbatch_strategy == MicrobatchStrategy.WATERMARK:
+        if inputs.values.cursor_watermark_mode not in _VALID_WATERMARK_MODES:
+            raise CompileInputError(
+                f"model '{model_name}': watermark strategy requires "
+                "cursor_watermark_mode all or any"
+            )
+    elif inputs.values.cursor_watermark_mode is not None:
         raise CompileInputError(
-            f"model '{model_name}': cursor_watermark_inputs requires cursor_filter_inputs "
-            "or deprecated cursor_inputs"
+            f"model '{model_name}': cursor_watermark_mode is only valid with "
+            "microbatch_strategy=watermark"
         )
-    if isinstance(filter_inputs, dict):
-        input_name: object
-        filter_field: str = (
-            "cursor_filter_inputs" if cursor_filter_inputs is not None else "cursor_inputs"
-        )
-        for input_name in filter_inputs:
-            if str(input_name) not in known_input_names:
-                expected_names: str = ", ".join(sorted(known_input_names))
-                raise CompileInputError(
-                    f"model '{model_name}': {filter_field} references unknown input "
-                    f"'{input_name}'; expected one of: {expected_names}"
-                )
-    if cursor is not None and ref_count > 1 and filter_inputs is None:
+    if inputs.values.max_microbatches is not None:
+        if (
+            isinstance(inputs.values.max_microbatches, bool)
+            or not isinstance(inputs.values.max_microbatches, int)
+            or inputs.values.max_microbatches < 1
+        ):
+            raise CompileInputError(
+                f"model '{model_name}': max_microbatches must be a positive integer"
+            )
+        if inputs.values.microbatch_strategy != MicrobatchStrategy.WATERMARK:
+            raise CompileInputError(
+                f"model '{model_name}': max_microbatches is only valid with "
+                "microbatch_strategy=watermark"
+            )
+    if (
+        inputs.values.cursor is not None
+        and inputs.ref_count > 1
+        and inputs.values.cursor_inputs is None
+    ):
         raise CompileInputError(
             f"model '{model_name}': models with cursor and multiple inputs require explicit "
-            "cursor_inputs (deprecated) or cursor_filter_inputs"
+            "cursor_inputs"
+        )
+
+
+def _validate_known_cursor_inputs(
+    *, model_name: str, value: object, known_input_names: frozenset[str]
+) -> None:
+    if not isinstance(value, dict):
+        return
+    for input_name in value:
+        if str(input_name) not in known_input_names:
+            expected_names: str = ", ".join(sorted(known_input_names))
+            raise CompileInputError(
+                f"model '{model_name}': cursor_inputs references unknown input "
+                f"'{input_name}'; expected one of: {expected_names}"
+            )
+
+
+def _validate_watermark_cursor_inputs(
+    *, model_name: str, value: object, known_input_names: frozenset[str]
+) -> None:
+    if not isinstance(value, dict) or not value:
+        raise CompileInputError(
+            f"model '{model_name}': watermark cursor_inputs must be a non-empty relation map"
+        )
+    has_watermark: bool = False
+    for relation, block in value.items():
+        if not isinstance(relation, str) or not relation.strip() or not isinstance(block, dict):
+            raise CompileInputError(
+                f"model '{model_name}': watermark cursor_inputs relation '{relation}' must use "
+                "(column ..., roles [...])"
+            )
+        if set(block) != WATERMARK_CURSOR_INPUT_BLOCK_KEYS:
+            raise CompileInputError(
+                f"model '{model_name}': cursor_inputs relation '{relation}' requires exactly "
+                "column and roles"
+            )
+        typed_block: dict[object, object] = cast(dict[object, object], block)
+        column: object | None = typed_block.get("column")
+        roles: object | None = typed_block.get("roles")
+        if not isinstance(column, str) or not column.strip():
+            raise CompileInputError(
+                f"model '{model_name}': cursor_inputs column for relation '{relation}' must be "
+                "a non-empty string"
+            )
+        if (
+            not isinstance(roles, list)
+            or not roles
+            or any(role not in _VALID_CURSOR_INPUT_ROLES for role in roles)
+        ):
+            raise CompileInputError(
+                f"model '{model_name}': cursor_inputs roles for relation '{relation}' must be a "
+                "non-empty list containing only filter and/or watermark"
+            )
+        if len(set(roles)) != len(roles):
+            raise CompileInputError(
+                f"model '{model_name}': cursor_inputs relation '{relation}' contains "
+                "duplicate roles"
+            )
+        has_watermark = has_watermark or CursorInputRole.WATERMARK in roles
+        if CursorInputRole.FILTER in roles and relation not in known_input_names:
+            expected_names: str = ", ".join(sorted(known_input_names))
+            raise CompileInputError(
+                f"model '{model_name}': filter role references input '{relation}' that is not "
+                f"directly filterable; expected one of: {expected_names}"
+            )
+    if not has_watermark:
+        raise CompileInputError(
+            f"model '{model_name}': watermark strategy requires at least one watermark role"
+        )
+
+
+def _validate_static_watermark_limit(
+    *, model_name: str, max_microbatches: int, lookback: str | None, batch_size: object | None
+) -> None:
+    if (
+        lookback is None
+        or not isinstance(batch_size, str)
+        or batch_size == EFFECTIVE_BATCH_SIZE_TOKEN
+    ):
+        return
+    lookback_duration: Duration | None = Duration.parse(lookback)
+    batch_duration: Duration | None = Duration.parse(batch_size)
+    if (
+        lookback_duration is None
+        or batch_duration is None
+        or lookback_duration.has_calendar_component
+        or batch_duration.has_calendar_component
+        or batch_duration.fixed_seconds == 0
+    ):
+        return
+    required: int = (
+        lookback_duration.fixed_seconds + batch_duration.fixed_seconds - 1
+    ) // batch_duration.fixed_seconds + 1
+    if max_microbatches < required:
+        raise CompileInputError(
+            f"model '{model_name}': max_microbatches {max_microbatches} is below the "
+            f"ordinary lookback requirement of {required} batches"
         )
 
 
@@ -372,7 +635,7 @@ def _validate_cursor_input_map(*, model_name: str, config_field: str, value: obj
 def _validate_microbatch_state_config(
     *,
     model_name: str,
-    strategy: str,
+    strategy: str | None,
     incremental_mode: str | None,
     batch_concurrency: object | None,
     unaccounted_partition_policy: object | None,
@@ -438,6 +701,7 @@ def _validate_incremental_cursor_rules(
     cursor_type: str | None,
     cursor_grain: str | None,
     cursor_start: object | None,
+    cursor_end: object | None,
     append_cursor_inclusive: object | None,
     strategy: str | None,
 ) -> None:
@@ -473,6 +737,21 @@ def _validate_incremental_cursor_rules(
         _validate_timestamp_cursor_start(cursor_start=cursor_start, model_name=model_name)
     if cursor_start is not None and cursor_type == CursorType.INTEGER:
         _validate_integer_cursor_start(cursor_start=cursor_start, model_name=model_name)
+    if cursor_end is not None and cursor is None:
+        raise CompileInputError(f"model '{model_name}': cursor_end requires cursor")
+    if cursor_end is not None and cursor_type == CursorType.TIMESTAMP:
+        _validate_timestamp_cursor_start(cursor_start=cursor_end, model_name=model_name)
+    if cursor_end is not None and cursor_type == CursorType.INTEGER:
+        _validate_integer_cursor_start(cursor_start=cursor_end, model_name=model_name)
+    if (
+        cursor_start is not None
+        and cursor_end is not None
+        and _cursor_contract_key(value=cursor_start, cursor_type=cursor_type)
+        >= _cursor_contract_key(value=cursor_end, cursor_type=cursor_type)
+    ):
+        raise CompileInputError(
+            f"model '{model_name}': cursor_start must be before exclusive cursor_end"
+        )
     if append_cursor_inclusive is not None and not isinstance(append_cursor_inclusive, bool):
         raise CompileInputError(f"model '{model_name}': append_cursor_inclusive must be a boolean")
     if append_cursor_inclusive is not None and strategy != IncrementalStrategy.APPEND:
@@ -481,6 +760,17 @@ def _validate_incremental_cursor_rules(
         )
     if append_cursor_inclusive is not None and cursor is None:
         raise CompileInputError(f"model '{model_name}': append_cursor_inclusive requires cursor")
+
+
+def _cursor_contract_key(*, value: object, cursor_type: str | None) -> Decimal:
+    if cursor_type == CursorType.INTEGER:
+        return Decimal(str(value))
+    parsed: datetime = datetime.fromisoformat(str(value))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    else:
+        parsed = parsed.astimezone(UTC)
+    return Decimal(str(parsed.timestamp()))
 
 
 def _validate_cursor_safety_overrides(

@@ -4,8 +4,10 @@ MODEL (
   cursor activity_day,
   cursor_type timestamp,
   cursor_grain day,
-  cursor_filter_inputs (
-    hourly_order_activity activity_hour,
+  microbatch_strategy watermark,
+  cursor_watermark_mode all,
+  cursor_inputs (
+    hourly_order_activity (column activity_hour, roles [filter, watermark]),
   ),
   incremental_mode microbatch,
   batch_size 2d,

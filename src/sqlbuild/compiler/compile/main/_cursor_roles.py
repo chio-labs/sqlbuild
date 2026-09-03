@@ -2,25 +2,37 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
-from sqlbuild.compiler.compile.constants import (
-    CURSOR_FILTER_INPUTS_CONFIG_KEY,
-    CURSOR_INPUTS_CONFIG_KEY,
-    CURSOR_WATERMARK_INPUTS_CONFIG_KEY,
-)
+from sqlbuild.compiler.compile.constants import CURSOR_INPUTS_CONFIG_KEY
 from sqlbuild.compiler.compile.models import CompiledModel, CursorInputRoles
+from sqlbuild.compiler.planner.types import CursorInputRole, MicrobatchStrategy
 
 
 def resolve_cursor_input_roles(*, model: CompiledModel) -> CursorInputRoles:
     """Resolve authored cursor input fields into explicit effective roles."""
 
-    explicit: object | None = model.config.values.get(CURSOR_FILTER_INPUTS_CONFIG_KEY)
-    legacy: object | None = model.config.values.get(CURSOR_INPUTS_CONFIG_KEY)
-    authored: object | None = explicit if explicit is not None else legacy
-    filter_inputs: dict[str, str]
-    if isinstance(authored, dict):
+    authored: object | None = model.config.values.get(CURSOR_INPUTS_CONFIG_KEY)
+    strategy: object | None = model.config.values.get("microbatch_strategy")
+    filter_inputs: dict[str, str] = {}
+    watermark_inputs: dict[str, str] = {}
+    if isinstance(authored, dict) and strategy == MicrobatchStrategy.WATERMARK:
+        for relation, block in authored.items():
+            if not isinstance(relation, str) or not isinstance(block, dict):
+                continue
+            typed_block: dict[object, object] = cast(dict[object, object], block)
+            column: object | None = typed_block.get("column")
+            roles: object | None = typed_block.get("roles")
+            if not isinstance(column, str) or not isinstance(roles, list):
+                continue
+            if CursorInputRole.FILTER in roles:
+                filter_inputs[relation] = column
+            if CursorInputRole.WATERMARK in roles:
+                watermark_inputs[relation] = column
+    elif isinstance(authored, dict):
         filter_inputs = _string_map(authored)
+        if strategy != MicrobatchStrategy.ROLLING_WINDOW:
+            watermark_inputs = filter_inputs
     else:
         cursor: object | None = model.config.values.get("cursor")
         filter_inputs = (
@@ -28,25 +40,14 @@ def resolve_cursor_input_roles(*, model: CompiledModel) -> CursorInputRoles:
             if isinstance(cursor, str)
             else {}
         )
-    explicit_watermarks: object | None = model.config.values.get(CURSOR_WATERMARK_INPUTS_CONFIG_KEY)
-    watermark_inputs: dict[str, str] = (
-        _string_map(explicit_watermarks) if isinstance(explicit_watermarks, dict) else filter_inputs
-    )
-    uses_legacy_alias: bool = CURSOR_INPUTS_CONFIG_KEY in model.config.values
-    filter_field: str = (
-        CURSOR_INPUTS_CONFIG_KEY if uses_legacy_alias else CURSOR_FILTER_INPUTS_CONFIG_KEY
-    )
-    watermark_field: str = (
-        CURSOR_WATERMARK_INPUTS_CONFIG_KEY
-        if CURSOR_WATERMARK_INPUTS_CONFIG_KEY in model.config.values
-        else filter_field
-    )
+        if strategy != MicrobatchStrategy.ROLLING_WINDOW:
+            watermark_inputs = filter_inputs
     return CursorInputRoles(
         filter_inputs=filter_inputs,
         watermark_inputs=watermark_inputs,
-        filter_field=filter_field,
-        watermark_field=watermark_field,
-        uses_legacy_alias=uses_legacy_alias,
+        filter_field=CURSOR_INPUTS_CONFIG_KEY,
+        watermark_field=CURSOR_INPUTS_CONFIG_KEY,
+        uses_legacy_alias=False,
     )
 
 

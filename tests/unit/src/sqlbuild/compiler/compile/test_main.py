@@ -144,6 +144,7 @@ MODEL (
   cursor_type timestamp,
   cursor_grain second,
   incremental_mode microbatch,
+  microbatch_strategy rolling_window,
   batch_size 30m,
   contract none,
 );
@@ -183,6 +184,7 @@ sources:
                     "cursor_type": "timestamp",
                     "cursor_grain": "second",
                     "incremental_mode": "microbatch",
+                    "microbatch_strategy": "rolling_window",
                     "batch_size": "30m",
                     "contract": "none",
                 },
@@ -780,6 +782,7 @@ database = "analytics"
 schema = "marts"
 incremental_strategy = "merge"
 incremental_mode = "microbatch"
+microbatch_strategy = "rolling_window"
 merge_exclude_columns = ["ingested_at"]
 full_refresh = false
 lookback = "1d"
@@ -814,6 +817,7 @@ absolute = 0.01
                     "schema": "marts",
                     "incremental_strategy": "merge",
                     "incremental_mode": "microbatch",
+                    "microbatch_strategy": "rolling_window",
                     "merge_exclude_columns": ("ingested_at",),
                     "full_refresh": False,
                     "unique_key": ["order_id"],

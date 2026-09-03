@@ -32,6 +32,7 @@ from tests.integration.src.sqlbuild.executor.run.microbatch.helpers import (
     causal_dependencies_for_intervals,
     fail_microbatch_hook,
     insert_microbatch_hook_log,
+    messages_with_prefix,
     reconcile_microbatch_batches,
     run_failure_test,
     run_skipped_test,
@@ -75,7 +76,7 @@ _INT_MODEL_SQL: str = (
     "test_case",
     [
         MicrobatchSuccessTestCase(
-            description="causal replay is clipped by CLI lower bound and future cursor cap",
+            description="legacy causal dependencies are inert while runtime safety applies",
             setup_sql=(
                 "CREATE TABLE main.future_input (id INTEGER, event_time TIMESTAMP)",
                 "INSERT INTO main.future_input VALUES (1, '2026-01-06'), (2, '2026-01-20')",
@@ -105,20 +106,17 @@ _INT_MODEL_SQL: str = (
             causal_dependencies=causal_dependencies_for_intervals(
                 intervals=(("2026-01-01", "2026-01-07"), ("2026-01-10", "2026-01-20"))
             ),
-            expected_row_count=2,
-            expected_batch_count=6,
+            expected_row_count=1,
+            expected_batch_count=8,
             expected_has_future_cursor_safety=True,
-            expected_cursor_range_start="2026-01-05",
+            expected_cursor_range_start="2026-01-05T00:00:00",
             expected_cursor_range_end="2026-01-13T00:00:00",
-            expected_causal_replay_intervals=(
-                ("2026-01-05", "2026-01-07"),
-                ("2026-01-10", "2026-01-13T00:00:00"),
-            ),
+            expected_causal_replay_intervals=(),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_causal_replay_and_runtime_safety_when_executing_then_all_bounds_are_intersected(
+def test_given_legacy_causal_dependencies_when_executing_then_they_are_inert(
     test_case: MicrobatchSuccessTestCase,
     adapter: DuckDbAdapter,
     connection: Any,
@@ -1333,8 +1331,9 @@ def test_given_microbatch_model_when_executing_then_reports_batch_progress(
 
     assert test_case.expected_batch_count is not None
     assert result.batch_count == test_case.expected_batch_count
-    assert len(progress_messages) == test_case.expected_batch_count * 2
-    assert "batch 1/" in progress_messages[0]
+    assert len(progress_messages) == test_case.expected_batch_count * 2 + 1
+    assert progress_messages[0].startswith("runtime plan resolved:")
+    assert any("batch 1/" in message for message in progress_messages[1:])
     assert any(message.rstrip().endswith("s") for message in progress_messages)
 
 
@@ -1392,6 +1391,10 @@ def test_given_runtime_owned_range_when_executing_then_reports_resolution_before
     )
 
     assert test_case.expected_progress_message is not None
-    assert progress_messages.index(test_case.expected_progress_message) > 0
+    runtime_messages: tuple[str, ...] = messages_with_prefix(
+        messages=progress_messages, prefix="runtime plan resolved:"
+    )
+    assert len(runtime_messages) == 1
+    assert "2 batches x 1h" in runtime_messages[0]
     assert result.cursor_range_start == test_case.expected_cursor_range_start
     assert result.cursor_range_end == test_case.expected_cursor_range_end
