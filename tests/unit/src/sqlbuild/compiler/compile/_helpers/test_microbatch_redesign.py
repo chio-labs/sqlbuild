@@ -114,6 +114,43 @@ def test_given_watermark_strategy_when_inputs_have_explicit_roles_then_config_is
     "test_case",
     (
         MicrobatchRedesignBehaviorTestCase(
+            description="watermark declares latest batch cap", expected_outcome=None
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_watermark_strategy_when_nested_limit_caps_from_end_then_config_is_valid(
+    test_case: MicrobatchRedesignBehaviorTestCase,
+) -> None:
+    validate_incremental_config(
+        config=CompileModelConfig(
+            values={
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "incremental_mode": "microbatch",
+                "microbatch_strategy": "watermark",
+                "cursor_watermark_mode": "all",
+                "cursor": "event_time",
+                "cursor_type": "timestamp",
+                "cursor_grain": "day",
+                "cursor_inputs": {
+                    "events": {"column": "event_time", "roles": ["filter", "watermark"]}
+                },
+                "batch_size": "1d",
+                "microbatch_limit": {"max_batches": 7, "action": "cap_from_end"},
+            }
+        ),
+        model_name="events",
+        ref_count=1,
+        known_input_names=frozenset({"events"}),
+    )
+    assert test_case.expected_outcome is None
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchRedesignBehaviorTestCase(
             description="watermark shorthand rejected", expected_outcome="must use .*column .*roles"
         ),
     ),

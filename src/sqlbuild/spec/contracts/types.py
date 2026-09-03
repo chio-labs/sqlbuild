@@ -24,6 +24,8 @@ class FutureCursorAction(StrEnum):
 class MicrobatchLimitAction(StrEnum):
     """Response when one model plans more than the configured batch limit."""
 
+    CAP_FROM_END = "cap_from_end"
+    CAP_FROM_START = "cap_from_start"
     ERROR = "error"
     WARN = "warn"
 

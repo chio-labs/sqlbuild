@@ -197,6 +197,11 @@ def test_given_effective_batch_size_default_when_loading_project_then_token_is_p
             limits_toml='max_batches = 2\naction = "cap"',
             expected_error_fragment="action must be one of: error, warn",
         ),
+        MicrobatchLimitConfigErrorTestCase(
+            description="model cap action is rejected as project safety policy",
+            limits_toml='max_batches = 2\naction = "cap_from_end"',
+            expected_error_fragment="action must be one of: error, warn",
+        ),
     ],
     ids=lambda case: case.description,
 )

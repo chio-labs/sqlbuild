@@ -4657,12 +4657,11 @@ Cursors define the incremental replay boundary. SQLBuild queries `MAX(cursor)` f
 | `cursor_type` | `timestamp` or `integer` |
 | `cursor_grain` | Time grain for timestamp cursors: `second`, `minute`, `hour`, `day`, `month`, `year` |
 | `cursor_start` | Lower bound floor; the cursor will never replay before this value |
-| `cursor_end` | Permanent exclusive upper boundary |
-| `cursor_inputs` | Strategy-specific input filtering and availability declarations |
+| `cursor_inputs` | Map of upstream ref/source names to their cursor columns |
 
 #### cursor_inputs
 
-For ordinary cursor incrementals and `rolling_window`, `cursor_inputs` is a simple relation-to-column filter map. For `watermark` microbatch models, every relation must instead use exactly one `column` plus explicit `filter` and/or `watermark` roles; split cursor input fields and shorthand watermark entries are invalid.
+When a model references multiple upstream inputs, `cursor_inputs` is required to tell SQLBuild which column on each input carries the cursor:
 
 ```sql
 MODEL (
@@ -4677,7 +4676,7 @@ MODEL (
 );
 ```
 
-In watermark mode, `cursor_watermark_mode all` uses the minimum usable watermark because every input is required. `any` uses the maximum usable watermark because the inputs are alternatives. Filtering is independent: only relations carrying the `filter` role receive cursor predicates.
+SQLBuild uses these to determine the replay window. With multiple listed inputs, the end is the conservative common watermark: the minimum of their maxima. This prevents a faster input from advancing the model beyond data available from a slower input.
 
 On a first build, SQLBuild derives the interval from the declared cursor inputs and cursor policy. If it cannot establish a valid interval, the build fails before mutating the destination.
 
@@ -4707,13 +4706,14 @@ WHERE ordered_at >= __cursor_start()
 
 In microbatch mode, the intrinsics resolve to each batch's concrete bounds. A microbatch full refresh discovers its range from current inputs while ignoring the old destination watermark.
 
-##### Input roles are independent
+##### Listed inputs bound the window; unlisted inputs do not
 
-- **`filter`** means SQLBuild restricts that relation to the active interval. The relation must be directly filterable in the model query.
-- **`watermark`** means SQLBuild inspects that relation for availability. It may be in transitive SQL or table-function lineage and does not imply invalidation or historical replay.
-- **Unlisted inputs** are read in full and do not contribute availability.
+Only the inputs you list in `cursor_inputs` bound the replay window. This is an explicit choice, and it has two consequences worth understanding:
 
-Ordinary upstream completions never widen a downstream range. Definition fingerprint replay remains controlled by `replay_on_change`; historical data propagation requires explicit selection and cursor bounds.
+- **Listed inputs** drive the window. Their new data advances the `MAX`, which is what tells SQLBuild how far to reprocess and which rows of the target to rewrite.
+- **Unlisted inputs are read in full.** SQLBuild does not add a cursor filter to them, and they do not bound the window. This is correct for lookup or dimension tables that have no meaningful cursor column: you do not list them, and SQLBuild reads them whole rather than trying to filter on a column that may not exist.
+
+The implication for `delete_insert` and `merge`: the target rows that get rewritten are the ones whose cursor falls inside the window derived from the listed inputs. If an unlisted input changes in a way that should affect target rows outside that window, those rows are not rewritten on a normal incremental run. List every input whose new data should drive reprocessing; leave unlisted only the inputs you intend to read in full.
 
 To capture changes that fall outside the normal forward window, see [Lookback](#lookback) for late-arriving data and [Replay on change](#replay-on-change) for model changes.
 
@@ -4736,9 +4736,7 @@ With `lookback 3d`, the replay window starts 3 days before the normal cursor pos
 
 ### Microbatch execution
 
-Microbatch models must declare `microbatch_strategy watermark` or `microbatch_strategy rolling_window`. There is no fallback between them. Each resolved range is split into batches and the exact runtime range and count are reported before model DML begins.
-
-`watermark` catches up from the model's own progress to declared input availability. Its canonical `cursor_inputs` shape has one `column` and explicit `roles` per relation. `cursor_watermark_mode all` uses the minimum usable maximum and requires every watermark; `any` uses the maximum usable alternative and ignores readable empty alternatives. Missing or unreadable relations remain errors in either mode.
+For large incremental ranges, microbatch mode splits the replay window into configurable batches. Each batch is processed serially with its own audit cycle: create delta, run delta audits, apply DML, clean up.
 
 ```sql
 MODEL (
@@ -4747,46 +4745,64 @@ MODEL (
   cursor activity_hour,
   cursor_type timestamp,
   cursor_grain hour,
-  microbatch_strategy watermark,
-  cursor_watermark_mode all,
   cursor_inputs (
-    fact_orders (column ordered_at, roles [filter, watermark]),
+    fact_orders ordered_at,
   ),
   incremental_mode microbatch,
   batch_size 1d,
 );
 ```
 
-`rolling_window` is anchored to the UTC invocation clock, never inspects input or destination maxima, and only processes its recent lookback on a first ordinary run. Its inputs use the simple filter-only form:
+Without microbatch mode, the entire replay range is processed in one pass.
+
+#### Batch size
+
+`batch_size` controls the window size for each batch. For timestamp cursors, use duration strings like `1d`, `6h`, `1mo`. For integer cursors, use an integer value.
+
+#### Watermark batch limits
+
+Watermark microbatch models can declare what to do when their resolved range contains more batches than an ordinary run should process:
 
 ```sql
 MODEL (
   materialized incremental,
   incremental_strategy delete_insert,
   incremental_mode microbatch,
-  microbatch_strategy rolling_window,
-  cursor event_time,
+  microbatch_strategy watermark,
+  cursor_watermark_mode all,
+  cursor event_date,
   cursor_type timestamp,
   cursor_grain day,
-  cursor_start "2026-01-01",
-  cursor_end "2030-01-01",
-  cursor_inputs (events event_time),
   batch_size 1d,
-  lookback 4d,
+  microbatch_limit (
+    max_batches 7,
+    action cap_from_end,
+  ),
 );
 ```
 
-Watermark models may set `max_microbatches`. The effective limit is resolved as CLI override, then model value, then project `microbatches.limits.max_batches`. Limits are enforced against final deduplicated runtime work before materialization. Rolling-window ordinary work is statically bounded and rejects a model-level limit; project limits still protect explicit backfills and full refreshes.
+| Action | Behavior when the range exceeds `max_batches` |
+|--------|------------------------------------------------|
+| `error` | Fail before hooks or model mutation |
+| `warn` | Emit a prominent warning and execute the full range |
+| `cap_from_start` | Execute the earliest N aligned batches and defer later work |
+| `cap_from_end` | Execute the latest N aligned batches ending at the resolved watermark and defer older work |
 
-Ordinary upstream microbatch completions do not invalidate or replay downstream history. Use an explicit downstream selection and cursor bounds, such as `sqb build --select model_a+ --start-cursor-ts ... --end-cursor-ts ...`, for intentional historical propagation.
+A cap changes only the work selected for that invocation. Deferred batches are not recorded as complete. `cap_from_end` is useful for feeds where keeping the latest projection current is more important than catching up oldest-first; `cap_from_start` is the oldest-first catch-up policy.
 
-Serial execution intentionally repairs only trailing interrupted work. If append-only history contains a missing interval followed by a later completion, SQLBuild treats that as a detectable inherited interior gap, warns, and continues from the ordinary physical frontier. Historical events do not record the concurrency setting that created them, so SQLBuild cannot distinguish an earlier concurrent hole from manually altered or legacy non-contiguous state; use an explicit bounded backfill to repair those gaps.
+The project can also set an outer safety policy:
 
-Without microbatch mode, the entire replay range is processed in one pass.
+```toml
+[microbatches.limits]
+max_batches = 100
+action = "error" # or "warn"
+```
 
-#### Batch size
+Project limits support only `error` and `warn`; they never silently cap work. When a model has a nested `microbatch_limit`, the project policy checks the full resolved range first and the model policy then applies.
 
-`batch_size` controls the window size for each batch. For timestamp cursors, use duration strings like `1d`, `6h`, `1mo`. For integer cursors, use an integer value.
+`--max-microbatches N` is an invocation-wide, hard `error` ceiling and an explicit one-run authorization. It takes precedence over project and model limits, applies to models without a declared limit, and never inherits `cap_from_start` or `cap_from_end`. For example, passing a value large enough for an intentional backfill authorizes the full range instead of retaining the model's ordinary-run cap.
+
+The legacy scalar `max_microbatches` model field remains supported as a fail/warn guard. New models should use the nested form when the action is part of the model's execution policy.
 
 #### Mixed-grain chains
 
@@ -4802,10 +4818,8 @@ MODEL (
   cursor activity_day,
   cursor_type timestamp,
   cursor_grain day,
-  microbatch_strategy watermark,
-  cursor_watermark_mode all,
   cursor_inputs (
-    hourly_order_activity (column activity_hour, roles [filter, watermark]),
+    hourly_order_activity activity_hour,
   ),
   incremental_mode microbatch,
   batch_size 2d,
@@ -4818,10 +4832,8 @@ MODEL (
   cursor activity_hour,
   cursor_type timestamp,
   cursor_grain hour,
-  microbatch_strategy watermark,
-  cursor_watermark_mode all,
   cursor_inputs (
-    daily_activity_rollup (column activity_day, roles [filter, watermark]),
+    daily_activity_rollup activity_day,
   ),
   incremental_mode microbatch,
   batch_size 6h,

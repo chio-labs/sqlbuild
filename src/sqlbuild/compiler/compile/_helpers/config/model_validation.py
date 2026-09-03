@@ -9,6 +9,8 @@ from decimal import Decimal, InvalidOperation
 from typing import cast
 
 from sqlbuild.compiler.compile.constants import (
+    MICROBATCH_LIMIT_ACTION_KEY,
+    MICROBATCH_LIMIT_MAX_BATCHES_KEY,
     SQL_WILDCARD_TOKEN,
     WATERMARK_CURSOR_INPUT_BLOCK_KEYS,
 )
@@ -41,7 +43,7 @@ from sqlbuild.spec.contracts.models import (
     SchemaColumn,
     SettingsConfig,
 )
-from sqlbuild.spec.contracts.types import FutureCursorAction
+from sqlbuild.spec.contracts.types import FutureCursorAction, MicrobatchLimitAction
 
 _VALID_STRATEGIES: frozenset[str] = frozenset(s.value for s in IncrementalStrategy)
 _VALID_CURSOR_TYPES: frozenset[str] = frozenset(ct.value for ct in CursorType)
@@ -90,6 +92,7 @@ _SNAPSHOT_DISALLOWED_KEYS: tuple[str, ...] = (
     "microbatch_strategy",
     "cursor_watermark_mode",
     "max_microbatches",
+    "microbatch_limit",
     "lookback",
 )
 _CUSTOM_MATERIALIZATION_DISALLOWED_KEYS: tuple[str, ...] = (
@@ -108,6 +111,7 @@ _CUSTOM_MATERIALIZATION_DISALLOWED_KEYS: tuple[str, ...] = (
     "microbatch_strategy",
     "cursor_watermark_mode",
     "max_microbatches",
+    "microbatch_limit",
     "lookback",
 )
 
@@ -136,6 +140,7 @@ class _IncrementalConfigValues:
     microbatch_strategy: str | None
     cursor_watermark_mode: str | None
     max_microbatches: object | None
+    microbatch_limit: object | None
     cursor_grain: str | None
     replay_on_change: object | None
     merge_exclude_columns: object | None
@@ -262,10 +267,16 @@ def _validate_incremental_batching(
         known_input_names=known_input_names,
         inputs=_CursorInputValidation(values=values, ref_count=ref_count),
     )
-    if isinstance(values.max_microbatches, int) and not isinstance(values.max_microbatches, bool):
+    resolved_limit: int | None = _validate_model_microbatch_limit(
+        model_name=model_name,
+        max_microbatches=values.max_microbatches,
+        microbatch_limit=values.microbatch_limit,
+        microbatch_strategy=values.microbatch_strategy,
+    )
+    if resolved_limit is not None:
         _validate_static_watermark_limit(
             model_name=model_name,
-            max_microbatches=values.max_microbatches,
+            max_microbatches=resolved_limit,
             lookback=values.lookback,
             batch_size=values.batch_size,
         )
@@ -371,6 +382,7 @@ def _resolve_incremental_config_values(*, config: CompileModelConfig) -> _Increm
         microbatch_strategy=_str(config=config, key="microbatch_strategy"),
         cursor_watermark_mode=_str(config=config, key="cursor_watermark_mode"),
         max_microbatches=config.values.get("max_microbatches"),
+        microbatch_limit=config.values.get("microbatch_limit"),
         cursor_grain=_str(config=config, key="cursor_grain"),
         replay_on_change=config.values.get("replay_on_change"),
         merge_exclude_columns=config.values.get("merge_exclude_columns"),
@@ -512,6 +524,51 @@ def _validate_cursor_input_config(
             f"model '{model_name}': models with cursor and multiple inputs require explicit "
             "cursor_inputs"
         )
+
+
+def _validate_model_microbatch_limit(
+    *,
+    model_name: str,
+    max_microbatches: object | None,
+    microbatch_limit: object | None,
+    microbatch_strategy: str | None,
+) -> int | None:
+    if max_microbatches is not None and microbatch_limit is not None:
+        raise CompileInputError(
+            f"model '{model_name}': use either max_microbatches or microbatch_limit, not both"
+        )
+    if microbatch_limit is None:
+        return (
+            max_microbatches
+            if isinstance(max_microbatches, int) and not isinstance(max_microbatches, bool)
+            else None
+        )
+    if not isinstance(microbatch_limit, dict) or set(microbatch_limit) != {
+        MICROBATCH_LIMIT_MAX_BATCHES_KEY,
+        MICROBATCH_LIMIT_ACTION_KEY,
+    }:
+        raise CompileInputError(
+            f"model '{model_name}': microbatch_limit requires exactly max_batches and action"
+        )
+    limit_mapping: dict[str, object] = cast(dict[str, object], microbatch_limit)
+    max_batches: object | None = limit_mapping.get(MICROBATCH_LIMIT_MAX_BATCHES_KEY)
+    action: object | None = limit_mapping.get(MICROBATCH_LIMIT_ACTION_KEY)
+    if isinstance(max_batches, bool) or not isinstance(max_batches, int) or max_batches < 1:
+        raise CompileInputError(
+            f"model '{model_name}': microbatch_limit max_batches must be a positive integer"
+        )
+    valid_actions: frozenset[str] = frozenset(item.value for item in MicrobatchLimitAction)
+    if not isinstance(action, str) or action not in valid_actions:
+        raise CompileInputError(
+            f"model '{model_name}': microbatch_limit action must be one of: "
+            + ", ".join(sorted(valid_actions))
+        )
+    if microbatch_strategy != MicrobatchStrategy.WATERMARK:
+        raise CompileInputError(
+            f"model '{model_name}': microbatch_limit is only valid with "
+            "microbatch_strategy=watermark"
+        )
+    return max_batches
 
 
 def _validate_known_cursor_inputs(
