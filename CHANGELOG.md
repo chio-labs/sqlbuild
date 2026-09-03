@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.1](https://github.com/chio-labs/sqlbuild/compare/v0.76.0...v0.76.1) (2026-09-03)
+
+
+### Bug Fixes
+
+* separate audit dependencies from model scheduling ([#481](https://github.com/chio-labs/sqlbuild/issues/481)) ([8fe5e30](https://github.com/chio-labs/sqlbuild/commit/8fe5e301ceea48d5d5a851f7e043c3ef7129e345))
+
 ## [0.76.0](https://github.com/chio-labs/sqlbuild/compare/v0.75.1...v0.76.0) (2026-09-02)
 
 
