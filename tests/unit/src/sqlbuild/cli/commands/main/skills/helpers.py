@@ -25,3 +25,23 @@ def prepare_skill_update_project(
     }[project_config is not None]
     write_project_files(project_dir=project_dir, files=project_files)
     write_project_files(project_dir=project_dir, files=existing_files)
+
+
+def _skip_git_marker(*, repository_dir: Path) -> None:
+    _ = repository_dir
+
+
+def _write_git_file(*, repository_dir: Path) -> None:
+    marker: Path = repository_dir / ".git"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text("gitdir: elsewhere\n", encoding="utf-8")
+
+
+def _write_git_directory(*, repository_dir: Path) -> None:
+    (repository_dir / ".git").mkdir(parents=True)
+
+
+def write_git_marker(*, repository_dir: Path, marker_is_file: bool | None) -> None:
+    {None: _skip_git_marker, False: _write_git_directory, True: _write_git_file}[marker_is_file](
+        repository_dir=repository_dir
+    )
