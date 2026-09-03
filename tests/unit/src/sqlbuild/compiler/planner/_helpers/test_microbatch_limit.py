@@ -10,11 +10,15 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner._helpers.output.plan_entry import _apply_microbatch_limit
+from sqlbuild.compiler.planner._helpers.output.plan_entry import (
+    _apply_configured_microbatch_limits,
+    _apply_microbatch_limit,
+)
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
     CursorInputRelation,
     ModelPlanEntry,
+    PlanEntryBuildInputs,
     PlanWarning,
 )
 from sqlbuild.compiler.planner.types import (
@@ -25,10 +29,78 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
+    ConfiguredMicrobatchPolicyTestCase,
     EffectiveMicrobatchLimitPlanningTestCase,
     MicrobatchLimitPlanningErrorTestCase,
     MicrobatchLimitPlanningTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ConfiguredMicrobatchPolicyTestCase(
+            description="cli authorization replaces model cap with hard ceiling",
+            configured_limit=35,
+            configured_action="warn",
+            is_cli_override=True,
+            expected_limit=35,
+            expected_action="error",
+            expected_range_start="2026-01-01T00:00:00",
+            expected_warning_count=0,
+        ),
+        ConfiguredMicrobatchPolicyTestCase(
+            description="project ceiling remains outside model cap",
+            configured_limit=40,
+            configured_action="error",
+            is_cli_override=False,
+            expected_limit=7,
+            expected_action="cap_from_end",
+            expected_range_start="2026-01-29T00:00:00",
+            expected_warning_count=1,
+            expected_safety_limit=40,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_nested_model_policy_when_applying_outer_limit_then_precedence_is_explicit(
+    test_case: ConfiguredMicrobatchPolicyTestCase,
+) -> None:
+    entry: ModelPlanEntry = ModelPlanEntry(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="events"),
+        name="events",
+        relative_path=Path("models/events.sql"),
+        materialization_type=MaterializationType.INCREMENTAL,
+        action=PlanAction.INCREMENTAL_DELETE_INSERT,
+        reason=PlanReason.NORMAL_INCREMENTAL,
+        destination=CompiledRelationLocation(None, "main", "events", "main.events"),
+        fingerprint_query_sql="SELECT 1",
+        resolved_sql="SELECT 1",
+        logical_ddl="",
+        incremental_mode=IncrementalMode.MICROBATCH,
+        microbatch_strategy="watermark",
+        cursor_type="timestamp",
+        batch_size="1d",
+        microbatch_range=CursorBounds(start="2026-01-01T00:00:00", end="2026-02-05T00:00:00"),
+        microbatch_limit=7,
+        declared_microbatch_limit_action=MicrobatchLimitAction.CAP_FROM_END,
+    )
+
+    limited_entry, warnings = _apply_configured_microbatch_limits(
+        entry=entry,
+        inputs=PlanEntryBuildInputs(
+            max_microbatches=test_case.configured_limit,
+            max_microbatches_is_override=test_case.is_cli_override,
+            microbatch_limit_action=MicrobatchLimitAction(test_case.configured_action),
+        ),
+    )
+
+    assert limited_entry.microbatch_limit == test_case.expected_limit
+    assert limited_entry.microbatch_limit_action == MicrobatchLimitAction(test_case.expected_action)
+    assert limited_entry.microbatch_range is not None
+    assert limited_entry.microbatch_range.start == test_case.expected_range_start
+    assert limited_entry.microbatch_safety_limit == test_case.expected_safety_limit
+    assert len(warnings) == test_case.expected_warning_count
 
 
 @pytest.mark.parametrize(
@@ -105,6 +177,41 @@ def test_given_coarse_effective_grain_when_applying_limit_then_authored_batch_se
             expected_warning=False,
         ),
         MicrobatchLimitPlanningTestCase(
+            description="cap from start selects earliest integer batches",
+            max_batches=2,
+            action="cap_from_start",
+            expected_count=3,
+            expected_warning=True,
+            expected_range_start="0",
+            expected_range_end="20",
+        ),
+        MicrobatchLimitPlanningTestCase(
+            description="cap from end selects latest seven daily batches",
+            max_batches=7,
+            action="cap_from_end",
+            expected_count=35,
+            expected_warning=True,
+            range_start="2026-01-01T00:00:00",
+            range_end="2026-02-05T00:00:00",
+            cursor_type="timestamp",
+            batch_size="1d",
+            expected_range_start="2026-01-29T00:00:00",
+            expected_range_end="2026-02-05T00:00:00",
+        ),
+        MicrobatchLimitPlanningTestCase(
+            description="cap from end preserves forward alignment with partial final batch",
+            max_batches=2,
+            action="cap_from_end",
+            expected_count=4,
+            expected_warning=True,
+            range_start="2026-01-01T00:00:00",
+            range_end="2026-01-04T12:00:00",
+            cursor_type="timestamp",
+            batch_size="1d",
+            expected_range_start="2026-01-03T00:00:00",
+            expected_range_end="2026-01-04T12:00:00",
+        ),
+        MicrobatchLimitPlanningTestCase(
             description="skipped model does not apply error limit",
             max_batches=1,
             action="error",
@@ -121,6 +228,8 @@ def test_given_coarse_effective_grain_when_applying_limit_then_authored_batch_se
             plan_action="create_table",
             range_start="10",
             range_end="10",
+            expected_range_start="10",
+            expected_range_end="10",
         ),
     ],
     ids=lambda case: case.description,
@@ -140,8 +249,8 @@ def test_given_planner_owned_range_when_applying_limit_then_expected_decision_is
         resolved_sql="SELECT 1",
         logical_ddl="",
         incremental_mode=IncrementalMode.MICROBATCH,
-        cursor_type="integer",
-        batch_size="10",
+        cursor_type=test_case.cursor_type,
+        batch_size=test_case.batch_size,
         microbatch_range=CursorBounds(start=test_case.range_start, end=test_case.range_end),
     )
     action: MicrobatchLimitAction = MicrobatchLimitAction(test_case.action)
@@ -153,6 +262,9 @@ def test_given_planner_owned_range_when_applying_limit_then_expected_decision_is
     assert limited_entry.microbatch_limit_count == test_case.expected_count
     assert (warning is not None) is test_case.expected_warning
     assert isinstance(warning, PlanWarning) is test_case.expected_warning
+    assert limited_entry.microbatch_range is not None
+    assert limited_entry.microbatch_range.start == test_case.expected_range_start
+    assert limited_entry.microbatch_range.end == test_case.expected_range_end
 
 
 @pytest.mark.parametrize(

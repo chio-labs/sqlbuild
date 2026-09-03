@@ -562,6 +562,8 @@ def _load_microbatches(*, payload: object, file_path: Path) -> MicrobatchesConfi
         action: MicrobatchLimitAction = MicrobatchLimitAction(raw_action)
     except ValueError:
         raise ProjectConfigError("microbatches.limits.action must be one of: error, warn") from None
+    if action not in {MicrobatchLimitAction.ERROR, MicrobatchLimitAction.WARN}:
+        raise ProjectConfigError("microbatches.limits.action must be one of: error, warn")
     return MicrobatchesConfig(limits=MicrobatchLimitsConfig(max_batches=max_batches, action=action))
 
 

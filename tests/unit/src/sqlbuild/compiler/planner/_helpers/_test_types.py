@@ -747,6 +747,10 @@ class MicrobatchLimitPlanningTestCase:
     plan_action: str = "incremental_delete_insert"
     range_start: str = "0"
     range_end: str = "30"
+    cursor_type: str = "integer"
+    batch_size: str = "10"
+    expected_range_start: str = "0"
+    expected_range_end: str = "30"
 
 
 @dataclass(frozen=True)
@@ -755,6 +759,19 @@ class MicrobatchLimitPlanningErrorTestCase:
     max_batches: int
     action: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ConfiguredMicrobatchPolicyTestCase:
+    description: str
+    configured_limit: int
+    configured_action: str
+    is_cli_override: bool
+    expected_limit: int
+    expected_action: str
+    expected_range_start: str
+    expected_warning_count: int
+    expected_safety_limit: int | None = None
 
 
 @dataclass(frozen=True)

@@ -788,6 +788,9 @@ class ModelPlanEntry:
     unaccounted_partition_policy: str | None = None
     microbatch_range: CursorBounds | None = None
     microbatch_limit: int | None = None
+    declared_microbatch_limit_action: MicrobatchLimitAction | None = None
+    microbatch_safety_limit: int | None = None
+    microbatch_safety_limit_action: MicrobatchLimitAction | None = None
     microbatch_limit_count: int | None = None
     microbatch_limit_action: MicrobatchLimitAction | None = None
     microbatch_limit_warning: str | None = None
