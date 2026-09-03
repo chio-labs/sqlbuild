@@ -79,6 +79,33 @@ def test_given_equal_priority_items_when_dequeuing_then_fifo_is_preserved(
 
 @pytest.mark.parametrize(
     "test_case",
+    (PriorityQueueTestCase("invocation terminal remains last", (1, 2)),),
+    ids=lambda case: case.description,
+)
+def test_given_queued_work_before_invocation_terminal_when_dequeuing_then_terminal_is_last(
+    test_case: PriorityQueueTestCase,
+) -> None:
+    event_queue: FinitePriorityEventQueue = FinitePriorityEventQueue(capacity=3)
+    statement: QueuedLifecycleEvent = queued_event(
+        sequence=1,
+        priority=0,
+        event_type="invocation_started",
+    )
+    terminal: QueuedLifecycleEvent = queued_event(
+        sequence=2,
+        priority=3,
+        event_type="invocation_completed",
+    )
+    for item in (statement, terminal):
+        assert event_queue.put_nowait(item) == (True, None)
+
+    assert tuple(event_queue.get(timeout=0.01).sequence for _ in (statement, terminal)) == (
+        test_case.expected_sequences
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
     (PriorityQueueTestCase("oldest lowest displacement", (1,)),),
     ids=lambda case: case.description,
 )

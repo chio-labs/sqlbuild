@@ -9,7 +9,6 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
-from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
@@ -22,9 +21,6 @@ from sqlbuild.compiler.graph.main._build_lineage_downstream_deps import (
 from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import (
     build_lineage_upstream_deps,
 )
-from sqlbuild.compiler.pipeline._helpers.analysis_selection import (
-    resolve_compile_analysis_selection,
-)
 from sqlbuild.compiler.pipeline._helpers.deferred_locations import (
     build_deferred_locations,
     gather_deferred_relations,
@@ -33,8 +29,9 @@ from sqlbuild.compiler.pipeline._helpers.deferred_locations import (
 from sqlbuild.compiler.pipeline._helpers.graph import build_static_all_keys
 from sqlbuild.compiler.pipeline._helpers.materializations import load_custom_materializations
 from sqlbuild.compiler.pipeline._helpers.python_plan_entries import build_python_run_plan_outputs
-from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
+from sqlbuild.compiler.pipeline.main._compile_phase import compile_project_phase
 from sqlbuild.compiler.pipeline.models import (
+    CompiledProjectPhaseResult,
     CompilePipelineOptions,
     CompilePipelineResult,
     ProjectGraph,
@@ -79,39 +76,16 @@ def run_compile_pipeline(
     )
     resolved_hooks: ConnectionHooks = hooks if hooks is not None else ConnectionHooks()
     on_progress: Callable[[str], None] | None = resolved_hooks.on_progress
-    effective_config: dict[str, object] = (
-        resolved_options.connection_config
-        if resolved_options.connection_config is not None
-        else build_effective_connection_config(
-            discovered_inputs=discovered_inputs,
-            selected_target=resolved_options.selected_target,
-            cli_vars=resolved_options.cli_vars,
-        )
+    compile_result: CompiledProjectPhaseResult = compile_project_phase(
+        discovered_inputs=discovered_inputs,
+        adapter=adapter,
+        options=resolved_options,
+        on_progress=on_progress,
     )
-    if on_progress is not None:
-        on_progress("Compiling project...")
-    compile_start: float = time.monotonic()
-    try:
-        project: CompiledProject = build_compiled_project(
-            discovered_inputs=discovered_inputs,
-            adapter=adapter,
-            selected_target=resolved_options.selected_target,
-            no_sql_validation=resolved_options.no_sql_validation,
-            cli_vars=resolved_options.cli_vars,
-            external_sql_reference_resolver=resolved_options.external_sql_reference_resolver,
-            resolved_connection=effective_config,
-            analysis_selection=resolve_compile_analysis_selection(
-                options=resolved_options,
-                discovered_inputs=discovered_inputs,
-            ),
-        )
-    finally:
-        compile_seconds: float = time.monotonic() - compile_start
-        timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
-        if timing_tracker is not None:
-            timing_tracker.compile_seconds = compile_seconds
-    if on_progress is not None:
-        on_progress(f"Compiled project. ({compile_seconds:.2f}s)")
+    effective_config: dict[str, object] = compile_result.connection_config
+    project: CompiledProject = compile_result.project
+    compile_seconds: float = compile_result.compile_seconds
+    timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
     planning_start: float = time.monotonic()
     connection: Any | None = None
     result: CompilePipelineResult | None = None

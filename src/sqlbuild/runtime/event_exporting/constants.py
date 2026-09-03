@@ -15,6 +15,9 @@ EVENT_EXPORT_SEVERITIES: tuple[str, ...] = ("debug", "info", "warning", "error")
 EVENT_EXPORT_KINDS: frozenset[str] = frozenset(
     {"invocation", "run", "resource", "operation", "statement", "retry"}
 )
+INVOCATION_TERMINAL_EVENT_TYPES: frozenset[str] = frozenset(
+    {"invocation_completed", "invocation_failed"}
+)
 EVENT_EXPORT_SEVERITY_RANKS: Mapping[str, int] = MappingProxyType(
     {severity: index for index, severity in enumerate(EVENT_EXPORT_SEVERITIES)}
 )

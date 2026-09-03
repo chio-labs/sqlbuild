@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
@@ -32,6 +34,7 @@ from sqlbuild.compiler.planner._helpers.sql_tests.assembly import plan_test
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
+    BackfillResult,
     FunctionChangeResult,
     FunctionPlanEntry,
     ModelPlanEntry,
@@ -112,7 +115,7 @@ def build_plan_output(
     model_materializations: dict[str, str] = build_model_materializations(
         model_entry_results.entries
     )
-    audit_entries: list[AuditPlanEntry] = _build_audit_entries(
+    audit_entries: list[AuditPlanEntry] = build_selected_audit_entries(
         project=project,
         adapter=adapter,
         scope=scope,
@@ -121,7 +124,7 @@ def build_plan_output(
     )
     test_entries: list[SqlTestPlanEntry]
     test_warnings: list[PlanWarning]
-    test_entries, test_warnings = _build_test_entries(
+    test_entries, test_warnings = build_selected_test_entries(
         project=project,
         adapter=adapter,
         selected_keys=scope.selected_keys,
@@ -337,31 +340,11 @@ def _build_function_entries(
             continue
         function_change: FunctionChangeResult = changes.functions[function.name]
         entries.append(
-            FunctionPlanEntry(
-                key=function.key,
-                name=function.name,
-                relative_path=function.relative_path,
-                destination=function.destination,
-                arguments=function.arguments,
-                returns=function.returns,
-                body_sql=resolve_function_sql(
-                    adapter=adapter,
-                    function=function,
-                    model_locations=relations.model_locations,
-                    seed_locations=relations.seed_locations,
-                    function_locations=relations.function_locations,
-                    source_map=relations.source_read_map,
-                    source_warehouse_columns=relations.source_warehouse_columns,
-                    star_exclude_keyword=relations.star_exclude_keyword,
-                ),
+            plan_function(
+                function=function,
+                adapter=adapter,
+                relations=relations,
                 fingerprint_query_sql=function_change.fingerprint_sql,
-                fingerprint_destination=function.fingerprint_destination,
-                return_columns=function.return_columns,
-                language=function.language,
-                source_file_path=function.source_file_path,
-                runtime_version=function.runtime_version,
-                entry_point=function.entry_point,
-                packages=function.packages,
                 previous_query_sql=(
                     snapshot.fingerprints.functions[function.name].definition
                     if function.name in snapshot.fingerprints.functions
@@ -374,7 +357,50 @@ def _build_function_entries(
     return entries
 
 
-def _build_audit_entries(
+def plan_function(
+    *,
+    function: CompiledFunction,
+    adapter: BaseAdapter,
+    relations: PlannerRelationsContext,
+    fingerprint_query_sql: str,
+    previous_query_sql: str | None = None,
+    reason: PlanReason = PlanReason.NO_CHANGE,
+    backfill: BackfillResult | None = None,
+) -> FunctionPlanEntry:
+    """Build one canonical function entry from resolved relation inputs."""
+
+    entry: FunctionPlanEntry = FunctionPlanEntry(
+        key=function.key,
+        name=function.name,
+        relative_path=function.relative_path,
+        destination=function.destination,
+        arguments=function.arguments,
+        returns=function.returns,
+        body_sql=resolve_function_sql(
+            adapter=adapter,
+            function=function,
+            model_locations=relations.model_locations,
+            seed_locations=relations.seed_locations,
+            function_locations=relations.function_locations,
+            source_map=relations.source_read_map,
+            source_warehouse_columns=relations.source_warehouse_columns,
+            star_exclude_keyword=relations.star_exclude_keyword,
+        ),
+        fingerprint_query_sql=fingerprint_query_sql,
+        fingerprint_destination=function.fingerprint_destination,
+        return_columns=function.return_columns,
+        language=function.language,
+        source_file_path=function.source_file_path,
+        runtime_version=function.runtime_version,
+        entry_point=function.entry_point,
+        packages=function.packages,
+        previous_query_sql=previous_query_sql,
+        reason=reason,
+    )
+    return entry if backfill is None else replace(entry, backfill=backfill)
+
+
+def build_selected_audit_entries(
     *,
     project: CompiledProject,
     adapter: BaseAdapter,
@@ -402,7 +428,7 @@ def _build_audit_entries(
     return entries
 
 
-def _build_test_entries(
+def build_selected_test_entries(
     *,
     project: CompiledProject,
     adapter: BaseAdapter,

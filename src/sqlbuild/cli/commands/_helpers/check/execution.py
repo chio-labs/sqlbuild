@@ -77,11 +77,15 @@ def prepare_check_execution(
         python_graph=python_graph,
         selected_python_names=check_names,
     )
+    relation_refs: frozenset[SqlResourceRef] = python_graph.selected_sql_refs(
+        selected_names=check_names
+    )
     return CheckExecutionPreparation(
         python_graph=python_graph,
         check_functions=check_functions,
         lifecycle_plan=lifecycle_plan,
         relation_targets=relation_targets,
+        relation_refs=relation_refs,
         default_database=_default_database(invocation=invocation, pipeline_result=pipeline_result),
         default_schema=_default_schema(invocation=invocation, pipeline_result=pipeline_result),
     )
@@ -228,6 +232,7 @@ def _execute_check_read_side(
         python_graph=preparation.python_graph,
         lifecycle_plan=preparation.lifecycle_plan,
         relation_targets=preparation.relation_targets,
+        validation_refs=preparation.relation_refs,
         providers=providers,
     )
     record_python_run_state_results(

@@ -56,7 +56,7 @@ from sqlbuild.cli.progress.main._write_execution_header import write_execution_h
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
+from sqlbuild.compiler.pipeline.main.compile_only import run_compile_only_pipeline
 from sqlbuild.compiler.pipeline.models import (
     CompilePipelineOptions,
     CompilePipelineResult,
@@ -158,11 +158,6 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
     use_color: bool = not no_color and supports_color()
     progress_stream: TextIO = sys.stderr if json_output else sys.stdout
     target_label: str | None = " ".join(selectors) if selectors else None
-    connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
-        adapter_name=adapter_name,
-        stream=progress_stream,
-        use_color=use_color,
-    )
     planning_progress: PlanningProgressReporter = PlanningProgressReporter(
         stream=progress_stream,
         use_color=use_color,
@@ -178,7 +173,7 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
 
     try:
         with OperationLifecycle(operation_kind="project", operation_name="project_compile"):
-            pipeline_result: CompilePipelineResult = run_compile_pipeline(
+            pipeline_result: CompilePipelineResult = run_compile_only_pipeline(
                 discovered_inputs=discovered_inputs,
                 adapter=adapter,
                 options=CompilePipelineOptions(
@@ -190,20 +185,7 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
                         discovered_inputs=discovered_inputs,
                     ),
                 ),
-                hooks=ConnectionHooks(
-                    on_progress=planning_progress.on_progress,
-                    on_connection_start=connection_progress.on_connection_start,
-                    on_connection_complete=lambda connection_count, elapsed_seconds: (
-                        connection_progress.on_connection_complete(
-                            connection_count=connection_count, elapsed_seconds=elapsed_seconds
-                        )
-                    ),
-                    on_connection_error=lambda connection_count, elapsed_seconds: (
-                        connection_progress.on_connection_error(
-                            connection_count=connection_count, elapsed_seconds=elapsed_seconds
-                        )
-                    ),
-                ),
+                on_progress=planning_progress.on_progress,
             )
     finally:
         planning_progress.finish()
@@ -355,18 +337,13 @@ def _sync_local_snapshots(
         progress_stream.flush()
         return 0, capture_results_out
 
-    connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
-        adapter_name=project_adapter_name,
-        stream=progress_stream,
-        use_color=use_color,
-    )
     planning_progress: PlanningProgressReporter = PlanningProgressReporter(
         stream=progress_stream,
         use_color=use_color,
     )
     try:
         with OperationLifecycle(operation_kind="project", operation_name="project_compile"):
-            project_pipeline_result: CompilePipelineResult = run_compile_pipeline(
+            project_pipeline_result: CompilePipelineResult = run_compile_only_pipeline(
                 discovered_inputs=discovered_inputs,
                 adapter=project_adapter,
                 options=CompilePipelineOptions(
@@ -378,20 +355,7 @@ def _sync_local_snapshots(
                         discovered_inputs=discovered_inputs,
                     ),
                 ),
-                hooks=ConnectionHooks(
-                    on_progress=planning_progress.on_progress,
-                    on_connection_start=connection_progress.on_connection_start,
-                    on_connection_complete=lambda connection_count, elapsed_seconds: (
-                        connection_progress.on_connection_complete(
-                            connection_count=connection_count, elapsed_seconds=elapsed_seconds
-                        )
-                    ),
-                    on_connection_error=lambda connection_count, elapsed_seconds: (
-                        connection_progress.on_connection_error(
-                            connection_count=connection_count, elapsed_seconds=elapsed_seconds
-                        )
-                    ),
-                ),
+                on_progress=planning_progress.on_progress,
             )
     finally:
         planning_progress.finish()

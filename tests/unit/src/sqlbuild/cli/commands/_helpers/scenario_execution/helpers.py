@@ -39,7 +39,7 @@ def configure_scenario_runner(
     monkeypatch.setattr(runner, "resolve_adapter", lambda **_: Mock())
     monkeypatch.setattr(runner, "resolve_project_connection_config", lambda **_: {})
     monkeypatch.setattr(runner, "resolve_external_sql_reference_resolver", lambda **_: None)
-    monkeypatch.setattr(runner, "run_compile_pipeline", compile_project)
+    monkeypatch.setattr(runner, "run_compile_only_pipeline", compile_project)
     monkeypatch.setattr(runner, "select_scenarios", lambda **_: ())
     monkeypatch.setattr(runner, "run_warehouse_scenarios", lambda **_: 0)
 

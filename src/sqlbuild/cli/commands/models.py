@@ -430,6 +430,7 @@ class CheckExecutionPreparation:
     check_functions: tuple[DiscoveredCheckFunction, ...]
     lifecycle_plan: PythonSqlRunLifecyclePlan
     relation_targets: dict[SqlResourceRef, str]
+    relation_refs: frozenset[SqlResourceRef]
     default_database: str | None
     default_schema: str | None
 
