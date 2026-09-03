@@ -37,6 +37,7 @@ from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
@@ -77,16 +78,17 @@ def analyze_compile_project(
     )
     graph_start: float = time.monotonic()
     _ = start_compile_phase(status=status, message="Compiling project graph...")
-    graph: ProjectGraph = build_project_graph(
-        discovered_inputs=discovered_inputs,
-        adapter=adapter,
-        selected_target=selected_target,
-        no_sql_validation=no_sql_validation,
-        skip_column_inference=profile_flags.skip_column_inference,
-        column_lineage_mode=compile_analysis_lineage_mode(lineage_mode),
-        cli_vars=cli_vars,
-        no_cache=no_cache,
-    )
+    with OperationLifecycle(operation_kind="project", operation_name="project_compile"):
+        graph: ProjectGraph = build_project_graph(
+            discovered_inputs=discovered_inputs,
+            adapter=adapter,
+            selected_target=selected_target,
+            no_sql_validation=no_sql_validation,
+            skip_column_inference=profile_flags.skip_column_inference,
+            column_lineage_mode=compile_analysis_lineage_mode(lineage_mode),
+            cli_vars=cli_vars,
+            no_cache=no_cache,
+        )
     graph_ms: int = elapsed_ms(graph_start)
     _ = complete_compile_phase(
         status=status, message=f"Compiled project graph. ({graph_ms / 1000:.2f}s)"

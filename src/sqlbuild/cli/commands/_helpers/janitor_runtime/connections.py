@@ -11,6 +11,7 @@ from sqlbuild.cli.commands.models import (
     JanitorInvocation,
 )
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def connect_janitor_warehouse(
@@ -26,7 +27,10 @@ def connect_janitor_warehouse(
     connection_start: float = time.perf_counter()
     connection_progress.on_connection_start(1)
     try:
-        connection: object = compile_context.adapter.connect(compile_context.connection_config)
+        with OperationLifecycle(
+            operation_kind="janitor", operation_name="janitor_target_connection"
+        ):
+            connection: object = compile_context.adapter.connect(compile_context.connection_config)
     except BaseException:
         connection_progress.on_connection_error(
             connection_count=1, elapsed_seconds=time.perf_counter() - connection_start

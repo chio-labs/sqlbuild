@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -33,6 +33,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioLocalSnapshotLoadResult,
     ScenarioSnapshotManifest,
 )
+from sqlbuild.observability import LifecycleEvent
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
 from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import (
@@ -40,8 +41,20 @@ from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import (
 )
 
 
+def lifecycle_events_with_prefix(
+    *, events: list[LifecycleEvent], prefixes: tuple[str, ...]
+) -> tuple[LifecycleEvent, ...]:
+    return tuple(filter(lambda event: event.event_type.startswith(prefixes), events))
+
+
+def lifecycle_order_with_prefix(*, order: list[str], prefixes: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(filter(lambda item: item.startswith(prefixes), order))
+
+
 class ScenarioPipelineTestAdapter(BaseAdapter):
     """Adapter that records pipeline connection lifecycle calls."""
+
+    adapter_name: ClassVar[str] = "scenario-pipeline-test"
 
     def __init__(self) -> None:
         self.events: list[str] = []
@@ -51,7 +64,7 @@ class ScenarioPipelineTestAdapter(BaseAdapter):
         self.events.append(f"connect:{database}")
         return object()
 
-    def execute(self, connection: object, sql: str) -> object:
+    def _execute(self, connection: object, sql: str) -> object:
         del connection, sql
         return object()
 
@@ -73,6 +86,8 @@ class ScenarioLocalPipelineTestAdapter(ScenarioPipelineTestAdapter):
 class SeedPipelineTestAdapter(BaseAdapter):
     """Adapter that records seed pipeline connection and load calls."""
 
+    adapter_name: ClassVar[str] = "seed-pipeline-test"
+
     def __init__(self, *, barrier_targets: tuple[str, ...]) -> None:
         self.connections: list[object] = []
         self.closed_connections: list[object] = []
@@ -86,7 +101,7 @@ class SeedPipelineTestAdapter(BaseAdapter):
         self.connections.append(connection)
         return connection
 
-    def execute(self, connection: object, sql: str) -> object:
+    def _execute(self, connection: object, sql: str) -> object:
         del connection, sql
         return object()
 

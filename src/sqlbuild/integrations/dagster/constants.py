@@ -17,8 +17,7 @@ ASSET_SELECTION_COMMANDS: frozenset[str] = frozenset(
     {"build", "run", "test", "check", "audit", "seed", "load", "clone"}
 )
 CLONE_COMMAND: str = "clone"
-CLONE_ASSET_EVENT: str = "asset"
-CHECK_EVENT: str = "check"
+CHECK_COMMAND: str = "check"
 EVENT_OUTPUT_FLAG: str = "--event-output"
 LIVE_EVENT_COMMANDS: frozenset[str] = ASSET_SELECTION_COMMANDS
 VIRTUAL_ENV_FLAG: str = "--virtual-env"

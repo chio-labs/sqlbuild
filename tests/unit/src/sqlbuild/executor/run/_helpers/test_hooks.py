@@ -26,6 +26,15 @@ from sqlbuild.executor.run.models import (
 from sqlbuild.executor.run.types import HookPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.hooks import HookContext as PublicHookContext
+from sqlbuild.observability import (
+    EventDispatcher,
+    LifecycleEvent,
+    dispatcher_scope,
+    invocation_scope,
+)
+from tests.unit.src.sqlbuild.executor.python_nodes._helpers.helpers import (
+    python_operation_events,
+)
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
     ExecuteHooksTestCase,
     PublicHookContextExportTestCase,
@@ -105,16 +114,30 @@ def test_given_typed_sql_hooks_when_executing_then_sql_statements_run_in_order(
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
 
-    execute_hooks(
-        connection=connection,
-        adapter=adapter,
-        hooks=test_case.hooks,
-        phase=HookPhase.PRE_HOOKS,
-    )
+    with invocation_scope("inv-sql-hook-order"), dispatcher_scope(dispatcher):
+        execute_hooks(
+            connection=connection,
+            adapter=adapter,
+            hooks=test_case.hooks,
+            phase=HookPhase.PRE_HOOKS,
+        )
 
     rows: list[tuple[int]] = connection.execute("SELECT * FROM hook_log ORDER BY 1").fetchall()
+    operation_events: tuple[LifecycleEvent, ...] = python_operation_events(events)
+    starts: tuple[LifecycleEvent, LifecycleEvent] = (
+        operation_events[0],
+        operation_events[2],
+    )
     assert tuple(rows) == test_case.expected_rows
+    assert tuple(event.payload["hook_index"] for event in starts) == (0, 1)
+    assert tuple(event.payload["hook_phase"] for event in starts) == ("pre_hooks", "pre_hooks")
+    assert tuple(event.payload["hook_type"] for event in starts) == ("sql", "sql")
+    assert all("hook_name" not in event.payload for event in starts)
+    assert "CREATE TABLE" not in repr(starts)
 
 
 @pytest.mark.parametrize(
@@ -452,34 +475,49 @@ def test_given_python_hook_returns_payload_when_executing_then_it_fails_clearly(
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
+    events: list[LifecycleEvent] = []
 
     def invalid_return(ctx: HookContext) -> object:
         return test_case.returned
 
-    with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
-        execute_hooks(
-            connection=connection,
-            adapter=adapter,
-            hooks=[PythonHookEntry(name="invalid_return", kwargs={})],
-            phase=HookPhase.POST_HOOKS,
-            hook_functions=(
-                DiscoveredHookFunction(
-                    file_path=Path(__file__),
-                    relative_path=Path("hooks/python/invalid_return.py"),
-                    name="invalid_return",
-                    function=invalid_return,
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+    with invocation_scope("inv-malformed-hook"), dispatcher_scope(dispatcher):
+        with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
+            execute_hooks(
+                connection=connection,
+                adapter=adapter,
+                hooks=[PythonHookEntry(name="invalid_return", kwargs={})],
+                phase=HookPhase.POST_HOOKS,
+                hook_functions=(
+                    DiscoveredHookFunction(
+                        file_path=Path(__file__),
+                        relative_path=Path("hooks/python/invalid_return.py"),
+                        name="invalid_return",
+                        function=invalid_return,
+                    ),
                 ),
-            ),
-            hook_run=HookRunContext(
-                model_name="orders",
-                destination=CompiledRelationLocation(
-                    database=None,
-                    schema="main",
-                    name="orders",
-                    qualified_name=None,
+                hook_run=HookRunContext(
+                    model_name="orders",
+                    destination=CompiledRelationLocation(
+                        database=None,
+                        schema="main",
+                        name="orders",
+                        qualified_name=None,
+                    ),
                 ),
-            ),
-        )
+            )
+
+    operation_events: tuple[LifecycleEvent, ...] = python_operation_events(events)
+    assert tuple(event.event_type for event in operation_events) == (
+        "operation_started",
+        "operation_failed",
+    )
+    assert operation_events[0].payload["operation_name"] == "python_hook"
+    assert operation_events[0].payload["hook_phase"] == "post_hooks"
+    assert operation_events[0].payload["hook_index"] == 0
+    assert operation_events[0].payload["hook_type"] == "python"
+    assert operation_events[0].payload["hook_name"] == "invalid_return"
 
 
 @pytest.mark.parametrize(

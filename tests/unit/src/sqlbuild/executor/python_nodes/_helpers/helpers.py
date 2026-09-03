@@ -39,6 +39,7 @@ from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
 from sqlbuild.executor.python_nodes.models import BasePythonNodeContext, PythonNodeRunState
 from sqlbuild.executor.scheduling.main._unlock_downstream import unlock_downstream_python_nodes
 from sqlbuild.executor.scheduling.models import LifecycleExecutionNode
+from sqlbuild.observability import LifecycleEvent
 from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.refs import model
@@ -79,6 +80,8 @@ def apply_completion_order(
 class PythonNodeContextTestAdapter(BaseAdapter):
     """Adapter that records SQL and returns deterministic values."""
 
+    adapter_name: ClassVar[str] = "python-node-context-test"
+
     def __init__(self) -> None:
         self.executed_sql: list[str] = []
 
@@ -89,7 +92,7 @@ class PythonNodeContextTestAdapter(BaseAdapter):
     def close(self, connection: object) -> None:
         del connection
 
-    def execute(self, connection: Any, sql: str) -> object:
+    def _execute(self, connection: Any, sql: str) -> object:
         del connection
         self.executed_sql.append(sql)
         return f"result:{sql}"
@@ -320,6 +323,10 @@ EXPECTED_START_CURSOR_TS: datetime = datetime(2026, 1, 1, tzinfo=UTC)
 EXPECTED_END_CURSOR_TS: datetime = datetime(2026, 1, 2, tzinfo=UTC)
 
 
+def python_operation_events(events: list[LifecycleEvent]) -> tuple[LifecycleEvent, ...]:
+    return tuple(filter(lambda event: event.event_type.startswith("operation_"), events))
+
+
 class FlakyTask:
     def __init__(self, failures_before_success: int, exception_type: type[Exception]) -> None:
         self.failures_before_success: int = failures_before_success
@@ -407,9 +414,19 @@ def prepare_ingress_orders(ctx: TaskContext) -> object:
     return ctx.result(payload={"prepared": True})
 
 
+@asset(depends_on=(prepare_ingress_orders,))
+def publish_ingress_orders(ctx: AssetContext) -> object:
+    INGRESS_CALLS.append("publish_ingress_orders")
+    return ctx.result(payload={"published": True}, materialized=True)
+
+
 def load_ingress_orders(_ctx: object) -> object:
     INGRESS_CALLS.append("load_ingress_orders")
     return None
+
+
+def scheduler_bypassed_task() -> object:
+    raise AssertionError("scheduler-bypassed task must not run")
 
 
 def build_ingress_task_loader_graph() -> PythonNodeGraph:
@@ -419,6 +436,25 @@ def build_ingress_task_loader_graph() -> PythonNodeGraph:
             local_config=LocalConfig(),
             loader_functions=(ingress_loader_function(),),
             task_functions=(ingress_task_function(),),
+        )
+    )
+
+
+def build_ingress_task_asset_graph() -> PythonNodeGraph:
+    return build_python_node_graph(
+        discovered_inputs=DiscoveredProjectInputs(
+            project_config=ProjectConfig(name="demo", adapter="duckdb"),
+            local_config=LocalConfig(),
+            task_functions=(ingress_task_function(),),
+            asset_functions=(
+                DiscoveredAssetFunction(
+                    file_path=Path("/project/assets/orders.py"),
+                    relative_path=Path("assets/orders.py"),
+                    name="publish_ingress_orders",
+                    function=publish_ingress_orders,
+                    depends_on=(prepare_ingress_orders,),
+                ),
+            ),
         )
     )
 

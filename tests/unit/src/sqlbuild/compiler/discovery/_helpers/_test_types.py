@@ -6,6 +6,26 @@ from sqlbuild.sql_values.types import CollectionRendering
 
 
 @dataclass(frozen=True)
+class EventExporterDiscoveryTestCase:
+    description: str
+    expected_name: str
+
+
+@dataclass(frozen=True)
+class EventExporterSignatureErrorTestCase:
+    description: str
+    body: str
+    expected_error: str
+
+
+@dataclass(frozen=True)
+class EventExporterTypedSignatureTestCase:
+    description: str
+    declaration: str
+    expected_error: str
+
+
+@dataclass(frozen=True)
 class FutureCursorConfigTestCase:
     description: str
     future_toml: str
@@ -40,6 +60,20 @@ class MicrobatchLimitConfigTestCase:
 class MicrobatchLimitConfigErrorTestCase:
     description: str
     limits_toml: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ColumnContractModeConfigTestCase:
+    description: str
+    settings_toml: str
+    expected_mode: str
+
+
+@dataclass(frozen=True)
+class ColumnContractModeConfigErrorTestCase:
+    description: str
+    settings_toml: str
     expected_error_fragment: str
 
 

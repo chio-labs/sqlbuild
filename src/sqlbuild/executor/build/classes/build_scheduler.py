@@ -77,6 +77,7 @@ from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.functions.constants import FUNCTION_ENTRY_MISSING_CODE
 from sqlbuild.executor.functions.main._execute import execute_function
 from sqlbuild.executor.load.main._build_execution_indexes import build_load_execution_indexes
+from sqlbuild.executor.load.main._resource_kind import load_resource_kind
 from sqlbuild.executor.load.main._skipped_result import skipped_load_result
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
@@ -94,6 +95,7 @@ from sqlbuild.executor.seed.constants import SEED_ENTRY_MISSING_CODE
 from sqlbuild.executor.seed.main._execute import execute_seed
 from sqlbuild.executor.testing.constants import SQL_TEST_ENTRY_MISSING_CODE
 from sqlbuild.executor.testing.main._execute import execute_sql_test
+from sqlbuild.executor.testing.main.resource_id import sql_test_resource_id
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.microbatches.classes.direct_store import (
@@ -104,6 +106,9 @@ from sqlbuild.microbatches.models import MicrobatchScope
 from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind, NodeStartCallback
+from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
+    ResourceAttemptLifecycle,
+)
 from sqlbuild.spec.contracts.models import SnapshotsConfig, SourceEntry
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
@@ -119,6 +124,12 @@ def _test_result_authored_order(*, plan: PlanOutput, result: SqlTestExecutionRes
         ):
             return index
     return len(plan.test_entries)
+
+
+def _resource_result_failed(result: object) -> bool:
+    if isinstance(result, SqlTestExecutionResult):
+        return result.outcome != SqlTestOutcome.PASS
+    return getattr(result, "status", None) == ExecutionStatus.FAILED
 
 
 class BuildScheduler:
@@ -262,6 +273,7 @@ class BuildScheduler:
                 model_locations=self._plan.model_locations,
                 seed_locations=self._plan.seed_locations,
                 source_map=self._plan.source_map,
+                run_id=self._run_id,
             )
 
         return (
@@ -400,7 +412,7 @@ class BuildScheduler:
                             self._mark_complete(key)
                             continue
                         self._in_flight.add(key)
-                        pool.submit(self._worker, key)
+                        pool.submit(copy_context().run, self._worker, key)
                         continue
                     if key in self._blocked_keys:
                         self._record_skipped(key)
@@ -424,10 +436,15 @@ class BuildScheduler:
                                 break
                             self._microbatch_coordinators.add(key)
                         self._in_flight.add(key)
-                        pool.submit(self._concurrent_microbatch_worker, key=key, pool=pool)
+                        pool.submit(
+                            copy_context().run,
+                            self._concurrent_microbatch_worker,
+                            key=key,
+                            pool=pool,
+                        )
                         continue
                     self._in_flight.add(key)
-                    pool.submit(self._worker, key)
+                    pool.submit(copy_context().run, self._worker, key)
 
                 self._report_scheduler_state()
                 if not self._in_flight:
@@ -675,6 +692,7 @@ class BuildScheduler:
                 adapter=self._adapter,
                 connection=self._scheduler_connection,
                 fail_fast=self._fail_fast,
+                run_id=self._run_id,
             )
             self._executed_source_audits.update(audit_run.executed_source_names)
             self._failed_sources.update(audit_run.failed_source_names)
@@ -682,10 +700,11 @@ class BuildScheduler:
             self._source_audit_results.extend(audit_run.audit_results)
             if audit_run.blocked:
                 self._blocked_keys.add(key)
-                self._model_results.append(
-                    ModelExecutionResult(
+                self._record_skipped_result(
+                    key=key,
+                    result=ModelExecutionResult(
                         model_name=model_entry.name, status=ExecutionStatus.SKIPPED
-                    )
+                    ),
                 )
                 if self._fail_fast:
                     self._stop = True
@@ -702,14 +721,62 @@ class BuildScheduler:
         | SqlTestExecutionResult
         | LoadExecutionResult
     ):
-        with CostContext.scope(
-            run_id=self._run_id,
-            resource_type=str(key.resource_type),
+        resource_kind: str = self._canonical_resource_kind(key=key)
+        with ResourceAttemptLifecycle(
+            resource_id=self._canonical_resource_id(key=key),
+            resource_kind=resource_kind,
             resource_name=key.name,
-            ledger_path=(self._runtime_dir / "runs" / self._run_id / "statements.jsonl"),
-            on_statement_complete=self._on_statement_complete,
-        ):
-            return self._execute_node_with_cost_context(key=key, connection=connection)
+            run_id=self._run_id,
+        ) as lifecycle:
+            with CostContext.scope(
+                run_id=self._run_id,
+                resource_type=str(key.resource_type),
+                resource_name=key.name,
+                ledger_path=(self._runtime_dir / "runs" / self._run_id / "statements.jsonl"),
+                on_statement_complete=self._on_statement_complete,
+            ):
+                result: (
+                    ModelExecutionResult
+                    | SeedExecutionResult
+                    | FunctionExecutionResult
+                    | SqlTestExecutionResult
+                    | LoadExecutionResult
+                ) = self._execute_node_with_cost_context(key=key, connection=connection)
+            if _resource_result_failed(result):
+                lifecycle.failed(error_code=getattr(result, "error_code", None))
+            elif getattr(result, "status", None) == ExecutionStatus.SKIPPED:
+                skip_mode: object = getattr(result, "skip_mode", None)
+                lifecycle.skipped(
+                    skip_code="scheduler",
+                    skip_mode=getattr(skip_mode, "value", None),
+                )
+            return result
+
+    def _canonical_resource_kind(self, *, key: CompiledObjectKey) -> str:
+        if key.resource_type == CompiledResourceType.MODEL:
+            entry: ModelPlanEntry | None = self._indexes.model_entries_by_key.get(key)
+            if entry is not None:
+                return _model_execution_resource_kind(entry.materialization_type).value
+        if key.resource_type == CompiledResourceType.SQL_TEST:
+            return "test"
+        if key.resource_type == CompiledResourceType.SOURCE:
+            source: SourceEntry | None = self._plan.source_map.get(key.name)
+            if source is not None:
+                return load_resource_kind(source).value
+        return str(key.resource_type)
+
+    def _canonical_resource_id(self, *, key: CompiledObjectKey) -> str:
+        if key.resource_type != CompiledResourceType.SQL_TEST:
+            return f"{key.resource_type}:{key.name}"
+        entry: SqlTestPlanEntry | None = self._indexes.test_entries_by_key.get(key)
+        if entry is None:
+            return f"sql_test:{key.name}"
+        return sql_test_resource_id(
+            test_name=entry.name,
+            source_path=entry.source_path,
+            block_index=entry.block_index,
+            case_name=entry.case_name,
+        )
 
     def _execute_node_with_cost_context(
         self, *, key: CompiledObjectKey, connection: Any
@@ -832,7 +899,10 @@ class BuildScheduler:
             sqlbuild_phase="run",
         ):
             result: SqlTestExecutionResult = execute_sql_test(
-                test_entry=test_entry, adapter=self._adapter, connection=connection
+                test_entry=test_entry,
+                adapter=self._adapter,
+                connection=connection,
+                quality_scope="model",
             )
         duration: int = int((time.monotonic() - start) * 1000)
         log_debug_event(
@@ -1128,35 +1198,74 @@ class BuildScheduler:
         if key.resource_type == CompiledResourceType.MODEL:
             entry: ModelPlanEntry | None = self._indexes.model_entries_by_key.get(key)
             if entry is not None:
-                self._model_results.append(
-                    ModelExecutionResult(model_name=entry.name, status=ExecutionStatus.SKIPPED)
+                self._record_skipped_result(
+                    key=key,
+                    result=ModelExecutionResult(
+                        model_name=entry.name, status=ExecutionStatus.SKIPPED
+                    ),
                 )
         elif key.resource_type == CompiledResourceType.SEED:
             seed_entry: SeedPlanEntry | None = self._indexes.seed_entries_by_key.get(key)
             if seed_entry is not None:
-                self._seed_results.append(
-                    SeedExecutionResult(seed_name=seed_entry.name, status=ExecutionStatus.SKIPPED)
+                self._record_skipped_result(
+                    key=key,
+                    result=SeedExecutionResult(
+                        seed_name=seed_entry.name, status=ExecutionStatus.SKIPPED
+                    ),
                 )
         elif key.resource_type in {CompiledResourceType.UDF, CompiledResourceType.TABLE_FN}:
             function_entry: FunctionPlanEntry | None = self._indexes.function_entries_by_key.get(
                 key
             )
             if function_entry is not None:
-                self._function_results.append(
-                    FunctionExecutionResult(
+                self._record_skipped_result(
+                    key=key,
+                    result=FunctionExecutionResult(
                         function_name=function_entry.name,
                         status=ExecutionStatus.SKIPPED,
                         function_kind=str(key.resource_type),
-                    )
+                    ),
                 )
         elif key.resource_type == CompiledResourceType.SOURCE:
             load_entry: SourceLoadPlanEntry | None = self._indexes.source_load_entries_by_key.get(
                 key
             )
             if load_entry is not None:
-                self._load_results.append(
-                    skipped_load_result(source=self._plan.source_map[load_entry.name])
+                self._record_skipped_result(
+                    key=key,
+                    result=skipped_load_result(source=self._plan.source_map[load_entry.name]),
                 )
+
+    def _record_skipped_result(
+        self,
+        *,
+        key: CompiledObjectKey,
+        result: ModelExecutionResult
+        | SeedExecutionResult
+        | FunctionExecutionResult
+        | LoadExecutionResult,
+    ) -> None:
+        with ResourceAttemptLifecycle(
+            resource_id=self._canonical_resource_id(key=key),
+            resource_kind=self._canonical_resource_kind(key=key),
+            resource_name=key.name,
+            run_id=self._run_id,
+        ) as lifecycle:
+            skip_mode: object = getattr(result, "skip_mode", None)
+            lifecycle.skipped(
+                skip_code="scheduler",
+                skip_mode=getattr(skip_mode, "value", None),
+            )
+        if isinstance(result, ModelExecutionResult):
+            self._model_results.append(result)
+        elif isinstance(result, SeedExecutionResult):
+            self._seed_results.append(result)
+        elif isinstance(result, FunctionExecutionResult):
+            self._function_results.append(result)
+        else:
+            self._load_results.append(result)
+        if self._on_node_complete is not None:
+            self._on_node_complete(result)
 
     def _skip_remaining(self) -> None:
         """Skip all nodes that were never dispatched."""

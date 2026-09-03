@@ -21,9 +21,9 @@ class _RecordingDuckDbAdapter(DuckDbAdapter):
     def __init__(self) -> None:
         self.statement_recorder = StatementRecorder()
 
-    def execute(self, *, connection: Any, sql: str) -> Any:
+    def _execute(self, *, connection: Any, sql: str) -> Any:
         self.statement_recorder.record(sql)
-        return super().execute(connection=connection, sql=sql)
+        return super()._execute(connection=connection, sql=sql)
 
 
 @pytest.mark.parametrize(

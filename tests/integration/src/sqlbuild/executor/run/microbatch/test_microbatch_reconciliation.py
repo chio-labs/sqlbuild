@@ -30,10 +30,10 @@ class _CountTrackingDuckDbAdapter(DuckDbAdapter):
     def __init__(self) -> None:
         self.count_sqls: list[str] = []
 
-    def execute(self, *, connection: Any, sql: str) -> Any:
+    def _execute(self, *, connection: Any, sql: str) -> Any:
         if "AS __sqb_count_" in sql:
             self.count_sqls.append(sql)
-        return super().execute(connection=connection, sql=sql)
+        return super()._execute(connection=connection, sql=sql)
 
 
 @pytest.mark.parametrize(

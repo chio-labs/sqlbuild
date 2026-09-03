@@ -8,9 +8,11 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
+from typing import ClassVar
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.compiler.compile._helpers.deps.dependencies import audit_scope_deps
 from sqlbuild.compiler.compile._helpers.sql_tests.core import (
     extract_assertion_target_model_names,
 )
@@ -102,11 +104,13 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
 class PlannerTestAdapter(BaseAdapter):
     """Minimal adapter for planner helper tests."""
 
+    adapter_name: ClassVar[str] = "planner-test"
+
     def connect(self, config: dict[str, object]) -> object:
         del config
         return object()
 
-    def execute(self, connection: object, sql: str) -> object:
+    def _execute(self, connection: object, sql: str) -> object:
         del connection, sql
         return object()
 
@@ -1382,7 +1386,11 @@ def build_scheduling_audit(
     name: str = "test_audit"
     return CompiledAudit(
         key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=name),
-        scope_deps=(),
+        scope_deps=audit_scope_deps(
+            references=references,
+            attached_target_kind=attached_target_kind,
+            attached_target_name=attached_target_name,
+        ),
         name=name,
         audit_file=stub_file,
         audit_block=stub_block,

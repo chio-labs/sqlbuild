@@ -4,7 +4,12 @@
 
 - Run targeted pytest commands with xdist by default: `uv run pytest <paths> -n auto --dist loadfile`.
 - Do not run pytest serially unless diagnosing an xdist-specific failure.
-- Do not run the full local test or CI suite unless the user explicitly requests it.
+- `make test` is the sanctioned broader local unit and integration check. It is normally acceptable
+  when the change warrants broader regression coverage because the target owns the required paths,
+  marker exclusions, xdist settings, and logging.
+- Do not replace `make test` with a raw broad pytest command. Do not run `make test-all`, E2E, dbt,
+  real-warehouse, or the full CI suite locally unless reproducing a specific failure or the user
+  explicitly requests it; rely on CI for those suites.
 - Before pushing, run the exact static CI target with all optional dependencies available: `uv sync --all-extras` followed by `make check-ci`.
 
 ## Subagent Verification
@@ -13,7 +18,9 @@
 - Implementation subagents should run only tests directly covering changed behavior plus targeted lint, type, and architecture checks for touched files.
 - Review subagents are read-only by default. They should inspect the diff and relevant call flow and run only focused tests needed to validate a concrete suspected finding.
 - Follow-up reviews should verify only previously reported findings and affected boundaries rather than repeating the complete review or full suite.
-- Use repository CI for full unit, integration, and end-to-end suites unless the user explicitly requests local full verification or CI is unavailable.
+- `make test` may be used for broader local unit and integration verification; use repository CI for
+  `test-all`, end-to-end, dbt, real-warehouse, and other full suites unless the user explicitly
+  requests local verification or CI is unavailable.
 - State the expected verification scope in subagent prompts and explicitly prohibit unnecessary full-suite runs.
 - Do not delay committing and pushing a focused fix solely to repeat checks already completed successfully by another agent or CI.
 

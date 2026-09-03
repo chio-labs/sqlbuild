@@ -5,6 +5,94 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from sqlbuild.cli.output.models import IntegrationCheckResult, IntegrationResultEnvelope
+from sqlbuild.cli.output.types import IntegrationOutputKind
+
+
+def integration_result_payload(
+    *, command: str, asset: Mapping[str, object], event_type: str = "resource_attempt_completed"
+) -> dict[str, object]:
+    asset_payload: dict[str, object] = dict(asset)
+    duration_ms: object | None = asset_payload.pop("duration_ms", None)
+    error_code: object | None = asset_payload.pop("error_code", None)
+    _ = asset_payload.pop("error_message", None)
+    _ = asset_payload.pop("error_help", None)
+    terminal_facts: dict[str, tuple[object | None, object | None, object | None]] = {
+        "resource_attempt_completed": (None, None, None),
+        "resource_attempt_failed": (error_code, "RuntimeError", None),
+        "resource_attempt_skipped": (None, None, "explicit"),
+    }
+    canonical_error_code, canonical_error_type, canonical_skip_code = terminal_facts[event_type]
+    return {
+        "schema_version": 1,
+        "record_kind": "integration_result",
+        "event_id": f"event-{asset['name']}",
+        "event_sequence": 0,
+        "event_type": event_type,
+        "occurred_at": "2026-09-02T12:00:00+00:00",
+        "invocation_id": "invocation-1",
+        "run_id": "run-1",
+        "resource_id": f"{asset['kind']}:{asset['name']}",
+        "resource_attempt_id": f"attempt-{asset['name']}",
+        "operation_id": None,
+        "statement_id": None,
+        "resource_kind": asset["kind"],
+        "resource_name": asset["name"],
+        "attempt_number": 1,
+        "duration_ms": duration_ms,
+        "output_kind": "asset",
+        "command": command,
+        "error_code": canonical_error_code,
+        "error_type": canonical_error_type,
+        "skip_code": canonical_skip_code,
+        "skip_mode": None,
+        "asset": asset_payload,
+        "checks": [],
+    }
+
+
+def build_check_integration_envelope(
+    *, check_id: str, name: str, event_id: str, attempt_id: str, event_sequence: int
+) -> IntegrationResultEnvelope:
+    return IntegrationResultEnvelope(
+        schema_version=1,
+        record_kind="integration_result",
+        event_id=event_id,
+        event_sequence=event_sequence,
+        event_type="resource_attempt_completed",
+        occurred_at="2026-09-02T12:00:00+00:00",
+        invocation_id="invocation-1",
+        run_id="run-1",
+        resource_id=check_id,
+        resource_attempt_id=attempt_id,
+        operation_id=None,
+        statement_id=None,
+        resource_kind="audit",
+        resource_name=name,
+        attempt_number=1,
+        duration_ms=1,
+        output_kind=IntegrationOutputKind.CHECK,
+        command="audit",
+        checks=(
+            IntegrationCheckResult(
+                kind="audit",
+                name=name,
+                check_id=check_id,
+                dag_check_id=check_id,
+                passed=True,
+                status="pass",
+                severity="error",
+                asset_name="orders",
+                attachment_kind="model",
+                attached_column_name="order_id",
+                attached_target_name="orders",
+                run_scope_phase="final",
+                row_count=0,
+                reused=False,
+            ),
+        ),
+    )
+
 
 def build_dagster_test_dag() -> Mapping[str, Any]:
     return {
@@ -189,6 +277,11 @@ def write_fake_sqb_command(
                 "if '--json-output' in sys.argv[1:]:",
                 "    json_output_path = Path(sys.argv[sys.argv.index('--json-output') + 1])",
                 f"    json_output_path.write_text({stdout!r}, encoding='utf-8')",
+                "elif any(arg.startswith('--json-output=') for arg in sys.argv[1:]):",
+                "    json_output_arg = next("
+                "arg for arg in sys.argv[1:] if arg.startswith('--json-output='))",
+                "    json_output_path = Path(json_output_arg.split('=', 1)[1])",
+                f"    json_output_path.write_text({stdout!r}, encoding='utf-8')",
                 "else:",
                 f"    sys.stdout.write({stdout!r})",
                 f"sys.stderr.write({stderr!r})",
@@ -227,17 +320,10 @@ def write_blocking_clone_event_command(
     *, root: Path, release_path: Path, command: str = "clone"
 ) -> list[str]:
     event_payload: str = json.dumps(
-        {
-            "version": 1,
-            "command": command,
-            "event": "asset",
-            "asset": {
-                "kind": "model",
-                "name": "orders",
-                "status": "success",
-                "action": "cloned",
-            },
-        }
+        integration_result_payload(
+            command=command,
+            asset={"kind": "model", "name": "orders", "status": "success", "action": "cloned"},
+        )
     )
     script_path: Path = root / "blocking_clone_event.py"
     script_path.write_text(
@@ -247,13 +333,7 @@ def write_blocking_clone_event_command(
                 "import os",
                 "import sys",
                 "import time",
-                "event_path = Path(os.environ['SQLBUILD_EXECUTION_EVENT_PATH'])",
-                "event_path.write_text("
-                '    \'{"version": 1, "command": "clone", "event": "asset", \''
-                '    \'{"asset": {"kind": "model", "name": "orders", \''
-                '    \'"status": "success", "action": "cloned"}}}\\n\','
-                "    encoding='utf-8',"
-                ")",
+                "event_path = Path(os.environ['SQLBUILD_INTEGRATION_RESULT_PATH'])",
                 f"event_path.write_text({event_payload + chr(10)!r}, encoding='utf-8')",
                 f"release_path = Path({str(release_path)!r})",
                 "while not release_path.exists():",
@@ -279,17 +359,14 @@ def write_blocking_execution_event_command(
 ) -> list[str]:
     event_payload: str = (
         json.dumps(
-            {
-                "version": 1,
-                "command": command,
-                "event": "asset",
-                "asset": {
+            integration_result_payload(
+                command=command,
+                asset={
                     "kind": "model",
-                    "name": "orders",
+                    "name": "customers",
                     "status": "success",
-                    "action": "completed",
                 },
-            }
+            )
         )
         + "\n"
     )
@@ -302,9 +379,8 @@ def write_blocking_execution_event_command(
             "assets": [
                 {
                     "kind": "model",
-                    "name": "orders",
+                    "name": "customers",
                     "status": "success",
-                    "action": "completed",
                 }
             ],
             "checks": [],
@@ -326,7 +402,7 @@ def write_blocking_execution_event_command(
                 "import os",
                 "import sys",
                 "import time",
-                "event_path = Path(os.environ['SQLBUILD_EXECUTION_EVENT_PATH'])",
+                "event_path = Path(os.environ['SQLBUILD_INTEGRATION_RESULT_PATH'])",
                 *event_write_lines,
                 f"release_path = Path({str(release_path)!r})",
                 "while not release_path.exists():",
@@ -354,7 +430,9 @@ def write_blocking_failed_execution_event_command(*, root: Path, release_path: P
         "duration_ms": 123,
     }
     event_payload: str = json.dumps(
-        {"version": 1, "command": "build", "event": "asset", "asset": asset}
+        integration_result_payload(
+            command="build", asset=asset, event_type="resource_attempt_failed"
+        )
     )
     execution_payload: str = json.dumps(
         {
@@ -374,7 +452,7 @@ def write_blocking_failed_execution_event_command(*, root: Path, release_path: P
                 "import os",
                 "import sys",
                 "import time",
-                "event_path = Path(os.environ['SQLBUILD_EXECUTION_EVENT_PATH'])",
+                "event_path = Path(os.environ['SQLBUILD_INTEGRATION_RESULT_PATH'])",
                 "with event_path.open('a', encoding='utf-8') as stream:",
                 f"    stream.write({event_payload + chr(10)!r})",
                 f"    stream.write({event_payload + chr(10)!r})",
@@ -397,6 +475,13 @@ def write_dagster_test_dag(*, root: Path) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     dag_path: Path = root / "sqlbuild_dag.json"
     dag_path.write_text(json.dumps(build_dagster_test_dag()), encoding="utf-8")
+    return dag_path
+
+
+def write_python_augmented_dagster_test_dag(*, root: Path) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    dag_path: Path = root / "sqlbuild_dag.json"
+    dag_path.write_text(json.dumps(build_python_augmented_dagster_test_dag()), encoding="utf-8")
     return dag_path
 
 

@@ -13,6 +13,19 @@ from tests.unit.src.sqlbuild.executor.build._helpers.helpers import ModelPlanOve
 
 
 @dataclass(frozen=True)
+class AuditExecutionIndexTestCase:
+    description: str
+    expected_model_audit_count: int
+    expected_end_audit_count: int
+
+
+@dataclass(frozen=True)
+class LifecycleProgressTestCase:
+    description: str
+    expected_event_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class BuildOutputTestCase:
     """Test case for build output formatting."""
 
@@ -35,6 +48,8 @@ class BuildSchedulerSourceLoadTestCase:
     loader_factory: Callable[..., DiscoveredLoaderFunction]
     expected_load_status: ExecutionStatus
     expected_model_status: ExecutionStatus
+    source_meta: dict[str, object]
+    expected_resource_kind: ExecutionResourceKind
     expected_execution_order: tuple[str, ...] = ()
     expected_model_rows: tuple[tuple[object, ...], ...] = ()
 

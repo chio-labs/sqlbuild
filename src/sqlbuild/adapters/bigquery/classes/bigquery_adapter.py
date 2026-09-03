@@ -69,6 +69,7 @@ from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
 from sqlbuild.adapter.type_system.main.first_arg_nullability import first_arg_nullability
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
+from sqlbuild.adapters.bigquery._helpers.statement_telemetry import affected_rows
 from sqlbuild.adapters.bigquery.classes.bigquery_connection import _BigQueryConnection
 from sqlbuild.adapters.bigquery.classes.bigquery_cursor import _BigQueryCursor
 from sqlbuild.adapters.bigquery.constants import (
@@ -91,6 +92,7 @@ from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.types import InitialValidFrom, SnapshotStrategy
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.diagnostics.main.log_sql import log_sql
+from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SeedCsvSettings
 from sqlbuild.sql_values.models import SqlValue
@@ -1387,7 +1389,7 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
             location=self._location,
         )
 
-    def execute(self, *, connection: _BigQueryConnection, sql: str) -> _BigQueryCursor:
+    def _execute(self, *, connection: _BigQueryConnection, sql: str) -> _BigQueryCursor:
         """Execute a SQL statement against BigQuery."""
 
         log_sql(logger=logging.getLogger("sqlbuild.adapter.bigquery"), sql=sql)
@@ -1423,24 +1425,38 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
         """Execute SQL and return normalized rows for ad hoc query output."""
 
         log_sql(logger=logging.getLogger("sqlbuild.adapter.bigquery"), sql=sql)
-        job: Any = connection.query_job(sql)
-        statement_type: str | None = getattr(job, "statement_type", None)
-        if statement_type is not None and statement_type != SELECT_STATEMENT_TYPE:
-            job.result()
-            return QueryResult()
-        cursor: Any = _BigQueryCursor(job.result())
-        description: Any | None = getattr(cursor, "description", None)
-        if description is None:
-            return QueryResult()
-        columns: tuple[str, ...] = tuple(str(column[0]) for column in description)
-        if limit is None:
-            return QueryResult(columns=columns, rows=tuple(cursor.fetchall()))
-        fetched_rows: list[tuple[object, ...]] = cursor.fetchmany(limit + 1)
-        return QueryResult(
-            columns=columns,
-            rows=tuple(fetched_rows[:limit]),
-            truncated=len(fetched_rows) > limit,
-        )
+        with StatementLifecycle(adapter="bigquery", sql=sql, intent="query") as lifecycle:
+            job: Any = connection.query_job(sql)
+            raw_job_id: object | None = getattr(job, "job_id", None)
+            job_id: str | None = raw_job_id if isinstance(raw_job_id, str) else None
+            lifecycle.submitted(job_id=job_id)
+            try:
+                statement_type: str | None = getattr(job, "statement_type", None)
+                if statement_type is not None and statement_type != SELECT_STATEMENT_TYPE:
+                    job.result()
+                    lifecycle.completed(job_id=job_id, affected_rows=affected_rows(job=job))
+                    return QueryResult()
+                cursor: Any = _BigQueryCursor(job.result())
+                description: Any | None = getattr(cursor, "description", None)
+                if description is None:
+                    lifecycle.completed(job_id=job_id, row_count=0)
+                    return QueryResult()
+                columns: tuple[str, ...] = tuple(str(column[0]) for column in description)
+                if limit is None:
+                    rows: tuple[tuple[object, ...], ...] = tuple(cursor.fetchall())
+                    lifecycle.completed(job_id=job_id, row_count=len(rows))
+                    return QueryResult(columns=columns, rows=rows)
+                fetched_rows: list[tuple[object, ...]] = cursor.fetchmany(limit + 1)
+                returned_rows: tuple[tuple[object, ...], ...] = tuple(fetched_rows[:limit])
+                lifecycle.completed(job_id=job_id, row_count=len(returned_rows))
+                return QueryResult(
+                    columns=columns,
+                    rows=returned_rows,
+                    truncated=len(fetched_rows) > limit,
+                )
+            except Exception as error:
+                lifecycle.failed(error=error, job_id=job_id)
+                raise
 
     def close(self, connection: _BigQueryConnection) -> None:
         """Close a BigQuery client."""

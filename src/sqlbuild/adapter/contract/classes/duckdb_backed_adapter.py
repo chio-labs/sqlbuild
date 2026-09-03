@@ -19,6 +19,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _render_ansi_typed_scalar,
     _render_typed_value_list,
 )
+from sqlbuild.adapter.contract.classes.observed_connection import ObservedConnection
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.constants import (
     DIFF_LEFT_SIDE,
@@ -1092,7 +1093,10 @@ class DuckDbBackedAdapter(BaseAdapter):
         import duckdb
 
         database: str = str(config.get("database", ":memory:"))
-        connection: duckdb.DuckDBPyConnection = duckdb.connect(database=database)
+        raw_connection: duckdb.DuckDBPyConnection = duckdb.connect(database=database)
+        connection: ObservedConnection = ObservedConnection(
+            raw_connection=raw_connection, adapter=self.adapter_name
+        )
 
         extensions: list[str] | tuple[str, ...] = config.get("extensions", ())
         extension_name: str
@@ -1113,7 +1117,7 @@ class DuckDbBackedAdapter(BaseAdapter):
 
         return connection
 
-    def execute(self, *, connection: Any, sql: str) -> Any:
+    def _execute(self, *, connection: Any, sql: str) -> Any:
         """Execute a SQL statement against a DuckDB connection."""
 
         log_sql(logger=logging.getLogger("sqlbuild.adapter.duckdb"), sql=sql)

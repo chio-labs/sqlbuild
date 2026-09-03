@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.76.1](https://github.com/chio-labs/sqlbuild/compare/v0.76.0...v0.76.1) (2026-09-03)
+
+
+### Bug Fixes
+
+* separate audit dependencies from model scheduling ([#481](https://github.com/chio-labs/sqlbuild/issues/481)) ([8fe5e30](https://github.com/chio-labs/sqlbuild/commit/8fe5e301ceea48d5d5a851f7e043c3ef7129e345))
+
+## [0.76.0](https://github.com/chio-labs/sqlbuild/compare/v0.75.1...v0.76.0) (2026-09-02)
+
+
+### Features
+
+* add execution observability foundation ([#479](https://github.com/chio-labs/sqlbuild/issues/479)) ([80ee9a9](https://github.com/chio-labs/sqlbuild/commit/80ee9a9f601e771c720b881057743776a04ffae8))
+
+## [0.75.1](https://github.com/chio-labs/sqlbuild/compare/v0.75.0...v0.75.1) (2026-09-02)
+
+
+### Bug Fixes
+
+* scope Dagster check-only execution ([#477](https://github.com/chio-labs/sqlbuild/issues/477)) ([ba43f41](https://github.com/chio-labs/sqlbuild/commit/ba43f41a597e0208d3a52eeb9a941eb13c7aa566))
+
+## [0.75.0](https://github.com/chio-labs/sqlbuild/compare/v0.74.4...v0.75.0) (2026-09-02)
+
+
+### Features
+
+* add explicit column contract mode ([#475](https://github.com/chio-labs/sqlbuild/issues/475)) ([62c7724](https://github.com/chio-labs/sqlbuild/commit/62c7724870de760124734d0e67e4a063baa0900b))
+
 ## [0.74.4](https://github.com/chio-labs/sqlbuild/compare/v0.74.3...v0.74.4) (2026-09-02)
 
 

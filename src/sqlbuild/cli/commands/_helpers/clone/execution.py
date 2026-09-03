@@ -18,9 +18,6 @@ from sqlbuild.cli.commands.models import (
     CloneRunOutcome,
 )
 from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
-from sqlbuild.cli.output.main._clone_item_execution_event import (
-    format_clone_item_execution_event,
-)
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
@@ -41,6 +38,7 @@ from sqlbuild.executor.clone.models import (
     CloneSourceEntries,
 )
 from sqlbuild.executor.clone.types import CloneItemCallback
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.models import SourceEntry
 
@@ -106,17 +104,18 @@ def execute_clone_plan(
         )
     finally:
         event_writer.close()
-    copy_clone_fingerprints(
-        result=result,
-        origin_model_entries=preparation.pipeline_result.origin_model_entries,
-        destination_model_entries=preparation.pipeline_result.destination_model_entries,
-        origin_seed_entries=preparation.pipeline_result.origin_seed_entries,
-        destination_seed_entries=preparation.pipeline_result.destination_seed_entries,
-        adapter=invocation.adapter,
-        destination_connection=connection_context.destination_connection,
-        run_id=preparation.pipeline_result.destination_project.run_id,
-        query_change_tracking=preparation.pipeline_result.destination_project.settings.query_change_tracking,
-    )
+    with OperationLifecycle(operation_kind="clone", operation_name="clone_finalization"):
+        copy_clone_fingerprints(
+            result=result,
+            origin_model_entries=preparation.pipeline_result.origin_model_entries,
+            destination_model_entries=preparation.pipeline_result.destination_model_entries,
+            origin_seed_entries=preparation.pipeline_result.origin_seed_entries,
+            destination_seed_entries=preparation.pipeline_result.destination_seed_entries,
+            adapter=invocation.adapter,
+            destination_connection=connection_context.destination_connection,
+            run_id=preparation.pipeline_result.destination_project.run_id,
+            query_change_tracking=preparation.pipeline_result.destination_project.settings.query_change_tracking,
+        )
     return CloneRunOutcome(result=result, elapsed=time.monotonic() - clone_start)
 
 
@@ -190,11 +189,9 @@ def _build_on_clone_item(
             + "\n"
         )
         stream.flush()
-        event_writer.write(
-            format_clone_item_execution_event(
-                item=item,
-                resource_type=resource_types_by_name[item.name],
-            )
+        event_writer.write_clone_result(
+            item=item,
+            resource_type=resource_types_by_name[item.name],
         )
 
     return _on_clone_item

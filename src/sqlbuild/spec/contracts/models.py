@@ -8,6 +8,7 @@ from pathlib import Path
 
 from sqlbuild.cost.constants import DEFAULT_USD_PER_CREDIT
 from sqlbuild.spec.contracts.types import (
+    ColumnContractMode,
     FutureCursorAction,
     MicrobatchLimitAction,
     SourceFreshnessStrategy,
@@ -159,6 +160,7 @@ class SettingsConfig:
     sql_analysis: bool = True
     query_change_tracking: bool = True
     sql_validation: bool = True
+    column_contract_mode: ColumnContractMode = ColumnContractMode.IMPLICIT
     concurrency: int = 1
     auto_load_sources: bool = True
     changes_only: bool = False
@@ -328,6 +330,22 @@ class LocalDbtConfig:
 
 
 @dataclass(frozen=True)
+class EventExporterFilterConfig:
+    """Destination-neutral runtime narrowing for lifecycle exporters."""
+
+    event_kinds: frozenset[str] | None = None
+    min_severity: str | None = None
+
+
+@dataclass(frozen=True)
+class EventExportersConfig:
+    """Global and named lifecycle exporter runtime filters."""
+
+    defaults: EventExporterFilterConfig = field(default_factory=EventExporterFilterConfig)
+    named: dict[str, EventExporterFilterConfig] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class ProjectConfig:
     """Shared project configuration loaded from sqlbuild_project.toml."""
 
@@ -353,6 +371,7 @@ class ProjectConfig:
     snapshots: SnapshotsConfig = field(default_factory=SnapshotsConfig)
     scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
     dbt: DbtConfig = field(default_factory=DbtConfig)
+    event_exporters: EventExportersConfig = field(default_factory=EventExportersConfig)
 
 
 @dataclass(frozen=True)

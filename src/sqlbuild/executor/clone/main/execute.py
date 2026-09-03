@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.contract.models import RelationLookup
-from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.planner.models import (
     CloneSourcePlanEntry,
@@ -11,10 +10,11 @@ from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
     SeedPlanEntry,
 )
+from sqlbuild.executor.clone._helpers.canonical_progress import clone_item_enrichment
 from sqlbuild.executor.clone._helpers.execution_items import (
-    execute_clone_function_item,
-    execute_clone_relation_item,
+    execute_clone_destination_item,
 )
+from sqlbuild.executor.clone._helpers.inspection import build_clone_relation_lookup
 from sqlbuild.executor.clone._helpers.lifecycle import finish_clone, prepare_clone_destination
 from sqlbuild.executor.clone.models import (
     CloneExecutionInput,
@@ -22,9 +22,27 @@ from sqlbuild.executor.clone.models import (
     CloneItemResult,
 )
 from sqlbuild.executor.clone.types import CloneStatus
+from sqlbuild.observability import run_scope
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
+from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
+    ResourceAttemptLifecycle,
+)
 
 
 def execute_clone(*, inputs: CloneExecutionInput) -> CloneExecutionResult:
+    with run_scope(inputs.run_id):
+        with OperationLifecycle(
+            operation_kind="clone",
+            operation_name="clone_execution",
+            metadata={"item_count": len(inputs.execution_order)},
+        ) as lifecycle:
+            result: CloneExecutionResult = _execute_clone(inputs=inputs)
+            if any(item.status == CloneStatus.FAILED for item in result.item_results):
+                lifecycle.failed(error_code="clone_execution_failed")
+            return result
+
+
+def _execute_clone(*, inputs: CloneExecutionInput) -> CloneExecutionResult:
     origin_models_by_name: dict[str, ModelPlanEntry] = {
         entry.name: entry for entry in inputs.origin_model_entries
     }
@@ -77,21 +95,8 @@ def execute_clone(*, inputs: CloneExecutionInput) -> CloneExecutionResult:
         )
         is not None
     )
-    relation_lookup: RelationLookup = build_relation_lookup(
-        adapter=inputs.adapter,
-        connection=inputs.destination_connection,
-        locations=tuple(
-            (
-                origin_entry.destination.database,
-                origin_entry.destination.schema,
-                origin_entry.destination.name,
-            )
-            for _, origin_entry in clonable_entries
-        )
-        + tuple(
-            (location.database, location.schema, location.name)
-            for location in inputs.dependency_locations.values()
-        ),
+    relation_lookup: RelationLookup = build_clone_relation_lookup(
+        inputs=inputs, clonable_entries=clonable_entries
     )
     available_keys: set[CompiledObjectKey] = {
         key
@@ -107,36 +112,47 @@ def execute_clone(*, inputs: CloneExecutionInput) -> CloneExecutionResult:
     ] = {destination.key: origin for destination, origin in clonable_entries}
     total: int = len(ordered_destination_entries)
     for index, destination_entry in enumerate(ordered_destination_entries, start=1):
-        if isinstance(destination_entry, FunctionPlanEntry):
-            item_result: CloneItemResult = execute_clone_function_item(
-                destination_entry=destination_entry,
-                inputs=inputs,
-                available_keys=available_keys,
-            )
-            results.append(item_result)
-            if inputs.on_item is not None:
-                inputs.on_item(index=index, total=total, item=item_result)
-            if item_result.status == CloneStatus.SUCCESS:
-                available_keys.add(destination_entry.key)
-            else:
-                available_keys.discard(destination_entry.key)
-            continue
-        origin_entry: CloneSourcePlanEntry | SeedPlanEntry | ModelPlanEntry = origins_by_key[
-            destination_entry.key
-        ]
-        item_result = execute_clone_relation_item(
-            destination_entry=destination_entry,
-            origin_entry=origin_entry,
-            inputs=inputs,
-            relation_lookup=relation_lookup,
-            available_keys=available_keys,
-        )
+        resource_kind: str = str(destination_entry.key.resource_type)
+        with clone_item_enrichment(
+            resource_name=destination_entry.name, enabled=inputs.on_item is not None
+        ):
+            with ResourceAttemptLifecycle(
+                resource_id=f"{resource_kind}:{destination_entry.name}",
+                resource_kind=resource_kind,
+                resource_name=destination_entry.name,
+                run_id=inputs.run_id,
+            ) as lifecycle:
+                item_result: CloneItemResult = execute_clone_destination_item(
+                    destination_entry=destination_entry,
+                    inputs=inputs,
+                    origins_by_key=origins_by_key,
+                    relation_lookup=relation_lookup,
+                    available_keys=available_keys,
+                )
+                if item_result.status == CloneStatus.FAILED:
+                    lifecycle.failed(error_code="clone_item_failed")
         results.append(item_result)
-        if item_result.status == CloneStatus.SUCCESS:
-            available_keys.add(destination_entry.key)
-        elif item_result.status == CloneStatus.FAILED:
-            available_keys.discard(destination_entry.key)
+        available_keys = _updated_available_keys(
+            available_keys=available_keys,
+            destination_entry=destination_entry,
+            item_result=item_result,
+        )
         if inputs.on_item is not None:
             inputs.on_item(index=index, total=total, item=item_result)
 
     return finish_clone(results=results, inputs=inputs)
+
+
+def _updated_available_keys(
+    *,
+    available_keys: set[CompiledObjectKey],
+    destination_entry: CloneSourcePlanEntry | SeedPlanEntry | ModelPlanEntry | FunctionPlanEntry,
+    item_result: CloneItemResult,
+) -> set[CompiledObjectKey]:
+    if item_result.status == CloneStatus.SUCCESS:
+        available_keys.add(destination_entry.key)
+    elif item_result.status == CloneStatus.FAILED or isinstance(
+        destination_entry, FunctionPlanEntry
+    ):
+        available_keys.discard(destination_entry.key)
+    return available_keys

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import duckdb
@@ -21,6 +22,12 @@ from sqlbuild.executor.custom.models import (
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.observability import (
+    EventDispatcher,
+    LifecycleEvent,
+    dispatcher_scope,
+    invocation_scope,
+)
 from tests.integration.src.sqlbuild.executor.build.custom._test_types import (
     CleanupTestCase,
     ContextVerificationTestCase,
@@ -39,11 +46,58 @@ from tests.integration.src.sqlbuild.executor.build.custom.helpers import (
     build_user_audit_fn,
     fail_custom_hook,
     insert_custom_hook_log,
+    operation_events,
     relation_exists,
     resolve_fn,
     row_count,
     run_custom_entry,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CustomFailureTestCase(
+            description="custom materialization returns unsupported object",
+            model_sql="SELECT 1 AS id",
+            expected_status=ExecutionStatus.FAILED,
+            expected_failed_phase=ExecutionPhase.CUSTOM_MATERIALIZATION,
+            expected_error_fragment="must return MaterializationResult",
+            fn_name="malformed_custom",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_malformed_custom_return_when_executing_then_operation_fails_once(
+    test_case: CustomFailureTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    def malformed_custom(ctx: MaterializationContext) -> object:
+        del ctx
+        return SimpleNamespace(failed=False)
+
+    with invocation_scope("inv-malformed-custom"), dispatcher_scope(dispatcher):
+        result: ModelExecutionResult = run_custom_entry(
+            adapter=adapter,
+            connection=connection,
+            entry=build_custom_plan_entry(sql=test_case.model_sql),
+            materialize_fn=cast(Any, malformed_custom),
+        )
+
+    observed_operations: tuple[LifecycleEvent, ...] = operation_events(events)
+    assert result.status == test_case.expected_status
+    assert result.failed_phase == test_case.expected_failed_phase
+    assert test_case.expected_error_fragment in (result.error_message or "")
+    assert tuple(event.event_type for event in observed_operations) == (
+        "operation_started",
+        "operation_failed",
+    )
+    assert observed_operations[0].payload["operation_name"] == "python_materialization"
 
 
 @pytest.mark.parametrize(

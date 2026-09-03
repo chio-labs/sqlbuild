@@ -49,6 +49,7 @@ from sqlbuild.compiler.pipeline.models import (
 from sqlbuild.executor.scenario.models import ScenarioSnapshotCaptureLimits
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.runtime.contracts.models import ConnectionHooks
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
@@ -120,32 +121,33 @@ def run_scenario_capture(request: ScenarioCaptureCommandRequest) -> int:
     progress_stream.write(f"{scenario_snapshot_capture_warning(force=force)}\n\n")
     progress_stream.flush()
 
-    pipeline_result: CompilePipelineResult = run_compile_pipeline(
-        discovered_inputs=discovered_inputs,
-        adapter=adapter,
-        options=CompilePipelineOptions(
-            no_sql_validation=no_sql_validation,
-            connection_config=connection_config,
-            external_sql_reference_resolver=resolve_external_sql_reference_resolver(
-                project_dir=effective_project_dir,
-                discovered_inputs=discovered_inputs,
+    with OperationLifecycle(operation_kind="project", operation_name="project_compile"):
+        pipeline_result: CompilePipelineResult = run_compile_pipeline(
+            discovered_inputs=discovered_inputs,
+            adapter=adapter,
+            options=CompilePipelineOptions(
+                no_sql_validation=no_sql_validation,
+                connection_config=connection_config,
+                external_sql_reference_resolver=resolve_external_sql_reference_resolver(
+                    project_dir=effective_project_dir,
+                    discovered_inputs=discovered_inputs,
+                ),
             ),
-        ),
-        hooks=ConnectionHooks(
-            on_progress=planning_progress.on_progress,
-            on_connection_start=connection_progress.on_connection_start,
-            on_connection_complete=lambda connection_count, elapsed_seconds: (
-                connection_progress.on_connection_complete(
-                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
-                )
+            hooks=ConnectionHooks(
+                on_progress=planning_progress.on_progress,
+                on_connection_start=connection_progress.on_connection_start,
+                on_connection_complete=lambda connection_count, elapsed_seconds: (
+                    connection_progress.on_connection_complete(
+                        connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                    )
+                ),
+                on_connection_error=lambda connection_count, elapsed_seconds: (
+                    connection_progress.on_connection_error(
+                        connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                    )
+                ),
             ),
-            on_connection_error=lambda connection_count, elapsed_seconds: (
-                connection_progress.on_connection_error(
-                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
-                )
-            ),
-        ),
-    )
+        )
     scenarios: tuple[CompiledSqlScenario, ...] = select_scenarios(
         project=pipeline_result.project,
         selectors=selectors,

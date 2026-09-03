@@ -30,6 +30,8 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotManifest,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.observability import run_scope
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def execute_scenario_snapshot_capture_steps(
@@ -38,10 +40,40 @@ def execute_scenario_snapshot_capture_steps(
     scenario_plan: ScenarioExecutionPlan,
     adapter: BaseAdapter,
     connection: Any,
+    run_id: str,
     settings: ScenarioCaptureSettings,
     local_type_overrides: dict[str, str] | None = None,
 ) -> ScenarioSnapshotCaptureRunResult:
     """Materialize scenario inputs, capture JSONL snapshots, and apply cleanup policy."""
+
+    with run_scope(run_id):
+        with OperationLifecycle(
+            operation_kind="scenario", operation_name="scenario_capture"
+        ) as lifecycle:
+            result: ScenarioSnapshotCaptureRunResult = _execute_scenario_snapshot_capture_steps(
+                project_dir=project_dir,
+                scenario_plan=scenario_plan,
+                adapter=adapter,
+                connection=connection,
+                run_id=run_id,
+                settings=settings,
+                local_type_overrides=local_type_overrides,
+            )
+            if result.status == ExecutionStatus.FAILED:
+                lifecycle.failed(error_code=result.error_code)
+            return result
+
+
+def _execute_scenario_snapshot_capture_steps(
+    *,
+    project_dir: Path,
+    scenario_plan: ScenarioExecutionPlan,
+    adapter: BaseAdapter,
+    connection: Any,
+    run_id: str,
+    settings: ScenarioCaptureSettings,
+    local_type_overrides: dict[str, str] | None,
+) -> ScenarioSnapshotCaptureRunResult:
 
     prepare_result: ScenarioCleanupExecutionResult = execute_scenario_cleanup(
         scenario_plan=scenario_plan,
@@ -82,9 +114,11 @@ def execute_scenario_snapshot_capture_steps(
         )
 
     seed_results: tuple[SeedExecutionResult, ...] = execute_scenario_seed_entries(
+        scenario_name=scenario_plan.name,
         seed_entries=scenario_plan.seed_entries,
         adapter=adapter,
         connection=connection,
+        run_id=run_id,
     )
     seed_error: str | None = _first_error(seed_results)
     if seed_error is not None:

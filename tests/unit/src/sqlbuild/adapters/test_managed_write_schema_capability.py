@@ -27,7 +27,7 @@ class _CustomAdapter(BaseAdapter):
     def close(self, connection: Any) -> None:
         del connection
 
-    def execute(self, connection: Any, sql: str) -> Any:
+    def _execute(self, *, connection: Any, sql: str) -> Any:
         del connection, sql
         return None
 

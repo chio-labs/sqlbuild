@@ -46,6 +46,7 @@ def reused_final_audit_results_by_binding_key(
             row_count=0,
             executed_sql=audit.resolved_sql,
             run_scope_phase=AuditRunScope.FINAL,
+            attached_target_kind=audit.attached_target_kind,
             attached_target_name=audit.attached_target_name,
             attached_column_name=audit.attached_column_name,
             reused=True,

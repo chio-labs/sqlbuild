@@ -20,6 +20,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorStateBackupCandidate,
     JanitorVirtualStatePruneCandidate,
 )
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def execute_janitor_plan(
@@ -40,15 +41,51 @@ def execute_janitor_plan(
 ) -> JanitorExecutionResult:
     """Delete all candidates in a janitor plan."""
 
+    with OperationLifecycle(
+        operation_kind="janitor",
+        operation_name="janitor_execution",
+        metadata={"item_count": _janitor_action_count(plan)},
+    ):
+        return _execute_janitor_plan(
+            plan=plan,
+            adapter=adapter,
+            connection=connection,
+            delete_checkpoint=delete_checkpoint,
+            delete_detached_virtual_environment=delete_detached_virtual_environment,
+            delete_expired_virtual_environment=delete_expired_virtual_environment,
+            delete_state_backup=delete_state_backup,
+            delete_expired_lock=delete_expired_lock,
+            prune_virtual_state=prune_virtual_state,
+        )
+
+
+def _execute_janitor_plan(
+    *,
+    plan: JanitorPlan,
+    adapter: BaseAdapter,
+    connection: Any,
+    delete_checkpoint: Callable[[JanitorCheckpointCandidate], None] | None,
+    delete_detached_virtual_environment: Callable[
+        [JanitorDetachedVirtualEnvironmentCandidate], None
+    ]
+    | None,
+    delete_expired_virtual_environment: Callable[[JanitorExpiredVirtualEnvironmentCandidate], None]
+    | None,
+    delete_state_backup: Callable[[JanitorStateBackupCandidate], None] | None,
+    delete_expired_lock: Callable[[JanitorExpiredLockCandidate], None] | None,
+    prune_virtual_state: Callable[[JanitorVirtualStatePruneCandidate], object] | None,
+) -> JanitorExecutionResult:
+
     recorder: StatementRecorder = StatementRecorder()
     candidate: JanitorDeleteCandidate
     for candidate in () if plan.direct_mode else plan.candidates:
-        adapter.drop(
-            connection=connection,
-            destination=candidate.key.display_name(),
-            if_exists=True,
-            statement_recorder=recorder,
-        )
+        with OperationLifecycle(operation_kind="janitor", operation_name="janitor_cleanup_action"):
+            adapter.drop(
+                connection=connection,
+                destination=candidate.key.display_name(),
+                if_exists=True,
+                statement_recorder=recorder,
+            )
     deleted_checkpoints: tuple[JanitorCheckpointCandidate, ...] = apply_janitor_deletions(
         candidates=plan.checkpoint_candidates, delete=delete_checkpoint
     )
@@ -88,4 +125,20 @@ def execute_janitor_plan(
         deleted_expired_locks=deleted_expired_locks,
         pruned_direct_state=pruned_direct_state,
         pruned_virtual_state=pruned_virtual_state,
+    )
+
+
+def _janitor_action_count(plan: JanitorPlan) -> int:
+    relation_count: int = 0 if plan.direct_mode else len(plan.candidates)
+    return relation_count + sum(
+        len(candidates)
+        for candidates in (
+            plan.checkpoint_candidates,
+            plan.detached_virtual_environment_candidates,
+            plan.expired_virtual_environment_candidates,
+            plan.state_backup_candidates,
+            plan.expired_lock_candidates,
+            plan.direct_state_prune_candidates,
+            plan.virtual_state_prune_candidates,
+        )
     )

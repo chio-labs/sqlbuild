@@ -23,6 +23,7 @@ from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
     SeedPlanEntry,
 )
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
 def prepare_clone_execution(
@@ -37,27 +38,28 @@ def prepare_clone_execution(
         stream=invocation.progress_stream,
         use_color=invocation.use_color,
     )
-    progress.start("Preparing clone plan...")
     planning_start: float = time.monotonic()
-    pipeline_result: ClonePipelineResult = run_clone_pipeline(
-        discovered_inputs=invocation.discovered_inputs,
-        adapter=invocation.adapter,
-        origin_target_name=request.origin_target_name,
-        destination_target_name=invocation.destination_target_name,
-        no_sql_validation=request.no_sql_validation,
-        select=request.select,
-        exclude=request.exclude,
-        cli_vars=request.cli_vars,
-        destination_connection=ClonePipelineConnection(
-            config=connection_context.destination_connection_config,
-            handle=connection_context.destination_connection,
-        ),
-        external_sql_reference_resolver=resolve_external_sql_reference_resolver(
-            project_dir=invocation.effective_project_dir,
+    with OperationLifecycle(operation_kind="project", operation_name="project_compile"):
+        progress.on_progress("Preparing clone plan...")
+        pipeline_result: ClonePipelineResult = run_clone_pipeline(
             discovered_inputs=invocation.discovered_inputs,
-        ),
-    )
-    progress.complete(f"Prepared clone plan. ({time.monotonic() - planning_start:.2f}s)")
+            adapter=invocation.adapter,
+            origin_target_name=request.origin_target_name,
+            destination_target_name=invocation.destination_target_name,
+            no_sql_validation=request.no_sql_validation,
+            select=request.select,
+            exclude=request.exclude,
+            cli_vars=request.cli_vars,
+            destination_connection=ClonePipelineConnection(
+                config=connection_context.destination_connection_config,
+                handle=connection_context.destination_connection,
+            ),
+            external_sql_reference_resolver=resolve_external_sql_reference_resolver(
+                project_dir=invocation.effective_project_dir,
+                discovered_inputs=invocation.discovered_inputs,
+            ),
+        )
+        progress.on_progress(f"Prepared clone plan. ({time.monotonic() - planning_start:.2f}s)")
     destination_model_entries: tuple[ModelPlanEntry, ...] = (
         pipeline_result.destination_model_entries
     )

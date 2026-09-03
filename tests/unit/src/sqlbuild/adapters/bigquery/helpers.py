@@ -136,15 +136,26 @@ class FakeBigQueryRows:
 
 
 class FakeBigQueryJob:
-    def __init__(self, rows: FakeBigQueryRows, *, statement_type: str | None = "SELECT") -> None:
+    job_id: str = "job-current"
+
+    def __init__(
+        self,
+        rows: FakeBigQueryRows,
+        *,
+        statement_type: str | None = "SELECT",
+        num_dml_affected_rows: object | None = None,
+    ) -> None:
         self._rows: FakeBigQueryRows = rows
         self.statement_type: str | None = statement_type
+        self.num_dml_affected_rows: object | None = num_dml_affected_rows
 
     def result(self) -> FakeBigQueryRows:
         return self._rows
 
 
 class FakeBigQueryFailingJob:
+    job_id: str = "job-current"
+
     def __init__(self, error: Exception) -> None:
         self.error: Exception = error
 
@@ -163,17 +174,23 @@ class FakeBigQueryClient:
         *,
         rows: FakeBigQueryRows | None = None,
         statement_type: str | None = "SELECT",
+        num_dml_affected_rows: object | None = None,
         dataset: object | None = None,
     ) -> None:
         self.rows: FakeBigQueryRows = rows or FakeBigQueryRows(columns=(), rows=())
         self.statement_type: str | None = statement_type
+        self.num_dml_affected_rows: object | None = num_dml_affected_rows
         self.queries: list[tuple[str, str | None]] = []
         self.dataset_ids: list[str] = []
         self.dataset: object = dataset or object()
 
     def query(self, sql: str, *, location: str | None) -> FakeBigQueryJob | FakeBigQueryFailingJob:
         self.queries.append((sql, location))
-        return FakeBigQueryJob(self.rows, statement_type=self.statement_type)
+        return FakeBigQueryJob(
+            self.rows,
+            statement_type=self.statement_type,
+            num_dml_affected_rows=self.num_dml_affected_rows,
+        )
 
     def get_dataset(self, dataset_id: str) -> object:
         self.dataset_ids.append(dataset_id)
