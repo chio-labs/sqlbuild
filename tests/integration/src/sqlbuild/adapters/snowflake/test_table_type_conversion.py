@@ -41,7 +41,7 @@ from tests.integration.src.sqlbuild.adapters.snowflake.helpers import (
             desired_type=TableType.PERMANENT,
             downgrade=False,
             expected_is_transient=False,
-            expected_conversion_statement_count=3,
+            expected_conversion_statement_count=4,
         ),
         SnowflakeTableTypeConversionTestCase(
             description="permanent table already at desired type is a no-op",

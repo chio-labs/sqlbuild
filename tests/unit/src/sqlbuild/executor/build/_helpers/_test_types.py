@@ -75,6 +75,8 @@ class TableTypeConversionTestCase:
     description: str
     relation_snapshots: tuple[tuple[RelationInfo, ...], ...]
     expected_statements: tuple[str, ...]
+    desired_type: str = "permanent"
+    actual_type: str = "transient"
 
 
 @dataclass(frozen=True)
