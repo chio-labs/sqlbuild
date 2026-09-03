@@ -22,6 +22,7 @@ from sqlbuild.compiler.planner._helpers.graph.loader_dag import upstream_loader_
 from sqlbuild.compiler.planner._helpers.graph.source_load_nodes import build_source_load_entries
 from sqlbuild.compiler.planner._helpers.output.audit_entry import plan_audit
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
+    audit_is_selected,
     build_model_materializations,
     extract_seed_columns,
     scope_overlaps,
@@ -384,7 +385,7 @@ def _build_audit_entries(
     entries: list[AuditPlanEntry] = []
     audit: CompiledAudit
     for audit in project.audits:
-        if not scope_overlaps(scope_deps=audit.scope_deps, selected_keys=scope.selected_keys):
+        if not audit_is_selected(audit=audit, selected_keys=scope.selected_keys):
             continue
         entries.append(
             plan_audit(
