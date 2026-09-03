@@ -15,6 +15,7 @@ from sqlbuild.sql_values.types import CollectionRendering
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ColumnContractModeConfigErrorTestCase,
     ColumnContractModeConfigTestCase,
+    EffectiveBatchDefaultTestCase,
     FutureCursorConfigErrorTestCase,
     FutureCursorConfigTestCase,
     LoadLocalConfigErrorTestCase,
@@ -151,6 +152,31 @@ def test_given_microbatch_limit_config_when_loading_project_then_policy_is_typed
 
     assert config.microbatches.limits.max_batches == test_case.expected_max_batches
     assert config.microbatches.limits.action == test_case.expected_action
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        EffectiveBatchDefaultTestCase(
+            description="effective token is preserved",
+            project_file_contents=(
+                'name = "demo"\nadapter = "duckdb"\n[defaults]\nbatch_size = "effective"\n'
+            ),
+            expected_batch_size="effective",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_effective_batch_size_default_when_loading_project_then_token_is_preserved(
+    test_case: EffectiveBatchDefaultTestCase, tmp_path: Path
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        test_case.project_file_contents, encoding="utf-8"
+    )
+
+    config: ProjectConfig = load_project_config(project_dir=tmp_path)
+
+    assert config.defaults.batch_size == test_case.expected_batch_size
 
 
 @pytest.mark.parametrize(

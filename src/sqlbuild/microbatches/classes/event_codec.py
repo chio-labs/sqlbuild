@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.microbatches.constants import MICROBATCH_COLUMNS
@@ -139,7 +139,10 @@ class MicrobatchEventCodec:
 
     @staticmethod
     def _datetime(value: object) -> datetime:
-        return value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
+        decoded: datetime = (
+            value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
+        )
+        return decoded.replace(tzinfo=UTC) if decoded.tzinfo is None else decoded
 
     @staticmethod
     def _optional_datetime(value: object) -> datetime | None:

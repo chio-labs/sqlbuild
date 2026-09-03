@@ -19,3 +19,10 @@ class DirectStoreSuccessiveWriteTestCase:
     expected_initial_statement_count: int
     expected_successive_statement_count: int
     expected_initialization_statement_count: int
+
+
+@dataclass(frozen=True)
+class CausalStoreTestCase:
+    description: str
+    expected_inserted: int
+    expected_existing: int

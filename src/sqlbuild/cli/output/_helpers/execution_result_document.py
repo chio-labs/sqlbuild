@@ -661,6 +661,22 @@ def _format_microbatch_result(result: ModelExecutionResult) -> dict[str, object]
             for interval in result.microbatch_accounting_intervals
         ],
     }
+    if (
+        result.microbatch_causal_history_status is not None
+        or result.microbatch_producer_completion_event_ids
+        or result.microbatch_consumer_frontier_event_ids
+    ):
+        microbatch.update(
+            {
+                "causal_history_status": result.microbatch_causal_history_status,
+                "causal_replay_intervals": [
+                    {"start": start, "end": end}
+                    for start, end in result.microbatch_causal_replay_intervals
+                ],
+                "producer_completion_event_ids": result.microbatch_producer_completion_event_ids,
+                "consumer_frontier_event_ids": result.microbatch_consumer_frontier_event_ids,
+            }
+        )
     if result.microbatch_limit is not None:
         microbatch.update(
             {

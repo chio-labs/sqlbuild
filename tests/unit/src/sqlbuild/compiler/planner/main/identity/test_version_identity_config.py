@@ -20,6 +20,11 @@ from tests.unit.src.sqlbuild.compiler.planner.main.identity._test_types import (
             expected_in_identity=True,
         ),
         VersionIdentityConfigTestCase(
+            description="authored batch size participates in model version identity",
+            config_key="batch_size",
+            expected_in_identity=True,
+        ),
+        VersionIdentityConfigTestCase(
             description="maximum start distance participates in model version identity",
             config_key="cursor_start_max_ahead",
             expected_in_identity=True,
@@ -68,6 +73,12 @@ def test_given_cursor_role_config_when_building_identity_then_field_participates
                 "cursor_filter_inputs": {"orders": "event_time"},
                 "cursor_watermark_inputs": {"raw_orders": "loaded_at"},
             },
+            expected_equal=False,
+        ),
+        CursorRoleIdentityTestCase(
+            description="authored effective batch differs from fixed batch identity",
+            original_config={"batch_size": "effective"},
+            changed_config={"batch_size": "1d"},
             expected_equal=False,
         ),
     ],

@@ -32,7 +32,7 @@ from sqlbuild.executor.run.types import (
     WatermarkResolver,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
-from sqlbuild.microbatches.models import MicrobatchScope
+from sqlbuild.microbatches.models import CausalDependencySnapshot, MicrobatchScope
 from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.provider.main.runtime import ProviderContainer, _empty_provider_container
 from sqlbuild.spec.contracts.models import FutureCursorsConfig, SourceEntry, StartCursorsConfig
@@ -156,6 +156,11 @@ class ModelExecutionResult:
     microbatch_accounting_intervals: tuple[MicrobatchAccountingInterval, ...] = field(
         default_factory=tuple
     )
+    microbatch_causal_history_status: str | None = None
+    microbatch_causal_replay_intervals: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    microbatch_applied_intervals: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    microbatch_producer_completion_event_ids: tuple[str, ...] = field(default_factory=tuple)
+    microbatch_consumer_frontier_event_ids: tuple[str, ...] = field(default_factory=tuple)
     microbatch_limit: int | None = None
     microbatch_limit_count: int | None = None
     microbatch_limit_action: MicrobatchLimitAction | None = None
@@ -216,6 +221,9 @@ class ModelMaterializationContext:
     microbatch_event_store_resolver: Callable[[Any], MicrobatchEventStore] | None = None
     microbatch_scope: MicrobatchScope | None = None
     microbatch_model_version_hash: str | None = None
+    microbatch_causal_dependencies: tuple[CausalDependencySnapshot, ...] = field(
+        default_factory=tuple
+    )
     microbatch_unaccounted_partition_policy: str = "synthesize"
     microbatch_lease_check: Callable[[], None] | None = None
     microbatch_global_concurrency: int = 1
@@ -352,6 +360,7 @@ class MicrobatchPhaseOutcome:
     failure: ModelExecutionResult | None = None
     completed_batches: int = 0
     rows_affected: int | None = None
+    applied_intervals: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

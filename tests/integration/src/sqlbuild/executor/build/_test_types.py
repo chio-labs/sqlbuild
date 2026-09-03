@@ -41,6 +41,14 @@ class BuildExecutionTestCase:
 
 
 @dataclass(frozen=True)
+class CausalBuildExecutionTestCase:
+    """Named causal integration scenario."""
+
+    description: str
+    expected_batch_count: int
+
+
+@dataclass(frozen=True)
 class SnapshotTimestampExecutionTestCase:
     description: str
     model_name: str

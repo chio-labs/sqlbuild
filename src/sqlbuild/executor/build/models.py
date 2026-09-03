@@ -9,7 +9,7 @@ from pathlib import Path
 
 from sqlbuild.adapter.contract.models import LifeCycleEvent, RelationInfo
 from sqlbuild.adapter.contract.types import TablePromotionMode
-from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
@@ -82,6 +82,13 @@ class BuildRuntimeParams:
     microbatch_unaccounted_partition_policy: str = "synthesize"
     microbatch_state_resolver: (
         Callable[[ModelPlanEntry, object], tuple[MicrobatchEventStore, MicrobatchScope]] | None
+    ) = None
+    microbatch_location_state_resolver: (
+        Callable[
+            [str, CompiledRelationLocation, str | None, object],
+            tuple[MicrobatchEventStore, MicrobatchScope],
+        ]
+        | None
     ) = None
     microbatch_lease_check: Callable[[], None] | None = None
 

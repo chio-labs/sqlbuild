@@ -17,6 +17,8 @@ class MicrobatchRecordType(StrEnum):
     PARTITION_COMPLETION = "partition_completion"
     REPLAY_REQUIREMENT = "replay_requirement"
     SYNTHETIC_COMPLETION = "synthetic_completion"
+    PRODUCER_COMPLETION = "producer_completion"
+    CONSUMER_FRONTIER = "consumer_frontier"
 
 
 class MicrobatchRunType(StrEnum):
@@ -31,6 +33,20 @@ class MicrobatchCompletionType(StrEnum):
 
 
 class MicrobatchFingerprintStatus(StrEnum):
+    KNOWN = "known"
+    UNKNOWN = "unknown"
+
+
+class CausalCompletionKind(StrEnum):
+    """How a producer completion was established."""
+
+    PHYSICAL = "physical"
+    SYNTHETIC = "synthetic"
+
+
+class CausalHistoryStatus(StrEnum):
+    """Whether durable history proves an exact producer causal frontier."""
+
     KNOWN = "known"
     UNKNOWN = "unknown"
 

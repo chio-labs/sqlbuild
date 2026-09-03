@@ -75,6 +75,7 @@ class CursorPlanDetails:
     declared_batch_size: str | None
     effective_batch_size: str | None
     planned_batch_count: int | None
+    causal_resolution: str | None = None
 
 
 @dataclass(frozen=True)
