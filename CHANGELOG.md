@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.6](https://github.com/chio-labs/sqlbuild/compare/v0.76.5...v0.76.6) (2026-09-03)
+
+
+### Bug Fixes
+
+* avoid build planning for focused commands ([#490](https://github.com/chio-labs/sqlbuild/issues/490)) ([6e2a82d](https://github.com/chio-labs/sqlbuild/commit/6e2a82d1b061cc6d520ea62078b10b3dee043a46))
+
 ## [0.76.5](https://github.com/chio-labs/sqlbuild/compare/v0.76.4...v0.76.5) (2026-09-03)
 
 
