@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.8](https://github.com/chio-labs/sqlbuild/compare/v0.76.7...v0.76.8) (2026-09-03)
+
+
+### Bug Fixes
+
+* install skills at repository root ([#494](https://github.com/chio-labs/sqlbuild/issues/494)) ([cdd1ea5](https://github.com/chio-labs/sqlbuild/commit/cdd1ea56991d6ca86184128fad7a952ae46d2fc2))
+
 ## [0.76.7](https://github.com/chio-labs/sqlbuild/compare/v0.76.6...v0.76.7) (2026-09-03)
 
 
