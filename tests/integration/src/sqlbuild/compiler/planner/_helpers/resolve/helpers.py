@@ -90,6 +90,7 @@ def resolve_and_execute(
         context=ModelPlanContext(
             model_locations=model_locations,
             models_by_name={},
+            functions_by_name={},
             seed_locations={},
             function_locations={},
             source_map=source_map,

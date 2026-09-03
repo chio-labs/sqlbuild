@@ -11,6 +11,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
+    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
@@ -53,6 +54,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     build_cursor_input_contract_models,
     build_cursor_input_contract_sources,
+    build_function_transitive_watermark_models,
     build_source_cursor_input_model,
     build_test_project_with_source_entry,
     build_transitive_watermark_models,
@@ -581,7 +583,56 @@ def test_given_transitive_watermark_when_validating_lineage_then_accepts_upstrea
         source_map={"raw_orders": SourceEntry(name="raw_orders", schema="raw")},
         source_warehouse_columns={"raw_orders": (ColumnInfo(name="loaded_at", type="TIMESTAMP"),)},
     )
+    assert test_case.expected_valid is True
 
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        WatermarkLineageTestCase(
+            description="table function resolves transitive physical source watermark",
+            watermark_name="raw_orders",
+            watermark_column="loaded_at",
+            expected_valid=True,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_table_function_and_transitive_watermark_when_planning_then_source_is_accepted(
+    test_case: WatermarkLineageTestCase,
+) -> None:
+    model: CompiledModel
+    models_by_name: dict[str, CompiledModel]
+    functions_by_name: dict[str, CompiledFunction]
+    model, models_by_name, functions_by_name = build_function_transitive_watermark_models(
+        watermark_name=test_case.watermark_name,
+        watermark_column=test_case.watermark_column,
+    )
+
+    validate_source_cursor_input_columns(
+        model=model,
+        cursor_column="event_time",
+        models_by_name=models_by_name,
+        functions_by_name=functions_by_name,
+        source_map={"raw_orders": SourceEntry(name="raw_orders", schema="raw")},
+        source_warehouse_columns={"raw_orders": (ColumnInfo(name="loaded_at", type="TIMESTAMP"),)},
+    )
+    relations: tuple[CursorInputRelation, ...] = _build_cursor_input_relations(
+        model=model,
+        adapter=DuckDbAdapter(),
+        model_locations={name: upstream.destination for name, upstream in models_by_name.items()},
+        models_by_name=models_by_name,
+        functions_by_name=functions_by_name,
+        seed_locations={},
+        source_map={"raw_orders": SourceEntry(name="raw_orders", schema="raw", table="raw_orders")},
+        cursor_column="event_time",
+        runtime_cursor_producer_names=frozenset(),
+        fingerprints=WarehouseFingerprints(),
+    )
+
+    assert len(relations) == 1
+    assert relations[0].relation == "raw.raw_orders"
+    assert relations[0].cursor_column == "loaded_at"
     assert test_case.expected_valid is True
 
 

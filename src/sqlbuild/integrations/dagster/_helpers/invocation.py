@@ -33,7 +33,6 @@ from sqlbuild.integrations.dagster.constants import (
     SCENARIO_VALUE_FLAGS,
     SELECT_FILE_FLAG,
     SOURCE_NODE_KIND,
-    STDERR_STREAM_NAME,
     SUCCESS_EXECUTION_STATUS,
     VIRTUAL_ENV_FLAG,
     WARNING_CHECK_SEVERITY,
@@ -284,8 +283,6 @@ def _start_stream_future(
     source: IO[str] | None,
     sink: TextIO,
     mirror_sink: TextIO | None = None,
-    context: Any,
-    stream_name: str,
 ) -> Future[str] | None:
     if source is None:
         return None
@@ -294,8 +291,6 @@ def _start_stream_future(
         source=source,
         sink=sink,
         mirror_sink=mirror_sink,
-        context=context,
-        stream_name=stream_name,
     )
 
 
@@ -304,11 +299,8 @@ def _forward_stream(
     source: IO[str],
     sink: TextIO,
     mirror_sink: TextIO | None,
-    context: Any,
-    stream_name: str,
 ) -> str:
     captured: list[str] = []
-    logger: Any | None = getattr(context, "log", None) if context is not None else None
     try:
         for chunk in iter(source.readline, ""):
             captured.append(chunk)
@@ -319,13 +311,6 @@ def _forward_stream(
             ):
                 mirror_sink.write(chunk)
                 mirror_sink.flush()
-            if logger is None:
-                continue
-            line: str = chunk.rstrip("\r\n")
-            if stream_name == STDERR_STREAM_NAME:
-                logger.warning("SQLBuild: %s", line)
-            else:
-                logger.info("SQLBuild: %s", line)
     finally:
         source.close()
     return "".join(captured)
@@ -544,7 +529,6 @@ def _build_results_from_integration_result(
     if asset is not None and asset.status in COMPLETED_EXECUTION_STATUSES:
         node: Mapping[str, Any] | None = nodes_by_id.get(envelope.resource_id)
         loader_result: tuple[str, Mapping[str, Any]] | None = None
-        same_envelope_node_ids: set[str] = set()
         if (
             node is not None
             and str(node.get("kind")) == SOURCE_NODE_KIND
@@ -556,15 +540,6 @@ def _build_results_from_integration_result(
                 payload_asset=asdict(asset),
                 loader_name=asset.loader,
             )
-            if loader_result is not None:
-                same_envelope_node_ids.add(loader_result[0])
-        if node is not None and not _live_node_dependencies_emitted(
-            node=node,
-            dag=dag,
-            emitted_asset_paths=emitted_asset_paths,
-            same_envelope_node_ids=same_envelope_node_ids,
-        ):
-            node = None
         asset_nodes: dict[str, tuple[Mapping[str, Any], Mapping[str, Any] | None]] = {}
         if node is not None:
             asset_nodes[str(node.get("id"))] = (node, asdict(asset))
@@ -637,32 +612,6 @@ def _build_results_from_integration_result(
     if _asset_check_only_context(context=context):
         return tuple(result for result in results if isinstance(result, dg.AssetCheckResult))
     return tuple(results)
-
-
-def _live_node_dependencies_emitted(
-    *,
-    node: Mapping[str, Any],
-    dag: Mapping[str, Any],
-    emitted_asset_paths: set[tuple[str, ...]],
-    same_envelope_node_ids: set[str],
-) -> bool:
-    node_id: str = str(node.get("id"))
-    nodes_by_id: dict[str, Mapping[str, Any]] = {
-        str(candidate.get("id")): candidate for candidate in dag.get("nodes", ())
-    }
-    for edge in dag.get("edges", ()):
-        if str(edge.get("to_id")) != node_id:
-            continue
-        upstream: Mapping[str, Any] | None = nodes_by_id.get(str(edge.get("from_id")))
-        if upstream is None or not _is_materializable_node_kind(str(upstream.get("kind"))):
-            continue
-        upstream_id: str = str(upstream.get("id"))
-        if upstream_id in same_envelope_node_ids:
-            continue
-        upstream_path: tuple[str, ...] = tuple(str(part) for part in upstream.get("asset_key", ()))
-        if upstream_path not in emitted_asset_paths:
-            return False
-    return True
 
 
 def _build_check_results_from_execution_check(

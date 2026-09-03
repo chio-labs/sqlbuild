@@ -142,6 +142,7 @@ def build_clone_model_entries(
                 context=ModelPlanContext(
                     model_locations=model_locations,
                     models_by_name={},
+                    functions_by_name={function.name: function for function in project.functions},
                     seed_locations=seed_locations,
                     function_locations=function_locations,
                     source_map=source_map,

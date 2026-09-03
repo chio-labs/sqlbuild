@@ -942,6 +942,49 @@ def build_transitive_watermark_models(
     return consumer, {view_model.name: view_model}
 
 
+def build_function_transitive_watermark_models(
+    *, watermark_name: str, watermark_column: str
+) -> tuple[CompiledModel, dict[str, CompiledModel], dict[str, CompiledFunction]]:
+    """Build a consumer whose physical watermark is upstream of a table function."""
+
+    consumer: CompiledModel
+    models_by_name: dict[str, CompiledModel]
+    consumer, models_by_name = build_transitive_watermark_models(
+        watermark_name=watermark_name,
+        watermark_column=watermark_column,
+    )
+    function_name: str = "orders_for_window"
+    function_location: CompiledRelationLocation = CompiledRelationLocation(
+        database=None,
+        schema="analytics",
+        name=function_name,
+        qualified_name=f"analytics.{function_name}",
+    )
+    function: CompiledFunction = CompiledFunction(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.TABLE_FN, name=function_name),
+        deps=(),
+        name=function_name,
+        relative_path=Path(f"functions/sql/{function_name}.sql"),
+        arguments=(),
+        returns="TABLE (order_id INTEGER)",
+        body_sql='SELECT * FROM __ref("orders_view")',
+        destination=function_location,
+        fingerprint_destination=function_location,
+        references=(CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders_view"),),
+    )
+    consumer = replace(
+        consumer,
+        query_sql=f'SELECT * FROM __table_fn("{function_name}")()',
+        references=(
+            CompileSqlReference(
+                ref_kind=SqlReferenceKind.TABLE_FUNCTION,
+                ref_name=function_name,
+            ),
+        ),
+    )
+    return consumer, models_by_name, {function.name: function}
+
+
 def build_cursor_input_contract_models(
     test_case: SourceCursorInputColumnsTestCase,
 ) -> dict[str, CompiledModel]:
