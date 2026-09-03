@@ -221,17 +221,20 @@ def build_install_targets(
     home_dir: Path | None = None,
 ) -> tuple[SkillInstallTarget, ...]:
     home_path: Path = home_dir if home_dir is not None else Path.home()
+    local_install_root: Path = _find_git_root(project_dir=project_dir) or project_dir
     install_targets: list[SkillInstallTarget] = []
     for target_name in target_names:
         base_path: Path
         if target_name == opencode_skill_target:
             base_path = (
-                home_path / ".config/opencode" if global_install else project_dir / ".opencode"
+                home_path / ".config/opencode"
+                if global_install
+                else local_install_root / ".opencode"
             )
         elif target_name == claude_skill_target:
-            base_path = home_path / ".claude" if global_install else project_dir / ".claude"
+            base_path = home_path / ".claude" if global_install else local_install_root / ".claude"
         else:
-            base_path = home_path / ".agents" if global_install else project_dir / ".agents"
+            base_path = home_path / ".agents" if global_install else local_install_root / ".agents"
         install_targets.append(
             SkillInstallTarget(
                 name=target_name,
@@ -239,6 +242,14 @@ def build_install_targets(
             )
         )
     return tuple(install_targets)
+
+
+def _find_git_root(*, project_dir: Path) -> Path | None:
+    for candidate in (project_dir, *project_dir.parents):
+        marker: Path = candidate / ".git"
+        if marker.is_dir() or marker.is_file():
+            return candidate
+    return None
 
 
 def load_packaged_skill_content() -> str:
