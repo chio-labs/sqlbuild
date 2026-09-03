@@ -461,15 +461,7 @@ fn filename_behavior<'a>(stem: &'a str, allowed_subjects: &[String]) -> Option<&
 }
 
 fn structured_name<'a>(name: &'a str, allowed_subjects: &[String]) -> Option<(&'a str, &'a str)> {
-    let matched_subject_length = allowed_subjects
-        .iter()
-        .filter_map(|subject| {
-            name.strip_prefix(subject)
-                .and_then(|suffix| suffix.strip_prefix("__"))
-                .filter(|behavior| !behavior.is_empty())
-                .map(|_| subject.len())
-        })
-        .max();
+    let matched_subject_length = longest_subject_prefix(name, allowed_subjects);
     let (subject, behavior) = matched_subject_length.map_or_else(
         || name.split_once("__"),
         |length| Some((&name[..length], &name[length + 2..])),
@@ -477,6 +469,25 @@ fn structured_name<'a>(name: &'a str, allowed_subjects: &[String]) -> Option<(&'
     let subject = subject.trim();
     let behavior = behavior.trim();
     (!subject.is_empty() && !behavior.is_empty()).then_some((subject, behavior))
+}
+
+fn longest_subject_prefix(name: &str, allowed_subjects: &[String]) -> Option<usize> {
+    let mut longest: Option<usize> = None;
+    for subject in allowed_subjects {
+        let Some(suffix) = name.strip_prefix(subject) else {
+            continue;
+        };
+        let Some(behavior) = suffix.strip_prefix("__") else {
+            continue;
+        };
+        if behavior.is_empty() {
+            continue;
+        }
+        if longest.is_none_or(|length| subject.len() > length) {
+            longest = Some(subject.len());
+        }
+    }
+    longest
 }
 
 fn behavior_slug_matches(filename: &str, behavior: &str) -> bool {
