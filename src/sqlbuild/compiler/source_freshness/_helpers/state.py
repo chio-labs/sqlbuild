@@ -73,8 +73,6 @@ def source_freshness_records_equivalent(
 
     if previous_record.data_version_hash == current_record.data_version_hash:
         return True
-    if lag_tolerance is None:
-        return False
     if previous_record.value_kind != SourceFreshnessValueKind.TIMESTAMP.value:
         return False
     if current_record.value_kind != SourceFreshnessValueKind.TIMESTAMP.value:
@@ -83,6 +81,10 @@ def source_freshness_records_equivalent(
         return False
     previous_timestamp: datetime = _parse_timestamp_data_version(previous_record.data_version)
     current_timestamp: datetime = _parse_timestamp_data_version(current_record.data_version)
+    if current_timestamp == previous_timestamp:
+        return True
+    if lag_tolerance is None:
+        return False
     if current_timestamp < previous_timestamp:
         return False
     return current_timestamp - previous_timestamp <= _parse_lag_tolerance(lag_tolerance)
@@ -90,11 +92,14 @@ def source_freshness_records_equivalent(
 
 def _parse_timestamp_data_version(value: str) -> datetime:
     try:
-        return datetime.fromisoformat(value)
+        parsed: datetime = datetime.fromisoformat(value)
     except ValueError as exc:
         raise SourceFreshnessObservationError(
             f"Timestamp source freshness state value is not valid ISO datetime: {value}"
         ) from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _parse_lag_tolerance(value: str) -> timedelta:

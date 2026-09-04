@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -111,7 +111,7 @@ def run_freshness(request: FreshnessCommandRequest) -> int:
                 sources=sources,
                 select=selected_source_names,
                 exclude=(),
-                observed_at=datetime.now(),
+                observed_at=_source_freshness_observed_at(),
                 run_id=graph.project.run_id,
                 previous_records=previous_records,
                 previous_records_by_source_name=previous_records_by_source_name,
@@ -151,3 +151,7 @@ def _format_freshness_for_terminal(*, result: FreshnessCommandResult, no_color: 
         result=result,
         use_color=not no_color and supports_color(),
     )
+
+
+def _source_freshness_observed_at() -> datetime:
+    return datetime.now(UTC)

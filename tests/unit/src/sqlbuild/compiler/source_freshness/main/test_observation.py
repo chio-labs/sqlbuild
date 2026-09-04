@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -68,15 +68,15 @@ class CapturingQueryDuckDbAdapter(DuckDbAdapter):
     [
         SharedSourceFreshnessObservationTestCase(
             description="uses adapter metadata observed_at when present",
-            adapter_observed_at=datetime(2026, 1, 15, 12, 1, 0),
-            fallback_observed_at=datetime(2026, 1, 15, 12, 5, 0),
-            expected_observed_at=datetime(2026, 1, 15, 12, 1, 0),
+            adapter_observed_at=datetime(2026, 1, 15, 12, 1, 0, tzinfo=UTC),
+            fallback_observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
+            expected_observed_at=datetime(2026, 1, 15, 12, 1, 0, tzinfo=UTC),
         ),
         SharedSourceFreshnessObservationTestCase(
             description="falls back to caller observed_at when adapter omits observed_at",
             adapter_observed_at=None,
-            fallback_observed_at=datetime(2026, 1, 15, 12, 5, 0),
-            expected_observed_at=datetime(2026, 1, 15, 12, 5, 0),
+            fallback_observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
+            expected_observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
         ),
     ],
     ids=lambda case: case.description,
@@ -103,6 +103,7 @@ def test_given_adapter_freshness_metadata_when_observing_then_uses_expected_obse
         adapter.close(connection)
 
     assert observation.observed_at == test_case.expected_observed_at
+    assert observation.data_version == datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC)
 
 
 @pytest.mark.parametrize(
@@ -156,7 +157,7 @@ def test_given_column_freshness_source_when_observing_then_renders_full_relation
                     filter=test_case.freshness_filter,
                 ),
             ),
-            observed_at=datetime(2026, 1, 15, 12, 5, 0),
+            observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
         )
 
     assert adapter.captured_sql is not None
@@ -198,7 +199,7 @@ def test_given_column_freshness_expression_source_when_observing_then_uses_subqu
                 column=test_case.column,
             ),
         ),
-        observed_at=datetime(2026, 1, 15, 12, 5, 0),
+        observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
     )
 
     assert adapter.captured_sql is not None

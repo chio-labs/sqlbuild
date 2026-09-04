@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.contract.types import AdapterExecute
+from sqlbuild.compiler.source_freshness._helpers.datetime import normalize_presumed_utc_datetime
 from sqlbuild.compiler.source_freshness._helpers.sql import (
     build_qualified_table_name,
 )
@@ -80,6 +81,7 @@ def _row_to_source_freshness_record(row: tuple[Any, ...]) -> SourceFreshnessReco
         if isinstance(raw_observed_at, datetime)
         else datetime.fromisoformat(str(raw_observed_at))
     )
+    observed_at = normalize_presumed_utc_datetime(value=observed_at)
     return SourceFreshnessRecord(
         source_name=str(row[0]),
         target_database=str(raw_target_database) if raw_target_database is not None else None,
