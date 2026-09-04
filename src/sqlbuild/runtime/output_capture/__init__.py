@@ -1,0 +1,1 @@
+"""Command output capture runtime."""

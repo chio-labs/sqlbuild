@@ -12,7 +12,7 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.planner._helpers.resolve.cursor import normalize_cursor_snapshot_grain
 from sqlbuild.compiler.planner.exceptions import FutureCursorSafetyError
 from sqlbuild.compiler.planner.models import CursorBounds, CursorInputRelation, ModelCursorSnapshot
-from sqlbuild.compiler.planner.types import CursorGrain, CursorType
+from sqlbuild.compiler.planner.types import CursorGrain, CursorType, CursorWatermarkMode
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     resolve_runtime_cursor_bounds,
@@ -32,6 +32,7 @@ from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
     RuntimeCursorStartTestCase,
     RuntimeExistingTargetOverrideTestCase,
     RuntimeFutureCursorTestCase,
+    RuntimeIntegerWatermarkModeTestCase,
     RuntimeTargetMaxTestCase,
     RuntimeTargetProbeFailureTestCase,
     RuntimeWatermarkStatementTestCase,
@@ -320,6 +321,68 @@ def test_given_multiple_physical_watermarks_when_resolving_then_reads_standalone
 
     assert "UNION ALL" not in " ".join(adapter.statements)
     assert tuple(adapter.statements) == test_case.expected_statements
+    assert bounds == test_case.expected_bounds
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        RuntimeIntegerWatermarkModeTestCase(
+            description="all_9_and_10",
+            mode=CursorWatermarkMode.ALL,
+            values=(9, 10),
+            expected_bounds=CursorBounds(start="9", end="10"),
+        ),
+        RuntimeIntegerWatermarkModeTestCase(
+            description="any_9_and_10",
+            mode=CursorWatermarkMode.ANY,
+            values=(9, 10),
+            expected_bounds=CursorBounds(start="9", end="11"),
+        ),
+        RuntimeIntegerWatermarkModeTestCase(
+            description="all_100_and_99",
+            mode=CursorWatermarkMode.ALL,
+            values=(100, 99),
+            expected_bounds=CursorBounds(start="99", end="100"),
+        ),
+        RuntimeIntegerWatermarkModeTestCase(
+            description="any_100_and_99",
+            mode=CursorWatermarkMode.ANY,
+            values=(100, 99),
+            expected_bounds=CursorBounds(start="99", end="101"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_multiple_integer_watermarks_when_resolving_then_uses_numeric_order(
+    test_case: RuntimeIntegerWatermarkModeTestCase,
+) -> None:
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
+    connection.execute("CREATE TABLE input_a (cursor_value INTEGER)")
+    connection.execute("CREATE TABLE input_b (cursor_value INTEGER)")
+    connection.execute("INSERT INTO input_a VALUES (?)", [test_case.values[0]])
+    connection.execute("INSERT INTO input_b VALUES (?)", [test_case.values[1]])
+
+    bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
+        adapter=cast(BaseAdapter, FakeCursorAdapter()),
+        connection=connection,
+        target_relation="target_data",
+        target_database=None,
+        target_schema=None,
+        target_name="target_data",
+        spec=RuntimeCursorSpec(
+            cursor_column="cursor_value",
+            cursor_type=CursorType.INTEGER,
+            cursor_grain=None,
+            cursor_start=None,
+            cursor_input_relations=(
+                CursorInputRelation(relation="input_a", cursor_column="cursor_value"),
+                CursorInputRelation(relation="input_b", cursor_column="cursor_value"),
+            ),
+            cursor_watermark_mode=test_case.mode,
+        ),
+    )
+
     assert bounds == test_case.expected_bounds
 
 

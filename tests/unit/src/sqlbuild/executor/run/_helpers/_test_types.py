@@ -187,6 +187,16 @@ class RuntimeWatermarkStatementTestCase:
     expected_bounds: object
 
 
+@dataclass(frozen=True, kw_only=True)
+class RuntimeIntegerWatermarkModeTestCase:
+    """Runtime integer aggregation case with non-lexicographic values."""
+
+    description: str
+    mode: str
+    values: tuple[int, int]
+    expected_bounds: object
+
+
 @dataclass(frozen=True)
 class MixedTemporalWatermarkTestCase:
     description: str

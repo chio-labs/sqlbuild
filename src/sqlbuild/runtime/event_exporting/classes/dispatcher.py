@@ -40,6 +40,7 @@ from sqlbuild.runtime.event_exporting.models import (
     LifecycleExportPolicy,
     QueuedLifecycleEvent,
 )
+from sqlbuild.runtime.output_capture.models import OutputRecord
 
 
 class EventExporterDispatcher:
@@ -193,6 +194,25 @@ class EventExporterDispatcher:
             self._exporters = exporters
             self._counts = [MutableEventExporterCounts() for _ in exporters]
             self._bound.set()
+
+    def export_output(self, records: tuple[OutputRecord, ...]) -> None:
+        """Deliver output records through the already-bound destination providers."""
+
+        invocation: threading.Thread = threading.current_thread()
+        failed: bool = False
+        with self._lock:
+            self._live_invocations.add(invocation)
+        try:
+            for record in records:
+                for exporter in self._exporters:
+                    try:
+                        exporter.function(event=record, **exporter.provider_arguments)
+                    except BaseException:
+                        failed = True
+        finally:
+            self._invocation_finished(invocation)
+        if failed:
+            raise EventExporterStateError("one or more output export attempts failed")
 
     def shutdown(self) -> EventExportSummary:
         """Stop acceptance and drain until the fixed shutdown deadline."""

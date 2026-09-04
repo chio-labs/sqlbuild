@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import heapq
 from datetime import datetime
-from decimal import Decimal
 
-from sqlbuild.compiler.planner.types import CursorType
+from sqlbuild.cursor_algebra.main.compare import compare
+from sqlbuild.cursor_algebra.main.cursor_sort_key import cursor_sort_key
+from sqlbuild.cursor_algebra.main.max_bound import max_bound
+from sqlbuild.cursor_algebra.main.min_bound import min_bound
+from sqlbuild.cursor_algebra.main.parse import parse
 from sqlbuild.microbatches.models import (
     MicrobatchCoverageProjection,
     MicrobatchEvent,
@@ -49,7 +52,7 @@ def project_microbatch_coverage(
     boundaries.update(interval.start for interval in expected_intervals)
     boundaries.update(interval.end for interval in expected_intervals)
     ordered_boundaries: tuple[str, ...] = tuple(
-        sorted(boundaries, key=lambda value: _cursor_value(value=value, cursor_type=cursor_type))
+        sorted(boundaries, key=lambda value: cursor_sort_key(raw=value, cursor_type=cursor_type))
     )
     projected: list[ProjectedMicrobatchInterval] = []
     for start, end, latest in _latest_completion_segments(
@@ -79,7 +82,7 @@ def project_microbatch_coverage(
     if accounted and contiguous_frontier is not None:
         ordered_accounted: list[MicrobatchInterval] = sorted(
             accounted,
-            key=lambda interval: _cursor_value(value=interval.start, cursor_type=cursor_type),
+            key=lambda interval: cursor_sort_key(raw=interval.start, cursor_type=cursor_type),
         )
         for interval in ordered_accounted:
             if _lte(left=interval.start, right=contiguous_frontier, cursor_type=cursor_type):
@@ -136,8 +139,8 @@ def _latest_completion_segments(
     by_start: tuple[MicrobatchEvent, ...] = tuple(
         sorted(
             completions,
-            key=lambda event: _cursor_value(
-                value=event.partition_start or "", cursor_type=cursor_type
+            key=lambda event: cursor_sort_key(
+                raw=event.partition_start or "", cursor_type=cursor_type
             ),
         )
     )
@@ -182,13 +185,13 @@ def _classify_uncovered_expected_intervals(
     ordered_expected: tuple[MicrobatchInterval, ...] = tuple(
         sorted(
             expected_intervals,
-            key=lambda interval: _cursor_value(value=interval.start, cursor_type=cursor_type),
+            key=lambda interval: cursor_sort_key(raw=interval.start, cursor_type=cursor_type),
         )
     )
     ordered_accounted: tuple[MicrobatchInterval, ...] = tuple(
         sorted(
             accounted,
-            key=lambda interval: _cursor_value(value=interval.start, cursor_type=cursor_type),
+            key=lambda interval: cursor_sort_key(raw=interval.start, cursor_type=cursor_type),
         )
     )
     known_missing: list[MicrobatchInterval] = []
@@ -313,7 +316,7 @@ def _is_fully_covered(
 ) -> bool:
     frontier: str = expected.start
     for interval in sorted(
-        accounted, key=lambda item: _cursor_value(value=item.start, cursor_type=cursor_type)
+        accounted, key=lambda item: cursor_sort_key(raw=item.start, cursor_type=cursor_type)
     ):
         if _lte(left=interval.end, right=frontier, cursor_type=cursor_type):
             continue
@@ -327,35 +330,29 @@ def _is_fully_covered(
 
 def _maximum_bound(*, values: tuple[str, ...], cursor_type: str) -> str | None:
     non_empty: tuple[str, ...] = tuple(value for value in values if value)
-    return (
-        max(non_empty, key=lambda value: _cursor_value(value=value, cursor_type=cursor_type))
-        if non_empty
-        else None
-    )
+    return max_bound(values=non_empty, cursor_type=cursor_type) if non_empty else None
 
 
 def _minimum_bound(*, values: tuple[str, ...], cursor_type: str) -> str | None:
     non_empty: tuple[str, ...] = tuple(value for value in values if value)
-    return (
-        min(non_empty, key=lambda value: _cursor_value(value=value, cursor_type=cursor_type))
-        if non_empty
-        else None
-    )
-
-
-def _cursor_value(*, value: str, cursor_type: str) -> datetime | Decimal:
-    if cursor_type == CursorType.TIMESTAMP:
-        return datetime.fromisoformat(value)
-    return Decimal(value)
+    return min_bound(values=non_empty, cursor_type=cursor_type) if non_empty else None
 
 
 def _lt(*, left: str, right: str, cursor_type: str) -> bool:
-    if cursor_type == CursorType.TIMESTAMP:
-        return datetime.fromisoformat(left) < datetime.fromisoformat(right)
-    return Decimal(left) < Decimal(right)
+    return (
+        compare(
+            left=parse(raw=left, cursor_type=cursor_type),
+            right=parse(raw=right, cursor_type=cursor_type),
+        )
+        < 0
+    )
 
 
 def _lte(*, left: str, right: str, cursor_type: str) -> bool:
-    if cursor_type == CursorType.TIMESTAMP:
-        return datetime.fromisoformat(left) <= datetime.fromisoformat(right)
-    return Decimal(left) <= Decimal(right)
+    return (
+        compare(
+            left=parse(raw=left, cursor_type=cursor_type),
+            right=parse(raw=right, cursor_type=cursor_type),
+        )
+        <= 0
+    )

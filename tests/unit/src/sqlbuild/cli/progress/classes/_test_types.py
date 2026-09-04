@@ -37,3 +37,22 @@ class BuildSqlTestProjectionCase:
     description: str
     expected_status: str
     expected_status_count: int
+
+
+@dataclass(frozen=True)
+class StatementProgressCase:
+    """Expected output for one monitored warehouse statement."""
+
+    description: str
+    adapter: str
+    query_id: str | None
+    expected_context: str
+
+
+@dataclass(frozen=True)
+class StatementMonitorRaceCase:
+    """Expected query-ID publication under concurrent monitor cleanup."""
+
+    description: str
+    query_id: str
+    expected_submission_count: int

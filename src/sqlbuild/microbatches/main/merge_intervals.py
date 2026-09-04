@@ -1,9 +1,9 @@
 """Merge canonical microbatch intervals."""
 
-from datetime import datetime
-from decimal import Decimal
-
 from sqlbuild.compiler.planner.types import CursorType
+from sqlbuild.cursor_algebra.main.compare import compare
+from sqlbuild.cursor_algebra.main.cursor_sort_key import cursor_sort_key
+from sqlbuild.cursor_algebra.main.parse import parse
 from sqlbuild.microbatches.exceptions import MicrobatchStateError
 from sqlbuild.microbatches.models import MicrobatchInterval
 
@@ -13,10 +13,12 @@ def merge_intervals(
 ) -> tuple[MicrobatchInterval, ...]:
     """Merge overlapping or adjacent intervals while preserving disjoint sets."""
 
+    if cursor_type not in {CursorType.TIMESTAMP, CursorType.INTEGER}:
+        raise MicrobatchStateError(f"unsupported cursor type: {cursor_type}")
     ordered: tuple[MicrobatchInterval, ...] = tuple(
         sorted(
             intervals,
-            key=lambda interval: _cursor_value(value=interval.start, cursor_type=cursor_type),
+            key=lambda interval: cursor_sort_key(raw=interval.start, cursor_type=cursor_type),
         )
     )
     merged: list[MicrobatchInterval] = []
@@ -29,17 +31,11 @@ def merge_intervals(
     return tuple(merged)
 
 
-def _cursor_value(*, value: str, cursor_type: str) -> datetime | Decimal:
-    if cursor_type == CursorType.TIMESTAMP:
-        return datetime.fromisoformat(value)
-    if cursor_type == CursorType.INTEGER:
-        return Decimal(value)
-    raise MicrobatchStateError(f"unsupported cursor type: {cursor_type}")
-
-
 def _lt(*, left: str, right: str, cursor_type: str) -> bool:
-    if cursor_type == CursorType.TIMESTAMP:
-        return datetime.fromisoformat(left) < datetime.fromisoformat(right)
-    if cursor_type == CursorType.INTEGER:
-        return Decimal(left) < Decimal(right)
-    raise MicrobatchStateError(f"unsupported cursor type: {cursor_type}")
+    return (
+        compare(
+            left=parse(raw=left, cursor_type=cursor_type),
+            right=parse(raw=right, cursor_type=cursor_type),
+        )
+        < 0
+    )

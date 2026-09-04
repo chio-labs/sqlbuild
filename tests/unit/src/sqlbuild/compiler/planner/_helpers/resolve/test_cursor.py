@@ -9,16 +9,25 @@ import pytest
 from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
     discovered_cursor_partition,
 )
-from sqlbuild.compiler.planner._helpers.resolve.cursor import compute_cursor_bounds
+from sqlbuild.compiler.planner._helpers.resolve.cursor import (
+    apply_cursor_replay_policy,
+    compute_cursor_bounds,
+)
 from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
 )
 from sqlbuild.compiler.planner.models import CursorBounds, ModelCursorSnapshot
-from sqlbuild.compiler.planner.types import CursorGrain, CursorType
+from sqlbuild.compiler.planner.types import (
+    CursorGrain,
+    CursorType,
+    CursorWatermarkMode,
+)
 from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     CursorBoundsTestCase,
     DiscoveredCursorPartitionTestCase,
+    IntegerWatermarkModeTestCase,
+    ReplayFloorRenderingTestCase,
 )
 
 
@@ -70,6 +79,13 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types impor
         ),
         DiscoveredCursorPartitionTestCase(
             "day plain date", "2026-07-15", "day", "2026-07-15", "2026-07-16"
+        ),
+        DiscoveredCursorPartitionTestCase(
+            "day midnight timestamp string",
+            "2026-07-15T00:00:00",
+            "day",
+            "2026-07-15T00:00:00",
+            "2026-07-16T00:00:00",
         ),
         DiscoveredCursorPartitionTestCase(
             "plain date without grain",
@@ -422,3 +438,99 @@ def test_given_snapshot_and_config_when_computing_cursor_bounds_then_returns_exp
     )
 
     assert result == test_case.expected_bounds
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        IntegerWatermarkModeTestCase(
+            description="all_9_and_10",
+            mode=CursorWatermarkMode.ALL,
+            minimums=("9", "10"),
+            maximums=("9", "10"),
+            expected_bounds=CursorBounds(start="9", end="10"),
+        ),
+        IntegerWatermarkModeTestCase(
+            description="any_9_and_10",
+            mode=CursorWatermarkMode.ANY,
+            minimums=("9", "10"),
+            maximums=("9", "10"),
+            expected_bounds=CursorBounds(start="9", end="11"),
+        ),
+        IntegerWatermarkModeTestCase(
+            description="all_100_and_99",
+            mode=CursorWatermarkMode.ALL,
+            minimums=("100", "99"),
+            maximums=("100", "99"),
+            expected_bounds=CursorBounds(start="99", end="100"),
+        ),
+        IntegerWatermarkModeTestCase(
+            description="any_100_and_99",
+            mode=CursorWatermarkMode.ANY,
+            minimums=("100", "99"),
+            maximums=("100", "99"),
+            expected_bounds=CursorBounds(start="99", end="101"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_multiple_integer_watermarks_when_planning_then_uses_numeric_order(
+    test_case: IntegerWatermarkModeTestCase,
+) -> None:
+    result: CursorBounds | None = compute_cursor_bounds(
+        cursor_snapshot=ModelCursorSnapshot(
+            target_max=None,
+            upstream_mins=test_case.minimums,
+            upstream_maxes=test_case.maximums,
+            cursor_watermark_mode=test_case.mode,
+        ),
+        cursor_type=CursorType.INTEGER,
+        cursor_start=None,
+        lookback=None,
+        backfill_duration=None,
+        start_cursor_override=None,
+        end_cursor_override=None,
+        is_microbatch=False,
+    )
+
+    assert result == test_case.expected_bounds
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ReplayFloorRenderingTestCase(
+            description="date_without_configured_floor_remains_date",
+            current_start="2025-01-01",
+            cursor_start=None,
+            expected_start="2025-01-01",
+        ),
+        ReplayFloorRenderingTestCase(
+            description="midnight_timestamp_with_floor_remains_timestamp",
+            current_start="2025-01-01T00:00:00",
+            cursor_start="2024-01-01",
+            expected_start="2025-01-01T00:00:00",
+        ),
+        ReplayFloorRenderingTestCase(
+            description="date_with_configured_floor_matches_legacy_datetime_promotion",
+            current_start="2025-01-01",
+            cursor_start="2024-01-01",
+            expected_start="2025-01-01T00:00:00",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_temporal_start_when_applying_replay_floor_then_preserves_legacy_rendering(
+    test_case: ReplayFloorRenderingTestCase,
+) -> None:
+    result: str = apply_cursor_replay_policy(
+        start=test_case.current_start,
+        end="2026-01-01",
+        cursor_start=test_case.cursor_start,
+        cursor_type=CursorType.TIMESTAMP,
+        lookback=None,
+        backfill_duration=None,
+        has_start_override=False,
+    )
+
+    assert result == test_case.expected_start

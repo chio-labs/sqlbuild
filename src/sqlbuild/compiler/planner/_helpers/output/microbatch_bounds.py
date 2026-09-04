@@ -19,6 +19,15 @@ from sqlbuild.compiler.planner.main.execution.microbatch_limit import (
 from sqlbuild.compiler.planner.models import CursorBounds, Duration
 from sqlbuild.compiler.planner.types import CursorType, IncrementalMode
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.cursor_algebra.main.cap_from_end import cap_from_end
+from sqlbuild.cursor_algebra.main.cap_from_start import cap_from_start
+from sqlbuild.cursor_algebra.main.clamp import clamp
+from sqlbuild.cursor_algebra.main.merge import merge
+from sqlbuild.cursor_algebra.main.parse import parse
+from sqlbuild.cursor_algebra.main.render import render
+from sqlbuild.cursor_algebra.main.split_into_batches import split_into_batches
+from sqlbuild.cursor_algebra.models import AlignedInterval, IntegerValue
+from sqlbuild.cursor_algebra.types import CursorScalar
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
 _CAP_ACTIONS: frozenset[MicrobatchLimitAction] = frozenset(
@@ -50,11 +59,49 @@ def cap_microbatch_bounds(
             return bounds
         if size <= 0:
             return bounds
+        capped_start: int = start
+        capped_end: int = end
         if action == MicrobatchLimitAction.CAP_FROM_START:
-            return CursorBounds(start=bounds.start, end=str(min(end, start + size * max_batches)))
-        batch_count: int = max(0, (end - start + size - 1) // size)
-        skipped_batches: int = max(0, batch_count - max_batches)
-        return CursorBounds(start=str(start + size * skipped_batches), end=bounds.end)
+            capped_end = min(end, start + size * max_batches)
+        else:
+            batch_count: int = max(0, (end - start + size - 1) // size)
+            skipped_batches: int = max(0, batch_count - max_batches)
+            capped_start = start + size * skipped_batches
+        if capped_start >= capped_end:
+            if action == MicrobatchLimitAction.CAP_FROM_START:
+                return CursorBounds(start=bounds.start, end=str(capped_end))
+            return CursorBounds(start=str(capped_start), end=bounds.end)
+        start_value: CursorScalar = parse(raw=capped_start, cursor_type=cursor_type)
+        end_value: CursorScalar = parse(raw=capped_end, cursor_type=cursor_type)
+        if not isinstance(start_value, IntegerValue) or not isinstance(end_value, IntegerValue):
+            return bounds
+        interval: AlignedInterval = AlignedInterval(start=start_value, end=end_value, grain=None)
+        batches: tuple[AlignedInterval, ...] = split_into_batches(
+            interval=interval, step=capped_end - capped_start
+        )
+        if action == MicrobatchLimitAction.CAP_FROM_START:
+            selected: tuple[AlignedInterval, ...] = cap_from_start(
+                intervals=batches, count=max_batches
+            )
+            if not selected:
+                return bounds
+            merged: tuple[AlignedInterval, ...] = merge(intervals=selected)
+            capped: AlignedInterval | None = clamp(interval=merged[0], bounds=interval)
+            return (
+                bounds
+                if capped is None
+                else CursorBounds(start=bounds.start, end=render(value=capped.end))
+            )
+        selected = cap_from_end(intervals=batches, count=max_batches)
+        if not selected:
+            return bounds
+        merged = merge(intervals=selected)
+        capped = clamp(interval=merged[0], bounds=interval)
+        return (
+            bounds
+            if capped is None
+            else CursorBounds(start=render(value=capped.start), end=bounds.end)
+        )
 
     if cursor_type != CursorType.TIMESTAMP:
         return bounds
