@@ -7,11 +7,19 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
+from sqlbuild.compiler.planner.models import SqlTestPlanEntry
+from sqlbuild.executor.testing._helpers.difference_samples import (
+    build_sql_test_difference_sample_sql,
+)
+from sqlbuild.executor.testing.main._execute import execute_sql_test
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
-from sqlbuild.executor.testing.models import SqlTestExecutionResult
-from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
+from sqlbuild.executor.testing.types import SqlTestDifferenceDirection, SqlTestOutcome
 from tests.integration.src.sqlbuild.executor.testing._test_types import (
     SqlTestComparisonSqlTestCase,
+    SqlTestDiagnosticsTestCase,
+    SqlTestDifferenceSqlTestCase,
     SqlTestExecutionTestCase,
 )
 from tests.integration.src.sqlbuild.executor.testing.helpers import (
@@ -24,6 +32,20 @@ from tests.integration.src.sqlbuild.executor.testing.helpers import (
 class TinySqlLimitDuckDbAdapter(DuckDbAdapter):
     def recommended_max_sql_length(self) -> int | None:
         return 80
+
+
+class FailingDifferenceSampleDuckDbAdapter(DuckDbAdapter):
+    def execute(self, *, connection: Any, sql: str) -> Any:
+        if "__sqlbuild_difference" in sql:
+            raise RuntimeError("controlled difference sampling failure")
+        return super().execute(connection=connection, sql=sql)
+
+
+class DescriptionlessDifferenceSampleDuckDbAdapter(DuckDbAdapter):
+    def execute(self, *, connection: Any, sql: str) -> Any:
+        if "__sqlbuild_difference" in sql:
+            return object()
+        return super().execute(connection=connection, sql=sql)
 
 
 @pytest.mark.parametrize(
@@ -94,6 +116,40 @@ def test_given_sql_test_chain_when_building_comparison_sql_then_uses_readable_ct
     unexpected_fragment: str
     for unexpected_fragment in test_case.unexpected_fragments:
         assert unexpected_fragment not in comparison_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SqlTestDifferenceSqlTestCase(
+            description="sqlserver uses TOP for bounded samples",
+            dialect="tsql",
+            expected_fragment="SELECT TOP 3",
+            unexpected_fragment="LIMIT 3",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_sqlserver_dialect_when_building_sample_sql_then_uses_bounded_top_query(
+    test_case: SqlTestDifferenceSqlTestCase,
+) -> None:
+    entry: SqlTestPlanEntry = build_sql_test_plan_entry(
+        name="test_model",
+        chain_steps=(("orders", "SELECT 2 AS id", "SELECT 1 AS id"),),
+    )
+
+    dialect: str | None = SqlServerAdapter().sql_analysis_dialect()
+    assert dialect == test_case.dialect
+    sample_sql: str = build_sql_test_difference_sample_sql(
+        test_entry=entry,
+        step=entry.chain[0],
+        direction=SqlTestDifferenceDirection.UNEXPECTED,
+        sample_limit=3,
+        sql_analysis_dialect=dialect,
+    )
+
+    assert test_case.expected_fragment in sample_sql
+    assert test_case.unexpected_fragment not in sample_sql
 
 
 @pytest.mark.parametrize(
@@ -244,6 +300,193 @@ def test_given_mismatching_sql_when_executing_test_then_fails(
 
     assert result.outcome == test_case.expected_outcome
     verify_test_result(result=result, test_case=test_case)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SqlTestDiagnosticsTestCase(
+            description="two-way differences are bounded redacted and truncated",
+            chain_steps=(
+                ("intermediate_orders", "SELECT 1 AS id", None),
+                (
+                    "orders",
+                    " UNION ALL ".join(
+                        f"SELECT {index} AS id, '{'x' * 160}{index}' AS detail, "
+                        f"'actual-token-{index}' AS access_token"
+                        for index in range(1, 5)
+                    ),
+                    " UNION ALL ".join(
+                        f"SELECT {index} AS id, 'expected-{index}' AS detail, "
+                        f"'expected-token-{index}' AS access_token"
+                        for index in range(1, 5)
+                    ),
+                ),
+            ),
+            expected_actual_count=4,
+            expected_expected_count=4,
+            expected_unexpected_count=4,
+            expected_missing_count=4,
+            expected_sample_count=3,
+            expect_redaction=True,
+            expect_truncation=True,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_two_way_mismatch_when_executing_test_then_samples_are_bounded_and_redacted(
+    test_case: SqlTestDiagnosticsTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    entry: SqlTestPlanEntry = build_sql_test_plan_entry(
+        name="bounded_diagnostics",
+        chain_steps=test_case.chain_steps,
+    )
+
+    result: SqlTestExecutionResult = execute_sql_test(
+        test_entry=entry,
+        adapter=adapter,
+        connection=connection,
+    )
+
+    assert result.outcome == SqlTestOutcome.FAIL
+    assert len(result.step_results) == 1
+    assert result.step_results[0].model_name == "orders"
+    step: StepResult = result.step_results[0]
+    assert step.actual_row_count == test_case.expected_actual_count
+    assert step.expected_row_count == test_case.expected_expected_count
+    assert step.unexpected_row_count == test_case.expected_unexpected_count
+    assert step.missing_row_count == test_case.expected_missing_count
+    assert len(step.unexpected_samples) == test_case.expected_sample_count
+    assert len(step.missing_samples) == test_case.expected_sample_count
+    unexpected_values: dict[str, str] = dict(step.unexpected_samples[0].values)
+    missing_values: dict[str, str] = dict(step.missing_samples[0].values)
+    assert (unexpected_values["access_token"] == "[REDACTED]") == test_case.expect_redaction
+    assert (missing_values["access_token"] == "[REDACTED]") == test_case.expect_redaction
+    assert unexpected_values["detail"].endswith("...") == test_case.expect_truncation
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SqlTestDiagnosticsTestCase(
+            description="duplicates differ only by total row count",
+            chain_steps=(("orders", "SELECT 1 AS id UNION ALL SELECT 1 AS id", "SELECT 1 AS id"),),
+            expected_actual_count=2,
+            expected_expected_count=1,
+            expected_unexpected_count=0,
+            expected_missing_count=0,
+            expected_sample_count=0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_only_duplicate_count_differs_when_executing_then_row_counts_explain_failure(
+    test_case: SqlTestDiagnosticsTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    entry: SqlTestPlanEntry = build_sql_test_plan_entry(
+        name="duplicate_diagnostics",
+        chain_steps=test_case.chain_steps,
+    )
+
+    result: SqlTestExecutionResult = execute_sql_test(
+        test_entry=entry,
+        adapter=adapter,
+        connection=connection,
+    )
+
+    step: StepResult = result.step_results[0]
+    assert result.outcome == SqlTestOutcome.FAIL
+    assert step.actual_row_count == test_case.expected_actual_count
+    assert step.expected_row_count == test_case.expected_expected_count
+    assert step.unexpected_row_count == test_case.expected_unexpected_count
+    assert step.missing_row_count == test_case.expected_missing_count
+    assert len(step.unexpected_samples) == test_case.expected_sample_count
+    assert len(step.missing_samples) == test_case.expected_sample_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SqlTestDiagnosticsTestCase(
+            description="sampling failure preserves known comparison failure",
+            chain_steps=(("orders", "SELECT 2 AS id", "SELECT 1 AS id"),),
+            expected_actual_count=1,
+            expected_expected_count=1,
+            expected_unexpected_count=1,
+            expected_missing_count=1,
+            expected_sample_count=0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_sample_query_failure_when_executing_then_comparison_failure_is_preserved(
+    test_case: SqlTestDiagnosticsTestCase,
+    connection: Any,
+) -> None:
+    entry: SqlTestPlanEntry = build_sql_test_plan_entry(
+        name="sampling_failure",
+        chain_steps=test_case.chain_steps,
+    )
+
+    result: SqlTestExecutionResult = execute_sql_test(
+        test_entry=entry,
+        adapter=FailingDifferenceSampleDuckDbAdapter(),
+        connection=connection,
+    )
+
+    step: StepResult = result.step_results[0]
+    assert result.outcome == SqlTestOutcome.FAIL
+    assert step.outcome == SqlTestOutcome.FAIL
+    assert step.actual_row_count == test_case.expected_actual_count
+    assert step.expected_row_count == test_case.expected_expected_count
+    assert step.unexpected_row_count == test_case.expected_unexpected_count
+    assert step.missing_row_count == test_case.expected_missing_count
+    assert len(step.unexpected_samples) == test_case.expected_sample_count
+    assert len(step.missing_samples) == test_case.expected_sample_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SqlTestDiagnosticsTestCase(
+            description="descriptionless sample cursor produces no empty records",
+            chain_steps=(("orders", "SELECT 2 AS id", "SELECT 1 AS id"),),
+            expected_actual_count=1,
+            expected_expected_count=1,
+            expected_unexpected_count=1,
+            expected_missing_count=1,
+            expected_sample_count=0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_descriptionless_sample_cursor_when_executing_then_empty_records_are_omitted(
+    test_case: SqlTestDiagnosticsTestCase,
+    connection: Any,
+) -> None:
+    entry: SqlTestPlanEntry = build_sql_test_plan_entry(
+        name="descriptionless_sampling",
+        chain_steps=test_case.chain_steps,
+    )
+
+    result: SqlTestExecutionResult = execute_sql_test(
+        test_entry=entry,
+        adapter=DescriptionlessDifferenceSampleDuckDbAdapter(),
+        connection=connection,
+    )
+
+    step: StepResult = result.step_results[0]
+    assert result.outcome == SqlTestOutcome.FAIL
+    assert step.actual_row_count == test_case.expected_actual_count
+    assert step.expected_row_count == test_case.expected_expected_count
+    assert step.unexpected_row_count == test_case.expected_unexpected_count
+    assert step.missing_row_count == test_case.expected_missing_count
+    assert len(step.unexpected_samples) == test_case.expected_sample_count
+    assert len(step.missing_samples) == test_case.expected_sample_count
 
 
 @pytest.mark.parametrize(
