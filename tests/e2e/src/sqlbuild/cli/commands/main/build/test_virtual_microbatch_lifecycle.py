@@ -4,16 +4,18 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from textwrap import dedent
 
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
-    CappedMicrobatchScenarioE2ETestCase,
+    CappedWatermarkRejectionE2ETestCase,
+    VirtualCappedProducerGapE2ETestCase,
     VirtualConcurrentMicrobatchE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
+    capped_watermark_consumer_model_sql,
     physical_orders_relation,
+    plain_capped_consumer_model_sql,
     prepare_virtual_microbatch_lifecycle_project,
     timestamp_microbatch_model_sql,
 )
@@ -92,15 +94,25 @@ def test_given_virtual_history_loss_when_reconciling_then_synthetic_events_stay_
 
 @pytest.mark.parametrize(
     "test_case",
-    (CappedMicrobatchScenarioE2ETestCase("virtual capped dependency preserves gap", 0),),
+    (
+        CappedWatermarkRejectionE2ETestCase(
+            description="virtual capped watermark dependency is rejected",
+            expected_exit_code=1,
+            expected_error_fragment=(
+                "model 'downstream_orders' uses capped producer 'orders' as a watermark input; "
+                "capped producers cannot serve as watermark inputs"
+            ),
+            expected_absent_relations=("orders", "downstream_orders"),
+        ),
+    ),
     ids=lambda case: case.description,
 )
-def test_given_virtual_capped_producer_watermark_jump_when_building_then_frontier_preserves_gap(
-    tmp_path: Path, test_case: CappedMicrobatchScenarioE2ETestCase
+def test_given_virtual_capped_producer_as_watermark_when_building_then_plan_rejects_before_dml(
+    tmp_path: Path, test_case: CappedWatermarkRejectionE2ETestCase
 ) -> None:
-    project_dir, warehouse_path, state_path = prepare_virtual_microbatch_lifecycle_project(
+    project_dir, _warehouse_path, state_path = prepare_virtual_microbatch_lifecycle_project(
         tmp_path=tmp_path,
-        project_name="virtual_capped_dependency",
+        project_name="virtual_capped_watermark_rejection",
         model_sql=timestamp_microbatch_model_sql(
             value_expression="payload",
             batch_concurrency=1,
@@ -113,29 +125,61 @@ def test_given_virtual_capped_producer_watermark_jump_when_building_then_frontie
         ),
     )
     (project_dir / "models" / "downstream_orders.sql").write_text(
-        dedent(
-            """
-            MODEL (
-              materialized incremental,
-              incremental_strategy delete_insert,
-              incremental_mode microbatch,
-              microbatch_strategy watermark,
-              cursor_watermark_mode all,
-              cursor event_time,
-              cursor_type timestamp,
-              cursor_grain hour,
-              cursor_start '2026-01-01T00:00:00',
-              cursor_inputs (
-                orders (column event_time, roles [filter, watermark]),
-              ),
-              batch_size 1h,
-              lookback 1h,
-            );
+        capped_watermark_consumer_model_sql(),
+        encoding="utf-8",
+    )
 
-            SELECT id, event_time, value FROM __ref("orders")
-            """
-        ).strip()
-        + "\n",
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+
+    assert result.returncode == test_case.expected_exit_code
+    assert test_case.expected_error_fragment in result.stdout + result.stderr
+    registered_models: tuple[str, ...] = tuple(
+        str(row[0])
+        for row in query_duckdb(
+            db_path=state_path,
+            sql=(
+                "SELECT artifact_name FROM sqlbuild_state.physical_relations "
+                "WHERE artifact_type = 'model' ORDER BY artifact_name"
+            ),
+        )
+    )
+    assert set(registered_models).isdisjoint(test_case.expected_absent_relations)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        VirtualCappedProducerGapE2ETestCase(
+            description="virtual capped producer preserves physical gap",
+            expected_exit_code=0,
+            expected_ids=(2, 3, 4, 8, 9, 10),
+            expected_gap_rows=(),
+            expected_microbatch_event_count=0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_virtual_capped_producer_with_plain_consumer_when_watermark_jumps_then_gap_is_untouched(
+    tmp_path: Path, test_case: VirtualCappedProducerGapE2ETestCase
+) -> None:
+    project_dir, warehouse_path, state_path = prepare_virtual_microbatch_lifecycle_project(
+        tmp_path=tmp_path,
+        project_name="virtual_capped_producer_gap",
+        model_sql=timestamp_microbatch_model_sql(
+            value_expression="payload",
+            batch_concurrency=1,
+            replay_policy="forward_only",
+            extra_config=(
+                "cursor_start '2026-01-01T00:00:00',\n"
+                "cursor_end '2026-01-01T12:00:00',\n"
+                "microbatch_limit (max_batches 3, action cap_from_end),"
+            ),
+        ),
+    )
+    (project_dir / "models" / "downstream_orders.sql").write_text(
+        plain_capped_consumer_model_sql(),
         encoding="utf-8",
     )
 
@@ -158,24 +202,30 @@ def test_given_virtual_capped_producer_watermark_jump_when_building_then_frontie
     )
 
     assert jumped.returncode == test_case.expected_exit_code, jumped.stdout + jumped.stderr
-    assert query_duckdb(
+    rows: list[tuple[object, ...]] = query_duckdb(
         db_path=warehouse_path,
-        sql="SELECT id FROM dev__dev.downstream_orders ORDER BY id",
-    ) == [(2,), (3,), (4,), (8,), (9,), (10,)]
-    assert (
+        sql="SELECT id FROM dev__dev.orders ORDER BY id",
+    )
+    gap_rows: tuple[tuple[object, ...], ...] = tuple(
         query_duckdb(
-            db_path=state_path,
+            db_path=warehouse_path,
             sql=(
-                "SELECT partition_start, partition_end "
-                "FROM sqlbuild_state.microbatch_events "
-                "WHERE model_name = 'downstream_orders' "
-                "AND record_type = 'partition_completion' "
-                "AND partition_start >= '2026-01-01T04:00:00' "
-                "AND partition_end <= '2026-01-01T08:00:00'"
+                "SELECT id FROM dev__dev.orders "
+                "WHERE event_time >= '2026-01-01T04:00:00' "
+                "AND event_time < '2026-01-01T08:00:00'"
             ),
         )
-        == []
     )
+    event_count: int = int(
+        query_duckdb(
+            db_path=state_path,
+            sql="SELECT COUNT(*) FROM sqlbuild_state.microbatch_events",
+        )[0][0]
+    )
+
+    assert tuple(int(str(row[0])) for row in rows) == test_case.expected_ids
+    assert gap_rows == test_case.expected_gap_rows
+    assert event_count == test_case.expected_microbatch_event_count
 
 
 @pytest.mark.parametrize(

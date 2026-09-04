@@ -777,6 +777,10 @@ def test_given_historical_backfill_when_normal_run_resumes_then_gap_to_normal_fl
 
                 [connection]
                 database = "historical.duckdb"
+
+                [settings]
+                concurrency = 3
+                microbatch_concurrency = true
                 """
             ).strip()
             + "\n",
@@ -802,8 +806,9 @@ def test_given_historical_backfill_when_normal_run_resumes_then_gap_to_normal_fl
                   cursor_grain day,
                   cursor_inputs (
             raw_events (column event_time, roles [filter, watermark]),
-          ),
+                  ),
                   batch_size 1d,
+                  batch_concurrency 2,
                 );
 
                 SELECT id, event_time

@@ -76,6 +76,17 @@ class CappedMicrobatchScenarioE2ETestCase:
 
 
 @dataclass(frozen=True)
+class VirtualCappedProducerGapE2ETestCase:
+    """Expected physical and state results for a legal virtual capped producer graph."""
+
+    description: str
+    expected_exit_code: int
+    expected_ids: tuple[int, ...]
+    expected_gap_rows: tuple[tuple[object, ...], ...]
+    expected_microbatch_event_count: int
+
+
+@dataclass(frozen=True)
 class CappedWatermarkRejectionE2ETestCase:
     """Expected static rejection for a capped watermark producer."""
 

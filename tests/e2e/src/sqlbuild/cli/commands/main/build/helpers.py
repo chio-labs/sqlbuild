@@ -706,6 +706,50 @@ def timestamp_microbatch_model_sql(
     )
 
 
+def capped_watermark_consumer_model_sql() -> str:
+    """Return an illegal watermark consumer of the canonical capped orders model."""
+
+    return (
+        dedent(
+            """
+            MODEL (
+              materialized incremental,
+              incremental_strategy delete_insert,
+              incremental_mode microbatch,
+              microbatch_strategy watermark,
+              cursor_watermark_mode all,
+              cursor event_time,
+              cursor_type timestamp,
+              cursor_grain hour,
+              cursor_start '2026-01-01T00:00:00',
+              cursor_inputs (
+                orders (column event_time, roles [filter, watermark]),
+              ),
+              batch_size 1h,
+              lookback 1h,
+            );
+
+            SELECT id, event_time, value FROM __ref("orders")
+            """
+        ).strip()
+        + "\n"
+    )
+
+
+def plain_capped_consumer_model_sql() -> str:
+    """Return a legal non-watermark consumer of the canonical capped orders model."""
+
+    return (
+        dedent(
+            """
+            MODEL (materialized table);
+            SELECT id, event_time, value FROM __ref("orders")
+            """
+        ).strip()
+        + "\n"
+    )
+
+
 def prepare_replay_microbatch_project(
     *, tmp_path: Path, project_name: str, database_name: str, replay_policy: str
 ) -> tuple[Path, Path]:
