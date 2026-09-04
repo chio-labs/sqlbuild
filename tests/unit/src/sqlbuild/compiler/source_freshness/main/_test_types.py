@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.spec.contracts.types import SourceFreshnessValueKind
@@ -68,6 +68,38 @@ class SharedSourceFreshnessHashTestCase:
 
 
 @dataclass(frozen=True)
+class SourceFreshnessAgeEvaluationTestCase:
+    description: str
+    data_version: datetime
+    observed_at: datetime
+    expected_status: str
+
+
+@dataclass(frozen=True)
+class SourceFreshnessNaiveDatetimeTestCase:
+    description: str
+    naive_value: datetime
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class SourceFreshnessDatetimeNormalizationTestCase:
+    description: str
+    data_version: datetime
+    observed_at: datetime
+    expected_data_version: datetime
+    expected_observed_at: datetime
+
+
+@dataclass(frozen=True)
+class SourceFreshnessStateCompatibilityTestCase:
+    description: str
+    previous_data_version: str
+    current_data_version: str
+    expected_equivalent: bool
+
+
+@dataclass(frozen=True)
 class DirectSourceFreshnessPlanningTestCase:
     description: str
     previous_data_version: str | None
@@ -92,7 +124,7 @@ class DirectSourceFreshnessAgePolicyTestCase:
     error_after: str | None
     value_kind: SourceFreshnessValueKind
     expected_age_status: str
-    observed_at: datetime = datetime(2026, 1, 15, 12, 0, 0)
+    observed_at: datetime = datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC)
 
 
 @dataclass(frozen=True)

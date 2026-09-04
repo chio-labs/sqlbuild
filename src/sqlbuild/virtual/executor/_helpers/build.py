@@ -8,7 +8,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -707,7 +707,7 @@ def _read_virtual_build_state(
                     connection=prebuild_source_connection,
                     sources=tuple(source.source_entry for source in graph.project.sources),
                     virtual_environment_name=target_vde_name,
-                    observed_at=datetime.now(),
+                    observed_at=datetime.now(UTC),
                     previous_records=source_freshness_records,
                     run_id=graph.project.run_id,
                 )
@@ -1850,7 +1850,7 @@ def _observe_and_persist_source_freshness(
                 connection=source_observation_connection,
                 sources=tuple(source.source_entry for source in project.sources),
                 virtual_environment_name=runtime.names.target_vde_name,
-                observed_at=datetime.now(),
+                observed_at=datetime.now(UTC),
                 run_id=project.run_id,
                 load_results=load_results,
                 previous_records=previous_source_freshness_records,

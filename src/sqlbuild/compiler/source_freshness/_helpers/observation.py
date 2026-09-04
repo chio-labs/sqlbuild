@@ -12,6 +12,7 @@ from sqlbuild.adapter.contract.models import (
     TableFreshnessRequest,
 )
 from sqlbuild.compiler.references.main._render_source_relation import render_source_relation
+from sqlbuild.compiler.source_freshness._helpers.datetime import normalize_presumed_utc_datetime
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessObservation
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
@@ -82,11 +83,13 @@ def _observe_configured_source_freshness(
             source_is_subquery=source.expression is not None,
             where_sql=where_sql,
         )
-        data_version: object = _query_single_data_version(
-            adapter=adapter,
-            connection=connection,
-            source_name=source.name,
-            sql=sql,
+        data_version: object = _normalize_adapter_datetime(
+            _query_single_data_version(
+                adapter=adapter,
+                connection=connection,
+                source_name=source.name,
+                sql=sql,
+            )
         )
         return SourceFreshnessObservation(
             source_name=source.name,
@@ -100,11 +103,13 @@ def _observe_configured_source_freshness(
         raise SourceFreshnessObservationError(
             f"source '{source.name}' has incomplete sql freshness configuration"
         )
-    data_version = _query_single_data_version(
-        adapter=adapter,
-        connection=connection,
-        source_name=source.name,
-        sql=config.query,
+    data_version = _normalize_adapter_datetime(
+        _query_single_data_version(
+            adapter=adapter,
+            connection=connection,
+            source_name=source.name,
+            sql=config.query,
+        )
     )
     return SourceFreshnessObservation(
         source_name=source.name,
@@ -143,9 +148,13 @@ def _observe_adapter_freshness(
     return SourceFreshnessObservation(
         source_name=source.name,
         strategy=SourceFreshnessStrategy.ADAPTER,
-        data_version=metadata.data_version,
+        data_version=_normalize_adapter_datetime(metadata.data_version),
         value_kind=SourceFreshnessValueKind(metadata.value_kind),
-        observed_at=metadata.observed_at or observed_at,
+        observed_at=(
+            normalize_presumed_utc_datetime(value=metadata.observed_at)
+            if metadata.observed_at is not None
+            else observed_at
+        ),
     )
 
 
@@ -219,9 +228,13 @@ def _observe_adapter_sources_freshness(
         observations[source.name] = SourceFreshnessObservation(
             source_name=source.name,
             strategy=SourceFreshnessStrategy.ADAPTER,
-            data_version=metadata.data_version,
+            data_version=_normalize_adapter_datetime(metadata.data_version),
             value_kind=SourceFreshnessValueKind(metadata.value_kind),
-            observed_at=metadata.observed_at or observed_at,
+            observed_at=(
+                normalize_presumed_utc_datetime(value=metadata.observed_at)
+                if metadata.observed_at is not None
+                else observed_at
+            ),
         )
     return observations
 
@@ -253,3 +266,11 @@ def _query_single_data_version(
             f"source '{source_name}' freshness data_version cannot be null"
         )
     return data_version
+
+
+def _normalize_adapter_datetime(value: object) -> object:
+    """Normalize driver datetimes, whose naive values are documented as presumed UTC."""
+
+    if not isinstance(value, datetime):
+        return value
+    return normalize_presumed_utc_datetime(value=value)

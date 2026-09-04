@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -148,7 +148,7 @@ def build_source_freshness_record(
         value_kind="timestamp",
         data_version=data_version,
         data_version_hash=data_hash,
-        observed_at=datetime(2026, 6, 30, 12, 1),
+        observed_at=datetime(2026, 6, 30, 12, 1, tzinfo=UTC),
     )
 
 

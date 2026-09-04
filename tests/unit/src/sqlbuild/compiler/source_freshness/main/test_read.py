@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -51,7 +51,7 @@ from tests.unit.src.sqlbuild.compiler.source_freshness.main.helpers import (
                 )
             ],
             expected_source_name="raw.orders",
-            expected_observed_at_iso="2026-01-15T12:05:00",
+            expected_observed_at_iso="2026-01-15T12:05:00+00:00",
         )
     ],
     ids=lambda case: case.description,
@@ -141,7 +141,7 @@ def test_given_index_renderer_when_writing_source_freshness_then_batches_inserts
                 value_kind="timestamp",
                 data_version="2026-01-15T12:00:00",
                 data_version_hash="hash_orders",
-                observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
             ),
             SourceFreshnessRecord(
                 source_name="raw.customers",
@@ -153,7 +153,7 @@ def test_given_index_renderer_when_writing_source_freshness_then_batches_inserts
                 value_kind="timestamp",
                 data_version="2026-01-15T12:10:00",
                 data_version_hash="hash_customers",
-                observed_at=datetime(2026, 1, 15, 12, 15, 0),
+                observed_at=datetime(2026, 1, 15, 12, 15, 0, tzinfo=UTC),
             ),
         ),
         renderers=SourceFreshnessRenderers(
@@ -168,6 +168,7 @@ def test_given_index_renderer_when_writing_source_freshness_then_batches_inserts
     assert execute.executed_sql[1] == test_case.expected_index_sql
     assert execute.executed_sql[2].startswith(test_case.expected_insert_prefix)
     assert test_case.expected_values_separator in execute.executed_sql[2]
+    assert "'2026-01-15T12:05:00+00:00'" in execute.executed_sql[2]
 
 
 @pytest.mark.parametrize(

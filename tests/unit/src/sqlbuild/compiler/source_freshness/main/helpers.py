@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from types import MappingProxyType
 from typing import Any
 
@@ -139,7 +139,7 @@ def write_optional_previous_record(
             value_kind=SourceFreshnessValueKind.INTEGER,
             data_version=data_version or "",
         ),
-        observed_at=datetime(2026, 1, 15, 10, 0, 0),
+        observed_at=datetime(2026, 1, 15, 10, 0, 0, tzinfo=UTC),
     )
     _OPTIONAL_PREVIOUS_RECORD_WRITERS[data_version is not None](
         adapter,
@@ -205,7 +205,7 @@ def write_previous_record_to_schema(
     schema: str,
     source_name: str,
     data_version: str,
-    observed_at: datetime = datetime(2026, 1, 15, 10, 0, 0),
+    observed_at: datetime = datetime(2026, 1, 15, 10, 0, 0, tzinfo=UTC),
 ) -> None:
     write_source_freshness_records(
         connection=connection,
@@ -236,6 +236,25 @@ def write_previous_record_to_schema(
             render_framework_type=render_framework_type,
             render_insert_records_sql=adapter.render_insert_source_freshness_records_sql,
         ),
+    )
+
+
+def timestamp_source_freshness_record(
+    *, data_version: str, data_version_hash: str
+) -> SourceFreshnessRecord:
+    """Build one timestamp record for state compatibility tests."""
+
+    return SourceFreshnessRecord(
+        source_name="raw.orders",
+        target_database=None,
+        target_schema="raw",
+        target_name="orders",
+        run_id="run_001",
+        strategy="column",
+        value_kind="timestamp",
+        data_version=data_version,
+        data_version_hash=data_version_hash,
+        observed_at=datetime(2026, 1, 15, 12, 5, tzinfo=UTC),
     )
 
 

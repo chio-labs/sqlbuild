@@ -530,12 +530,12 @@ def test_given_seed_and_function_changes_when_building_hashes_then_downstream_ha
         VirtualSourceFreshnessLagToleranceTestCase(
             description="virtual uses current beyond tolerance",
             current_data_version="2026-01-15T12:11:00",
-            expected_record_data_version="2026-01-15T12:11:00",
+            expected_record_data_version="2026-01-15T12:11:00+00:00",
         ),
         VirtualSourceFreshnessLagToleranceTestCase(
             description="virtual uses current for backwards timestamp movement",
             current_data_version="2026-01-15T11:59:00",
-            expected_record_data_version="2026-01-15T11:59:00",
+            expected_record_data_version="2026-01-15T11:59:00+00:00",
         ),
     ),
     ids=lambda case: case.description,
@@ -551,7 +551,7 @@ def test_given_virtual_lag_tolerance_when_building_current_records_then_preserve
         value_kind=SourceFreshnessValueKind.TIMESTAMP.value,
         data_version=previous_data_version,
         data_version_hash="previous-hash",
-        observed_at=datetime(2026, 1, 15, 12, 0, 0),
+        observed_at=datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC),
     )
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: object = adapter.connect({"database": ":memory:"})
@@ -571,7 +571,7 @@ def test_given_virtual_lag_tolerance_when_building_current_records_then_preserve
                 ),
             ),
             virtual_environment_name="dev",
-            observed_at=datetime(2026, 1, 15, 12, 30, 0),
+            observed_at=datetime(2026, 1, 15, 12, 30, 0, tzinfo=UTC),
             previous_records=(previous_record,),
         )
     finally:
