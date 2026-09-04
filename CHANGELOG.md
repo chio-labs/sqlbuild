@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.81.1](https://github.com/chio-labs/sqlbuild/compare/v0.81.0...v0.81.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* release loader decimal acceptance and UTC cursor normalization ([#517](https://github.com/chio-labs/sqlbuild/issues/517)) ([6d621d1](https://github.com/chio-labs/sqlbuild/commit/6d621d141f084ff1eb7dcbce06d8fc374cabd9f7))
+
 ## [0.81.0](https://github.com/chio-labs/sqlbuild/compare/v0.80.2...v0.81.0) (2026-09-04)
 
 
