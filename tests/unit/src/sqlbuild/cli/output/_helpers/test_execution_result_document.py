@@ -13,6 +13,7 @@ from sqlbuild.cli.output._helpers.execution_result_document import (
     _format_audit_checks,
     _format_model_assets,
     _format_sql_test_checks,
+    _format_sql_test_step,
     format_audit_execution_json,
 )
 from sqlbuild.compiler.auditing.types import (
@@ -33,7 +34,11 @@ from sqlbuild.executor.run.models import (
     ModelExecutionResult,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
-from sqlbuild.executor.testing.models import SqlTestExecutionResult
+from sqlbuild.executor.testing.models import (
+    SqlTestDifferenceSample,
+    SqlTestExecutionResult,
+    StepResult,
+)
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.spec.contracts.types import FutureCursorAction
 from sqlbuild.sql_values.models import SqlLogicalType, SqlValue
@@ -43,7 +48,45 @@ from tests.unit.src.sqlbuild.cli.output._helpers._test_types import (
     FutureCursorExecutionProtocolTestCase,
     MicrobatchExecutionProtocolTestCase,
     SqlTestCaseExecutionProtocolTestCase,
+    SqlTestDifferenceOutputTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SqlTestDifferenceOutputTestCase(
+            description="two-way samples remain structured",
+            expected_unexpected_count=1,
+            expected_missing_count=1,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_difference_samples_when_formatting_json_then_structured_diagnostics_are_preserved(
+    test_case: SqlTestDifferenceOutputTestCase,
+) -> None:
+    step: StepResult = StepResult(
+        model_name="orders",
+        outcome=SqlTestOutcome.FAIL,
+        unexpected_row_count=test_case.expected_unexpected_count,
+        missing_row_count=test_case.expected_missing_count,
+        unexpected_samples=(
+            SqlTestDifferenceSample(values=(("id", "2"), ("status", "unexpected"))),
+        ),
+        missing_samples=(SqlTestDifferenceSample(values=(("id", "1"), ("status", "expected"))),),
+    )
+
+    payload: dict[str, object] = _format_sql_test_step(step)
+
+    assert payload["unexpected_row_count"] == test_case.expected_unexpected_count
+    assert payload["missing_row_count"] == test_case.expected_missing_count
+    assert payload["unexpected_samples"] == [
+        [{"name": "id", "value": "2"}, {"name": "status", "value": "unexpected"}]
+    ]
+    assert payload["missing_samples"] == [
+        [{"name": "id", "value": "1"}, {"name": "status", "value": "expected"}]
+    ]
 
 
 @pytest.mark.parametrize(
