@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.80.1](https://github.com/chio-labs/sqlbuild/compare/v0.80.0...v0.80.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* preserve capped microbatch cursor boundaries ([#510](https://github.com/chio-labs/sqlbuild/issues/510)) ([9197813](https://github.com/chio-labs/sqlbuild/commit/91978132b52b6f4a0d1bebad733742ae36999474))
+
 ## [0.80.0](https://github.com/chio-labs/sqlbuild/compare/v0.79.0...v0.80.0) (2026-09-03)
 
 
