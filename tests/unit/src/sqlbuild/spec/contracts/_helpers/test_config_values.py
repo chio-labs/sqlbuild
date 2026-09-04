@@ -18,6 +18,9 @@ from tests.unit.src.sqlbuild.spec.contracts._helpers._test_types import (
     "test_case",
     [
         ConfigValueSuccessTestCase("absent string", get_config_str, {}, "cursor", None),
+        ConfigValueSuccessTestCase(
+            "present null string is absent", get_config_str, {"cursor": None}, "cursor", None
+        ),
         ConfigValueSuccessTestCase("absent boolean", get_config_bool, {}, "enabled", None),
         ConfigValueSuccessTestCase(
             "absent string tuple", get_config_string_tuple, {}, "columns", None
@@ -79,7 +82,6 @@ def test_given_supported_config_when_extracting_then_returns_typed_value(
         ConfigValueErrorTestCase(
             "boolean integer", get_config_int, "batch_concurrency", "an integer", True
         ),
-        ConfigValueErrorTestCase("present null", get_config_str, "cursor", "a string", None),
     ],
     ids=lambda case: case.description,
 )

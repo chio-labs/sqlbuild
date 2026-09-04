@@ -925,9 +925,9 @@ def resolve_cursor_overrides(
         if cursor_overrides.end_int is not None:
             resolved_end = render(value=cursor_overrides.end_int)
 
-        cursor_start: str | None = get_config_cursor_bound(
-            values=model.config.values, key="cursor_start"
-        )
+    cursor_start: str | None = get_config_cursor_bound(
+        values=model.config.values, key="cursor_start"
+    )
     cursor_end: str | None = get_config_cursor_bound(values=model.config.values, key="cursor_end")
     if (
         resolved_start is not None
