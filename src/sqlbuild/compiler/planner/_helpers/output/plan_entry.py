@@ -31,7 +31,10 @@ from sqlbuild.compiler.planner._helpers.output.cursor_type_check import (
 from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
     resolve_bounded_cursor_override,
 )
-from sqlbuild.compiler.planner._helpers.output.microbatch_bounds import cap_microbatch_bounds
+from sqlbuild.compiler.planner._helpers.output.microbatch_bounds import (
+    cap_microbatch_bounds,
+    validate_capped_watermark_inputs,
+)
 from sqlbuild.compiler.planner._helpers.output.microbatch_count import count_microbatches
 from sqlbuild.compiler.planner._helpers.output.strategy import (
     build_model_warnings,
@@ -99,7 +102,6 @@ from sqlbuild.compiler.planner.models import (
     RunDespiteUnchangedDecision,
     RunDespiteUnchangedPlanningResult,
     SchemaAction,
-    WarehouseFingerprints,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import (
@@ -530,9 +532,6 @@ def _apply_microbatch_limit(
         entry.microbatch_range is not None
         and entry.batch_size is not None
         and entry.cursor_type is not None
-        and not any(
-            relation.producer_model_name is not None for relation in entry.cursor_input_relations
-        )
     ):
         effective_grain: str | None = resolve_effective_timestamp_grain(
             cursor_type=entry.cursor_type,
@@ -696,6 +695,11 @@ def plan_model_from_change(
         model=model, context=context
     )
     cursor_input_relations: tuple[CursorInputRelation, ...] = ()
+    validate_capped_watermark_inputs(
+        model=model,
+        models_by_name=context.models_by_name,
+        functions_by_name=context.functions_by_name,
+    )
     if not suppress_runtime_cursor_bounds:
         cursor_input_relations = _build_cursor_input_relations(
             model=model,
@@ -707,7 +711,6 @@ def plan_model_from_change(
             source_map=context.source_map,
             cursor_column=cursor_column,
             runtime_cursor_producer_names=context.runtime_cursor_producer_names,
-            fingerprints=snapshot.fingerprints,
         )
     runtime_owned_cursor_bounds: bool = _has_runtime_owned_cursor_watermarks(
         cursor_input_relations
@@ -1532,7 +1535,6 @@ def _build_cursor_input_relations(
     source_map: dict[str, SourceEntry],
     cursor_column: str | None,
     runtime_cursor_producer_names: frozenset[str],
-    fingerprints: WarehouseFingerprints,
 ) -> tuple[CursorInputRelation, ...]:
     """Build cursor-bearing input relation metadata for runtime range discovery."""
 
@@ -1564,25 +1566,10 @@ def _build_cursor_input_relations(
             source_map=source_map,
         )
         if relation is not None:
-            producer_limit_action: MicrobatchLimitAction | None = (
-                _resolve_microbatch_limit_config(values=producer_model.config.values)[1]
-                if producer_model is not None
-                else None
-            )
-            producer_has_cap: bool = producer_limit_action in {
-                MicrobatchLimitAction.CAP_FROM_END,
-                MicrobatchLimitAction.CAP_FROM_START,
-            } and _is_compatible_causal_producer(consumer=model, producer=producer_model)
             relations.append(
                 CursorInputRelation(
                     relation=relation,
                     cursor_column=input_cursor_column,
-                    producer_model_name=(ref.ref_name if producer_has_cap else None),
-                    producer_model_version_hash=(
-                        fingerprints.models[ref.ref_name].version_hash
-                        if producer_has_cap and ref.ref_name in fingerprints.models
-                        else None
-                    ),
                     cursor_grain=_resolve_cursor_input_grain(
                         ref=ref,
                         models_by_name=models_by_name,
@@ -1597,26 +1584,9 @@ def _build_cursor_input_relations(
                     terminal_cursor_end=(
                         _get_cursor_end(producer_model) if producer_model is not None else None
                     ),
-                    producer_microbatch_limit_action=producer_limit_action,
                 )
             )
     return tuple(relations)
-
-
-def _is_compatible_causal_producer(
-    *, consumer: CompiledModel, producer: CompiledModel | None
-) -> bool:
-    """Return whether a model can publish compatible cursor interval completions."""
-
-    if producer is None:
-        return False
-    return (
-        _get_config_str(model=producer, key="materialized") == MaterializationType.INCREMENTAL
-        and _get_config_str(model=producer, key="incremental_mode") == IncrementalMode.MICROBATCH
-        and _get_config_str(model=producer, key="cursor") is not None
-        and _get_config_str(model=producer, key="cursor_type")
-        == _get_config_str(model=consumer, key="cursor_type")
-    )
 
 
 def validate_source_cursor_input_columns(

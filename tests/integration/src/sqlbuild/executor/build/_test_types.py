@@ -6,18 +6,49 @@ from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
 
 @dataclass(frozen=True)
-class CausalExecutionTestCase:
+class CappedWatermarkRejectionTestCase:
     description: str
-    expected_status: ExecutionStatus
-    expected_minimum_cursor_start: str
+    limit_action: MicrobatchLimitAction
+    watermark_mode: str
+    watermark_input_name: str
+    intermediary_names: tuple[str, ...]
+    expected_error_fragment: str
 
 
 @dataclass(frozen=True)
-class CappedDependencyExecutionTestCase:
+class CappedFilterConsumerTestCase:
     description: str
     limit_action: MicrobatchLimitAction
-    expected_ids: tuple[int, ...]
-    expected_intervals: tuple[tuple[str, str], ...]
+    filter_input_name: str
+    intermediary_names: tuple[str, ...]
+    expected_model_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PlainCappedConsumerTestCase:
+    description: str
+    materialized: str
+    expected_model_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class UncappedWatermarkChainTestCase:
+    description: str
+    watermark_input_name: str
+    intermediary_names: tuple[str, ...]
+    expected_model_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CappedIntermediateFilterTestCase:
+    description: str
+    expected_model_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CappedIntermediateWatermarkTestCase:
+    description: str
+    expected_error_fragment: str
 
 
 @dataclass(frozen=True)
@@ -54,14 +85,6 @@ class BuildExecutionTestCase:
         default_factory=tuple
     )
     expected_missing_relations: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class CausalBuildExecutionTestCase:
-    """Named causal integration scenario."""
-
-    description: str
-    expected_batch_count: int
 
 
 @dataclass(frozen=True)

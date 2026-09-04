@@ -21,7 +21,7 @@ from sqlbuild.integrations.dagster._helpers.invocation import (
     _build_results_from_integration_result,
 )
 from sqlbuild.integrations.dagster.classes.sqlbuild_cli_invocation import SqlBuildCliInvocation
-from sqlbuild.spec.contracts.types import FutureCursorAction
+from sqlbuild.spec.contracts.types import FutureCursorAction, MicrobatchLimitAction
 from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterAuditIdentityTestCase,
     DagsterCliCloneFailureTestCase,
@@ -425,6 +425,48 @@ def test_given_malformed_complete_live_record_when_parsing_then_warning_omits_re
     logger.warning.assert_called_once_with("Ignored invalid SQLBuild integration result record")
     assert "secret-line-content" not in str(logger.warning.call_args)
     assert test_case.expected_output_path_retained is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (DagsterFutureCursorMetadataTestCase("unknown optional microbatch action", "future_action"),),
+    ids=lambda case: case.description,
+)
+def test_given_unknown_optional_action_when_parsing_live_record_then_asset_stream_continues(
+    test_case: DagsterFutureCursorMetadataTestCase, tmp_path: Path
+) -> None:
+    logger: Mock = Mock()
+    invocation: SqlBuildCliInvocation = SqlBuildCliInvocation(
+        process=Mock(),
+        command=("sqb", "build"),
+        project_dir=tmp_path,
+        context=type("AssetContext", (), {"selected_asset_keys": set(), "log": logger})(),
+    )
+    line: str = json.dumps(
+        integration_result_payload(
+            command="build",
+            asset={
+                "kind": "model",
+                "name": "orders",
+                "status": "success",
+                "microbatch": {"action": test_case.expected_action, "limit": 2},
+            },
+        )
+    )
+
+    results: list[Any] = list(
+        invocation._results_from_live_event_line(
+            dg=dg,
+            dag=build_dagster_test_dag(),
+            line=line,
+            logged_failed_assets=set(),
+            emitted_asset_keys=set(),
+        )
+    )
+
+    assert tuple(tuple(result.asset_key.path) for result in results) == (("analytics", "orders"),)
+    assert results[0].metadata["microbatch"] == {"limit": 2}
+    logger.warning.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -943,27 +985,16 @@ def test_given_future_cursor_execution_metadata_when_streaming_then_dagster_reta
     "test_case",
     [
         DagsterMicrobatchLimitMetadataTestCase(
-            description="microbatch limit metadata",
+            description=f"canonical microbatch action {action.value}",
             execution_status="success",
             expected_microbatch={
                 "run_type": "normal",
                 "limit": 2,
                 "count": 3,
-                "action": "warn",
-                "warning": "MICROBATCH LIMIT EXCEEDED",
+                "action": action.value,
             },
-        ),
-        DagsterMicrobatchLimitMetadataTestCase(
-            description="warn limit metadata after skipped pre-hook",
-            execution_status="skipped",
-            expected_microbatch={
-                "run_type": "normal",
-                "limit": 2,
-                "count": 3,
-                "action": "warn",
-                "warning": "MICROBATCH LIMIT EXCEEDED",
-            },
-        ),
+        )
+        for action in MicrobatchLimitAction
     ],
     ids=lambda case: case.description,
 )

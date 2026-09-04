@@ -37,15 +37,10 @@ def build_cursor_plan_details(*, entry: ModelPlanEntry) -> CursorPlanDetails | N
     runtime_owned: bool = any(
         relation.is_runtime_owned for relation in entry.cursor_input_relations
     ) and not (entry.start_cursor_override is not None and entry.end_cursor_override is not None)
-    causal_runtime: bool = any(
-        relation.producer_model_name is not None for relation in entry.cursor_input_relations
-    )
     resolved_bounds: CursorBounds | None = entry.microbatch_range or entry.cursor_bounds
-    effective_grain: str | None = None if causal_runtime else _effective_grain(entry=entry)
-    effective_batch_size: str | None = (
-        None
-        if causal_runtime
-        else _effective_batch_size(entry=entry, effective_grain=effective_grain)
+    effective_grain: str | None = _effective_grain(entry=entry)
+    effective_batch_size: str | None = _effective_batch_size(
+        entry=entry, effective_grain=effective_grain
     )
     planned_batch_count: int | None = None
     if (
@@ -59,9 +54,7 @@ def build_cursor_plan_details(*, entry: ModelPlanEntry) -> CursorPlanDetails | N
             batch_size=effective_batch_size,
             cursor_type=entry.cursor_type,
         )
-    if causal_runtime:
-        resolution_status: CursorResolutionStatus = CursorResolutionStatus.DEFERRED
-    elif resolved_bounds is not None:
+    if resolved_bounds is not None:
         resolution_status: CursorResolutionStatus = CursorResolutionStatus.RESOLVED
     elif runtime_owned:
         resolution_status = CursorResolutionStatus.DEFERRED
@@ -70,11 +63,7 @@ def build_cursor_plan_details(*, entry: ModelPlanEntry) -> CursorPlanDetails | N
     return CursorPlanDetails(
         requested_start=entry.start_cursor_override,
         requested_end=entry.end_cursor_override,
-        bounds_owner=(
-            CursorBoundsOwner.RUNTIME
-            if runtime_owned or causal_runtime
-            else CursorBoundsOwner.PLANNER
-        ),
+        bounds_owner=(CursorBoundsOwner.RUNTIME if runtime_owned else CursorBoundsOwner.PLANNER),
         resolution_status=resolution_status,
         resolved_bounds=resolved_bounds,
         declared_grain=entry.cursor_grain,
@@ -82,11 +71,6 @@ def build_cursor_plan_details(*, entry: ModelPlanEntry) -> CursorPlanDetails | N
         declared_batch_size=entry.batch_size,
         effective_batch_size=effective_batch_size,
         planned_batch_count=planned_batch_count,
-        causal_resolution=(
-            "runtime producer-event snapshot; unknown history uses conservative input grain"
-            if causal_runtime
-            else None
-        ),
     )
 
 
@@ -154,9 +138,7 @@ def append_microbatch_plan_detail(
 
     if details.declared_grain is not None:
         grain_text: str = details.declared_grain
-        resolved_grain: str = details.effective_grain or (
-            "runtime" if details.causal_resolution is not None else details.declared_grain
-        )
+        resolved_grain: str = details.effective_grain or details.declared_grain
         if resolved_grain != details.declared_grain:
             grain_text = f"{details.declared_grain} -> {resolved_grain} (effective)"
         lines.append(f"    grain: {grain_text}")
@@ -172,8 +154,6 @@ def append_microbatch_plan_detail(
         lines.append(f"    batch size: {batch_size_text}")
     if details.planned_batch_count is not None and details.effective_batch_size is not None:
         lines.append(f"    batches: {details.planned_batch_count} x {details.effective_batch_size}")
-    if details.causal_resolution is not None:
-        lines.append(f"    causal replay: {details.causal_resolution}")
     if details.resolution_status == CursorResolutionStatus.DEFERRED:
         lines.append("    batches: resolved at runtime after upstream models complete")
     lines.append(f"    batch concurrency: {entry.batch_concurrency}")

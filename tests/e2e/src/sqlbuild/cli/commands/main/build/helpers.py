@@ -22,7 +22,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 def capped_microbatch_project_files(
     *, limit_action: str, project_limit: str = ""
 ) -> dict[str, str]:
-    """Build a direct DuckDB project with one capped producer and consumer."""
+    """Build a direct DuckDB project with one capped producer and plain consumer."""
 
     return {
         "sqlbuild_project.toml": dedent(
@@ -75,6 +75,22 @@ def capped_microbatch_project_files(
         + "\n",
         "models/downstream_events.sql": dedent(
             """
+            MODEL (materialized view);
+            SELECT id, event_time
+            FROM __ref("capped_events")
+            """
+        ).strip()
+        + "\n",
+    }
+
+
+def capped_watermark_consumer_project_files(*, limit_action: str) -> dict[str, str]:
+    """Build an invalid project whose watermark consumer reads a capped producer."""
+
+    repo_files: dict[str, str] = capped_microbatch_project_files(limit_action=limit_action)
+    repo_files["models/downstream_events.sql"] = (
+        dedent(
+            """
             MODEL (
               materialized incremental,
               incremental_strategy delete_insert,
@@ -95,8 +111,9 @@ def capped_microbatch_project_files(
             FROM __ref("capped_events")
             """
         ).strip()
-        + "\n",
-    }
+        + "\n"
+    )
+    return repo_files
 
 
 def prepare_defer_clone_project(
@@ -683,6 +700,50 @@ def timestamp_microbatch_model_sql(
             FROM __source("raw_events")
             WHERE event_time >= __cursor_start()
               AND event_time < __cursor_end()
+            """
+        ).strip()
+        + "\n"
+    )
+
+
+def capped_watermark_consumer_model_sql() -> str:
+    """Return an illegal watermark consumer of the canonical capped orders model."""
+
+    return (
+        dedent(
+            """
+            MODEL (
+              materialized incremental,
+              incremental_strategy delete_insert,
+              incremental_mode microbatch,
+              microbatch_strategy watermark,
+              cursor_watermark_mode all,
+              cursor event_time,
+              cursor_type timestamp,
+              cursor_grain hour,
+              cursor_start '2026-01-01T00:00:00',
+              cursor_inputs (
+                orders (column event_time, roles [filter, watermark]),
+              ),
+              batch_size 1h,
+              lookback 1h,
+            );
+
+            SELECT id, event_time, value FROM __ref("orders")
+            """
+        ).strip()
+        + "\n"
+    )
+
+
+def plain_capped_consumer_model_sql() -> str:
+    """Return a legal non-watermark consumer of the canonical capped orders model."""
+
+    return (
+        dedent(
+            """
+            MODEL (materialized table);
+            SELECT id, event_time, value FROM __ref("orders")
             """
         ).strip()
         + "\n"

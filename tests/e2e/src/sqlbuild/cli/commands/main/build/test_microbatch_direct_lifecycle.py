@@ -1,4 +1,4 @@
-"""E2E coverage for universal direct microbatch ledger lifecycle invariants."""
+"""E2E coverage for direct microbatch state lifecycle invariants."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     ConcurrentMicrobatchBehaviorE2ETestCase,
-    SerialMicrobatchLedgerE2ETestCase,
+    StatelessSerialMicrobatchE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     direct_microbatch_project_toml,
@@ -27,23 +27,23 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 @pytest.mark.parametrize(
     "test_case",
     [
-        SerialMicrobatchLedgerE2ETestCase(
-            description="concurrency capability disabled still records serial provenance",
+        StatelessSerialMicrobatchE2ETestCase(
+            description="concurrency capability disabled remains stateless",
             settings_toml="",
             expected_complexity_warning_count=0,
-            expected_minimum_completion_count=3,
+            expected_state_table_count=0,
         ),
-        SerialMicrobatchLedgerE2ETestCase(
-            description="capability enabled with model ceiling one remains quiet and serial",
+        StatelessSerialMicrobatchE2ETestCase(
+            description="capability enabled with model ceiling one remains stateless",
             settings_toml=("\n[settings]\nconcurrency = 3\nmicrobatch_concurrency = true\n"),
             expected_complexity_warning_count=0,
-            expected_minimum_completion_count=3,
+            expected_state_table_count=0,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_serial_microbatch_when_building_then_partition_and_producer_events_are_durable(
-    test_case: SerialMicrobatchLedgerE2ETestCase, tmp_path: Path
+def test_given_serial_microbatch_when_building_then_state_table_is_not_used(
+    test_case: StatelessSerialMicrobatchE2ETestCase, tmp_path: Path
 ) -> None:
     project_name: str = "serial_microbatch_ledger"
     project_dir: Path = prepare_inline_project(
@@ -96,20 +96,16 @@ def test_given_serial_microbatch_when_building_then_partition_and_producer_event
         ),
     )[0]
     assert maximum_timestamps[0] == maximum_timestamps[1]
-    history: list[tuple[object, ...]] = query_duckdb(
-        db_path=db_path,
-        sql=(
-            "SELECT record_type, fingerprint_status, COUNT(*) "
-            "FROM main._sqlbuild_microbatches "
-            "GROUP BY record_type, fingerprint_status ORDER BY record_type"
-        ),
+    state_table_count: int = int(
+        query_duckdb(
+            db_path=db_path,
+            sql=(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                "WHERE table_schema = 'main' AND table_name = '_sqlbuild_microbatches'"
+            ),
+        )[0][0]
     )
-    completion_count: int = int(history[0][2])
-    assert completion_count >= test_case.expected_minimum_completion_count
-    assert history == [
-        ("partition_completion", "known", completion_count),
-        ("producer_completion", "known", completion_count),
-    ]
+    assert state_table_count == test_case.expected_state_table_count
 
 
 @pytest.mark.parametrize(

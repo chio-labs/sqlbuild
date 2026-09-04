@@ -3,11 +3,7 @@
 from dataclasses import dataclass
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.microbatches.models import (
-    CausalDependencySnapshot,
-    MicrobatchEvent,
-    MicrobatchInterval,
-)
+from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchInterval
 from sqlbuild.microbatches.types import ReplayRequirementState
 
 
@@ -57,15 +53,15 @@ class MicrobatchSqlBehaviorTestCase:
 
 
 @dataclass(frozen=True)
-class CausalEventTestCase:
-    """One named causal primitive behavior."""
-
+class RetiredRecordDecodingTestCase:
     description: str
-    expected_enabled: bool = True
+    retired_record_type: str
+    expected_event_ids: tuple[str, ...]
+    expected_projected_event_ids: tuple[str, ...]
 
 
 @dataclass(frozen=True)
-class CausalInputGrainTestCase:
+class UnknownRecordDecodingTestCase:
     description: str
-    dependency: CausalDependencySnapshot
-    expected_grain: str
+    unknown_record_type: str
+    expected_error_fragment: str

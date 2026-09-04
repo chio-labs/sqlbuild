@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, ClassVar
 
 import pytest
@@ -15,13 +14,9 @@ from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationLocation,
-    CompileModelConfig,
-    CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
-    _apply_microbatch_limit,
     _build_cursor_input_relations,
     _runtime_cursor_producer_names,
     build_planner_relations_context,
@@ -30,17 +25,12 @@ from sqlbuild.compiler.planner._helpers.output.plan_entry import (
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
-    CursorBounds,
     CursorInputRelation,
-    ModelPlanEntry,
     PlannerRelationsContext,
     PlannerScope,
-    WarehouseFingerprints,
 )
-from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SourceEntry
-from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CursorRuntimeOwnershipTestCase,
     KnownSourceColumnsReuseTestCase,
@@ -48,7 +38,6 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     RuntimeCursorProducerNamesTestCase,
     SourceColumnsTestCase,
     SourceCursorInputColumnsTestCase,
-    UnsupportedCausalModelEdgeTestCase,
     WatermarkLineageTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
@@ -464,7 +453,6 @@ def test_given_view_filter_and_transitive_watermark_when_planning_then_relation_
         source_map={"raw_orders": SourceEntry(name="raw_orders", schema="raw", table="raw_orders")},
         cursor_column="event_time",
         runtime_cursor_producer_names=frozenset({"raw_orders"}),
-        fingerprints=WarehouseFingerprints(),
     )
 
     assert len(relations) == 1
@@ -627,7 +615,6 @@ def test_given_table_function_and_transitive_watermark_when_planning_then_source
         source_map={"raw_orders": SourceEntry(name="raw_orders", schema="raw", table="raw_orders")},
         cursor_column="event_time",
         runtime_cursor_producer_names=frozenset(),
-        fingerprints=WarehouseFingerprints(),
     )
 
     assert len(relations) == 1
@@ -805,122 +792,6 @@ def test_given_cursor_relation_metadata_when_checking_runtime_ownership_then_onl
     )
 
     assert relation.is_runtime_owned is test_case.expected_runtime_owned
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        UnsupportedCausalModelEdgeTestCase(
-            description="selected non-microbatch input retains noncausal batch evidence",
-            producer_config={
-                "materialized": "table",
-                "cursor": "event_time",
-                "cursor_type": "timestamp",
-                "cursor_grain": "month",
-            },
-            expected_grain="month",
-            expected_batch_size="1d",
-            expected_batch_count=90,
-        ),
-        UnsupportedCausalModelEdgeTestCase(
-            description="selected cursor-incompatible input retains noncausal batch evidence",
-            producer_config={
-                "materialized": "incremental",
-                "incremental_mode": "microbatch",
-                "microbatch_strategy": "watermark",
-                "cursor_watermark_mode": "all",
-                "cursor": "event_id",
-                "cursor_type": "integer",
-                "cursor_grain": "month",
-            },
-            expected_grain="month",
-            expected_batch_size="1d",
-            expected_batch_count=90,
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_unsupported_selected_edge_when_planning_then_watermark_is_runtime_and_noncausal(
-    test_case: UnsupportedCausalModelEdgeTestCase,
-) -> None:
-    producer_key: CompiledObjectKey = CompiledObjectKey(
-        resource_type=CompiledResourceType.MODEL, name="upstream_events"
-    )
-    producer: CompiledModel = CompiledModel(
-        key=producer_key,
-        deps=(),
-        name="upstream_events",
-        relative_path=Path("models/upstream_events.sql"),
-        query_sql="SELECT event_time FROM raw_events",
-        config=CompileModelConfig(values=test_case.producer_config),
-        destination=CompiledRelationLocation(
-            None, "main", "upstream_events", "main.upstream_events"
-        ),
-    )
-    consumer: CompiledModel = CompiledModel(
-        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="daily_events"),
-        deps=(producer_key,),
-        name="daily_events",
-        relative_path=Path("models/daily_events.sql"),
-        query_sql='SELECT event_time FROM __ref("upstream_events")',
-        references=(
-            CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="upstream_events"),
-        ),
-        config=CompileModelConfig(
-            values={
-                "materialized": "incremental",
-                "incremental_mode": "microbatch",
-                "microbatch_strategy": "watermark",
-                "cursor_watermark_mode": "all",
-                "cursor": "event_time",
-                "cursor_type": "timestamp",
-                "cursor_grain": "day",
-                "cursor_inputs": {
-                    "upstream_events": {"column": "event_time", "roles": ["watermark"]}
-                },
-            }
-        ),
-        destination=CompiledRelationLocation(None, "main", "daily_events", "main.daily_events"),
-    )
-    relations: tuple[CursorInputRelation, ...] = _build_cursor_input_relations(
-        model=consumer,
-        adapter=DuckDbAdapter(),
-        model_locations={producer.name: producer.destination},
-        models_by_name={producer.name: producer, consumer.name: consumer},
-        seed_locations={},
-        source_map={},
-        cursor_column="event_time",
-        runtime_cursor_producer_names=frozenset({producer.name}),
-        fingerprints=WarehouseFingerprints(),
-    )
-    entry: ModelPlanEntry = ModelPlanEntry(
-        key=consumer.key,
-        name=consumer.name,
-        relative_path=consumer.relative_path,
-        materialization_type=MaterializationType.INCREMENTAL,
-        action=PlanAction.INCREMENTAL_DELETE_INSERT,
-        reason=PlanReason.NORMAL_INCREMENTAL,
-        destination=consumer.destination,
-        fingerprint_query_sql=consumer.query_sql,
-        resolved_sql=consumer.query_sql,
-        logical_ddl="",
-        cursor_type="timestamp",
-        cursor_grain="day",
-        cursor_input_relations=relations,
-        batch_size=test_case.expected_batch_size,
-        microbatch_range=CursorBounds(start="2026-01-01", end="2026-04-01"),
-    )
-
-    limited, warning = _apply_microbatch_limit(
-        entry=entry, max_batches=None, action=MicrobatchLimitAction.WARN
-    )
-
-    assert relations[0].producer_model_name is None
-    assert relations[0].is_runtime_produced is True
-    assert relations[0].cursor_grain == test_case.expected_grain
-    assert limited.batch_size == test_case.expected_batch_size
-    assert limited.microbatch_limit_count == test_case.expected_batch_count
-    assert warning is None
 
 
 if __name__ == "__main__":

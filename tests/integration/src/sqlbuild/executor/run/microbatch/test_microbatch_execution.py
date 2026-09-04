@@ -29,7 +29,6 @@ from tests.integration.src.sqlbuild.executor.run.microbatch._test_types import (
     MicrobatchSuccessTestCase,
 )
 from tests.integration.src.sqlbuild.executor.run.microbatch.helpers import (
-    causal_dependencies_for_intervals,
     fail_microbatch_hook,
     insert_microbatch_hook_log,
     messages_with_prefix,
@@ -70,64 +69,6 @@ _INT_MODEL_SQL: str = (
     f"WHERE batch_id >= {MICROBATCH_START_SENTINEL} "
     f"AND batch_id < {MICROBATCH_END_SENTINEL}"
 )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        MicrobatchSuccessTestCase(
-            description="legacy causal dependencies are inert while runtime safety applies",
-            setup_sql=(
-                "CREATE TABLE main.future_input (id INTEGER, event_time TIMESTAMP)",
-                "INSERT INTO main.future_input VALUES (1, '2026-01-06'), (2, '2026-01-20')",
-                "CREATE TABLE main.orders (id INTEGER, event_time TIMESTAMP)",
-                "INSERT INTO main.orders VALUES (9, '2026-01-09')",
-            ),
-            model_sql=(
-                "SELECT * FROM main.future_input "
-                f"WHERE event_time >= '{MICROBATCH_START_SENTINEL}' "
-                f"AND event_time < '{MICROBATCH_END_SENTINEL}'"
-            ),
-            target_schema="main",
-            target_name="orders",
-            incremental_strategy="delete_insert",
-            cursor_column="event_time",
-            cursor_type="timestamp",
-            cursor_grain="day",
-            batch_size="1d",
-            microbatch_start="2026-01-01",
-            microbatch_end="2026-01-21",
-            use_plan_microbatch_range=False,
-            cursor_input_relations=(("main.future_input", "event_time"),),
-            cursor_inputs_model_backed=True,
-            start_cursor_override="2026-01-05",
-            future_cursor_config=FutureCursorsConfig("2d", FutureCursorAction.CAP),
-            invocation_time=datetime(2026, 1, 10, 12, 0, tzinfo=UTC),
-            causal_dependencies=causal_dependencies_for_intervals(
-                intervals=(("2026-01-01", "2026-01-07"), ("2026-01-10", "2026-01-20"))
-            ),
-            expected_row_count=1,
-            expected_batch_count=8,
-            expected_has_future_cursor_safety=True,
-            expected_cursor_range_start="2026-01-05T00:00:00",
-            expected_cursor_range_end="2026-01-13T00:00:00",
-            expected_causal_replay_intervals=(),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_legacy_causal_dependencies_when_executing_then_they_are_inert(
-    test_case: MicrobatchSuccessTestCase,
-    adapter: DuckDbAdapter,
-    connection: Any,
-) -> None:
-    result: ModelExecutionResult = run_success_test(
-        test_case=test_case, adapter=adapter, connection=connection
-    )
-
-    assert result.cursor_range_start == test_case.expected_cursor_range_start
-    assert result.cursor_range_end == test_case.expected_cursor_range_end
-    assert result.microbatch_causal_replay_intervals == test_case.expected_causal_replay_intervals
 
 
 @pytest.mark.parametrize(

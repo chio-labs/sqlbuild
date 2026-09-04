@@ -2,12 +2,47 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
+from typing import cast
 
 from sqlbuild.compiler.planner.constants import WHOLE_DAY_CURSOR_GRAINS
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
+
+
+def discovered_cursor_partition(
+    *, value: object, cursor_type: str | None, cursor_grain: str | None
+) -> tuple[object, object]:
+    """Return the grain-aligned partition containing one observed physical value."""
+
+    if cursor_type == CursorType.INTEGER:
+        return _discovered_integer_partition(value=value)
+    if cursor_type != CursorType.TIMESTAMP:
+        return value, value
+    parsed, was_string = _parse_discovered_timestamp(value=value)
+    if parsed is None:
+        return value, value
+    grain: str = cursor_grain or (
+        CursorGrain.SECOND if isinstance(parsed, datetime) else CursorGrain.DAY
+    )
+    start: date | datetime = _floor_discovered_timestamp(value=parsed, grain=grain)
+    end: date | datetime = _advance_discovered_timestamp(value=start, grain=grain)
+    if not was_string:
+        return start, end
+    return _format_discovered_timestamp(value=start), _format_discovered_timestamp(value=end)
+
+
+def advance_discovered_cursor_end(
+    *, value: object, cursor_type: str | None, cursor_grain: str | None
+) -> object:
+    """Convert an observed physical maximum to its exclusive partition end."""
+
+    return discovered_cursor_partition(
+        value=value,
+        cursor_type=cursor_type,
+        cursor_grain=cursor_grain,
+    )[1]
 
 
 def advance_cursor_end(
@@ -131,3 +166,81 @@ def _try_parse_plain_date(*, value: str) -> date | None:
         return date.fromisoformat(value)
     except ValueError:
         return None
+
+
+def _discovered_integer_partition(*, value: object) -> tuple[object, object]:
+    try:
+        parsed: Decimal = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return value, value
+    if parsed != int(parsed):
+        return value, value
+    start: int = int(parsed)
+    if isinstance(value, str):
+        return str(start), str(start + 1)
+    return start, start + 1
+
+
+def _parse_discovered_timestamp(*, value: object) -> tuple[date | datetime | None, bool]:
+    if isinstance(value, datetime):
+        return value, False
+    if isinstance(value, date):
+        return value, False
+    if not isinstance(value, str):
+        return None, False
+    try:
+        return date.fromisoformat(value), True
+    except ValueError:
+        try:
+            return datetime.fromisoformat(value), True
+        except ValueError:
+            return None, True
+
+
+def _floor_discovered_timestamp(*, value: date | datetime, grain: str) -> date | datetime:
+    if isinstance(value, datetime):
+        if grain == CursorGrain.SECOND:
+            return value.replace(microsecond=0)
+        if grain == CursorGrain.MINUTE:
+            return value.replace(second=0, microsecond=0)
+        if grain == CursorGrain.HOUR:
+            return value.replace(minute=0, second=0, microsecond=0)
+        if grain == CursorGrain.DAY:
+            return value.replace(hour=0, minute=0, second=0, microsecond=0)
+        if grain == CursorGrain.MONTH:
+            return value.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if grain == CursorGrain.YEAR:
+            return value.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        return value
+    if grain == CursorGrain.MONTH:
+        return value.replace(day=1)
+    if grain == CursorGrain.YEAR:
+        return value.replace(month=1, day=1)
+    if grain in {CursorGrain.SECOND, CursorGrain.MINUTE, CursorGrain.HOUR}:
+        return datetime.combine(value, time.min)
+    return value
+
+
+def _advance_discovered_timestamp(*, value: date | datetime, grain: str) -> date | datetime:
+    if grain == CursorGrain.SECOND:
+        return value + timedelta(seconds=1)
+    if grain == CursorGrain.MINUTE:
+        return value + timedelta(minutes=1)
+    if grain == CursorGrain.HOUR:
+        return value + timedelta(hours=1)
+    if grain == CursorGrain.DAY:
+        return value + timedelta(days=1)
+    if grain == CursorGrain.MONTH:
+        final_month: int = 12
+        year: int = value.year + (1 if value.month == final_month else 0)
+        month: int = 1 if value.month == final_month else value.month + 1
+        return value.replace(year=year, month=month, day=1)
+    if grain == CursorGrain.YEAR:
+        return value.replace(year=value.year + 1, month=1, day=1)
+    return value
+
+
+def _format_discovered_timestamp(*, value: date | datetime) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return cast(date, value).isoformat()

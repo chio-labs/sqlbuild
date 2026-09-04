@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from operator import attrgetter
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, cast
+from typing import Any
 
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
@@ -14,30 +12,37 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
-from sqlbuild.compiler.planner.models import CursorOverrides, ModelPlanEntry, PlanOutput
+from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.main._execute import execute_build_plan
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
     BuildRuntimeParams,
 )
-from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
-from sqlbuild.microbatches.classes.direct_store import (
-    DirectMicrobatchEventStore,
-    direct_microbatch_scope,
-)
-from sqlbuild.microbatches.exceptions import MicrobatchStateError
-from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope, MicrobatchWriteResult
-from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 from tests.integration.src.sqlbuild.executor.build._test_types import (
     BuildExecutionTestCase,
 )
 
 
-def capped_dependency_producer_sql(*, action: MicrobatchLimitAction) -> str:
+def capped_dependency_producer_sql(*, action: MicrobatchLimitAction | None) -> str:
     """Return the timestamp capped-producer model used by graph tests."""
 
+    limit_blocks: dict[MicrobatchLimitAction | None, str] = {
+        None: "",
+        **{
+            member: dedent(
+                f"""
+                microbatch_limit (
+                  max_batches 3,
+                  action {member.value},
+                ),
+                """
+            )
+            for member in MicrobatchLimitAction
+        },
+    }
+    limit_sql: str = limit_blocks[action]
     return dedent(
         f"""
         MODEL (
@@ -56,10 +61,7 @@ def capped_dependency_producer_sql(*, action: MicrobatchLimitAction) -> str:
           ),
           batch_size 1d,
           lookback 1d,
-          microbatch_limit (
-            max_batches 3,
-            action {action.value},
-          ),
+          {limit_sql}
         );
         SELECT id, event_time
         FROM __source("raw_events")
@@ -67,11 +69,40 @@ def capped_dependency_producer_sql(*, action: MicrobatchLimitAction) -> str:
     )
 
 
-def capped_dependency_consumer_sql() -> str:
+def capped_dependency_consumer_sql(
+    *, watermark_mode: str, input_name: str = "capped_events"
+) -> str:
     """Return the timestamp consumer model used by capped graph tests."""
 
     return dedent(
+        f"""
+        MODEL (
+          materialized incremental,
+          incremental_strategy delete_insert,
+          incremental_mode microbatch,
+          microbatch_strategy watermark,
+          cursor event_time,
+          cursor_type timestamp,
+          cursor_grain day,
+          cursor_start '2026-01-01',
+          cursor_watermark_mode {watermark_mode},
+          cursor_inputs (
+            {input_name} (column event_time, roles [filter, watermark]),
+          ),
+          batch_size 1d,
+          lookback 1d,
+        );
+        SELECT id, event_time
+        FROM __ref("{input_name}")
         """
+    )
+
+
+def capped_filter_consumer_sql(*, input_name: str = "capped_events") -> str:
+    """Return a microbatch consumer that uses the capped model only for filtering."""
+
+    return dedent(
+        f"""
         MODEL (
           materialized incremental,
           incremental_strategy delete_insert,
@@ -83,14 +114,146 @@ def capped_dependency_consumer_sql() -> str:
           cursor_start '2026-01-01',
           cursor_watermark_mode all,
           cursor_inputs (
-            capped_events (column event_time, roles [filter, watermark]),
+            {input_name} (column event_time, roles [filter]),
+            raw_events (column event_time, roles [watermark]),
           ),
           batch_size 1d,
-          lookback 1d,
         );
-        SELECT id, event_time
-        FROM __ref("capped_events")
+        SELECT capped.id, capped.event_time
+        FROM __ref("{input_name}") AS capped
+        JOIN __source("raw_events") AS raw_events USING (id)
         """
+    )
+
+
+def plain_capped_consumer_sql(*, materialized: str) -> str:
+    """Return a non-microbatch consumer of a capped model."""
+
+    return dedent(
+        f"""
+        MODEL (materialized {materialized});
+        SELECT id, event_time FROM __ref("capped_events")
+        """
+    )
+
+
+def dependency_view_sql(*, upstream_name: str) -> str:
+    """Return a view forwarding one producer relation."""
+
+    return dedent(
+        f"""
+        MODEL (materialized view);
+        SELECT id, event_time FROM __ref("{upstream_name}")
+        """
+    )
+
+
+def capped_microbatch_intermediary_sql(*, input_role: str) -> str:
+    """Return a microbatch intermediary with a capped filter or watermark input."""
+
+    cursor_inputs: dict[str, str] = {
+        "filter": dedent(
+            """
+            capped_events (column event_time, roles [filter]),
+            raw_events (column event_time, roles [watermark]),
+            """
+        ),
+        "watermark": "capped_events (column event_time, roles [filter, watermark]),",
+    }
+    queries: dict[str, str] = {
+        "filter": dedent(
+            """
+            SELECT capped.id, capped.event_time
+            FROM __ref("capped_events") AS capped
+            JOIN __source("raw_events") AS raw_events USING (id)
+            """
+        ),
+        "watermark": 'SELECT id, event_time FROM __ref("capped_events")',
+    }
+    return dedent(
+        f"""
+        MODEL (
+          materialized incremental,
+          incremental_strategy delete_insert,
+          incremental_mode microbatch,
+          microbatch_strategy watermark,
+          cursor event_time,
+          cursor_type timestamp,
+          cursor_grain day,
+          cursor_start '2026-01-01',
+          cursor_watermark_mode all,
+          cursor_inputs (
+            {cursor_inputs[input_role]}
+          ),
+          batch_size 1d,
+        );
+        {queries[input_role]}
+        """
+    )
+
+
+def compile_capped_microbatch_intermediary_project(
+    *, project_dir: Path, adapter: DuckDbAdapter, input_role: str
+) -> CompilePipelineResult:
+    """Compile a capped producer through a microbatch intermediary."""
+
+    write_build_project_files(
+        project_dir=project_dir,
+        project_files={
+            "sqlbuild_project.toml": 'name = "capped_dependency"\nadapter = "duckdb"\n',
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_events\n    schema: main\n    table: raw_events\n"
+            ),
+            "models/capped_events.sql": capped_dependency_producer_sql(
+                action=MicrobatchLimitAction.CAP_FROM_END
+            ),
+            "models/intermediate_events.sql": capped_microbatch_intermediary_sql(
+                input_role=input_role
+            ),
+            "models/downstream_events.sql": capped_dependency_consumer_sql(
+                watermark_mode="all", input_name="intermediate_events"
+            ),
+        },
+    )
+    return run_compile_pipeline(
+        discovered_inputs=discover_project_inputs(project_dir=project_dir),
+        adapter=adapter,
+        options=CompilePipelineOptions(no_sql_validation=True),
+    )
+
+
+def compile_capped_dependency_project(
+    *,
+    project_dir: Path,
+    adapter: DuckDbAdapter,
+    action: MicrobatchLimitAction | None,
+    consumer_sql: str,
+    intermediary_names: tuple[str, ...] = (),
+) -> CompilePipelineResult:
+    """Compile a capped-producer project with optional intermediary views."""
+
+    project_files: dict[str, str] = {
+        "sqlbuild_project.toml": 'name = "capped_dependency"\nadapter = "duckdb"\n',
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_events\n    schema: main\n    table: raw_events\n"
+        ),
+        "models/capped_events.sql": capped_dependency_producer_sql(action=action),
+        "models/downstream_events.sql": consumer_sql,
+    }
+    upstream_name: str = "capped_events"
+    for intermediary_name in intermediary_names:
+        project_files[f"models/{intermediary_name}.sql"] = dependency_view_sql(
+            upstream_name=upstream_name
+        )
+        upstream_name = intermediary_name
+    write_build_project_files(
+        project_dir=project_dir,
+        project_files=project_files,
+    )
+    return run_compile_pipeline(
+        discovered_inputs=discover_project_inputs(project_dir=project_dir),
+        adapter=adapter,
+        options=CompilePipelineOptions(no_sql_validation=True),
     )
 
 
@@ -137,187 +300,6 @@ def run_build_for_project(
             fail_fast=test_case.fail_fast,
         ),
     )
-
-
-def run_selected_causal_build(
-    *,
-    project_dir: Path,
-    adapter: DuckDbAdapter,
-    connection: Any,
-    run_id: str,
-    select: tuple[str, ...],
-    microbatch_state_resolver: Any = None,
-    start_cursor_ts: str | None = None,
-    end_cursor_ts: str | None = None,
-) -> BuildExecutionResult:
-    """Compile the full graph while executing only named models against one persisted database."""
-
-    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
-    compiled: CompilePipelineResult = run_compile_pipeline(
-        discovered_inputs=discovered,
-        adapter=adapter,
-        options=CompilePipelineOptions(
-            no_sql_validation=True,
-            connection_config={"database": str(project_dir / "test.duckdb")},
-            select=select,
-            cursor_overrides=CursorOverrides(start_ts=start_cursor_ts, end_ts=end_cursor_ts),
-        ),
-    )
-    return execute_build_plan(
-        plan=compiled.plan_output,
-        adapter=adapter,
-        connection_config={"database": str(project_dir / "test.duckdb")},
-        connections=(connection,),
-        scheduler_connection=connection,
-        runtime=BuildRuntimeParams(
-            promotion_mode=TablePromotionMode(adapter.default_table_promotion_mode()),
-            run_id=run_id,
-            query_change_tracking=True,
-            microbatch_state_resolver=microbatch_state_resolver,
-        ),
-    )
-
-
-def causal_model_result(result: BuildExecutionResult, model_name: str) -> ModelExecutionResult:
-    """Return one named model result from a causal integration build."""
-
-    results: dict[str, ModelExecutionResult] = {
-        model.model_name: model for model in result.model_results
-    }
-    return results[model_name]
-
-
-def causal_partition_ranges(
-    connection: Any, *, model_name: str, run_id: str
-) -> tuple[tuple[str, str], ...]:
-    """Read persisted partition-completion ranges for one model run."""
-
-    return tuple(
-        connection.execute(
-            "SELECT partition_start, partition_end FROM main._sqlbuild_microbatches "
-            "WHERE record_type = 'partition_completion' AND model_name = ? "
-            "AND execution_run_id = ? ORDER BY partition_start",
-            (model_name, run_id),
-        ).fetchall()
-    )
-
-
-def causal_delete_statements(result: ModelExecutionResult) -> tuple[str, ...]:
-    """Return concrete target-delete statements for a model execution."""
-
-    delete_events: Any = filter(
-        lambda event: event.content.startswith("DELETE FROM"), result.lifecycle_events
-    )
-    return tuple(map(attrgetter("content"), delete_events))
-
-
-def _monthly_causal_producer_sql(*, id_expression: str) -> str:
-    return dedent(
-        f"""
-        MODEL (
-          materialized incremental,
-          incremental_strategy delete_insert,
-          incremental_mode microbatch,
-          microbatch_strategy watermark,
-          cursor event_time,
-          cursor_type timestamp,
-          cursor_grain month,
-          cursor_start '2026-07-01',
-          cursor_watermark_mode all,
-          cursor_inputs (
-            raw_events (column event_time, roles [filter, watermark]),
-          ),
-          batch_size 1mo,
-          replay_on_change full,
-        );
-        SELECT {id_expression}, event_time
-        FROM __source("raw_events")
-        WHERE event_time >= __cursor_start() AND event_time < __cursor_end()
-        """
-    )
-
-
-def monthly_causal_producer_sql() -> str:
-    """Build the initial monthly producer SQL."""
-
-    return _monthly_causal_producer_sql(id_expression="id")
-
-
-def replacement_monthly_causal_producer_sql() -> str:
-    """Build a semantically equivalent but version-distinct monthly producer."""
-
-    return _monthly_causal_producer_sql(id_expression="CAST(id AS INTEGER) AS id")
-
-
-def daily_causal_consumer_sql(*, batch_size: str) -> str:
-    """Build daily consumer SQL with the requested fixed or effective batch size."""
-
-    return dedent(
-        f"""
-        MODEL (
-          materialized incremental,
-          incremental_strategy delete_insert,
-          incremental_mode microbatch,
-          microbatch_strategy watermark,
-          cursor event_time,
-          cursor_type timestamp,
-          cursor_grain day,
-          cursor_start '2026-07-01',
-          cursor_watermark_mode all,
-          cursor_inputs (
-            monthly_events (column event_time, roles [filter, watermark]),
-          ),
-          batch_size {batch_size},
-          lookback 4d,
-        );
-        SELECT id, event_time
-        FROM __ref("monthly_events")
-        WHERE event_time >= __cursor_start() AND event_time < __cursor_end()
-        """
-    )
-
-
-class FailConsumerTerminalPublication:
-    """Direct-store decorator that fails one consumer terminal publication."""
-
-    def __init__(self, *, adapter: DuckDbAdapter, connection: Any) -> None:
-        self._adapter = adapter
-        self._delegate: MicrobatchEventStore = DirectMicrobatchEventStore(
-            adapter=adapter, connection=connection
-        )
-
-    def write(self, event: MicrobatchEvent) -> None:
-        self._delegate.write(event)
-
-    def write_many(self, events: tuple[MicrobatchEvent, ...]) -> MicrobatchWriteResult:
-        writers: dict[bool, Callable[[tuple[MicrobatchEvent, ...]], MicrobatchWriteResult]] = {
-            True: self._fail_frontier_write,
-            False: self._delegate.write_many,
-        }
-        return writers[any(event.record_type.value == "consumer_frontier" for event in events)](
-            events
-        )
-
-    def _fail_frontier_write(self, events: tuple[MicrobatchEvent, ...]) -> MicrobatchWriteResult:
-        raise MicrobatchStateError("injected terminal causal publication failure")
-
-    def read_scope_history(self, scope: MicrobatchScope) -> tuple[MicrobatchEvent, ...]:
-        return self._delegate.read_scope_history(scope)
-
-    def read_model_history(self, scope: MicrobatchScope) -> tuple[MicrobatchEvent, ...]:
-        return self._delegate.read_model_history(scope)
-
-    def resolve(
-        self, entry: ModelPlanEntry, current_connection: object
-    ) -> tuple[MicrobatchEventStore, MicrobatchScope]:
-        """Resolve the failing consumer store and ordinary producer stores."""
-
-        return (
-            cast(MicrobatchEventStore, self),
-            direct_microbatch_scope(
-                adapter=self._adapter, connection=current_connection, entry=entry
-            ),
-        )
 
 
 def write_build_project_files(*, project_dir: Path, project_files: dict[str, str]) -> None:

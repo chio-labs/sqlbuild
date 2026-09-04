@@ -32,3 +32,12 @@ class CostFailureTimingTestCase:
     clock_values: tuple[float, ...]
     expected_cost_seconds: float
     expected_error_message: str
+
+
+@dataclass(frozen=True)
+class ExecutionProjectionFailureTestCase:
+    description: str
+    build_status: str
+    expected_exit_code: int
+    expected_document_status: str
+    expected_completion_message: str
