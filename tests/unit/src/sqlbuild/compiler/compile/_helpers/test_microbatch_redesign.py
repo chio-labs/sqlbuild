@@ -17,10 +17,74 @@ from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     resolve_effective_timestamp_grain as resolve_runtime_effective_timestamp_grain,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
+    AvailabilityStartFloorTestCase,
     MicrobatchCursorTypeTestCase,
     MicrobatchGrainOwnershipTestCase,
     MicrobatchRedesignBehaviorTestCase,
+    WatermarkLimitValidationTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        AvailabilityStartFloorTestCase(
+            description="all mode intersects every capped producer lower edge",
+            ranges=(
+                ("2026-01-03", "2026-01-10"),
+                ("2026-01-05", "2026-01-08"),
+                (None, "2026-01-12"),
+            ),
+            mode="all",
+            resolved_end="2026-01-08",
+            expected_start="2026-01-05",
+        ),
+        AvailabilityStartFloorTestCase(
+            description="any mode uses lower edge of producer supplying furthest end",
+            ranges=(
+                (None, "2026-01-08"),
+                ("2026-01-05", "2026-01-12"),
+            ),
+            mode="any",
+            resolved_end="2026-01-12",
+            expected_start="2026-01-05",
+        ),
+        AvailabilityStartFloorTestCase(
+            description="any mode remains unbounded when furthest producer is uncapped",
+            ranges=(
+                ("2026-01-05", "2026-01-08"),
+                (None, "2026-01-12"),
+            ),
+            mode="any",
+            resolved_end="2026-01-12",
+            expected_start="2026-01-01",
+        ),
+        AvailabilityStartFloorTestCase(
+            description="any tied end remains unbounded when one producer is uncapped",
+            ranges=(
+                ("2026-01-05", "2026-01-12"),
+                (None, "2026-01-12"),
+            ),
+            mode="any",
+            resolved_end="2026-01-12",
+            expected_start="2026-01-01",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_producer_availability_ranges_when_clamping_bounds_then_mode_is_respected(
+    test_case: AvailabilityStartFloorTestCase,
+) -> None:
+    assert (
+        CursorBounds(start="2026-01-01", end=test_case.resolved_end)
+        .clamp_to_availability(
+            ranges=test_case.ranges,
+            cursor_watermark_mode=test_case.mode,
+            cursor_type="timestamp",
+        )
+        .start
+        == test_case.expected_start
+    )
 
 
 @pytest.mark.parametrize(
@@ -221,6 +285,145 @@ def test_given_model_limit_below_lookback_when_validating_then_compilation_fails
             ref_count=1,
             known_input_names=frozenset({"events"}),
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        WatermarkLimitValidationTestCase(
+            description="fixed lookback cap from start must leave one forward batch",
+            incremental_strategy="delete_insert",
+            batch_size="1d",
+            lookback="1d",
+            max_batches=2,
+            action="cap_from_start",
+            expected_error_fragment="ordinary lookback requirement of 3 batches",
+        ),
+        WatermarkLimitValidationTestCase(
+            description="implicit idempotent lookback cap from start must leave one forward batch",
+            incremental_strategy="delete_insert",
+            batch_size="1d",
+            lookback=None,
+            max_batches=2,
+            action="cap_from_start",
+            expected_error_fragment="ordinary lookback requirement of 3 batches",
+        ),
+        WatermarkLimitValidationTestCase(
+            description="calendar lookback cap from start must leave one forward batch",
+            incremental_strategy="delete_insert",
+            batch_size="1mo",
+            lookback="1mo",
+            max_batches=2,
+            action="cap_from_start",
+            expected_error_fragment="ordinary lookback requirement of 3 batches",
+        ),
+        WatermarkLimitValidationTestCase(
+            description="effective batch cap from start resolves against cursor grain",
+            incremental_strategy="delete_insert",
+            batch_size="effective",
+            lookback=None,
+            max_batches=2,
+            action="cap_from_start",
+            expected_error_fragment="ordinary lookback requirement of 3 batches",
+        ),
+        WatermarkLimitValidationTestCase(
+            description="mixed duration cap from start fails closed",
+            incremental_strategy="delete_insert",
+            batch_size="1d",
+            lookback="1mo",
+            max_batches=10,
+            action="cap_from_start",
+            expected_error_fragment="cannot prove forward progress",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_insufficient_capped_watermark_limit_when_validating_then_error_explains_progress(
+    test_case: WatermarkLimitValidationTestCase,
+) -> None:
+    config: CompileModelConfig = CompileModelConfig(
+        values={
+            "materialized": "incremental",
+            "incremental_strategy": test_case.incremental_strategy,
+            "incremental_mode": "microbatch",
+            "microbatch_strategy": "watermark",
+            "cursor_watermark_mode": "all",
+            "cursor": "event_time",
+            "cursor_type": "timestamp",
+            "cursor_grain": "day",
+            "cursor_inputs": {
+                "events": {
+                    "column": "event_time",
+                    "roles": ["filter", "watermark"],
+                }
+            },
+            "batch_size": test_case.batch_size,
+            "lookback": test_case.lookback,
+            "microbatch_limit": {
+                "max_batches": test_case.max_batches,
+                "action": test_case.action,
+            },
+        }
+    )
+
+    assert test_case.expected_error_fragment is not None
+    with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
+        validate_incremental_config(
+            config=config,
+            model_name="events",
+            ref_count=1,
+            known_input_names=frozenset({"events"}),
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        WatermarkLimitValidationTestCase(
+            description="cap from end may equal ordinary lookback requirement",
+            incremental_strategy="delete_insert",
+            batch_size="1d",
+            lookback="1d",
+            max_batches=2,
+            action="cap_from_end",
+            expected_error_fragment=None,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_sufficient_cap_from_end_limit_when_validating_then_config_is_accepted(
+    test_case: WatermarkLimitValidationTestCase,
+) -> None:
+    assert test_case.expected_error_fragment is None
+    validate_incremental_config(
+        config=CompileModelConfig(
+            values={
+                "materialized": "incremental",
+                "incremental_strategy": test_case.incremental_strategy,
+                "incremental_mode": "microbatch",
+                "microbatch_strategy": "watermark",
+                "cursor_watermark_mode": "all",
+                "cursor": "event_time",
+                "cursor_type": "timestamp",
+                "cursor_grain": "day",
+                "cursor_inputs": {
+                    "events": {
+                        "column": "event_time",
+                        "roles": ["filter", "watermark"],
+                    }
+                },
+                "batch_size": test_case.batch_size,
+                "lookback": test_case.lookback,
+                "microbatch_limit": {
+                    "max_batches": test_case.max_batches,
+                    "action": test_case.action,
+                },
+            }
+        ),
+        model_name="events",
+        ref_count=1,
+        known_input_names=frozenset({"events"}),
+    )
 
 
 @pytest.mark.parametrize(

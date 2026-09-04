@@ -208,7 +208,7 @@ def test_given_concurrent_delta_audit_failure_when_fixed_then_rejected_partition
         sql=(
             "SELECT COUNT(*) FROM main._sqlbuild_microbatches "
             "WHERE record_type = 'partition_completion' "
-            "AND partition_start = '2026-01-01T02:30:00'"
+            "AND partition_start = '2026-01-01T02:00:00'"
         ),
     )
     execute_duckdb(db_path=db_path, sql="UPDATE raw_events SET payload = '3' WHERE id = 3")
@@ -232,7 +232,7 @@ def test_given_concurrent_delta_audit_failure_when_fixed_then_rejected_partition
             sql=(
                 "SELECT COUNT(*) FROM main._sqlbuild_microbatches "
                 "WHERE record_type = 'partition_completion' "
-                "AND partition_start = '2026-01-01T02:30:00'"
+                "AND partition_start = '2026-01-01T02:00:00'"
             ),
         )[0][0]
         >= 1

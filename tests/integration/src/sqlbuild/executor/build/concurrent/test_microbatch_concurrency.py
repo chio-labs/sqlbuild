@@ -76,7 +76,7 @@ class _TrackingDuckDbAdapter(DuckDbAdapter):
             expected_max_active_batches=3,
             expected_max_active_models=2,
             expected_row_count=6,
-            expected_completion_count=18,
+            expected_completion_count=14,
             expected_unattributed_batches=0,
         )
     ],

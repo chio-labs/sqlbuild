@@ -4790,6 +4790,10 @@ MODEL (
 
 A cap changes only the work selected for that invocation. Deferred batches are not recorded as complete. `cap_from_end` is useful for feeds where keeping the latest projection current is more important than catching up oldest-first; `cap_from_start` is the oldest-first catch-up policy.
 
+For `cap_from_start`, `max_batches` must be large enough to cover the model's ordinary lookback/current buckets and at least one forward batch. SQLBuild rejects a static limit that cannot make forward progress, including when an idempotent strategy uses its implicit one-batch lookback.
+
+When another watermark model consumes a capped model, SQLBuild uses the producer's durable partition-completion facts as the authoritative availability intervals. A configured producer `cursor_end` remains a domain boundary, but neither that declaration nor the target table's physical `MIN`/`MAX` envelope proves that deferred or intervening intervals were materialized. This keeps disjoint `cap_from_end` suffixes disjoint for downstream execution. If completion history is unavailable, the consumer fails closed.
+
 The project can also set an outer safety policy:
 
 ```toml

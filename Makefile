@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: verify verify-quick verify-pg coverage cli-preview rust-check
+.PHONY: verify verify-quick verify-pg coverage cli-preview rust-check test-e2e-performance
 
 format:
 	uv run ruff format .
@@ -66,11 +66,22 @@ test-e2e-duckdb:
 			fi; \
 		}; \
 		run_step "duckdb e2e" env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/e2e -m "not real_warehouse and not dbt and not performance" -vv --color=yes -n auto --dist loadfile; \
-		run_step "duckdb performance" env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/e2e -m "performance and not real_warehouse and not dbt" -vv --log-cli-level=INFO --color=yes; \
 		exit $$status; \
 	} 2>&1 | tee "$$log"; \
 	status=$${PIPESTATUS[0]}; \
 	echo "TEST_E2E_DUCKDB_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
+
+
+test-e2e-performance:
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/test-e2e-performance-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Logging to $$log"; \
+	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/e2e \
+		-m "performance and not real_warehouse and not dbt" \
+		-vv --log-cli-level=INFO --color=yes 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "TEST_E2E_PERFORMANCE_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
 	exit $$status
 
 

@@ -157,6 +157,31 @@ jobs:
       - name: Run DuckDB E2E tests
         run: make test-e2e-duckdb
 
+  performance:
+    name: Performance guards
+    needs: [changes, lockfile]
+    if: needs.changes.outputs.duckdb == 'true'
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            Cargo.lock
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Install Python
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: uv sync --locked --all-groups --all-extras
+      - name: Run performance guards
+        run: make test-e2e-performance
+
   postgres:
     name: PostgreSQL integration and E2E tests
     needs: [changes, lockfile]
@@ -193,7 +218,7 @@ jobs:
   verify:
     name: Verify
     if: always()
-    needs: [changes, lockfile, checks, e2e, postgres]
+    needs: [changes, lockfile, checks, e2e, performance, postgres]
     runs-on: ubuntu-24.04
     steps:
       - name: Confirm all required verification jobs passed
@@ -202,6 +227,7 @@ jobs:
           LOCKFILE_RESULT: ${{ needs.lockfile.result }}
           CHECKS_RESULT: ${{ needs.checks.result }}
           E2E_RESULT: ${{ needs.e2e.result }}
+          PERFORMANCE_RESULT: ${{ needs.performance.result }}
           POSTGRES_RESULT: ${{ needs.postgres.result }}
         run: |
           if [[ "${CHANGES_RESULT}" != "success" || \
@@ -210,7 +236,7 @@ jobs:
             echo "Required classification, lockfile, or static checks did not pass" >&2
             exit 1
           fi
-          for result in "${E2E_RESULT}" "${POSTGRES_RESULT}"; do
+          for result in "${E2E_RESULT}" "${PERFORMANCE_RESULT}" "${POSTGRES_RESULT}"; do
             if [[ "${result}" != "success" && "${result}" != "skipped" ]]; then
               echo "A selected verification suite did not pass: ${result}" >&2
               exit 1

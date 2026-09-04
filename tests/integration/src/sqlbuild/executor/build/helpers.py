@@ -29,9 +29,69 @@ from sqlbuild.microbatches.classes.direct_store import (
 from sqlbuild.microbatches.exceptions import MicrobatchStateError
 from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope, MicrobatchWriteResult
 from sqlbuild.microbatches.types import MicrobatchEventStore
+from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 from tests.integration.src.sqlbuild.executor.build._test_types import (
     BuildExecutionTestCase,
 )
+
+
+def capped_dependency_producer_sql(*, action: MicrobatchLimitAction) -> str:
+    """Return the timestamp capped-producer model used by graph tests."""
+
+    return dedent(
+        f"""
+        MODEL (
+          materialized incremental,
+          incremental_strategy delete_insert,
+          incremental_mode microbatch,
+          microbatch_strategy watermark,
+          cursor event_time,
+          cursor_type timestamp,
+          cursor_grain day,
+          cursor_start '2026-01-01',
+          cursor_end '2026-01-06',
+          cursor_watermark_mode all,
+          cursor_inputs (
+            raw_events (column event_time, roles [filter, watermark]),
+          ),
+          batch_size 1d,
+          lookback 1d,
+          microbatch_limit (
+            max_batches 3,
+            action {action.value},
+          ),
+        );
+        SELECT id, event_time
+        FROM __source("raw_events")
+        """
+    )
+
+
+def capped_dependency_consumer_sql() -> str:
+    """Return the timestamp consumer model used by capped graph tests."""
+
+    return dedent(
+        """
+        MODEL (
+          materialized incremental,
+          incremental_strategy delete_insert,
+          incremental_mode microbatch,
+          microbatch_strategy watermark,
+          cursor event_time,
+          cursor_type timestamp,
+          cursor_grain day,
+          cursor_start '2026-01-01',
+          cursor_watermark_mode all,
+          cursor_inputs (
+            capped_events (column event_time, roles [filter, watermark]),
+          ),
+          batch_size 1d,
+          lookback 1d,
+        );
+        SELECT id, event_time
+        FROM __ref("capped_events")
+        """
+    )
 
 
 def run_build_for_project(

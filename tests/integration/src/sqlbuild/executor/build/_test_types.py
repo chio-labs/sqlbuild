@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
 
 @dataclass(frozen=True)
@@ -9,6 +10,14 @@ class CausalExecutionTestCase:
     description: str
     expected_status: ExecutionStatus
     expected_minimum_cursor_start: str
+
+
+@dataclass(frozen=True)
+class CappedDependencyExecutionTestCase:
+    description: str
+    limit_action: MicrobatchLimitAction
+    expected_ids: tuple[int, ...]
+    expected_intervals: tuple[tuple[str, str], ...]
 
 
 @dataclass(frozen=True)

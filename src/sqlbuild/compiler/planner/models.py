@@ -34,6 +34,8 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
     ChangeKind,
+    CursorType,
+    CursorWatermarkMode,
     GraphResourceKind,
     LocalNodePlanAction,
     LocalNodePlanReason,
@@ -213,6 +215,7 @@ class ModelCursorSnapshot:
     upstream_terminal_ends: tuple[str, ...] = ()
     upstream_end_inputs: tuple[tuple[str | None, str | None], ...] = ()
     upstream_availability_ends: tuple[str, ...] = ()
+    upstream_availability_ranges: tuple[tuple[str | None, str], ...] = ()
 
     @property
     def watermarks_available(self) -> bool:
@@ -229,6 +232,64 @@ class CursorBounds:
     end: str
     future_safety: FutureCursorSafetyEvidence | None = None
     maximum_start_safety: MaximumStartSafetyEvidence | None = None
+
+    def clamp_to_availability(
+        self,
+        *,
+        ranges: tuple[tuple[str | None, str], ...],
+        cursor_watermark_mode: str,
+        cursor_type: str | None,
+    ) -> CursorBounds:
+        """Intersect these bounds with capped-producer physical availability."""
+
+        if not ranges:
+            return self
+        starts: tuple[str | None, ...]
+        if cursor_watermark_mode == CursorWatermarkMode.ANY:
+            resolved_key: Decimal = self._cursor_order_key(value=self.end, cursor_type=cursor_type)
+            starts = tuple(
+                start
+                for start, end in ranges
+                if self._cursor_order_key(value=end, cursor_type=cursor_type) == resolved_key
+            )
+            if not starts or any(start is None for start in starts):
+                return self
+            availability_start: str = min(
+                (start for start in starts if start is not None),
+                key=lambda value: self._cursor_order_key(value=value, cursor_type=cursor_type),
+            )
+        else:
+            concrete_starts: tuple[str, ...] = tuple(
+                start for start, _ in ranges if start is not None
+            )
+            if not concrete_starts:
+                return self
+            availability_start = max(
+                concrete_starts,
+                key=lambda value: self._cursor_order_key(value=value, cursor_type=cursor_type),
+            )
+        start_key: Decimal = self._cursor_order_key(value=self.start, cursor_type=cursor_type)
+        availability_key: Decimal = self._cursor_order_key(
+            value=availability_start, cursor_type=cursor_type
+        )
+        if start_key >= availability_key:
+            return self
+        end_key: Decimal = self._cursor_order_key(value=self.end, cursor_type=cursor_type)
+        return CursorBounds(
+            start=self.end if availability_key >= end_key else availability_start,
+            end=self.end,
+            future_safety=self.future_safety,
+            maximum_start_safety=self.maximum_start_safety,
+        )
+
+    @staticmethod
+    def _cursor_order_key(*, value: str, cursor_type: str | None) -> Decimal:
+        if cursor_type == CursorType.INTEGER:
+            return Decimal(value)
+        parsed: datetime = datetime.fromisoformat(value)
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+        return Decimal(str(parsed.replace(tzinfo=UTC).timestamp()))
 
 
 @dataclass(frozen=True)
@@ -388,6 +449,7 @@ class CursorInputRelation:
     is_runtime_produced: bool = False
     terminal_cursor_start: str | None = None
     terminal_cursor_end: str | None = None
+    producer_microbatch_limit_action: MicrobatchLimitAction | None = None
 
     @property
     def is_runtime_owned(self) -> bool:

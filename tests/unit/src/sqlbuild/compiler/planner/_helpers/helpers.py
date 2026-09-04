@@ -93,12 +93,47 @@ from sqlbuild.spec.contracts.types import (
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     BuildModelWarningsTestCase,
     IncrementalStrategyErrorTestCase,
+    MicrobatchCursorEndPlanTestCase,
     PlanAuditTestCase,
     PlanScenarioGraphErrorTestCase,
     PlanScenarioGraphTestCase,
     ResolveModelPlanActionTestCase,
     SourceCursorInputColumnsTestCase,
 )
+
+
+def microbatch_model_with_cursor_end(
+    test_case: MicrobatchCursorEndPlanTestCase,
+) -> CompiledModel:
+    """Build a microbatch model with a configured terminal cursor bound."""
+
+    return CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
+        deps=(),
+        name="orders",
+        relative_path=Path("models/orders.sql"),
+        query_sql="SELECT 1",
+        references=(),
+        config=CompileModelConfig(
+            values={
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "incremental_mode": "microbatch",
+                "microbatch_strategy": "watermark",
+                "batch_size": test_case.batch_size,
+                "cursor": "cursor_value",
+                "cursor_type": test_case.cursor_type,
+                "cursor_grain": test_case.cursor_grain,
+                "cursor_end": test_case.cursor_end,
+            }
+        ),
+        destination=CompiledRelationLocation(
+            database=None,
+            schema="main",
+            name="orders",
+            qualified_name="main.orders",
+        ),
+    )
 
 
 class PlannerTestAdapter(BaseAdapter):

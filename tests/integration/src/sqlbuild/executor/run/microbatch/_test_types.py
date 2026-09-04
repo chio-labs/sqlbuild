@@ -39,6 +39,28 @@ class RuntimeWatermarkGrainTestCase:
 
 
 @dataclass(frozen=True)
+class CappedProducerAvailabilityTestCase:
+    description: str
+    cursor_type: str
+    sql_type: str
+    cursor_grain: str | None
+    producer_values_sql: str
+    target_values_sql: str
+    cursor_start: str
+    cursor_end: str
+    limit_action: MicrobatchLimitAction
+    expected_start: str
+    expected_end: str
+
+
+@dataclass(frozen=True)
+class EmptyCappedProducerTestCase:
+    description: str
+    limit_action: MicrobatchLimitAction
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class MicrobatchSuccessTestCase:
     """Test case where microbatch execution succeeds."""
 

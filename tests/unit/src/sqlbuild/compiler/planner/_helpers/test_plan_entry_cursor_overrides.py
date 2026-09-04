@@ -19,6 +19,7 @@ from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     _compute_plan_cursor_bounds,
     _MicrobatchRangeInputs,
 )
+from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CursorBounds,
@@ -29,10 +30,91 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import BackfillAction
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     AuthoritativeCursorOverrideTestCase,
+    MicrobatchCursorEndPlanTestCase,
     PlanEntryCursorGrainTestCase,
     PlanEntryCursorOverrideTestCase,
     PlannerOwnedMixedGrainRangeTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
+    microbatch_model_with_cursor_end,
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchCursorEndPlanTestCase(
+            description="timestamp microbatch keeps runtime sentinels and clamps concrete range",
+            cursor_type="timestamp",
+            cursor_grain="month",
+            batch_size="1mo",
+            cursor_end="2025-12-01",
+            target_max="2025-10-01",
+            upstream_min="2025-01-01",
+            upstream_max="2026-02-01",
+            expected_microbatch_range=CursorBounds(start="2025-09-01T00:00:00", end="2025-12-01"),
+        ),
+        MicrobatchCursorEndPlanTestCase(
+            description="integer microbatch keeps runtime sentinels and clamps concrete range",
+            cursor_type="integer",
+            cursor_grain=None,
+            batch_size="5",
+            cursor_end="20",
+            target_max="10",
+            upstream_min="0",
+            upstream_max="30",
+            expected_microbatch_range=CursorBounds(start="10", end="20"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_planner_owned_microbatch_with_cursor_end_when_planning_then_sentinels_are_deferred(
+    test_case: MicrobatchCursorEndPlanTestCase,
+) -> None:
+    model: CompiledModel = microbatch_model_with_cursor_end(test_case)
+    snapshot: WarehouseSnapshot = WarehouseSnapshot(
+        cursor_snapshots={
+            model.name: ModelCursorSnapshot(
+                target_max=test_case.target_max,
+                upstream_mins=(test_case.upstream_min,),
+                upstream_maxes=(test_case.upstream_max,),
+            )
+        }
+    )
+    backfill: BackfillResult = BackfillResult(action=BackfillAction.FORWARD_ONLY)
+
+    plan_bounds: CursorBounds | None = _compute_plan_cursor_bounds(
+        model=model,
+        snapshot=snapshot,
+        backfill=backfill,
+        full_refresh=False,
+        start_cursor_override=None,
+        end_cursor_override=None,
+        runtime_owned_cursor_bounds=False,
+    )
+    microbatch_range: CursorBounds | None = _compute_microbatch_range(
+        model=model,
+        inputs=_MicrobatchRangeInputs(
+            snapshot=snapshot,
+            backfill=backfill,
+            start_cursor_override=None,
+            end_cursor_override=None,
+            runtime_owned_cursor_bounds=False,
+            cursor_input_relations=(
+                CursorInputRelation(relation="main.raw_orders", cursor_column="cursor_value"),
+            ),
+            future_cursor_config=None,
+            start_cursor_config=None,
+            invocation_time=None,
+            full_refresh=False,
+        ),
+    )
+
+    assert plan_bounds == CursorBounds(
+        start=MICROBATCH_START_SENTINEL,
+        end=MICROBATCH_END_SENTINEL,
+    )
+    assert microbatch_range == test_case.expected_microbatch_range
 
 
 @pytest.mark.parametrize(
@@ -212,7 +294,19 @@ def test_given_runtime_owned_missing_snapshot_when_overrides_complete_then_all_r
                 start="2026-04-03T18:00:00",
                 end="2026-04-05T00:00:00",
             ),
-        )
+        ),
+        PlannerOwnedMixedGrainRangeTestCase(
+            description="planner-owned same-grain input aligns target and watermark bounds",
+            target_max="2026-04-04 14:37:00",
+            upstream_max="2026-04-04 16:37:00",
+            downstream_grain="hour",
+            upstream_grain="hour",
+            batch_size="1h",
+            expected_bounds=CursorBounds(
+                start="2026-04-04T13:00:00",
+                end="2026-04-04T17:00:00",
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
