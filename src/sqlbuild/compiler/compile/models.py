@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
@@ -580,7 +581,7 @@ class CompileAuditInput:
     attached_target_kind: AttachedAuditTargetKind | str | None = None
     attached_target_name: str | None = None
     attached_column_name: str | None = None
-    severity: str | None = None
+    severity: AuditSeverity | None = None
     run_scope: str | None = None
     always_run: bool = False
     declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
@@ -722,7 +723,7 @@ class CompiledAudit:
     attached_target_kind: AttachedAuditTargetKind | None = None
     attached_target_name: str | None = None
     attached_column_name: str | None = None
-    severity: str | None = None
+    severity: AuditSeverity | None = None
     run_scope: str | None = None
     always_run: bool = False
 

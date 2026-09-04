@@ -4478,6 +4478,16 @@ def test_given_typed_hook_defaults_when_building_config_then_layers_values(
             expected_source=TimeTravelRetentionSource.MODEL,
         ),
         BuildModelRetentionConfigTestCase(
+            description="zero-day model retention remains valid",
+            defaults=DefaultsConfig(materialized="table"),
+            model_header_values={"time_travel_retention": "0d"},
+            target_config=None,
+            materialization_defaults=MaterializationDefaultsConfig(),
+            expected_desired_days=0,
+            expected_unmanaged=False,
+            expected_source=TimeTravelRetentionSource.MODEL,
+        ),
+        BuildModelRetentionConfigTestCase(
             description="model disabled overrides inherited view policy",
             defaults=DefaultsConfig(materialized="view"),
             model_header_values={"time_travel_retention": "disabled"},

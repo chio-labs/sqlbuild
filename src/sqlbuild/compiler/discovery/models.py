@@ -29,7 +29,7 @@ from sqlbuild.spec.contracts.models import (
     SourceEntry,
     SourceLocation,
 )
-from sqlbuild.spec.contracts.types import SourceWriteStrategy
+from sqlbuild.spec.contracts.types import EventExportSeverity, SourceWriteStrategy
 from sqlbuild.sql_values.models import SqlLogicalType, SqlValue
 from sqlbuild.sql_values.types import CollectionRendering, SqlValueKind
 
@@ -452,7 +452,7 @@ class DiscoveredEventExporterDeclaration:
     name: str
     function: Callable[..., object]
     event_kinds: frozenset[str]
-    min_severity: str
+    min_severity: EventExportSeverity
 
 
 @dataclass(frozen=True)
@@ -464,7 +464,7 @@ class DiscoveredEventExporter:
     name: str
     function: Callable[..., object]
     event_kinds: frozenset[str] = EVENT_EXPORT_KINDS
-    min_severity: str = "debug"
+    min_severity: EventExportSeverity = EventExportSeverity.DEBUG
     provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
 
 

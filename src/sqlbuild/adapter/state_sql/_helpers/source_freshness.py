@@ -16,9 +16,12 @@ from sqlbuild.compiler.source_freshness.constants import (
     COLUMN_TARGET_NAME,
     COLUMN_TARGET_SCHEMA,
     COLUMN_VALUE_KIND,
+    SOURCE_FRESHNESS_COLUMN_TYPES,
+    SOURCE_FRESHNESS_COLUMNS,
     SOURCE_FRESHNESS_TABLE_NAME,
 )
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
+from sqlbuild.sql_values.main.render_state_literal import render_state_sql_literal
 
 
 def render_insert_source_freshness_records_sql(
@@ -55,28 +58,25 @@ def render_insert_source_freshness_records_sql(
 
 
 def _record_values_sql(record: SourceFreshnessRecord) -> str:
+    values: tuple[object | None, ...] = (
+        record.source_name,
+        record.target_database,
+        record.target_schema,
+        record.target_name,
+        record.run_id,
+        record.strategy,
+        record.value_kind,
+        record.data_version,
+        record.data_version_hash,
+        record.observed_at,
+    )
     return (
         "("
-        f"{_quote_sql_string(record.source_name)}, "
-        f"{_optional_string(record.target_database)}, "
-        f"{_optional_string(record.target_schema)}, "
-        f"{_optional_string(record.target_name)}, "
-        f"{_quote_sql_string(record.run_id)}, "
-        f"{_quote_sql_string(record.strategy)}, "
-        f"{_quote_sql_string(record.value_kind)}, "
-        f"{_optional_string(record.data_version)}, "
-        f"{_quote_sql_string(record.data_version_hash)}, "
-        f"{_quote_sql_string(record.observed_at.isoformat())}"
-        ")"
+        + ", ".join(
+            render_state_sql_literal(
+                value=value, declared_type=SOURCE_FRESHNESS_COLUMN_TYPES[column]
+            )
+            for column, value in zip(SOURCE_FRESHNESS_COLUMNS, values, strict=True)
+        )
+        + ")"
     )
-
-
-def _optional_string(value: str | None) -> str:
-    if value is None:
-        return "NULL"
-    return _quote_sql_string(value)
-
-
-def _quote_sql_string(value: str) -> str:
-    escaped_value: str = value.replace("'", "''")
-    return f"'{escaped_value}'"

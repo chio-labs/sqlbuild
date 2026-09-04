@@ -2,14 +2,9 @@
 
 from __future__ import annotations
 
-SOURCE_FRESHNESS_TABLE_NAME: str = "_sqlbuild_source_freshness"
+from sqlbuild.sql_values.types import StateSqlValueType
 
-DURATION_MINUTE_UNIT: str = "m"
-DURATION_HOUR_UNIT: str = "h"
-DURATION_DAY_UNIT: str = "d"
-VALID_DURATION_UNITS: frozenset[str] = frozenset(
-    {DURATION_MINUTE_UNIT, DURATION_HOUR_UNIT, DURATION_DAY_UNIT}
-)
+SOURCE_FRESHNESS_TABLE_NAME: str = "_sqlbuild_source_freshness"
 PHYSICAL_TABLE_SOURCE_ERROR_FRAGMENT: str = "requires a physical table source"
 INCOMPLETE_CONFIGURATION_ERROR_FRAGMENT: str = "incomplete"
 
@@ -36,3 +31,16 @@ SOURCE_FRESHNESS_COLUMNS: tuple[str, ...] = (
     COLUMN_DATA_VERSION_HASH,
     COLUMN_OBSERVED_AT,
 )
+
+SOURCE_FRESHNESS_COLUMN_TYPES: dict[str, StateSqlValueType] = {
+    COLUMN_SOURCE_NAME: StateSqlValueType.STRING,
+    COLUMN_TARGET_DATABASE: StateSqlValueType.STRING,
+    COLUMN_TARGET_SCHEMA: StateSqlValueType.STRING,
+    COLUMN_TARGET_NAME: StateSqlValueType.STRING,
+    COLUMN_RUN_ID: StateSqlValueType.STRING,
+    COLUMN_STRATEGY: StateSqlValueType.STRING,
+    COLUMN_VALUE_KIND: StateSqlValueType.STRING,
+    COLUMN_DATA_VERSION: StateSqlValueType.STRING,
+    COLUMN_DATA_VERSION_HASH: StateSqlValueType.STRING,
+    COLUMN_OBSERVED_AT: StateSqlValueType.TEXT_TIMESTAMP,
+}

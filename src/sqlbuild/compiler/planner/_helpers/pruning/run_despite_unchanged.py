@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-import re
 from datetime import UTC, datetime, timedelta
 
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.constants import (
-    RUN_DESPITE_UNCHANGED_HOUR_SUFFIX,
-    RUN_DESPITE_UNCHANGED_MINUTE_SUFFIX,
-)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection.model_downstream_closure import (
     build_downstream_model_names,
@@ -25,9 +20,9 @@ from sqlbuild.compiler.source_freshness.models import (
     DirectSourceFreshnessPlanningResult,
     SourceFreshnessRecord,
 )
+from sqlbuild.cursor_algebra.constants import MINUTE_TO_DAY_DURATION_UNITS
+from sqlbuild.cursor_algebra.models import Duration
 from sqlbuild.spec.contracts.types import SourceFreshnessValueKind
-
-_DURATION_PATTERN: re.Pattern[str] = re.compile(r"^([1-9][0-9]*)([mhd])$")
 
 
 def build_run_despite_unchanged_planning_result(
@@ -175,19 +170,13 @@ def _decision_for_model(
 
 
 def _parse_duration(*, model_name: str, value: str) -> timedelta:
-    match: re.Match[str] | None = _DURATION_PATTERN.match(value)
-    if match is None:
+    duration: Duration | None = Duration.parse(value)
+    if duration is None or not duration.is_single_unit_in(MINUTE_TO_DAY_DURATION_UNITS):
         raise PlannerInputError(
             f"model '{model_name}' run_despite_unchanged must be 'always' or a positive "
             "duration like 30d, 12h, or 90m"
         )
-    amount: int = int(match.group(1))
-    unit: str = match.group(2)
-    if unit == RUN_DESPITE_UNCHANGED_MINUTE_SUFFIX:
-        return timedelta(minutes=amount)
-    if unit == RUN_DESPITE_UNCHANGED_HOUR_SUFFIX:
-        return timedelta(hours=amount)
-    return timedelta(days=amount)
+    return timedelta(seconds=duration.fixed_seconds)
 
 
 def _upstream_source_records(

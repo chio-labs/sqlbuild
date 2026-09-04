@@ -5,6 +5,12 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class DagsterConstantGuardTestCase:
+    description: str
+    expected_exhaustive: bool
+
+
+@dataclass(frozen=True)
 class DagsterAssetSpecTestCase:
     description: str
     expected_asset_keys: tuple[tuple[str, ...], ...]

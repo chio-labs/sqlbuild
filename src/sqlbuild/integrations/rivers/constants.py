@@ -2,23 +2,37 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.dag.types import NodeKind
 from sqlbuild.compiler.planner.types import MaterializationType
-from sqlbuild.compiler.python_nodes.types import PythonNodeKind
-from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 
 RIVERS_DEPLOYMENT_ENVIRONMENT_VARIABLE: str = "RIVERS_DEPLOYMENT"
 RIVERS_DEVELOPMENT_DEPLOYMENT: str = "dev"
-RIVERS_MODEL_KIND: str = CompiledResourceType.MODEL
+RIVERS_MODEL_KIND: str = NodeKind.MODEL.value
 RIVERS_VIEW_MATERIALIZATION: str = MaterializationType.VIEW
-RIVERS_DIRECT_ASSET_KINDS: frozenset[str] = frozenset(
+RIVERS_ASSET_NODE_KIND_MEMBERS: frozenset[NodeKind] = frozenset(
     {
-        CompiledResourceType.SOURCE,
-        ExecutionResourceKind.LOADER,
-        CompiledResourceType.SEED,
-        CompiledResourceType.UDF,
-        CompiledResourceType.TABLE_FN,
-        PythonNodeKind.TASK,
-        PythonNodeKind.ASSET,
+        NodeKind.SOURCE,
+        NodeKind.LOADER,
+        NodeKind.SEED,
+        NodeKind.MODEL,
+        NodeKind.UDF,
+        NodeKind.TABLE_FN,
+        NodeKind.TASK,
+        NodeKind.ASSET,
     }
+)
+RIVERS_ASSET_NODE_KIND_EXCLUSIONS: frozenset[NodeKind] = frozenset(
+    {NodeKind.CHECK, NodeKind.SQL_TEST, NodeKind.AUDIT, NodeKind.SCENARIO, NodeKind.PYTHON_CHECK}
+)
+RIVERS_ASSET_NODE_KINDS: frozenset[str] = frozenset(
+    kind.value for kind in RIVERS_ASSET_NODE_KIND_MEMBERS
+)
+RIVERS_DIRECT_ASSET_KIND_MEMBERS: frozenset[NodeKind] = frozenset(
+    RIVERS_ASSET_NODE_KIND_MEMBERS - {NodeKind.MODEL}
+)
+RIVERS_DIRECT_ASSET_KIND_EXCLUSIONS: frozenset[NodeKind] = frozenset(
+    RIVERS_ASSET_NODE_KIND_EXCLUSIONS | {NodeKind.MODEL}
+)
+RIVERS_DIRECT_ASSET_KINDS: frozenset[str] = frozenset(
+    kind.value for kind in RIVERS_DIRECT_ASSET_KIND_MEMBERS
 )

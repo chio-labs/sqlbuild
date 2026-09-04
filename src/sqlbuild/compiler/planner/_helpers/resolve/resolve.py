@@ -19,8 +19,6 @@ from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
 )
 from sqlbuild.compiler.planner._helpers.resolve.config import (
     get_config_append_cursor_inclusive,
-    get_config_cursor_start,
-    get_config_str,
 )
 from sqlbuild.compiler.planner._helpers.resolve.cursor import compute_cursor_bounds
 from sqlbuild.compiler.planner._helpers.resolve.cursor_policies import (
@@ -54,6 +52,8 @@ from sqlbuild.compiler.references.main.assert_no_unresolved_sql_markers import (
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.cursor_algebra.types import BoundSentinel
+from sqlbuild.spec.contracts.main.get_config_cursor_bound import get_config_cursor_bound
+from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 from sqlbuild.spec.contracts.models import FutureCursorsConfig, SourceEntry, StartCursorsConfig
 
 
@@ -78,7 +78,7 @@ def resolve_model_sql(
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] = context.source_warehouse_columns
     star_exclude_keyword: str = context.star_exclude_keyword
     query_sql: str = model.query_sql
-    cursor_type: str | None = get_config_str(model=model, key="cursor_type")
+    cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
 
     cursor_bounds: CursorBounds | None = _compute_model_cursor_bounds(
         model=model,
@@ -225,13 +225,15 @@ def _compute_model_cursor_bounds(
 ) -> CursorBounds | None:
     """Compute cursor bounds for a model if it is incremental with a cursor."""
 
-    materialized: str | None = get_config_str(model=model, key="materialized")
-    cursor_column: str | None = get_config_str(model=model, key="cursor")
+    materialized: str | None = get_config_str(values=model.config.values, key="materialized")
+    cursor_column: str | None = get_config_str(values=model.config.values, key="cursor")
 
     if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
         return None
 
-    incremental_mode: str | None = get_config_str(model=model, key="incremental_mode")
+    incremental_mode: str | None = get_config_str(
+        values=model.config.values, key="incremental_mode"
+    )
     future_cursor_config: FutureCursorsConfig | None = resolve_future_cursor_config(
         model=model, project_config=context.future_cursor_config
     )
@@ -246,8 +248,8 @@ def _compute_model_cursor_bounds(
     bounded_override: CursorBounds | None = resolve_bounded_cursor_override(
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
-        cursor_type=get_config_str(model=model, key="cursor_type"),
-        cursor_grain=get_config_str(model=model, key="cursor_grain"),
+        cursor_type=get_config_str(values=model.config.values, key="cursor_type"),
+        cursor_grain=get_config_str(values=model.config.values, key="cursor_grain"),
     )
     if bounded_override is not None:
         return bounded_override
@@ -279,26 +281,30 @@ def _compute_model_cursor_bounds(
     if cursor_snapshot is None:
         return None
 
-    lookback: str | None = get_config_str(model=model, key="lookback")
-    cursor_start: str | None = get_config_cursor_start(model)
+    lookback: str | None = get_config_str(values=model.config.values, key="lookback")
+    cursor_start: str | None = get_config_cursor_bound(
+        values=model.config.values, key="cursor_start"
+    )
     backfill_duration: str | None = None
     if backfill.action == BackfillAction.BOUNDED:
         backfill_duration = backfill.duration
 
     bounds: CursorBounds | None = compute_cursor_bounds(
         cursor_snapshot=cursor_snapshot,
-        cursor_type=get_config_str(model=model, key="cursor_type"),
+        cursor_type=get_config_str(values=model.config.values, key="cursor_type"),
         cursor_start=cursor_start,
         lookback=lookback,
         backfill_duration=backfill_duration,
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
         is_microbatch=is_microbatch,
-        cursor_grain=get_config_str(model=model, key="cursor_grain"),
+        cursor_grain=get_config_str(values=model.config.values, key="cursor_grain"),
         maximum_start_policy=MaximumStartPolicyInputs(
             config=start_cursor_config,
             invocation_time=invocation_time,
-            incremental_strategy=get_config_str(model=model, key="incremental_strategy"),
+            incremental_strategy=get_config_str(
+                values=model.config.values, key="incremental_strategy"
+            ),
             incremental_mode=incremental_mode,
         ),
     )
@@ -306,8 +312,8 @@ def _compute_model_cursor_bounds(
         return None
     return apply_future_cursor_safety(
         bounds=bounds,
-        cursor_type=get_config_str(model=model, key="cursor_type"),
-        cursor_grain=get_config_str(model=model, key="cursor_grain"),
+        cursor_type=get_config_str(values=model.config.values, key="cursor_type"),
+        cursor_grain=get_config_str(values=model.config.values, key="cursor_grain"),
         config=future_cursor_config,
         invocation_time=invocation_time,
         has_complete_override=(

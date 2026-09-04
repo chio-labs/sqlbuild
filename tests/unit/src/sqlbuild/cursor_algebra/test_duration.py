@@ -4,8 +4,8 @@ from datetime import datetime
 
 import pytest
 
-from sqlbuild.compiler.planner.models import Duration
-from tests.unit.src.sqlbuild.compiler.planner._test_types import (
+from sqlbuild.cursor_algebra.models import Duration
+from tests.unit.src.sqlbuild.cursor_algebra._test_types import (
     DurationParseNoneTestCase,
     DurationParseTestCase,
     DurationShiftTestCase,

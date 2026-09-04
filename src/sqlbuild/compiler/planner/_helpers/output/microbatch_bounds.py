@@ -19,6 +19,7 @@ from sqlbuild.compiler.planner.models import CursorBounds, Duration
 from sqlbuild.compiler.planner.types import CursorType, IncrementalMode
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue
+from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
 _CAP_ACTIONS: frozenset[MicrobatchLimitAction] = frozenset(
@@ -102,7 +103,10 @@ def validate_capped_watermark_inputs(
 ) -> None:
     """Reject capped producers feeding microbatch watermark inputs."""
 
-    if _config_str(model=model, key="incremental_mode") != IncrementalMode.MICROBATCH:
+    if (
+        get_config_str(values=model.config.values, key="incremental_mode")
+        != IncrementalMode.MICROBATCH
+    ):
         return
     input_name: str
     for input_name in resolve_cursor_input_roles(model=model).watermark_inputs:
@@ -154,7 +158,8 @@ def _find_capped_producer_ancestor(
                 values=producer.config.values
             )[1]
             is_microbatch: bool = (
-                _config_str(model=producer, key="incremental_mode") == IncrementalMode.MICROBATCH
+                get_config_str(values=producer.config.values, key="incremental_mode")
+                == IncrementalMode.MICROBATCH
             )
             if is_microbatch and action in _CAP_ACTIONS:
                 return producer
@@ -179,10 +184,3 @@ def _find_capped_producer_ancestor(
             if function is not None:
                 pending.extend(function.references)
     return None
-
-
-def _config_str(*, model: CompiledModel, key: str) -> str | None:
-    """Extract a string config value from model config."""
-
-    raw: object | None = model.config.values.get(key)
-    return raw if isinstance(raw, str) else None

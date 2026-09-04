@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from sqlbuild.observability import LifecycleEvent
 from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORT_KINDS
+from sqlbuild.spec.contracts.types import EventExportSeverity
 
 
 @dataclass(frozen=True)
@@ -15,7 +16,7 @@ class LifecycleEventSinkDefinition:
 
     name: str
     event_kinds: frozenset[str]
-    min_severity: str
+    min_severity: EventExportSeverity
 
 
 @dataclass(frozen=True)
@@ -26,7 +27,7 @@ class BoundEventExporter:
     function: Callable[..., object]
     provider_arguments: Mapping[str, object]
     event_kinds: frozenset[str] = EVENT_EXPORT_KINDS
-    min_severity: str = "debug"
+    min_severity: EventExportSeverity = EventExportSeverity.DEBUG
 
 
 @dataclass(frozen=True)
@@ -86,7 +87,7 @@ class EventExporterFailure:
     exporter_name: str
     error_type: str
     event_kind: str
-    event_severity: str
+    event_severity: EventExportSeverity
 
 
 @dataclass(frozen=True)
@@ -94,7 +95,7 @@ class LifecycleExportPolicy:
     """Catalogued export dimensions for one validated lifecycle type."""
 
     kind: str
-    severity: str
+    severity: EventExportSeverity
     priority: int
 
 

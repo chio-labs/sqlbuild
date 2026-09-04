@@ -4,6 +4,12 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class RiversConstantGuardTestCase:
+    description: str
+    expected_exhaustive: bool
+
+
+@dataclass(frozen=True)
 class RiversPythonArtifactCompatibilityTestCase:
     description: str
     expected_asset_names: tuple[str, ...]

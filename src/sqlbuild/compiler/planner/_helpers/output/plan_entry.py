@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -123,6 +123,11 @@ from sqlbuild.cursor_algebra.main.render import render
 from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.cursor_algebra.models import TimestampValue
 from sqlbuild.cursor_algebra.types import BoundSentinel
+from sqlbuild.spec.contracts.main.get_config_bool import get_config_bool
+from sqlbuild.spec.contracts.main.get_config_cursor_bound import get_config_cursor_bound
+from sqlbuild.spec.contracts.main.get_config_int import get_config_int
+from sqlbuild.spec.contracts.main.get_config_str import get_config_str
+from sqlbuild.spec.contracts.main.get_config_string_tuple import get_config_string_tuple
 from sqlbuild.spec.contracts.models import (
     FutureCursorsConfig,
     LocalConfig,
@@ -633,7 +638,7 @@ def plan_model_from_change(
     suppress_runtime_cursor_bounds: bool = (
         backfill_override is not None and backfill_override.action == BackfillAction.FULL
     )
-    cursor_column: str | None = _get_config_str(model=model, key="cursor")
+    cursor_column: str | None = get_config_str(values=model.config.values, key="cursor")
     validate_source_cursor_input_columns(
         model=model,
         cursor_column=cursor_column,
@@ -691,9 +696,11 @@ def plan_model_from_change(
         model.config.values.get("pre_hooks"),
         model.config.values.get("post_hooks"),
     )
-    cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
-    cursor_grain: str | None = _get_config_str(model=model, key="cursor_grain")
-    cursor_start: str | None = _get_cursor_start(model)
+    cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
+    cursor_grain: str | None = get_config_str(values=model.config.values, key="cursor_grain")
+    cursor_start: str | None = get_config_cursor_bound(
+        values=model.config.values, key="cursor_start"
+    )
     effective_future_cursor_config, effective_start_cursor_config = _resolve_cursor_safety_configs(
         model=model, context=context
     )
@@ -784,9 +791,10 @@ def plan_model_from_change(
             resolved_sql=resolved_sql,
             destination=model.destination,
             unique_key=unique_key,
-            merge_exclude_columns=_get_config_string_tuple(
-                model=model, key="merge_exclude_columns"
-            ),
+            merge_exclude_columns=get_config_string_tuple(
+                values=model.config.values, key="merge_exclude_columns"
+            )
+            or (),
             warehouse_columns=warehouse_columns,
             cursor_column=cursor_column,
             cursor_bounds=ddl_cursor_bounds,
@@ -814,7 +822,7 @@ def plan_model_from_change(
         cursor_type=cursor_type,
         cursor_grain=cursor_grain,
         cursor_start=cursor_start,
-        cursor_end=_get_cursor_end(model),
+        cursor_end=get_config_cursor_bound(values=model.config.values, key="cursor_end"),
         lookback=(
             resolve_microbatch_lookback(
                 model=model,
@@ -828,18 +836,18 @@ def plan_model_from_change(
                 ),
             )
             if plan_config.incremental_mode == IncrementalMode.MICROBATCH
-            else _get_config_str(model=model, key="lookback")
+            else get_config_str(values=model.config.values, key="lookback")
         ),
         lookback_is_default=(
             plan_config.incremental_mode == IncrementalMode.MICROBATCH
-            and _get_config_str(model=model, key="lookback") is None
+            and get_config_str(values=model.config.values, key="lookback") is None
         ),
         cursor_bounds=cursor_bounds,
         cursor_input_relations=cursor_input_relations,
         batch_size=plan_config.batch_size,
-        batch_concurrency=_get_positive_config_int(model=model, key="batch_concurrency") or 1,
-        unaccounted_partition_policy=_get_config_str(
-            model=model, key="unaccounted_partition_policy"
+        batch_concurrency=get_config_int(values=model.config.values, key="batch_concurrency") or 1,
+        unaccounted_partition_policy=get_config_str(
+            values=model.config.values, key="unaccounted_partition_policy"
         ),
         microbatch_range=microbatch_range,
         microbatch_limit=_resolve_microbatch_limit_config(values=model.config.values)[0],
@@ -852,7 +860,10 @@ def plan_model_from_change(
         start_cursor_config=effective_start_cursor_config,
         invocation_time=context.invocation_time,
         unique_key=unique_key,
-        merge_exclude_columns=_get_config_string_tuple(model=model, key="merge_exclude_columns"),
+        merge_exclude_columns=get_config_string_tuple(
+            values=model.config.values, key="merge_exclude_columns"
+        )
+        or (),
         snapshot_strategy=plan_config.snapshot_strategy,
         updated_at_column=plan_config.updated_at_column,
         check_columns=plan_config.check_columns,
@@ -899,7 +910,7 @@ def resolve_cursor_overrides(
 ) -> tuple[str | None, str | None]:
     """Resolve typed cursor overrides to generic start/end for one model."""
 
-    cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
+    cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
     resolved_start: str | None = start_cursor_override
     resolved_end: str | None = end_cursor_override
 
@@ -914,8 +925,10 @@ def resolve_cursor_overrides(
         if cursor_overrides.end_int is not None:
             resolved_end = render(value=cursor_overrides.end_int)
 
-    cursor_start: str | None = _get_cursor_start(model)
-    cursor_end: str | None = _get_cursor_end(model)
+    cursor_start: str | None = get_config_cursor_bound(
+        values=model.config.values, key="cursor_start"
+    )
+    cursor_end: str | None = get_config_cursor_bound(values=model.config.values, key="cursor_end")
     if (
         resolved_start is not None
         and cursor_start is not None
@@ -1107,23 +1120,6 @@ def _get_unique_key(model: CompiledModel) -> tuple[str, ...]:
     return ()
 
 
-def _get_config_string_tuple(*, model: CompiledModel, key: str) -> tuple[str, ...]:
-    raw: object | None = model.config.values.get(key)
-    if isinstance(raw, list | tuple):
-        return tuple(value for value in raw if isinstance(value, str))
-    return ()
-
-
-def _get_config_optional_bool(*, model: CompiledModel, key: str) -> bool | None:
-    raw: object | None = model.config.values.get(key)
-    return raw if isinstance(raw, bool) else None
-
-
-def _get_positive_config_int(*, model: CompiledModel, key: str) -> int | None:
-    raw: object | None = model.config.values.get(key)
-    return raw if isinstance(raw, int) and not isinstance(raw, bool) and raw > 0 else None
-
-
 def _get_check_columns(model: CompiledModel) -> tuple[str, ...]:
     """Extract check_columns from model config as a normalized tuple."""
 
@@ -1146,22 +1142,31 @@ def _resolve_cursor_safety_configs(
 
 def _resolve_model_plan_config(*, model: CompiledModel) -> _ModelPlanConfig:
     return _ModelPlanConfig(
-        incremental_strategy=_get_config_str(model=model, key="incremental_strategy"),
-        incremental_mode=_get_config_str(model=model, key="incremental_mode"),
-        microbatch_strategy=_get_config_str(model=model, key="microbatch_strategy"),
-        cursor_watermark_mode=_get_config_str(model=model, key="cursor_watermark_mode"),
-        batch_size=_get_config_str(model=model, key="batch_size"),
-        snapshot_strategy=_get_config_str(model=model, key="snapshot_strategy"),
-        updated_at_column=_get_config_str(model=model, key="updated_at"),
+        incremental_strategy=get_config_str(values=model.config.values, key="incremental_strategy"),
+        incremental_mode=get_config_str(values=model.config.values, key="incremental_mode"),
+        microbatch_strategy=get_config_str(values=model.config.values, key="microbatch_strategy"),
+        cursor_watermark_mode=get_config_str(
+            values=model.config.values, key="cursor_watermark_mode"
+        ),
+        batch_size=get_config_str(values=model.config.values, key="batch_size"),
+        snapshot_strategy=get_config_str(values=model.config.values, key="snapshot_strategy"),
+        updated_at_column=get_config_str(values=model.config.values, key="updated_at"),
         check_columns=_get_check_columns(model),
-        observed_at_column=_get_config_str(model=model, key="observed_at"),
-        historical_input=_get_config_str(model=model, key="historical_input"),
-        valid_from_column=_get_config_str(model=model, key="valid_from_column"),
-        valid_to_column=_get_config_str(model=model, key="valid_to_column"),
-        initial_valid_from=_get_config_str(model=model, key="initial_valid_from"),
-        invalidate_hard_deletes=_get_config_bool(model=model, key="invalidate_hard_deletes"),
-        snapshot_full_refresh=_get_config_str(model=model, key="snapshot_full_refresh"),
-        snapshot_schema_change=_get_config_str(model=model, key="snapshot_schema_change"),
+        observed_at_column=get_config_str(values=model.config.values, key="observed_at"),
+        historical_input=get_config_str(values=model.config.values, key="historical_input"),
+        valid_from_column=get_config_str(values=model.config.values, key="valid_from_column"),
+        valid_to_column=get_config_str(values=model.config.values, key="valid_to_column"),
+        initial_valid_from=get_config_str(values=model.config.values, key="initial_valid_from"),
+        invalidate_hard_deletes=get_config_bool(
+            values=model.config.values, key="invalidate_hard_deletes"
+        )
+        or False,
+        snapshot_full_refresh=get_config_str(
+            values=model.config.values, key="snapshot_full_refresh"
+        ),
+        snapshot_schema_change=get_config_str(
+            values=model.config.values, key="snapshot_schema_change"
+        ),
     )
 
 
@@ -1193,29 +1198,36 @@ def _compute_microbatch_range(
 ) -> CursorBounds | None:
     """Compute the real overall cursor range for microbatch batch splitting."""
 
-    materialized: str | None = _get_config_str(model=model, key="materialized")
+    materialized: str | None = get_config_str(values=model.config.values, key="materialized")
     if materialized != MaterializationType.INCREMENTAL:
         return None
-    incremental_mode: str | None = _get_config_str(model=model, key="incremental_mode")
+    incremental_mode: str | None = get_config_str(
+        values=model.config.values, key="incremental_mode"
+    )
     if incremental_mode != IncrementalMode.MICROBATCH:
         return None
-    cursor_column: str | None = _get_config_str(model=model, key="cursor")
+    cursor_column: str | None = get_config_str(values=model.config.values, key="cursor")
     if cursor_column is None:
         return None
     bounded_override: CursorBounds | None = resolve_bounded_cursor_override(
         start_cursor_override=inputs.start_cursor_override,
         end_cursor_override=inputs.end_cursor_override,
-        cursor_type=_get_config_str(model=model, key="cursor_type"),
-        cursor_grain=_get_config_str(model=model, key="cursor_grain"),
+        cursor_type=get_config_str(values=model.config.values, key="cursor_type"),
+        cursor_grain=get_config_str(values=model.config.values, key="cursor_grain"),
     )
     if bounded_override is not None:
         return _clamp_cursor_end(bounds=bounded_override, model=model)
-    if _get_config_str(model=model, key="microbatch_strategy") == MicrobatchStrategy.ROLLING_WINDOW:
+    if (
+        get_config_str(values=model.config.values, key="microbatch_strategy")
+        == MicrobatchStrategy.ROLLING_WINDOW
+    ):
         rolling_bounds: CursorBounds | None = _rolling_window_bounds(
             model=model, invocation_time=inputs.invocation_time
         )
         if inputs.full_refresh and rolling_bounds is not None:
-            cursor_start: str | None = _get_cursor_start(model)
+            cursor_start: str | None = get_config_cursor_bound(
+                values=model.config.values, key="cursor_start"
+            )
             if cursor_start is not None:
                 rolling_bounds = replace(rolling_bounds, start=cursor_start)
         return rolling_bounds
@@ -1225,12 +1237,12 @@ def _compute_microbatch_range(
     if cursor_snapshot is None:
         return None
 
-    cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
-    downstream_grain: str | None = _get_config_str(model=model, key="cursor_grain")
+    cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
+    downstream_grain: str | None = get_config_str(values=model.config.values, key="cursor_grain")
     effective_grain: str | None = resolve_effective_timestamp_grain(
         cursor_type=cursor_type,
         downstream_grain=downstream_grain,
-        microbatch_strategy=_get_config_str(model=model, key="microbatch_strategy"),
+        microbatch_strategy=get_config_str(values=model.config.values, key="microbatch_strategy"),
         cursor_input_grains=tuple(
             relation.cursor_grain for relation in inputs.cursor_input_relations
         ),
@@ -1243,7 +1255,9 @@ def _compute_microbatch_range(
         )
 
     lookback: str | None = resolve_microbatch_lookback(model=model, effective_grain=effective_grain)
-    cursor_start: str | None = _get_cursor_start(model)
+    cursor_start: str | None = get_config_cursor_bound(
+        values=model.config.values, key="cursor_start"
+    )
     backfill_duration: str | None = None
     if inputs.backfill.action == BackfillAction.BOUNDED:
         backfill_duration = inputs.backfill.duration
@@ -1261,7 +1275,9 @@ def _compute_microbatch_range(
         maximum_start_policy=MaximumStartPolicyInputs(
             config=inputs.start_cursor_config,
             invocation_time=inputs.invocation_time,
-            incremental_strategy=_get_config_str(model=model, key="incremental_strategy"),
+            incremental_strategy=get_config_str(
+                values=model.config.values, key="incremental_strategy"
+            ),
             incremental_mode=incremental_mode,
         ),
     )
@@ -1285,19 +1301,23 @@ def resolve_microbatch_lookback(
 ) -> str | None:
     """Resolve explicit or default lookback for one microbatch model."""
 
-    lookback: str | None = _get_config_str(model=model, key="lookback")
+    lookback: str | None = get_config_str(values=model.config.values, key="lookback")
     if lookback is not None:
         return lookback
-    raw_strategy: str | None = _get_config_str(model=model, key="incremental_strategy")
+    raw_strategy: str | None = get_config_str(
+        values=model.config.values, key="incremental_strategy"
+    )
     strategy: IncrementalStrategy | None = (
         IncrementalStrategy(raw_strategy) if raw_strategy is not None else None
     )
     if strategy not in _IDEMPOTENT_MICROBATCH_STRATEGIES:
         return None
-    batch_size: str | None = _get_config_str(model=model, key="batch_size")
+    batch_size: str | None = get_config_str(values=model.config.values, key="batch_size")
     if batch_size is None:
         return None
-    resolved_grain: str | None = effective_grain or _get_config_str(model=model, key="cursor_grain")
+    resolved_grain: str | None = effective_grain or get_config_str(
+        values=model.config.values, key="cursor_grain"
+    )
     if resolved_grain is None:
         return batch_size
     return resolve_effective_microbatch_batch_size(
@@ -1321,15 +1341,15 @@ def _compute_plan_cursor_bounds(
 ) -> CursorBounds | None:
     """Compute cursor bounds for inclusion on the plan entry."""
 
-    materialized: str | None = _get_config_str(model=model, key="materialized")
-    cursor_column: str | None = _get_config_str(model=model, key="cursor")
+    materialized: str | None = get_config_str(values=model.config.values, key="materialized")
+    cursor_column: str | None = get_config_str(values=model.config.values, key="cursor")
     if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
         return None
     bounded_override: CursorBounds | None = resolve_bounded_cursor_override(
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
-        cursor_type=_get_config_str(model=model, key="cursor_type"),
-        cursor_grain=_get_config_str(model=model, key="cursor_grain"),
+        cursor_type=get_config_str(values=model.config.values, key="cursor_type"),
+        cursor_grain=get_config_str(values=model.config.values, key="cursor_grain"),
     )
     if bounded_override is not None:
         return _clamp_cursor_end(bounds=bounded_override, model=model)
@@ -1342,17 +1362,21 @@ def _compute_plan_cursor_bounds(
     if cursor_snapshot is None:
         return None
 
-    lookback: str | None = _get_config_str(model=model, key="lookback")
-    cursor_start: str | None = _get_cursor_start(model)
-    incremental_mode: str | None = _get_config_str(model=model, key="incremental_mode")
+    lookback: str | None = get_config_str(values=model.config.values, key="lookback")
+    cursor_start: str | None = get_config_cursor_bound(
+        values=model.config.values, key="cursor_start"
+    )
+    incremental_mode: str | None = get_config_str(
+        values=model.config.values, key="incremental_mode"
+    )
     is_microbatch: bool = incremental_mode == IncrementalMode.MICROBATCH
 
     backfill_duration: str | None = None
     if backfill.action == BackfillAction.BOUNDED:
         backfill_duration = backfill.duration
 
-    cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
-    cursor_grain: str | None = _get_config_str(model=model, key="cursor_grain")
+    cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
+    cursor_grain: str | None = get_config_str(values=model.config.values, key="cursor_grain")
     bounds: CursorBounds | None = compute_cursor_bounds(
         cursor_snapshot=cursor_snapshot,
         cursor_type=cursor_type,
@@ -1366,7 +1390,9 @@ def _compute_plan_cursor_bounds(
         maximum_start_policy=MaximumStartPolicyInputs(
             config=start_cursor_config,
             invocation_time=invocation_time,
-            incremental_strategy=_get_config_str(model=model, key="incremental_strategy"),
+            incremental_strategy=get_config_str(
+                values=model.config.values, key="incremental_strategy"
+            ),
             incremental_mode=incremental_mode,
         ),
     )
@@ -1541,7 +1567,7 @@ def _build_cursor_input_relations(
 ) -> tuple[CursorInputRelation, ...]:
     """Build cursor-bearing input relation metadata for runtime range discovery."""
 
-    materialized: str | None = _get_config_str(model=model, key="materialized")
+    materialized: str | None = get_config_str(values=model.config.values, key="materialized")
     if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
         return ()
 
@@ -1589,22 +1615,36 @@ def _build_cursor_input_relations(
                     is_runtime_produced=ref.ref_name in runtime_cursor_producer_names,
                     terminal_cursor_start=(
                         parse(
-                            raw=_get_cursor_start(producer_model),
-                            cursor_type=_get_config_str(model=model, key="cursor_type")
+                            raw=get_config_cursor_bound(
+                                values=producer_model.config.values, key="cursor_start"
+                            ),
+                            cursor_type=get_config_str(
+                                values=model.config.values, key="cursor_type"
+                            )
                             or CursorType.TIMESTAMP,
                         )
                         if producer_model is not None
-                        and _get_cursor_start(producer_model) is not None
+                        and get_config_cursor_bound(
+                            values=producer_model.config.values, key="cursor_start"
+                        )
+                        is not None
                         else None
                     ),
                     terminal_cursor_end=(
                         parse(
-                            raw=_get_cursor_end(producer_model),
-                            cursor_type=_get_config_str(model=model, key="cursor_type")
+                            raw=get_config_cursor_bound(
+                                values=producer_model.config.values, key="cursor_end"
+                            ),
+                            cursor_type=get_config_str(
+                                values=model.config.values, key="cursor_type"
+                            )
                             or CursorType.TIMESTAMP,
                         )
                         if producer_model is not None
-                        and _get_cursor_end(producer_model) is not None
+                        and get_config_cursor_bound(
+                            values=producer_model.config.values, key="cursor_end"
+                        )
+                        is not None
                         else None
                     ),
                 )
@@ -1623,7 +1663,7 @@ def validate_source_cursor_input_columns(
 ) -> None:
     """Validate cursor input columns using contracts before source warehouse metadata."""
 
-    materialized: str | None = _get_config_str(model=model, key="materialized")
+    materialized: str | None = get_config_str(values=model.config.values, key="materialized")
     if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
         return
 
@@ -1770,7 +1810,7 @@ def _resolve_cursor_input_grain(
     upstream_model: CompiledModel | None = models_by_name.get(ref.ref_name)
     if upstream_model is None:
         return None
-    return _get_config_str(model=upstream_model, key="cursor_grain")
+    return get_config_str(values=upstream_model.config.values, key="cursor_grain")
 
 
 def scope_overlaps(
@@ -1831,50 +1871,10 @@ def build_model_materializations(
     return {entry.name: entry.materialization_type for entry in model_entries}
 
 
-def _get_config_str(*, model: CompiledModel, key: str) -> str | None:
-    """Extract a string config value from model config."""
-
-    raw: object | None = model.config.values.get(key)
-    return raw if isinstance(raw, str) else None
-
-
-def _get_config_bool(*, model: CompiledModel, key: str) -> bool:
-    """Extract a boolean config value from model config."""
-
-    raw: object | None = model.config.values.get(key)
-    return raw if isinstance(raw, bool) else False
-
-
-def _get_cursor_start(model: CompiledModel) -> str | None:
-    """Extract cursor_start as a normalized string value."""
-
-    raw: object | None = model.config.values.get("cursor_start")
-    if raw is None:
-        return None
-    if isinstance(raw, datetime):
-        return raw.isoformat()
-    if isinstance(raw, date):
-        return raw.isoformat()
-    if isinstance(raw, str):
-        return raw
-    return str(raw)
-
-
-def _get_cursor_end(model: CompiledModel) -> str | None:
-    """Extract exclusive cursor_end as a normalized string value."""
-
-    raw: object | None = model.config.values.get("cursor_end")
-    if raw is None:
-        return None
-    if isinstance(raw, (date, datetime)):
-        return raw.isoformat()
-    return str(raw)
-
-
 def _rolling_window_bounds(
     *, model: CompiledModel, invocation_time: datetime | None
 ) -> CursorBounds | None:
-    grain: str | None = _get_config_str(model=model, key="cursor_grain")
+    grain: str | None = get_config_str(values=model.config.values, key="cursor_grain")
     lookback: str | None = resolve_microbatch_lookback(model=model, effective_grain=grain)
     duration: Duration | None = Duration.parse(lookback or "")
     if grain is None or duration is None:
@@ -1889,7 +1889,9 @@ def _rolling_window_bounds(
         start=TimestampValue(value=duration.subtract_from(anchor)),
         end=TimestampValue(value=anchor),
     )
-    cursor_start: str | None = _get_cursor_start(model)
+    cursor_start: str | None = get_config_cursor_bound(
+        values=model.config.values, key="cursor_start"
+    )
     if cursor_start is not None and _cursor_order_key(
         value=sentinel_to_token(sentinel=bounds.start), cursor_type=CursorType.TIMESTAMP
     ) < _cursor_order_key(value=cursor_start, cursor_type=CursorType.TIMESTAMP):
@@ -1912,8 +1914,8 @@ def _floor_utc_grain(*, moment: datetime, grain: str) -> datetime:
 
 
 def _clamp_cursor_end(*, bounds: CursorBounds | None, model: CompiledModel) -> CursorBounds | None:
-    cursor_end: str | None = _get_cursor_end(model)
-    cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
+    cursor_end: str | None = get_config_cursor_bound(values=model.config.values, key="cursor_end")
+    cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
     if bounds is None or cursor_end is None:
         return bounds
     if bounds.start == BoundSentinel.START or bounds.end == BoundSentinel.END:

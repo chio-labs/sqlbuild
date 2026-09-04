@@ -5,11 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlbuild.compiler.source_freshness._helpers.datetime import require_aware_utc_datetime
-from sqlbuild.compiler.source_freshness.constants import (
-    DURATION_DAY_UNIT,
-    DURATION_HOUR_UNIT,
-)
+from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessInputError
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
+from sqlbuild.cursor_algebra.constants import MINUTE_TO_DAY_DURATION_UNITS
+from sqlbuild.cursor_algebra.models import Duration
 from sqlbuild.spec.contracts.models import SourceFreshnessAgePolicy
 
 
@@ -40,10 +39,9 @@ def evaluate_source_freshness_age_policy(
 
 
 def _duration_seconds(value: str) -> int:
-    amount: int = int(value[:-1])
-    unit: str = value[-1]
-    if unit == DURATION_DAY_UNIT:
-        return amount * 24 * 60 * 60
-    if unit == DURATION_HOUR_UNIT:
-        return amount * 60 * 60
-    return amount * 60
+    duration: Duration | None = Duration.parse(value)
+    if duration is None or not duration.is_single_unit_in(MINUTE_TO_DAY_DURATION_UNITS):
+        raise SourceFreshnessInputError(
+            "source freshness age_policy value must be a positive duration like 15m, 2h, or 1d"
+        )
+    return duration.fixed_seconds

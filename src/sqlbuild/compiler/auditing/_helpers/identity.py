@@ -35,7 +35,7 @@ def audit_identity(audit: AuditPlanEntry) -> AuditIdentity:
         audit_name=audit.name,
         definition_fingerprint=hash_payload(definition_payload),
         execution_fingerprint=hash_payload(execution_identity_payload),
-        severity=audit.severity.value,
+        severity=audit.severity,
         run_scope_phase=audit.effective_run_scope.value,
         attachment_kind=audit.attachment_kind.value,
         attached_target_name=audit.attached_target_name,
@@ -50,7 +50,7 @@ def binding_payload(audit: AuditIdentity) -> dict[str, object]:
     return {
         "binding_key": audit.binding_key,
         "audit_name": audit.audit_name,
-        "severity": audit.severity,
+        "severity": audit.severity.value,
         "run_scope_phase": audit.run_scope_phase,
         "attachment_kind": audit.attachment_kind,
         "attached_target_name": audit.attached_target_name,

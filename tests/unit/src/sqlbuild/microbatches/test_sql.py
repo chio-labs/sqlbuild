@@ -187,7 +187,26 @@ def test_given_completion_when_building_insert_then_provenance_and_numeric_rows_
     assert "'recovery'" in sql
     assert "'F2'" in sql
     assert "'fingerprint''definition'" in sql
-    assert "CAST(0 AS BIGINT)" in sql
+    assert sql == (
+        "INSERT INTO analytics._sqlbuild_microbatches (event_id, record_type, scope_kind, "
+        "scope_key, model_name, target_database, target_schema, target_name, "
+        "physical_generation_id, virtual_environment_name, virtual_model_version_hash, "
+        "origin_run_id, origin_run_started_at, execution_run_id, execution_run_started_at, "
+        "run_type, completion_type, run_start, run_end, partition_start, partition_end, "
+        "batch_size, cursor_column, cursor_type, cursor_grain, model_version_hash, "
+        "definition_hash, fingerprint_status, replay_requirement_id, "
+        "required_model_version_hash, previous_model_version_hash, replay_policy, "
+        "rows_affected, completed_at, coverage_source, observed_row_count, observed_at, "
+        "synthetic_reason, unaccounted_policy, created_at) SELECT 'event-1', "
+        "'partition_completion', 'direct_logical', 'duckdb:analytics.orders', 'orders', NULL, "
+        "'analytics', 'orders', '*', NULL, NULL, 'origin-run', CAST(NULL AS TIMESTAMP), "
+        "'execution-run', CAST(NULL AS TIMESTAMP), 'replay_on_change', 'recovery', '0', '1', "
+        "'0', '1', '1', 'batch_id', 'integer', NULL, 'F2', 'fingerprint''definition', "
+        "'known', NULL, NULL, NULL, NULL, CAST(0 AS BIGINT), CAST(NULL AS TIMESTAMP), NULL, "
+        "CAST(NULL AS BIGINT), CAST(NULL AS TIMESTAMP), NULL, NULL, "
+        "CAST('2026-01-01T00:00:00+00:00' AS TIMESTAMP) WHERE NOT EXISTS (SELECT 1 FROM "
+        "analytics._sqlbuild_microbatches WHERE event_id = 'event-1')"
+    )
     assert len((sql,)) == test_case.expected_statement_count
 
 
@@ -240,7 +259,7 @@ def test_given_builtin_adapter_when_rendering_direct_event_inserts_then_typed_co
 
     for sql, expected_row_count in ((single_sql, 1), (bulk_sql, 2)):
         assert test_case.expected_table_name in sql
-        assert "CAST('2026-01-01T00:00:00' AS TIMESTAMP)" in sql
+        assert "CAST('2026-01-01T00:00:00+00:00' AS TIMESTAMP)" in sql
         assert sql.count("CAST(NULL AS TIMESTAMP)") == 4 * expected_row_count
         assert sql.count("CAST(0 AS BIGINT)") == expected_row_count
         assert sql.count("CAST(NULL AS BIGINT)") == expected_row_count

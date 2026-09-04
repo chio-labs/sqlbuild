@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.auditing.main._parse_audit_instance import parse_audit_instance
+from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.spec.contracts.models import SchemaAuditInstance
 from tests.unit.src.sqlbuild.compiler.auditing.main._test_types import (
     ParseAuditInstanceErrorTestCase,
@@ -43,12 +44,18 @@ def test_given_audit_mapping_when_parsing_then_always_run_is_reserved_option(
 
     assert result.definition_name == test_case.expected_definition_name
     assert result.always_run is test_case.expected_always_run
+    assert result.severity is AuditSeverity.ERROR
     assert tuple(sorted(result.arguments)) == test_case.expected_argument_keys
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
+        ParseAuditInstanceErrorTestCase(
+            description="rejects unknown severity",
+            raw_audit={"not_null": {"severity": "critical"}},
+            expected_error_fragment="'severity' must be one of: warn, error",
+        ),
         ParseAuditInstanceErrorTestCase(
             description="rejects non-boolean always_run",
             raw_audit={"not_null": {"always_run": "true"}},

@@ -17,6 +17,7 @@ from sqlbuild.compiler.compile._helpers.config.model_validation import (
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileModelConfig
+from sqlbuild.spec.contracts.exceptions import ConfigValueTypeError
 from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention
 from sqlbuild.spec.contracts.types import TimeTravelRetentionSource
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
@@ -777,6 +778,44 @@ def test_given_invalid_config_when_validating_then_raises(
             ref_count=test_case.ref_count,
             known_input_names=frozenset({"orders", "shipments"}),
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        IncrementalConfigErrorTestCase(
+            description="integer batch size raises a typed config error",
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "delete_insert",
+                "cursor": "event_id",
+                "cursor_type": "integer",
+                "incremental_mode": "microbatch",
+                "microbatch_strategy": "rolling_window",
+                "batch_size": 5,
+            },
+            ref_count=1,
+            expected_error_fragment="a string",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_integer_batch_size_when_validating_then_raises_typed_config_error(
+    test_case: IncrementalConfigErrorTestCase,
+) -> None:
+    config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
+
+    with pytest.raises(ConfigValueTypeError) as error_info:
+        validate_incremental_config(
+            config=config,
+            model_name="test_model",
+            ref_count=test_case.ref_count,
+            known_input_names=frozenset({"orders"}),
+        )
+
+    assert error_info.value.key == "batch_size"
+    assert error_info.value.expected == test_case.expected_error_fragment
+    assert error_info.value.actual_type is int
 
 
 @pytest.mark.parametrize(

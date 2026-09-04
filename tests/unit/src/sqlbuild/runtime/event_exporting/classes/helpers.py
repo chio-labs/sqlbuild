@@ -14,6 +14,7 @@ from sqlbuild.runtime.event_exporting.models import (
     LifecycleExportPolicy,
     QueuedLifecycleEvent,
 )
+from sqlbuild.spec.contracts.types import EventExportSeverity
 
 
 class BlockingProvider(Provider):
@@ -95,7 +96,7 @@ def queued_event(
     return QueuedLifecycleEvent(
         sequence,
         lifecycle_event(sequence, event_type=event_type),
-        LifecycleExportPolicy("invocation", "debug", priority),
+        LifecycleExportPolicy("invocation", EventExportSeverity.DEBUG, priority),
         eligible,
     )
 

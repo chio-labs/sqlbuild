@@ -15,6 +15,7 @@ from sqlbuild.sinks import (
     get_lifecycle_event_sink_definition,
     lifecycle_event_sink,
 )
+from sqlbuild.spec.contracts.types import EventExportSeverity
 from tests.unit.src.sqlbuild.runtime.event_exporting._test_types import SinkApiTestCase
 
 
@@ -61,7 +62,31 @@ def test_given_lifecycle_filters_when_decorating_then_options_are_frozen(
     assert definition is not None
     assert definition.name == test_case.expected_name
     assert definition.event_kinds == frozenset({"run", "statement"})
-    assert definition.min_severity == "info"
+    assert definition.min_severity is EventExportSeverity.INFO
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SinkApiTestCase(
+            "invalid lifecycle severity",
+            "min_severity must be one of: debug, info, warning, error",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_invalid_lifecycle_severity_when_decorating_then_lists_allowed_values(
+    test_case: SinkApiTestCase,
+) -> None:
+    assert test_case.expected_name is not None
+    with pytest.raises(
+        EventExporterInputError,
+        match=test_case.expected_name,
+    ):
+
+        @lifecycle_event_sink(min_severity="fatal")
+        def publish(event: object) -> None:
+            del event
 
 
 @pytest.mark.parametrize(
