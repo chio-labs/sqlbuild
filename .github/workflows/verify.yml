@@ -115,12 +115,30 @@ jobs:
       - name: Run unit and integration tests
         run: make test
 
-  e2e:
-    name: DuckDB E2E tests
+  e2e_shards:
+    name: DuckDB E2E (${{ matrix.name }})
     needs: [changes, lockfile]
     if: needs.changes.outputs.duckdb == 'true'
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: build core
+            target: test-e2e-duckdb-build-core
+          - name: build incremental
+            target: test-e2e-duckdb-build-incremental
+          - name: build virtual
+            target: test-e2e-duckdb-build-virtual
+          - name: CLI data
+            target: test-e2e-duckdb-cli-data
+          - name: CLI commands
+            target: test-e2e-duckdb-cli
+          - name: virtual environments
+            target: test-e2e-duckdb-virtual
+          - name: integrations
+            target: test-e2e-duckdb-integrations
     env:
       PYTEST_XDIST_AUTO_NUM_WORKERS: "4"
     steps:
@@ -154,8 +172,8 @@ jobs:
               f"{os.environ.get('PYTEST_XDIST_AUTO_NUM_WORKERS', '<unset>')}"
           )
           PY
-      - name: Run DuckDB E2E tests
-        run: make test-e2e-duckdb
+      - name: Run DuckDB E2E shard
+        run: make ${{ matrix.target }}
 
   performance:
     name: Performance guards
@@ -218,7 +236,7 @@ jobs:
   verify:
     name: Verify
     if: always()
-    needs: [changes, lockfile, checks, e2e, performance, postgres]
+    needs: [changes, lockfile, checks, e2e_shards, performance, postgres]
     runs-on: ubuntu-24.04
     steps:
       - name: Confirm all required verification jobs passed
@@ -226,7 +244,7 @@ jobs:
           CHANGES_RESULT: ${{ needs.changes.result }}
           LOCKFILE_RESULT: ${{ needs.lockfile.result }}
           CHECKS_RESULT: ${{ needs.checks.result }}
-          E2E_RESULT: ${{ needs.e2e.result }}
+          E2E_SHARDS_RESULT: ${{ needs.e2e_shards.result }}
           PERFORMANCE_RESULT: ${{ needs.performance.result }}
           POSTGRES_RESULT: ${{ needs.postgres.result }}
         run: |
@@ -236,7 +254,7 @@ jobs:
             echo "Required classification, lockfile, or static checks did not pass" >&2
             exit 1
           fi
-          for result in "${E2E_RESULT}" "${PERFORMANCE_RESULT}" "${POSTGRES_RESULT}"; do
+          for result in "${E2E_SHARDS_RESULT}" "${PERFORMANCE_RESULT}" "${POSTGRES_RESULT}"; do
             if [[ "${result}" != "success" && "${result}" != "skipped" ]]; then
               echo "A selected verification suite did not pass: ${result}" >&2
               exit 1
