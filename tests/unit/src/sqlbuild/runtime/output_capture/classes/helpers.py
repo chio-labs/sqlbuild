@@ -7,17 +7,17 @@ from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 
 from sqlbuild.runtime.output_capture.classes.dispatcher import OutputCaptureDispatcher
-from sqlbuild.runtime.output_capture.models import OutputRecord
+from sqlbuild.runtime.output_capture.models import CommandOutputRecord
 
 
 class RecordingOutputExporter:
     """Thread-safe output exporter test double."""
 
     def __init__(self) -> None:
-        self.records: list[OutputRecord] = []
+        self.records: list[CommandOutputRecord] = []
         self.called = threading.Event()
 
-    def export_output(self, records: tuple[OutputRecord, ...]) -> None:
+    def export_output(self, records: tuple[CommandOutputRecord, ...]) -> None:
         self.records.extend(records)
         self.called.set()
 
@@ -29,7 +29,7 @@ class BlockingOutputExporter(RecordingOutputExporter):
         super().__init__()
         self.release = threading.Event()
 
-    def export_output(self, records: tuple[OutputRecord, ...]) -> None:
+    def export_output(self, records: tuple[CommandOutputRecord, ...]) -> None:
         super().export_output(records)
         self.release.wait()
 
@@ -40,7 +40,7 @@ class FailingOutputExporter:
     def __init__(self) -> None:
         self.called = threading.Event()
 
-    def export_output(self, records: tuple[OutputRecord, ...]) -> None:
+    def export_output(self, records: tuple[CommandOutputRecord, ...]) -> None:
         del records
         self.called.set()
         raise RuntimeError("destination unavailable")
@@ -53,7 +53,7 @@ class DiagnosingFailingOutputExporter(FailingOutputExporter):
         super().__init__()
         self._diagnostic: Callable[[], None] = diagnostic
 
-    def export_output(self, records: tuple[OutputRecord, ...]) -> None:
+    def export_output(self, records: tuple[CommandOutputRecord, ...]) -> None:
         self._diagnostic()
         super().export_output(records)
 

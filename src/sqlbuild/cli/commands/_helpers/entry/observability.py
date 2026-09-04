@@ -26,7 +26,11 @@ from sqlbuild.cli.output.classes.terminal_event_index import (
 )
 from sqlbuild.cli.progress.classes.native_progress_projector import NativeProgressProjector
 from sqlbuild.compiler.discovery.main.runtime_extensions import discover_runtime_extensions
-from sqlbuild.compiler.discovery.models import DiscoveredEventExporter, DiscoveredProvider
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredCommandOutputSink,
+    DiscoveredEventExporter,
+    DiscoveredProvider,
+)
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.observability import DispatchFailure, EventDispatcher, Unsubscribe, dispatcher_scope
 from sqlbuild.presentation.main.supports_color import supports_color
@@ -82,8 +86,11 @@ def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> Iterato
     try:
         providers: tuple[DiscoveredProvider, ...]
         event_exporters: tuple[DiscoveredEventExporter, ...]
-        providers, event_exporters = discover_runtime_extensions(project_dir=project_dir)
-        if event_exporters:
+        command_output_sinks: tuple[DiscoveredCommandOutputSink, ...]
+        providers, event_exporters, command_output_sinks = discover_runtime_extensions(
+            project_dir=project_dir
+        )
+        if event_exporters or command_output_sinks:
             exporter_delivery: EventExporterDispatcher = EventExporterDispatcher(
                 failure_callback=_log_exporter_failure,
                 summary_callback=_log_exporter_summary,
@@ -93,6 +100,7 @@ def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> Iterato
                 project_dir=project_dir,
                 providers=providers,
                 event_exporters=event_exporters,
+                command_output_sinks=command_output_sinks,
             )
             unsubscribe_exporters = dispatcher.subscribe_lifecycle(
                 subscriber=exporter_delivery.enqueue,
@@ -104,11 +112,12 @@ def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> Iterato
             if exporter_scope is not None:
                 _ = stack.enter_context(event_exporter_command_scope(exporter_scope))
                 identity: ExecutionIdentity | None = current_execution_identity()
-                if identity is not None:
+                if identity is not None and command_output_sinks:
                     _ = stack.enter_context(
                         configured_output_capture_scope(
                             exporter_scope=exporter_scope,
                             identity=identity,
+                            failure_callback=_log_command_output_failure,
                         )
                     )
             yield dispatcher
@@ -163,6 +172,14 @@ def _log_exporter_failure(failure: EventExporterFailure) -> None:
         error_type=failure.error_type,
         event_kind=failure.event_kind,
         event_severity=failure.event_severity,
+    )
+
+
+def _log_command_output_failure(error: BaseException) -> None:
+    log_debug_event(
+        logger=_LOGGER,
+        message="Command-output sink delivery failed",
+        error_type=type(error).__name__,
     )
 
 

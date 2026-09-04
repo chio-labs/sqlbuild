@@ -15,6 +15,12 @@ class InvalidEventExporterNameTestCase:
 
 
 @dataclass(frozen=True)
+class SinkApiTestCase:
+    description: str
+    expected_name: str | None = None
+
+
+@dataclass(frozen=True)
 class EventExporterFilterTestCase:
     description: str
     event_kinds: object

@@ -11,8 +11,8 @@ import pytest
 
 from sqlbuild.runtime.output_capture.classes.dispatcher import OutputCaptureDispatcher
 from sqlbuild.runtime.output_capture.classes.text_tee import TextOutputTee
-from sqlbuild.runtime.output_capture.models import OutputCaptureSummary
-from sqlbuild.runtime.output_capture.types import OutputStream
+from sqlbuild.runtime.output_capture.models import CommandOutputCaptureSummary
+from sqlbuild.runtime.output_capture.types import CommandOutputStream
 from tests.unit.src.sqlbuild.runtime.output_capture.classes._test_types import (
     ChunkingTestCase,
     OutputCaptureTestCase,
@@ -38,10 +38,12 @@ def test_given_ansi_terminal_text_when_captured_then_passthrough_is_byte_for_byt
     sink: io.StringIO = io.StringIO()
     exporter: RecordingOutputExporter = RecordingOutputExporter()
     dispatcher: OutputCaptureDispatcher = make_dispatcher(exporter=exporter)
-    tee: TextOutputTee = TextOutputTee(sink=sink, dispatcher=dispatcher, stream=OutputStream.STDOUT)
+    tee: TextOutputTee = TextOutputTee(
+        sink=sink, dispatcher=dispatcher, stream=CommandOutputStream.STDOUT
+    )
 
     written: int = tee.write("\x1b[31mfailed\x1b[0m\n")
-    summary: OutputCaptureSummary = dispatcher.close()
+    summary: CommandOutputCaptureSummary = dispatcher.close()
 
     assert written == 16
     assert sink.getvalue() == "\x1b[31mfailed\x1b[0m\n"
@@ -61,15 +63,15 @@ def test_given_interleaved_partial_writes_when_closed_then_complete_lines_have_g
     exporter: RecordingOutputExporter = RecordingOutputExporter()
     dispatcher: OutputCaptureDispatcher = make_dispatcher(exporter=exporter, batch_size=1)
 
-    dispatcher.append(stream=OutputStream.STDOUT, text="out")
-    dispatcher.append(stream=OutputStream.STDERR, text="error\n")
-    dispatcher.append(stream=OutputStream.STDOUT, text="put\n")
-    summary: OutputCaptureSummary = dispatcher.close()
+    dispatcher.append(stream=CommandOutputStream.STDOUT, text="out")
+    dispatcher.append(stream=CommandOutputStream.STDERR, text="error\n")
+    dispatcher.append(stream=CommandOutputStream.STDOUT, text="put\n")
+    summary: CommandOutputCaptureSummary = dispatcher.close()
 
     assert tuple(record.sequence for record in exporter.records) == (0, 1)
     assert tuple(record.stream for record in exporter.records) == (
-        OutputStream.STDERR,
-        OutputStream.STDOUT,
+        CommandOutputStream.STDERR,
+        CommandOutputStream.STDOUT,
     )
     assert tuple(record.message for record in exporter.records) == ("error\n", "output\n")
     assert summary.delivered == 2
@@ -91,8 +93,8 @@ def test_given_oversized_line_when_captured_then_chunks_are_deterministic(
         exporter=exporter, max_record_bytes=test_case.max_record_bytes
     )
 
-    dispatcher.append(stream=OutputStream.STDOUT, text=test_case.text)
-    summary: OutputCaptureSummary = dispatcher.close()
+    dispatcher.append(stream=CommandOutputStream.STDOUT, text=test_case.text)
+    summary: CommandOutputCaptureSummary = dispatcher.close()
 
     assert tuple(record.message for record in exporter.records) == test_case.expected_messages
     assert tuple(record.chunk_index for record in exporter.records) == tuple(
@@ -117,22 +119,22 @@ def test_given_full_queue_when_terminal_summary_arrives_then_bulk_is_dropped_and
         queue_capacity=2,
         batch_size=1,
     )
-    dispatcher.append(stream=OutputStream.STDOUT, text="first\n")
+    dispatcher.append(stream=CommandOutputStream.STDOUT, text="first\n")
     assert exporter.called.wait(timeout=1.0)
 
-    dispatcher.append(stream=OutputStream.STDOUT, text="second\n")
-    dispatcher.append(stream=OutputStream.STDOUT, text="third\n")
-    dispatcher.append(stream=OutputStream.STDOUT, text="fourth\n")
+    dispatcher.append(stream=CommandOutputStream.STDOUT, text="second\n")
+    dispatcher.append(stream=CommandOutputStream.STDOUT, text="third\n")
+    dispatcher.append(stream=CommandOutputStream.STDOUT, text="fourth\n")
     release_timer: threading.Timer = threading.Timer(0.02, exporter.release.set)
     release_timer.start()
-    summary: OutputCaptureSummary = dispatcher.close()
+    summary: CommandOutputCaptureSummary = dispatcher.close()
 
     assert summary.dropped == 2
     assert summary.flush_complete is True
     assert tuple(record.record_type for record in exporter.records) == (
-        "output",
-        "output",
-        "loss_summary",
+        "command_output",
+        "command_output",
+        "command_output_loss",
     )
     assert tuple(record.dropped_records for record in exporter.records) == (0, 0, 2)
 
@@ -150,11 +152,11 @@ def test_given_slow_exporter_when_shutdown_then_return_is_bounded_and_run_is_unf
     dispatcher: OutputCaptureDispatcher = make_dispatcher(
         exporter=exporter, shutdown_timeout_seconds=0.01
     )
-    dispatcher.append(stream=OutputStream.STDOUT, text="line\n")
+    dispatcher.append(stream=CommandOutputStream.STDOUT, text="line\n")
     assert exporter.called.wait(timeout=1.0)
 
     started: float = time.monotonic()
-    summary: OutputCaptureSummary = dispatcher.close()
+    summary: CommandOutputCaptureSummary = dispatcher.close()
     elapsed: float = time.monotonic() - started
     exporter.release.set()
 
@@ -178,8 +180,8 @@ def test_given_exporter_failure_when_delivering_then_failure_is_isolated_and_acc
         exporter=exporter, failure_callback=lambda error: failures.append(type(error).__name__)
     )
 
-    dispatcher.append(stream=OutputStream.STDERR, text="problem\n")
-    summary: OutputCaptureSummary = dispatcher.close()
+    dispatcher.append(stream=CommandOutputStream.STDERR, text="problem\n")
+    summary: CommandOutputCaptureSummary = dispatcher.close()
 
     assert failures == ["RuntimeError"]
     assert summary.failed == 1
@@ -202,8 +204,8 @@ def test_given_external_context_when_exporting_then_it_is_attached_opaquely(
         exporter=exporter, external_context=context
     )
 
-    dispatcher.append(stream=OutputStream.STDOUT, text="ok\n")
-    summary: OutputCaptureSummary = dispatcher.close()
+    dispatcher.append(stream=CommandOutputStream.STDOUT, text="ok\n")
+    summary: CommandOutputCaptureSummary = dispatcher.close()
 
     assert exporter.records[0].external_context == context
     assert exporter.records[0].invocation_id == "invocation-1"
@@ -223,8 +225,8 @@ def test_given_absent_external_context_when_exporting_then_empty_mapping_is_atta
     exporter: RecordingOutputExporter = RecordingOutputExporter()
     dispatcher: OutputCaptureDispatcher = make_dispatcher(exporter=exporter)
 
-    dispatcher.append(stream=OutputStream.STDOUT, text="ok\n")
-    summary: OutputCaptureSummary = dispatcher.close()
+    dispatcher.append(stream=CommandOutputStream.STDOUT, text="ok\n")
+    summary: CommandOutputCaptureSummary = dispatcher.close()
 
     assert exporter.records[0].external_context == {}
     assert summary.delivered == 1
@@ -244,11 +246,13 @@ def test_given_exporter_diagnostic_when_exporting_then_diagnostic_is_not_recaptu
         diagnostic=lambda: print("export diagnostic", file=sys.stderr)
     )
     dispatcher: OutputCaptureDispatcher = make_dispatcher(exporter=exporter)
-    tee: TextOutputTee = TextOutputTee(sink=sink, dispatcher=dispatcher, stream=OutputStream.STDERR)
+    tee: TextOutputTee = TextOutputTee(
+        sink=sink, dispatcher=dispatcher, stream=CommandOutputStream.STDERR
+    )
     monkeypatch.setattr(sys, "stderr", tee)
 
     tee.write("command output\n")
-    summary: OutputCaptureSummary = dispatcher.close()
+    summary: CommandOutputCaptureSummary = dispatcher.close()
 
     assert sink.getvalue() == "command output\nexport diagnostic\n"
     assert summary.accepted == 1

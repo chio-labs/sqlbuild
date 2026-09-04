@@ -11,9 +11,12 @@ from sqlbuild.cli.commands.main.entrypoint._dispatch_with_output_capture import 
     configured_output_capture_scope,
 )
 from sqlbuild.observability import ExecutionIdentity
-from sqlbuild.output_capture import output_capture_context
 from sqlbuild.runtime.event_exporting.classes.command_scope import EventExporterCommandScope
-from sqlbuild.runtime.output_capture.models import OutputRecord
+from sqlbuild.sinks import (
+    CommandOutputRecord,
+    CommandOutputValidationError,
+    command_output_context,
+)
 from tests.unit.src.sqlbuild.cli.commands.main.entrypoint._test_types import (
     OutputCaptureWiringTestCase,
 )
@@ -24,12 +27,12 @@ from tests.unit.src.sqlbuild.cli.commands.main.entrypoint.helpers import make_ev
     "test_case",
     (
         OutputCaptureWiringTestCase(
-            description="inert_without_event_export_config", expected_success=True
+            description="inert_without_command_output_sink", expected_success=True
         ),
     ),
     ids=lambda case: case.description,
 )
-def test_given_no_event_export_configuration_when_dispatching_then_capture_is_inert(
+def test_given_no_command_output_sink_when_dispatching_then_capture_is_inert(
     test_case: OutputCaptureWiringTestCase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     assert test_case.expected_success is True
@@ -48,16 +51,20 @@ def test_given_no_event_export_configuration_when_dispatching_then_capture_is_in
 
 @pytest.mark.parametrize(
     "test_case",
-    (OutputCaptureWiringTestCase(description="configured_event_export", expected_success=True),),
+    (
+        OutputCaptureWiringTestCase(
+            description="configured_command_output_sink", expected_success=True
+        ),
+    ),
     ids=lambda case: case.description,
 )
-def test_given_event_export_configuration_when_dispatching_then_output_uses_same_exporter_scope(
+def test_given_command_output_sink_when_dispatching_then_output_uses_same_provider_scope(
     test_case: OutputCaptureWiringTestCase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     assert test_case.expected_success is True
     stdout: io.StringIO = io.StringIO()
     stderr: io.StringIO = io.StringIO()
-    records: list[OutputRecord] = []
+    records: list[CommandOutputRecord] = []
     exporter_scope: EventExporterCommandScope = make_event_exporter_scope(records=records)
     monkeypatch.setattr(sys, "stdout", stdout)
     monkeypatch.setattr(sys, "stderr", stderr)
@@ -82,14 +89,14 @@ def test_given_event_export_configuration_when_dispatching_then_output_uses_same
     (OutputCaptureWiringTestCase(description="optional_external_context", expected_success=True),),
     ids=lambda case: case.description,
 )
-def test_given_integration_context_when_event_export_is_configured_then_context_is_stamped_opaquely(
+def test_given_integration_context_when_output_sink_is_configured_then_context_is_stamped_opaquely(
     test_case: OutputCaptureWiringTestCase,
 ) -> None:
     assert test_case.expected_success is True
-    records: list[OutputRecord] = []
+    records: list[CommandOutputRecord] = []
     exporter_scope: EventExporterCommandScope = make_event_exporter_scope(records=records)
 
-    with output_capture_context(external_context={"system": "opaque", "external_run": "42"}):
+    with command_output_context(external_context={"system": "opaque", "external_run": "42"}):
         with configured_output_capture_scope(
             exporter_scope=exporter_scope,
             identity=ExecutionIdentity(invocation_id="invocation-1"),
@@ -102,6 +109,37 @@ def test_given_integration_context_when_event_export_is_configured_then_context_
 
 @pytest.mark.parametrize(
     "test_case",
+    (OutputCaptureWiringTestCase(description="invalid_external_context", expected_success=True),),
+    ids=lambda case: case.description,
+)
+def test_given_invalid_integration_context_when_capture_starts_then_reports_once_and_stays_inert(
+    test_case: OutputCaptureWiringTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert test_case.expected_success is True
+    stdout: io.StringIO = io.StringIO()
+    records: list[CommandOutputRecord] = []
+    failures: list[BaseException] = []
+    exporter_scope: EventExporterCommandScope = make_event_exporter_scope(records=records)
+    monkeypatch.setattr(sys, "stdout", stdout)
+
+    with command_output_context(external_context={"invalid": object()}):
+        with configured_output_capture_scope(
+            exporter_scope=exporter_scope,
+            identity=ExecutionIdentity(invocation_id="invocation-1"),
+            failure_callback=failures.append,
+        ):
+            print("terminal only")
+    _ = exporter_scope.close()
+
+    assert stdout.getvalue() == "terminal only\n"
+    assert records == []
+    assert len(failures) == 1
+    assert isinstance(failures[0], CommandOutputValidationError)
+
+
+@pytest.mark.parametrize(
+    "test_case",
     (OutputCaptureWiringTestCase(description="interrupted_cleanup", expected_success=True),),
     ids=lambda case: case.description,
 )
@@ -110,7 +148,7 @@ def test_given_interrupted_command_when_cleaning_up_then_stream_restores_and_int
 ) -> None:
     assert test_case.expected_success is True
     stdout: io.StringIO = io.StringIO()
-    records: list[OutputRecord] = []
+    records: list[CommandOutputRecord] = []
     exporter_scope: EventExporterCommandScope = make_event_exporter_scope(records=records)
     monkeypatch.setattr(sys, "stdout", stdout)
 
