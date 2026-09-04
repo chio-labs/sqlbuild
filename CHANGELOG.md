@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.82.1](https://github.com/chio-labs/sqlbuild/compare/v0.82.0...v0.82.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* record source freshness observations in UTC ([#522](https://github.com/chio-labs/sqlbuild/issues/522)) ([a828f3a](https://github.com/chio-labs/sqlbuild/commit/a828f3a76d2e377c74487c42742d64d4ab92fbe2))
+
 ## [0.82.0](https://github.com/chio-labs/sqlbuild/compare/v0.81.2...v0.82.0) (2026-09-04)
 
 
