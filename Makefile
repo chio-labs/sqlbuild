@@ -1,6 +1,10 @@
 SHELL := /bin/bash
 
-.PHONY: verify verify-quick verify-pg coverage cli-preview rust-check test-e2e-performance
+.PHONY: verify verify-quick verify-pg coverage cli-preview rust-check \
+	check-e2e-shards test-e2e-duckdb test-e2e-duckdb-build-core \
+	test-e2e-duckdb-build-incremental test-e2e-duckdb-build-virtual \
+	test-e2e-duckdb-cli-data test-e2e-duckdb-cli test-e2e-duckdb-virtual \
+	test-e2e-duckdb-integrations test-e2e-performance
 
 format:
 	uv run ruff format .
@@ -48,10 +52,113 @@ test-all:
 	exit $$status
 
 
-test-e2e-duckdb:
+E2E_DUCKDB_MARKERS := not real_warehouse and not dbt and not performance
+E2E_DUCKDB_PYTEST_ARGS := -m "$(E2E_DUCKDB_MARKERS)" -vv --color=yes -n auto --dist loadfile
+
+E2E_DUCKDB_BUILD_CORE_PATHS := \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/no_tests_no_audits \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_audit_failures.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_build.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_compile_json_behavior.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_dag_json_behavior.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_enum_contract.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_expression_sources.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_lifecycle_commands.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_manifest_artifact_gating.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_no_tests_no_audits_flags.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_plan_command_surface.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_python_hooks.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_query_change_tracking.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_query_propagation.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_remove_column_semantics.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_reusable_model_schemas.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_runtime_artifact_preservation.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_schema_backfill_behavior.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_selector_surface.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_table_function_dependency.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_template_expressions.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_validation_failures.py
+
+E2E_DUCKDB_BUILD_INCREMENTAL_PATHS := \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_append_cursor_build.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_capped_microbatch_build.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_concurrent_microbatch_build.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_cursor_runtime_failures.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_loader_watermark_build.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_microbatch_direct_lifecycle.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_microbatch_failure_windows.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_microbatch_replay_backfill_lifecycle.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_mixed_timestamp_grain_replay.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_model_backed_cursor_build.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_seed_watermark_build.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_snapshot_build.py
+
+E2E_DUCKDB_BUILD_VIRTUAL_PATHS := \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_virtual_build_state.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_virtual_incremental_build.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_virtual_microbatch_lifecycle.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_virtual_mode_guard.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_virtual_promote.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_virtual_python_build.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_virtual_rollback.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_virtual_seed_build.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_virtual_source_freshness_build.py
+
+E2E_DUCKDB_CLI_DATA_PATHS := \
+	tests/e2e/src/sqlbuild/cli/commands/main/load \
+	tests/e2e/src/sqlbuild/cli/commands/main/providers \
+	tests/e2e/src/sqlbuild/cli/commands/main/scenario
+
+E2E_DUCKDB_CLI_PATHS := \
+	tests/e2e/scripts/cli_preview \
+	tests/e2e/src/sqlbuild/cli/commands/main/adapters \
+	tests/e2e/src/sqlbuild/cli/commands/main/audit \
+	tests/e2e/src/sqlbuild/cli/commands/main/bigquery \
+	tests/e2e/src/sqlbuild/cli/commands/main/check \
+	tests/e2e/src/sqlbuild/cli/commands/main/compile \
+	tests/e2e/src/sqlbuild/cli/commands/main/databricks \
+	tests/e2e/src/sqlbuild/cli/commands/main/dbt \
+	tests/e2e/src/sqlbuild/cli/commands/main/debug \
+	tests/e2e/src/sqlbuild/cli/commands/main/freshness \
+	tests/e2e/src/sqlbuild/cli/commands/main/init \
+	tests/e2e/src/sqlbuild/cli/commands/main/kata \
+	tests/e2e/src/sqlbuild/cli/commands/main/lineage \
+	tests/e2e/src/sqlbuild/cli/commands/main/motherduck \
+	tests/e2e/src/sqlbuild/cli/commands/main/playground \
+	tests/e2e/src/sqlbuild/cli/commands/main/postgres \
+	tests/e2e/src/sqlbuild/cli/commands/main/query \
+	tests/e2e/src/sqlbuild/cli/commands/main/scope \
+	tests/e2e/src/sqlbuild/cli/commands/main/seed \
+	tests/e2e/src/sqlbuild/cli/commands/main/skills \
+	tests/e2e/src/sqlbuild/cli/commands/main/snowflake \
+	tests/e2e/src/sqlbuild/cli/commands/main/sqlserver \
+	tests/e2e/src/sqlbuild/cli/commands/main/test
+
+E2E_DUCKDB_VIRTUAL_PATHS := \
+	tests/e2e/src/sqlbuild/cli/commands/main/clone \
+	tests/e2e/src/sqlbuild/cli/commands/main/diff \
+	tests/e2e/src/sqlbuild/cli/commands/main/janitor \
+	tests/e2e/src/sqlbuild/cli/commands/main/plan \
+	tests/e2e/src/sqlbuild/cli/commands/main/reconcile \
+	tests/e2e/src/sqlbuild/cli/commands/main/state
+
+E2E_DUCKDB_INTEGRATIONS_PATHS := tests/e2e/src/sqlbuild/integrations
+
+E2E_DUCKDB_PATHS := \
+	$(E2E_DUCKDB_BUILD_CORE_PATHS) \
+	$(E2E_DUCKDB_BUILD_INCREMENTAL_PATHS) \
+	$(E2E_DUCKDB_BUILD_VIRTUAL_PATHS) \
+	$(E2E_DUCKDB_CLI_DATA_PATHS) \
+	$(E2E_DUCKDB_CLI_PATHS) \
+	$(E2E_DUCKDB_VIRTUAL_PATHS) \
+	$(E2E_DUCKDB_INTEGRATIONS_PATHS)
+
+define run_e2e_duckdb
 	@mkdir -p /tmp/opencode
-	@log="/tmp/opencode/test-e2e-duckdb-$$(date +%Y%m%d-%H%M%S).log"; \
+	@log="/tmp/opencode/$(1)-$$(date +%Y%m%d-%H%M%S).log"; \
 	echo "Logging to $$log"; \
+	echo "Reproduce locally: make $(1)"; \
+	echo 'Pytest scope: $(2) -m "$(E2E_DUCKDB_MARKERS)"'; \
 	{ \
 		status=0; \
 		run_step() { \
@@ -65,12 +172,47 @@ test-e2e-duckdb:
 				if [ $$status -eq 0 ]; then status=$$rc; fi; \
 			fi; \
 		}; \
-		run_step "duckdb e2e" env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/e2e -m "not real_warehouse and not dbt and not performance" -vv --color=yes -n auto --dist loadfile; \
+		run_step "$(1)" env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest $(2) $(E2E_DUCKDB_PYTEST_ARGS); \
 		exit $$status; \
 	} 2>&1 | tee "$$log"; \
 	status=$${PIPESTATUS[0]}; \
 	echo "TEST_E2E_DUCKDB_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
 	exit $$status
+endef
+
+test-e2e-duckdb:
+	$(call run_e2e_duckdb,$@,$(E2E_DUCKDB_PATHS))
+
+test-e2e-duckdb-build-core:
+	$(call run_e2e_duckdb,$@,$(E2E_DUCKDB_BUILD_CORE_PATHS))
+
+test-e2e-duckdb-build-incremental:
+	$(call run_e2e_duckdb,$@,$(E2E_DUCKDB_BUILD_INCREMENTAL_PATHS))
+
+test-e2e-duckdb-build-virtual:
+	$(call run_e2e_duckdb,$@,$(E2E_DUCKDB_BUILD_VIRTUAL_PATHS))
+
+test-e2e-duckdb-cli-data:
+	$(call run_e2e_duckdb,$@,$(E2E_DUCKDB_CLI_DATA_PATHS))
+
+test-e2e-duckdb-cli:
+	$(call run_e2e_duckdb,$@,$(E2E_DUCKDB_CLI_PATHS))
+
+test-e2e-duckdb-virtual:
+	$(call run_e2e_duckdb,$@,$(E2E_DUCKDB_VIRTUAL_PATHS))
+
+test-e2e-duckdb-integrations:
+	$(call run_e2e_duckdb,$@,$(E2E_DUCKDB_INTEGRATIONS_PATHS))
+
+check-e2e-shards:
+	bash scripts/check_e2e_shards.sh \
+		--shard build-core $(E2E_DUCKDB_BUILD_CORE_PATHS) \
+		--shard build-incremental $(E2E_DUCKDB_BUILD_INCREMENTAL_PATHS) \
+		--shard build-virtual $(E2E_DUCKDB_BUILD_VIRTUAL_PATHS) \
+		--shard cli-data $(E2E_DUCKDB_CLI_DATA_PATHS) \
+		--shard cli $(E2E_DUCKDB_CLI_PATHS) \
+		--shard virtual $(E2E_DUCKDB_VIRTUAL_PATHS) \
+		--shard integrations $(E2E_DUCKDB_INTEGRATIONS_PATHS)
 
 
 test-e2e-performance:
@@ -384,7 +526,7 @@ verify-quick:
 	exit $$status
 
 
-check-ci:
+check-ci: check-e2e-shards
 	uv run ruff format --check .
 	uv run ruff check .
 	uv run ty check src tests
