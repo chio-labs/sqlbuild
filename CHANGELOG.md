@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.81.2](https://github.com/chio-labs/sqlbuild/compare/v0.81.1...v0.81.2) (2026-09-04)
+
+
+### Bug Fixes
+
+* show SQL test difference samples ([#520](https://github.com/chio-labs/sqlbuild/issues/520)) ([627ab95](https://github.com/chio-labs/sqlbuild/commit/627ab95fe13b63ed6ffa308120f006a446042eeb))
+
 ## [0.81.1](https://github.com/chio-labs/sqlbuild/compare/v0.81.0...v0.81.1) (2026-09-04)
 
 
