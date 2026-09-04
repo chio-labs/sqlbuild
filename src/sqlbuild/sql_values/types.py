@@ -27,6 +27,17 @@ class CollectionRendering(StrEnum):
     ARRAY = "array"
 
 
+class StateSqlValueType(StrEnum):
+    """Closed physical value kinds used by warehouse state columns."""
+
+    STRING = "string"
+    INTEGER = "integer"
+    BOOLEAN = "boolean"
+    TIMESTAMP = "timestamp"
+    DATE = "date"
+    JSON = "json"
+
+
 type SqlScalar = str | int | bool | float | Decimal | None
 type SqlValuePayload = SqlScalar | tuple[object, ...]
 type SqlCollectionRendering = CollectionRendering

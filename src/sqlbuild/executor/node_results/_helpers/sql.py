@@ -19,9 +19,25 @@ from sqlbuild.executor.node_results.constants import (
     COLUMN_TARGET_NAME,
     COLUMN_TARGET_SCHEMA,
     COLUMN_TIMESTAMP,
+    NODE_RESULT_COLUMN_TYPES,
+    NODE_RESULT_COLUMNS,
     NODE_RESULTS_TABLE_NAME,
 )
 from sqlbuild.executor.node_results.models import NodeResultQuery, NodeResultRecord
+from sqlbuild.sql_values.main.render_state_literal import render_state_sql_literal
+from sqlbuild.sql_values.types import StateSqlValueType
+
+_REQUIRED_NODE_RESULT_COLUMNS: frozenset[str] = frozenset(
+    {
+        COLUMN_NODE_TYPE,
+        COLUMN_NODE_NAME,
+        COLUMN_RUN_ID,
+        COLUMN_STATUS,
+        COLUMN_PAYLOAD_JSON_B64,
+        COLUMN_METADATA_JSON_B64,
+        COLUMN_TIMESTAMP,
+    }
+)
 
 
 def build_qualified_table_name(
@@ -56,22 +72,16 @@ def build_create_table_sql(
     string_type: str = render_framework_type(FrameworkType.STRING)
     timestamp_type: str = render_framework_type(FrameworkType.TIMESTAMP)
     table_kind: str = "TRANSIENT TABLE" if transient else "TABLE"
-    return (
-        f"CREATE {table_kind} IF NOT EXISTS {qualified_name} ("
-        f"{COLUMN_NODE_TYPE} {string_type} NOT NULL, "
-        f"{COLUMN_NODE_NAME} {string_type} NOT NULL, "
-        f"{COLUMN_TARGET_DATABASE} {string_type}, "
-        f"{COLUMN_TARGET_SCHEMA} {string_type}, "
-        f"{COLUMN_TARGET_NAME} {string_type}, "
-        f"{COLUMN_RUN_ID} {string_type} NOT NULL, "
-        f"{COLUMN_STATUS} {string_type} NOT NULL, "
-        f"{COLUMN_PAYLOAD_JSON_B64} {string_type} NOT NULL, "
-        f"{COLUMN_METADATA_JSON_B64} {string_type} NOT NULL, "
-        f"{COLUMN_ERROR_MESSAGE} {string_type}, "
-        f"{COLUMN_MATERIALIZED} {string_type}, "
-        f"{COLUMN_TIMESTAMP} {timestamp_type} NOT NULL"
-        f")"
-    )
+    definitions: list[str] = []
+    for column in NODE_RESULT_COLUMNS:
+        column_type: str = (
+            timestamp_type
+            if NODE_RESULT_COLUMN_TYPES[column] == StateSqlValueType.TIMESTAMP
+            else string_type
+        )
+        required: str = " NOT NULL" if column in _REQUIRED_NODE_RESULT_COLUMNS else ""
+        definitions.append(f"{column} {column_type}{required}")
+    return f"CREATE {table_kind} IF NOT EXISTS {qualified_name} ({', '.join(definitions)})"
 
 
 def build_insert_sql(
@@ -88,6 +98,7 @@ def build_insert_sql(
         schema=schema,
         render_qualified_name=render_qualified_name,
     )
+    materialized: str | None = _materialized_storage(record.materialized)
     return (
         f"INSERT INTO {qualified_name} ("
         f"{COLUMN_NODE_TYPE}, "
@@ -103,18 +114,18 @@ def build_insert_sql(
         f"{COLUMN_MATERIALIZED}, "
         f"{COLUMN_TIMESTAMP}"
         f") VALUES ("
-        f"{_required_string_literal(record.node_type)}, "
-        f"{_required_string_literal(record.node_name)}, "
-        f"{_optional_string_literal(record.target_database)}, "
-        f"{_optional_string_literal(record.target_schema)}, "
-        f"{_optional_string_literal(record.target_name)}, "
-        f"{_required_string_literal(record.run_id)}, "
-        f"{_required_string_literal(record.status)}, "
-        f"{_required_string_literal(payload_json_b64)}, "
-        f"{_required_string_literal(metadata_json_b64)}, "
-        f"{_optional_string_literal(record.error_message)}, "
-        f"{_optional_string_literal(_materialized_storage(record.materialized))}, "
-        f"{_required_string_literal(record.ts.isoformat())}"
+        f"{_column_literal(column=COLUMN_NODE_TYPE, value=record.node_type)}, "
+        f"{_column_literal(column=COLUMN_NODE_NAME, value=record.node_name)}, "
+        f"{_column_literal(column=COLUMN_TARGET_DATABASE, value=record.target_database)}, "
+        f"{_column_literal(column=COLUMN_TARGET_SCHEMA, value=record.target_schema)}, "
+        f"{_column_literal(column=COLUMN_TARGET_NAME, value=record.target_name)}, "
+        f"{_column_literal(column=COLUMN_RUN_ID, value=record.run_id)}, "
+        f"{_column_literal(column=COLUMN_STATUS, value=record.status)}, "
+        f"{_column_literal(column=COLUMN_PAYLOAD_JSON_B64, value=payload_json_b64)}, "
+        f"{_column_literal(column=COLUMN_METADATA_JSON_B64, value=metadata_json_b64)}, "
+        f"{_column_literal(column=COLUMN_ERROR_MESSAGE, value=record.error_message)}, "
+        f"{_column_literal(column=COLUMN_MATERIALIZED, value=materialized)}, "
+        f"{_column_literal(column=COLUMN_TIMESTAMP, value=record.ts)}"
         f")"
     )
 
@@ -132,19 +143,21 @@ def build_read_history_sql(
         render_qualified_name=render_qualified_name,
     )
     predicates: list[str] = [
-        f"{COLUMN_NODE_TYPE} = {_required_string_literal(query.node_type)}",
-        f"{COLUMN_NODE_NAME} = {_required_string_literal(query.node_name)}",
+        f"{COLUMN_NODE_TYPE} = {_column_literal(column=COLUMN_NODE_TYPE, value=query.node_type)}",
+        f"{COLUMN_NODE_NAME} = {_column_literal(column=COLUMN_NODE_NAME, value=query.node_name)}",
         _optional_equality(column=COLUMN_TARGET_DATABASE, value=query.target_database),
         _optional_equality(column=COLUMN_TARGET_SCHEMA, value=query.target_schema),
         _optional_equality(column=COLUMN_TARGET_NAME, value=query.target_name),
     ]
     if query.statuses is not None:
         status_literals: str = ", ".join(
-            _required_string_literal(status) for status in query.statuses
+            _column_literal(column=COLUMN_STATUS, value=status) for status in query.statuses
         )
         predicates.append(f"{COLUMN_STATUS} IN ({status_literals})")
     if query.run_id is not None:
-        predicates.append(f"{COLUMN_RUN_ID} = {_required_string_literal(query.run_id)}")
+        predicates.append(
+            f"{COLUMN_RUN_ID} = {_column_literal(column=COLUMN_RUN_ID, value=query.run_id)}"
+        )
     return (
         f"SELECT {_select_columns()} "
         f"FROM {qualified_name} "
@@ -173,7 +186,7 @@ def _select_columns() -> str:
 def _optional_equality(*, column: str, value: str | None) -> str:
     if value is None:
         return f"{column} IS NULL"
-    return f"{column} = {_required_string_literal(value)}"
+    return f"{column} = {_column_literal(column=column, value=value)}"
 
 
 def _materialized_storage(value: bool | None) -> str | None:
@@ -182,12 +195,5 @@ def _materialized_storage(value: bool | None) -> str | None:
     return "true" if value else "false"
 
 
-def _optional_string_literal(value: str | None) -> str:
-    if value is None:
-        return "NULL"
-    return _required_string_literal(value)
-
-
-def _required_string_literal(value: str) -> str:
-    escaped_value: str = value.replace("'", "''")
-    return f"'{escaped_value}'"
+def _column_literal(*, column: str, value: object | None) -> str:
+    return render_state_sql_literal(value=value, declared_type=NODE_RESULT_COLUMN_TYPES[column])

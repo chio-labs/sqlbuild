@@ -1,5 +1,7 @@
 """Stable constants for microbatch state storage and retries."""
 
+from sqlbuild.sql_values.types import StateSqlValueType
+
 MICROBATCH_TABLE_NAME: str = "_sqlbuild_microbatches"
 DIRECT_MICROBATCH_SCOPE_KIND: str = "direct_logical"
 VIRTUAL_MICROBATCH_SCOPE_KIND: str = "virtual_physical"
@@ -52,6 +54,27 @@ MICROBATCH_COLUMNS: tuple[str, ...] = (
     "unaccounted_policy",
     "created_at",
 )
+
+MICROBATCH_TIMESTAMP_COLUMNS: frozenset[str] = frozenset(
+    {
+        "origin_run_started_at",
+        "execution_run_started_at",
+        "completed_at",
+        "observed_at",
+        "created_at",
+    }
+)
+
+MICROBATCH_COLUMN_TYPES: dict[str, StateSqlValueType] = {
+    column: (
+        StateSqlValueType.INTEGER
+        if column in MICROBATCH_INTEGER_COLUMNS
+        else StateSqlValueType.TIMESTAMP
+        if column in MICROBATCH_TIMESTAMP_COLUMNS
+        else StateSqlValueType.STRING
+    )
+    for column in MICROBATCH_COLUMNS
+}
 
 MICROBATCH_DIRECT_INDEXES: dict[str, tuple[str, ...]] = {
     "_sqlbuild_microbatches_scope_idx": (

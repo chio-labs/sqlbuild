@@ -16,9 +16,23 @@ from sqlbuild.compiler.source_freshness.constants import (
     COLUMN_TARGET_NAME,
     COLUMN_TARGET_SCHEMA,
     COLUMN_VALUE_KIND,
+    SOURCE_FRESHNESS_COLUMN_TYPES,
+    SOURCE_FRESHNESS_COLUMNS,
     SOURCE_FRESHNESS_TABLE_NAME,
 )
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessInputError
+from sqlbuild.sql_values.types import StateSqlValueType
+
+_REQUIRED_SOURCE_FRESHNESS_COLUMNS: frozenset[str] = frozenset(
+    {
+        COLUMN_SOURCE_NAME,
+        COLUMN_RUN_ID,
+        COLUMN_STRATEGY,
+        COLUMN_VALUE_KIND,
+        COLUMN_DATA_VERSION_HASH,
+        COLUMN_OBSERVED_AT,
+    }
+)
 
 
 def build_qualified_table_name(
@@ -57,20 +71,16 @@ def build_create_table_sql(
     string_type: str = render_framework_type(FrameworkType.STRING)
     timestamp_type: str = render_framework_type(FrameworkType.TIMESTAMP)
     table_kind: str = "TRANSIENT TABLE" if transient else "TABLE"
-    return (
-        f"CREATE {table_kind} IF NOT EXISTS {qualified_name} ("
-        f"{COLUMN_SOURCE_NAME} {string_type} NOT NULL, "
-        f"{COLUMN_TARGET_DATABASE} {string_type}, "
-        f"{COLUMN_TARGET_SCHEMA} {string_type}, "
-        f"{COLUMN_TARGET_NAME} {string_type}, "
-        f"{COLUMN_RUN_ID} {string_type} NOT NULL, "
-        f"{COLUMN_STRATEGY} {string_type} NOT NULL, "
-        f"{COLUMN_VALUE_KIND} {string_type} NOT NULL, "
-        f"{COLUMN_DATA_VERSION} {string_type}, "
-        f"{COLUMN_DATA_VERSION_HASH} {string_type} NOT NULL, "
-        f"{COLUMN_OBSERVED_AT} {timestamp_type} NOT NULL"
-        f")"
-    )
+    definitions: list[str] = []
+    for column in SOURCE_FRESHNESS_COLUMNS:
+        column_type: str = (
+            timestamp_type
+            if SOURCE_FRESHNESS_COLUMN_TYPES[column] == StateSqlValueType.TIMESTAMP
+            else string_type
+        )
+        required: str = " NOT NULL" if column in _REQUIRED_SOURCE_FRESHNESS_COLUMNS else ""
+        definitions.append(f"{column} {column_type}{required}")
+    return f"CREATE {table_kind} IF NOT EXISTS {qualified_name} ({', '.join(definitions)})"
 
 
 def build_read_latest_sql(
