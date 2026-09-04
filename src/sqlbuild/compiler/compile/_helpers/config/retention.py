@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import re
-
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import ResolvedTimeTravelRetention
 from sqlbuild.compiler.planner.types import MaterializationType
+from sqlbuild.cursor_algebra.constants import DURATION_DAY_UNIT
+from sqlbuild.cursor_algebra.models import Duration
 from sqlbuild.spec.contracts.models import (
     AuthoredTimeTravelRetention,
     MaterializationDefaultsConfig,
@@ -52,13 +52,13 @@ def resolve_time_travel_retention(
             if model_value == TimeTravelRetentionValue.DISABLED:
                 policy = AuthoredTimeTravelRetention(unmanaged=True)
             else:
-                match: re.Match[str] | None = re.fullmatch(r"([0-9]+)d", model_value)
-                if match is None:
+                duration: Duration | None = Duration.parse(model_value)
+                if duration is None or duration.units != frozenset({DURATION_DAY_UNIT}):
                     raise CompileInputError(
                         f"model '{model_name}': time_travel_retention must be a whole-day string "
                         "like '7d', 'inherit', or 'disabled'"
                     )
-                policy = AuthoredTimeTravelRetention(desired_days=int(match.group(1)))
+                policy = AuthoredTimeTravelRetention(desired_days=duration.days)
             source = TimeTravelRetentionSource.MODEL
     if policy is None:
         return ResolvedTimeTravelRetention()

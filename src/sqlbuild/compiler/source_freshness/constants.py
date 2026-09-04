@@ -3,13 +3,6 @@
 from __future__ import annotations
 
 SOURCE_FRESHNESS_TABLE_NAME: str = "_sqlbuild_source_freshness"
-
-DURATION_MINUTE_UNIT: str = "m"
-DURATION_HOUR_UNIT: str = "h"
-DURATION_DAY_UNIT: str = "d"
-VALID_DURATION_UNITS: frozenset[str] = frozenset(
-    {DURATION_MINUTE_UNIT, DURATION_HOUR_UNIT, DURATION_DAY_UNIT}
-)
 PHYSICAL_TABLE_SOURCE_ERROR_FRAGMENT: str = "requires a physical table source"
 INCOMPLETE_CONFIGURATION_ERROR_FRAGMENT: str = "incomplete"
 

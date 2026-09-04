@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
+from sqlbuild.cli.commands._helpers.load.invocation import _effective_loader_defaults
 from sqlbuild.cli.commands._helpers.load.selection import (
     select_load_entries,
     select_load_reference_entries,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.spec.contracts.models import SourceEntry
+from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction, DiscoveredProjectInputs
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceEntry, TargetConfig
 from tests.unit.src.sqlbuild.cli.commands._helpers.load_selection._test_types import (
+    LoaderDefaultResolutionTestCase,
+    LoaderDestinationSelectionTestCase,
     LoadReferenceSelectionTestCase,
     LoadSelectionTestCase,
 )
@@ -84,3 +89,72 @@ def test_given_integration_loader_selected_when_selecting_references_then_return
     )
 
     assert tuple(entry.name for entry in reference_entries) == test_case.expected_entry_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        LoaderDestinationSelectionTestCase(
+            description="two-part destination uses effective database default",
+            destination="staging.orders",
+            expected_parts=("connection_db", "staging", "orders"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_intermediate_loader_when_selecting_then_parses_destination_with_effective_defaults(
+    test_case: LoaderDestinationSelectionTestCase,
+) -> None:
+    discovered_inputs: DiscoveredProjectInputs = build_load_selection_inputs()
+    fetch_loader: DiscoveredLoaderFunction = replace(
+        discovered_inputs.loader_functions[0], destination=test_case.destination
+    )
+    discovered_inputs = replace(
+        discovered_inputs,
+        loader_functions=(fetch_loader, *discovered_inputs.loader_functions[1:]),
+    )
+
+    entries: tuple[SourceEntry, ...] = select_load_entries(
+        discovered_inputs=discovered_inputs,
+        select=("+raw_orders",),
+        exclude=(),
+        target_config=TargetConfig(database="target_db", schema="target_schema"),
+        loader_default_database="connection_db",
+        loader_default_schema="connection_schema",
+    )
+
+    assert (entries[0].database, entries[0].schema, entries[0].table) == test_case.expected_parts
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        LoaderDefaultResolutionTestCase(
+            description="connection namespace supplies non-duckdb loader defaults",
+            adapter="postgres",
+            connection={"database": "connection_db", "schema": "connection_schema"},
+            expected_defaults=("connection_db", "connection_schema"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_connection_namespace_when_resolving_load_defaults_then_matches_compiled_project(
+    test_case: LoaderDefaultResolutionTestCase,
+) -> None:
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=ProjectConfig(
+            name="demo",
+            adapter=test_case.adapter,
+            connection=test_case.connection,
+        ),
+        local_config=LocalConfig(),
+    )
+
+    defaults: tuple[str | None, str | None] = _effective_loader_defaults(
+        discovered_inputs=discovered_inputs,
+        selected_target=None,
+        target_config=None,
+        cli_vars=None,
+    )
+
+    assert defaults == test_case.expected_defaults

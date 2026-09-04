@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
@@ -16,7 +15,6 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileModelConfig
-from sqlbuild.compiler.planner.models import Duration
 from sqlbuild.compiler.planner.types import (
     ContractPolicy,
     CursorGrain,
@@ -34,6 +32,7 @@ from sqlbuild.compiler.planner.types import (
     SnapshotStrategy,
 )
 from sqlbuild.cursor_algebra.constants import GRAIN_BATCH_SIZE
+from sqlbuild.cursor_algebra.models import Duration
 from sqlbuild.spec.contracts.constants import (
     CURSOR_POLICY_DISABLED,
     EFFECTIVE_BATCH_SIZE_TOKEN,
@@ -882,14 +881,11 @@ def _validate_cursor_safety_overrides(
     )
     if cursor is None and any(value is not None for value in values):
         raise CompileInputError(f"model '{model_name}': cursor safety overrides require cursor")
-    duration_pattern: re.Pattern[str] = re.compile(
-        r"^(?=.*[1-9])(?:(\d+)y)?(?:(\d+)mo)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$"
-    )
     if cursor_start_max_ahead is not None and (
         not isinstance(cursor_start_max_ahead, str)
         or (
             cursor_start_max_ahead not in {CURSOR_POLICY_DISABLED, ZERO_DAY_CURSOR_DURATION}
-            and duration_pattern.fullmatch(cursor_start_max_ahead) is None
+            and Duration.parse(cursor_start_max_ahead) is None
         )
     ):
         raise CompileInputError(
@@ -899,7 +895,7 @@ def _validate_cursor_safety_overrides(
         not isinstance(cursor_future_max_distance, str)
         or (
             cursor_future_max_distance not in {CURSOR_POLICY_DISABLED, ZERO_DAY_CURSOR_DURATION}
-            and duration_pattern.fullmatch(cursor_future_max_distance) is None
+            and Duration.parse(cursor_future_max_distance) is None
         )
     ):
         raise CompileInputError(

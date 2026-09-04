@@ -23,13 +23,12 @@ from sqlbuild.compiler.discovery._helpers.yml.primitives import (
 from sqlbuild.compiler.discovery.constants import (
     NOT_NULL_AUDIT_NAME,
     SOURCE_AGE_POLICY_CONFIG_KEY,
-    SOURCE_FRESHNESS_DAY_UNIT,
-    SOURCE_FRESHNESS_DURATION_UNITS,
-    SOURCE_FRESHNESS_HOUR_UNIT,
     SOURCE_LOADER_CONFIG_KEY,
 )
 from sqlbuild.compiler.discovery.exceptions import SourceParseError
 from sqlbuild.compiler.planner.types import ContractPolicy
+from sqlbuild.cursor_algebra.constants import MINUTE_TO_DAY_DURATION_UNITS
+from sqlbuild.cursor_algebra.models import Duration
 from sqlbuild.spec.contracts.models import (
     IntegrationLoaderConfig,
     SchemaAuditInstance,
@@ -542,22 +541,15 @@ def _validate_source_freshness_age_policy(
 
 
 def _is_valid_source_freshness_duration(value: str) -> bool:
-    quoted_value_character_count: int = 2
-    if len(value) < quoted_value_character_count:
-        return False
-    unit: str = value[-1]
-    amount: str = value[:-1]
-    return unit in SOURCE_FRESHNESS_DURATION_UNITS and amount.isdigit() and int(amount) > 0
+    duration: Duration | None = Duration.parse(value)
+    return duration is not None and duration.is_single_unit_in(MINUTE_TO_DAY_DURATION_UNITS)
 
 
 def _source_freshness_duration_minutes(value: str) -> int:
-    amount: int = int(value[:-1])
-    unit: str = value[-1]
-    if unit == SOURCE_FRESHNESS_DAY_UNIT:
-        return amount * 24 * 60
-    if unit == SOURCE_FRESHNESS_HOUR_UNIT:
-        return amount * 60
-    return amount
+    duration: Duration | None = Duration.parse(value)
+    if duration is None or not duration.is_single_unit_in(MINUTE_TO_DAY_DURATION_UNITS):
+        raise SourceParseError(f"invalid source freshness duration: {value}")
+    return duration.fixed_seconds // 60
 
 
 def _optional_positive_int(*, entry: dict[str, object], key: str, file_path: Path) -> int | None:

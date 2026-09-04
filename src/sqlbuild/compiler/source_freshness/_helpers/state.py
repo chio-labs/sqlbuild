@@ -6,9 +6,10 @@ import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 
-from sqlbuild.compiler.source_freshness.constants import VALID_DURATION_UNITS
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessComparableRecord
+from sqlbuild.cursor_algebra.constants import MINUTE_TO_DAY_DURATION_UNITS
+from sqlbuild.cursor_algebra.models import Duration
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 
 
@@ -103,29 +104,9 @@ def _parse_timestamp_data_version(value: str) -> datetime:
 
 
 def _parse_lag_tolerance(value: str) -> timedelta:
-    quoted_value_character_count: int = 2
-    if len(value) < quoted_value_character_count:
+    duration: Duration | None = Duration.parse(value)
+    if duration is None or not duration.is_single_unit_in(MINUTE_TO_DAY_DURATION_UNITS):
         raise SourceFreshnessObservationError(
             "source freshness lag_tolerance must be a positive duration like 15m, 2h, or 1d"
         )
-    unit: str = value[-1]
-    amount_text: str = value[:-1]
-    if unit not in VALID_DURATION_UNITS or not amount_text.isdigit():
-        raise SourceFreshnessObservationError(
-            "source freshness lag_tolerance must be a positive duration like 15m, 2h, or 1d"
-        )
-    amount: int = int(amount_text)
-    if amount <= 0:
-        raise SourceFreshnessObservationError(
-            "source freshness lag_tolerance must be a positive duration like 15m, 2h, or 1d"
-        )
-    match unit:
-        case "m":
-            return timedelta(minutes=amount)
-        case "h":
-            return timedelta(hours=amount)
-        case "d":
-            return timedelta(days=amount)
-    raise SourceFreshnessObservationError(
-        "source freshness lag_tolerance must be a positive duration like 15m, 2h, or 1d"
-    )
+    return timedelta(seconds=duration.fixed_seconds)

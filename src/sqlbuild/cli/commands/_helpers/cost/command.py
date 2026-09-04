@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import sys
 from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta
@@ -27,6 +26,8 @@ from sqlbuild.cli.commands.models import CostCommandRequest
 from sqlbuild.cost.classes.run_cost_store import RunCostStore
 from sqlbuild.cost.models import CostRunRecord, ResourceCost
 from sqlbuild.cost.types import CostStatus
+from sqlbuild.cursor_algebra.constants import MINUTE_TO_DAY_DURATION_UNITS
+from sqlbuild.cursor_algebra.models import Duration
 from sqlbuild.presentation.main.supports_color import supports_color
 
 _HISTORY_SORT_FIELDS: frozenset[str] = frozenset(
@@ -35,8 +36,6 @@ _HISTORY_SORT_FIELDS: frozenset[str] = frozenset(
 _BREAKDOWN_SORT_FIELDS: frozenset[str] = frozenset(
     {"cost", "credits", "busy", "scanned", "model", "warehouse"}
 )
-_RELATIVE_SINCE_PATTERN: re.Pattern[str] = re.compile(r"^(?P<amount>\d+)(?P<unit>[dhm])$")
-_RELATIVE_SECONDS_BY_UNIT: dict[str, int] = {"d": 86_400, "h": 3_600, "m": 60}
 _MISSING_METRIC_STATUSES: frozenset[CostStatus] = frozenset(
     {
         CostStatus.PENDING,
@@ -205,12 +204,12 @@ def _parse_bound(*, value: str | None, label: str, end_of_day: bool) -> datetime
 def _parse_since_bound(*, value: str | None) -> datetime | None:
     if value is None:
         return None
-    match: re.Match[str] | None = _RELATIVE_SINCE_PATTERN.fullmatch(value)
-    if match is None:
+    duration: Duration | None = Duration.parse(value)
+    if duration is None:
         return _parse_bound(value=value, label="--since", end_of_day=False)
-    amount: int = int(match.group("amount"))
-    seconds: int = amount * _RELATIVE_SECONDS_BY_UNIT[match.group("unit")]
-    return datetime.now(UTC) - timedelta(seconds=seconds)
+    if not duration.is_single_unit_in(MINUTE_TO_DAY_DURATION_UNITS):
+        raise CliUserError("cost --since relative duration must use one of: d, h, m", code="C707")
+    return datetime.now(UTC) - timedelta(seconds=duration.fixed_seconds)
 
 
 def _sort_history_records(

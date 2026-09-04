@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from sqlbuild.spec.contracts.models import SeedCsvSettings
 
+LOADER_SCHEMA_TABLE_PART_COUNT: int = 2
+LOADER_QUALIFIED_TABLE_PART_COUNT: int = 3
 DEFAULT_SEED_CSV_SETTINGS: SeedCsvSettings = SeedCsvSettings()
 CHANGES_ONLY_SETTING_OVERRIDE_KEY: str = "changes_only"
 CURSOR_POLICY_DISABLED: str = "disabled"

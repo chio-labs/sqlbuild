@@ -285,6 +285,13 @@ class LoaderDagExpansionTestCase:
 
 
 @dataclass(frozen=True)
+class LoaderDestinationPlanningTestCase:
+    description: str
+    destination: str
+    expected_parts: tuple[str | None, str | None, str | None]
+
+
+@dataclass(frozen=True)
 class SourceCursorInputColumnsTestCase:
     description: str
     reference_kind: SqlReferenceKind

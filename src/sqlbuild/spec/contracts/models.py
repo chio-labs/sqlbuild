@@ -545,3 +545,12 @@ class SourceEntry:
     meta: dict[str, object] = field(default_factory=dict)
     columns: tuple[SourceColumnEntry, ...] = field(default_factory=tuple)
     audits: tuple[SchemaAuditInstance, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class LoaderDestinationParts:
+    """Parsed warehouse relation parts for a loader destination."""
+
+    database: str | None
+    schema: str | None
+    table: str

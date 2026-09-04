@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import tomllib
 from dataclasses import fields
 from datetime import date, datetime
@@ -32,6 +31,8 @@ from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.path_defaults.constants import GLOB_SEGMENTS, UNSUPPORTED_GLOB_MARKERS
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.cost.constants import USD_PER_CREDIT_CONFIG_KEY
+from sqlbuild.cursor_algebra.constants import DURATION_DAY_UNIT
+from sqlbuild.cursor_algebra.models import Duration
 from sqlbuild.spec.contracts.constants import (
     TIME_TRAVEL_RETENTION_MATERIALIZATIONS,
     ZERO_DAY_CURSOR_DURATION,
@@ -94,9 +95,6 @@ _MAX_BATCHES_CONFIG_KEY: str = "max_batches"
 _EVENT_EXPORTER_FILTER_KEYS: frozenset[str] = frozenset({"event_kinds", "min_severity"})
 _EVENT_EXPORTER_KEYS: frozenset[str] = _EVENT_EXPORTER_FILTER_KEYS | frozenset({"named"})
 _LEGACY_EVENT_EXPORTERS_CONFIG_KEY: str = "event_exporters"
-_CURSOR_DURATION_PATTERN: re.Pattern[str] = re.compile(
-    r"^(?=.*[1-9])(?:(\d+)y)?(?:(\d+)mo)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$"
-)
 
 
 def load_project_config(*, project_dir: Path) -> ProjectConfig:
@@ -512,7 +510,7 @@ def _load_cursors(*, payload: object, file_path: Path) -> CursorsConfig:
     if (
         max_distance is not None
         and max_distance != ZERO_DAY_CURSOR_DURATION
-        and _CURSOR_DURATION_PATTERN.fullmatch(max_distance) is None
+        and Duration.parse(max_distance) is None
     ):
         raise ProjectConfigError(
             "cursors.future.max_distance must be a duration like 0d, 7d, 12h, or 1mo"
@@ -535,7 +533,7 @@ def _load_cursors(*, payload: object, file_path: Path) -> CursorsConfig:
     if (
         max_ahead is not None
         and max_ahead != ZERO_DAY_CURSOR_DURATION
-        and _CURSOR_DURATION_PATTERN.fullmatch(max_ahead) is None
+        and Duration.parse(max_ahead) is None
     ):
         raise ProjectConfigError(
             "cursors.start.max_ahead must be a duration like 0d, 7d, 12h, or 1mo"
@@ -891,13 +889,13 @@ def _optional_retention_policy(
         return None
     if value == TimeTravelRetentionValue.DISABLED:
         return AuthoredTimeTravelRetention(unmanaged=True)
-    match: re.Match[str] | None = re.fullmatch(r"([0-9]+)d", value)
-    if match is None:
+    duration: Duration | None = Duration.parse(value)
+    if duration is None or duration.units != frozenset({DURATION_DAY_UNIT}):
         allowed_keywords: str = ", 'inherit', or 'disabled'" if allow_inherit else " or 'disabled'"
         raise ProjectConfigError(
             f"{file_path} {label} must be a whole-day string like '7d'{allowed_keywords}"
         )
-    return AuthoredTimeTravelRetention(desired_days=int(match.group(1)))
+    return AuthoredTimeTravelRetention(desired_days=duration.days)
 
 
 def _optional_table_type(
