@@ -7,7 +7,7 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -45,6 +45,18 @@ from sqlbuild.compiler.planner.types import (
     OnSchemaChange,
     PlanReason,
 )
+from sqlbuild.cursor_algebra.main.cap_from_end import cap_from_end
+from sqlbuild.cursor_algebra.main.cap_from_start import cap_from_start
+from sqlbuild.cursor_algebra.main.exclusive_end_from_observed_max import (
+    exclusive_end_from_observed_max,
+)
+from sqlbuild.cursor_algebra.main.floor_to_grain import floor_to_grain
+from sqlbuild.cursor_algebra.main.next_boundary import next_boundary
+from sqlbuild.cursor_algebra.main.parse import parse
+from sqlbuild.cursor_algebra.main.render import render
+from sqlbuild.cursor_algebra.main.split_into_batches import split_into_batches
+from sqlbuild.cursor_algebra.models import AlignedInterval, IntegerValue
+from sqlbuild.cursor_algebra.types import CursorScalar
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
@@ -147,8 +159,6 @@ _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 _EMPTY_INTEGER_CURSOR_BOUND: str = "0"
 _EMPTY_TIMESTAMP_CURSOR_BOUND: str = "1970-01-01T00:00:00"
 _UNACCOUNTED_COUNT_CHUNK_SIZE: int = 100
-_FIRST_MONTH: int = 1
-_FINAL_MONTH: int = 12
 
 
 @dataclass(frozen=True)
@@ -727,9 +737,9 @@ def _enforce_microbatch_limit(
         }
     ):
         selected_batches: tuple[BatchWindow, ...] = (
-            batch_plan.batches[-context.entry.microbatch_limit :]
+            cap_from_end(intervals=batch_plan.batches, count=context.entry.microbatch_limit)
             if action == MicrobatchLimitAction.CAP_FROM_END
-            else batch_plan.batches[: context.entry.microbatch_limit]
+            else cap_from_start(intervals=batch_plan.batches, count=context.entry.microbatch_limit)
         )
         selected_batches = tuple(
             replace(batch, index=index) for index, batch in enumerate(selected_batches)
@@ -2206,58 +2216,23 @@ def _canonical_destination_envelope(
     *, raw_min: object, raw_max: object, cursor_type: str | None, cursor_grain: str | None
 ) -> CursorBounds:
     if cursor_type == CursorType.INTEGER:
+        minimum: CursorScalar = parse(raw=raw_min, cursor_type=CursorType.INTEGER)
+        maximum: CursorScalar = exclusive_end_from_observed_max(
+            value=parse(raw=raw_max, cursor_type=CursorType.INTEGER), grain=None
+        )
         return CursorBounds(
-            start=str(int(Decimal(str(raw_min)))),
-            end=str(int(Decimal(str(raw_max))) + 1),
+            start=str(minimum.value),
+            end=str(maximum.value),
         )
     if not isinstance(raw_min, datetime | date) or not isinstance(raw_max, datetime | date):
         raise ExecutorInputError("timestamp cursor envelope returned non-temporal bounds")
-    grain: str = cursor_grain or CursorGrain.SECOND
-    start: datetime | date = _floor_temporal_bound(value=raw_min, grain=grain)
-    end_floor: datetime | date = _floor_temporal_bound(value=raw_max, grain=grain)
-    end: datetime | date = _increment_temporal_bound(value=end_floor, grain=grain)
-    return CursorBounds(start=start.isoformat(), end=end.isoformat())
-
-
-def _floor_temporal_bound(*, value: datetime | date, grain: str) -> datetime | date:
-    if isinstance(value, datetime):
-        if grain == CursorGrain.SECOND:
-            return value.replace(microsecond=0)
-        if grain == CursorGrain.MINUTE:
-            return value.replace(second=0, microsecond=0)
-        if grain == CursorGrain.HOUR:
-            return value.replace(minute=0, second=0, microsecond=0)
-        if grain == CursorGrain.DAY:
-            return value.replace(hour=0, minute=0, second=0, microsecond=0)
-        if grain == CursorGrain.MONTH:
-            return value.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        if grain == CursorGrain.YEAR:
-            return value.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-    if grain == CursorGrain.MONTH:
-        return value.replace(day=1)
-    if grain == CursorGrain.YEAR:
-        return value.replace(month=1, day=1)
-    return value
-
-
-def _increment_temporal_bound(*, value: datetime | date, grain: str) -> datetime | date:
-    if grain == CursorGrain.SECOND:
-        return value + timedelta(seconds=1)
-    if grain == CursorGrain.MINUTE:
-        return value + timedelta(minutes=1)
-    if grain == CursorGrain.HOUR:
-        return value + timedelta(hours=1)
-    if grain == CursorGrain.DAY:
-        return value + timedelta(days=1)
-    if grain == CursorGrain.MONTH:
-        return value.replace(
-            year=value.year + (1 if value.month == _FINAL_MONTH else 0),
-            month=_FIRST_MONTH if value.month == _FINAL_MONTH else value.month + 1,
-            day=1,
-        )
-    if grain == CursorGrain.YEAR:
-        return value.replace(year=value.year + 1, month=1, day=1)
-    return value
+    grain: CursorGrain = CursorGrain(cursor_grain or CursorGrain.SECOND)
+    minimum = parse(raw=raw_min, cursor_type=CursorType.TIMESTAMP)
+    maximum = parse(raw=raw_max, cursor_type=CursorType.TIMESTAMP)
+    start: CursorScalar = floor_to_grain(value=minimum, grain=grain)
+    end_floor: CursorScalar = floor_to_grain(value=maximum, grain=grain)
+    end: CursorScalar = next_boundary(value=end_floor, grain=grain)
+    return CursorBounds(start=render(value=start), end=render(value=end))
 
 
 def _build_synthetic_completions(
@@ -3326,19 +3301,11 @@ def _compute_integer_batches(
     if size_int <= 0 or start_int >= end_int:
         return ()
 
-    windows: list[BatchWindow] = []
-    index: int = 0
-    current: int = start_int
-    while current < end_int:
-        batch_end: int = min(current + size_int, end_int)
-        windows.append(
-            BatchWindow(
-                start=str(current),
-                end=str(batch_end),
-                index=index,
-            )
-        )
-        current = batch_end
-        index += 1
-
-    return tuple(windows)
+    interval: AlignedInterval = AlignedInterval(
+        start=IntegerValue(value=start_int), end=IntegerValue(value=end_int), grain=None
+    )
+    batches: tuple[AlignedInterval, ...] = split_into_batches(interval=interval, step=size_int)
+    return tuple(
+        BatchWindow(start=render(value=batch.start), end=render(value=batch.end), index=index)
+        for index, batch in enumerate(batches)
+    )

@@ -36,6 +36,27 @@ class DiscoveredCursorPartitionTestCase:
     expected_end: str | date | datetime
 
 
+@dataclass(frozen=True, kw_only=True)
+class IntegerWatermarkModeTestCase:
+    """Integer watermark aggregation case with non-lexicographic values."""
+
+    description: str
+    mode: str
+    minimums: tuple[str, ...]
+    maximums: tuple[str, ...]
+    expected_bounds: CursorBounds
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReplayFloorRenderingTestCase:
+    """Expected temporal representation after applying a configured cursor floor."""
+
+    description: str
+    current_start: str
+    cursor_start: str | None
+    expected_start: str
+
+
 @dataclass(frozen=True)
 class CursorIntrinsicResolutionTestCase:
     description: str

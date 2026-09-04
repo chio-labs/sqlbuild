@@ -103,6 +103,9 @@ class _SnowflakeCursor:
             intent=intent,
             batch_size=batch_size,
             statement_id=statement_id,
+            query_id_provider=lambda: _submitted_query_id(
+                cursor=self.raw_cursor, previous_query_id=previous_query_id
+            ),
         ) as lifecycle:
             try:
                 result: Any = operation(sql, *args, **kwargs)

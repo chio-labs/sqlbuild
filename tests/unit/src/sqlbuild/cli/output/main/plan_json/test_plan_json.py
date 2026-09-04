@@ -233,6 +233,50 @@ def test_given_direct_diagnostics_policy_when_formatting_plan_json_then_evidence
     "test_case",
     [
         JsonOutputTestCase(
+            description="mixed plan json preserves full refresh and incremental reasons",
+            plan_output=build_plan_output(
+                model_entries=(
+                    build_model_entry(
+                        name="rebuilt_orders",
+                        action=PlanAction.CREATE_TABLE,
+                        reason=PlanReason.FULL_REFRESH,
+                        materialization_type=MaterializationType.INCREMENTAL,
+                        incremental_strategy="delete_insert",
+                    ),
+                    build_model_entry(
+                        name="appended_orders",
+                        action=PlanAction.INCREMENTAL_APPEND,
+                        reason=PlanReason.NORMAL_INCREMENTAL,
+                        materialization_type=MaterializationType.INCREMENTAL,
+                        incremental_strategy="append",
+                        backfill_action=BackfillAction.FORWARD_ONLY,
+                    ),
+                    build_model_entry(
+                        name="microbatched_orders",
+                        action=PlanAction.INCREMENTAL_DELETE_INSERT,
+                        reason=PlanReason.QUERY_CHANGED,
+                        materialization_type=MaterializationType.INCREMENTAL,
+                        incremental_strategy="delete_insert",
+                        incremental_mode="microbatch",
+                        backfill_action=BackfillAction.BOUNDED,
+                        backfill_duration="7d",
+                    ),
+                ),
+            ),
+            expected_keys=("models",),
+            expected_fragments=(
+                '"name": "rebuilt_orders"',
+                '"reason": "full_refresh"',
+                '"action": "create_table"',
+                '"name": "appended_orders"',
+                '"reason": "normal_incremental"',
+                '"action": "incremental_append"',
+                '"name": "microbatched_orders"',
+                '"reason": "query_changed"',
+                '"incremental_mode": "microbatch"',
+            ),
+        ),
+        JsonOutputTestCase(
             description="plan json includes model action reason and backfill",
             plan_output=build_plan_output(
                 model_entries=(

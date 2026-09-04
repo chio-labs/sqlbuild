@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
-from decimal import Decimal, InvalidOperation
-from typing import cast
+from datetime import datetime
 
 from sqlbuild.compiler.planner.constants import WHOLE_DAY_CURSOR_GRAINS
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
+from sqlbuild.cursor_algebra.main.exclusive_to_inclusive import exclusive_to_inclusive
+from sqlbuild.cursor_algebra.main.inclusive_to_exclusive import inclusive_to_exclusive
+from sqlbuild.cursor_algebra.main.observed_partition import observed_partition
+from sqlbuild.cursor_algebra.main.render import render
+from sqlbuild.cursor_algebra.main.try_parse import try_parse
+from sqlbuild.cursor_algebra.models import AlignedInterval, TimestampValue
+from sqlbuild.cursor_algebra.types import CursorScalar
 
 
 def discovered_cursor_partition(
@@ -16,21 +21,23 @@ def discovered_cursor_partition(
 ) -> tuple[object, object]:
     """Return the grain-aligned partition containing one observed physical value."""
 
-    if cursor_type == CursorType.INTEGER:
-        return _discovered_integer_partition(value=value)
-    if cursor_type != CursorType.TIMESTAMP:
+    if cursor_type not in {CursorType.INTEGER, CursorType.TIMESTAMP}:
         return value, value
-    parsed, was_string = _parse_discovered_timestamp(value=value)
+    parsed: CursorScalar | None = try_parse(raw=value, cursor_type=cursor_type)
     if parsed is None:
         return value, value
-    grain: str = cursor_grain or (
-        CursorGrain.SECOND if isinstance(parsed, datetime) else CursorGrain.DAY
+    grain: CursorGrain | None = (
+        None
+        if cursor_type == CursorType.INTEGER
+        else CursorGrain(
+            cursor_grain
+            or (CursorGrain.SECOND if isinstance(parsed, TimestampValue) else CursorGrain.DAY)
+        )
     )
-    start: date | datetime = _floor_discovered_timestamp(value=parsed, grain=grain)
-    end: date | datetime = _advance_discovered_timestamp(value=start, grain=grain)
-    if not was_string:
-        return start, end
-    return _format_discovered_timestamp(value=start), _format_discovered_timestamp(value=end)
+    partition: AlignedInterval = observed_partition(value=parsed, grain=grain)
+    if isinstance(value, str):
+        return render(value=partition.start), render(value=partition.end)
+    return partition.start.value, partition.end.value
 
 
 def advance_discovered_cursor_end(
@@ -53,9 +60,16 @@ def advance_cursor_end(
 ) -> str:
     """Return the exclusive stored bound for an inclusive end value (adds one step)."""
 
-    if cursor_type == CursorType.INTEGER:
-        return _advance_integer_end(value=value)
-    return _advance_timestamp_end(value=value, cursor_grain=cursor_grain)
+    effective_type: str = cursor_type or CursorType.TIMESTAMP
+    parsed: CursorScalar | None = try_parse(raw=value, cursor_type=effective_type)
+    if parsed is None:
+        return value
+    grain: CursorGrain | None = (
+        None
+        if effective_type == CursorType.INTEGER
+        else CursorGrain(cursor_grain or CursorGrain.SECOND)
+    )
+    return render(value=inclusive_to_exclusive(value=parsed, grain=grain))
 
 
 def inclusive_cursor_end(
@@ -66,9 +80,16 @@ def inclusive_cursor_end(
 ) -> str:
     """Return the last cursor value included by an exclusive end bound."""
 
-    if cursor_type == CursorType.INTEGER:
-        return _inclusive_integer_end(end=end)
-    return _inclusive_timestamp_end(end=end, cursor_grain=cursor_grain)
+    effective_type: str = cursor_type or CursorType.TIMESTAMP
+    parsed: CursorScalar | None = try_parse(raw=end, cursor_type=effective_type)
+    if parsed is None:
+        return end
+    grain: CursorGrain | None = (
+        None
+        if effective_type == CursorType.INTEGER
+        else CursorGrain(cursor_grain or CursorGrain.SECOND)
+    )
+    return render(value=exclusive_to_inclusive(value=parsed, grain=grain))
 
 
 def cursor_bound_display(
@@ -111,136 +132,5 @@ def resolve_bounded_cursor_override(
     )
 
 
-def _advance_integer_end(*, value: str) -> str:
-    try:
-        return str(int(Decimal(value)) + 1)
-    except (InvalidOperation, ValueError):
-        return value
-
-
-def _inclusive_integer_end(*, end: str) -> str:
-    try:
-        return str(int(Decimal(end)) - 1)
-    except (InvalidOperation, ValueError):
-        return end
-
-
-def _advance_timestamp_end(*, value: str, cursor_grain: str | None) -> str:
-    plain_date: date | None = _try_parse_plain_date(value=value)
-    if plain_date is not None:
-        return (plain_date + timedelta(days=1)).isoformat()
-    try:
-        parsed: datetime = datetime.fromisoformat(value)
-    except ValueError:
-        return value
-    return (parsed + _grain_step(cursor_grain=cursor_grain)).isoformat()
-
-
-def _inclusive_timestamp_end(*, end: str, cursor_grain: str | None) -> str:
-    plain_date: date | None = _try_parse_plain_date(value=end)
-    if plain_date is not None:
-        return (plain_date - timedelta(days=1)).isoformat()
-    try:
-        parsed: datetime = datetime.fromisoformat(end)
-    except ValueError:
-        return end
-    return (parsed - _grain_step(cursor_grain=cursor_grain)).isoformat()
-
-
-def _grain_step(*, cursor_grain: str | None) -> timedelta:
-    if cursor_grain == CursorGrain.MINUTE:
-        return timedelta(minutes=1)
-    if cursor_grain == CursorGrain.HOUR:
-        return timedelta(hours=1)
-    if cursor_grain in WHOLE_DAY_CURSOR_GRAINS:
-        return timedelta(days=1)
-    return timedelta(seconds=1)
-
-
 def _has_no_time_component(*, value: datetime) -> bool:
     return (value.hour, value.minute, value.second, value.microsecond) == (0, 0, 0, 0)
-
-
-def _try_parse_plain_date(*, value: str) -> date | None:
-    try:
-        return date.fromisoformat(value)
-    except ValueError:
-        return None
-
-
-def _discovered_integer_partition(*, value: object) -> tuple[object, object]:
-    try:
-        parsed: Decimal = Decimal(str(value))
-    except (InvalidOperation, ValueError):
-        return value, value
-    if parsed != int(parsed):
-        return value, value
-    start: int = int(parsed)
-    if isinstance(value, str):
-        return str(start), str(start + 1)
-    return start, start + 1
-
-
-def _parse_discovered_timestamp(*, value: object) -> tuple[date | datetime | None, bool]:
-    if isinstance(value, datetime):
-        return value, False
-    if isinstance(value, date):
-        return value, False
-    if not isinstance(value, str):
-        return None, False
-    try:
-        return date.fromisoformat(value), True
-    except ValueError:
-        try:
-            return datetime.fromisoformat(value), True
-        except ValueError:
-            return None, True
-
-
-def _floor_discovered_timestamp(*, value: date | datetime, grain: str) -> date | datetime:
-    if isinstance(value, datetime):
-        if grain == CursorGrain.SECOND:
-            return value.replace(microsecond=0)
-        if grain == CursorGrain.MINUTE:
-            return value.replace(second=0, microsecond=0)
-        if grain == CursorGrain.HOUR:
-            return value.replace(minute=0, second=0, microsecond=0)
-        if grain == CursorGrain.DAY:
-            return value.replace(hour=0, minute=0, second=0, microsecond=0)
-        if grain == CursorGrain.MONTH:
-            return value.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        if grain == CursorGrain.YEAR:
-            return value.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        return value
-    if grain == CursorGrain.MONTH:
-        return value.replace(day=1)
-    if grain == CursorGrain.YEAR:
-        return value.replace(month=1, day=1)
-    if grain in {CursorGrain.SECOND, CursorGrain.MINUTE, CursorGrain.HOUR}:
-        return datetime.combine(value, time.min)
-    return value
-
-
-def _advance_discovered_timestamp(*, value: date | datetime, grain: str) -> date | datetime:
-    if grain == CursorGrain.SECOND:
-        return value + timedelta(seconds=1)
-    if grain == CursorGrain.MINUTE:
-        return value + timedelta(minutes=1)
-    if grain == CursorGrain.HOUR:
-        return value + timedelta(hours=1)
-    if grain == CursorGrain.DAY:
-        return value + timedelta(days=1)
-    if grain == CursorGrain.MONTH:
-        final_month: int = 12
-        year: int = value.year + (1 if value.month == final_month else 0)
-        month: int = 1 if value.month == final_month else value.month + 1
-        return value.replace(year=year, month=month, day=1)
-    if grain == CursorGrain.YEAR:
-        return value.replace(year=value.year + 1, month=1, day=1)
-    return value
-
-
-def _format_discovered_timestamp(*, value: date | datetime) -> str:
-    if isinstance(value, datetime):
-        return value.isoformat()
-    return cast(date, value).isoformat()

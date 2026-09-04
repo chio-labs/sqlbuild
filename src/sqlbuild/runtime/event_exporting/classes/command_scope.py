@@ -14,6 +14,7 @@ from sqlbuild.provider.classes.session import ProviderSession
 from sqlbuild.provider.main.session import build_provider_session
 from sqlbuild.runtime.event_exporting.classes.dispatcher import EventExporterDispatcher
 from sqlbuild.runtime.event_exporting.models import BoundEventExporter, EventExportSummary
+from sqlbuild.runtime.output_capture.models import OutputRecord
 
 
 class EventExporterCommandScope:
@@ -110,3 +111,8 @@ class EventExporterCommandScope:
 
         self.dispatcher.finalize_when_idle(close_provider_session)
         return summary
+
+    def export_output(self, records: tuple[OutputRecord, ...]) -> None:
+        """Reuse bound exporter functions and provider instances for output records."""
+
+        self.dispatcher.export_output(records)

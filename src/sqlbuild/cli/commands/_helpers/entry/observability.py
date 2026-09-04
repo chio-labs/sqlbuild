@@ -17,6 +17,9 @@ from sqlbuild.cli.commands.constants import (
     LINEAGE_COMMAND,
     QUERY_COMMAND,
 )
+from sqlbuild.cli.commands.main.entrypoint._dispatch_with_output_capture import (
+    configured_output_capture_scope,
+)
 from sqlbuild.cli.output.classes.terminal_event_index import (
     TerminalEventIndex,
     terminal_event_index_scope,
@@ -37,6 +40,10 @@ from sqlbuild.runtime.event_exporting.models import (
     EventExporterFailure,
     EventExportSummary,
 )
+from sqlbuild.runtime.observability.main.current_execution_identity import (
+    current_execution_identity,
+)
+from sqlbuild.runtime.observability.models import ExecutionIdentity
 
 _LOGGER: logging.Logger = logging.getLogger("sqlbuild.cli.observability")
 
@@ -96,6 +103,14 @@ def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> Iterato
             _ = stack.enter_context(terminal_event_index_scope(terminal_index))
             if exporter_scope is not None:
                 _ = stack.enter_context(event_exporter_command_scope(exporter_scope))
+                identity: ExecutionIdentity | None = current_execution_identity()
+                if identity is not None:
+                    _ = stack.enter_context(
+                        configured_output_capture_scope(
+                            exporter_scope=exporter_scope,
+                            identity=identity,
+                        )
+                    )
             yield dispatcher
     finally:
         if unsubscribe_exporters is not None:

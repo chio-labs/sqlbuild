@@ -13,6 +13,12 @@ from sqlbuild.adapters.snowflake.classes.snowflake_cursor import _SnowflakeCurso
 from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.cost.constants import COST_TELEMETRY_HEALTH
 from sqlbuild.cost.models import StatementExecutionTelemetry
+from sqlbuild.observability import (
+    EventDispatcher,
+    LifecycleEvent,
+    dispatcher_scope,
+    invocation_scope,
+)
 from tests.unit.src.sqlbuild.adapters.snowflake.classes.snowflake_connection._test_types import (
     CursorAttributeTestCase,
     CursorContextManagerTestCase,
@@ -23,6 +29,7 @@ from tests.unit.src.sqlbuild.adapters.snowflake.classes.snowflake_connection._te
     StatementDiagnosticsTestCase,
 )
 from tests.unit.src.sqlbuild.adapters.snowflake.classes.snowflake_connection.helpers import (
+    BlockingQueryCursor,
     read_ledger,
 )
 
@@ -82,10 +89,10 @@ class _Cursor:
 
 
 class _RawConnection:
-    def __init__(self, cursor: _Cursor) -> None:
-        self._cursor = cursor
+    def __init__(self, cursor: Any) -> None:
+        self._cursor: Any = cursor
 
-    def cursor(self) -> _Cursor:
+    def cursor(self) -> Any:
         return self._cursor
 
 
@@ -121,6 +128,38 @@ class _SubmittedQueryTagErrorCursor(_Cursor):
         self.calls += 1
         self.sfqid = "01c-submitted-query-id"
         raise RuntimeError("submitted QUERY_TAG statement failed")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SnowflakeConnectionTestCase(
+            description="running statement exposes query ID before completion",
+            expected_query_id="01c-running-query-id",
+            expected_status="success",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_running_snowflake_statement_when_sfqid_appears_then_submission_is_announced(
+    test_case: SnowflakeConnectionTestCase,
+) -> None:
+    cursor: BlockingQueryCursor = BlockingQueryCursor()
+    connection: _SnowflakeConnection = _SnowflakeConnection(_RawConnection(cursor))
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+    dispatcher.subscribe_lifecycle(subscriber=cursor.consume, accepts_opaque=False)
+
+    with invocation_scope("inv-running-snowflake"), dispatcher_scope(dispatcher):
+        connection.execute("SELECT 1")
+
+    assert tuple(event.event_type for event in events) == (
+        "statement_started",
+        "statement_submitted",
+        "statement_completed",
+    )
+    assert events[1].payload["query_id"] == test_case.expected_query_id
 
 
 @pytest.mark.parametrize(
