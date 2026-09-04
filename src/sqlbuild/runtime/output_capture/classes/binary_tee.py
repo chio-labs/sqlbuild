@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.runtime.output_capture.classes.dispatcher import OutputCaptureDispatcher
-from sqlbuild.runtime.output_capture.types import OutputStream
+from sqlbuild.runtime.output_capture.types import CommandOutputStream
 
 
 class BinaryOutputTee:
@@ -16,13 +16,13 @@ class BinaryOutputTee:
         *,
         sink: Any,
         dispatcher: OutputCaptureDispatcher,
-        stream: OutputStream,
+        stream: CommandOutputStream,
         encoding: str,
         text_sink: bool,
     ) -> None:
         self._sink: Any = sink
         self._dispatcher: OutputCaptureDispatcher = dispatcher
-        self._stream: OutputStream = stream
+        self._stream: CommandOutputStream = stream
         self._encoding: str = encoding
         self._text_sink: bool = text_sink
 

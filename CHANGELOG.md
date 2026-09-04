@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.82.0](https://github.com/chio-labs/sqlbuild/compare/v0.81.2...v0.82.0) (2026-09-04)
+
+
+### Features
+
+* separate typed command output sinks ([#523](https://github.com/chio-labs/sqlbuild/issues/523)) ([ac554f1](https://github.com/chio-labs/sqlbuild/commit/ac554f152929333b3afd3a2f1eb6a11964739b2a))
+
 ## [0.81.2](https://github.com/chio-labs/sqlbuild/compare/v0.81.1...v0.81.2) (2026-09-04)
 
 

@@ -61,10 +61,10 @@ def test_given_projector_close_failure_when_command_fails_then_original_error_an
 
 @pytest.mark.parametrize(
     "test_case",
-    (NoExporterFastPathTestCase("no public exporter skips providers and thread", 0),),
+    (NoExporterFastPathTestCase("no public sink skips providers and thread", 0),),
     ids=lambda case: case.description,
 )
-def test_given_no_public_exporter_when_observability_runs_then_provider_import_is_skipped(
+def test_given_no_public_sink_when_observability_runs_then_provider_import_is_skipped(
     test_case: NoExporterFastPathTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
@@ -79,8 +79,8 @@ def test_given_no_public_exporter_when_observability_runs_then_provider_import_i
                 f"Path({str(marker_path)!r}).write_text('imported', encoding='utf-8')\n"
                 "raise RuntimeError('provider must not import')\n"
             ),
-            "event_exporters/_private.py": "raise RuntimeError('private exporter imported')\n",
-            "event_exporters/helpers.py": (
+            "sinks/_private.py": "raise RuntimeError('private sink imported')\n",
+            "sinks/helpers.py": (
                 "from pathlib import Path\n"
                 f"Path({str(helper_marker_path)!r}).write_text('imported', encoding='utf-8')\n"
                 "def encode(value):\n    return value\n"

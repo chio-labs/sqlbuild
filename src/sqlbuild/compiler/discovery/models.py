@@ -18,6 +18,7 @@ from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.models import ColumnLineageRef, RetryPolicy, SqlResourceRef
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORT_KINDS
+from sqlbuild.runtime.output_capture.types import CommandOutputStream
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,
@@ -468,6 +469,29 @@ class DiscoveredEventExporter:
 
 
 @dataclass(frozen=True)
+class DiscoveredCommandOutputSinkDeclaration:
+    """A command-output sink declaration before provider binding."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    streams: frozenset[CommandOutputStream]
+
+
+@dataclass(frozen=True)
+class DiscoveredCommandOutputSink:
+    """A discovered command-output sink function."""
+
+    file_path: Path
+    relative_path: Path
+    name: str
+    function: Callable[..., object]
+    streams: frozenset[CommandOutputStream]
+    provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class DiscoveredProvider:
     """A discovered project provider class and validated settings object."""
 
@@ -516,6 +540,7 @@ class DiscoveredProjectInputs:
     check_functions: tuple[DiscoveredCheckFunction, ...] = field(default_factory=tuple)
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
     event_exporters: tuple[DiscoveredEventExporter, ...] = field(default_factory=tuple)
+    command_output_sinks: tuple[DiscoveredCommandOutputSink, ...] = field(default_factory=tuple)
     providers: tuple[DiscoveredProvider, ...] = field(default_factory=tuple)
     adapter_file: DiscoveredAdapterFile | None = None
 

@@ -334,19 +334,26 @@ class LocalDbtConfig:
 
 
 @dataclass(frozen=True)
-class EventExporterFilterConfig:
-    """Destination-neutral runtime narrowing for lifecycle exporters."""
+class LifecycleEventSinkFilterConfig:
+    """Destination-neutral runtime narrowing for lifecycle-event sinks."""
 
     event_kinds: frozenset[str] | None = None
     min_severity: str | None = None
 
 
 @dataclass(frozen=True)
-class EventExportersConfig:
-    """Global and named lifecycle exporter runtime filters."""
+class LifecycleEventSinksConfig:
+    """Global and named lifecycle-event sink runtime filters."""
 
-    defaults: EventExporterFilterConfig = field(default_factory=EventExporterFilterConfig)
-    named: dict[str, EventExporterFilterConfig] = field(default_factory=dict)
+    defaults: LifecycleEventSinkFilterConfig = field(default_factory=LifecycleEventSinkFilterConfig)
+    named: dict[str, LifecycleEventSinkFilterConfig] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class SinksConfig:
+    """Typed destination sink configuration."""
+
+    lifecycle: LifecycleEventSinksConfig = field(default_factory=LifecycleEventSinksConfig)
 
 
 @dataclass(frozen=True)
@@ -375,7 +382,7 @@ class ProjectConfig:
     snapshots: SnapshotsConfig = field(default_factory=SnapshotsConfig)
     scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
     dbt: DbtConfig = field(default_factory=DbtConfig)
-    event_exporters: EventExportersConfig = field(default_factory=EventExportersConfig)
+    sinks: SinksConfig = field(default_factory=SinksConfig)
 
 
 @dataclass(frozen=True)

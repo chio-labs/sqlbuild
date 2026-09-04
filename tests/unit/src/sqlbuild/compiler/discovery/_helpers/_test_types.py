@@ -42,6 +42,12 @@ class EventExporterDiscoveryTestCase:
 
 
 @dataclass(frozen=True)
+class CommandOutputSinkDiscoveryTestCase:
+    description: str
+    expected_name: str | None = None
+
+
+@dataclass(frozen=True)
 class EventExporterSignatureErrorTestCase:
     description: str
     body: str

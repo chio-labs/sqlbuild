@@ -14,6 +14,12 @@ class EventExporterTeardownTestCase:
 
 
 @dataclass(frozen=True)
+class SharedSinkProviderTestCase:
+    description: str
+    expected_delivery_count: int
+
+
+@dataclass(frozen=True)
 class PriorityPairTestCase:
     description: str
     queued_priority: int

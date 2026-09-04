@@ -157,9 +157,9 @@ reason = "These imports preserve Dagster's documented external package-root APIs
 
 [[rule_exceptions]]
 rule = "FFS120"
-path = "src/sqlbuild/event_exporters.py"
-symbols = ["event_exporter"]
-reason = "Bare @event_exporter is evaluated by Python as event_exporter(function), requiring positional function calling."
+path = "src/sqlbuild/sinks.py"
+symbols = ["command_output_sink", "lifecycle_event_sink"]
+reason = "Bare sink decorators are evaluated by Python as decorator(function), requiring positional function calling."
 
 [[rule_exceptions]]
 rule = "FFR402"
