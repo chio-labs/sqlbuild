@@ -219,7 +219,7 @@ def test_given_opt_in_concurrent_microbatch_when_building_twice_then_records_all
     [ConcurrentMicrobatchBehaviorE2ETestCase(description="failed sibling gap recovers")],
     ids=lambda case: case.description,
 )
-def test_given_later_batches_succeed_when_one_batch_fails_then_next_run_recovers_gap(
+def test_given_later_batches_succeed_when_one_batch_fails_then_next_run_preserves_result(
     test_case: ConcurrentMicrobatchBehaviorE2ETestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = prepare_inline_project(
@@ -317,10 +317,10 @@ def test_given_later_batches_succeed_when_one_batch_fails_then_next_run_recovers
             sql=(
                 "SELECT COUNT(*) FROM main._sqlbuild_microbatches "
                 "WHERE record_type = 'partition_completion' "
-                "AND partition_start > '2026-01-01T03:00:00'"
+                "AND partition_start >= '2026-01-01T03:00:00'"
             ),
         )[0][0]
-        >= 2
+        == 2
     )
 
     connection = duckdb.connect(str(db_path))
@@ -335,29 +335,6 @@ def test_given_later_batches_succeed_when_one_batch_fails_then_next_run_recovers
         db_path=db_path,
         sql="SELECT id, value FROM main.orders ORDER BY id",
     ) == [(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7)]
-    assert (
-        query_duckdb(
-            db_path=db_path,
-            sql=(
-                "SELECT COUNT(*) FROM main._sqlbuild_microbatches "
-                "WHERE record_type = 'partition_completion' "
-                "AND completion_type = 'recovery'"
-            ),
-        )[0][0]
-        >= 1
-    )
-    assert (
-        query_duckdb(
-            db_path=db_path,
-            sql=(
-                "SELECT COUNT(*) FROM main._sqlbuild_microbatches "
-                "WHERE record_type = 'partition_completion' "
-                "AND completion_type = 'recovery' "
-                "AND origin_run_id <> execution_run_id"
-            ),
-        )[0][0]
-        >= 1
-    )
     assert query_duckdb(
         db_path=db_path,
         sql=(

@@ -43,6 +43,8 @@ from sqlbuild.microbatches.models import (
 )
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 from tests.integration.src.sqlbuild.executor.run.microbatch._test_types import (
+    CappedProducerAvailabilityTestCase,
+    EmptyCappedProducerTestCase,
     MicrobatchBehaviorTestCase,
     MicrobatchReconciliationChunkTestCase,
     RuntimeWatermarkGrainTestCase,
@@ -80,6 +82,143 @@ class _RecordingEventStore:
 
     def read_model_history(self, scope: MicrobatchScope) -> tuple[MicrobatchEvent, ...]:
         return ()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CappedProducerAvailabilityTestCase(
+            description="timestamp cap from start uses physical maximum instead of terminal end",
+            cursor_type="timestamp",
+            sql_type="TIMESTAMP",
+            cursor_grain="month",
+            producer_values_sql="('2025-02-15')",
+            target_values_sql="('2025-01-01')",
+            cursor_start="2025-01-01",
+            cursor_end="2025-12-01",
+            limit_action=MicrobatchLimitAction.CAP_FROM_START,
+            expected_start="2025-01-01T00:00:00",
+            expected_end="2025-03-01T00:00:00",
+        ),
+        CappedProducerAvailabilityTestCase(
+            description="timestamp cap from end intersects physical minimum and maximum",
+            cursor_type="timestamp",
+            sql_type="TIMESTAMP",
+            cursor_grain="month",
+            producer_values_sql="('2025-08-15'), ('2025-09-15')",
+            target_values_sql="('2025-01-01')",
+            cursor_start="2025-01-01",
+            cursor_end="2025-12-01",
+            limit_action=MicrobatchLimitAction.CAP_FROM_END,
+            expected_start="2025-08-01T00:00:00",
+            expected_end="2025-10-01T00:00:00",
+        ),
+        CappedProducerAvailabilityTestCase(
+            description="integer cap from end intersects physical minimum and maximum",
+            cursor_type="integer",
+            sql_type="INTEGER",
+            cursor_grain=None,
+            producer_values_sql="(10), (20)",
+            target_values_sql="(0)",
+            cursor_start="0",
+            cursor_end="100",
+            limit_action=MicrobatchLimitAction.CAP_FROM_END,
+            expected_start="10",
+            expected_end="21",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_capped_terminal_producer_when_resolving_consumer_then_uses_physical_availability(
+    adapter: DuckDbAdapter,
+    connection: Any,
+    test_case: CappedProducerAvailabilityTestCase,
+) -> None:
+    connection.execute(f"CREATE TABLE main.target_events (cursor_value {test_case.sql_type})")
+    connection.execute(f"CREATE TABLE main.producer_events (cursor_value {test_case.sql_type})")
+    connection.execute(f"INSERT INTO main.target_events VALUES {test_case.target_values_sql}")
+    connection.execute(f"INSERT INTO main.producer_events VALUES {test_case.producer_values_sql}")
+
+    bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
+        adapter=adapter,
+        connection=connection,
+        target_relation="main.target_events",
+        target_database=None,
+        target_schema="main",
+        target_name="target_events",
+        spec=RuntimeCursorSpec(
+            cursor_column="cursor_value",
+            cursor_type=test_case.cursor_type,
+            cursor_grain=test_case.cursor_grain,
+            cursor_start=test_case.cursor_start,
+            cursor_input_relations=(
+                CursorInputRelation(
+                    "main.producer_events",
+                    "cursor_value",
+                    cursor_grain=test_case.cursor_grain,
+                    terminal_cursor_start=test_case.cursor_start,
+                    terminal_cursor_end=test_case.cursor_end,
+                    producer_microbatch_limit_action=test_case.limit_action,
+                ),
+            ),
+            cursor_watermark_mode="all",
+            microbatch_strategy="watermark",
+        ),
+    )
+
+    assert bounds == CursorBounds(start=test_case.expected_start, end=test_case.expected_end)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        EmptyCappedProducerTestCase(
+            description="empty cap from start producer",
+            limit_action=MicrobatchLimitAction.CAP_FROM_START,
+            expected_error_fragment="required cursor watermark is empty",
+        ),
+        EmptyCappedProducerTestCase(
+            description="empty cap from end producer",
+            limit_action=MicrobatchLimitAction.CAP_FROM_END,
+            expected_error_fragment="required cursor watermark is empty",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_empty_capped_terminal_producer_when_resolving_all_then_fails_closed(
+    adapter: DuckDbAdapter,
+    connection: Any,
+    test_case: EmptyCappedProducerTestCase,
+) -> None:
+    connection.execute("CREATE TABLE main.target_events (event_time TIMESTAMP)")
+    connection.execute("CREATE TABLE main.producer_events (event_time TIMESTAMP)")
+
+    with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
+        resolve_runtime_cursor_bounds(
+            adapter=adapter,
+            connection=connection,
+            target_relation="main.target_events",
+            target_database=None,
+            target_schema="main",
+            target_name="target_events",
+            spec=RuntimeCursorSpec(
+                cursor_column="event_time",
+                cursor_type="timestamp",
+                cursor_grain="day",
+                cursor_start="2025-01-01",
+                cursor_input_relations=(
+                    CursorInputRelation(
+                        "main.producer_events",
+                        "event_time",
+                        terminal_cursor_start="2025-01-01",
+                        terminal_cursor_end="2025-12-01",
+                        producer_microbatch_limit_action=test_case.limit_action,
+                    ),
+                ),
+                cursor_watermark_mode="all",
+                microbatch_strategy="watermark",
+            ),
+        )
 
 
 @pytest.mark.parametrize(

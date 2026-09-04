@@ -19,6 +19,86 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 )
 
 
+def capped_microbatch_project_files(
+    *, limit_action: str, project_limit: str = ""
+) -> dict[str, str]:
+    """Build a direct DuckDB project with one capped producer and consumer."""
+
+    return {
+        "sqlbuild_project.toml": dedent(
+            f"""
+            name = "capped_microbatch"
+            adapter = "duckdb"
+
+            [connection]
+            database = "regression.duckdb"
+            {project_limit}
+            """
+        ).strip()
+        + "\n",
+        "sources/raw.yml": dedent(
+            """
+            sources:
+              - name: raw_events
+                schema: main
+                table: raw_events
+            """
+        ).strip()
+        + "\n",
+        "models/capped_events.sql": dedent(
+            f"""
+            MODEL (
+              materialized incremental,
+              incremental_strategy delete_insert,
+              incremental_mode microbatch,
+              microbatch_strategy watermark,
+              cursor event_time,
+              cursor_type timestamp,
+              cursor_grain day,
+              cursor_start '2026-01-01',
+              cursor_end '2026-01-06',
+              cursor_watermark_mode all,
+              cursor_inputs (
+                raw_events (column event_time, roles [filter, watermark]),
+              ),
+              batch_size 1d,
+              lookback 1d,
+              microbatch_limit (
+                max_batches 3,
+                action {limit_action},
+              ),
+            );
+            SELECT id, event_time
+            FROM __source("raw_events")
+            """
+        ).strip()
+        + "\n",
+        "models/downstream_events.sql": dedent(
+            """
+            MODEL (
+              materialized incremental,
+              incremental_strategy delete_insert,
+              incremental_mode microbatch,
+              microbatch_strategy watermark,
+              cursor event_time,
+              cursor_type timestamp,
+              cursor_grain day,
+              cursor_start '2026-01-01',
+              cursor_watermark_mode all,
+              cursor_inputs (
+                capped_events (column event_time, roles [filter, watermark]),
+              ),
+              batch_size 1d,
+              lookback 1d,
+            );
+            SELECT id, event_time
+            FROM __ref("capped_events")
+            """
+        ).strip()
+        + "\n",
+    }
+
+
 def prepare_defer_clone_project(
     *,
     tmp_path: Path,

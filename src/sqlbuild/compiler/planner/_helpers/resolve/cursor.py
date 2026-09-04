@@ -87,7 +87,7 @@ def compute_cursor_bounds(
         apply_maximum_start_policy,
     )
 
-    return apply_maximum_start_policy(
+    bounds = apply_maximum_start_policy(
         bounds=bounds,
         snapshot=cursor_snapshot,
         cursor_type=cursor_type,
@@ -97,6 +97,11 @@ def compute_cursor_bounds(
         backfill_duration=backfill_duration,
         policy=maximum_start_policy or MaximumStartPolicyInputs(),
         has_start_override=start_cursor_override is not None,
+    )
+    return bounds.clamp_to_availability(
+        ranges=cursor_snapshot.upstream_availability_ranges,
+        cursor_watermark_mode=cursor_snapshot.cursor_watermark_mode,
+        cursor_type=cursor_type,
     )
 
 
@@ -172,6 +177,17 @@ def normalize_cursor_snapshot_grain(
             for physical, terminal in cursor_snapshot.upstream_end_inputs
         ),
         upstream_availability_ends=cursor_snapshot.upstream_availability_ends,
+        upstream_availability_ranges=tuple(
+            (
+                (
+                    _floor_timestamp_string(value=start, grain=effective_grain)
+                    if start is not None
+                    else None
+                ),
+                _floor_timestamp_string(value=end, grain=effective_grain),
+            )
+            for start, end in cursor_snapshot.upstream_availability_ranges
+        ),
     )
 
 

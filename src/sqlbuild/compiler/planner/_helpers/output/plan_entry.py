@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Any, cast
+from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
@@ -71,7 +71,10 @@ from sqlbuild.compiler.planner.main.execution.effective_microbatch_batch_size im
 from sqlbuild.compiler.planner.main.execution.future_cursor_safety import apply_future_cursor_safety
 from sqlbuild.compiler.planner.main.execution.future_cursor_warning import future_cursor_cap_warning
 from sqlbuild.compiler.planner.main.execution.maximum_start_warning import maximum_start_cap_warning
-from sqlbuild.compiler.planner.main.execution.microbatch_limit import microbatch_limit_warning
+from sqlbuild.compiler.planner.main.execution.microbatch_limit import (
+    _resolve_microbatch_limit_config,
+    microbatch_limit_warning,
+)
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     ChangeDetectionResult,
@@ -833,8 +836,10 @@ def plan_model_from_change(
             model=model, key="unaccounted_partition_policy"
         ),
         microbatch_range=microbatch_range,
-        microbatch_limit=_get_model_microbatch_limit(model=model)[0],
-        declared_microbatch_limit_action=_get_model_microbatch_limit(model=model)[1],
+        microbatch_limit=_resolve_microbatch_limit_config(values=model.config.values)[0],
+        declared_microbatch_limit_action=_resolve_microbatch_limit_config(
+            values=model.config.values
+        )[1],
         start_cursor_override=start_cursor_override,
         end_cursor_override=end_cursor_override,
         future_cursor_config=effective_future_cursor_config,
@@ -1113,24 +1118,6 @@ def _get_positive_config_int(*, model: CompiledModel, key: str) -> int | None:
     return raw if isinstance(raw, int) and not isinstance(raw, bool) and raw > 0 else None
 
 
-def _get_model_microbatch_limit(
-    *, model: CompiledModel
-) -> tuple[int | None, MicrobatchLimitAction | None]:
-    raw: object | None = model.config.values.get("microbatch_limit")
-    if isinstance(raw, dict):
-        limit_mapping: dict[str, object] = cast(dict[str, object], raw)
-        max_batches: object | None = limit_mapping.get("max_batches")
-        action: object | None = limit_mapping.get("action")
-        if (
-            isinstance(max_batches, int)
-            and not isinstance(max_batches, bool)
-            and max_batches > 0
-            and isinstance(action, str)
-        ):
-            return max_batches, MicrobatchLimitAction(action)
-    return _get_positive_config_int(model=model, key="max_microbatches"), None
-
-
 def _get_check_columns(model: CompiledModel) -> tuple[str, ...]:
     """Extract check_columns from model config as a normalized tuple."""
 
@@ -1242,7 +1229,7 @@ def _compute_microbatch_range(
             relation.cursor_grain for relation in inputs.cursor_input_relations
         ),
     )
-    if downstream_grain is not None and effective_grain != downstream_grain:
+    if cursor_type == CursorType.TIMESTAMP and effective_grain is not None:
         cursor_snapshot = normalize_cursor_snapshot_grain(
             cursor_snapshot=cursor_snapshot,
             cursor_type=cursor_type,
@@ -1577,12 +1564,25 @@ def _build_cursor_input_relations(
             source_map=source_map,
         )
         if relation is not None:
+            producer_limit_action: MicrobatchLimitAction | None = (
+                _resolve_microbatch_limit_config(values=producer_model.config.values)[1]
+                if producer_model is not None
+                else None
+            )
+            producer_has_cap: bool = producer_limit_action in {
+                MicrobatchLimitAction.CAP_FROM_END,
+                MicrobatchLimitAction.CAP_FROM_START,
+            } and _is_compatible_causal_producer(consumer=model, producer=producer_model)
             relations.append(
                 CursorInputRelation(
                     relation=relation,
                     cursor_column=input_cursor_column,
-                    producer_model_name=None,
-                    producer_model_version_hash=None,
+                    producer_model_name=(ref.ref_name if producer_has_cap else None),
+                    producer_model_version_hash=(
+                        fingerprints.models[ref.ref_name].version_hash
+                        if producer_has_cap and ref.ref_name in fingerprints.models
+                        else None
+                    ),
                     cursor_grain=_resolve_cursor_input_grain(
                         ref=ref,
                         models_by_name=models_by_name,
@@ -1597,6 +1597,7 @@ def _build_cursor_input_relations(
                     terminal_cursor_end=(
                         _get_cursor_end(producer_model) if producer_model is not None else None
                     ),
+                    producer_microbatch_limit_action=producer_limit_action,
                 )
             )
     return tuple(relations)
@@ -1920,6 +1921,8 @@ def _clamp_cursor_end(*, bounds: CursorBounds | None, model: CompiledModel) -> C
     cursor_end: str | None = _get_cursor_end(model)
     cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
     if bounds is None or cursor_end is None:
+        return bounds
+    if bounds.start == MICROBATCH_START_SENTINEL or bounds.end == MICROBATCH_END_SENTINEL:
         return bounds
     if _cursor_order_key(value=bounds.start, cursor_type=cursor_type) >= _cursor_order_key(
         value=cursor_end, cursor_type=cursor_type

@@ -28,9 +28,12 @@ from sqlbuild.compiler.planner.main.execution.effective_microbatch_batch_size im
 from sqlbuild.compiler.planner.main.execution.future_cursor_warning import future_cursor_cap_warning
 from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
 from sqlbuild.compiler.planner.main.execution.maximum_start_warning import maximum_start_cap_warning
-from sqlbuild.compiler.planner.main.execution.microbatch_limit import microbatch_limit_warning
+from sqlbuild.compiler.planner.main.execution.microbatch_limit import (
+    microbatch_limit_warning,
+)
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
+    CursorInputRelation,
     Duration,
     ModelPlanEntry,
 )
@@ -38,6 +41,7 @@ from sqlbuild.compiler.planner.types import (
     BackfillAction,
     CursorGrain,
     CursorType,
+    CursorWatermarkMode,
     IncrementalStrategy,
     MicrobatchStrategy,
     OnSchemaChange,
@@ -3160,14 +3164,40 @@ def _plan_microbatch_windows(
             batch_size=batch_size,
             effective_grain=effective_grain,
         )
-    work_intervals: tuple[MicrobatchInterval, ...] = merge_causal_intervals(
-        intervals=(
-            *(
-                (MicrobatchInterval(start=microbatch_range.start, end=microbatch_range.end),)
-                if microbatch_range.start != microbatch_range.end
-                else ()
-            ),
-        ),
+    causal_history_status: CausalHistoryStatus | None = _causal_history_status(context=context)
+    if causal_history_status == CausalHistoryStatus.UNKNOWN:
+        return _MicrobatchPlan(
+            early_exit=build_failed_result(
+                entry=entry,
+                phase=ExecutionPhase.STAGING,
+                error=(
+                    "capped producer completion history is unavailable; run the producer "
+                    "successfully before building its watermark consumers"
+                ),
+                warnings=warnings,
+                audit_results=audit_results,
+                statement_recorder=statement_recorder,
+            )
+        )
+    uncapped_any_range: CursorBounds | None = _resolve_uncapped_any_range(
+        context=context,
+        target_qualified=target_qualified,
+        is_full_refresh=is_full_refresh,
+        on_progress=on_progress,
+    )
+    causal_intervals: tuple[MicrobatchInterval, ...] = (
+        _bounded_causal_replay_intervals(
+            context=context,
+            availability=microbatch_range,
+        )
+        if _has_capped_producer_dependencies(context=context)
+        else ()
+    )
+    work_intervals: tuple[MicrobatchInterval, ...] = _resolved_work_intervals(
+        context=context,
+        availability=microbatch_range,
+        causal_intervals=causal_intervals,
+        uncapped_any_range=uncapped_any_range,
         cursor_type=cursor_type,
     )
     computed_batches: tuple[BatchWindow, ...] = _batches_for_intervals(
@@ -3197,12 +3227,125 @@ def _plan_microbatch_windows(
         effective_batch_size=effective_batch_size,
         resolved_range=resolved_range,
         runtime_discovery=runtime_discovery,
-        causal_history_status=None,
-        causal_replay_intervals=(),
+        causal_history_status=causal_history_status,
+        causal_replay_intervals=causal_intervals,
     )
 
 
+def _resolve_uncapped_any_range(
+    *,
+    context: ModelMaterializationContext,
+    target_qualified: str,
+    is_full_refresh: bool,
+    on_progress: Callable[[str], None] | None,
+) -> CursorBounds | None:
+    if (
+        not _has_capped_producer_dependencies(context=context)
+        or context.entry.cursor_watermark_mode != CursorWatermarkMode.ANY
+    ):
+        return None
+    uncapped_inputs: tuple[CursorInputRelation, ...] = tuple(
+        relation
+        for relation in context.entry.cursor_input_relations
+        if relation.producer_model_name is None
+    )
+    if not uncapped_inputs:
+        return None
+    uncapped_entry: ModelPlanEntry = replace(
+        context.entry,
+        cursor_input_relations=uncapped_inputs,
+        microbatch_range=None,
+    )
+    return resolve_runtime_cursor_bounds(
+        adapter=context.adapter,
+        connection=context.connection,
+        target_relation=target_qualified,
+        target_database=context.entry.destination.database,
+        target_schema=context.entry.destination.schema,
+        target_name=context.entry.destination.name,
+        spec=build_runtime_cursor_spec(
+            entry=uncapped_entry,
+            read_destination_cursor=not is_full_refresh,
+        ),
+        on_progress=on_progress,
+        watermark_resolver=context.watermark_resolver,
+    )
+
+
+def _resolved_work_intervals(
+    *,
+    context: ModelMaterializationContext,
+    availability: CursorBounds,
+    causal_intervals: tuple[MicrobatchInterval, ...],
+    uncapped_any_range: CursorBounds | None,
+    cursor_type: str,
+) -> tuple[MicrobatchInterval, ...]:
+    if not _has_capped_producer_dependencies(context=context):
+        return _bounds_intervals(bounds=availability)
+    if context.entry.cursor_watermark_mode == CursorWatermarkMode.ANY:
+        return merge_causal_intervals(
+            intervals=(*_bounds_intervals(bounds=uncapped_any_range), *causal_intervals),
+            cursor_type=cursor_type,
+        )
+    intersections: tuple[MicrobatchInterval, ...] = _bounds_intervals(bounds=availability)
+    for dependency in context.microbatch_causal_dependencies:
+        dependency_intervals: tuple[MicrobatchInterval, ...] = _bounded_dependency_intervals(
+            dependency=dependency,
+            availability=availability,
+            context=context,
+        )
+        intersections = _intersect_interval_sets(
+            left=intersections,
+            right=dependency_intervals,
+            cursor_type=cursor_type,
+        )
+    return intersections
+
+
+def _bounds_intervals(*, bounds: CursorBounds | None) -> tuple[MicrobatchInterval, ...]:
+    if bounds is None or bounds.start == bounds.end:
+        return ()
+    return (MicrobatchInterval(start=bounds.start, end=bounds.end),)
+
+
+def _intersect_interval_sets(
+    *,
+    left: tuple[MicrobatchInterval, ...],
+    right: tuple[MicrobatchInterval, ...],
+    cursor_type: str,
+) -> tuple[MicrobatchInterval, ...]:
+    intersections: list[MicrobatchInterval] = []
+    left_interval: MicrobatchInterval
+    right_interval: MicrobatchInterval
+    for left_interval in left:
+        for right_interval in right:
+            start: str = (
+                right_interval.start
+                if _cursor_lte(
+                    left=left_interval.start,
+                    right=right_interval.start,
+                    cursor_type=cursor_type,
+                )
+                else left_interval.start
+            )
+            end: str = (
+                left_interval.end
+                if _cursor_lte(
+                    left=left_interval.end,
+                    right=right_interval.end,
+                    cursor_type=cursor_type,
+                )
+                else right_interval.end
+            )
+            if _cursor_lte(left=end, right=start, cursor_type=cursor_type):
+                continue
+            intersections.append(MicrobatchInterval(start=start, end=end))
+    return merge_causal_intervals(intervals=tuple(intersections), cursor_type=cursor_type)
+
+
 def _causal_history_status(*, context: ModelMaterializationContext) -> CausalHistoryStatus | None:
+    if not _has_capped_producer_dependencies(context=context):
+        return None
     dependencies: tuple[CausalDependencySnapshot, ...] = context.microbatch_causal_dependencies
     if not dependencies:
         return None
@@ -3211,18 +3354,47 @@ def _causal_history_status(*, context: ModelMaterializationContext) -> CausalHis
     return CausalHistoryStatus.KNOWN
 
 
+def _has_capped_producer_dependencies(*, context: ModelMaterializationContext) -> bool:
+    return any(
+        relation.producer_model_name is not None
+        and relation.producer_microbatch_limit_action
+        in {
+            MicrobatchLimitAction.CAP_FROM_END,
+            MicrobatchLimitAction.CAP_FROM_START,
+        }
+        for relation in context.entry.cursor_input_relations
+    )
+
+
 def _bounded_causal_replay_intervals(
     *, context: ModelMaterializationContext, availability: CursorBounds
 ) -> tuple[MicrobatchInterval, ...]:
     interval_values: list[MicrobatchInterval] = []
     for dependency in context.microbatch_causal_dependencies:
-        if dependency.history_status == CausalHistoryStatus.KNOWN:
-            interval_values.extend(dependency.outstanding.intervals)
-    intervals: tuple[MicrobatchInterval, ...] = tuple(interval_values)
+        interval_values.extend(
+            _bounded_dependency_intervals(
+                dependency=dependency,
+                availability=availability,
+                context=context,
+            )
+        )
+    return merge_causal_intervals(
+        intervals=tuple(interval_values), cursor_type=context.entry.cursor_type or ""
+    )
+
+
+def _bounded_dependency_intervals(
+    *,
+    dependency: CausalDependencySnapshot,
+    availability: CursorBounds,
+    context: ModelMaterializationContext,
+) -> tuple[MicrobatchInterval, ...]:
+    if dependency.history_status != CausalHistoryStatus.KNOWN:
+        return ()
     floor: str | None = context.entry.start_cursor_override or context.entry.cursor_start
     ceiling: str | None = availability.end
     bounded: list[MicrobatchInterval] = []
-    for interval in intervals:
+    for interval in dependency.outstanding.intervals:
         start: str = interval.start
         end: str = interval.end
         if floor is not None and _cursor_lte(

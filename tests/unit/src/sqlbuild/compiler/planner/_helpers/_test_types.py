@@ -122,6 +122,19 @@ class CursorQueryFailureTestCase:
 
 
 @dataclass(frozen=True)
+class MicrobatchCursorEndPlanTestCase:
+    description: str
+    cursor_type: str
+    cursor_grain: str | None
+    batch_size: str
+    cursor_end: str
+    target_max: str
+    upstream_min: str
+    upstream_max: str
+    expected_microbatch_range: CursorBounds
+
+
+@dataclass(frozen=True)
 class CursorFetchFailureTestCase:
     description: str
     expected_results: dict[str, str]
