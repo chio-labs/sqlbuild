@@ -220,6 +220,16 @@ def test_given_relative_since_bound_when_running_history_then_old_runs_are_exclu
             value="0d",
             expected_seconds=0,
         ),
+        CostRelativeSinceTestCase(
+            description="zero hours means now",
+            value="0h",
+            expected_seconds=0,
+        ),
+        CostRelativeSinceTestCase(
+            description="zero minutes means now",
+            value="0m",
+            expected_seconds=0,
+        ),
     ],
     ids=lambda case: case.description,
 )

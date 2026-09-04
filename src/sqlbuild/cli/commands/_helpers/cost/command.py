@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta
@@ -45,7 +46,7 @@ _MISSING_METRIC_STATUSES: frozenset[CostStatus] = frozenset(
     }
 )
 _HISTORY_METRIC_SORT_FIELDS: frozenset[str] = frozenset({"cost", "credits"})
-_ZERO_DAY_DURATION: str = "0d"
+_ZERO_DURATION_PATTERN: re.Pattern[str] = re.compile(r"^0+[dhm]$")
 
 
 def run_cost_command(request: CostCommandRequest) -> int:
@@ -205,7 +206,7 @@ def _parse_bound(*, value: str | None, label: str, end_of_day: bool) -> datetime
 def _parse_since_bound(*, value: str | None) -> datetime | None:
     if value is None:
         return None
-    if value == _ZERO_DAY_DURATION:
+    if _ZERO_DURATION_PATTERN.fullmatch(value) is not None:
         return datetime.now(UTC)
     duration: Duration | None = Duration.parse(value)
     if duration is None:
