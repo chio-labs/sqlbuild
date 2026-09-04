@@ -245,6 +245,19 @@ class SnapshotAdapterRenderingTestCase:
 
 
 @dataclass(frozen=True)
+class AuditGateMetadataSchemaTestCase:
+    description: str
+    expected_serialized: str
+
+
+@dataclass(frozen=True)
+class AuditGateMetadataFailureTestCase:
+    description: str
+    metadata_json: str
+    expected_diagnostic: str
+
+
+@dataclass(frozen=True)
 class SnapshotLifecycleTestCase:
     description: str
     run_id: str

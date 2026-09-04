@@ -5,7 +5,8 @@ from __future__ import annotations
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.spec.contracts.models import SourceEntry
+from sqlbuild.spec.contracts.main.loader_destination_parts import loader_destination_parts
+from sqlbuild.spec.contracts.models import LoaderDestinationParts, SourceEntry
 
 
 def expand_selected_loader_dependencies(
@@ -190,26 +191,18 @@ def upstream_loader_dependency_names(
 def loader_to_source_entry(
     *, project: CompiledProject, loader: DiscoveredLoaderFunction
 ) -> SourceEntry:
-    database: str | None = project.effective_target_database
-    schema: str | None = project.effective_target_schema
-    table: str = f"__loader__{loader.name}"
-    if loader.destination is not None:
-        parts: tuple[str, ...] = tuple(part for part in loader.destination.split(".") if part)
-        if len(parts) == 1:
-            table = parts[0]
-        source_name_part_count: int = 2
-        qualified_source_name_part_count: int = 3
-        if len(parts) == source_name_part_count:
-            schema, table = parts
-        elif len(parts) == qualified_source_name_part_count:
-            database, schema, table = parts
-        else:
-            table = loader.destination
+    destination: LoaderDestinationParts = loader_destination_parts(
+        destination=(
+            loader.destination if loader.destination is not None else f"__loader__{loader.name}"
+        ),
+        default_database=project.effective_target_database,
+        default_schema=project.effective_target_schema,
+    )
     return SourceEntry(
         name=loader.name,
-        database=database,
-        schema=schema,
-        table=table,
+        database=destination.database,
+        schema=destination.schema,
+        table=destination.table,
         loader=loader.name,
         write_strategy=loader.write_strategy,
         cursor_column=loader.cursor_column,

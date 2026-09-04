@@ -35,6 +35,7 @@ from sqlbuild.runtime.observability.exceptions import ObservabilityValidationErr
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.types import FutureCursorAction, MicrobatchLimitAction
 from tests.unit.src.sqlbuild.cli.output.classes._test_types import (
+    CheckSeverityDecodingTestCase,
     EnvelopeFieldValidationTestCase,
     IntegrationActionContractTestCase,
     MaximumStartMetadataValidationTestCase,
@@ -92,6 +93,45 @@ def test_given_invalid_bounded_field_when_decoding_then_validation_rejects_recor
 ) -> None:
     payload: dict[str, object] = build_valid_integration_payload()
     payload[test_case.field_name] = test_case.value
+
+    with pytest.raises(ObservabilityValidationError, match=test_case.expected_error):
+        _ = IntegrationResultEnvelope.from_json(json.dumps(payload))
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CheckSeverityDecodingTestCase(
+            description="unknown audit severity",
+            severity="critical",
+            expected_error="integration check severity must be one of: warn, error",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_unknown_check_severity_when_decoding_then_lists_allowed_values(
+    test_case: CheckSeverityDecodingTestCase,
+) -> None:
+    payload: dict[str, object] = build_valid_integration_payload()
+    payload.update(
+        {
+            "resource_id": "audit:not_null",
+            "resource_kind": "audit",
+            "resource_name": "not_null",
+            "output_kind": "check",
+            "asset": None,
+            "checks": [
+                {
+                    "kind": "audit",
+                    "name": "not_null",
+                    "check_id": "audit:not_null",
+                    "passed": True,
+                    "status": "pass",
+                    "severity": test_case.severity,
+                }
+            ],
+        }
+    )
 
     with pytest.raises(ObservabilityValidationError, match=test_case.expected_error):
         _ = IntegrationResultEnvelope.from_json(json.dumps(payload))

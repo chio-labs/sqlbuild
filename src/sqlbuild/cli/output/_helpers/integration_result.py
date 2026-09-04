@@ -22,7 +22,7 @@ from sqlbuild.cli.output.models import (
     IntegrationResultEnvelope,
 )
 from sqlbuild.cli.output.types import IntegrationOutputKind
-from sqlbuild.compiler.auditing.types import AuditOutcome
+from sqlbuild.compiler.auditing.types import AuditOutcome, AuditSeverity
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.auditing.main.resource_id import audit_resource_id
@@ -349,7 +349,7 @@ def _check_results(*, result: object) -> tuple[IntegrationCheckResult, ...]:
                 dag_check_id=f"check:{result.node_name}",
                 passed=result.passed,
                 status=status,
-                severity=result.severity.value,
+                severity=AuditSeverity(result.severity.value),
             ),
         )
     return ()
@@ -363,7 +363,7 @@ def _audit_result(result: AuditExecutionResult) -> IntegrationCheckResult:
         dag_check_id=_audit_check_id(result),
         passed=result.outcome == AuditOutcome.PASS,
         status=result.outcome.value,
-        severity=result.severity.value,
+        severity=result.severity,
         row_count=result.row_count,
         attachment_kind=result.attachment_kind.value,
         asset_name=result.attached_target_name,

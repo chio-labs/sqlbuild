@@ -50,6 +50,7 @@ from sqlbuild.cli.output.types import (
     CursorResolutionStatus,
     IntegrationOutputKind,
 )
+from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.runtime.observability.constants import (
     RESOURCE_ATTEMPT_SKIPPED_EVENT,
@@ -181,7 +182,7 @@ class IntegrationCheckResult:
     passed: bool
     status: str
     dag_check_id: str | None = None
-    severity: str | None = None
+    severity: AuditSeverity | None = None
     asset_name: str | None = None
     attachment_kind: str | None = None
     attached_column_name: str | None = None
@@ -360,6 +361,9 @@ class IntegrationResultEnvelope:
 
         payload: dict[str, Any] = asdict(self)
         payload["output_kind"] = self.output_kind.value
+        for check_payload, check in zip(payload["checks"], self.checks, strict=True):
+            if check.severity is not None:
+                check_payload["severity"] = check.severity.value
         return encode_integration_json(value=payload, record=True) + "\n"
 
     def _validate_result_identity(self) -> None:
@@ -449,11 +453,22 @@ class IntegrationResultEnvelope:
             asset: IntegrationAssetResult | None = (
                 IntegrationAssetResult(**asset_payload) if isinstance(asset_payload, dict) else None
             )
-            checks: tuple[IntegrationCheckResult, ...] = tuple(
-                IntegrationCheckResult(**check_payload)
-                for check_payload in checks_payload
-                if isinstance(check_payload, dict)
-            )
+            parsed_checks: list[IntegrationCheckResult] = []
+            for check_payload in checks_payload:
+                if not isinstance(check_payload, dict):
+                    continue
+                severity_value: object = check_payload.pop("severity", None)
+                severity: AuditSeverity | None = None
+                if severity_value is not None:
+                    try:
+                        severity = AuditSeverity(severity_value)
+                    except (TypeError, ValueError) as error:
+                        allowed: str = ", ".join(item.value for item in AuditSeverity)
+                        raise ObservabilityValidationError(
+                            f"integration check severity must be one of: {allowed}"
+                        ) from error
+                parsed_checks.append(IntegrationCheckResult(**check_payload, severity=severity))
+            checks: tuple[IntegrationCheckResult, ...] = tuple(parsed_checks)
             if len(checks) != len(checks_payload):
                 raise ObservabilityValidationError(
                     "integration result checks must contain only objects"

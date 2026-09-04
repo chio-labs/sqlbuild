@@ -1054,6 +1054,20 @@ def test_given_dlt_sources_yaml_when_parsing_then_expands_managed_sources(
             expected_error_fragment="source freshness age_policy values must be positive durations",
         ),
         ParseSourcesYamlErrorTestCase(
+            description="raises when source freshness age policy has unknown duration unit",
+            contents="""
+        sources:
+          - name: raw_orders
+            freshness:
+              strategy: column
+              column: updated_at
+              type: timestamp
+              age_policy:
+                warn_after: 1w
+        """,
+            expected_error_fragment="source freshness age_policy values must be positive durations",
+        ),
+        ParseSourcesYamlErrorTestCase(
             description="raises when source freshness age policy warning exceeds error",
             contents="""
         sources:

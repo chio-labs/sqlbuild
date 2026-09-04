@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_ref_names,
     build_known_seed_names,
@@ -64,7 +65,7 @@ class _AuditAttachmentContext:
     known_model_names: set[str]
     known_seed_names: set[str]
     known_source_names: set[str]
-    default_audit_severity: str | None
+    default_audit_severity: AuditSeverity | None
     default_audit_run_scope: str | None
     effective_vars: dict[str, object]
     macro_context: MacroContext
@@ -98,7 +99,7 @@ def build_audit_inputs(
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
     if generic_audit_definitions is None:
         generic_audit_definitions = index_generic_audit_definitions(discovered_inputs.audit_files)
-    default_audit_severity: str | None = effective_settings.default_audit_severity
+    default_audit_severity: AuditSeverity | None = effective_settings.default_audit_severity
     default_audit_run_scope: str | None = effective_settings.default_audit_run_scope
     attachment_context: _AuditAttachmentContext = _AuditAttachmentContext(
         generic_audit_definitions=generic_audit_definitions,
@@ -160,7 +161,7 @@ def build_audit_inputs(
             header_always_run: bool = _bool_from_dict(
                 values=audit_block.header_values, key="always_run"
             )
-            resolved_severity: str = resolve_audit_severity(
+            resolved_severity: AuditSeverity = resolve_audit_severity(
                 instance_severity=header_severity,
                 default_severity=default_audit_severity,
                 audit_label=str(audit_file.relative_path),
@@ -386,7 +387,7 @@ def build_attached_audit_input(
         known_source_names=context.known_source_names,
     )
     audit_label: str = f"{owner_file} audit '{audit_instance.definition_name}'"
-    resolved_severity: str = resolve_audit_severity(
+    resolved_severity: AuditSeverity = resolve_audit_severity(
         instance_severity=audit_instance.severity,
         default_severity=context.default_audit_severity,
         audit_label=audit_label,
@@ -531,30 +532,29 @@ def render_generic_audit_argument_value(
 
 def resolve_audit_severity(
     *,
-    instance_severity: str | None,
-    default_severity: str | None,
+    instance_severity: str | AuditSeverity | None,
+    default_severity: str | AuditSeverity | None,
     audit_label: str,
-) -> str:
+) -> AuditSeverity:
     """Resolve audit severity from instance, project default, or error fallback."""
 
-    from sqlbuild.compiler.auditing.types import AuditSeverity
-
-    valid_values: frozenset[str] = frozenset(s.value for s in AuditSeverity)
+    valid_values: tuple[str, ...] = tuple(severity.value for severity in AuditSeverity)
     if instance_severity is not None:
-        if instance_severity not in valid_values:
+        try:
+            return AuditSeverity(instance_severity)
+        except ValueError as error:
             raise CompileInputError(
                 f"{audit_label}: unknown severity '{instance_severity}'; "
-                f"valid values: {', '.join(sorted(valid_values))}"
-            )
-        return instance_severity
+                f"valid values: {', '.join(valid_values)}"
+            ) from error
     if default_severity is not None:
-        if default_severity not in valid_values:
+        try:
+            return AuditSeverity(default_severity)
+        except ValueError as error:
             raise CompileInputError(
-                f"settings.default_audit_severity in sqlbuild_project.toml: "
-                f"unknown value '{default_severity}'; "
-                f"valid values: {', '.join(sorted(valid_values))}"
-            )
-        return default_severity
+                "settings.default_audit_severity in sqlbuild_project.toml: "
+                f"unknown value '{default_severity}'; valid values: {', '.join(valid_values)}"
+            ) from error
     return AuditSeverity.ERROR
 
 

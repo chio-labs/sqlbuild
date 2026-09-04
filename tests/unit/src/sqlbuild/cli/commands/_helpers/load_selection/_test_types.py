@@ -14,3 +14,18 @@ class LoadReferenceSelectionTestCase:
     description: str
     select: tuple[str, ...]
     expected_entry_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LoaderDestinationSelectionTestCase:
+    description: str
+    destination: str
+    expected_parts: tuple[str | None, str | None, str | None]
+
+
+@dataclass(frozen=True)
+class LoaderDefaultResolutionTestCase:
+    description: str
+    adapter: str
+    connection: dict[str, object]
+    expected_defaults: tuple[str | None, str | None]

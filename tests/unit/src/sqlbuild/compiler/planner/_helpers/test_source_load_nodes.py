@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -29,6 +30,7 @@ from sqlbuild.spec.contracts.models import SourceEntry
 from sqlbuild.spec.contracts.types import SourceWriteStrategy
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     LoaderDagExpansionTestCase,
+    LoaderDestinationPlanningTestCase,
     MetadataNameFilterTestCase,
     SourceLoadNodesTestCase,
     SourceMetadataClosureTestCase,
@@ -283,3 +285,37 @@ def test_given_terminal_source_when_expanding_loader_deps_then_adds_intermediate
         )
         == test_case.expected_intermediate_loader_flags
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        LoaderDestinationPlanningTestCase(
+            description="two-part loader destination retains effective target database",
+            destination="loader_schema.fetch_orders",
+            expected_parts=("default_db", "loader_schema", "fetch_orders"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_qualified_intermediate_destination_when_building_map_then_parses_loader_target(
+    test_case: LoaderDestinationPlanningTestCase,
+) -> None:
+    project: CompiledProject = build_source_load_nodes_project()
+    project = replace(
+        project,
+        effective_target_database="default_db",
+        effective_target_schema="default_schema",
+        loader_functions=(
+            replace(project.loader_functions[0], destination=test_case.destination),
+            *project.loader_functions[1:],
+        ),
+    )
+
+    entries: dict[str, SourceEntry] = build_intermediate_source_map(
+        project=project,
+        selected_keys=frozenset({CompiledObjectKey(CompiledResourceType.SOURCE, "fetch_orders")}),
+    )
+
+    entry: SourceEntry = entries["fetch_orders"]
+    assert (entry.database, entry.schema, entry.table) == test_case.expected_parts

@@ -9,6 +9,7 @@ from sqlbuild.adapter.contract.models import CursorValue
 from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.compiler.planner.models import Duration
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 
 def resolve_bounded_cursors(
@@ -20,10 +21,10 @@ def resolve_bounded_cursors(
 
     if bounded is None:
         return None, None, None, False
-    cursor_column: str | None = _get_config_str(model=model, key="cursor")
+    cursor_column: str | None = get_config_str(values=model.config.values, key="cursor")
     if cursor_column is None:
         return None, None, None, True
-    cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
+    cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
     if cursor_type == CursorKind.INTEGER:
         return (
             cursor_column,
@@ -41,11 +42,6 @@ def resolve_bounded_cursors(
             False,
         )
     raise ExecutorInputError(f"model '{model.name}' bounded diff requires cursor_type", code="X101")
-
-
-def _get_config_str(*, model: Any, key: str) -> str | None:
-    raw: object | None = model.config.values.get(key)
-    return raw if isinstance(raw, str) and raw else None
 
 
 def _parse_integer_bound(raw: str) -> int:

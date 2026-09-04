@@ -8,7 +8,8 @@ from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import LoadSelectionSets, LoadSelectorSets
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction, DiscoveredProjectInputs
 from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
-from sqlbuild.spec.contracts.models import SourceEntry, TargetConfig
+from sqlbuild.spec.contracts.main.loader_destination_parts import loader_destination_parts
+from sqlbuild.spec.contracts.models import LoaderDestinationParts, SourceEntry, TargetConfig
 
 
 def select_load_entries(
@@ -17,6 +18,8 @@ def select_load_entries(
     select: tuple[str, ...],
     exclude: tuple[str, ...],
     target_config: TargetConfig | None,
+    loader_default_database: str | None = None,
+    loader_default_schema: str | None = None,
 ) -> tuple[SourceEntry, ...]:
     """Select source and intermediate loader execution entries for sqb load."""
 
@@ -99,7 +102,11 @@ def select_load_entries(
     ):
         if loader_name not in selected_terminal_loaders:
             entries.append(
-                _loader_to_source_entry(loader=loaders[loader_name], target_config=target_config)
+                _loader_to_source_entry(
+                    loader=loaders[loader_name],
+                    default_database=loader_default_database,
+                    default_schema=loader_default_schema,
+                )
             )
     entries.extend(
         managed_sources[source_name]
@@ -113,6 +120,8 @@ def select_load_reference_entries(
     discovered_inputs: DiscoveredProjectInputs,
     selected_sources: tuple[SourceEntry, ...],
     target_config: TargetConfig | None,
+    loader_default_database: str | None = None,
+    loader_default_schema: str | None = None,
 ) -> tuple[SourceEntry, ...]:
     """Return unselected upstream intermediate loader entries used only for refs."""
 
@@ -143,7 +152,11 @@ def select_load_reference_entries(
                 )
             )
     return tuple(
-        _loader_to_source_entry(loader=loaders[loader_name], target_config=target_config)
+        _loader_to_source_entry(
+            loader=loaders[loader_name],
+            default_database=loader_default_database,
+            default_schema=loader_default_schema,
+        )
         for loader_name in _topological_loader_order(
             loader_names=reference_loader_names,
             upstream_loaders=upstream_loaders,
@@ -409,28 +422,21 @@ def _environment_sources(
 def _loader_to_source_entry(
     *,
     loader: DiscoveredLoaderFunction,
-    target_config: TargetConfig | None,
+    default_database: str | None,
+    default_schema: str | None,
 ) -> SourceEntry:
-    database: str | None = target_config.database if target_config is not None else None
-    schema: str | None = target_config.schema if target_config is not None else None
-    table: str = f"__loader__{loader.name}"
-    if loader.destination is not None:
-        parts: tuple[str, ...] = tuple(part for part in loader.destination.split(".") if part)
-        if len(parts) == 1:
-            table = parts[0]
-        source_name_part_count: int = 2
-        qualified_source_name_part_count: int = 3
-        if len(parts) == source_name_part_count:
-            schema, table = parts
-        elif len(parts) == qualified_source_name_part_count:
-            database, schema, table = parts
-        else:
-            table = loader.destination
+    destination: LoaderDestinationParts = loader_destination_parts(
+        destination=(
+            loader.destination if loader.destination is not None else f"__loader__{loader.name}"
+        ),
+        default_database=default_database,
+        default_schema=default_schema,
+    )
     return SourceEntry(
         name=loader.name,
-        database=database,
-        schema=schema,
-        table=table,
+        database=destination.database,
+        schema=destination.schema,
+        table=destination.table,
         loader=loader.name,
         write_strategy=loader.write_strategy,
         cursor_column=loader.cursor_column,

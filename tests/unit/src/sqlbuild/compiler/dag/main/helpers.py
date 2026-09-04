@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
@@ -210,7 +211,7 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
                 attached_target_kind=AttachedAuditTargetKind.MODEL,
                 attached_target_name="orders",
                 attached_column_name="order_id",
-                severity="warn",
+                severity=AuditSeverity.WARN,
             ),
         ),
         sql_scenarios=(

@@ -7,11 +7,25 @@ from pathlib import Path
 from typing import Any, Protocol, cast
 
 from sqlbuild.cli.commands.models import CliEntrypointHandlers
+from sqlbuild.spec.contracts.exceptions import SpecConfigError
+from sqlbuild.spec.contracts.main.loader_destination_parts import loader_destination_parts
 
 
 class JsonOutputRequest(Protocol):
     json_output: bool
     json_output_path: Path | None
+
+
+def invalid_loader_destination_error(_: Path) -> SpecConfigError:
+    """Return the contract error produced by an invalid loader destination."""
+
+    try:
+        loader_destination_parts(
+            destination="raw..orders", default_database=None, default_schema=None
+        )
+    except SpecConfigError as error:
+        return error
+    raise AssertionError("invalid loader destination was accepted")
 
 
 def noop_handler(*_a: Any, **_k: Any) -> int:

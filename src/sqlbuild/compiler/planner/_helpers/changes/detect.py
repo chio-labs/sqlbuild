@@ -15,7 +15,6 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.planner._helpers.changes.config import get_config_str
 from sqlbuild.compiler.planner._helpers.changes.metadata import version_identity_metadata_payload
 from sqlbuild.compiler.planner._helpers.changes.policy import (
     pick_more_aggressive,
@@ -47,6 +46,7 @@ from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReas
 from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.diagnostics.main.log_sql import log_sql
+from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 
 def detect_changes(
@@ -190,7 +190,9 @@ def detect_model_changes(
         log_sql(logger=debug_logger, sql=model.query_sql, action="compiled_query")
         log_sql(logger=debug_logger, sql=fingerprint.definition, action="fingerprint_definition")
         if query_changed:
-            raw_policy: str | None = get_config_str(model=model, key="replay_on_change")
+            raw_policy: str | None = get_config_str(
+                values=model.config.values, key="replay_on_change"
+            )
             replay_backfill = resolve_replay_on_change(replay_on_change=raw_policy)
 
     schema_findings: tuple[SchemaFinding, ...] = ()
@@ -211,7 +213,7 @@ def detect_model_changes(
             inferred_schema_complete=not model.fast_lineage_has_star,
         )
         if schema_findings:
-            raw_policy = get_config_str(model=model, key="replay_on_change")
+            raw_policy = get_config_str(values=model.config.values, key="replay_on_change")
             schema_backfill = resolve_replay_on_change(replay_on_change=raw_policy)
 
     backfill: BackfillResult = pick_more_aggressive(a=replay_backfill, b=schema_backfill)

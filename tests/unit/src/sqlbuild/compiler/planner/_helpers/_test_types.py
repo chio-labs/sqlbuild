@@ -126,6 +126,7 @@ class MicrobatchCursorEndPlanTestCase:
     description: str
     cursor_type: str
     cursor_grain: str | None
+    authored_cursor_grain: dict[str, object]
     batch_size: str
     cursor_end: str
     target_max: str
@@ -282,6 +283,13 @@ class LoaderDagExpansionTestCase:
     expected_upstream_names: dict[str, tuple[str, ...]]
     expected_intermediate_source_names: tuple[str, ...]
     expected_intermediate_loader_flags: tuple[bool, ...]
+
+
+@dataclass(frozen=True)
+class LoaderDestinationPlanningTestCase:
+    description: str
+    destination: str
+    expected_parts: tuple[str | None, str | None, str | None]
 
 
 @dataclass(frozen=True)
@@ -826,6 +834,7 @@ class AuthoritativeCursorOverrideTestCase:
     description: str
     cursor_type: str
     cursor_grain: str | None
+    authored_cursor_grain: dict[str, object]
     batch_size: str
     start_override: str
     end_override: str

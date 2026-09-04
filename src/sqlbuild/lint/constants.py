@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from sqlbuild.lint.types import LintSeverity
+
 LINT_ENGINE_SQLBUILD: str = "sqlbuild"
 LINT_ENGINE_SQRUFF: str = "sqruff"
 
-VIOLATION_SEVERITY_FAULT: str = "fault"
-VIOLATION_SEVERITY_WARNING: str = "warning"
+VIOLATION_SEVERITY_FAULT: LintSeverity = LintSeverity.FAULT
+VIOLATION_SEVERITY_WARNING: LintSeverity = LintSeverity.WARNING
 
 HEADER_KIND_MODEL: str = "MODEL"
 HEADER_KIND_SCENARIO: str = "SCENARIO"

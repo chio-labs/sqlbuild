@@ -12,6 +12,7 @@ from typing import ClassVar
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.compile._helpers.deps.dependencies import audit_scope_deps
 from sqlbuild.compiler.compile._helpers.sql_tests.core import (
     extract_assertion_target_model_names,
@@ -123,8 +124,8 @@ def microbatch_model_with_cursor_end(
                 "batch_size": test_case.batch_size,
                 "cursor": "cursor_value",
                 "cursor_type": test_case.cursor_type,
-                "cursor_grain": test_case.cursor_grain,
                 "cursor_end": test_case.cursor_end,
+                **test_case.authored_cursor_grain,
             }
         ),
         destination=CompiledRelationLocation(
@@ -1481,7 +1482,7 @@ def build_scheduling_audit(
         references=references,
         attached_target_kind=attached_target_kind,
         attached_target_name=attached_target_name,
-        severity="warn",
+        severity=AuditSeverity.WARN,
         run_scope="final",
     )
 

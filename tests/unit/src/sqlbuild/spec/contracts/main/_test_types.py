@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
+from sqlbuild.spec.contracts.models import LoaderDestinationParts, LocalConfig, ProjectConfig
 from sqlbuild.sql_values.types import CollectionRendering
 
 
@@ -46,3 +46,19 @@ class TargetRetentionResolutionTestCase:
     local_config: LocalConfig
     target_name: str
     expected_desired_days: int
+
+
+@dataclass(frozen=True)
+class LoaderDestinationPartsTestCase:
+    description: str
+    destination: str
+    default_database: str | None
+    default_schema: str | None
+    expected_parts: LoaderDestinationParts
+
+
+@dataclass(frozen=True)
+class InvalidLoaderDestinationTestCase:
+    description: str
+    destination: str
+    expected_error_fragment: str

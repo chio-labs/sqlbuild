@@ -26,6 +26,7 @@ from sqlbuild.spec.contracts.models import (
     LifecycleEventSinkFilterConfig,
     LifecycleEventSinksConfig,
 )
+from sqlbuild.spec.contracts.types import EventExportSeverity
 
 
 def discover_runtime_extensions(
@@ -80,7 +81,7 @@ def _apply_runtime_filter(
     *, exporter: DiscoveredEventExporter, config: LifecycleEventSinksConfig
 ) -> DiscoveredEventExporter:
     kinds: frozenset[str] = exporter.event_kinds
-    severity: str = exporter.min_severity
+    severity: EventExportSeverity = exporter.min_severity
     filters: tuple[LifecycleEventSinkFilterConfig, ...] = (
         config.defaults,
         config.named.get(exporter.name, LifecycleEventSinkFilterConfig()),

@@ -11,6 +11,7 @@ from sqlbuild.runtime.event_exporting.constants import (
     LIFECYCLE_EXPORT_DIMENSIONS,
 )
 from sqlbuild.runtime.event_exporting.models import LifecycleExportPolicy
+from sqlbuild.spec.contracts.types import EventExportSeverity
 
 _LIFECYCLE_EXPORT_POLICY: Mapping[str, LifecycleExportPolicy] = MappingProxyType(
     {
@@ -32,13 +33,15 @@ def lifecycle_export_policy_catalog() -> Mapping[str, LifecycleExportPolicy]:
     return _LIFECYCLE_EXPORT_POLICY
 
 
-def severity_at_least(*, severity: str, minimum: str) -> bool:
+def severity_at_least(*, severity: EventExportSeverity, minimum: EventExportSeverity) -> bool:
     """Return whether a catalogued severity meets a configured minimum."""
 
     return EVENT_EXPORT_SEVERITY_RANKS[severity] >= EVENT_EXPORT_SEVERITY_RANKS[minimum]
 
 
-def stricter_severity(*, first: str, second: str | None) -> str:
+def stricter_severity(
+    *, first: EventExportSeverity, second: EventExportSeverity | None
+) -> EventExportSeverity:
     """Return the stricter of a required and optional minimum severity."""
 
     if second is None or EVENT_EXPORT_SEVERITY_RANKS[first] >= EVENT_EXPORT_SEVERITY_RANKS[second]:

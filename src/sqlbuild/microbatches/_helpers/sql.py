@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import date, datetime
 
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.microbatches.classes.event_codec import MicrobatchEventCodec
 from sqlbuild.microbatches.constants import (
+    MICROBATCH_COLUMN_TYPES,
     MICROBATCH_COLUMNS,
     MICROBATCH_GENERATION_WILDCARD,
-    MICROBATCH_INTEGER_COLUMNS,
     MICROBATCH_TABLE_NAME,
 )
 from sqlbuild.microbatches.exceptions import MicrobatchStateError
 from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
+from sqlbuild.sql_values.main.render_state_literal import render_state_sql_literal
+from sqlbuild.sql_values.types import StateSqlValueType
 
 
 def build_create_table_sql(
@@ -31,9 +32,10 @@ def build_create_table_sql(
     timestamp_type: str = render_framework_type(FrameworkType.TIMESTAMP)
     definitions: list[str] = []
     for column in MICROBATCH_COLUMNS:
-        if column.endswith("_at"):
+        declared_type: StateSqlValueType = MICROBATCH_COLUMN_TYPES[column]
+        if declared_type == StateSqlValueType.TIMESTAMP:
             column_type: str = timestamp_type
-        elif column in MICROBATCH_INTEGER_COLUMNS:
+        elif declared_type == StateSqlValueType.INTEGER:
             column_type = "BIGINT"
         else:
             column_type = text_type
@@ -58,7 +60,7 @@ def build_insert_sql(
         f"INSERT INTO {table} ({', '.join(MICROBATCH_COLUMNS)}) SELECT "
         f"{literals} "
         f"WHERE NOT EXISTS (SELECT 1 FROM {table} "
-        f"WHERE event_id = {_literal(event.event_id)})"
+        f"WHERE event_id = {_column_literal(column='event_id', value=event.event_id)})"
     )
 
 
@@ -118,10 +120,10 @@ def build_existing_event_ids_sql(
         schema=_required_schema(first.scope),
         render_qualified_name=render_qualified_name,
     )
-    return (
-        f"SELECT event_id FROM {table} WHERE event_id IN "
-        f"({', '.join(_literal(event.event_id) for event in events)})"
+    event_ids: str = ", ".join(
+        _column_literal(column="event_id", value=event.event_id) for event in events
     )
+    return f"SELECT event_id FROM {table} WHERE event_id IN ({event_ids})"
 
 
 def build_read_scope_sql(
@@ -135,12 +137,14 @@ def build_read_scope_sql(
     generation_predicate: str = (
         ""
         if scope.physical_generation_id == MICROBATCH_GENERATION_WILDCARD
-        else f"AND physical_generation_id = {_literal(scope.physical_generation_id)} "
+        else "AND physical_generation_id = "
+        + _column_literal(column="physical_generation_id", value=scope.physical_generation_id)
+        + " "
     )
     return (
         f"SELECT {', '.join(MICROBATCH_COLUMNS)} FROM {table} "
-        f"WHERE scope_kind = {_literal(scope.scope_kind)} "
-        f"AND scope_key = {_literal(scope.scope_key)} "
+        f"WHERE scope_kind = {_column_literal(column='scope_kind', value=scope.scope_kind)} "
+        f"AND scope_key = {_column_literal(column='scope_key', value=scope.scope_key)} "
         f"{generation_predicate}"
         "ORDER BY created_at, event_id"
     )
@@ -163,19 +167,5 @@ def _required_schema(scope: MicrobatchScope) -> str:
     return scope.target_schema
 
 
-def _literal(value: object | None) -> str:
-    if value is None:
-        return "NULL"
-    if isinstance(value, int) and not isinstance(value, bool):
-        return str(value)
-    normalized: str = value.isoformat() if isinstance(value, date | datetime) else str(value)
-    return "'" + normalized.replace("'", "''") + "'"
-
-
 def _column_literal(*, column: str, value: object | None) -> str:
-    literal: str = _literal(value)
-    if column in MICROBATCH_INTEGER_COLUMNS:
-        return f"CAST({literal} AS BIGINT)"
-    if column.endswith("_at"):
-        return f"CAST({literal} AS TIMESTAMP)"
-    return literal
+    return render_state_sql_literal(value=value, declared_type=MICROBATCH_COLUMN_TYPES[column])
