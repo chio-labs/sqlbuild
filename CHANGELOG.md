@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.81.0](https://github.com/chio-labs/sqlbuild/compare/v0.80.2...v0.81.0) (2026-09-04)
+
+
+### Features
+
+* add live statement observability, output capture, and typed cursor algebra ([#514](https://github.com/chio-labs/sqlbuild/issues/514)) ([cce6a79](https://github.com/chio-labs/sqlbuild/commit/cce6a795a81cdd5468cdbeb230a955f9c9a9bbc5))
+
 ## [0.80.2](https://github.com/chio-labs/sqlbuild/compare/v0.80.1...v0.80.2) (2026-09-04)
 
 
