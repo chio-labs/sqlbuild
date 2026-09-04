@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.80.2](https://github.com/chio-labs/sqlbuild/compare/v0.80.1...v0.80.2) (2026-09-04)
+
+
+### Bug Fixes
+
+* canonicalize cursor boundaries and isolate integration failures ([#512](https://github.com/chio-labs/sqlbuild/issues/512)) ([1d48a23](https://github.com/chio-labs/sqlbuild/commit/1d48a230d5cec7d42138f5661884318cbc7bba75))
+
 ## [0.80.1](https://github.com/chio-labs/sqlbuild/compare/v0.80.0...v0.80.1) (2026-09-04)
 
 
