@@ -47,7 +47,11 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotCaptureRunResult,
 )
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus
-from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
+from sqlbuild.executor.testing.models import (
+    SqlTestDifferenceSample,
+    SqlTestExecutionResult,
+    StepResult,
+)
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.sql_values.models import SqlValue
@@ -933,11 +937,24 @@ def _format_sql_test_step(step: StepResult) -> dict[str, object]:
             "actual_row_count": step.actual_row_count,
             "expected_row_count": step.expected_row_count,
             "mismatched_row_count": step.mismatched_row_count,
+            "unexpected_row_count": step.unexpected_row_count,
+            "missing_row_count": step.missing_row_count,
+            "unexpected_samples": _format_sql_test_difference_samples(step.unexpected_samples),
+            "missing_samples": _format_sql_test_difference_samples(step.missing_samples),
             "error_code": step.error_code,
             "error_help": step.error_help,
             "error_message": step.error_message,
         }
     )
+
+
+def _format_sql_test_difference_samples(
+    samples: tuple[SqlTestDifferenceSample, ...],
+) -> list[list[dict[str, str]]] | None:
+    formatted_samples: list[list[dict[str, str]]] = []
+    for sample in samples:
+        formatted_samples.append([{"name": name, "value": value} for name, value in sample.values])
+    return formatted_samples or None
 
 
 def _sql_test_asset_name(result: SqlTestExecutionResult) -> str | None:

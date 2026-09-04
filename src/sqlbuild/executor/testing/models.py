@@ -11,6 +11,13 @@ from sqlbuild.sql_values.models import SqlValue
 
 
 @dataclass(frozen=True)
+class SqlTestDifferenceSample:
+    """One redacted, size-bounded row from an expected-output difference."""
+
+    values: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class StepResult:
     """Outcome of one chain step in a SQL unit test."""
 
@@ -19,6 +26,10 @@ class StepResult:
     actual_row_count: int = 0
     expected_row_count: int = 0
     mismatched_row_count: int = 0
+    unexpected_row_count: int | None = None
+    missing_row_count: int | None = None
+    unexpected_samples: tuple[SqlTestDifferenceSample, ...] = field(default_factory=tuple)
+    missing_samples: tuple[SqlTestDifferenceSample, ...] = field(default_factory=tuple)
     error_code: str | None = None
     error_help: str | None = None
     error_message: str | None = None

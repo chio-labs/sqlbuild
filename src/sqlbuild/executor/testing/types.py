@@ -9,3 +9,10 @@ class SqlTestOutcome(StrEnum):
     PASS = "pass"
     FAIL = "fail"
     ERROR = "error"
+
+
+class SqlTestDifferenceDirection(StrEnum):
+    """Direction of one expected-output set difference."""
+
+    UNEXPECTED = "unexpected"
+    MISSING = "missing"

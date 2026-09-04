@@ -61,7 +61,10 @@ def build_sql_test_comparison_sql(
             f"(SELECT COUNT(*) FROM {expected_cte}) AS expected_count, "
             f"(SELECT COUNT(*) FROM ("
             f"SELECT * FROM {actual_cte} {set_difference_operator} SELECT * FROM {expected_cte}"
-            f") AS __sqlbuild_mismatch) AS mismatched_count"
+            f") AS __sqlbuild_mismatch) AS unexpected_count, "
+            f"(SELECT COUNT(*) FROM ("
+            f"SELECT * FROM {expected_cte} {set_difference_operator} SELECT * FROM {actual_cte}"
+            f") AS __sqlbuild_missing) AS missing_count"
         )
     assertion_index: int
     for assertion_index, assertion in enumerate(test_entry.assertions, start=len(test_entry.chain)):
@@ -84,7 +87,8 @@ def build_sql_test_comparison_sql(
             f"'assertion {_escape_sql_string(assertion.name)}' AS model_name, "
             f"(SELECT COUNT(*) FROM {assertion_cte}) AS actual_count, "
             "0 AS expected_count, "
-            f"(SELECT COUNT(*) FROM {assertion_cte}) AS mismatched_count"
+            f"(SELECT COUNT(*) FROM {assertion_cte}) AS unexpected_count, "
+            "0 AS missing_count"
         )
     cte_parts: list[str] = [f"{name} AS ({sql})" for name, sql in lifted_ctes.items()]
     cte_parts.extend(comparison_ctes)

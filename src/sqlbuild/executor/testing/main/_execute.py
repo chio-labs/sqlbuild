@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import SqlTestPlanEntry
+from sqlbuild.executor.testing._helpers.difference_samples import add_difference_samples
 from sqlbuild.executor.testing.constants import (
     SQL_TEST_ASSERTION_FAILED_CODE,
     SQL_TEST_EXECUTION_ERROR_CODE,
@@ -28,7 +29,7 @@ def execute_sql_test(
     connection: Any,
     quality_scope: str = "standalone",
 ) -> SqlTestExecutionResult:
-    """Execute one SQL unit test as a single comparison query."""
+    """Execute one SQL unit test and collect bounded diagnostics for failed comparisons."""
 
     comparison_sql: str = build_sql_test_comparison_sql(
         test_entry=test_entry,
@@ -83,6 +84,13 @@ def execute_sql_test(
         try:
             cursor: Any = adapter.execute(connection=connection, sql=comparison_sql)
             rows: list[Any] = cursor.fetchall()
+            step_results: list[StepResult] = _build_step_results(rows)
+            step_results = add_difference_samples(
+                step_results=step_results,
+                test_entry=test_entry,
+                adapter=adapter,
+                connection=connection,
+            )
         except Exception as error:
             lifecycle.failed(error=error, error_code=SQL_TEST_EXECUTION_ERROR_CODE)
             error_message = (
@@ -112,7 +120,6 @@ def execute_sql_test(
                 error_message=error_message,
             )
 
-        step_results: list[StepResult] = _build_step_results(rows)
         overall_outcome: SqlTestOutcome = SqlTestOutcome.PASS
         step_result: StepResult
         for step_result in step_results:
@@ -155,9 +162,10 @@ def _build_step_results(rows: list[Any]) -> list[StepResult]:
         model_name: str = str(row[1])
         actual_count: int = int(row[2])
         expected_count: int = int(row[3])
-        mismatched_count: int = int(row[4])
+        unexpected_count: int = int(row[4])
+        missing_count: int = int(row[5])
         outcome: SqlTestOutcome
-        if mismatched_count == 0 and actual_count == expected_count:
+        if unexpected_count == 0 and missing_count == 0 and actual_count == expected_count:
             outcome = SqlTestOutcome.PASS
         else:
             outcome = SqlTestOutcome.FAIL
@@ -167,7 +175,9 @@ def _build_step_results(rows: list[Any]) -> list[StepResult]:
                 outcome=outcome,
                 actual_row_count=actual_count,
                 expected_row_count=expected_count,
-                mismatched_row_count=mismatched_count,
+                mismatched_row_count=unexpected_count,
+                unexpected_row_count=unexpected_count,
+                missing_row_count=missing_count,
             )
         )
     return step_results

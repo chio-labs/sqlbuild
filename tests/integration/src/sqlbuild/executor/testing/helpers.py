@@ -19,7 +19,7 @@ from tests.integration.src.sqlbuild.executor.testing._test_types import (
 def build_sql_test_plan_entry(
     *,
     name: str,
-    chain_steps: tuple[tuple[str, str, str], ...],
+    chain_steps: tuple[tuple[str, str, str | None], ...],
 ) -> SqlTestPlanEntry:
     """Build a SqlTestPlanEntry from (model_name, resolved_sql, expected_cte_sql) tuples."""
 

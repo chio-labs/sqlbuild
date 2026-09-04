@@ -30,6 +30,15 @@ class SqlTestCaseExecutionProtocolTestCase:
 
 
 @dataclass(frozen=True)
+class SqlTestDifferenceOutputTestCase:
+    """Expected structured fields for SQL test difference output."""
+
+    description: str
+    expected_unexpected_count: int
+    expected_missing_count: int
+
+
+@dataclass(frozen=True)
 class AuditExecutionProtocolTestCase:
     description: str
     expected_check_id: str
