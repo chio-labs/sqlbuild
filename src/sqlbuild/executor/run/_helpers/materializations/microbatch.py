@@ -47,6 +47,7 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.cursor_algebra.main.cap_from_end import cap_from_end
 from sqlbuild.cursor_algebra.main.cap_from_start import cap_from_start
+from sqlbuild.cursor_algebra.main.compare import compare
 from sqlbuild.cursor_algebra.main.exclusive_end_from_observed_max import (
     exclusive_end_from_observed_max,
 )
@@ -54,9 +55,10 @@ from sqlbuild.cursor_algebra.main.floor_to_grain import floor_to_grain
 from sqlbuild.cursor_algebra.main.next_boundary import next_boundary
 from sqlbuild.cursor_algebra.main.parse import parse
 from sqlbuild.cursor_algebra.main.render import render
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.cursor_algebra.main.split_into_batches import split_into_batches
-from sqlbuild.cursor_algebra.models import AlignedInterval, IntegerValue
-from sqlbuild.cursor_algebra.types import CursorScalar
+from sqlbuild.cursor_algebra.models import AlignedInterval, DateValue, IntegerValue, TimestampValue
+from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
@@ -179,8 +181,8 @@ class _MicrobatchHistoryContext:
     scope: MicrobatchScope
     history: tuple[MicrobatchEvent, ...]
     run_type: MicrobatchRunType
-    run_start: str
-    run_end: str
+    run_start: CursorScalar
+    run_end: CursorScalar
     batch_size: str
     replay_requirement_id: str | None = None
     origin_run_id: str | None = None
@@ -208,8 +210,8 @@ class _MicrobatchHistoryContext:
 class _RecoveryOrigin:
     origin_run_id: str
     origin_run_started_at: datetime | None
-    run_start: str
-    run_end: str
+    run_start: CursorScalar
+    run_end: CursorScalar
     run_type: MicrobatchRunType
     replay_requirement_id: str | None
 
@@ -389,7 +391,8 @@ def execute_microbatch_entry(
     state, history_context, reconciled_batches = reconciliation
     resolved_intervals: tuple[MicrobatchInterval, ...] = merge_intervals(
         intervals=tuple(
-            MicrobatchInterval(start=batch.start, end=batch.end) for batch in reconciled_batches
+            MicrobatchInterval(start=render(value=batch.start), end=render(value=batch.end))
+            for batch in reconciled_batches
         ),
         cursor_type=context.entry.cursor_type or "",
     )
@@ -590,8 +593,12 @@ def execute_microbatch_entry(
         batch_size=batch_plan.effective_batch_size,
         rows_affected=batch_outcome.rows_affected,
         microbatch_applied_intervals=batch_outcome.applied_intervals,
-        cursor_range_start=None if resolved_range is None else resolved_range.start,
-        cursor_range_end=None if resolved_range is None else resolved_range.end,
+        cursor_range_start=(
+            None if resolved_range is None else sentinel_to_token(sentinel=resolved_range.start)
+        ),
+        cursor_range_end=(
+            None if resolved_range is None else sentinel_to_token(sentinel=resolved_range.end)
+        ),
         cursor_type=context.entry.cursor_type,
         cursor_grain=context.entry.cursor_grain,
         future_cursor_safety=(resolved_range.future_safety if resolved_range is not None else None),
@@ -639,8 +646,12 @@ def _no_work_microbatch_result(
         promoted_relation=promoted_relation,
         batch_count=0,
         batch_size=batch_plan.effective_batch_size,
-        cursor_range_start=None if resolved_range is None else resolved_range.start,
-        cursor_range_end=None if resolved_range is None else resolved_range.end,
+        cursor_range_start=(
+            None if resolved_range is None else sentinel_to_token(sentinel=resolved_range.start)
+        ),
+        cursor_range_end=(
+            None if resolved_range is None else sentinel_to_token(sentinel=resolved_range.end)
+        ),
         cursor_type=context.entry.cursor_type,
         cursor_grain=context.entry.cursor_grain,
         warning_messages=tuple(state.warnings),
@@ -745,7 +756,8 @@ def _enforce_microbatch_limit(
             replace(batch, index=index) for index, batch in enumerate(selected_batches)
         )
         selected_intervals: tuple[MicrobatchInterval, ...] = tuple(
-            MicrobatchInterval(start=batch.start, end=batch.end) for batch in selected_batches
+            MicrobatchInterval(start=render(value=batch.start), end=render(value=batch.end))
+            for batch in selected_batches
         )
         limited_plan = replace(
             batch_plan,
@@ -1016,7 +1028,7 @@ def _execute_microbatch_batches(
             context=context, targets=targets, batch=batch
         )
         batch_start_time: float = time.monotonic()
-        window_text: str = f"{batch.start}..{batch.end}"
+        window_text: str = f"{render(value=batch.start)}..{render(value=batch.end)}"
         display_window: str = _format_batch_window_for_display(batch=batch, entry=context.entry)
         if on_progress is not None:
             on_progress(f"batch {completed_batches + 1}/{total_batches} {display_window}")
@@ -1147,7 +1159,7 @@ def _execute_microbatch_batches(
             state=state,
         )
         completed_batches += 1
-        applied_intervals.append((batch.start, batch.end))
+        applied_intervals.append((render(value=batch.start), render(value=batch.end)))
         if on_progress is not None:
             batch_elapsed: float = time.monotonic() - batch_start_time
             on_progress(
@@ -1200,12 +1212,16 @@ def _execute_microbatch_batches_concurrently(
     on_progress: Callable[[str], None] | None,
 ) -> MicrobatchPhaseOutcome:
     recovery_batches: tuple[BatchWindow, ...] = tuple(
-        batch for batch in batches if (batch.start, batch.end) in history_context.recovery_intervals
+        batch
+        for batch in batches
+        if (render(value=batch.start), render(value=batch.end))
+        in history_context.recovery_intervals
     )
     ordinary_batches: tuple[BatchWindow, ...] = tuple(
         batch
         for batch in batches
-        if (batch.start, batch.end) not in history_context.recovery_intervals
+        if (render(value=batch.start), render(value=batch.end))
+        not in history_context.recovery_intervals
     )
     completed_batches: int = 0
     applied_intervals: list[tuple[str, str]] = []
@@ -1355,7 +1371,8 @@ def _targets_for_batch(
     if context.entry.batch_concurrency <= 1:
         return targets
     identity: str = hashlib.sha256(
-        f"{context.run_id}:{batch.index}:{batch.start}:{batch.end}".encode()
+        f"{context.run_id}:{batch.index}:{render(value=batch.start)}:"
+        f"{render(value=batch.end)}".encode()
     ).hexdigest()[:12]
     suffix: str = f"__delta_{identity}"
     max_length: int = context.adapter.maximum_identifier_length()
@@ -1495,8 +1512,8 @@ def _serial_microbatch_context(
         scope=scope,
         history=(),
         run_type=_microbatch_run_type(context=context),
-        run_start=resolved_range.start,
-        run_end=resolved_range.end,
+        run_start=_concrete_bound(bound=resolved_range.start),
+        run_end=_concrete_bound(bound=resolved_range.end),
         batch_size=batch_size,
         origin_run_id=context.run_id,
         execution_run_started_at=datetime.now(tz=UTC),
@@ -1566,8 +1583,8 @@ def _prepare_microbatch_history(
             requirement_id: str = deterministic_microbatch_event_id(
                 scope=scope,
                 record_type=MicrobatchRecordType.REPLAY_REQUIREMENT,
-                partition_start=resolved_range.start,
-                partition_end=resolved_range.end,
+                partition_start=sentinel_to_token(sentinel=resolved_range.start),
+                partition_end=sentinel_to_token(sentinel=resolved_range.end),
                 completion_reason=requirement_reason,
             )
             requirement = MicrobatchEvent(
@@ -1577,8 +1594,8 @@ def _prepare_microbatch_history(
                 origin_run_id=context.run_id,
                 execution_run_id=context.run_id,
                 run_type=run_type,
-                run_start=resolved_range.start,
-                run_end=resolved_range.end,
+                run_start=sentinel_to_token(sentinel=resolved_range.start),
+                run_end=sentinel_to_token(sentinel=resolved_range.end),
                 batch_size=batch_size,
                 cursor_column=context.entry.cursor_column or "",
                 cursor_type=context.entry.cursor_type or "",
@@ -1607,8 +1624,16 @@ def _prepare_microbatch_history(
         scope=scope,
         history=effective_history,
         run_type=run_type,
-        run_start=requirement.run_start if requirement is not None else resolved_range.start,
-        run_end=requirement.run_end if requirement is not None else resolved_range.end,
+        run_start=(
+            parse(raw=requirement.run_start, cursor_type=context.entry.cursor_type or "")
+            if requirement is not None
+            else _concrete_bound(bound=resolved_range.start)
+        ),
+        run_end=(
+            parse(raw=requirement.run_end, cursor_type=context.entry.cursor_type or "")
+            if requirement is not None
+            else _concrete_bound(bound=resolved_range.end)
+        ),
         batch_size=requirement.batch_size if requirement is not None else batch_size,
         replay_requirement_id=(
             requirement.replay_requirement_id if requirement is not None else None
@@ -1662,7 +1687,7 @@ def _replay_requirement_still_active(
     ):
         return False
     expected_intervals: tuple[MicrobatchInterval, ...] = tuple(
-        MicrobatchInterval(start=batch.start, end=batch.end)
+        MicrobatchInterval(start=render(value=batch.start), end=render(value=batch.end))
         for batch in compute_batch_windows(
             start=requirement.run_start,
             end=requirement.run_end,
@@ -1695,7 +1720,8 @@ def _record_microbatch_completion(
     targets: MicrobatchTargets,
 ) -> ModelExecutionResult | None:
     now: datetime = datetime.now(tz=UTC)
-    recovery_origin: _RecoveryOrigin | None = history.recovery_origins.get((batch.start, batch.end))
+    batch_key: tuple[str, str] = (render(value=batch.start), render(value=batch.end))
+    recovery_origin: _RecoveryOrigin | None = history.recovery_origins.get(batch_key)
     completion_scope: MicrobatchScope = _current_completion_scope(
         context=context,
         scope=history.scope,
@@ -1707,13 +1733,13 @@ def _record_microbatch_completion(
         event_id=deterministic_microbatch_event_id(
             scope=completion_scope,
             record_type=MicrobatchRecordType.PARTITION_COMPLETION,
-            partition_start=batch.start,
-            partition_end=batch.end,
+            partition_start=batch_key[0],
+            partition_end=batch_key[1],
             completion_reason=":".join(
                 (
                     (
                         MicrobatchCompletionType.RECOVERY.value
-                        if (batch.start, batch.end) in history.recovery_intervals
+                        if batch_key in history.recovery_intervals
                         else MicrobatchCompletionType.INITIAL.value
                     ),
                     _expected_model_version_hash(context=context),
@@ -1733,13 +1759,17 @@ def _record_microbatch_completion(
         run_type=(recovery_origin.run_type if recovery_origin is not None else history.run_type),
         completion_type=(
             MicrobatchCompletionType.RECOVERY
-            if (batch.start, batch.end) in history.recovery_intervals
+            if batch_key in history.recovery_intervals
             else MicrobatchCompletionType.INITIAL
         ),
-        run_start=(recovery_origin.run_start if recovery_origin is not None else history.run_start),
-        run_end=(recovery_origin.run_end if recovery_origin is not None else history.run_end),
-        partition_start=batch.start,
-        partition_end=batch.end,
+        run_start=render(
+            value=recovery_origin.run_start if recovery_origin is not None else history.run_start
+        ),
+        run_end=render(
+            value=recovery_origin.run_end if recovery_origin is not None else history.run_end
+        ),
+        partition_start=batch_key[0],
+        partition_end=batch_key[1],
         batch_size=history.batch_size,
         cursor_column=context.entry.cursor_column or "",
         cursor_type=context.entry.cursor_type or "",
@@ -1916,7 +1946,9 @@ def _reconcile_microbatch_history(
         ()
         if history.run_type == MicrobatchRunType.REPLAY_ON_CHANGE
         else tuple(
-            batch for batch in normal_batches if (batch.start, batch.end) not in recovery_keys
+            batch
+            for batch in normal_batches
+            if (render(value=batch.start), render(value=batch.end)) not in recovery_keys
         )
     )
     all_batches: tuple[BatchWindow, ...] = tuple(
@@ -2012,8 +2044,8 @@ def _accounting_intervals(
     ]
     if envelope is not None:
         if not starts:
-            starts.append(envelope.start)
-        ends.append(envelope.end)
+            starts.append(sentinel_to_token(sentinel=envelope.start))
+        ends.append(sentinel_to_token(sentinel=envelope.end))
     if context.entry.cursor_start is not None and not starts:
         starts.append(context.entry.cursor_start)
     if not starts or not ends:
@@ -2021,7 +2053,7 @@ def _accounting_intervals(
     floor: str = _cursor_bound(values=starts, cursor_type=cursor_type, maximum=False)
     frontier: str = _cursor_bound(values=ends, cursor_type=cursor_type, maximum=True)
     return tuple(
-        MicrobatchInterval(start=batch.start, end=batch.end)
+        MicrobatchInterval(start=render(value=batch.start), end=render(value=batch.end))
         for batch in compute_batch_windows(
             start=floor,
             end=frontier,
@@ -2108,7 +2140,7 @@ def _replay_recovery_intervals(
     if requirement is None:
         return (), None, 0
     replay_intervals: tuple[MicrobatchInterval, ...] = tuple(
-        MicrobatchInterval(start=batch.start, end=batch.end)
+        MicrobatchInterval(start=render(value=batch.start), end=render(value=batch.end))
         for batch in compute_batch_windows(
             start=requirement.run_start,
             end=requirement.run_end,
@@ -2150,21 +2182,29 @@ def _clamp_intervals_to_model_domain(
     *, context: ModelMaterializationContext, intervals: tuple[MicrobatchInterval, ...]
 ) -> tuple[MicrobatchInterval, ...]:
     cursor_type: str = context.entry.cursor_type or ""
-    floor: str | None = context.entry.cursor_start
-    ceiling: str | None = context.entry.cursor_end
+    floor: CursorScalar | None = (
+        parse(raw=context.entry.cursor_start, cursor_type=cursor_type)
+        if context.entry.cursor_start is not None
+        else None
+    )
+    ceiling: CursorScalar | None = (
+        parse(raw=context.entry.cursor_end, cursor_type=cursor_type)
+        if context.entry.cursor_end is not None
+        else None
+    )
     bounded: list[MicrobatchInterval] = []
     for interval in intervals:
-        start: str = interval.start
-        end: str = interval.end
-        if floor is not None and _cursor_lte(left=start, right=floor, cursor_type=cursor_type):
+        start: CursorScalar = parse(raw=interval.start, cursor_type=cursor_type)
+        end: CursorScalar = parse(raw=interval.end, cursor_type=cursor_type)
+        if floor is not None and compare(left=start, right=floor) <= 0:
             start = floor
-        if ceiling is not None and _cursor_lte(left=ceiling, right=end, cursor_type=cursor_type):
+        if ceiling is not None and compare(left=ceiling, right=end) <= 0:
             end = ceiling
-        if ceiling is not None and _cursor_lte(left=ceiling, right=start, cursor_type=cursor_type):
+        if ceiling is not None and compare(left=ceiling, right=start) <= 0:
             continue
-        if _cursor_lte(left=end, right=start, cursor_type=cursor_type):
+        if compare(left=end, right=start) <= 0:
             continue
-        bounded.append(MicrobatchInterval(start=start, end=end))
+        bounded.append(MicrobatchInterval(start=render(value=start), end=render(value=end)))
     return _deduplicate_intervals(tuple(bounded))
 
 
@@ -2221,8 +2261,8 @@ def _canonical_destination_envelope(
             value=parse(raw=raw_max, cursor_type=CursorType.INTEGER), grain=None
         )
         return CursorBounds(
-            start=str(minimum.value),
-            end=str(maximum.value),
+            start=minimum,
+            end=maximum,
         )
     if not isinstance(raw_min, datetime | date) or not isinstance(raw_max, datetime | date):
         raise ExecutorInputError("timestamp cursor envelope returned non-temporal bounds")
@@ -2232,7 +2272,7 @@ def _canonical_destination_envelope(
     start: CursorScalar = floor_to_grain(value=minimum, grain=grain)
     end_floor: CursorScalar = floor_to_grain(value=maximum, grain=grain)
     end: CursorScalar = next_boundary(value=end_floor, grain=grain)
-    return CursorBounds(start=render(value=start), end=render(value=end))
+    return CursorBounds(start=start, end=end)
 
 
 def _build_synthetic_completions(
@@ -2264,8 +2304,8 @@ def _build_synthetic_completions(
             execution_run_started_at=history.execution_run_started_at,
             run_type=history.run_type,
             completion_type=MicrobatchCompletionType.RECOVERY,
-            run_start=history.run_start,
-            run_end=history.run_end,
+            run_start=render(value=history.run_start),
+            run_end=render(value=history.run_end),
             partition_start=interval.start,
             partition_end=interval.end,
             batch_size=history.batch_size,
@@ -2432,8 +2472,8 @@ def _known_gap_origins(
         origins[(interval.start, interval.end)] = _RecoveryOrigin(
             origin_run_id=witness.origin_run_id,
             origin_run_started_at=witness.origin_run_started_at,
-            run_start=witness.run_start,
-            run_end=witness.run_end,
+            run_start=parse(raw=witness.run_start, cursor_type=cursor_type),
+            run_end=parse(raw=witness.run_end, cursor_type=cursor_type),
             run_type=witness.run_type,
             replay_requirement_id=witness.replay_requirement_id,
         )
@@ -2493,7 +2533,8 @@ def _refresh_microbatch_result_history(
     if not batches:
         return history
     expected: tuple[MicrobatchInterval, ...] = tuple(
-        MicrobatchInterval(start=batch.start, end=batch.end) for batch in batches
+        MicrobatchInterval(start=render(value=batch.start), end=render(value=batch.end))
+        for batch in batches
     )
     current_scope: MicrobatchScope = _current_completion_scope(
         context=context, scope=history.scope, physical_target_name=physical_target_name
@@ -2825,8 +2866,8 @@ def _apply_microbatch_dml(
                     target_columns=target_columns,
                     delta_columns=delta_columns,
                     entry=context.entry,
-                    cursor_start=batch.start,
-                    cursor_end=batch.end,
+                    cursor_start=render(value=batch.start),
+                    cursor_end=render(value=batch.end),
                     statement_recorder=state.statement_recorder,
                 )
                 if reported_rows is not None:
@@ -3071,7 +3112,7 @@ def _plan_microbatch_windows(
             )
         )
     if microbatch_range is None:
-        empty_bound: str = _empty_microbatch_bound(entry=entry)
+        empty_bound: CursorScalar = _empty_microbatch_bound(entry=entry)
         microbatch_range = CursorBounds(start=empty_bound, end=empty_bound)
 
     effective_batch_size: str = batch_size
@@ -3082,7 +3123,12 @@ def _plan_microbatch_windows(
         )
     work_intervals: tuple[MicrobatchInterval, ...] = merge_intervals(
         intervals=(
-            (MicrobatchInterval(start=microbatch_range.start, end=microbatch_range.end),)
+            (
+                MicrobatchInterval(
+                    start=sentinel_to_token(sentinel=microbatch_range.start),
+                    end=sentinel_to_token(sentinel=microbatch_range.end),
+                ),
+            )
             if microbatch_range.start != microbatch_range.end
             else ()
         ),
@@ -3094,10 +3140,16 @@ def _plan_microbatch_windows(
         cursor_type=cursor_type,
     )
     batches: tuple[BatchWindow, ...] = (
-        (BatchWindow(start=microbatch_range.start, end=microbatch_range.end, index=0),)
+        (
+            BatchWindow(
+                start=sentinel_to_token(sentinel=microbatch_range.start),
+                end=sentinel_to_token(sentinel=microbatch_range.end),
+                index=0,
+            ),
+        )
         if is_full_refresh
         and microbatch_range.start == microbatch_range.end
-        and microbatch_range.start != entry.cursor_end
+        and sentinel_to_token(sentinel=microbatch_range.start) != entry.cursor_end
         else tuple(replace(batch, index=index) for index, batch in enumerate(computed_batches))
     )
     resolved_range: CursorBounds = (
@@ -3125,8 +3177,8 @@ def _batches_for_intervals(
     for interval in intervals:
         batches.extend(
             compute_batch_windows(
-                start=interval.start,
-                end=interval.end,
+                start=parse(raw=interval.start, cursor_type=cursor_type),
+                end=parse(raw=interval.end, cursor_type=cursor_type),
                 batch_size=batch_size,
                 cursor_type=cursor_type,
             )
@@ -3134,12 +3186,21 @@ def _batches_for_intervals(
     return tuple(batches)
 
 
-def _empty_microbatch_bound(*, entry: ModelPlanEntry) -> str:
+def _empty_microbatch_bound(*, entry: ModelPlanEntry) -> CursorScalar:
     if entry.cursor_start is not None:
-        return entry.cursor_start
+        return parse(
+            raw=entry.cursor_start,
+            cursor_type=entry.cursor_type or CursorType.TIMESTAMP,
+        )
     if entry.cursor_type == CursorType.INTEGER:
-        return _EMPTY_INTEGER_CURSOR_BOUND
-    return _EMPTY_TIMESTAMP_CURSOR_BOUND
+        return IntegerValue(value=int(_EMPTY_INTEGER_CURSOR_BOUND))
+    return TimestampValue(value=datetime.fromisoformat(_EMPTY_TIMESTAMP_CURSOR_BOUND))
+
+
+def _concrete_bound(*, bound: Bound) -> CursorScalar:
+    if isinstance(bound, BoundSentinel):
+        raise ExecutorInputError("microbatch execution requires concrete cursor bounds")
+    return bound
 
 
 def _format_resolved_microbatch_progress(
@@ -3157,12 +3218,12 @@ def _format_resolved_microbatch_progress(
     """Format the concrete runtime-owned range before its first batch starts."""
 
     start: str = cursor_bound_display(
-        value=bounds.start,
+        value=sentinel_to_token(sentinel=bounds.start),
         cursor_type=cursor_type,
         cursor_grain=cursor_grain,
     )
     end: str = inclusive_cursor_end(
-        end=bounds.end,
+        end=sentinel_to_token(sentinel=bounds.end),
         cursor_type=cursor_type,
         cursor_grain=cursor_grain,
     )
@@ -3178,17 +3239,23 @@ def _format_resolved_microbatch_progress(
 
 def compute_batch_windows(
     *,
-    start: str,
-    end: str,
+    start: CursorScalar | str,
+    end: CursorScalar | str,
     batch_size: str,
     cursor_type: str,
 ) -> tuple[BatchWindow, ...]:
     """Split a cursor range into ordered batch windows."""
 
+    start_value: CursorScalar = (
+        parse(raw=start, cursor_type=cursor_type) if isinstance(start, str) else start
+    )
+    end_value: CursorScalar = (
+        parse(raw=end, cursor_type=cursor_type) if isinstance(end, str) else end
+    )
     if cursor_type == CursorType.TIMESTAMP:
-        return _compute_timestamp_batches(start=start, end=end, batch_size=batch_size)
+        return _compute_timestamp_batches(start=start_value, end=end_value, batch_size=batch_size)
     if cursor_type == CursorType.INTEGER:
-        return _compute_integer_batches(start=start, end=end, batch_size=batch_size)
+        return _compute_integer_batches(start=start_value, end=end_value, batch_size=batch_size)
     return ()
 
 
@@ -3196,12 +3263,12 @@ def _format_batch_window_for_display(*, batch: BatchWindow, entry: ModelPlanEntr
     """Render a batch window for progress output, collapsing whole-day bounds to dates."""
 
     start: str = cursor_bound_display(
-        value=batch.start,
+        value=render(value=batch.start),
         cursor_type=entry.cursor_type,
         cursor_grain=entry.cursor_grain,
     )
     end: str = cursor_bound_display(
-        value=batch.end,
+        value=render(value=batch.end),
         cursor_type=entry.cursor_type,
         cursor_grain=entry.cursor_grain,
     )
@@ -3211,8 +3278,8 @@ def _format_batch_window_for_display(*, batch: BatchWindow, entry: ModelPlanEntr
 def _substitute_sentinels(
     *,
     sql: str,
-    batch_start: str,
-    batch_end: str,
+    batch_start: CursorScalar,
+    batch_end: CursorScalar,
 ) -> str:
     """Replace microbatch cursor sentinels with concrete batch bounds."""
 
@@ -3246,8 +3313,8 @@ def _validate_cursor_output_columns(
 
 def _compute_timestamp_batches(
     *,
-    start: str,
-    end: str,
+    start: CursorScalar,
+    end: CursorScalar,
     batch_size: str,
 ) -> tuple[BatchWindow, ...]:
     """Split a timestamp range into batch windows by duration."""
@@ -3256,11 +3323,20 @@ def _compute_timestamp_batches(
     if duration is None:
         return ()
 
-    try:
-        start_dt: datetime = datetime.fromisoformat(start)
-        end_dt: datetime = datetime.fromisoformat(end)
-    except (ValueError, TypeError):
+    if not isinstance(start, TimestampValue | DateValue) or not isinstance(
+        end, TimestampValue | DateValue
+    ):
         return ()
+    start_dt: datetime = (
+        start.value
+        if isinstance(start, TimestampValue)
+        else datetime.combine(start.value, datetime.min.time())
+    )
+    end_dt: datetime = (
+        end.value
+        if isinstance(end, TimestampValue)
+        else datetime.combine(end.value, datetime.min.time())
+    )
 
     if start_dt >= end_dt:
         return ()
@@ -3272,8 +3348,8 @@ def _compute_timestamp_batches(
         batch_end: datetime = min(duration.add_to(current), end_dt)
         windows.append(
             BatchWindow(
-                start=current.isoformat(),
-                end=batch_end.isoformat(),
+                start=TimestampValue(value=current),
+                end=TimestampValue(value=batch_end),
                 index=index,
             )
         )
@@ -3285,15 +3361,17 @@ def _compute_timestamp_batches(
 
 def _compute_integer_batches(
     *,
-    start: str,
-    end: str,
+    start: CursorScalar,
+    end: CursorScalar,
     batch_size: str,
 ) -> tuple[BatchWindow, ...]:
     """Split an integer range into batch windows."""
 
+    if not isinstance(start, IntegerValue) or not isinstance(end, IntegerValue):
+        return ()
     try:
-        start_int: int = int(Decimal(start))
-        end_int: int = int(Decimal(end))
+        start_int: int = start.value
+        end_int: int = end.value
         size_int: int = int(Decimal(batch_size))
     except (InvalidOperation, ValueError, OverflowError):
         return ()
@@ -3306,6 +3384,6 @@ def _compute_integer_batches(
     )
     batches: tuple[AlignedInterval, ...] = split_into_batches(interval=interval, step=size_int)
     return tuple(
-        BatchWindow(start=render(value=batch.start), end=render(value=batch.end), index=index)
+        BatchWindow(start=batch.start, end=batch.end, index=index)
         for index, batch in enumerate(batches)
     )

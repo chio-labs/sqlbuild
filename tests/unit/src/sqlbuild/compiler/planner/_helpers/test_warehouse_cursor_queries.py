@@ -14,6 +14,10 @@ from sqlbuild.compiler.planner._helpers.warehouse.snapshot import (
     _UpstreamCursorInfo,
 )
 from sqlbuild.compiler.planner.models import ModelCursorSnapshot
+from sqlbuild.compiler.planner.types import CursorType
+from sqlbuild.cursor_algebra.main.parse import parse
+from sqlbuild.cursor_algebra.main.render import render
+from sqlbuild.cursor_algebra.types import CursorScalar
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CursorFetchFailureTestCase,
     CursorQueryFailureTestCase,
@@ -226,14 +230,16 @@ def test_given_requested_bounds_when_executing_then_uses_one_standalone_query_wi
         max_tags=test_case.max_tags,
     )
 
-    results: dict[str, str] = _execute_cursor_queries(
+    results: dict[str, CursorScalar] = _execute_cursor_queries(
         queries=[query],
         connection=object(),
         execute=_execute,
         on_progress=progress.append,
     )
 
-    assert results == test_case.expected_results
+    assert {
+        key: render(value=value) for key, value in results.items()
+    } == test_case.expected_results
     assert statements == [test_case.expected_sql]
     assert "UNION ALL" not in statements[0]
     assert progress[-1] == (
@@ -281,14 +287,16 @@ def test_given_one_failed_physical_read_when_executing_then_reports_failure_and_
         ),
     ]
 
-    results: dict[str, str] = _execute_cursor_queries(
+    results: dict[str, CursorScalar] = _execute_cursor_queries(
         queries=queries,
         connection=object(),
         execute=execute,
         on_progress=progress.append,
     )
 
-    assert results == test_case.expected_results
+    assert {
+        key: render(value=value) for key, value in results.items()
+    } == test_case.expected_results
     assert len(execute.sql) == 2
     assert progress[1] == test_case.expected_failure_progress
     assert progress[3] == test_case.expected_success_progress
@@ -333,14 +341,16 @@ def test_given_fetch_failure_when_executing_then_reports_failure_and_continues(
         ),
     ]
 
-    results: dict[str, str] = _execute_cursor_queries(
+    results: dict[str, CursorScalar] = _execute_cursor_queries(
         queries=queries,
         connection=object(),
         execute=execute,
         on_progress=progress.append,
     )
 
-    assert results == test_case.expected_results
+    assert {
+        key: render(value=value) for key, value in results.items()
+    } == test_case.expected_results
     assert len(execute.sql) == 2
     assert tuple(progress) == test_case.expected_progress
 
@@ -414,7 +424,11 @@ def test_given_partial_watermark_results_when_assembling_then_model_snapshot_fai
     )
 
     snapshot: ModelCursorSnapshot = _assemble_cursor_snapshots(
-        cursor_models=[info], results=test_case.results
+        cursor_models=[info],
+        results={
+            key: parse(raw=value, cursor_type=CursorType.TIMESTAMP)
+            for key, value in test_case.results.items()
+        },
     )["model"]
 
     assert snapshot.watermarks_available is test_case.expected_available

@@ -27,6 +27,7 @@ from sqlbuild.compiler.planner.models import (
     ModelCursorSnapshot,
     WarehouseSnapshot,
 )
+from sqlbuild.cursor_algebra.models import TimestampValue
 from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry
 from tests.integration.src.sqlbuild.compiler.planner._helpers._test_types import (
     GatherCursorSnapshotTestCase,
@@ -655,7 +656,7 @@ def test_given_models_sharing_one_source_when_gathering_snapshot_then_executes_o
     [
         GatherOverrideCursorSnapshotTestCase(
             description="explicit timestamp start skips eligible target query",
-            expected_target_max="2026-09-03 00:00:00",
+            expected_target_max=TimestampValue(value=datetime(2026, 9, 3)),
             expected_eligible_max=None,
             expected_statement_count=2,
         )
@@ -722,7 +723,7 @@ def test_given_explicit_start_when_gathering_snapshot_then_eligible_query_is_nev
     [
         GatherMixedGrainEligibilityTestCase(
             description="planner eligible query and result use common day grain",
-            expected_eligible_max="2024-01-15T00:00:00",
+            expected_eligible_max=TimestampValue(value=datetime(2024, 1, 15)),
             expected_eligible_sql=(
                 'SELECT MAX("event_time") FROM staging.hourly_events '
                 "WHERE \"event_time\" <= TIMESTAMP '2024-01-20T00:00:00'"

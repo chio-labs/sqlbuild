@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import CursorSnapshotScope, ModelCursorSnapshot
+from sqlbuild.cursor_algebra.types import CursorScalar
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -69,15 +70,15 @@ class GatherSelectedCursorScopeTestCase:
 @dataclass(frozen=True)
 class GatherOverrideCursorSnapshotTestCase:
     description: str
-    expected_target_max: str
-    expected_eligible_max: str | None
+    expected_target_max: CursorScalar
+    expected_eligible_max: CursorScalar | None
     expected_statement_count: int
 
 
 @dataclass(frozen=True)
 class GatherMixedGrainEligibilityTestCase:
     description: str
-    expected_eligible_max: str
+    expected_eligible_max: CursorScalar
     expected_eligible_sql: str
 
 
