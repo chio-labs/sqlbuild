@@ -20,3 +20,12 @@ class BuildPartialTimingOutputTestCase:
     execution_seconds: float | None
     expected_fragments: tuple[str, ...]
     expected_absent_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class VirtualBuildProjectionFailureTestCase:
+    description: str
+    build_status: str
+    expected_exit_code: int
+    expected_document_status: str
+    expected_completion_message: str

@@ -341,15 +341,6 @@ class CursorRuntimeOwnershipTestCase:
 
 
 @dataclass(frozen=True)
-class UnsupportedCausalModelEdgeTestCase:
-    description: str
-    producer_config: dict[str, object]
-    expected_grain: str
-    expected_batch_size: str
-    expected_batch_count: int
-
-
-@dataclass(frozen=True)
 class BuildDownstreamDepsTestCase:
     description: str
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]

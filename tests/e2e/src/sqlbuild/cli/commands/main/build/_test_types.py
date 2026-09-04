@@ -76,6 +76,25 @@ class CappedMicrobatchScenarioE2ETestCase:
 
 
 @dataclass(frozen=True)
+class CappedWatermarkRejectionE2ETestCase:
+    """Expected static rejection for a capped watermark producer."""
+
+    description: str
+    expected_exit_code: int
+    expected_error_fragment: str
+    expected_absent_relations: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CalendarGrainCursorBoundaryE2ETestCase:
+    """Expected capped daily suffix from a calendar-grain producer maximum."""
+
+    description: str
+    expected_batch_starts: tuple[str, ...]
+    expected_exclusive_end: str
+
+
+@dataclass(frozen=True)
 class EnumContractBuildE2ETestCase:
     """Test case for enum-backed contract enforcement."""
 
@@ -894,13 +913,13 @@ class ConcurrentMicrobatchBehaviorE2ETestCase:
 
 
 @dataclass(frozen=True)
-class SerialMicrobatchLedgerE2ETestCase:
-    """Expected serial ledger and warning behavior for one project capability setting."""
+class StatelessSerialMicrobatchE2ETestCase:
+    """Expected stateless serial behavior for one project capability setting."""
 
     description: str
     settings_toml: str
     expected_complexity_warning_count: int
-    expected_minimum_completion_count: int
+    expected_state_table_count: int
 
 
 @dataclass(frozen=True)

@@ -78,6 +78,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes.postgres._test_types i
     PostgresConditionalPublicationPayloadContractTestCase,
     PostgresConditionalVirtualRefPublishTestCase,
     PostgresMicrobatchStateRoundTripTestCase,
+    PostgresRetiredMicrobatchRecordTestCase,
     PostgresStateBackendColumnValidationTestCase,
     PostgresStateBackendConcurrentLockTestCase,
     PostgresStateBackendCoreRecordsTestCase,
@@ -97,9 +98,82 @@ from tests.integration.src.sqlbuild.virtual.state.classes.postgres._test_types i
 )
 from tests.integration.src.sqlbuild.virtual.state.classes.postgres.helpers import (
     fetch_all,
+    insert_raw_postgres_microbatch_record,
+    postgres_microbatch_event,
+    postgres_microbatch_scope,
     qualified_name,
     quote_identifier,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        PostgresRetiredMicrobatchRecordTestCase(
+            description="retired producer completion",
+            retired_record_type="producer_completion",
+            expected_event_count=1,
+        ),
+        PostgresRetiredMicrobatchRecordTestCase(
+            description="retired consumer frontier",
+            retired_record_type="consumer_frontier",
+            expected_event_count=1,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_retired_postgres_rows_when_reading_history_then_only_active_events_returned(
+    test_case: PostgresRetiredMicrobatchRecordTestCase,
+    postgres_state_backend: PostgresStateBackend,
+    postgres_state_connection: Any,
+    postgres_state_schema: str,
+) -> None:
+    postgres_state_backend.initialize(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        sqlbuild_version="test",
+    )
+    scope: MicrobatchScope = postgres_microbatch_scope()
+    event: MicrobatchEvent = postgres_microbatch_event(scope=scope, event_id="active-event")
+    postgres_state_backend.append_microbatch_event(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        event=event,
+    )
+    insert_raw_postgres_microbatch_record(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        event=event,
+        event_id="retired-event",
+        record_type=test_case.retired_record_type,
+    )
+
+    scope_history: tuple[MicrobatchEvent, ...] = (
+        postgres_state_backend.read_microbatch_scope_history(
+            connection=postgres_state_connection,
+            schema=postgres_state_schema,
+            scope=scope,
+        )
+    )
+    retention_history: tuple[MicrobatchEvent, ...] = (
+        postgres_state_backend.read_microbatch_retention_history(
+            connection=postgres_state_connection,
+            schema=postgres_state_schema,
+        )
+    )
+    model_history: tuple[MicrobatchEvent, ...] = (
+        postgres_state_backend.read_microbatch_model_history(
+            connection=postgres_state_connection,
+            schema=postgres_state_schema,
+            scope=scope,
+        )
+    )
+
+    assert len(scope_history) == test_case.expected_event_count
+    assert tuple(item.event_id for item in scope_history) == (event.event_id,)
+    assert retention_history == scope_history
+    assert model_history == scope_history
+
 
 EXPECTED_STATE_INDEX_NAMES: list[str] = []
 for state_indexes in STATE_TABLE_INDEXES.values():

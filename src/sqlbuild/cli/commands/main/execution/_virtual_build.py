@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands._helpers.build_execution.outputs import (
+    execution_json_payload_with_degradation,
+)
 from sqlbuild.cli.commands._helpers.build_execution.phase_timings import (
     record_and_write_virtual_build_phase_timings,
 )
@@ -33,7 +36,6 @@ from sqlbuild.cli.commands.models import (
     VirtualBuildCliRequest,
     VirtualBuildExecution,
 )
-from sqlbuild.cli.output.main._build_execution_json import format_build_execution_json
 from sqlbuild.cli.output.main._write_execution_json_output import write_execution_json_output
 from sqlbuild.cli.target_artifacts.main._write_python_check_runtime_target import (
     write_python_check_runtime_target,
@@ -44,7 +46,6 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.plan_work import plan_has_executable_work
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.cost.classes.cost_context import CostContext
-from sqlbuild.cost.classes.run_cost_store import RunCostStore
 from sqlbuild.cost.models import CostRunRecord
 from sqlbuild.cost.types import CostStatus
 from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
@@ -235,16 +236,18 @@ def _complete_virtual_build(
     cost_collection_seconds: float = time.monotonic() - cost_started_at
     stream.write("\n" + footer + "\n")
     stream.flush()
+    payload: str = execution_json_payload_with_degradation(
+        result=result.execution_result,
+        plan=plan_output,
+        python_node_results=result.python_node_results,
+        python_check_results=check_results,
+        command=request.execution_command,
+        run_id=None if cost_record is None else result.project.run_id,
+        cost_record=cost_record,
+        execution_succeeded=exit_code == 0,
+    )
     write_execution_json_output(
-        payload=format_build_execution_json(
-            result=result.execution_result,
-            plan=plan_output,
-            python_node_results=result.python_node_results,
-            python_check_results=check_results,
-            command=request.execution_command,
-            run_id=None if cost_record is None else result.project.run_id,
-            cost=(None if cost_record is None else RunCostStore.output_payload(record=cost_record)),
-        ),
+        payload=payload,
         json_output=request.json_output,
         json_output_path=request.json_output_path,
     )

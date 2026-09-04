@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import threading
 from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import TextIO
 
 from sqlbuild.cli.output._helpers.integration_result import (
     build_clone_integration_result,
+    build_degraded_integration_result,
     build_integration_result,
     result_resource_identity,
 )
@@ -21,6 +23,7 @@ from sqlbuild.cli.output.constants import INTEGRATION_RESULT_PATH_ENV
 from sqlbuild.cli.output.models import IntegrationResultEnvelope, TerminalEventClaim
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.clone.models import CloneItemResult
+from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 
 
 class ExecutionEventWriter:
@@ -55,18 +58,33 @@ class ExecutionEventWriter:
                     if self._terminal_index is not None and resource_name is not None
                     else None
                 )
-                envelope: IntegrationResultEnvelope | None = (
-                    build_integration_result(
+                if claim is None:
+                    return
+                try:
+                    envelope: IntegrationResultEnvelope | None = build_integration_result(
                         result=result,
                         terminal=claim.terminal,
                         event_sequence=claim.event_sequence,
                         plan=plan,
                         command=command,
                     )
-                    if claim is not None
-                    else None
-                )
-                self._write_envelope(envelope)
+                    self._write_envelope(envelope)
+                except ObservabilityValidationError as error:
+                    self._warn_degraded_output(
+                        error=error,
+                        execution_succeeded=claim.terminal.event_type.endswith("completed"),
+                    )
+                    try:
+                        self._write_envelope(
+                            build_degraded_integration_result(
+                                result=result,
+                                terminal=claim.terminal,
+                                event_sequence=claim.event_sequence,
+                                command=command,
+                            )
+                        )
+                    except ObservabilityValidationError:
+                        return
 
     def write_clone_result(self, *, item: CloneItemResult, resource_type: str) -> None:
         """Write canonical terminal evidence plus typed clone-result enrichment."""
@@ -83,16 +101,32 @@ class ExecutionEventWriter:
                     if self._terminal_index is not None
                     else None
                 )
-                envelope: IntegrationResultEnvelope | None = (
-                    build_clone_integration_result(
-                        item=item,
-                        terminal=claim.terminal,
-                        event_sequence=claim.event_sequence,
+                if claim is None:
+                    return
+                try:
+                    self._write_envelope(
+                        build_clone_integration_result(
+                            item=item,
+                            terminal=claim.terminal,
+                            event_sequence=claim.event_sequence,
+                        )
                     )
-                    if claim is not None
-                    else None
-                )
-                self._write_envelope(envelope)
+                except ObservabilityValidationError as error:
+                    self._warn_degraded_output(
+                        error=error,
+                        execution_succeeded=claim.terminal.event_type.endswith("completed"),
+                    )
+                    try:
+                        self._write_envelope(
+                            build_degraded_integration_result(
+                                result=item,
+                                terminal=claim.terminal,
+                                event_sequence=claim.event_sequence,
+                                command="clone",
+                            )
+                        )
+                    except ObservabilityValidationError:
+                        return
 
     def _write_envelope(self, envelope: IntegrationResultEnvelope | None) -> None:
         if self._stream is None or envelope is None:
@@ -104,6 +138,18 @@ class ExecutionEventWriter:
         if self._terminal_index is None:
             return nullcontext()
         return self._terminal_index.output_serialization_scope()
+
+    @staticmethod
+    def _warn_degraded_output(
+        *, error: ObservabilityValidationError, execution_succeeded: bool
+    ) -> None:
+        completion: str = (
+            "warehouse execution completed successfully"
+            if execution_succeeded
+            else "execution result remains authoritative"
+        )
+        sys.stderr.write(f"warning: integration output degraded: {error}; {completion}\n")
+        sys.stderr.flush()
 
     def close(self) -> None:
         """Close the event stream when configured."""

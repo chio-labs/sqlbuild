@@ -22,7 +22,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 def capped_microbatch_project_files(
     *, limit_action: str, project_limit: str = ""
 ) -> dict[str, str]:
-    """Build a direct DuckDB project with one capped producer and consumer."""
+    """Build a direct DuckDB project with one capped producer and plain consumer."""
 
     return {
         "sqlbuild_project.toml": dedent(
@@ -75,6 +75,22 @@ def capped_microbatch_project_files(
         + "\n",
         "models/downstream_events.sql": dedent(
             """
+            MODEL (materialized view);
+            SELECT id, event_time
+            FROM __ref("capped_events")
+            """
+        ).strip()
+        + "\n",
+    }
+
+
+def capped_watermark_consumer_project_files(*, limit_action: str) -> dict[str, str]:
+    """Build an invalid project whose watermark consumer reads a capped producer."""
+
+    repo_files: dict[str, str] = capped_microbatch_project_files(limit_action=limit_action)
+    repo_files["models/downstream_events.sql"] = (
+        dedent(
+            """
             MODEL (
               materialized incremental,
               incremental_strategy delete_insert,
@@ -95,8 +111,9 @@ def capped_microbatch_project_files(
             FROM __ref("capped_events")
             """
         ).strip()
-        + "\n",
-    }
+        + "\n"
+    )
+    return repo_files
 
 
 def prepare_defer_clone_project(

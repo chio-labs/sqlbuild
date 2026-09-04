@@ -142,6 +142,84 @@ def build_clone_integration_result(
     )
 
 
+def build_degraded_integration_result(
+    *,
+    result: object,
+    terminal: LifecycleEvent,
+    event_sequence: int,
+    command: str,
+) -> IntegrationResultEnvelope | None:
+    """Build a minimal result after optional integration enrichment fails."""
+
+    payload: Mapping[str, JSONValue] = terminal.payload
+    resource_kind: str = str(payload.get("resource_kind") or "")
+    resource_name: str = str(payload.get("resource_name") or "")
+    asset: IntegrationAssetResult | None = None
+    checks: tuple[IntegrationCheckResult, ...] = ()
+    if isinstance(
+        result,
+        (
+            ModelExecutionResult,
+            SeedExecutionResult,
+            FunctionExecutionResult,
+            LoadExecutionResult,
+            PythonNodeExecutionResult,
+            CloneItemResult,
+        ),
+    ):
+        asset = IntegrationAssetResult(
+            kind=resource_kind,
+            name=resource_name,
+            status=_terminal_status(terminal),
+        )
+    elif isinstance(
+        result,
+        (AuditExecutionResult, SqlTestExecutionResult, PythonCheckExecutionResult),
+    ):
+        checks = (
+            IntegrationCheckResult(
+                kind=resource_kind,
+                name=resource_name,
+                check_id=terminal.resource_id or "",
+                passed=terminal.event_type != INTEGRATION_RESOURCE_FAILED_EVENT,
+                status=(
+                    "error" if terminal.event_type == INTEGRATION_RESOURCE_FAILED_EVENT else "pass"
+                ),
+            ),
+        )
+    if asset is None and not checks:
+        return None
+    return IntegrationResultEnvelope(
+        schema_version=INTEGRATION_RESULT_SCHEMA_VERSION,
+        record_kind=INTEGRATION_RESULT_RECORD_KIND,
+        event_id=terminal.event_id,
+        event_sequence=event_sequence,
+        event_type=terminal.event_type,
+        occurred_at=terminal.occurred_at.isoformat(),
+        invocation_id=terminal.invocation_id,
+        run_id=terminal.run_id or "",
+        resource_id=terminal.resource_id or "",
+        resource_attempt_id=terminal.resource_attempt_id or "",
+        operation_id=terminal.operation_id,
+        statement_id=terminal.statement_id,
+        resource_kind=resource_kind,
+        resource_name=resource_name,
+        attempt_number=_attempt_number(payload.get("attempt_number")),
+        duration_ms=_number(payload.get("duration_ms")),
+        output_kind=(
+            IntegrationOutputKind.ASSET if asset is not None else IntegrationOutputKind.CHECK
+        ),
+        command=command,
+        error_code=_optional_text(payload.get("error_code")),
+        error_type=_optional_text(payload.get("error_type")),
+        skip_code=_optional_text(payload.get("skip_code")),
+        skip_mode=_optional_text(payload.get("skip_mode")),
+        projection_degraded=True,
+        asset=asset,
+        checks=checks,
+    )
+
+
 def result_resource_identity(*, result: object) -> tuple[str | None, str | None]:
     """Return the canonical resource name and identifier for an executor result."""
 
@@ -363,21 +441,6 @@ def _model_microbatch(result: ModelExecutionResult) -> Mapping[str, JSONValue]:
             else None
         ),
     }
-    if (
-        result.microbatch_causal_history_status is not None
-        or result.microbatch_producer_completion_event_ids
-        or result.microbatch_consumer_frontier_event_ids
-    ):
-        values.update(
-            {
-                "causal_history_status": result.microbatch_causal_history_status,
-                "causal_replay_interval_count": len(result.microbatch_causal_replay_intervals),
-                "producer_completion_event_count": len(
-                    result.microbatch_producer_completion_event_ids
-                ),
-                "consumer_frontier_event_count": len(result.microbatch_consumer_frontier_event_ids),
-            }
-        )
     return _bounded_metadata({key: value for key, value in values.items() if value is not None})
 
 
@@ -391,6 +454,14 @@ def _canonical_status(*, terminal: LifecycleEvent, fallback: str) -> str:
     if terminal.event_type == RESOURCE_ATTEMPT_SKIPPED_EVENT:
         return "skipped"
     return fallback
+
+
+def _terminal_status(terminal: LifecycleEvent) -> str:
+    if terminal.event_type == INTEGRATION_RESOURCE_FAILED_EVENT:
+        return "failed"
+    if terminal.event_type == RESOURCE_ATTEMPT_SKIPPED_EVENT:
+        return "skipped"
+    return "success"
 
 
 def _attempt_number(value: object) -> int:

@@ -17,74 +17,11 @@ from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     resolve_effective_timestamp_grain as resolve_runtime_effective_timestamp_grain,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
-    AvailabilityStartFloorTestCase,
     MicrobatchCursorTypeTestCase,
     MicrobatchGrainOwnershipTestCase,
     MicrobatchRedesignBehaviorTestCase,
     WatermarkLimitValidationTestCase,
 )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    (
-        AvailabilityStartFloorTestCase(
-            description="all mode intersects every capped producer lower edge",
-            ranges=(
-                ("2026-01-03", "2026-01-10"),
-                ("2026-01-05", "2026-01-08"),
-                (None, "2026-01-12"),
-            ),
-            mode="all",
-            resolved_end="2026-01-08",
-            expected_start="2026-01-05",
-        ),
-        AvailabilityStartFloorTestCase(
-            description="any mode uses lower edge of producer supplying furthest end",
-            ranges=(
-                (None, "2026-01-08"),
-                ("2026-01-05", "2026-01-12"),
-            ),
-            mode="any",
-            resolved_end="2026-01-12",
-            expected_start="2026-01-05",
-        ),
-        AvailabilityStartFloorTestCase(
-            description="any mode remains unbounded when furthest producer is uncapped",
-            ranges=(
-                ("2026-01-05", "2026-01-08"),
-                (None, "2026-01-12"),
-            ),
-            mode="any",
-            resolved_end="2026-01-12",
-            expected_start="2026-01-01",
-        ),
-        AvailabilityStartFloorTestCase(
-            description="any tied end remains unbounded when one producer is uncapped",
-            ranges=(
-                ("2026-01-05", "2026-01-12"),
-                (None, "2026-01-12"),
-            ),
-            mode="any",
-            resolved_end="2026-01-12",
-            expected_start="2026-01-01",
-        ),
-    ),
-    ids=lambda case: case.description,
-)
-def test_given_producer_availability_ranges_when_clamping_bounds_then_mode_is_respected(
-    test_case: AvailabilityStartFloorTestCase,
-) -> None:
-    assert (
-        CursorBounds(start="2026-01-01", end=test_case.resolved_end)
-        .clamp_to_availability(
-            ranges=test_case.ranges,
-            cursor_watermark_mode=test_case.mode,
-            cursor_type="timestamp",
-        )
-        .start
-        == test_case.expected_start
-    )
 
 
 @pytest.mark.parametrize(

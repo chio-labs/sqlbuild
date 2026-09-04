@@ -84,6 +84,38 @@ def write_execution_json_output(
         sys.stdout.flush()
 
 
+def format_degraded_execution_json(*, command: str, status: str) -> str:
+    """Format a minimal valid document when optional result projection fails."""
+
+    return (
+        json.dumps(
+            {
+                "version": _JSON_VERSION,
+                "command": command,
+                "status": status,
+                "summary": {},
+                "assets": [],
+                "checks": [],
+                "projection_degraded": True,
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+
+
+def warn_execution_json_degraded(*, error: Exception, execution_succeeded: bool) -> None:
+    """Warn without allowing an optional post-execution projection to alter exit status."""
+
+    completion: str = (
+        "warehouse execution completed successfully"
+        if execution_succeeded
+        else "execution result remains authoritative"
+    )
+    sys.stderr.write(f"warning: integration output degraded: {error}; {completion}\n")
+    sys.stderr.flush()
+
+
 def format_build_execution_json(
     *,
     result: BuildExecutionResult,
@@ -671,22 +703,6 @@ def _format_microbatch_result(result: ModelExecutionResult) -> dict[str, object]
             for interval in result.microbatch_accounting_intervals
         ],
     }
-    if (
-        result.microbatch_causal_history_status is not None
-        or result.microbatch_producer_completion_event_ids
-        or result.microbatch_consumer_frontier_event_ids
-    ):
-        microbatch.update(
-            {
-                "causal_history_status": result.microbatch_causal_history_status,
-                "causal_replay_intervals": [
-                    {"start": start, "end": end}
-                    for start, end in result.microbatch_causal_replay_intervals
-                ],
-                "producer_completion_event_ids": result.microbatch_producer_completion_event_ids,
-                "consumer_frontier_event_ids": result.microbatch_consumer_frontier_event_ids,
-            }
-        )
     if result.microbatch_limit is not None:
         microbatch.update(
             {

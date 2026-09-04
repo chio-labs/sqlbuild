@@ -11,7 +11,7 @@ from collections import deque
 from collections.abc import Callable, Mapping
 from concurrent.futures import FIRST_COMPLETED, CancelledError, Future, ThreadPoolExecutor, wait
 from contextvars import copy_context
-from datetime import UTC, datetime
+from datetime import datetime
 from functools import partial
 from pathlib import Path
 from typing import Any, cast
@@ -20,7 +20,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.contract.types import TablePromotionMode
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.planner.models import (
@@ -101,18 +101,9 @@ from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.microbatches.classes.direct_store import (
     DirectMicrobatchEventStore,
     direct_microbatch_scope,
-    direct_microbatch_scope_for_location,
 )
-from sqlbuild.microbatches.main.causal_dependency import capture_causal_dependency
-from sqlbuild.microbatches.main.causal_publication import publish_terminal_causal_facts
-from sqlbuild.microbatches.main.physical_causal_completion import physical_producer_completion
-from sqlbuild.microbatches.models import (
-    CausalDependencySnapshot,
-    CausalPublicationResult,
-    MicrobatchInterval,
-    MicrobatchScope,
-)
-from sqlbuild.microbatches.types import MicrobatchEventStore, MicrobatchRunType
+from sqlbuild.microbatches.models import MicrobatchScope
+from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind, NodeStartCallback
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
@@ -305,6 +296,7 @@ class BuildScheduler:
             (entry.destination.database, entry.destination.schema)
             for entry in self._plan.model_entries
             if entry.incremental_mode == IncrementalMode.MICROBATCH
+            and entry.batch_concurrency > 1
             and entry.action != PlanAction.SKIP
             and entry.destination.schema is not None
         }
@@ -996,8 +988,6 @@ class BuildScheduler:
         microbatch_event_store: MicrobatchEventStore | None = None
         microbatch_event_store_resolver: Callable[[Any], MicrobatchEventStore] | None = None
         microbatch_scope: MicrobatchScope | None = None
-        causal_dependencies: tuple[CausalDependencySnapshot, ...] = ()
-
         start: float = time.monotonic()
         log_debug_event(
             logger=_DEBUG_LOGGER,
@@ -1015,23 +1005,19 @@ class BuildScheduler:
             try:
                 if self._before_model_materialize is not None:
                     self._before_model_materialize(entry=model_entry, connection=connection)
-                if model_entry.incremental_mode == IncrementalMode.MICROBATCH:
+                if (
+                    model_entry.incremental_mode == IncrementalMode.MICROBATCH
+                    and model_entry.batch_concurrency > 1
+                ):
                     microbatch_event_store, microbatch_scope = self._resolve_microbatch_state(
                         model_entry=model_entry, connection=connection
                     )
-                    causal_dependencies = self._capture_causal_dependencies(
-                        model_entry=model_entry,
-                        connection=connection,
-                        consumer_store=microbatch_event_store,
-                        consumer_scope=microbatch_scope,
+                    microbatch_event_store_resolver = partial(
+                        lambda connection, *, entry: self._microbatch_store_for_connection(
+                            connection=connection, model_entry=entry
+                        ),
+                        entry=model_entry,
                     )
-                    if model_entry.batch_concurrency > 1:
-                        microbatch_event_store_resolver = partial(
-                            lambda connection, *, entry: self._microbatch_store_for_connection(
-                                connection=connection, model_entry=entry
-                            ),
-                            entry=model_entry,
-                        )
                 result: ModelExecutionResult = _dispatch_model(
                     context=ModelMaterializationContext(
                         entry=model_entry,
@@ -1058,7 +1044,6 @@ class BuildScheduler:
                             and microbatch_scope.virtual_model_version_hash is not None
                             else model_entry.fingerprint_version_hash
                         ),
-                        microbatch_causal_dependencies=causal_dependencies,
                         microbatch_unaccounted_partition_policy=(
                             model_entry.unaccounted_partition_policy
                             or self._runtime.microbatch_unaccounted_partition_policy
@@ -1078,14 +1063,6 @@ class BuildScheduler:
                     on_progress=self._on_sub_progress,
                 )
                 if result.status == ExecutionStatus.SUCCESS:
-                    if microbatch_event_store is not None and causal_dependencies:
-                        result = self._publish_terminal_causal_facts(
-                            model_entry=model_entry,
-                            result=result,
-                            connection=connection,
-                            store=microbatch_event_store,
-                            dependencies=causal_dependencies,
-                        )
                     reconcile_model_retention(
                         plan=self._plan,
                         adapter=self._adapter,
@@ -1132,141 +1109,6 @@ class BuildScheduler:
             direct_microbatch_scope(
                 adapter=self._adapter, connection=connection, entry=model_entry
             ),
-        )
-
-    def _capture_causal_dependencies(
-        self,
-        *,
-        model_entry: ModelPlanEntry,
-        connection: Any,
-        consumer_store: MicrobatchEventStore,
-        consumer_scope: MicrobatchScope,
-    ) -> tuple[CausalDependencySnapshot, ...]:
-        dependencies: list[CausalDependencySnapshot] = []
-        for relation in model_entry.cursor_input_relations:
-            producer_name: str | None = relation.producer_model_name
-            producer_entry: ModelPlanEntry | None = (
-                None
-                if producer_name is None
-                else self._indexes.model_entries_by_key.get(
-                    CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=producer_name)
-                )
-            )
-            if producer_name is None:
-                continue
-            producer_store: MicrobatchEventStore
-            producer_scope: MicrobatchScope
-            if producer_entry is not None:
-                if (
-                    producer_entry.incremental_mode != IncrementalMode.MICROBATCH
-                    or producer_entry.cursor_type != model_entry.cursor_type
-                ):
-                    continue
-                producer_store, producer_scope = self._resolve_microbatch_state(
-                    model_entry=producer_entry, connection=connection
-                )
-                producer_version_hash: str | None = (
-                    producer_scope.virtual_model_version_hash
-                    or producer_entry.fingerprint_version_hash
-                )
-                producer_cursor_grain: str | None = producer_entry.cursor_grain
-            else:
-                producer_location: CompiledRelationLocation | None = self._plan.model_locations.get(
-                    producer_name
-                )
-                if producer_location is None:
-                    continue
-                producer_version_hash = relation.producer_model_version_hash
-                producer_cursor_grain = relation.cursor_grain
-                location_resolver: (
-                    Callable[
-                        [str, CompiledRelationLocation, str | None, object],
-                        tuple[MicrobatchEventStore, MicrobatchScope],
-                    ]
-                    | None
-                ) = self._runtime.microbatch_location_state_resolver
-                if location_resolver is not None:
-                    producer_store, producer_scope = location_resolver(
-                        producer_name,
-                        producer_location,
-                        producer_version_hash,
-                        connection,
-                    )
-                else:
-                    producer_store = DirectMicrobatchEventStore(
-                        adapter=self._adapter, connection=connection
-                    )
-                    producer_scope = direct_microbatch_scope_for_location(
-                        adapter=self._adapter,
-                        connection=connection,
-                        model_name=producer_name,
-                        destination=producer_location,
-                    )
-            dependencies.append(
-                capture_causal_dependency(
-                    producer_store=producer_store,
-                    consumer_store=consumer_store,
-                    producer_scope=producer_scope,
-                    producer_model_version_hash=producer_version_hash,
-                    producer_model_name=producer_name,
-                    producer_cursor_grain=producer_cursor_grain,
-                    consumer_scope=consumer_scope,
-                    consumer_model_version_hash=(
-                        consumer_scope.virtual_model_version_hash
-                        or model_entry.fingerprint_version_hash
-                    ),
-                    cursor_type=model_entry.cursor_type or "",
-                )
-            )
-        return tuple(dependencies)
-
-    def _publish_terminal_causal_facts(
-        self,
-        *,
-        model_entry: ModelPlanEntry,
-        result: ModelExecutionResult,
-        connection: Any,
-        store: MicrobatchEventStore,
-        dependencies: tuple[CausalDependencySnapshot, ...],
-    ) -> ModelExecutionResult:
-        current_store, current_scope = self._resolve_microbatch_state(
-            model_entry=model_entry, connection=connection
-        )
-        publication: CausalPublicationResult = publish_terminal_causal_facts(
-            store=current_store if current_store is not store else store,
-            model_scope=current_scope,
-            model_version_hash=(
-                current_scope.virtual_model_version_hash or model_entry.fingerprint_version_hash
-            ),
-            run_id=self._run_id,
-            run_type=MicrobatchRunType(result.microbatch_run_type or MicrobatchRunType.NORMAL),
-            completed_intervals=tuple(
-                MicrobatchInterval(start=start, end=end)
-                for start, end in result.microbatch_applied_intervals
-                if start != end
-            ),
-            dependencies=dependencies,
-            publish_producer_completions=False,
-        )
-        producer_event_ids: tuple[str, ...] = tuple(
-            physical_producer_completion(
-                scope=current_scope,
-                model_version_hash=(
-                    current_scope.virtual_model_version_hash or model_entry.fingerprint_version_hash
-                ),
-                interval=MicrobatchInterval(start=start, end=end),
-                run_id=self._run_id,
-                run_type=MicrobatchRunType(result.microbatch_run_type or MicrobatchRunType.NORMAL),
-                created_at=datetime.now(tz=UTC),
-            ).event_id
-            for start, end in result.microbatch_applied_intervals
-            if start != end
-        )
-        return dataclasses.replace(
-            result,
-            microbatch_physical_generation_id=current_scope.physical_generation_id,
-            microbatch_producer_completion_event_ids=producer_event_ids,
-            microbatch_consumer_frontier_event_ids=publication.consumer_frontier_event_ids,
         )
 
     def _microbatch_store_for_connection(

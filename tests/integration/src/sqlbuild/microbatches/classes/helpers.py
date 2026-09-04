@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
+from sqlbuild.microbatches.classes.event_codec import MicrobatchEventCodec
+from sqlbuild.microbatches.constants import MICROBATCH_COLUMNS
 from sqlbuild.microbatches.main.deterministic_event_id import (
     deterministic_microbatch_event_id,
 )
@@ -64,13 +67,16 @@ def build_events(*, count: int, start_at: int = 0) -> tuple[MicrobatchEvent, ...
     return tuple(events)
 
 
-def causal_scope(*, model_name: str, generation: str) -> MicrobatchScope:
-    return MicrobatchScope(
-        scope_kind="direct_logical",
-        scope_key=f"duckdb:main.{model_name}",
-        model_name=model_name,
-        target_database=None,
-        target_schema="main",
-        target_name=model_name,
-        physical_generation_id=generation,
+def insert_raw_event_record_type(
+    *, connection: Any, event: MicrobatchEvent, record_type: str
+) -> None:
+    """Insert a persisted event using a raw record type string."""
+
+    values: list[object | None] = list(MicrobatchEventCodec.values(event))
+    values[1] = record_type
+    placeholders: str = ", ".join("?" for _ in values)
+    connection.execute(
+        f"INSERT INTO main._sqlbuild_microbatches ({', '.join(MICROBATCH_COLUMNS)}) "
+        f"VALUES ({placeholders})",
+        values,
     )

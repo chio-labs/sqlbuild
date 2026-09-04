@@ -380,10 +380,10 @@ def test_given_planner_owned_model_backed_input_when_grain_is_coarser_then_range
     "test_case",
     [
         PlanEntryCursorGrainTestCase(
-            description="hour grain advances plan DML bound by a whole hour",
+            description="hour grain aligns plan DML bound to the next hour boundary",
             cursor_grain="hour",
             upstream_max="2026-01-04T12:37:00",
-            expected_end="2026-01-04T13:37:00",
+            expected_end="2026-01-04T13:00:00",
         )
     ],
     ids=lambda case: case.description,

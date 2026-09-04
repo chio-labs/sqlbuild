@@ -76,7 +76,8 @@ class _TrackingDuckDbAdapter(DuckDbAdapter):
             expected_max_active_batches=3,
             expected_max_active_models=2,
             expected_row_count=6,
-            expected_completion_count=14,
+            expected_completion_count=10,
+            expected_synthetic_completion_count=6,
             expected_unattributed_batches=0,
         )
     ],
@@ -168,9 +169,16 @@ def test_given_three_batch_ceiling_when_incremental_runs_then_batches_overlap(
 
     adapter: _TrackingDuckDbAdapter = _TrackingDuckDbAdapter()
     db_path: Path = tmp_path / "test.duckdb"
+    initial_project_files: dict[str, str] = {
+        path: contents.replace("batch_concurrency 3", "batch_concurrency 1")
+        for path, contents in project_files.items()
+    }
+    for relative_path, contents in initial_project_files.items():
+        destination = tmp_path / relative_path
+        destination.write_text(contents, encoding="utf-8")
     initial_case: ConcurrentBuildTestCase = ConcurrentBuildTestCase(
         description="initial serial generation",
-        project_files=project_files,
+        project_files=initial_project_files,
         max_concurrency=3,
         expected_status=BuildStatus.SUCCESS,
         setup_sql=(
@@ -188,6 +196,21 @@ def test_given_three_batch_ceiling_when_incremental_runs_then_batches_overlap(
         adapter=adapter,
     )
     assert initial_result.status == BuildStatus.SUCCESS
+    initial_connection: Any = adapter.connect({"database": str(db_path)})
+    try:
+        assert (
+            initial_connection.execute(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                "WHERE table_schema = 'main' AND table_name = '_sqlbuild_microbatches'"
+            ).fetchone()[0]
+            == 0
+        )
+    finally:
+        adapter.close(initial_connection)
+
+    for relative_path, contents in project_files.items():
+        destination = tmp_path / relative_path
+        destination.write_text(contents, encoding="utf-8")
 
     adapter.track_delta_staging = True
     incremental_case: ConcurrentBuildTestCase = ConcurrentBuildTestCase(
@@ -229,6 +252,13 @@ def test_given_three_batch_ceiling_when_incremental_runs_then_batches_overlap(
                 "WHERE record_type = 'partition_completion'"
             ).fetchone()[0]
             == test_case.expected_completion_count
+        )
+        assert (
+            connection.execute(
+                "SELECT COUNT(*) FROM main._sqlbuild_microbatches "
+                "WHERE record_type = 'synthetic_completion'"
+            ).fetchone()[0]
+            == test_case.expected_synthetic_completion_count
         )
     finally:
         adapter.close(connection)

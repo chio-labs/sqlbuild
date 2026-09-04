@@ -202,7 +202,6 @@ def test_given_opt_in_concurrent_microbatch_when_building_twice_then_records_all
     )
     assert history == [
         ("partition_completion", "known", 9),
-        ("producer_completion", "known", 9),
     ]
     delta_count: list[tuple[object, ...]] = query_duckdb(
         db_path=db_path,

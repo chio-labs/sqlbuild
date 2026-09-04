@@ -17,6 +17,9 @@ from sqlbuild.compiler.planner.main.execution.bounded_cursor_override import (
 )
 from sqlbuild.compiler.planner.main.execution.cursor_replay_policy import apply_cursor_replay_policy
 from sqlbuild.compiler.planner.main.execution.future_cursor_safety import apply_future_cursor_safety
+from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import (
+    _advance_discovered_cursor_end as advance_discovered_cursor_end,
+)
 from sqlbuild.compiler.planner.main.execution.maximum_start_safety import apply_maximum_start_policy
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
@@ -39,7 +42,6 @@ from sqlbuild.executor.run.models import RuntimeCursorSpec
 from sqlbuild.executor.run.types import WatermarkResolver
 from sqlbuild.spec.contracts.constants import ZERO_DAY_CURSOR_DURATION
 from sqlbuild.spec.contracts.models import StartCursorsConfig
-from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
 _TIMESTAMP_GRAIN_ORDER: dict[str, int] = {
     CursorGrain.SECOND: 0,
@@ -142,6 +144,12 @@ def resolve_runtime_cursor_bounds(
         cursor_input_relations=spec.cursor_input_relations,
         microbatch_strategy=spec.microbatch_strategy,
     )
+    discovered_grain: str | None = (
+        effective_grain
+        if spec.cursor_grain is not None
+        or any(item.cursor_grain is not None for item in spec.cursor_input_relations)
+        else None
+    )
 
     target_max_raw: object | None = None
     if spec.read_destination_cursor:
@@ -169,14 +177,14 @@ def resolve_runtime_cursor_bounds(
     upstream_mins: list[object] = []
     upstream_maxes: list[object] = []
     upstream_availability_ends: list[object] = []
-    upstream_availability_ranges: list[tuple[str | None, str]] = []
     input_evidence: list[CursorInputEvidence] = []
     input_index: int
     physical_input: tuple[tuple[str, str], CursorInputRelation]
     for input_index, physical_input in enumerate(physical_inputs, start=1):
         relation_column, cursor_input = physical_input
-        terminal_start, terminal_end = _effective_terminal_bounds(cursor_input=cursor_input)
-        input_grain: str | None = cursor_input.cursor_grain or effective_grain
+        terminal_start: str | None = cursor_input.terminal_cursor_start
+        terminal_end: str | None = cursor_input.terminal_cursor_end
+        input_grain: str | None = cursor_input.cursor_grain or discovered_grain
         minimum: object | None
         maximum: object | None
         minimum, maximum = _query_watermark_raw(
@@ -184,11 +192,7 @@ def resolve_runtime_cursor_bounds(
             connection=connection,
             relation=relation_column[0],
             cursor_column=relation_column[1],
-            read_minimum=(
-                read_minimum
-                or cursor_input.producer_microbatch_limit_action
-                == MicrobatchLimitAction.CAP_FROM_END
-            ),
+            read_minimum=read_minimum,
             query_index=input_index,
             total=len(physical_inputs),
             on_progress=on_progress,
@@ -210,20 +214,20 @@ def resolve_runtime_cursor_bounds(
         if minimum is not None:
             upstream_mins.append(minimum)
         upstream_maxes.append(maximum)
-        availability_end, availability_range = _input_availability(
-            minimum=minimum,
-            maximum=maximum,
-            terminal_end=terminal_end,
-            input_grain=input_grain,
-            effective_grain=effective_grain,
-            cursor_type=cursor_type,
-            microbatch_strategy=spec.microbatch_strategy,
-            producer_limit_action=cursor_input.producer_microbatch_limit_action,
-        )
-        if availability_end is not None:
+        if (
+            cursor_type == CursorType.TIMESTAMP
+            and spec.microbatch_strategy == MicrobatchStrategy.WATERMARK
+        ):
+            availability_end: object = (
+                _raw_terminal_bound(value=terminal_end, cursor_type=cursor_type)
+                if terminal_end is not None
+                else advance_discovered_cursor_end(
+                    value=maximum,
+                    cursor_type=cursor_type,
+                    cursor_grain=input_grain,
+                )
+            )
             upstream_availability_ends.append(availability_end)
-        if availability_range is not None:
-            upstream_availability_ranges.append(availability_range)
         normalized_maximum: str | None = _normalize_bound(value=maximum, is_end=False)
         if normalized_maximum is not None:
             input_evidence.append(
@@ -240,18 +244,59 @@ def resolve_runtime_cursor_bounds(
             )
     if not upstream_maxes:
         return None
-    start: str | None
-    end: str | None
-    start, end = _resolve_raw_cursor_range(
-        cursor_type=cursor_type,
-        effective_grain=effective_grain,
-        microbatch_strategy=spec.microbatch_strategy,
-        cursor_watermark_mode=spec.cursor_watermark_mode,
-        target_max_raw=target_max_raw,
-        upstream_mins=upstream_mins,
-        upstream_maxes=upstream_maxes,
-        upstream_availability_ends=upstream_availability_ends,
+    upstream_min_raw: object | None = (
+        _minimum_bound_raw(
+            values=upstream_mins,
+            cursor_type=cursor_type,
+            effective_grain=effective_grain,
+        )
+        if upstream_mins
+        else None
     )
+    aggregate: Callable[..., object] = (
+        _maximum_bound_raw
+        if spec.cursor_watermark_mode == CursorWatermarkMode.ANY
+        else _minimum_bound_raw
+    )
+    watermark_timestamp: bool = (
+        cursor_type == CursorType.TIMESTAMP
+        and spec.microbatch_strategy == MicrobatchStrategy.WATERMARK
+    )
+    upstream_max_raw: object = aggregate(
+        values=(upstream_availability_ends if watermark_timestamp else upstream_maxes),
+        cursor_type=cursor_type,
+        effective_grain=(CursorGrain.SECOND if watermark_timestamp else effective_grain),
+    )
+    if cursor_type == CursorType.TIMESTAMP and effective_grain is not None:
+        start_raw: object | None = (
+            target_max_raw if target_max_raw is not None else upstream_min_raw
+        )
+        if start_raw is None:
+            return None
+        start: str | None = _normalize_bound(
+            value=_floor_timestamp_bound(value=start_raw, grain=effective_grain), is_end=False
+        )
+        end: str | None = _normalize_bound(
+            value=(
+                _floor_timestamp_bound(value=upstream_max_raw, grain=effective_grain)
+                if watermark_timestamp and discovered_grain is not None
+                else upstream_max_raw
+                if watermark_timestamp
+                else advance_discovered_cursor_end(
+                    value=upstream_max_raw,
+                    cursor_type=cursor_type,
+                    cursor_grain=discovered_grain,
+                )
+            ),
+            is_end=False,
+        )
+    else:
+        start: str | None = (
+            _normalize_bound(value=target_max_raw, is_end=False)
+            if target_max_raw is not None
+            else _normalize_bound(value=upstream_min_raw, is_end=False)
+        )
+        end: str | None = _normalize_bound(value=upstream_max_raw, is_end=True)
     if start is None or end is None:
         return None
     if spec.end_cursor_override is not None:
@@ -312,7 +357,7 @@ def resolve_runtime_cursor_bounds(
         ),
         has_start_override=spec.start_cursor_override is not None,
     )
-    bounds = _clamp_cursor_end(
+    return _clamp_cursor_end(
         bounds=apply_future_cursor_safety(
             bounds=bounds,
             cursor_type=cursor_type,
@@ -326,132 +371,6 @@ def resolve_runtime_cursor_bounds(
         ),
         cursor_end=spec.cursor_end,
         cursor_type=cursor_type,
-    )
-    return bounds.clamp_to_availability(
-        ranges=tuple(upstream_availability_ranges),
-        cursor_watermark_mode=spec.cursor_watermark_mode,
-        cursor_type=cursor_type,
-    )
-
-
-def _resolve_raw_cursor_range(
-    *,
-    cursor_type: str | None,
-    effective_grain: str | None,
-    microbatch_strategy: str | None,
-    cursor_watermark_mode: str,
-    target_max_raw: object | None,
-    upstream_mins: list[object],
-    upstream_maxes: list[object],
-    upstream_availability_ends: list[object],
-) -> tuple[str | None, str | None]:
-    upstream_min_raw: object | None = (
-        _minimum_bound_raw(
-            values=upstream_mins,
-            cursor_type=cursor_type,
-            effective_grain=effective_grain,
-        )
-        if upstream_mins
-        else None
-    )
-    aggregate: Callable[..., object] = (
-        _maximum_bound_raw
-        if cursor_watermark_mode == CursorWatermarkMode.ANY
-        else _minimum_bound_raw
-    )
-    watermark_timestamp: bool = (
-        cursor_type == CursorType.TIMESTAMP and microbatch_strategy == MicrobatchStrategy.WATERMARK
-    )
-    upstream_max_raw: object = aggregate(
-        values=(upstream_availability_ends if watermark_timestamp else upstream_maxes),
-        cursor_type=cursor_type,
-        effective_grain=(CursorGrain.SECOND if watermark_timestamp else effective_grain),
-    )
-    if cursor_type != CursorType.TIMESTAMP or effective_grain is None:
-        start: str | None = (
-            _normalize_bound(value=target_max_raw, is_end=False)
-            if target_max_raw is not None
-            else _normalize_bound(value=upstream_min_raw, is_end=False)
-        )
-        return start, _normalize_bound(value=upstream_max_raw, is_end=True)
-    start_raw: object | None = target_max_raw if target_max_raw is not None else upstream_min_raw
-    if start_raw is None:
-        return None, None
-    start = _normalize_bound(
-        value=_floor_timestamp_bound(value=start_raw, grain=effective_grain), is_end=False
-    )
-    end: str | None = _normalize_bound(
-        value=(
-            _floor_timestamp_bound(value=upstream_max_raw, grain=effective_grain)
-            if watermark_timestamp
-            else _increment_timestamp_bound(
-                value=_floor_timestamp_bound(value=upstream_max_raw, grain=effective_grain),
-                grain=effective_grain,
-            )
-        ),
-        is_end=False,
-    )
-    return start, end
-
-
-def _effective_terminal_bounds(
-    *, cursor_input: CursorInputRelation
-) -> tuple[str | None, str | None]:
-    producer_is_capped: bool = cursor_input.producer_microbatch_limit_action in {
-        MicrobatchLimitAction.CAP_FROM_END,
-        MicrobatchLimitAction.CAP_FROM_START,
-    }
-    if producer_is_capped:
-        return None, None
-    return cursor_input.terminal_cursor_start, cursor_input.terminal_cursor_end
-
-
-def _input_availability(
-    *,
-    minimum: object | None,
-    maximum: object,
-    terminal_end: str | None,
-    input_grain: str | None,
-    effective_grain: str | None,
-    cursor_type: str | None,
-    microbatch_strategy: str | None,
-    producer_limit_action: MicrobatchLimitAction | None,
-) -> tuple[object | None, tuple[str | None, str] | None]:
-    watermark_timestamp: bool = (
-        cursor_type == CursorType.TIMESTAMP and microbatch_strategy == MicrobatchStrategy.WATERMARK
-    )
-    if watermark_timestamp:
-        availability_end: object = (
-            _raw_terminal_bound(value=terminal_end, cursor_type=cursor_type)
-            if terminal_end is not None
-            else _increment_timestamp_bound(
-                value=_floor_timestamp_bound(
-                    value=maximum,
-                    grain=input_grain or CursorGrain.SECOND,
-                ),
-                grain=input_grain or CursorGrain.SECOND,
-            )
-        )
-        normalized_end: str | None = _normalize_effective_timestamp_bound(
-            value=availability_end,
-            cursor_type=cursor_type,
-            effective_grain=effective_grain,
-        )
-    else:
-        availability_end = None
-        normalized_end = _normalize_bound(value=maximum, is_end=True)
-    normalized_start: str | None = (
-        _normalize_effective_timestamp_bound(
-            value=minimum,
-            cursor_type=cursor_type,
-            effective_grain=effective_grain,
-        )
-        if minimum is not None and producer_limit_action == MicrobatchLimitAction.CAP_FROM_END
-        else None
-    )
-    return (
-        availability_end,
-        None if normalized_end is None else (normalized_start, normalized_end),
     )
 
 

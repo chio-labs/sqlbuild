@@ -11,6 +11,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import IO, Any
 
+from sqlbuild.cli.output.constants import INTEGRATION_MICROBATCH_KEYS
 from sqlbuild.cli.output.models import IntegrationAssetResult, IntegrationResultEnvelope
 from sqlbuild.integrations.dagster._helpers.imports import load_dagster
 from sqlbuild.integrations.dagster._helpers.invocation import (
@@ -29,6 +30,29 @@ from sqlbuild.integrations.dagster.constants import (
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 
 _MAX_DIAGNOSTIC_CHARS: int = 4_000
+_OPTIONAL_ASSET_ENRICHMENT_FIELDS: frozenset[str] = frozenset(
+    {
+        "action",
+        "failed_phase",
+        "future_cursor_safety",
+        "maximum_start_safety",
+    }
+)
+_OPTIONAL_MICROBATCH_ENUM_FIELDS: frozenset[str] = frozenset(
+    {
+        "action",
+        "replay_requirement_state",
+        "run_type",
+        "unaccounted_partition_policy",
+    }
+)
+_OPTIONAL_CHECK_ENRICHMENT_FIELDS: frozenset[str] = frozenset(
+    {
+        "attachment_kind",
+        "run_scope_phase",
+        "severity",
+    }
+)
 
 
 def _diagnostic_tail(value: str) -> str:
@@ -374,8 +398,11 @@ class SqlBuildCliInvocation:
             try:
                 envelope: IntegrationResultEnvelope = IntegrationResultEnvelope.from_json(line)
             except ObservabilityValidationError:
-                self._warn_invalid_integration_record()
-                return
+                try:
+                    envelope = _integration_result_without_optional_enrichment(line)
+                except ObservabilityValidationError:
+                    self._warn_invalid_integration_record()
+                    return
             if envelope.asset is not None:
                 _ = self._log_live_asset_failure(
                     asset=envelope.asset,
@@ -448,3 +475,46 @@ class SqlBuildCliInvocation:
             extra=metadata,
         )
         return logged_failed_assets
+
+
+def _integration_result_without_optional_enrichment(line: str) -> IntegrationResultEnvelope:
+    """Retry a valid envelope after dropping forward-compatible optional enrichment."""
+
+    try:
+        payload: Any = json.loads(line)
+    except json.JSONDecodeError as error:
+        raise ObservabilityValidationError("malformed integration result JSON") from error
+    if not isinstance(payload, dict):
+        raise ObservabilityValidationError("integration result must be a JSON object")
+    asset: object = payload.get("asset")
+    if isinstance(asset, dict):
+        stripped_asset: dict[str, object] = {
+            key: value
+            for key, value in asset.items()
+            if key not in _OPTIONAL_ASSET_ENRICHMENT_FIELDS
+        }
+        microbatch: object = asset.get("microbatch")
+        if isinstance(microbatch, dict):
+            stripped_asset["microbatch"] = {
+                key: value
+                for key, value in microbatch.items()
+                if key in INTEGRATION_MICROBATCH_KEYS
+                and key not in _OPTIONAL_MICROBATCH_ENUM_FIELDS
+            }
+        payload["asset"] = stripped_asset
+    checks: object = payload.get("checks")
+    if isinstance(checks, list):
+        stripped_checks: list[object] = []
+        for check in checks:
+            stripped_check: object = (
+                {
+                    key: value
+                    for key, value in check.items()
+                    if key not in _OPTIONAL_CHECK_ENRICHMENT_FIELDS
+                }
+                if isinstance(check, dict)
+                else check
+            )
+            stripped_checks.append(stripped_check)
+        payload["checks"] = stripped_checks
+    return IntegrationResultEnvelope.from_json(json.dumps(payload))
