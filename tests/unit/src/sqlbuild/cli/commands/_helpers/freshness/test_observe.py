@@ -40,11 +40,11 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.freshness.helpers import (
                 "raw_unknown": "unknown",
             },
             expected_versions={
-                "raw_age_error": "2025-12-31T21:00:00",
-                "raw_age_pass": "2025-12-31T23:30:00",
+                "raw_age_error": "2025-12-31T21:00:00+00:00",
+                "raw_age_pass": "2025-12-31T23:30:00+00:00",
                 "raw_age_unknown": "42",
-                "raw_age_warn": "2025-12-31T22:30:00",
-                "raw_lag": "2026-01-01T00:05:00",
+                "raw_age_warn": "2025-12-31T22:30:00+00:00",
+                "raw_lag": "2026-01-01T00:05:00+00:00",
                 "raw_orders": "1",
                 "raw_payments": "2",
             },
@@ -100,7 +100,7 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.freshness.helpers import (
                 "raw_unknown": "unknown",
             },
             expected_versions={
-                "raw_lag": "2026-01-01T00:05:00",
+                "raw_lag": "2026-01-01T00:05:00+00:00",
                 "raw_orders": "1",
                 "raw_payments": "2",
             },
@@ -153,7 +153,7 @@ def test_given_sources_when_observing_freshness_then_classifies_sources(
             select=("raw_metadata",),
             exclude=(),
             expected_statuses={"raw_metadata": "observed"},
-            expected_versions={"raw_metadata": "2026-01-02T03:04:05"},
+            expected_versions={"raw_metadata": "2026-01-02T03:04:05+00:00"},
         )
     ],
     ids=lambda case: case.description,

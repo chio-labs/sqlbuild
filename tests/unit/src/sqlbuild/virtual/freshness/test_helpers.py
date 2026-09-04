@@ -116,7 +116,7 @@ def test_given_source_freshness_config_when_observing_then_returns_data_version(
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
-    observed_at: datetime = datetime(2026, 1, 1, 12, 0, 0)
+    observed_at: datetime = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
     try:
         statement: str
         for statement in test_case.setup_sql:
@@ -216,7 +216,7 @@ def test_given_invalid_source_freshness_result_when_observing_then_raises_clear_
                 adapter=adapter,
                 connection=connection,
                 source=source,
-                observed_at=datetime(2026, 1, 1, 12, 0, 0),
+                observed_at=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
             )
     finally:
         adapter.close(connection)
@@ -257,7 +257,7 @@ def test_given_adapter_freshness_is_unsupported_when_observing_then_metadata_is_
                 adapter=adapter,
                 connection=connection,
                 source=source,
-                observed_at=datetime(2026, 1, 1, 12, 0, 0),
+                observed_at=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
             )
     finally:
         adapter.close(connection)
@@ -274,7 +274,7 @@ def test_given_adapter_freshness_is_unsupported_when_observing_then_metadata_is_
             strategy="column",
             value_kind="timestamp",
             data_version=datetime(2026, 1, 1, 12, 34, 56, tzinfo=UTC),
-            observed_at=datetime(2026, 1, 1, 13, 0, 0),
+            observed_at=datetime(2026, 1, 1, 13, 0, 0, tzinfo=UTC),
             expected_data_version="2026-01-01T12:34:56+00:00",
             expected_hash_changes_with_observed_at=False,
         ),
@@ -284,7 +284,7 @@ def test_given_adapter_freshness_is_unsupported_when_observing_then_metadata_is_
             strategy="column",
             value_kind="integer",
             data_version=123,
-            observed_at=datetime(2026, 1, 1, 13, 0, 0),
+            observed_at=datetime(2026, 1, 1, 13, 0, 0, tzinfo=UTC),
             expected_data_version="123",
             expected_hash_changes_with_observed_at=False,
         ),
@@ -294,7 +294,7 @@ def test_given_adapter_freshness_is_unsupported_when_observing_then_metadata_is_
             strategy="sql",
             value_kind="string",
             data_version="batch-001",
-            observed_at=datetime(2026, 1, 1, 13, 0, 0),
+            observed_at=datetime(2026, 1, 1, 13, 0, 0, tzinfo=UTC),
             expected_data_version="batch-001",
             expected_hash_changes_with_observed_at=False,
         ),
@@ -322,7 +322,7 @@ def test_given_source_freshness_observation_when_building_state_record_then_hash
             strategy=SourceFreshnessStrategy(test_case.strategy),
             data_version=test_case.data_version,
             value_kind=SourceFreshnessValueKind(test_case.value_kind),
-            observed_at=datetime(2026, 1, 2, 13, 0, 0),
+            observed_at=datetime(2026, 1, 2, 13, 0, 0, tzinfo=UTC),
         ),
         virtual_environment_name="dev",
     )
@@ -415,7 +415,7 @@ def test_given_unmanaged_sources_when_observing_runtime_freshness_then_applies_p
                 SourceEntry(name="raw.unknown", expression="SELECT 1 AS id"),
             ),
             virtual_environment_name="dev",
-            observed_at=datetime(2026, 1, 1, 13, 0, 0),
+            observed_at=datetime(2026, 1, 1, 13, 0, 0, tzinfo=UTC),
         )
     finally:
         adapter.close(connection)
@@ -430,7 +430,7 @@ def test_given_unmanaged_sources_when_observing_runtime_freshness_then_applies_p
     assert records_by_source["raw.orders"].strategy == "column"
     assert records_by_source["raw.orders"].data_version == "7"
     assert records_by_source["raw.customers"].strategy == "adapter"
-    assert records_by_source["raw.customers"].data_version == "2026-01-01T12:00:00"
+    assert records_by_source["raw.customers"].data_version == "2026-01-01T12:00:00+00:00"
 
 
 @pytest.mark.parametrize(
@@ -458,7 +458,7 @@ def test_given_managed_loader_results_when_observing_freshness_then_applies_load
         value_kind="integer",
         data_version="10",
         data_version_hash="previous-hash",
-        observed_at=datetime(2026, 1, 1, 12, 0, 0),
+        observed_at=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
     )
     try:
         result: SourceFreshnessRuntimeResult = observe_virtual_environment_source_freshness(
@@ -470,7 +470,7 @@ def test_given_managed_loader_results_when_observing_freshness_then_applies_load
                 SourceEntry(name="raw.customers", table="raw_customers", managed=True),
             ),
             virtual_environment_name="dev",
-            observed_at=datetime(2026, 1, 2, 12, 0, 0),
+            observed_at=datetime(2026, 1, 2, 12, 0, 0, tzinfo=UTC),
             run_id="run-123",
             previous_records=(previous_record,),
             load_results=(
@@ -527,12 +527,12 @@ def test_given_managed_loader_results_when_observing_freshness_then_applies_load
         SourceFreshnessRuntimeLagToleranceTestCase(
             description="advances beyond lag tolerance",
             current_data_version="2026-01-01T12:11:00",
-            expected_record_data_version="2026-01-01T12:11:00",
+            expected_record_data_version="2026-01-01T12:11:00+00:00",
         ),
         SourceFreshnessRuntimeLagToleranceTestCase(
             description="advances on backwards timestamp movement",
             current_data_version="2026-01-01T11:59:00",
-            expected_record_data_version="2026-01-01T11:59:00",
+            expected_record_data_version="2026-01-01T11:59:00+00:00",
         ),
     ),
     ids=lambda case: case.description,
@@ -549,7 +549,7 @@ def test_given_virtual_runtime_lag_tolerance_when_observing_then_preserves_basel
         value_kind=SourceFreshnessValueKind.TIMESTAMP.value,
         data_version="2026-01-01T12:00:00",
         data_version_hash="previous-hash",
-        observed_at=datetime(2026, 1, 1, 12, 0, 0),
+        observed_at=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
     )
     try:
         result: SourceFreshnessRuntimeResult = observe_virtual_environment_source_freshness(
@@ -567,7 +567,7 @@ def test_given_virtual_runtime_lag_tolerance_when_observing_then_preserves_basel
                 ),
             ),
             virtual_environment_name="dev",
-            observed_at=datetime(2026, 1, 1, 12, 30, 0),
+            observed_at=datetime(2026, 1, 1, 12, 30, 0, tzinfo=UTC),
             previous_records=(previous_record,),
         )
     finally:

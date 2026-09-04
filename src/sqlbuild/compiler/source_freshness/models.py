@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from sqlbuild.adapter.contract.types import FrameworkType
+from sqlbuild.compiler.source_freshness._helpers.datetime import require_aware_utc_datetime
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
 
@@ -24,13 +25,26 @@ class SourceFreshnessRenderers:
 
 @dataclass(frozen=True)
 class SourceFreshnessObservation:
-    """One comparable source data-version observation."""
+    """One comparable observation whose datetime values are always aware UTC."""
 
     source_name: str
     strategy: SourceFreshnessStrategy
     data_version: object
     value_kind: SourceFreshnessValueKind
     observed_at: datetime
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "observed_at",
+            require_aware_utc_datetime(value=self.observed_at, field_name="observed_at"),
+        )
+        if isinstance(self.data_version, datetime):
+            object.__setattr__(
+                self,
+                "data_version",
+                require_aware_utc_datetime(value=self.data_version, field_name="data_version"),
+            )
 
 
 @dataclass(frozen=True)
@@ -45,7 +59,7 @@ class SourceFreshnessIdentity:
 
 @dataclass(frozen=True)
 class SourceFreshnessRecord:
-    """One append-only direct source freshness observation."""
+    """One append-only direct observation whose observed time is always aware UTC."""
 
     source_name: str
     target_database: str | None
@@ -57,6 +71,13 @@ class SourceFreshnessRecord:
     data_version: str | None
     data_version_hash: str
     observed_at: datetime
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "observed_at",
+            require_aware_utc_datetime(value=self.observed_at, field_name="observed_at"),
+        )
 
     @property
     def identity(self) -> SourceFreshnessIdentity:

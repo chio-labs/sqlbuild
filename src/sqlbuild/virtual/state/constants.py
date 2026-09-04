@@ -243,6 +243,7 @@ SOURCE_FRESHNESS_OBSERVATION_COLUMNS: dict[str, StateColumnType] = {
     "observed_at": StateColumnType.TIMESTAMP,
     "updated_at": StateColumnType.TIMESTAMP,
 }
+SOURCE_FRESHNESS_NAIVE_UTC_WALL_CLOCK_COLUMNS: frozenset[str] = frozenset({"observed_at"})
 
 VIRTUAL_ENVIRONMENT_CHECKPOINT_COLUMNS: dict[str, StateColumnType] = {
     "checkpoint_id": StateColumnType.TEXT,

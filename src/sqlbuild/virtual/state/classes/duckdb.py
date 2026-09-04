@@ -15,6 +15,10 @@ from sqlbuild.executor.node_results.models import (
     NodeResultRecord,
 )
 from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope, MicrobatchWriteResult
+from sqlbuild.virtual.state._helpers.state_storage.datetime import (
+    from_naive_utc_wall_clock,
+    to_naive_utc_wall_clock,
+)
 from sqlbuild.virtual.state._helpers.state_storage.events import backup_id, event_id
 from sqlbuild.virtual.state._helpers.state_storage.microbatch_events import (
     append_duckdb_microbatch_event,
@@ -1260,7 +1264,7 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, StateBackend):
                         record.value_kind,
                         record.data_version,
                         record.data_version_hash,
-                        record.observed_at,
+                        to_naive_utc_wall_clock(record.observed_at),
                     ],
                 )
             connection.execute(
@@ -1310,7 +1314,7 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, StateBackend):
                 value_kind=row[3],
                 data_version=row[4],
                 data_version_hash=row[5],
-                observed_at=row[6],
+                observed_at=from_naive_utc_wall_clock(row[6]),
             )
             for row in rows
         )
