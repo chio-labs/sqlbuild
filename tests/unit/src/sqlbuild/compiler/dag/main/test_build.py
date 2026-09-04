@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
@@ -11,6 +12,7 @@ from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compile
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import CompiledProject, CompileProjectInputs
 from sqlbuild.compiler.dag.main.build import build_dag_json
+from sqlbuild.compiler.dag.types import NodeKind
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
@@ -21,6 +23,8 @@ from tests.unit.src.sqlbuild.compiler.compile._test_helpers import base_repo_fil
 from tests.unit.src.sqlbuild.compiler.dag.main._test_types import (
     DagArtifactTestCase,
     DagJsonTestCase,
+    DagLoaderDestinationTestCase,
+    DagProducedKindsTestCase,
     DagResourceNamespaceTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.dag.main.helpers import build_dag_artifact_test_graph
@@ -97,6 +101,61 @@ def test_given_project_graph_when_building_dag_artifact_then_includes_assets_edg
     assert nodes_by_id["udf:normalize_email"]["sql"] == "lower(email)"
     assert nodes_by_id["loader:shared_order_feed"]["kind"] == "loader"
     assert tuple(checks[0]["checked_asset_ids"]) == ("model:orders",)
+    assert checks[0]["severity"] == "warn"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagProducedKindsTestCase(
+            description="compiled project emits canonical DAG kinds",
+            expected_kinds=frozenset(
+                {
+                    "source",
+                    "loader",
+                    "seed",
+                    "udf",
+                    "model",
+                    "sql_test",
+                    "audit",
+                    "scenario",
+                }
+            ),
+            expected_enum_values=frozenset(
+                {
+                    "source",
+                    "loader",
+                    "seed",
+                    "udf",
+                    "table_fn",
+                    "model",
+                    "task",
+                    "asset",
+                    "check",
+                    "sql_test",
+                    "audit",
+                    "scenario",
+                    "python_check",
+                }
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_compiled_project_when_building_dag_then_produced_kinds_are_canonical(
+    test_case: DagProducedKindsTestCase,
+) -> None:
+    payload: dict[str, object] = json.loads(
+        build_dag_json(graph=build_dag_artifact_test_graph(), project_name="dag_project")
+    )
+    nodes: list[dict[str, object]] = payload["nodes"]
+    checks: list[dict[str, object]] = payload["checks"]
+    produced_kinds: frozenset[str] = frozenset(str(item["kind"]) for item in (*nodes, *checks))
+
+    assert produced_kinds == test_case.expected_kinds
+    canonical_kinds: frozenset[str] = frozenset(kind.value for kind in NodeKind)
+    assert canonical_kinds == test_case.expected_enum_values
+    assert produced_kinds <= canonical_kinds
 
 
 @pytest.mark.parametrize(
@@ -222,3 +281,47 @@ def test_given_dag_artifact_when_formatting_json_then_serializes_public_shape(
         assert fragment not in rendered_json
     assert "query_sql" not in json.dumps(payload)
     assert "fingerprint" not in json.dumps(payload)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagLoaderDestinationTestCase(
+            description="three-part loader destination overrides DAG target defaults",
+            destination="loader_db.loader_schema.shared_orders",
+            expected_target_parts=("loader_db", "loader_schema", "shared_orders"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_qualified_loader_destination_when_building_dag_then_parses_loader_target(
+    test_case: DagLoaderDestinationTestCase,
+) -> None:
+    graph: ProjectGraph = build_dag_artifact_test_graph()
+    graph = replace(
+        graph,
+        project=replace(
+            graph.project,
+            effective_target_database="default_db",
+            effective_target_schema="default_schema",
+            loader_functions=(
+                replace(
+                    graph.project.loader_functions[0],
+                    destination=test_case.destination,
+                ),
+                *graph.project.loader_functions[1:],
+            ),
+        ),
+    )
+
+    payload: dict[str, object] = json.loads(build_dag_json(graph=graph, project_name="demo"))
+    nodes: dict[str, dict[str, object]] = {
+        str(node["id"]): node for node in cast(list[dict[str, object]], payload["nodes"])
+    }
+    target: dict[str, object] = cast(dict[str, object], nodes["loader:shared_order_feed"]["target"])
+
+    assert (
+        target["database"],
+        target["schema"],
+        target["name"],
+    ) == test_case.expected_target_parts

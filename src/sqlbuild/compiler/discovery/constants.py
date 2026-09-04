@@ -58,6 +58,3 @@ CANONICAL_AUTHORED_ROOTS: tuple[tuple[str, ...], ...] = (
 )
 
 NOT_NULL_AUDIT_NAME: str = "not_null"
-SOURCE_FRESHNESS_DURATION_UNITS: frozenset[str] = frozenset({"m", "h", "d"})
-SOURCE_FRESHNESS_DAY_UNIT: str = "d"
-SOURCE_FRESHNESS_HOUR_UNIT: str = "h"

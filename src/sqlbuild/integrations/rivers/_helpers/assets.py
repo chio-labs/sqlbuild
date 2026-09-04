@@ -9,10 +9,7 @@ from sqlbuild.integrations.rivers._helpers.imports import load_rivers
 from sqlbuild.integrations.rivers.classes.sqlbuild_rivers_translator import (
     SqlBuildRiversTranslator,
 )
-
-_ASSET_KINDS: frozenset[str] = frozenset(
-    {"source", "loader", "seed", "model", "udf", "table_fn", "task", "asset"}
-)
+from sqlbuild.integrations.rivers.constants import RIVERS_ASSET_NODE_KINDS
 
 
 def build_asset_defs(
@@ -26,13 +23,16 @@ def build_asset_defs(
     project_name: object = dag.get("project_name")
     asset_defs: list[Any] = []
     for node in dag["nodes"]:
-        if str(node.get("kind")) not in _ASSET_KINDS:
+        if str(node.get("kind")) not in RIVERS_ASSET_NODE_KINDS:
             continue
         translated_node: Mapping[str, Any] = {**node, "project_name": project_name}
         deps: list[Any] = []
         for upstream_id in upstream_by_id.get(str(node["id"]), []):
             upstream_node: Mapping[str, Any] | None = nodes_by_id.get(upstream_id)
-            if upstream_node is None or str(upstream_node.get("kind")) not in _ASSET_KINDS:
+            if (
+                upstream_node is None
+                or str(upstream_node.get("kind")) not in RIVERS_ASSET_NODE_KINDS
+            ):
                 continue
             deps.append(rs.AssetDef.dep(translator.get_asset_name(upstream_node)))
         asset_defs.append(

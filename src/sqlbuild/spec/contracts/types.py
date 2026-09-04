@@ -7,6 +7,15 @@ from enum import StrEnum
 type PathDefaultsMap = dict[str, dict[str, object]]
 
 
+class EventExportSeverity(StrEnum):
+    """Severity used to filter exported lifecycle events."""
+
+    DEBUG = "debug"
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+
+
 class SourceWriteStrategy(StrEnum):
     APPEND = "append"
     DELETE_INSERT = "delete_insert"

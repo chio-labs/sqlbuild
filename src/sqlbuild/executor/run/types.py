@@ -88,3 +88,12 @@ class AuditGateReuseReason(StrEnum):
     BINDING_SET_CHANGED = "binding_set_changed"
     AUDIT_CHANGED = "audit_changed"
     ALWAYS_RUN = "always_run"
+
+
+class AuditGateMetadataParseFailure(StrEnum):
+    """Why persisted audit-gate metadata could not be parsed."""
+
+    CORRUPT_JSON = "corrupt JSON"
+    NON_DICT = "non-dict payload"
+    MISSING_FIELD = "missing field"
+    WRONG_TYPE = "wrong type"

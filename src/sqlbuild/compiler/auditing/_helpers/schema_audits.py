@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild.compiler.auditing.constants import SCHEMA_AUDIT_OPTION_KEYS
+from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
     validate_resource_identity,
 )
@@ -74,13 +75,22 @@ def parse_audit_instance_impl(
         key="description",
         error_class=error_class,
     )
-    severity: str | None = _optional_named_string(
+    raw_severity: str | None = _optional_named_string(
         raw_value=argument_mapping.get("severity"),
         file_path=file_path,
         label=option_label,
         key="severity",
         error_class=error_class,
     )
+    severity: AuditSeverity | None = None
+    if raw_severity is not None:
+        try:
+            severity = AuditSeverity(raw_severity)
+        except ValueError as error:
+            allowed: str = ", ".join(item.value for item in AuditSeverity)
+            raise error_class(
+                f"{file_path} {option_label} 'severity' must be one of: {allowed}"
+            ) from error
     run_scope: str | None = _optional_named_string(
         raw_value=argument_mapping.get("run_scope"),
         file_path=file_path,

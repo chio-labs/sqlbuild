@@ -21,6 +21,7 @@ from sqlbuild.runtime.output_capture.models import (
     CommandOutputSinkDefinition,
 )
 from sqlbuild.runtime.output_capture.types import CommandOutputStream
+from sqlbuild.spec.contracts.types import EventExportSeverity
 
 __all__ = (
     "CommandOutputRecord",
@@ -55,18 +56,20 @@ def lifecycle_event_sink(
     def decorate(inner: Callable[..., object]) -> Callable[..., object]:
         resolved_name: str = _sink_name(function=inner, explicit_name=name)
         resolved_kinds: frozenset[str] = _event_kinds(event_kinds)
-        if min_severity not in EVENT_EXPORT_SEVERITIES:
+        try:
+            resolved_min_severity: EventExportSeverity = EventExportSeverity(min_severity)
+        except ValueError as error:
             raise EventExporterInputError(
                 "lifecycle-event sink min_severity must be one of: "
                 + ", ".join(EVENT_EXPORT_SEVERITIES)
-            )
+            ) from error
         return attach_definition(
             function=inner,
             attribute_name=_LIFECYCLE_EVENT_SINK_ATTRIBUTE,
             definition=LifecycleEventSinkDefinition(
                 name=resolved_name,
                 event_kinds=resolved_kinds,
-                min_severity=min_severity,
+                min_severity=resolved_min_severity,
             ),
         )
 

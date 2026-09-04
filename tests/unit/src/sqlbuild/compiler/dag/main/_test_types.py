@@ -29,3 +29,17 @@ class DagJsonTestCase:
     expected_project_name: str
     expected_node_count: int
     expected_absent_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DagProducedKindsTestCase:
+    description: str
+    expected_kinds: frozenset[str]
+    expected_enum_values: frozenset[str]
+
+
+@dataclass(frozen=True)
+class DagLoaderDestinationTestCase:
+    description: str
+    destination: str
+    expected_target_parts: tuple[str, str, str]

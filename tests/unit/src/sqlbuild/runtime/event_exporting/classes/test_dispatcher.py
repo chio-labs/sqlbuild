@@ -19,6 +19,7 @@ from sqlbuild.runtime.event_exporting.models import (
 from sqlbuild.runtime.output_capture.constants import COMMAND_OUTPUT_LOSS_RECORD_TYPE
 from sqlbuild.runtime.output_capture.models import BoundCommandOutputSink
 from sqlbuild.sinks import CommandOutputRecord, CommandOutputStream
+from sqlbuild.spec.contracts.types import EventExportSeverity
 from tests.unit.src.sqlbuild.runtime.event_exporting.classes._test_types import (
     EventExporterDispatcherTestCase,
     HealthIntervalTestCase,
@@ -407,14 +408,18 @@ def test_given_exporter_specific_filters_when_enqueuing_then_filtering_precedes_
     dispatcher: EventExporterDispatcher = EventExporterDispatcher(
         exporters=(
             BoundEventExporter(
-                "runs", publish, {}, event_kinds=frozenset({"run"}), min_severity="debug"
+                "runs",
+                publish,
+                {},
+                event_kinds=frozenset({"run"}),
+                min_severity=EventExportSeverity.DEBUG,
             ),
             BoundEventExporter(
                 "errors",
                 publish,
                 {},
                 event_kinds=frozenset({"invocation"}),
-                min_severity="error",
+                min_severity=EventExportSeverity.ERROR,
             ),
         ),
         queue_capacity=1,
@@ -490,7 +495,7 @@ def test_given_mixed_eligible_queue_when_high_priority_displaces_then_attempts_c
     dispatcher: EventExporterDispatcher = EventExporterDispatcher(
         exporters=(
             BoundEventExporter("first", first, {}),
-            BoundEventExporter("second", second, {}, min_severity="info"),
+            BoundEventExporter("second", second, {}, min_severity=EventExportSeverity.INFO),
         ),
         queue_capacity=1,
         invocation_timeout_seconds=1,

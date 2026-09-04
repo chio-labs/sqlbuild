@@ -1,12 +1,21 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Set
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from sqlbuild.cli.output.models import IntegrationCheckResult, IntegrationResultEnvelope
 from sqlbuild.cli.output.types import IntegrationOutputKind
+from sqlbuild.compiler.auditing.types import AuditSeverity
+
+
+def assert_exhaustive_enum_partition[EnumT: StrEnum](
+    *, all_members: Set[EnumT], included: Set[EnumT], excluded: Set[EnumT]
+) -> None:
+    assert included.isdisjoint(excluded)
+    assert included | excluded == all_members
 
 
 def integration_result_payload(
@@ -81,7 +90,7 @@ def build_check_integration_envelope(
                 dag_check_id=check_id,
                 passed=True,
                 status="pass",
-                severity="error",
+                severity=AuditSeverity.ERROR,
                 asset_name="orders",
                 attachment_kind="model",
                 attached_column_name="order_id",

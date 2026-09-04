@@ -31,6 +31,7 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.types import (
+    AuditGateMetadataParseFailure,
     AuditGateReuseReason,
     ExecutionPhase,
     HookPhase,
@@ -213,6 +214,35 @@ class AuditGateReuseDecision:
     reason: AuditGateReuseReason
     reusable_binding_keys: tuple[str, ...] = ()
     missing_binding_keys: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class AuditGateResultMetadata:
+    """Typed persisted proof for one audit binding."""
+
+    binding_key: str
+    definition_fingerprint: str
+    execution_fingerprint: str
+    outcome: str
+    fields: Mapping[str, object]
+
+
+@dataclass(frozen=True)
+class AuditGateMetadata:
+    """Typed persisted audit-gate proof attached to a model fingerprint."""
+
+    status: str
+    binding_set_hash: str
+    results: tuple[AuditGateResultMetadata, ...]
+    fields: Mapping[str, object]
+
+
+@dataclass(frozen=True)
+class AuditGateMetadataParseFailureDetail:
+    """Structured failure returned when persisted audit-gate metadata is invalid."""
+
+    reason: AuditGateMetadataParseFailure
+    detail: str
 
 
 @dataclass(frozen=True)

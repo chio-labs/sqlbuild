@@ -7,6 +7,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.models import ExpansionSpan
 from sqlbuild.lint.constants import VIOLATION_SEVERITY_FAULT, VIOLATION_SEVERITY_WARNING
+from sqlbuild.lint.types import LintSeverity
 
 
 @dataclass(frozen=True)
@@ -50,7 +51,7 @@ class LintViolation:
     column: int
     code: str
     message: str
-    severity: str
+    severity: LintSeverity
     engine: str
 
 

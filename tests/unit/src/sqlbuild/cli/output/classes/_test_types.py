@@ -54,3 +54,12 @@ class ProjectionDegradationTestCase:
     description: str
     expected_warning: str
     expected_degraded: bool
+
+
+@dataclass(frozen=True)
+class CheckSeverityDecodingTestCase:
+    """One invalid integration check severity ingestion case."""
+
+    description: str
+    severity: object
+    expected_error: str

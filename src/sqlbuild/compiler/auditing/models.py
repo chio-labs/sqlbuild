@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.compiler.auditing.types import AuditSeverity
+
 
 @dataclass(frozen=True)
 class AuditIdentity:
@@ -13,7 +15,7 @@ class AuditIdentity:
     audit_name: str
     definition_fingerprint: str
     execution_fingerprint: str
-    severity: str
+    severity: AuditSeverity
     run_scope_phase: str
     attachment_kind: str
     attached_target_name: str | None = None

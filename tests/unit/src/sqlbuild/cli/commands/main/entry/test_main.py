@@ -38,6 +38,7 @@ from sqlbuild.executor.pipeline.exceptions import AuditExecutionError
 from sqlbuild.executor.pipeline.models import AuditExecutionFailure
 from sqlbuild.observability import EventDispatcher, ExecutionIdentity, current_execution_identity
 from sqlbuild.runtime.observability.models import LifecycleEvent
+from sqlbuild.spec.contracts.exceptions import SpecConfigError
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     AuditAggregateRenderingTestCase,
     MainErrorRenderingTestCase,
@@ -47,6 +48,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
 from tests.unit.src.sqlbuild.cli.commands.main.entry.helpers import (
     build_handlers,
     build_json_recording_handler,
+    invalid_loader_destination_error,
 )
 
 
@@ -2663,6 +2665,17 @@ def test_given_parser_error_and_no_color_when_running_main_then_it_renders_plain
             error_type=ValueError,
             error_factory=lambda project_dir: ValueError("invalid compile request"),
             expected_stderr_fragment="error[E001]: invalid compile request",
+            expected_exit_code=1,
+        ),
+        MainErrorRenderingTestCase(
+            description="renders invalid loader destinations without a traceback",
+            argv=["--project-dir", "/tmp/demo", "compile"],
+            error_type=SpecConfigError,
+            error_factory=invalid_loader_destination_error,
+            expected_stderr_fragment=(
+                "error[E001]: Invalid loader destination 'raw..orders': expected 1 to 3 "
+                "non-empty dot-separated parts"
+            ),
             expected_exit_code=1,
         ),
         MainErrorRenderingTestCase(

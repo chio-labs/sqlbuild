@@ -8,11 +8,12 @@ from typing import Any
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild.cli.commands._helpers.cost.command import run_cost_command
+from sqlbuild.cli.commands._helpers.cost.command import _parse_since_bound, run_cost_command
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cost.classes.run_cost_store import RunCostStore
 from tests.unit.src.sqlbuild.cli.commands.main.inspection.cost._test_types import (
     CostCommandTestCase,
+    CostRelativeSinceTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.inspection.cost.helpers import (
     build_cost_request,
@@ -194,6 +195,79 @@ def test_given_relative_since_bound_when_running_history_then_old_runs_are_exclu
     payload: dict[str, Any] = json.loads(capsys.readouterr().out)
     assert tuple(item["run_id"] for item in payload["runs"]) == test_case.expected_run_ids
     assert payload["matching_count"] == len(test_case.expected_run_ids)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CostRelativeSinceTestCase(
+            description="days remain a valid relative bound",
+            value="7d",
+            expected_seconds=7 * 86_400,
+        ),
+        CostRelativeSinceTestCase(
+            description="hours remain a valid relative bound",
+            value="12h",
+            expected_seconds=12 * 3_600,
+        ),
+        CostRelativeSinceTestCase(
+            description="minutes remain a valid relative bound",
+            value="90m",
+            expected_seconds=90 * 60,
+        ),
+        CostRelativeSinceTestCase(
+            description="zero days means now",
+            value="0d",
+            expected_seconds=0,
+        ),
+        CostRelativeSinceTestCase(
+            description="zero hours means now",
+            value="0h",
+            expected_seconds=0,
+        ),
+        CostRelativeSinceTestCase(
+            description="zero minutes means now",
+            value="0m",
+            expected_seconds=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_supported_relative_since_duration_when_parsing_then_returns_expected_bound(
+    test_case: CostRelativeSinceTestCase,
+) -> None:
+    before: datetime = datetime.now(UTC)
+    result: datetime | None = _parse_since_bound(value=test_case.value)
+    after: datetime = datetime.now(UTC)
+
+    assert result is not None
+    assert test_case.expected_seconds is not None
+    assert before - timedelta(seconds=test_case.expected_seconds) <= result
+    assert result <= after - timedelta(seconds=test_case.expected_seconds)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CostRelativeSinceTestCase(
+            description="seconds are explicitly unsupported",
+            value="30s",
+            expected_error_fragment="must use one of: d, h, m",
+        ),
+        CostRelativeSinceTestCase(
+            description="calendar units are explicitly unsupported",
+            value="1mo",
+            expected_error_fragment="must use one of: d, h, m",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unsupported_relative_since_duration_when_parsing_then_raises_clear_error(
+    test_case: CostRelativeSinceTestCase,
+) -> None:
+    assert test_case.expected_error_fragment is not None
+    with pytest.raises(CliUserError, match=test_case.expected_error_fragment):
+        _parse_since_bound(value=test_case.value)
 
 
 @pytest.mark.parametrize(

@@ -7,6 +7,7 @@ from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
+from sqlbuild.spec.contracts.exceptions import SpecConfigError
 
 
 @dataclass(frozen=True)
@@ -115,7 +116,11 @@ class MainErrorRenderingTestCase:
     description: str
     argv: list[str]
     error_type: (
-        type[CliUserError] | type[ProjectConfigError] | type[CompileInputError] | type[ValueError]
+        type[CliUserError]
+        | type[ProjectConfigError]
+        | type[CompileInputError]
+        | type[SpecConfigError]
+        | type[ValueError]
     )
     error_factory: Callable[[Path], Exception]
     expected_stderr_fragment: str

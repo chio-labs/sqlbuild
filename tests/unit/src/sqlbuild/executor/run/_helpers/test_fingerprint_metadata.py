@@ -3,24 +3,34 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import replace
 from typing import Any
 
 import pytest
 
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditSeverity
+from sqlbuild.compiler.fingerprints.constants import AUDIT_GATE_METADATA_KEY
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run._helpers.reuse import fingerprinting
 from sqlbuild.executor.run._helpers.reuse.fingerprint_metadata import (
     model_fingerprint_metadata_with_audit_gate,
+    parse_audit_gate_metadata,
+    render_audit_gate_metadata,
     reuse_from_audit_gate_reuse_decision,
     same_target_audit_gate_reuse_decision,
 )
-from sqlbuild.executor.run.models import AuditGateReuseDecision
+from sqlbuild.executor.run.models import (
+    AuditGateMetadata,
+    AuditGateMetadataParseFailureDetail,
+    AuditGateReuseDecision,
+)
 from sqlbuild.executor.run.types import AuditGateMode, AuditGateReuseReason, AuditGateStatus
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
+    AuditGateMetadataFailureTestCase,
+    AuditGateMetadataSchemaTestCase,
     AuditGatePartialReuseDecisionTestCase,
     AuditGateReuseDecisionTestCase,
     FingerprintAuditGateEdgeTestCase,
@@ -82,6 +92,87 @@ def test_given_audit_results_when_building_fingerprint_metadata_then_audit_gate_
     assert audit_gate["mode"] == AuditGateMode.EXECUTED.value
     assert audit_gate["run_id"] == "run_1"
     assert len(audit_gate["results"]) == test_case.expected_result_count  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AuditGateMetadataSchemaTestCase(
+            description="written payload retains the pinned warehouse format",
+            expected_serialized=(
+                '{"audit_gate":{"binding_set_hash":"e8caed68bb3c3bc0cb2fd33e9701a789afcc32e874272a0f381072f5ad35803c",'
+                '"blocking_set_hash":"734928618c041e13429bbe80355dff2b0f72ab32421b9d413820553810a91554",'
+                '"mode":"executed","results":[{"always_run":false,"attached_column_name":"order_id",'
+                '"attached_target_name":"orders","audit_name":"not_null_orders",'
+                '"binding_key":"ec8e86d82472ac0f5772d1c1a4ee1600dcec056474a1b7099f86840889fc15b2",'
+                '"definition_fingerprint":"e9cd7c351d9602fc524c68d266d2d3d9daaccd52367591daafec675074b266c7",'
+                '"execution_fingerprint":"f15c815cb150c3cd6bdc7b2edea5fcfcdd629b720e012eed819d4c9aa089f292",'
+                '"outcome":"pass","reused":false,"row_count":0,"run_scope_phase":"final",'
+                '"severity":"error"}],"run_id":"run_1","status":"passed"},"existing":"kept"}'
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_written_audit_gate_when_parsing_and_rendering_then_round_trips_pinned_format(
+    test_case: AuditGateMetadataSchemaTestCase,
+) -> None:
+    metadata_json: str = model_fingerprint_metadata_with_audit_gate(
+        metadata_json='{"existing":"kept"}',
+        model_audits=(build_fingerprint_audit_plan_entry(),),
+        audit_results=(build_fingerprint_audit_result(outcome="pass"),),
+        run_id="run_1",
+    )
+    payload: AuditGateMetadata | AuditGateMetadataParseFailureDetail = parse_audit_gate_metadata(
+        metadata_json
+    )
+
+    assert isinstance(payload, AuditGateMetadata)
+    rendered_payload: dict[str, object] = render_audit_gate_metadata(payload)
+    assert rendered_payload == json.loads(metadata_json)[AUDIT_GATE_METADATA_KEY]
+    assert parse_audit_gate_metadata({AUDIT_GATE_METADATA_KEY: rendered_payload}) == payload
+    assert metadata_json == test_case.expected_serialized
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AuditGateMetadataFailureTestCase(
+            description="corrupt JSON is diagnosed",
+            metadata_json="{",
+            expected_diagnostic="corrupt JSON",
+        ),
+        AuditGateMetadataFailureTestCase(
+            description="non-dict JSON is diagnosed",
+            metadata_json="[]",
+            expected_diagnostic="non-dict payload",
+        ),
+        AuditGateMetadataFailureTestCase(
+            description="missing audit gate field is diagnosed",
+            metadata_json="{}",
+            expected_diagnostic="missing field",
+        ),
+        AuditGateMetadataFailureTestCase(
+            description="wrong audit gate type is diagnosed",
+            metadata_json='{"audit_gate":[]}',
+            expected_diagnostic="wrong type",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_metadata_when_deciding_reuse_then_denies_with_debug_diagnostic(
+    test_case: AuditGateMetadataFailureTestCase,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="sqlbuild.execution")
+
+    decision: AuditGateReuseDecision = same_target_audit_gate_reuse_decision(
+        metadata_json=test_case.metadata_json,
+        model_audits=(build_fingerprint_audit_plan_entry(),),
+    )
+
+    assert decision.reusable is False
+    assert test_case.expected_diagnostic in caplog.text
 
 
 @pytest.mark.parametrize(

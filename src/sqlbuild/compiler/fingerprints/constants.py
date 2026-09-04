@@ -45,3 +45,4 @@ FINGERPRINT_COLUMNS: tuple[str, ...] = (
     COLUMN_METADATA_JSON_B64,
     COLUMN_TIMESTAMP,
 )
+AUDIT_GATE_METADATA_KEY: str = "audit_gate"

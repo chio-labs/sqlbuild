@@ -30,6 +30,7 @@
 - Model lifecycle state as immutable, append-only events or facts with deterministic event IDs and idempotent writes. Derive current status by projecting event history, following the existing microbatch requirement/completion pattern. Retention pruning is cleanup, not a lifecycle update.
 - Design every warehouse-DML/state-publication failure window for reconciliation from durable events and physical warehouse evidence. If append-only state cannot represent a proposed direct-mode feature safely, stop and resolve the architecture explicitly rather than adding mutable transitions.
 - Sequential microbatch execution (`batch_concurrency = 1`) is fully stateless: zero reads and zero writes of `_sqlbuild_microbatches`. The state table is strictly a concurrency-coordination feature. Reintroducing state reads or writes into the sequential path requires an explicit user-approved design decision, never incidental wiring.
+- State-table schemas evolve additively only: add new columns and deprecate old columns in place; never repurpose a column or change a stored format in place. Readers must tolerate absent new columns. Do not build version-reset or migration machinery for state tables; a breaking state change requires an explicit user decision and a one-time operator-performed table drop.
 
 ## Delivery Workflow
 

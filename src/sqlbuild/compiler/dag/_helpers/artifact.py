@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
+from enum import StrEnum
 
+from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.compile.main.function_node_type import function_node_type
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
@@ -30,13 +32,20 @@ from sqlbuild.compiler.dag.models import (
     DagNode,
     DagTarget,
 )
+from sqlbuild.compiler.dag.types import NodeKind
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.python_nodes.models import ColumnLineageRef, SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
-from sqlbuild.spec.contracts.models import SchemaColumn, SourceColumnEntry, SourceEntry
+from sqlbuild.spec.contracts.main.loader_destination_parts import loader_destination_parts
+from sqlbuild.spec.contracts.models import (
+    LoaderDestinationParts,
+    SchemaColumn,
+    SourceColumnEntry,
+    SourceEntry,
+)
 from sqlbuild.sql_values.types import SqlValueKind
 
 _DAG_VERSION: int = 1
@@ -88,7 +97,7 @@ def _build_source_node(source: CompiledSource) -> DagNode:
     )
     return DagNode(
         id=_node_id(source.key),
-        kind=CompiledResourceType.SOURCE.value,
+        kind=NodeKind.SOURCE.value,
         name=source.name,
         asset_key=_source_asset_key(entry),
         target=target,
@@ -118,7 +127,7 @@ def _build_loader_node(
     )
     return DagNode(
         id=_loader_node_id(loader.name),
-        kind="loader",
+        kind=NodeKind.LOADER.value,
         name=loader.name,
         asset_key=(loader.name,),
         target=target,
@@ -147,7 +156,7 @@ def _build_python_node(node: DiscoveredPythonNode) -> DagNode:
         materialization_type = "python_asset"
     return DagNode(
         id=_python_node_id(kind=node.kind, node_name=node.name),
-        kind=node.kind.value,
+        kind=NodeKind(node.kind.value).value,
         name=node.name,
         asset_key=(node.kind.value, node.name),
         path=str(node.relative_path),
@@ -164,7 +173,7 @@ def _build_python_node(node: DiscoveredPythonNode) -> DagNode:
 def _build_seed_node(seed: CompiledSeed) -> DagNode:
     return DagNode(
         id=_node_id(seed.key),
-        kind=CompiledResourceType.SEED.value,
+        kind=NodeKind.SEED.value,
         name=seed.name,
         asset_key=_target_asset_key(seed.destination),
         target=_dag_target(seed.destination),
@@ -179,7 +188,7 @@ def _build_function_node(function: CompiledFunction) -> DagNode:
     node_type: str = function_node_type(return_columns=function.return_columns)
     return DagNode(
         id=f"{node_type}:{function.name}",
-        kind=node_type,
+        kind=NodeKind(node_type).value,
         name=function.name,
         asset_key=_target_asset_key(function.destination),
         target=_dag_target(function.destination),
@@ -201,7 +210,7 @@ def _build_function_node(function: CompiledFunction) -> DagNode:
 def _build_model_node(model: CompiledModel) -> DagNode:
     return DagNode(
         id=_node_id(model.key),
-        kind=CompiledResourceType.MODEL.value,
+        kind=NodeKind.MODEL.value,
         name=model.name,
         asset_key=_target_asset_key(model.destination),
         target=_dag_target(model.destination),
@@ -309,7 +318,7 @@ def _build_checks(
 def _build_sql_test_check(test: CompiledSqlTest) -> DagCheck:
     return DagCheck(
         id=_sql_test_check_id(test),
-        kind="sql_test",
+        kind=NodeKind.SQL_TEST.value,
         name=test.name,
         checked_asset_ids=tuple(_node_id(key) for key in test.scope_deps),
         path=str(test.test_file.relative_path),
@@ -370,7 +379,7 @@ def _build_audit_check(audit: CompiledAudit) -> DagCheck:
         )
     return DagCheck(
         id=_audit_check_id(audit),
-        kind="audit",
+        kind=NodeKind.AUDIT.value,
         name=audit.name,
         checked_asset_ids=checked_asset_ids,
         path=str(audit.audit_file.relative_path),
@@ -404,7 +413,7 @@ def _build_scenario_check(scenario: CompiledSqlScenario) -> DagCheck:
     )
     return DagCheck(
         id=_node_id(scenario.key),
-        kind="scenario",
+        kind=NodeKind.SCENARIO.value,
         name=scenario.name,
         checked_asset_ids=tuple(_node_id(key) for key in target_keys),
         path=str(scenario.scenario_file.relative_path),
@@ -431,12 +440,12 @@ def _build_python_check(*, node: DiscoveredPythonNode, python_graph: PythonNodeG
     )
     return DagCheck(
         id=_python_node_id(kind=node.kind, node_name=node.name),
-        kind="python_check",
+        kind=NodeKind.PYTHON_CHECK.value,
         name=node.name,
         checked_asset_ids=checked_asset_ids,
         path=str(node.relative_path),
         description=node.description,
-        severity=(node.check.severity.value if node.check is not None else None),
+        severity=(AuditSeverity(node.check.severity.value) if node.check is not None else None),
         tags=node.tags,
         group=node.group,
         meta=node.meta or {},
@@ -505,26 +514,18 @@ def _source_by_loader(graph: ProjectGraph) -> dict[str, SourceEntry]:
 def _loader_to_source_entry(
     *, project: CompiledProject, loader: DiscoveredLoaderFunction
 ) -> SourceEntry:
-    database: str | None = project.effective_target_database
-    schema: str | None = project.effective_target_schema
-    table: str = f"__loader__{loader.name}"
-    if loader.destination is not None:
-        parts: tuple[str, ...] = tuple(part for part in loader.destination.split(".") if part)
-        if len(parts) == 1:
-            table = parts[0]
-        source_name_part_count: int = 2
-        qualified_source_name_part_count: int = 3
-        if len(parts) == source_name_part_count:
-            schema, table = parts
-        elif len(parts) == qualified_source_name_part_count:
-            database, schema, table = parts
-        else:
-            table = loader.destination
+    destination: LoaderDestinationParts = loader_destination_parts(
+        destination=(
+            loader.destination if loader.destination is not None else f"__loader__{loader.name}"
+        ),
+        default_database=project.effective_target_database,
+        default_schema=project.effective_target_schema,
+    )
     return SourceEntry(
         name=loader.name,
-        database=database,
-        schema=schema,
-        table=table,
+        database=destination.database,
+        schema=destination.schema,
+        table=destination.table,
         loader=loader.name,
         write_strategy=loader.write_strategy,
         cursor_column=loader.cursor_column,
@@ -594,6 +595,8 @@ def _qualified_name(*, database: str | None, schema: str | None, name: str) -> s
 
 
 def _drop_none(value: object) -> object:
+    if isinstance(value, StrEnum):
+        return value.value
     if isinstance(value, dict):
         result: dict[object, object] = {}
         for key, item in value.items():

@@ -30,3 +30,24 @@ GRAIN_FIXED_STEP: dict[CursorGrain, timedelta | None] = {
     CursorGrain.MONTH: None,
     CursorGrain.YEAR: None,
 }
+
+DURATION_YEAR_UNIT: str = "y"
+DURATION_MONTH_UNIT: str = "mo"
+DURATION_DAY_UNIT: str = "d"
+DURATION_HOUR_UNIT: str = "h"
+DURATION_MINUTE_UNIT: str = "m"
+DURATION_SECOND_UNIT: str = "s"
+
+DURATION_UNITS: frozenset[str] = frozenset(
+    {
+        DURATION_YEAR_UNIT,
+        DURATION_MONTH_UNIT,
+        DURATION_DAY_UNIT,
+        DURATION_HOUR_UNIT,
+        DURATION_MINUTE_UNIT,
+        DURATION_SECOND_UNIT,
+    }
+)
+MINUTE_TO_DAY_DURATION_UNITS: frozenset[str] = frozenset(
+    {DURATION_MINUTE_UNIT, DURATION_HOUR_UNIT, DURATION_DAY_UNIT}
+)
