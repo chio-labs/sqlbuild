@@ -25,16 +25,16 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.graph.source_load_nodes import build_source_load_map
-from sqlbuild.compiler.planner._helpers.output.capped_watermark import (
-    validate_capped_watermark_inputs,
-)
 from sqlbuild.compiler.planner._helpers.output.cursor_type_check import (
     check_cursor_type_consistency,
 )
 from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
     resolve_bounded_cursor_override,
 )
-from sqlbuild.compiler.planner._helpers.output.microbatch_bounds import cap_microbatch_bounds
+from sqlbuild.compiler.planner._helpers.output.microbatch_bounds import (
+    cap_microbatch_bounds,
+    validate_capped_watermark_inputs,
+)
 from sqlbuild.compiler.planner._helpers.output.microbatch_count import count_microbatches
 from sqlbuild.compiler.planner._helpers.output.strategy import (
     build_model_warnings,
