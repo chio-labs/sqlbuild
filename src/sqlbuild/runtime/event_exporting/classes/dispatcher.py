@@ -40,7 +40,11 @@ from sqlbuild.runtime.event_exporting.models import (
     LifecycleExportPolicy,
     QueuedLifecycleEvent,
 )
-from sqlbuild.runtime.output_capture.models import OutputRecord
+from sqlbuild.runtime.output_capture.constants import COMMAND_OUTPUT_RECORD_TYPE
+from sqlbuild.runtime.output_capture.models import (
+    BoundCommandOutputSink,
+    CommandOutputRecord,
+)
 
 
 class EventExporterDispatcher:
@@ -73,6 +77,7 @@ class EventExporterDispatcher:
             )
         self._queue = FinitePriorityEventQueue(queue_capacity)
         self._exporters: tuple[BoundEventExporter, ...] = exporters or ()
+        self._command_output_sinks: tuple[BoundCommandOutputSink, ...] = ()
         self._counts: list[MutableEventExporterCounts] = [
             MutableEventExporterCounts() for _ in self._exporters
         ]
@@ -195,7 +200,13 @@ class EventExporterDispatcher:
             self._counts = [MutableEventExporterCounts() for _ in exporters]
             self._bound.set()
 
-    def export_output(self, records: tuple[OutputRecord, ...]) -> None:
+    def bind_command_output_sinks(self, sinks: tuple[BoundCommandOutputSink, ...]) -> None:
+        """Bind explicit command-output sinks before capture starts."""
+
+        with self._lock:
+            self._command_output_sinks = sinks
+
+    def export_output(self, records: tuple[CommandOutputRecord, ...]) -> None:
         """Deliver output records through the already-bound destination providers."""
 
         invocation: threading.Thread = threading.current_thread()
@@ -204,9 +215,14 @@ class EventExporterDispatcher:
             self._live_invocations.add(invocation)
         try:
             for record in records:
-                for exporter in self._exporters:
+                for exporter in self._command_output_sinks:
+                    if (
+                        record.record_type == COMMAND_OUTPUT_RECORD_TYPE
+                        and record.stream not in exporter.streams
+                    ):
+                        continue
                     try:
-                        exporter.function(event=record, **exporter.provider_arguments)
+                        exporter.function(record=record, **exporter.provider_arguments)
                     except BaseException:
                         failed = True
         finally:

@@ -9,21 +9,25 @@ from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from typing import cast
 
+from sqlbuild.runtime.output_capture._helpers.json import freeze_command_output_json
 from sqlbuild.runtime.output_capture._helpers.text import chunk_text, strip_ansi
 from sqlbuild.runtime.output_capture.constants import (
+    COMMAND_OUTPUT_LOSS_RECORD_TYPE,
     DEFAULT_OUTPUT_BATCH_SIZE,
     DEFAULT_OUTPUT_MAX_RECORD_BYTES,
     DEFAULT_OUTPUT_QUEUE_CAPACITY,
     DEFAULT_OUTPUT_SHUTDOWN_TIMEOUT_SECONDS,
     MIN_OUTPUT_RECORD_BYTES,
-    OUTPUT_LOSS_SUMMARY_RECORD_TYPE,
 )
 from sqlbuild.runtime.output_capture.exceptions import OutputCaptureInputError
-from sqlbuild.runtime.output_capture.models import OutputCaptureSummary, OutputRecord
+from sqlbuild.runtime.output_capture.models import (
+    CommandOutputCaptureSummary,
+    CommandOutputRecord,
+)
 from sqlbuild.runtime.output_capture.types import (
-    OutputBatchExporter,
+    CommandOutputBatchExporter,
+    CommandOutputStream,
     OutputRecordPriority,
-    OutputStream,
 )
 
 
@@ -53,17 +57,23 @@ class OutputCaptureDispatcher:
         self._exporter: object = exporter
         self._invocation_id: str = invocation_id
         self._run_id: str | None = run_id
-        self._context: dict[str, object] = dict(external_context or {})
+        frozen_context: object = freeze_command_output_json(
+            value=dict(external_context or {}),
+            path="external_context",
+        )
+        if not isinstance(frozen_context, Mapping):
+            raise OutputCaptureInputError("output capture external_context must be a mapping")
+        self._context: Mapping[str, object] = cast(Mapping[str, object], frozen_context)
         self._capacity: int = queue_capacity
         self._batch_size: int = batch_size
         self._max_record_bytes: int = max_record_bytes
         self._shutdown_timeout_seconds: float = shutdown_timeout_seconds
         self._clock: Callable[[], datetime] = clock or (lambda: datetime.now(UTC))
         self._failure_callback: Callable[[BaseException], object] | None = failure_callback
-        self._queue: deque[OutputRecord] = deque()
-        self._partials: dict[OutputStream, str] = {
-            OutputStream.STDOUT: "",
-            OutputStream.STDERR: "",
+        self._queue: deque[CommandOutputRecord] = deque()
+        self._partials: dict[CommandOutputStream, str] = {
+            CommandOutputStream.STDOUT: "",
+            CommandOutputStream.STDERR: "",
         }
         self._condition = threading.Condition()
         self._sequence: int = 0
@@ -81,7 +91,7 @@ class OutputCaptureDispatcher:
         )
         self._thread.start()
 
-    def append(self, *, stream: OutputStream, text: str) -> None:
+    def append(self, *, stream: CommandOutputStream, text: str) -> None:
         """Accept one stream fragment without waiting for destination work."""
 
         if not text or threading.get_ident() in self._suppressed_threads:
@@ -99,7 +109,7 @@ class OutputCaptureDispatcher:
                 self._enqueue_text(stream=stream, text=line, priority=OutputRecordPriority.BULK)
             self._condition.notify()
 
-    def close(self) -> OutputCaptureSummary:
+    def close(self) -> CommandOutputCaptureSummary:
         """Flush partial records until a fixed deadline and return without indefinite waits."""
 
         with self._condition:
@@ -111,7 +121,10 @@ class OutputCaptureDispatcher:
                             text=partial,
                             priority=OutputRecordPriority.TERMINAL,
                         )
-                self._partials = {OutputStream.STDOUT: "", OutputStream.STDERR: ""}
+                self._partials = {
+                    CommandOutputStream.STDOUT: "",
+                    CommandOutputStream.STDERR: "",
+                }
                 self._accepting = False
                 if self._dropped:
                     self._enqueue_loss_summary()
@@ -125,7 +138,7 @@ class OutputCaptureDispatcher:
                 self._dropped += len(self._queue)
                 self._queue.clear()
                 self._condition.notify_all()
-            return OutputCaptureSummary(
+            return CommandOutputCaptureSummary(
                 accepted=self._accepted,
                 delivered=self._delivered,
                 failed=self._failed,
@@ -136,16 +149,16 @@ class OutputCaptureDispatcher:
             )
 
     def _enqueue_text(
-        self, *, stream: OutputStream, text: str, priority: OutputRecordPriority
+        self, *, stream: CommandOutputStream, text: str, priority: OutputRecordPriority
     ) -> None:
         plain: str = strip_ansi(text)
         chunks: tuple[str, ...] = chunk_text(text=plain, max_bytes=self._max_record_bytes)
         for index, chunk in enumerate(chunks):
-            record: OutputRecord = OutputRecord(
+            record: CommandOutputRecord = CommandOutputRecord(
                 invocation_id=self._invocation_id,
                 run_id=self._run_id,
                 sequence=self._next_sequence(),
-                timestamp=self._clock(),
+                occurred_at=self._clock(),
                 stream=stream,
                 message=chunk,
                 external_context=self._context,
@@ -155,7 +168,7 @@ class OutputCaptureDispatcher:
             )
             self._put(record)
 
-    def _put(self, record: OutputRecord) -> None:
+    def _put(self, record: CommandOutputRecord) -> None:
         self._accepted += 1
         if len(self._queue) < self._capacity:
             self._queue.append(record)
@@ -174,16 +187,16 @@ class OutputCaptureDispatcher:
             queued.priority is OutputRecordPriority.BULK for queued in self._queue
         )
         dropped_before_summary: int = self._dropped + int(summary_displaces_bulk)
-        record: OutputRecord = OutputRecord(
+        record: CommandOutputRecord = CommandOutputRecord(
             invocation_id=self._invocation_id,
             run_id=self._run_id,
             sequence=self._next_sequence(),
-            timestamp=self._clock(),
-            stream=OutputStream.STDERR,
+            occurred_at=self._clock(),
+            stream=CommandOutputStream.STDERR,
             message=f"SQLBuild output export dropped {dropped_before_summary} record(s)",
             external_context=self._context,
             priority=OutputRecordPriority.TERMINAL,
-            record_type=OUTPUT_LOSS_SUMMARY_RECORD_TYPE,
+            record_type=COMMAND_OUTPUT_LOSS_RECORD_TYPE,
             dropped_records=dropped_before_summary,
         )
         self._put(record)
@@ -201,7 +214,7 @@ class OutputCaptureDispatcher:
                         self._condition.wait()
                     if self._force_stop or (not self._queue and self._stopping):
                         return
-                    batch: tuple[OutputRecord, ...] = tuple(
+                    batch: tuple[CommandOutputRecord, ...] = tuple(
                         self._queue.popleft()
                         for _ in range(min(self._batch_size, len(self._queue)))
                     )
@@ -211,11 +224,11 @@ class OutputCaptureDispatcher:
                 self._worker_finished = True
                 self._condition.notify_all()
 
-    def _export(self, batch: tuple[OutputRecord, ...]) -> None:
+    def _export(self, batch: tuple[CommandOutputRecord, ...]) -> None:
         thread_id: int = threading.get_ident()
         self._suppressed_threads.add(thread_id)
         try:
-            exporter: OutputBatchExporter = cast(OutputBatchExporter, self._exporter)
+            exporter: CommandOutputBatchExporter = cast(CommandOutputBatchExporter, self._exporter)
             exporter.export_output(batch)
         except BaseException as error:
             with self._condition:

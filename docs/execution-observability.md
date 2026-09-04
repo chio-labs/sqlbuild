@@ -10,14 +10,15 @@ record that answers the question instead of treating every JSON or log file as i
 | `LifecycleEvent` | Immutable facts about invocation, run, resource-attempt, operation, retry, and statement lifecycles | Canonical execution evidence. An explicitly attached `EventLogStorage` is authoritative once the fact is durable. SQLite and PostgreSQL retain facts until an operator removes the database or applies an external retention policy. |
 | `DiagnosticLog` | Structured framework and user diagnostics | Explanatory only. It cannot establish that work started, completed, failed, skipped, or retried. Local compute-log retention applies. |
 | `stdout.log` and `stderr.log` | Exact process output for one invocation | Troubleshooting data, not execution truth. Local compute-log retention applies. |
+| `CommandOutputRecord` | Normalized, ANSI-free, line-oriented stdout/stderr chunks for an explicitly configured remote sink | Potentially sensitive, bounded, and potentially lossy troubleshooting data. It is not execution evidence and destination retention is project-owned. |
 | `target/run/` | Full executed model, function, and test SQL, Python-check output, and scenario artifacts | Sensitive, command-written runtime artifacts. This shared tree is not invocation-isolated and may be replaced by later commands. It is not lifecycle truth. |
 | `target/executions/<run_id>/statements.jsonl` | Best-effort run statement ledger with statement/resource identity, status, timing, query ID, and SQL SHA256 | A run-owned cost/query-ID input. It omits SQL text and does not establish lifecycle status. SQLBuild has no automatic retention for this tree. |
 | `RunRecord` | Current run summary rebuilt from durable run facts | Disposable serving state. Rebuild it from the event log; never use it as the only lifecycle authority. |
 | Integration-result JSONL | Bounded resource terminal plus integration enrichment | Canonical SQLBuild-owned integration side channel, but still a projection/consumer of lifecycle facts rather than event history. |
 | Final `--json` or `--json-output` document | Aggregate command result | A separate end-of-command projection. It is not enabled by integration-result output and is not lifecycle authority. |
 
-Compute logs, final output, full SQL artifacts, user messages, and Python/check metadata can contain
-sensitive data. Lifecycle, integration-result, and exporter-health records intentionally exclude
+Compute logs, command-output records, final output, full SQL artifacts, user messages, and
+Python/check metadata can contain sensitive data. Lifecycle, integration-result, and sink-health records intentionally exclude
 full SQL, parameter values, credentials, arbitrary user messages, and unbounded metadata.
 
 ## Lifecycle envelope
@@ -53,7 +54,7 @@ an idempotent no-op; different content under that ID is an integrity error. `pro
 wire contract. Known schema-v1 events reject unknown envelope and payload fields. Readers preserve
 unknown event names or newer schema versions as opaque envelopes rather than inventing semantics.
 History storage retains those opaque envelopes and exposes them to queries, but run projection,
-native progress, integration-result output, and event exporters consume only known
+native progress, integration-result output, and lifecycle-event sinks consume only known
 `LifecycleEvent` values and ignore opaque facts.
 
 An invocation ID exists for every fact. A run groups executable graph work. A stable `resource_id`
@@ -66,7 +67,7 @@ global event-time ordering guarantee. Durable `storage_order` is the total order
 storage backend; `occurred_at` never reorders it. Starts and `statement_submitted` are nonterminal.
 Completed, failed, and `resource_attempt_skipped` facts are terminal. `retry_scheduled` is a
 first-class fact between attempts. A start without terminal evidence remains unknown or presumed
-lost: no storage, projection, integration, or exporter may fabricate success or failure.
+lost: no storage, projection, integration, or sink may fabricate success or failure.
 
 ## Integration consumers
 
@@ -207,4 +208,4 @@ launch/cancel control plane, durable exporter spool, object-storage compute logs
 Kafka/ClickHouse integration. Kafka, ClickHouse, and other exporter destinations are project-owned.
 
 See [execution history](execution-history.md) for storage APIs and
-[event exporters](event-exporters.md) for extension and delivery semantics.
+[typed sinks](sinks.md) for lifecycle-event and command-output delivery semantics.

@@ -10,8 +10,8 @@ from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORT_KINDS
 
 
 @dataclass(frozen=True)
-class EventExporterDefinition:
-    """Immutable metadata attached to an event exporter function."""
+class LifecycleEventSinkDefinition:
+    """Immutable metadata attached to a lifecycle-event sink function."""
 
     name: str
     event_kinds: frozenset[str]

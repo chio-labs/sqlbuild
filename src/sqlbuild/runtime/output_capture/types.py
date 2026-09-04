@@ -6,10 +6,10 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from sqlbuild.runtime.output_capture.models import OutputRecord
+    from sqlbuild.runtime.output_capture.models import CommandOutputRecord
 
 
-class OutputStream(StrEnum):
+class CommandOutputStream(StrEnum):
     """Process text streams captured at the command boundary."""
 
     STDOUT = "stdout"
@@ -23,7 +23,7 @@ class OutputRecordPriority(StrEnum):
     TERMINAL = "terminal"
 
 
-class OutputBatchExporter(Protocol):
+class CommandOutputBatchExporter(Protocol):
     """Destination-owned batch publisher, commonly backed by Kafka."""
 
-    def export_output(self, records: tuple[OutputRecord, ...]) -> object: ...
+    def export_output(self, records: tuple[CommandOutputRecord, ...]) -> object: ...

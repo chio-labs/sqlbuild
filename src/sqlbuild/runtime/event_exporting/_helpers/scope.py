@@ -8,6 +8,7 @@ from contextvars import ContextVar, Token
 from pathlib import Path
 
 from sqlbuild.compiler.discovery.models import (
+    DiscoveredCommandOutputSink,
     DiscoveredEventExporter,
     DiscoveredProjectInputs,
     DiscoveredProvider,
@@ -42,6 +43,13 @@ def configure_discovered_event_exporters(discovered_inputs: DiscoveredProjectInp
 
 def cached_event_exporter_extensions(
     *, project_dir: Path
-) -> tuple[tuple[DiscoveredProvider, ...], tuple[DiscoveredEventExporter, ...]] | None:
+) -> (
+    tuple[
+        tuple[DiscoveredProvider, ...],
+        tuple[DiscoveredEventExporter, ...],
+        tuple[DiscoveredCommandOutputSink, ...],
+    ]
+    | None
+):
     scope: EventExporterCommandScope | None = current_event_exporter_command_scope()
     return None if scope is None else scope.cached_extensions(project_dir=project_dir)

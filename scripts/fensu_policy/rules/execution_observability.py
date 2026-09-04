@@ -30,7 +30,7 @@ from scripts.fensu_policy.constants import (
     CORE_EVENT_EXPORTER_CLASS_NAMES,
     DIAGNOSTIC_CONSTRUCTION_OWNER_PATHS,
     DIAGNOSTIC_LOG_CLASS_NAME,
-    EVENT_EXPORTER_DECORATOR_NAME,
+    EVENT_EXPORTER_DECORATOR_NAMES,
     EVENT_EXPORTER_DIRECTORY_NAME,
     EVENT_EXPORTER_MODULE_PARTS,
     EVENT_EXPORTER_RUNTIME_PREFIX,
@@ -179,13 +179,10 @@ def event_construction_ownership(*, module: object, ctx: RuleContext) -> list[Fa
 @rule(
     code="XSB071",
     family=Family.CUSTOM,
-    slug="event-exporter-location",
-    message=(
-        "event exporter declarations and private runtime imports must stay in their owner boundary"
-    ),
+    slug="sink-location",
+    message=("sink declarations and private runtime imports must stay in their owner boundary"),
     remediation=(
-        "Put project @event_exporter declarations under event_exporters/**/*.py and use public "
-        "APIs elsewhere."
+        "Put project sink declarations under sinks/**/*.py and use public APIs elsewhere."
     ),
 )
 def event_exporter_location(*, module: object, ctx: RuleContext) -> list[Fault]:
@@ -203,11 +200,14 @@ def event_exporter_location(*, module: object, ctx: RuleContext) -> list[Fault]:
         for decorator in node.decorator_list:
             expression: ast.expr = decorator.func if isinstance(decorator, ast.Call) else decorator
             reference_parts: tuple[str, ...] | None = expression_reference_parts(expression)
-            if reference_parts is None or not imported_reference_matches(
-                ctx=ctx,
-                reference_parts=reference_parts,
-                symbol=EVENT_EXPORTER_DECORATOR_NAME,
-                source_modules=(PUBLIC_EVENT_EXPORTER_MODULE_PARTS,),
+            if reference_parts is None or not any(
+                imported_reference_matches(
+                    ctx=ctx,
+                    reference_parts=reference_parts,
+                    symbol=decorator_name,
+                    source_modules=(PUBLIC_EVENT_EXPORTER_MODULE_PARTS,),
+                )
+                for decorator_name in EVENT_EXPORTER_DECORATOR_NAMES
             ):
                 continue
             if (

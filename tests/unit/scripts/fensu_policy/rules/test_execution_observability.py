@@ -518,9 +518,9 @@ def test_given_event_usage_when_checking_event_owner_then_matches_contract(
     [
         CustomRuleTestCase(
             description="recursive project exporter declaration passes",
-            path="event_exporters/private/audit.py",
+            path="sinks/private/audit.py",
             source=(
-                "from sqlbuild.event_exporters import event_exporter as exporter\n"
+                "from sqlbuild.sinks import lifecycle_event_sink as exporter\n"
                 "@exporter\n"
                 "def audit(event): ...\n"
             ),
@@ -531,8 +531,8 @@ def test_given_event_usage_when_checking_event_owner_then_matches_contract(
             description="misplaced project exporter declaration faults",
             path="plugins/audit.py",
             source=(
-                "from sqlbuild.event_exporters import event_exporter\n"
-                "@event_exporter(name='audit')\n"
+                "from sqlbuild.sinks import lifecycle_event_sink\n"
+                "@lifecycle_event_sink(name='audit')\n"
                 "def audit(event): ...\n"
             ),
             expected_fault_count=1,
@@ -542,8 +542,8 @@ def test_given_event_usage_when_checking_event_owner_then_matches_contract(
             description="qualified misplaced exporter declaration faults",
             path="plugins/audit.py",
             source=(
-                "import sqlbuild.event_exporters as exporters\n"
-                "@exporters.event_exporter\n"
+                "import sqlbuild.sinks as exporters\n"
+                "@exporters.lifecycle_event_sink\n"
                 "def audit(event): ...\n"
             ),
             expected_fault_count=1,
@@ -553,8 +553,8 @@ def test_given_event_usage_when_checking_event_owner_then_matches_contract(
             description="from package exporter module alias faults",
             path="plugins/audit.py",
             source=(
-                "from sqlbuild import event_exporters as ex\n"
-                "@ex.event_exporter\n"
+                "from sqlbuild import sinks as ex\n"
+                "@ex.lifecycle_event_sink\n"
                 "def audit(event): ...\n"
             ),
             expected_fault_count=1,
@@ -564,8 +564,8 @@ def test_given_event_usage_when_checking_event_owner_then_matches_contract(
             description="fully qualified exporter decorator faults",
             path="plugins/audit.py",
             source=(
-                "import sqlbuild.event_exporters\n"
-                "@sqlbuild.event_exporters.event_exporter\n"
+                "import sqlbuild.sinks\n"
+                "@sqlbuild.sinks.lifecycle_event_sink\n"
                 "def audit(event): ...\n"
             ),
             expected_fault_count=1,
@@ -576,7 +576,7 @@ def test_given_event_usage_when_checking_event_owner_then_matches_contract(
             path="plugins/audit.py",
             source=(
                 "from third_party.exporters import event_exporter\n"
-                "@event_exporter\n"
+                "@lifecycle_event_sink\n"
                 "def audit(event): ...\n"
             ),
             expected_fault_count=0,
@@ -584,9 +584,9 @@ def test_given_event_usage_when_checking_event_owner_then_matches_contract(
         ),
         CustomRuleTestCase(
             description="core public exporter facade passes",
-            path="src/sqlbuild/event_exporters.py",
+            path="src/sqlbuild/sinks.py",
             source=(
-                "from sqlbuild.runtime.event_exporting.models import EventExporterDefinition\n"
+                "from sqlbuild.runtime.event_exporting.models import LifecycleEventSinkDefinition\n"
             ),
             expected_fault_count=0,
         ),
@@ -594,7 +594,7 @@ def test_given_event_usage_when_checking_event_owner_then_matches_contract(
             description="compiler integration seam passes",
             path="src/sqlbuild/compiler/discovery/models.py",
             source=(
-                "from sqlbuild.runtime.event_exporting.models import EventExporterDefinition\n"
+                "from sqlbuild.runtime.event_exporting.models import LifecycleEventSinkDefinition\n"
             ),
             expected_fault_count=0,
         ),
@@ -602,7 +602,7 @@ def test_given_event_usage_when_checking_event_owner_then_matches_contract(
             description="compiler integration neighbor faults",
             path="src/sqlbuild/compiler/discovery/main/neighbor.py",
             source=(
-                "from sqlbuild.runtime.event_exporting.models import EventExporterDefinition\n"
+                "from sqlbuild.runtime.event_exporting.models import LifecycleEventSinkDefinition\n"
             ),
             expected_fault_count=1,
         ),
@@ -629,7 +629,7 @@ def test_given_event_usage_when_checking_event_owner_then_matches_contract(
         CustomRuleTestCase(
             description="public exporter types remain consumable",
             path="src/sqlbuild/example/main/work.py",
-            source="from sqlbuild.event_exporters import EventExporterDefinition\n",
+            source="from sqlbuild.sinks import LifecycleEventSinkDefinition\n",
             expected_fault_count=0,
         ),
     ],

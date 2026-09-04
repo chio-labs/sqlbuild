@@ -28,13 +28,13 @@ it returns.
 
 ## Filters and lifecycle policy
 
-`@event_exporter(event_kinds=..., min_severity=...)` accepts the canonical kinds `invocation`,
+`@lifecycle_event_sink(event_kinds=..., min_severity=...)` accepts the canonical kinds `invocation`,
 `run`, `resource`, `operation`, `statement`, and `retry`, and severities `debug`, `info`, `warning`,
 and `error`. Omitted declaration filters opt into all kinds from `debug` upward. Options are
 validated and frozen when the function is decorated.
 
-Project config can only narrow that opt-in. `[event_exporters]` supplies global `event_kinds` and
-`min_severity`; `[event_exporters.named.<exporter_name>]` can narrow one exporter further. Effective
+Project config can only narrow that opt-in. `[sinks.lifecycle]` supplies global `event_kinds` and
+`min_severity`; `[sinks.lifecycle.named.<exporter_name>]` can narrow one exporter further. Effective
 kinds are the intersection of declaration, global, and named sets. Effective minimum severity is
 the strictest of those three values. Unknown names, kinds, and severities fail before execution.
 
@@ -68,10 +68,10 @@ dropped. Failure and health diagnostics use only exporter name, catalogued kind/
 type, counts, and queue dimensions. They bypass lifecycle publication and exporter enqueue, contain
 no event payload or destination/provider details, and reporter failures remain isolated.
 
-Startup first imports public Python modules under `event_exporters/` and collects decorated
+Startup first imports public Python modules under `sinks/` and collects decorated
 declarations without discovering providers. If those modules contain only helpers, SQLBuild does
 not import project providers or construct exporter queue, dispatcher, or notification threads.
 Normal command-owned project discovery remains responsible for providers needed by nodes and hooks.
 
 The project declaration, configuration, delivery, security, and failure contract is documented in
-[`docs/event-exporters.md`](../../../../docs/event-exporters.md).
+[`docs/sinks.md`](../../../../docs/sinks.md).

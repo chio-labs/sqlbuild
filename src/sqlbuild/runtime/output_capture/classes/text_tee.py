@@ -6,18 +6,18 @@ from typing import Any
 
 from sqlbuild.runtime.output_capture.classes.binary_tee import BinaryOutputTee
 from sqlbuild.runtime.output_capture.classes.dispatcher import OutputCaptureDispatcher
-from sqlbuild.runtime.output_capture.types import OutputStream
+from sqlbuild.runtime.output_capture.types import CommandOutputStream
 
 
 class TextOutputTee:
     """Preserve the original text stream behavior and capture only accepted text."""
 
     def __init__(
-        self, *, sink: Any, dispatcher: OutputCaptureDispatcher, stream: OutputStream
+        self, *, sink: Any, dispatcher: OutputCaptureDispatcher, stream: CommandOutputStream
     ) -> None:
         self._sink: Any = sink
         self._dispatcher: OutputCaptureDispatcher = dispatcher
-        self._stream: OutputStream = stream
+        self._stream: CommandOutputStream = stream
         encoding: str = getattr(sink, "encoding", None) or "utf-8"
         binary_sink: Any = getattr(sink, "buffer", sink)
         self._buffer = BinaryOutputTee(
