@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlbuild.adapter.contract.models import (
     QueryResult,
@@ -43,7 +43,7 @@ class FreshnessRecordingAdapter:
         return TableFreshnessMetadata(
             data_version=datetime(2026, 1, 2, 3, 4, 5),
             value_kind="timestamp",
-            observed_at=datetime(2026, 1, 2, 3, 5, 0),
+            observed_at=datetime(2026, 1, 2, 3, 5, 0, tzinfo=UTC),
         )
 
     def get_tables_freshness_metadata(
@@ -217,5 +217,5 @@ def source_freshness_record(
             value_kind=value_kind,
             data_version=data_version,
         ),
-        observed_at=datetime(2025, 12, 31, 0, 0, 0),
+        observed_at=datetime(2025, 12, 31, 0, 0, 0, tzinfo=UTC),
     )

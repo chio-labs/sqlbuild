@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -53,7 +53,7 @@ RELATION_EXISTS: Callable[..., bool] = DuckDbAdapter().relation_exists
                     value_kind="timestamp",
                     data_version="2026-01-15T12:00:00",
                     data_version_hash="hash_orders",
-                    observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                    observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
                 ),
                 SourceFreshnessRecord(
                     source_name="raw.customers",
@@ -65,7 +65,7 @@ RELATION_EXISTS: Callable[..., bool] = DuckDbAdapter().relation_exists
                     value_kind="timestamp",
                     data_version="2026-01-15T12:01:00",
                     data_version_hash="hash_customers",
-                    observed_at=datetime(2026, 1, 15, 12, 6, 0),
+                    observed_at=datetime(2026, 1, 15, 12, 6, 0, tzinfo=UTC),
                 ),
             ),
             expected_identities=(
@@ -182,7 +182,7 @@ def test_given_no_table_when_reading_source_freshness_then_returns_empty_set(
                     value_kind="timestamp",
                     data_version="2026-01-15T12:00:00",
                     data_version_hash="hash_orders",
-                    observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                    observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
                 ),
             ),
             expected_table_exists=True,
@@ -241,7 +241,7 @@ def test_given_no_table_when_writing_source_freshness_then_creates_table(
                     value_kind="timestamp",
                     data_version="2026-01-15T12:00:00",
                     data_version_hash="new_hash",
-                    observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                    observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
                 ),
                 SourceFreshnessRecord(
                     source_name="raw.orders",
@@ -253,7 +253,7 @@ def test_given_no_table_when_writing_source_freshness_then_creates_table(
                     value_kind="timestamp",
                     data_version="2026-01-15T10:00:00",
                     data_version_hash="old_hash",
-                    observed_at=datetime(2026, 1, 15, 10, 5, 0),
+                    observed_at=datetime(2026, 1, 15, 10, 5, 0, tzinfo=UTC),
                 ),
             ),
             identity=SourceFreshnessIdentity("raw.orders", None, "raw", "orders"),
@@ -276,7 +276,7 @@ def test_given_no_table_when_writing_source_freshness_then_creates_table(
                     value_kind="timestamp",
                     data_version="2026-01-15T10:00:00",
                     data_version_hash="low_run_hash",
-                    observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                    observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
                 ),
                 SourceFreshnessRecord(
                     source_name="raw.orders",
@@ -288,7 +288,7 @@ def test_given_no_table_when_writing_source_freshness_then_creates_table(
                     value_kind="timestamp",
                     data_version="2026-01-15T12:00:00",
                     data_version_hash="high_run_hash",
-                    observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                    observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
                 ),
             ),
             identity=SourceFreshnessIdentity("raw.orders", None, "raw", "orders"),
@@ -357,7 +357,7 @@ def test_given_multiple_source_freshness_records_when_reading_then_resolves_late
                     value_kind="timestamp",
                     data_version="2026-01-15T10:00:00",
                     data_version_hash="hash_old",
-                    observed_at=datetime(2026, 1, 15, 10, 5, 0),
+                    observed_at=datetime(2026, 1, 15, 10, 5, 0, tzinfo=UTC),
                 ),
                 SourceFreshnessRecord(
                     source_name="raw.orders",
@@ -369,7 +369,7 @@ def test_given_multiple_source_freshness_records_when_reading_then_resolves_late
                     value_kind="timestamp",
                     data_version="2026-01-15T12:00:00",
                     data_version_hash="hash_low_tie",
-                    observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                    observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
                 ),
                 SourceFreshnessRecord(
                     source_name="raw.orders",
@@ -381,7 +381,7 @@ def test_given_multiple_source_freshness_records_when_reading_then_resolves_late
                     value_kind="timestamp",
                     data_version="2026-01-15T12:00:00",
                     data_version_hash="hash_high_tie",
-                    observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                    observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
                 ),
                 SourceFreshnessRecord(
                     source_name="raw.orders",
@@ -393,7 +393,7 @@ def test_given_multiple_source_freshness_records_when_reading_then_resolves_late
                     value_kind="timestamp",
                     data_version="2026-01-15T13:00:00",
                     data_version_hash="hash_latest",
-                    observed_at=datetime(2026, 1, 15, 13, 5, 0),
+                    observed_at=datetime(2026, 1, 15, 13, 5, 0, tzinfo=UTC),
                 ),
                 SourceFreshnessRecord(
                     source_name="raw.orders",
@@ -405,7 +405,7 @@ def test_given_multiple_source_freshness_records_when_reading_then_resolves_late
                     value_kind="timestamp",
                     data_version="2026-01-15T10:00:00",
                     data_version_hash="hash_physical_old",
-                    observed_at=datetime(2026, 1, 15, 10, 5, 0),
+                    observed_at=datetime(2026, 1, 15, 10, 5, 0, tzinfo=UTC),
                 ),
                 SourceFreshnessRecord(
                     source_name="raw.orders",
@@ -417,7 +417,7 @@ def test_given_multiple_source_freshness_records_when_reading_then_resolves_late
                     value_kind="timestamp",
                     data_version="2026-01-15T11:00:00",
                     data_version_hash="hash_physical_latest",
-                    observed_at=datetime(2026, 1, 15, 11, 5, 0),
+                    observed_at=datetime(2026, 1, 15, 11, 5, 0, tzinfo=UTC),
                 ),
             ),
             expected_run_ids_by_identity={
@@ -525,7 +525,7 @@ def test_given_source_freshness_history_when_pruning_then_keeps_latest_versions_
                     value_kind="timestamp",
                     data_version="2026-01-15T10:00:00",
                     data_version_hash="dev_hash",
-                    observed_at=datetime(2026, 1, 15, 10, 5, 0),
+                    observed_at=datetime(2026, 1, 15, 10, 5, 0, tzinfo=UTC),
                 ),
                 SourceFreshnessRecord(
                     source_name="raw.orders",
@@ -537,7 +537,7 @@ def test_given_source_freshness_history_when_pruning_then_keeps_latest_versions_
                     value_kind="timestamp",
                     data_version="2026-01-15T12:00:00",
                     data_version_hash="prod_hash",
-                    observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                    observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
                 ),
             ),
             expected_identities=(
@@ -568,7 +568,7 @@ def test_given_source_freshness_history_when_pruning_then_keeps_latest_versions_
                     value_kind="timestamp",
                     data_version="2026-01-15T10:00:00",
                     data_version_hash="null_target_hash",
-                    observed_at=datetime(2026, 1, 15, 10, 5, 0),
+                    observed_at=datetime(2026, 1, 15, 10, 5, 0, tzinfo=UTC),
                 ),
                 SourceFreshnessRecord(
                     source_name="raw.orders",
@@ -580,7 +580,7 @@ def test_given_source_freshness_history_when_pruning_then_keeps_latest_versions_
                     value_kind="timestamp",
                     data_version="2026-01-15T12:00:00",
                     data_version_hash="physical_target_hash",
-                    observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                    observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
                 ),
             ),
             expected_identities=(
@@ -659,7 +659,7 @@ def test_given_same_source_name_with_different_targets_when_reading_then_keeps_i
                     value_kind="unknown",
                     data_version=None,
                     data_version_hash="unknown_hash",
-                    observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                    observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
                 ),
             ),
             expected_data_version=None,
@@ -680,7 +680,7 @@ def test_given_same_source_name_with_different_targets_when_reading_then_keeps_i
                     value_kind="time'stamp",
                     data_version="2026-01-15T12:00:00's",
                     data_version_hash="hash_'orders",
-                    observed_at=datetime(2026, 1, 15, 12, 5, 0),
+                    observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
                 ),
             ),
             expected_data_version="2026-01-15T12:00:00's",

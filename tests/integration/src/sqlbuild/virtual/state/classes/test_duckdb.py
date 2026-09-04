@@ -3,12 +3,19 @@ from __future__ import annotations
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from sqlbuild.cli.commands._helpers.freshness.state import _direct_record_from_virtual_record
+from sqlbuild.compiler.source_freshness.models import (
+    DirectSourceFreshnessPlanningResult,
+)
+from sqlbuild.compiler.source_freshness.models import (
+    SourceFreshnessRecord as DirectSourceFreshnessRecord,
+)
 from sqlbuild.executor.node_results.models import (
     NodeResultEnvelope,
     NodeResultQuery,
@@ -22,7 +29,14 @@ from sqlbuild.microbatches.types import (
     MicrobatchRecordType,
     MicrobatchRunType,
 )
-from sqlbuild.virtual.state.constants import STATE_TABLE_INDEXES, STATE_TABLES
+from sqlbuild.virtual.planner._helpers.run_despite_unchanged import (
+    _direct_source_freshness_result,
+)
+from sqlbuild.virtual.state.constants import (
+    SOURCE_FRESHNESS_OBSERVATION_TABLE,
+    STATE_TABLE_INDEXES,
+    STATE_TABLES,
+)
 from sqlbuild.virtual.state.exceptions import StateBackendConfigError
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
@@ -1545,6 +1559,7 @@ def test_given_duckdb_state_backend_when_replacing_source_freshness_then_round_t
 ) -> None:
     backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
     try:
+        connection.execute("SET TimeZone = 'Asia/Singapore'")
         backend.initialize(
             connection=connection,
             schema=test_case.schema,
@@ -1558,8 +1573,8 @@ def test_given_duckdb_state_backend_when_replacing_source_freshness_then_round_t
                 status=VirtualEnvironmentStatus.ACTIVE,
             ),
         )
-        first_observed_at: datetime = datetime(2026, 1, 1, 12, 0, 0)
-        second_observed_at: datetime = datetime(2026, 1, 2, 12, 0, 0)
+        first_observed_at: datetime = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+        second_observed_at: datetime = datetime(2026, 1, 2, 12, 0, 0, tzinfo=UTC)
         backend.replace_virtual_environment_source_freshness(
             connection=connection,
             schema=test_case.schema,
@@ -1625,6 +1640,18 @@ def test_given_duckdb_state_backend_when_replacing_source_freshness_then_round_t
         assert replaced_records[0].data_version == "2"
         assert replaced_records[0].data_version_hash == "hash-3"
         assert replaced_records[0].observed_at == second_observed_at
+        stored_observed_at: datetime = connection.execute(
+            f'SELECT observed_at FROM "{test_case.schema}"."{SOURCE_FRESHNESS_OBSERVATION_TABLE}"'
+        ).fetchone()[0]
+        assert stored_observed_at == second_observed_at.replace(tzinfo=None)
+        planning_result: DirectSourceFreshnessPlanningResult = _direct_source_freshness_result(
+            replaced_records
+        )
+        assert planning_result.observed_records[0].observed_at == second_observed_at
+        direct_record: DirectSourceFreshnessRecord = _direct_record_from_virtual_record(
+            replaced_records[0]
+        )
+        assert direct_record.observed_at == second_observed_at
 
         backend.delete_virtual_environment(
             connection=connection,

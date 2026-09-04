@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from textwrap import dedent
 
@@ -183,7 +183,7 @@ def create_direct_state_history(*, db_path: Path) -> None:
                         value_kind="timestamp",
                         data_version=f"2026-01-15T{observed_hour:02d}:00:00",
                         data_version_hash=f"source_{run_id}",
-                        observed_at=datetime(2026, 1, 15, observed_hour, 5, 0),
+                        observed_at=datetime(2026, 1, 15, observed_hour, 5, 0, tzinfo=UTC),
                     ),
                 ),
                 renderers=SourceFreshnessRenderers(

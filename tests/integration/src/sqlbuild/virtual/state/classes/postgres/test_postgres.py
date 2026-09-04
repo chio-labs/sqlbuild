@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -21,7 +21,11 @@ from sqlbuild.microbatches.types import (
     MicrobatchRunType,
 )
 from sqlbuild.virtual.state.classes.postgres import PostgresStateBackend
-from sqlbuild.virtual.state.constants import STATE_TABLE_INDEXES, STATE_TABLES
+from sqlbuild.virtual.state.constants import (
+    SOURCE_FRESHNESS_OBSERVATION_TABLE,
+    STATE_TABLE_INDEXES,
+    STATE_TABLES,
+)
 from sqlbuild.virtual.state.exceptions import StateBackendConfigError
 from sqlbuild.virtual.state.models import (
     ModelVersionRecord,
@@ -1023,6 +1027,8 @@ def test_given_postgres_backend_when_replacing_source_freshness_then_round_trips
     postgres_state_connection: Any,
     postgres_state_schema: str,
 ) -> None:
+    with postgres_state_connection.cursor() as cursor:
+        cursor.execute("SET TIME ZONE 'Asia/Singapore'")
     postgres_state_backend.initialize(
         connection=postgres_state_connection,
         schema=postgres_state_schema,
@@ -1036,8 +1042,8 @@ def test_given_postgres_backend_when_replacing_source_freshness_then_round_trips
             status=VirtualEnvironmentStatus.ACTIVE,
         ),
     )
-    first_observed_at: datetime = datetime(2026, 1, 1, 12, 0, 0)
-    second_observed_at: datetime = datetime(2026, 1, 2, 12, 0, 0)
+    first_observed_at: datetime = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+    second_observed_at: datetime = datetime(2026, 1, 2, 12, 0, 0, tzinfo=UTC)
     postgres_state_backend.replace_virtual_environment_source_freshness(
         connection=postgres_state_connection,
         schema=postgres_state_schema,
@@ -1103,6 +1109,13 @@ def test_given_postgres_backend_when_replacing_source_freshness_then_round_trips
     assert replaced_records[0].data_version == "2"
     assert replaced_records[0].data_version_hash == "hash-3"
     assert replaced_records[0].observed_at == second_observed_at
+    with postgres_state_connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT observed_at FROM "
+            f"{qualified_name(schema=postgres_state_schema, table=SOURCE_FRESHNESS_OBSERVATION_TABLE)}"
+        )
+        stored_observed_at: datetime = cursor.fetchone()[0]
+    assert stored_observed_at == second_observed_at.replace(tzinfo=None)
 
     postgres_state_backend.delete_virtual_environment(
         connection=postgres_state_connection,

@@ -21,6 +21,10 @@ from sqlbuild.microbatches.constants import (
     VIRTUAL_MICROBATCH_SCOPE_KIND,
 )
 from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope, MicrobatchWriteResult
+from sqlbuild.virtual.state._helpers.state_storage.datetime import (
+    from_naive_utc_wall_clock,
+    to_naive_utc_wall_clock,
+)
 from sqlbuild.virtual.state._helpers.state_storage.events import backup_id, event_id
 from sqlbuild.virtual.state._helpers.state_storage.validation import (
     build_validation_result,
@@ -1460,7 +1464,7 @@ class PostgresStateBackend(StateBackend):
                             record.value_kind,
                             record.data_version,
                             record.data_version_hash,
-                            record.observed_at,
+                            to_naive_utc_wall_clock(record.observed_at),
                         ],
                     )
                 cursor.execute("COMMIT")
@@ -1489,7 +1493,7 @@ class PostgresStateBackend(StateBackend):
                 value_kind=row[3],
                 data_version=row[4],
                 data_version_hash=row[5],
-                observed_at=row[6],
+                observed_at=from_naive_utc_wall_clock(row[6]),
             )
             for row in rows
         )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from sqlbuild.compiler.source_freshness._helpers.datetime import require_aware_utc_datetime
 from sqlbuild.compiler.source_freshness.constants import (
     DURATION_DAY_UNIT,
     DURATION_HOUR_UNIT,
@@ -24,21 +25,18 @@ def evaluate_source_freshness_age_policy(
         return None
     if not isinstance(data_version, datetime):
         return SourceFreshnessAgeStatus.UNKNOWN
-    data_version = _align_timezone(data_version=data_version, observed_at=observed_at)
-    age_seconds: float = (observed_at - data_version).total_seconds()
+    aware_data_version: datetime = require_aware_utc_datetime(
+        value=data_version, field_name="data_version"
+    )
+    aware_observed_at: datetime = require_aware_utc_datetime(
+        value=observed_at, field_name="observed_at"
+    )
+    age_seconds: float = (aware_observed_at - aware_data_version).total_seconds()
     if policy.error_after is not None and age_seconds > _duration_seconds(policy.error_after):
         return SourceFreshnessAgeStatus.ERROR
     if policy.warn_after is not None and age_seconds > _duration_seconds(policy.warn_after):
         return SourceFreshnessAgeStatus.WARN
     return SourceFreshnessAgeStatus.PASS
-
-
-def _align_timezone(*, data_version: datetime, observed_at: datetime) -> datetime:
-    if data_version.tzinfo is None and observed_at.tzinfo is not None:
-        return data_version.replace(tzinfo=observed_at.tzinfo)
-    if data_version.tzinfo is not None and observed_at.tzinfo is None:
-        return data_version.replace(tzinfo=None)
-    return data_version
 
 
 def _duration_seconds(value: str) -> int:

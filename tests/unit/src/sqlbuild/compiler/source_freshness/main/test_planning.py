@@ -69,7 +69,7 @@ class FreshnessMetadataDuckDbAdapter(DuckDbAdapter):
         return TableFreshnessMetadata(
             data_version=self.data_version,
             value_kind=self.value_kind,
-            observed_at=datetime(2026, 1, 15, 12, 0, 0),
+            observed_at=datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC),
         )
 
     def get_tables_freshness_metadata(
@@ -84,7 +84,7 @@ class FreshnessMetadataDuckDbAdapter(DuckDbAdapter):
             request: TableFreshnessMetadata(
                 data_version=self.data_version,
                 value_kind=self.value_kind,
-                observed_at=datetime(2026, 1, 15, 12, 0, 0),
+                observed_at=datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC),
             )
             for request in requests
         }
@@ -146,7 +146,7 @@ def test_given_direct_source_freshness_state_when_planning_then_classifies_hash_
             sources=(source,),
             state_database=None,
             state_schemas=("state_schema",),
-            observed_at=datetime(2026, 1, 15, 12, 0, 0),
+            observed_at=datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC),
             run_id="planning",
             render_qualified_name=RENDER_QUALIFIED_NAME,
             state_table_exists_by_schema=state_table_exists_map(
@@ -297,7 +297,7 @@ def test_given_adapter_metadata_age_policy_when_planning_then_records_age_status
             sources=(source,),
             state_database=None,
             state_schemas=("state_schema",),
-            observed_at=datetime(2026, 1, 15, 12, 0, 0),
+            observed_at=datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC),
             run_id="planning",
             render_qualified_name=RENDER_QUALIFIED_NAME,
             state_table_exists_by_schema=state_table_exists_map(
@@ -373,7 +373,7 @@ def test_given_timestamp_lag_tolerance_when_planning_then_classifies_tolerated_m
                         value_kind=SourceFreshnessValueKind.TIMESTAMP,
                         data_version=previous_data_version,
                     ),
-                    observed_at=datetime(2026, 1, 15, 12, 0, 0),
+                    observed_at=datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC),
                 ),
             ),
             renderers=SourceFreshnessRenderers(
@@ -399,7 +399,7 @@ def test_given_timestamp_lag_tolerance_when_planning_then_classifies_tolerated_m
             ),
             state_database=None,
             state_schemas=("state_schema",),
-            observed_at=datetime(2026, 1, 15, 12, 30, 0),
+            observed_at=datetime(2026, 1, 15, 12, 30, 0, tzinfo=UTC),
             run_id="planning",
             render_qualified_name=RENDER_QUALIFIED_NAME,
             state_table_exists_by_schema=state_table_exists_map(
@@ -438,7 +438,7 @@ def test_given_unconfigured_source_without_adapter_metadata_when_planning_then_m
             sources=(SourceEntry(name="raw.orders", table="orders"),),
             state_database=None,
             state_schemas=("state_schema",),
-            observed_at=datetime(2026, 1, 15, 12, 0, 0),
+            observed_at=datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC),
             run_id="planning",
             render_qualified_name=RENDER_QUALIFIED_NAME,
             state_table_exists_by_schema=state_table_exists_map(
@@ -489,7 +489,7 @@ def test_given_column_freshness_expression_when_planning_then_observes_subquery(
             ),
             state_database=None,
             state_schemas=("state_schema",),
-            observed_at=datetime(2026, 1, 15, 12, 0, 0),
+            observed_at=datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC),
             run_id="planning",
             render_qualified_name=RENDER_QUALIFIED_NAME,
             state_table_exists_by_schema=state_table_exists_map(
@@ -534,7 +534,7 @@ def test_given_adapter_metadata_support_when_planning_unconfigured_source_then_o
             ),
             state_database=None,
             state_schemas=("state_schema",),
-            observed_at=datetime(2026, 1, 15, 12, 5, 0),
+            observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
             run_id="planning",
             render_qualified_name=RENDER_QUALIFIED_NAME,
             state_table_exists_by_schema=state_table_exists_map(
@@ -576,7 +576,7 @@ def test_given_managed_source_when_planning_source_freshness_then_skips_observat
             sources=(SourceEntry(name="raw.orders", schema="raw", table="orders", managed=True),),
             state_database=None,
             state_schemas=("state_schema",),
-            observed_at=datetime(2026, 1, 15, 12, 5, 0),
+            observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
             run_id="planning",
             render_qualified_name=RENDER_QUALIFIED_NAME,
             state_table_exists_by_schema=state_table_exists_map(
@@ -645,7 +645,7 @@ def test_given_multiple_state_schemas_when_planning_then_merges_previous_records
             ),
             state_database=None,
             state_schemas=("state_a", "state_b"),
-            observed_at=datetime(2026, 1, 15, 12, 5, 0),
+            observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
             run_id="planning",
             render_qualified_name=RENDER_QUALIFIED_NAME,
             state_table_exists_by_schema=state_table_exists_map(
@@ -689,7 +689,7 @@ def test_given_duplicate_state_schema_records_when_planning_then_uses_newest_obs
             schema="state_a",
             source_name="raw.orders",
             data_version="2",
-            observed_at=datetime(2026, 1, 15, 12, 0, 0),
+            observed_at=datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC),
         )
         write_previous_record_to_schema(
             adapter=adapter,
@@ -699,7 +699,7 @@ def test_given_duplicate_state_schema_records_when_planning_then_uses_newest_obs
             schema="state_b",
             source_name="raw.orders",
             data_version="1",
-            observed_at=datetime(2026, 1, 15, 10, 0, 0),
+            observed_at=datetime(2026, 1, 15, 10, 0, 0, tzinfo=UTC),
         )
 
         result: DirectSourceFreshnessPlanningResult = build_direct_source_freshness_planning_result(
@@ -717,7 +717,7 @@ def test_given_duplicate_state_schema_records_when_planning_then_uses_newest_obs
             ),
             state_database=None,
             state_schemas=("state_a", "state_b"),
-            observed_at=datetime(2026, 1, 15, 12, 5, 0),
+            observed_at=datetime(2026, 1, 15, 12, 5, 0, tzinfo=UTC),
             run_id="planning",
             render_qualified_name=RENDER_QUALIFIED_NAME,
             state_table_exists_by_schema=state_table_exists_map(

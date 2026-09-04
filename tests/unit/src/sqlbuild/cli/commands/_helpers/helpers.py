@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlbuild.adapter.contract.types import FrameworkType
@@ -137,5 +137,5 @@ def source_freshness_record(
         value_kind="integer",
         data_version=data_version,
         data_version_hash=data_version_hash,
-        observed_at=datetime(2026, 1, 1, 0, 0, 0),
+        observed_at=datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC),
     )
