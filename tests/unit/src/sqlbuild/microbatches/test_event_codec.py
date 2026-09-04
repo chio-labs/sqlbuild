@@ -27,15 +27,15 @@ from tests.unit.src.sqlbuild.microbatches.helpers import (
     (
         MicrobatchEventCursorEncodingTestCase(
             description="offset timestamp cursor fields remain state-table strings",
-            run_start="2026-01-01T00:00:00+00:00",
-            run_end="2026-01-02T00:00:00+00:00",
-            partition_start="2026-01-01T00:00:00+00:00",
-            partition_end="2026-01-01T01:00:00+00:00",
+            run_start="2026-01-01T08:00:00+08:00",
+            run_end="2026-01-02T08:00:00+08:00",
+            partition_start="2026-01-01T08:00:00+08:00",
+            partition_end="2026-01-01T09:00:00+08:00",
             expected_values=(
-                "2026-01-01T00:00:00+00:00",
-                "2026-01-02T00:00:00+00:00",
-                "2026-01-01T00:00:00+00:00",
-                "2026-01-01T01:00:00+00:00",
+                "2026-01-01T08:00:00+08:00",
+                "2026-01-02T08:00:00+08:00",
+                "2026-01-01T08:00:00+08:00",
+                "2026-01-01T09:00:00+08:00",
             ),
         ),
     ),

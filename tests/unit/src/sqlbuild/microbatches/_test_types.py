@@ -75,3 +75,11 @@ class MicrobatchEventCursorEncodingTestCase:
     partition_start: str
     partition_end: str
     expected_values: tuple[str, str, str, str]
+
+
+@dataclass(frozen=True, kw_only=True)
+class MicrobatchAwareOffsetIdentityTestCase:
+    description: str
+    partition_start: str
+    partition_end: str
+    expected_event_id: str

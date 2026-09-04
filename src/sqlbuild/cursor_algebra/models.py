@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 
 from sqlbuild.compiler.planner.types import CursorGrain
@@ -14,6 +14,7 @@ class TimestampValue:
     """Timestamp cursor value; the datetime retains its original UTC offset."""
 
     value: datetime
+    source_text: str | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -1,6 +1,7 @@
 """Test case models for cursor algebra."""
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlbuild.compiler.planner.types import CursorGrain
 
@@ -47,3 +48,14 @@ class TemporalSplitTestCase:
     end: str
     step: int
     expected_boundaries: tuple[str, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class TimestampTimezonePolicyTestCase:
+    description: str
+    raw: str | datetime
+    directly_constructed_value: datetime
+    expected_value: datetime
+    expected_passthrough: str
+    grain: CursorGrain
+    expected_exclusive_end: str

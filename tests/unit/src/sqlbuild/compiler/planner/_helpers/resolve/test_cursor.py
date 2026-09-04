@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
 
@@ -56,8 +56,8 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types impor
             "month final timezone timestamp",
             datetime(2026, 7, 31, 23, 59, 59, tzinfo=timezone(timedelta(hours=5, minutes=30))),
             "month",
-            datetime(2026, 7, 1, tzinfo=timezone(timedelta(hours=5, minutes=30))),
-            datetime(2026, 8, 1, tzinfo=timezone(timedelta(hours=5, minutes=30))),
+            datetime(2026, 7, 1, tzinfo=UTC),
+            datetime(2026, 8, 1, tzinfo=UTC),
         ),
         DiscoveredCursorPartitionTestCase(
             "year boundary date", date(2026, 1, 1), "year", date(2026, 1, 1), date(2027, 1, 1)

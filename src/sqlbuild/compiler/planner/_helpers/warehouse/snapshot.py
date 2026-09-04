@@ -71,6 +71,7 @@ from sqlbuild.compiler.planner.types import (
 from sqlbuild.compiler.references.main._render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
+from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
 from sqlbuild.cursor_algebra.main.compare import compare
 from sqlbuild.cursor_algebra.main.exclusive_to_inclusive import exclusive_to_inclusive
 from sqlbuild.cursor_algebra.main.observed_partition import observed_partition
@@ -965,15 +966,24 @@ def _execute_cursor_query(
         if min_value is not None:
             min_tag: str
             for min_tag in query.min_tags:
-                output[min_tag] = parse(raw=min_value, cursor_type=query.cursor_type)
+                output[min_tag] = _parse_warehouse_cursor(value=min_value)
         value_index += 1
     if query.max_tags:
         max_value: Any = row[value_index]
         if max_value is not None:
             max_tag: str
             for max_tag in query.max_tags:
-                output[max_tag] = parse(raw=max_value, cursor_type=query.cursor_type)
+                output[max_tag] = _parse_warehouse_cursor(value=max_value)
     return output
+
+
+def _parse_warehouse_cursor(*, value: object) -> CursorScalar:
+    """Parse a physical cursor value independently of a possibly incorrect declaration."""
+
+    try:
+        return parse(raw=value, cursor_type=CursorType.INTEGER)
+    except CursorAlgebraError:
+        return parse(raw=value, cursor_type=CursorType.TIMESTAMP)
 
 
 def _gather_eligible_target_maxes(

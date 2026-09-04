@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -58,8 +59,8 @@ def _parse_loader_cursor(*, value: object | None) -> CursorScalar | None:
         return None
     if isinstance(value, bool):
         raise ExecutorInputError("delete_insert cursor bounds do not support boolean values")
-    if isinstance(value, int):
+    if isinstance(value, int | Decimal):
         return parse(raw=value, cursor_type="integer")
-    if isinstance(value, date | datetime):
+    if isinstance(value, date | datetime | str):
         return parse(raw=value, cursor_type="timestamp")
     raise ExecutorInputError(f"delete_insert cursor bounds do not support {type(value).__name__}")
