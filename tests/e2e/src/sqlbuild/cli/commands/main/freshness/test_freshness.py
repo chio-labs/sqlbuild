@@ -338,7 +338,7 @@ def test_given_existing_source_freshness_state_when_running_then_does_not_write_
             ),
             expected_fragments=(
                 "Changed (1)",
-                "raw_orders  previous 2026-01-01T00:00:00  current 2026-01-01T00:11:00",
+                "raw_orders  previous 2026-01-01T00:00:00+00:00  current 2026-01-01T00:11:00+00:00",
                 "tolerance 10m",
                 "OBSERVED=0  CHANGED=1  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
@@ -401,7 +401,7 @@ def test_given_timestamp_freshness_beyond_tolerance_when_state_then_returns_nonz
             description="direct state comparison fails on backwards timestamp movement",
             expected_fragments=(
                 "Changed (1)",
-                "raw_orders  previous 2026-01-01T00:10:00  current 2026-01-01T00:05:00",
+                "raw_orders  previous 2026-01-01T00:10:00+00:00  current 2026-01-01T00:05:00+00:00",
                 "tolerance 10m",
                 "OBSERVED=0  CHANGED=1  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
@@ -609,7 +609,7 @@ def test_given_changed_source_freshness_when_running_state_fail_on_stale_then_re
             ),
             expected_fragments=(
                 "Tolerated (1)",
-                "raw_orders  previous 2026-01-01T00:00:00  current 2026-01-01T00:05:00",
+                "raw_orders  previous 2026-01-01T00:00:00+00:00  current 2026-01-01T00:05:00+00:00",
                 "tolerance 10m",
                 "OBSERVED=0  CHANGED=0  UNCHANGED=0  TOLERATED=1  UNKNOWN=0  ERROR=0",
             ),
@@ -679,8 +679,8 @@ def test_given_timestamp_freshness_within_tolerance_when_running_state_then_repo
     assert json_result.returncode == 0, json_result.stdout + json_result.stderr
     assert payload["summary"]["tolerated"] == 1
     assert payload["sources"][0]["status"] == "tolerated"
-    assert payload["sources"][0]["previous_data_version"] == "2026-01-01T00:00:00"
-    assert payload["sources"][0]["current_data_version"] == "2026-01-01T00:05:00"
+    assert payload["sources"][0]["previous_data_version"] == "2026-01-01T00:00:00+00:00"
+    assert payload["sources"][0]["current_data_version"] == "2026-01-01T00:05:00+00:00"
 
 
 @pytest.mark.parametrize(
@@ -902,7 +902,7 @@ def test_given_virtual_source_freshness_changes_when_state_then_returns_nonzero(
             description="virtual state comparison tolerates timestamp movement within tolerance",
             expected_fragments=(
                 "Tolerated (1)",
-                "raw_orders  previous 2026-01-01T00:00:00  current 2026-01-01T00:05:00",
+                "raw_orders  previous 2026-01-01T00:00:00+00:00  current 2026-01-01T00:05:00+00:00",
                 "tolerance 10m",
                 "OBSERVED=0  CHANGED=0  UNCHANGED=0  TOLERATED=1  UNKNOWN=0  ERROR=0",
             ),
@@ -965,7 +965,7 @@ def test_given_virtual_timestamp_freshness_within_tolerance_when_state_then_repo
             description="virtual state comparison fails beyond timestamp tolerance",
             expected_fragments=(
                 "Changed (1)",
-                "raw_orders  previous 2026-01-01T00:00:00  current 2026-01-01T00:11:00",
+                "raw_orders  previous 2026-01-01T00:00:00+00:00  current 2026-01-01T00:11:00+00:00",
                 "tolerance 10m",
                 "OBSERVED=0  CHANGED=1  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
@@ -1028,7 +1028,7 @@ def test_given_virtual_timestamp_freshness_beyond_tolerance_when_state_then_retu
             description="virtual state comparison fails on backwards timestamp movement",
             expected_fragments=(
                 "Changed (1)",
-                "raw_orders  previous 2026-01-01T00:10:00  current 2026-01-01T00:05:00",
+                "raw_orders  previous 2026-01-01T00:10:00+00:00  current 2026-01-01T00:05:00+00:00",
                 "tolerance 10m",
                 "OBSERVED=0  CHANGED=1  UNCHANGED=0  TOLERATED=0  UNKNOWN=0  ERROR=0",
             ),
