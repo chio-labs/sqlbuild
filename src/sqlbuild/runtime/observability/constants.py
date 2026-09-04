@@ -51,6 +51,8 @@ OPERATION_FIELDS: frozenset[str] = frozenset(
 OPERATION_EVENT_PREFIX: str = "operation_"
 RENAME_OPERATION_STRATEGY: str = "rename"
 RETRY_SCHEDULED_EVENT: str = "retry_scheduled"
+STATEMENT_FAILED_EVENT: str = "statement_failed"
+STATEMENT_HEARTBEAT_THRESHOLD_SECONDS: float = 30.0
 OPERATION_KINDS: frozenset[str] = frozenset(
     {
         "clone",
@@ -413,6 +415,10 @@ LIFECYCLE_EVENT_CATALOG_V1: Mapping[str, LifecycleEventDefinition] = MappingProx
         "statement_submitted": LifecycleEventDefinition.create(
             required_correlations=frozenset({"statement_id"}),
             allowed=STATEMENT_FIELDS - frozenset({"row_count"}),
+        ),
+        "statement_heartbeat": LifecycleEventDefinition.create(
+            required_correlations=frozenset({"statement_id"}),
+            allowed=STATEMENT_FIELDS | DURATION_FIELDS,
         ),
         "statement_completed": LifecycleEventDefinition.create(
             required_correlations=frozenset({"statement_id"}),

@@ -16,7 +16,6 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileModelConfig
-from sqlbuild.compiler.planner.constants import CURSOR_GRAIN_BATCH_SIZE
 from sqlbuild.compiler.planner.models import Duration
 from sqlbuild.compiler.planner.types import (
     ContractPolicy,
@@ -34,6 +33,7 @@ from sqlbuild.compiler.planner.types import (
     SnapshotSchemaChangePolicy,
     SnapshotStrategy,
 )
+from sqlbuild.cursor_algebra.constants import GRAIN_BATCH_SIZE
 from sqlbuild.spec.contracts.constants import (
     CURSOR_POLICY_DISABLED,
     EFFECTIVE_BATCH_SIZE_TOKEN,
@@ -658,7 +658,7 @@ def _validate_static_watermark_limit(
 ) -> None:
     effective_batch_size: object = batch_size
     if batch_size == EFFECTIVE_BATCH_SIZE_TOKEN and cursor_grain is not None:
-        effective_batch_size = CURSOR_GRAIN_BATCH_SIZE.get(cursor_grain, batch_size)
+        effective_batch_size = GRAIN_BATCH_SIZE.get(CursorGrain(cursor_grain), batch_size)
     effective_lookback: str | None = lookback
     if (
         effective_lookback is None

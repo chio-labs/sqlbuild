@@ -37,20 +37,30 @@ from sqlbuild.compiler.planner.types import (
     CursorWatermarkMode,
     MicrobatchStrategy,
 )
+from sqlbuild.cursor_algebra.constants import GRAIN_ORDER
+from sqlbuild.cursor_algebra.main.clamp import clamp
+from sqlbuild.cursor_algebra.main.compare import compare
+from sqlbuild.cursor_algebra.main.exclusive_to_inclusive import exclusive_to_inclusive
+from sqlbuild.cursor_algebra.main.floor_to_grain import floor_to_grain
+from sqlbuild.cursor_algebra.main.inclusive_to_exclusive import inclusive_to_exclusive
+from sqlbuild.cursor_algebra.main.max_bound import max_bound
+from sqlbuild.cursor_algebra.main.min_bound import min_bound
+from sqlbuild.cursor_algebra.main.parse import parse
+from sqlbuild.cursor_algebra.main.render import render
+from sqlbuild.cursor_algebra.main.sentinel_from_token import sentinel_from_token
+from sqlbuild.cursor_algebra.main.try_parse import try_parse
+from sqlbuild.cursor_algebra.models import (
+    AlignedInterval,
+    DateValue,
+    IntegerValue,
+    TimestampValue,
+)
+from sqlbuild.cursor_algebra.types import CursorScalar
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run.models import RuntimeCursorSpec
 from sqlbuild.executor.run.types import WatermarkResolver
 from sqlbuild.spec.contracts.constants import ZERO_DAY_CURSOR_DURATION
 from sqlbuild.spec.contracts.models import StartCursorsConfig
-
-_TIMESTAMP_GRAIN_ORDER: dict[str, int] = {
-    CursorGrain.SECOND: 0,
-    CursorGrain.MINUTE: 1,
-    CursorGrain.HOUR: 2,
-    CursorGrain.DAY: 3,
-    CursorGrain.MONTH: 4,
-    CursorGrain.YEAR: 5,
-}
 
 
 def has_runtime_owned_cursor_watermarks(
@@ -274,11 +284,12 @@ def resolve_runtime_cursor_bounds(
         if start_raw is None:
             return None
         start: str | None = _normalize_bound(
-            value=_floor_timestamp_bound(value=start_raw, grain=effective_grain), is_end=False
+            value=_normalize_raw_temporal_grain(value=start_raw, grain=effective_grain),
+            is_end=False,
         )
         end: str | None = _normalize_bound(
             value=(
-                _floor_timestamp_bound(value=upstream_max_raw, grain=effective_grain)
+                _normalize_raw_temporal_grain(value=upstream_max_raw, grain=effective_grain)
                 if watermark_timestamp and discovered_grain is not None
                 else upstream_max_raw
                 if watermark_timestamp
@@ -379,21 +390,30 @@ def _clamp_cursor_end(
 ) -> CursorBounds:
     if cursor_end is None:
         return bounds
-    end_key: Decimal = _normalized_comparison_key(value=cursor_end, cursor_type=cursor_type)
-    if _normalized_comparison_key(value=bounds.start, cursor_type=cursor_type) >= end_key:
+    effective_type: str = cursor_type or CursorType.TIMESTAMP
+    end_value: CursorScalar = parse(raw=cursor_end, cursor_type=effective_type)
+    if compare(left=parse(raw=bounds.start, cursor_type=effective_type), right=end_value) >= 0:
         return CursorBounds(start=cursor_end, end=cursor_end)
-    if _normalized_comparison_key(value=bounds.end, cursor_type=cursor_type) > end_key:
+    if compare(left=parse(raw=bounds.end, cursor_type=effective_type), right=end_value) > 0:
+        if effective_type == CursorType.INTEGER:
+            start_value: CursorScalar = parse(raw=bounds.start, cursor_type=CursorType.INTEGER)
+            current_end_value: CursorScalar = parse(raw=bounds.end, cursor_type=CursorType.INTEGER)
+            if (
+                isinstance(start_value, IntegerValue)
+                and isinstance(current_end_value, IntegerValue)
+                and isinstance(end_value, IntegerValue)
+            ):
+                original: AlignedInterval = AlignedInterval(
+                    start=start_value, end=current_end_value, grain=None
+                )
+                ceiling: AlignedInterval = AlignedInterval(
+                    start=start_value, end=end_value, grain=None
+                )
+                clamped: AlignedInterval | None = clamp(interval=original, bounds=ceiling)
+                if clamped is not None:
+                    return CursorBounds(start=bounds.start, end=cursor_end)
         return CursorBounds(start=bounds.start, end=cursor_end)
     return bounds
-
-
-def _normalized_comparison_key(*, value: str, cursor_type: str | None) -> Decimal:
-    if cursor_type == CursorType.INTEGER:
-        return Decimal(value)
-    parsed: datetime = datetime.fromisoformat(value)
-    if parsed.tzinfo is not None:
-        parsed = parsed.astimezone(UTC).replace(tzinfo=None)
-    return Decimal(str(parsed.replace(tzinfo=UTC).timestamp()))
 
 
 def _normalize_bounds(
@@ -417,7 +437,7 @@ def _normalize_effective_timestamp_bound(
 ) -> str | None:
     normalized_value: object = value
     if cursor_type == CursorType.TIMESTAMP and effective_grain is not None:
-        normalized_value = _floor_timestamp_bound(value=value, grain=effective_grain)
+        normalized_value = _normalize_raw_temporal_grain(value=value, grain=effective_grain)
     return _normalize_bound(value=normalized_value, is_end=False)
 
 
@@ -501,10 +521,21 @@ def _minimum_bound_raw(
 ) -> object:
     """Choose a conservative minimum across compatible raw watermark values."""
 
-    if cursor_type != CursorType.TIMESTAMP:
-        return min(values)
-    grain: str = effective_grain or CursorGrain.SECOND
-    return min(values, key=lambda value: _timestamp_comparison_key(value=value, grain=grain))
+    if cursor_type == CursorType.TIMESTAMP:
+        grain: str = effective_grain or CursorGrain.SECOND
+        normalized: list[object] = [
+            _normalize_raw_temporal_grain(value=value, grain=grain) for value in values
+        ]
+        try:
+            selected: object = min_bound(values=normalized, cursor_type=cursor_type)
+        except ValueError as error:
+            raise ExecutorInputError(
+                "runtime timestamp watermark returned incompatible value type"
+            ) from error
+        return values[normalized.index(selected)]
+    if cursor_type == CursorType.INTEGER:
+        return min_bound(values=values, cursor_type=cursor_type)
+    return min(values)
 
 
 def _maximum_bound_raw(
@@ -512,15 +543,26 @@ def _maximum_bound_raw(
 ) -> object:
     """Choose the furthest usable alternative watermark value."""
 
-    if cursor_type != CursorType.TIMESTAMP:
-        return max(values)
-    grain: str = effective_grain or CursorGrain.SECOND
-    return max(values, key=lambda value: _timestamp_comparison_key(value=value, grain=grain))
+    if cursor_type == CursorType.TIMESTAMP:
+        grain: str = effective_grain or CursorGrain.SECOND
+        normalized: list[object] = [
+            _normalize_raw_temporal_grain(value=value, grain=grain) for value in values
+        ]
+        try:
+            selected: object = max_bound(values=normalized, cursor_type=cursor_type)
+        except ValueError as error:
+            raise ExecutorInputError(
+                "runtime timestamp watermark returned incompatible value type"
+            ) from error
+        return values[normalized.index(selected)]
+    if cursor_type == CursorType.INTEGER:
+        return max_bound(values=values, cursor_type=cursor_type)
+    return max(values)
 
 
 def _raw_terminal_bound(*, value: str, cursor_type: str | None) -> object:
     if cursor_type == CursorType.INTEGER:
-        return Decimal(value)
+        return parse(raw=value, cursor_type=CursorType.INTEGER).value
     return datetime.fromisoformat(value)
 
 
@@ -530,34 +572,18 @@ def _terminal_inclusive_maximum(
     if value is None:
         return None
     if cursor_type == CursorType.INTEGER:
-        return Decimal(value) - 1
-    duration_by_grain: dict[str, str] = {
-        CursorGrain.SECOND: "1s",
-        CursorGrain.MINUTE: "1m",
-        CursorGrain.HOUR: "1h",
-        CursorGrain.DAY: "1d",
-        CursorGrain.MONTH: "1mo",
-        CursorGrain.YEAR: "1y",
-    }
-    duration: Duration | None = Duration.parse(
-        duration_by_grain.get(cursor_grain or CursorGrain.SECOND, "1s")
+        return exclusive_to_inclusive(
+            value=parse(raw=value, cursor_type=CursorType.INTEGER), grain=None
+        ).value
+    parsed: CursorScalar | None = try_parse(raw=value, cursor_type=CursorType.TIMESTAMP)
+    if parsed is None:
+        return None
+    if isinstance(parsed, DateValue):
+        parsed = TimestampValue(value=datetime.combine(parsed.value, datetime.min.time()))
+    inclusive: CursorScalar = exclusive_to_inclusive(
+        value=parsed, grain=CursorGrain(cursor_grain or CursorGrain.SECOND)
     )
-    return None if duration is None else duration.subtract_from(datetime.fromisoformat(value))
-
-
-def _timestamp_comparison_key(*, value: object, grain: str) -> datetime:
-    """Normalize DATE and TIMESTAMP values to one grain-aware comparison domain."""
-
-    floored: object = _floor_timestamp_bound(value=value, grain=grain)
-    if _is_plain_date(floored):
-        return datetime.combine(cast(date, floored), datetime.min.time())
-    if isinstance(floored, datetime):
-        if floored.tzinfo is not None:
-            return floored.astimezone(UTC).replace(tzinfo=None)
-        return floored
-    raise ExecutorInputError(
-        f"runtime timestamp watermark returned incompatible value type '{type(value).__name__}'"
-    )
+    return inclusive.value
 
 
 def resolve_effective_timestamp_grain(
@@ -577,7 +603,7 @@ def resolve_effective_timestamp_grain(
     cursor_input: CursorInputRelation
     for cursor_input in cursor_input_relations:
         input_grain: str = cursor_input.cursor_grain or CursorGrain.SECOND
-        if _TIMESTAMP_GRAIN_ORDER[input_grain] > _TIMESTAMP_GRAIN_ORDER[effective]:
+        if GRAIN_ORDER[CursorGrain(input_grain)] > GRAIN_ORDER[CursorGrain(effective)]:
             effective = input_grain
     return effective
 
@@ -585,6 +611,8 @@ def resolve_effective_timestamp_grain(
 def substitute_cursor_sentinels(*, sql: str, bounds: CursorBounds) -> str:
     """Substitute runtime cursor sentinels with concrete bounds."""
 
+    if sentinel_from_token(token=MICROBATCH_START_SENTINEL) is None:
+        raise ExecutorInputError("invalid start cursor marker")
     result: str = sql.replace(MICROBATCH_START_SENTINEL, bounds.start)
     result = result.replace(MICROBATCH_END_SENTINEL, bounds.end)
     _, has_intrinsics = resolve_cursor_intrinsics(sql=result)
@@ -676,7 +704,7 @@ def _maximum_allowed_start(
     if duration is None:
         raise ExecutorInputError(f"invalid cursors.start.max_ahead '{max_ahead}'")
     maximum: datetime = duration.add_to(invocation_time.astimezone(UTC).replace(tzinfo=None))
-    floored: object = _floor_timestamp_bound(
+    floored: object = _normalize_raw_temporal_grain(
         value=maximum, grain=cursor_grain or CursorGrain.SECOND
     )
     if not isinstance(floored, datetime):
@@ -705,70 +733,11 @@ def _is_plain_date(value: object) -> bool:
     return isinstance(value, date) and not isinstance(value, datetime)
 
 
-def _floor_date_bound(*, value: date, grain: str) -> date:
-    """Floor a plain date bound to the start of its grain."""
-
-    if grain == CursorGrain.MONTH:
-        return value.replace(day=1)
-    if grain == CursorGrain.YEAR:
-        return value.replace(month=1, day=1)
-    return value
-
-
-def _floor_timestamp_bound(*, value: object, grain: str) -> object:
-    if _is_plain_date(value):
-        return _floor_date_bound(value=cast(date, value), grain=grain)
-    if not isinstance(value, datetime):
+def _normalize_raw_temporal_grain(*, value: object, grain: str) -> object:
+    parsed: CursorScalar | None = try_parse(raw=value, cursor_type=CursorType.TIMESTAMP)
+    if parsed is None:
         return value
-    if grain == CursorGrain.SECOND:
-        return value.replace(microsecond=0)
-    if grain == CursorGrain.MINUTE:
-        return value.replace(second=0, microsecond=0)
-    if grain == CursorGrain.HOUR:
-        return value.replace(minute=0, second=0, microsecond=0)
-    if grain == CursorGrain.DAY:
-        return value.replace(hour=0, minute=0, second=0, microsecond=0)
-    if grain == CursorGrain.MONTH:
-        return value.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    if grain == CursorGrain.YEAR:
-        return value.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-    return value
-
-
-def _increment_timestamp_bound(*, value: object, grain: str) -> object:
-    if _is_plain_date(value):
-        return _increment_date_bound(value=cast(date, value), grain=grain)
-    if not isinstance(value, datetime):
-        return value
-    if grain == CursorGrain.SECOND:
-        return value + timedelta(seconds=1)
-    if grain == CursorGrain.MINUTE:
-        return value + timedelta(minutes=1)
-    if grain == CursorGrain.HOUR:
-        return value + timedelta(hours=1)
-    if grain == CursorGrain.DAY:
-        return value + timedelta(days=1)
-    if grain == CursorGrain.MONTH:
-        final_month: int = 12
-        year: int = value.year + (1 if value.month == final_month else 0)
-        month: int = 1 if value.month == final_month else value.month + 1
-        return value.replace(year=year, month=month, day=1)
-    if grain == CursorGrain.YEAR:
-        return value.replace(year=value.year + 1, month=1, day=1)
-    return value
-
-
-def _increment_date_bound(*, value: date, grain: str) -> date:
-    """Step a plain date bound forward by one whole unit of grain."""
-
-    if grain == CursorGrain.MONTH:
-        final_month: int = 12
-        year: int = value.year + (1 if value.month == final_month else 0)
-        month: int = 1 if value.month == final_month else value.month + 1
-        return value.replace(year=year, month=month, day=1)
-    if grain == CursorGrain.YEAR:
-        return value.replace(year=value.year + 1, month=1, day=1)
-    return value + timedelta(days=1)
+    return floor_to_grain(value=parsed, grain=CursorGrain(grain)).value
 
 
 def _normalize_bound(*, value: object, is_end: bool) -> str | None:
@@ -787,28 +756,6 @@ def _normalize_bound(*, value: object, is_end: bool) -> str | None:
     return str(value)
 
 
-def _apply_cursor_start_floor(
-    *,
-    current_start: str,
-    cursor_start: str | None,
-    cursor_type: str | None,
-) -> str:
-    if cursor_start is None:
-        return current_start
-    if cursor_type == CursorType.TIMESTAMP:
-        current_timestamp: datetime | None = _try_parse_timestamp(current_start)
-        floor_timestamp: datetime | None = _try_parse_timestamp(cursor_start)
-        if current_timestamp is not None and floor_timestamp is not None:
-            return max(current_timestamp, floor_timestamp).isoformat()
-        return current_start
-    if cursor_type == CursorType.INTEGER:
-        current_integer: int | None = _try_parse_integer(current_start)
-        floor_integer: int | None = _try_parse_integer(cursor_start)
-        if current_integer is not None and floor_integer is not None:
-            return str(max(current_integer, floor_integer))
-    return current_start
-
-
 def _apply_cursor_end_ceiling(
     *,
     current_end: str,
@@ -819,52 +766,41 @@ def _apply_cursor_end_ceiling(
     """Clamp the discovered exclusive end down to the inclusive `--end-cursor-ts` override."""
 
     if cursor_type == CursorType.TIMESTAMP:
-        override_value: date | datetime | None = _parse_timestamp_or_date(end_cursor_override)
-        if _try_parse_timestamp(current_end) is None or override_value is None:
-            return current_end
-        grain: str = effective_grain or CursorGrain.SECOND
-        exclusive_override: object = _increment_timestamp_bound(
-            value=_floor_timestamp_bound(value=override_value, grain=grain),
-            grain=grain,
+        current_value: CursorScalar | None = try_parse(
+            raw=current_end, cursor_type=CursorType.TIMESTAMP
         )
-        normalized_override: str | None = _normalize_bound(value=exclusive_override, is_end=False)
-        if normalized_override is None:
+        override_value: CursorScalar | None = try_parse(
+            raw=end_cursor_override, cursor_type=CursorType.TIMESTAMP
+        )
+        if current_value is None or override_value is None:
             return current_end
-        return min(current_end, normalized_override, key=_timestamp_sort_key)
+        grain: CursorGrain = CursorGrain(effective_grain or CursorGrain.SECOND)
+        exclusive_override: CursorScalar = inclusive_to_exclusive(
+            value=floor_to_grain(value=override_value, grain=grain), grain=grain
+        )
+        return render(
+            value=min_bound(
+                values=(current_value, exclusive_override), cursor_type=CursorType.TIMESTAMP
+            )
+        )
     if cursor_type == CursorType.INTEGER:
-        current_integer: int | None = _try_parse_integer(current_end)
-        override_integer: int | None = _try_parse_integer(end_cursor_override)
-        if current_integer is None or override_integer is None:
+        current_integer: CursorScalar | None = try_parse(
+            raw=current_end, cursor_type=CursorType.INTEGER
+        )
+        override_integer: CursorScalar | None = try_parse(
+            raw=end_cursor_override, cursor_type=CursorType.INTEGER
+        )
+        if not isinstance(current_integer, IntegerValue) or not isinstance(
+            override_integer, IntegerValue
+        ):
             return current_end
-        return str(min(current_integer, override_integer + 1))
+        return render(
+            value=min_bound(
+                values=(
+                    current_integer,
+                    inclusive_to_exclusive(value=override_integer, grain=None),
+                ),
+                cursor_type=CursorType.INTEGER,
+            )
+        )
     return current_end
-
-
-def _timestamp_sort_key(value: str) -> datetime:
-    parsed: datetime | None = _try_parse_timestamp(value)
-    if parsed is None:
-        return datetime.max
-    return parsed
-
-
-def _parse_timestamp_or_date(value: str) -> date | datetime | None:
-    """Parse an override bound as a plain date when date-only, else a datetime."""
-
-    try:
-        return date.fromisoformat(value)
-    except ValueError:
-        return _try_parse_timestamp(value)
-
-
-def _try_parse_timestamp(value: str) -> datetime | None:
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError:
-        return None
-
-
-def _try_parse_integer(value: str) -> int | None:
-    try:
-        return int(value)
-    except ValueError:
-        return None

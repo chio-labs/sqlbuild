@@ -64,6 +64,7 @@ _STALE_INPUT_WARNING_TITLE: str = "Stale inputs detected"
 _TREE_EXEMPT_CHARS: frozenset[str] = frozenset({" ", "."})
 
 _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
+    PlanReason.FULL_REFRESH,
     PlanReason.QUERY_CHANGED,
     PlanReason.CONFIG_CHANGED,
     PlanReason.SCHEMA_CHANGED,
@@ -72,6 +73,7 @@ _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
 )
 
 _REASON_GROUP_LABELS: dict[PlanReason, str] = {
+    PlanReason.FULL_REFRESH: "Full refresh",
     PlanReason.QUERY_CHANGED: "Query changed",
     PlanReason.CONFIG_CHANGED: "Config changed",
     PlanReason.SCHEMA_CHANGED: "Schema changed",
