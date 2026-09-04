@@ -7,6 +7,7 @@ from sqlbuild.compiler.compile.models import ResolvedTimeTravelRetention
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.cursor_algebra.constants import DURATION_DAY_UNIT
 from sqlbuild.cursor_algebra.models import Duration
+from sqlbuild.spec.contracts.constants import ZERO_DAY_CURSOR_DURATION
 from sqlbuild.spec.contracts.models import (
     AuthoredTimeTravelRetention,
     MaterializationDefaultsConfig,
@@ -51,6 +52,8 @@ def resolve_time_travel_retention(
         if model_value != TimeTravelRetentionValue.INHERIT:
             if model_value == TimeTravelRetentionValue.DISABLED:
                 policy = AuthoredTimeTravelRetention(unmanaged=True)
+            elif model_value == ZERO_DAY_CURSOR_DURATION:
+                policy = AuthoredTimeTravelRetention(desired_days=0)
             else:
                 duration: Duration | None = Duration.parse(model_value)
                 if duration is None or duration.units != frozenset({DURATION_DAY_UNIT}):

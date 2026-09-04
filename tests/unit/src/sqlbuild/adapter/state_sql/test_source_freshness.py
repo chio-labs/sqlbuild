@@ -24,8 +24,7 @@ from tests.unit.src.sqlbuild.adapter.state_sql._test_types import StateSqlGolden
                 "target_database, target_schema, target_name, run_id, strategy, value_kind, "
                 "data_version, data_version_hash, observed_at) VALUES ('raw.o''rders', NULL, "
                 "'raw', 'orders', 'run-1', 'adapter', 'timestamp', "
-                "'2026-01-01T01:00:00+01:00', 'hash', "
-                "CAST('2026-01-01T00:00:00+00:00' AS TIMESTAMP))"
+                "'2026-01-01T01:00:00+01:00', 'hash', '2026-01-01T00:00:00+00:00')"
             ),
         )
     ],

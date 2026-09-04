@@ -35,5 +35,5 @@ NODE_RESULT_COLUMNS: tuple[str, ...] = (
 
 NODE_RESULT_COLUMN_TYPES: dict[str, StateSqlValueType] = {
     **{column: StateSqlValueType.STRING for column in NODE_RESULT_COLUMNS},
-    COLUMN_TIMESTAMP: StateSqlValueType.TIMESTAMP,
+    COLUMN_TIMESTAMP: StateSqlValueType.TEXT_TIMESTAMP,
 }

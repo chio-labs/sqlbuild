@@ -67,8 +67,7 @@ def test_given_node_result_read_request_when_building_sql_then_scopes_and_orders
                 "target_database, target_schema, target_name, run_id, status, "
                 "payload_json_b64, metadata_json_b64, error_message, materialized, ts) VALUES "
                 "('task', 'node''name', NULL, 'analytics', NULL, 'run-1', 'success', 'e30=', "
-                "'e30=', 'it''s fine', 'true', "
-                "CAST('2026-01-01T00:00:00+00:00' AS TIMESTAMP))"
+                "'e30=', 'it''s fine', 'true', '2026-01-01T00:00:00+00:00')"
             ),
         )
     ],

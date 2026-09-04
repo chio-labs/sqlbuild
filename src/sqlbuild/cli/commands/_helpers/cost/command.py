@@ -45,6 +45,7 @@ _MISSING_METRIC_STATUSES: frozenset[CostStatus] = frozenset(
     }
 )
 _HISTORY_METRIC_SORT_FIELDS: frozenset[str] = frozenset({"cost", "credits"})
+_ZERO_DAY_DURATION: str = "0d"
 
 
 def run_cost_command(request: CostCommandRequest) -> int:
@@ -204,6 +205,8 @@ def _parse_bound(*, value: str | None, label: str, end_of_day: bool) -> datetime
 def _parse_since_bound(*, value: str | None) -> datetime | None:
     if value is None:
         return None
+    if value == _ZERO_DAY_DURATION:
+        return datetime.now(UTC)
     duration: Duration | None = Duration.parse(value)
     if duration is None:
         return _parse_bound(value=value, label="--since", end_of_day=False)

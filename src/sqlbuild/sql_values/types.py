@@ -34,6 +34,7 @@ class StateSqlValueType(StrEnum):
     INTEGER = "integer"
     BOOLEAN = "boolean"
     TIMESTAMP = "timestamp"
+    TEXT_TIMESTAMP = "text_timestamp"
     DATE = "date"
     JSON = "json"
 

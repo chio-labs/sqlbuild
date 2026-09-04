@@ -75,7 +75,8 @@ def build_create_table_sql(
     for column in SOURCE_FRESHNESS_COLUMNS:
         column_type: str = (
             timestamp_type
-            if SOURCE_FRESHNESS_COLUMN_TYPES[column] == StateSqlValueType.TIMESTAMP
+            if SOURCE_FRESHNESS_COLUMN_TYPES[column]
+            in {StateSqlValueType.TIMESTAMP, StateSqlValueType.TEXT_TIMESTAMP}
             else string_type
         )
         required: str = " NOT NULL" if column in _REQUIRED_SOURCE_FRESHNESS_COLUMNS else ""

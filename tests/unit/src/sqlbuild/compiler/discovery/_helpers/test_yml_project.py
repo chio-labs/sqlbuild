@@ -393,12 +393,12 @@ def test_given_invalid_constants_config_when_loading_project_then_config_error_i
                     "[materialization_defaults.incremental]",
                     'time_travel_retention = "disabled"',
                     "[targets.prod]",
-                    'time_travel_retention = "7d"',
+                    'time_travel_retention = "0d"',
                 )
             ),
             expected_table_days=14,
             expected_incremental_unmanaged=True,
-            expected_target_days=7,
+            expected_target_days=0,
         )
     ],
     ids=lambda case: case.description,
@@ -1075,9 +1075,7 @@ adapter = "duckdb"
 [settings]
 default_audit_severity = "critical"
 """.strip(),
-            expected_error_fragment=(
-                "settings.default_audit_severity must be one of: warn, error"
-            ),
+            expected_error_fragment=("settings.default_audit_severity must be one of: warn, error"),
         ),
         LoadProjectConfigErrorTestCase(
             description="raises when project unaccounted policy is unknown",

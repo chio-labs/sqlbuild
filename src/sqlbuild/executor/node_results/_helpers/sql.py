@@ -76,7 +76,8 @@ def build_create_table_sql(
     for column in NODE_RESULT_COLUMNS:
         column_type: str = (
             timestamp_type
-            if NODE_RESULT_COLUMN_TYPES[column] == StateSqlValueType.TIMESTAMP
+            if NODE_RESULT_COLUMN_TYPES[column]
+            in {StateSqlValueType.TIMESTAMP, StateSqlValueType.TEXT_TIMESTAMP}
             else string_type
         )
         required: str = " NOT NULL" if column in _REQUIRED_NODE_RESULT_COLUMNS else ""

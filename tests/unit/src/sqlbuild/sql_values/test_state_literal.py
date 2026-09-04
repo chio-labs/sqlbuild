@@ -22,6 +22,7 @@ from tests.unit.src.sqlbuild.sql_values._test_types import StateLiteralGoldenTes
                 "boolean_true": "TRUE",
                 "boolean_false": "FALSE",
                 "timestamp": "CAST('2026-01-01T00:00:00+00:00' AS TIMESTAMP)",
+                "text_timestamp": "'2026-01-01T00:00:00+00:00'",
                 "date": "CAST('2026-01-01' AS DATE)",
                 "json": '\'{"count":2,"quoted":"it\'\'s"}\'',
                 "null": "NULL",
@@ -48,6 +49,10 @@ def test_given_each_declared_state_type_when_rendering_then_returns_canonical_sq
         "timestamp": render_state_sql_literal(
             value=datetime(2026, 1, 1, 1, tzinfo=timezone(timedelta(hours=1))),
             declared_type=StateSqlValueType.TIMESTAMP,
+        ),
+        "text_timestamp": render_state_sql_literal(
+            value=datetime(2026, 1, 1, 1, tzinfo=timezone(timedelta(hours=1))),
+            declared_type=StateSqlValueType.TEXT_TIMESTAMP,
         ),
         "date": render_state_sql_literal(
             value=date(2026, 1, 1), declared_type=StateSqlValueType.DATE

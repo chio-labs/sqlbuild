@@ -900,6 +900,8 @@ def _optional_retention_policy(
         return None
     if value == TimeTravelRetentionValue.DISABLED:
         return AuthoredTimeTravelRetention(unmanaged=True)
+    if value == ZERO_DAY_CURSOR_DURATION:
+        return AuthoredTimeTravelRetention(desired_days=0)
     duration: Duration | None = Duration.parse(value)
     if duration is None or duration.units != frozenset({DURATION_DAY_UNIT}):
         allowed_keywords: str = ", 'inherit', or 'disabled'" if allow_inherit else " or 'disabled'"

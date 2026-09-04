@@ -27,7 +27,7 @@ def render_state_sql_literal(*, value: object | None, declared_type: StateSqlVal
             if not isinstance(value, bool):
                 raise SqlValueRenderingError("state boolean columns require bool values")
             return "TRUE" if value else "FALSE"
-        case StateSqlValueType.TIMESTAMP:
+        case StateSqlValueType.TIMESTAMP | StateSqlValueType.TEXT_TIMESTAMP:
             if not isinstance(value, datetime):
                 raise SqlValueRenderingError("state timestamp columns require datetime values")
             normalized: datetime = (
@@ -35,7 +35,10 @@ def render_state_sql_literal(*, value: object | None, declared_type: StateSqlVal
                 if value.tzinfo is None or value.utcoffset() is None
                 else value.astimezone(UTC)
             )
-            return f"CAST({_quoted(value=normalized.isoformat())} AS TIMESTAMP)"
+            rendered: str = _quoted(value=normalized.isoformat())
+            if declared_type == StateSqlValueType.TEXT_TIMESTAMP:
+                return rendered
+            return f"CAST({rendered} AS TIMESTAMP)"
         case StateSqlValueType.DATE:
             if isinstance(value, datetime) or not isinstance(value, date):
                 raise SqlValueRenderingError("state date columns require date values")
