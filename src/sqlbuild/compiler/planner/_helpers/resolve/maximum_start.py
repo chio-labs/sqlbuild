@@ -74,9 +74,9 @@ def apply_maximum_start_policy(
     snapshot: ModelCursorSnapshot,
     cursor_type: str | None,
     cursor_grain: str | None,
-    cursor_start: str | None,
-    lookback: str | None,
-    backfill_duration: str | None,
+    cursor_start: CursorScalar | str | None,
+    lookback: Duration | str | None,
+    backfill_duration: Duration | str | None,
     policy: MaximumStartPolicyInputs,
     has_start_override: bool,
 ) -> CursorBounds:
@@ -113,7 +113,9 @@ def apply_maximum_start_policy(
             eligible_start = upstream_minimum
     if eligible_start is None:
         parsed_cursor_start: CursorScalar | None = (
-            parse(raw=cursor_start, cursor_type=CursorType.TIMESTAMP)
+            cursor_start
+            if isinstance(cursor_start, DateValue | TimestampValue)
+            else parse(raw=cursor_start, cursor_type=CursorType.TIMESTAMP)
             if cursor_start is not None
             else None
         )

@@ -18,6 +18,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import BackfillAction, CursorWatermarkMode
 from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
+from sqlbuild.cursor_algebra.models import IntegerValue
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run._helpers.materializations.microbatch import (
     _clamp_intervals_to_model_domain,
@@ -745,8 +746,8 @@ def test_given_serial_history_with_interior_and_trailing_gaps_when_detecting_the
         scope=SCOPE,
         history=(completion_event(event_id="later", start="2", end="3"),),
         run_type=completion_event(event_id="kind", start="2", end="3").run_type,
-        run_start="0",
-        run_end="4",
+        run_start=IntegerValue(value=0),
+        run_end=IntegerValue(value=4),
         batch_size="1",
         batch_concurrency=1,
     )

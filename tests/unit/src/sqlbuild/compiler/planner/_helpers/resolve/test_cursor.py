@@ -6,11 +6,8 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
-    discovered_cursor_partition,
-)
 from sqlbuild.compiler.planner._helpers.resolve.cursor import (
-    apply_cursor_replay_policy,
+    apply_typed_cursor_replay_policy,
     compute_cursor_bounds,
 )
 from sqlbuild.compiler.planner.constants import (
@@ -23,6 +20,11 @@ from sqlbuild.compiler.planner.types import (
     CursorType,
     CursorWatermarkMode,
 )
+from sqlbuild.cursor_algebra.main.observed_partition import observed_partition
+from sqlbuild.cursor_algebra.main.parse import parse
+from sqlbuild.cursor_algebra.main.render import render
+from sqlbuild.cursor_algebra.models import AlignedInterval, DateValue
+from sqlbuild.cursor_algebra.types import CursorScalar
 from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     CursorBoundsTestCase,
     DiscoveredCursorPartitionTestCase,
@@ -121,11 +123,19 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types impor
 def test_given_observed_timestamp_when_resolving_partition_then_boundaries_are_grain_aligned(
     test_case: DiscoveredCursorPartitionTestCase,
 ) -> None:
-    assert discovered_cursor_partition(
-        value=test_case.value,
-        cursor_type=CursorType.TIMESTAMP,
-        cursor_grain=test_case.cursor_grain,
-    ) == (test_case.expected_start, test_case.expected_end)
+    value: CursorScalar = parse(raw=test_case.value, cursor_type=CursorType.TIMESTAMP)
+    default_grain: CursorGrain = {
+        True: CursorGrain.DAY,
+        False: CursorGrain.SECOND,
+    }[isinstance(value, DateValue)]
+    grain: CursorGrain = CursorGrain(test_case.cursor_grain or default_grain)
+    partition: AlignedInterval = observed_partition(value=value, grain=grain)
+    actual: tuple[object, object] = {
+        True: (render(value=partition.start), render(value=partition.end)),
+        False: (partition.start.value, partition.end.value),
+    }[isinstance(test_case.value, str)]
+
+    assert actual == (test_case.expected_start, test_case.expected_end)
 
 
 @pytest.mark.parametrize(
@@ -523,9 +533,9 @@ def test_given_multiple_integer_watermarks_when_planning_then_uses_numeric_order
 def test_given_temporal_start_when_applying_replay_floor_then_preserves_legacy_rendering(
     test_case: ReplayFloorRenderingTestCase,
 ) -> None:
-    result: str = apply_cursor_replay_policy(
-        start=test_case.current_start,
-        end="2026-01-01",
+    result: CursorScalar = apply_typed_cursor_replay_policy(
+        start=parse(raw=test_case.current_start, cursor_type=CursorType.TIMESTAMP),
+        end=parse(raw="2026-01-01", cursor_type=CursorType.TIMESTAMP),
         cursor_start=test_case.cursor_start,
         cursor_type=CursorType.TIMESTAMP,
         lookback=None,
@@ -533,4 +543,4 @@ def test_given_temporal_start_when_applying_replay_floor_then_preserves_legacy_r
         has_start_override=False,
     )
 
-    assert result == test_case.expected_start
+    assert render(value=result) == test_case.expected_start

@@ -42,6 +42,7 @@ from sqlbuild.spec.contracts.types import FutureCursorAction
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
     AuthoritativeRuntimeCursorOverrideTestCase,
     CursorSentinelSubstitutionErrorTestCase,
+    CursorSentinelSubstitutionTestCase,
     MixedTemporalWatermarkTestCase,
     RuntimeCursorEndBoundTestCase,
     RuntimeCursorFailureTestCase,
@@ -65,6 +66,30 @@ from tests.unit.src.sqlbuild.executor.run._helpers.helpers import (
 @pytest.mark.parametrize(
     "test_case",
     (
+        CursorSentinelSubstitutionTestCase(
+            description="date and offset timestamp retain SQL token formats",
+            start="2026-01-01",
+            end="2026-02-01T00:00:00+00:00",
+            sql="SELECT '__SQB_CURSOR_START__', '__SQB_CURSOR_END__'",
+            expected_sql="SELECT '2026-01-01', '2026-02-01T00:00:00+00:00'",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_typed_runtime_bounds_when_substituting_then_preserves_sql_formats(
+    test_case: CursorSentinelSubstitutionTestCase,
+) -> None:
+    result: str = substitute_cursor_sentinels(
+        sql=test_case.sql,
+        bounds=CursorBounds(start=test_case.start, end=test_case.end),
+    )
+
+    assert result == test_case.expected_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
         RuntimeCursorSpecBoundaryTestCase(
             description="date timestamp and grain retain boundary formats",
             expected_grain="day",
@@ -74,7 +99,7 @@ from tests.unit.src.sqlbuild.executor.run._helpers.helpers import (
     ),
     ids=lambda case: case.description,
 )
-def test_given_typed_planner_cursor_input_when_building_runtime_spec_then_renders_strings(
+def test_given_typed_planner_cursor_input_when_building_runtime_spec_then_preserves_typed_formats(
     test_case: RuntimeCursorSpecBoundaryTestCase,
 ) -> None:
     entry: ModelPlanEntry = ModelPlanEntry(
@@ -111,8 +136,10 @@ def test_given_typed_planner_cursor_input_when_building_runtime_spec_then_render
     ).cursor_input_relations[0]
 
     assert relation.cursor_grain == test_case.expected_grain
-    assert relation.terminal_cursor_start == test_case.expected_start
-    assert relation.terminal_cursor_end == test_case.expected_end
+    assert relation.terminal_cursor_start is not None
+    assert relation.terminal_cursor_end is not None
+    assert render(value=relation.terminal_cursor_start) == test_case.expected_start
+    assert render(value=relation.terminal_cursor_end) == test_case.expected_end
 
 
 @pytest.mark.parametrize(

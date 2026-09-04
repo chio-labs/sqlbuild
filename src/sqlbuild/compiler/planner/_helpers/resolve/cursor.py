@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
-    advance_discovered_cursor_end as _advance_discovered_cursor_end,
-)
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
     Duration,
@@ -26,7 +23,6 @@ from sqlbuild.cursor_algebra.main.inclusive_to_exclusive import inclusive_to_exc
 from sqlbuild.cursor_algebra.main.max_bound import max_bound
 from sqlbuild.cursor_algebra.main.min_bound import min_bound
 from sqlbuild.cursor_algebra.main.observed_partition import observed_partition
-from sqlbuild.cursor_algebra.main.render import render
 from sqlbuild.cursor_algebra.main.try_parse import try_parse
 from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue
 from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar
@@ -179,40 +175,14 @@ def normalize_cursor_snapshot_grain(
     )
 
 
-def apply_cursor_replay_policy(
-    *,
-    start: str,
-    end: str,
-    cursor_start: str | None,
-    cursor_type: str | None,
-    lookback: str | None,
-    backfill_duration: str | None,
-    has_start_override: bool,
-) -> str:
-    """Apply replay policy for the executor's string-based phase-2 compatibility boundary."""
-
-    effective_type: str = cursor_type or CursorType.TIMESTAMP
-    return render(
-        value=apply_typed_cursor_replay_policy(
-            start=_parse_required(value=start, cursor_type=effective_type),
-            end=_parse_required(value=end, cursor_type=effective_type),
-            cursor_start=cursor_start,
-            cursor_type=effective_type,
-            lookback=lookback,
-            backfill_duration=backfill_duration,
-            has_start_override=has_start_override,
-        )
-    )
-
-
 def apply_typed_cursor_replay_policy(
     *,
     start: CursorScalar,
     end: CursorScalar,
-    cursor_start: str | None,
+    cursor_start: CursorScalar | str | None,
     cursor_type: str | None,
-    lookback: str | None,
-    backfill_duration: str | None,
+    lookback: Duration | str | None,
+    backfill_duration: Duration | str | None,
     has_start_override: bool,
 ) -> CursorScalar:
     """Apply replay, lookback, and configured lower-bound policy to a typed cursor start."""
@@ -234,20 +204,6 @@ def apply_typed_cursor_replay_policy(
         current_start=effective_start,
         cursor_start=cursor_start,
         cursor_type=cursor_type,
-    )
-
-
-def advance_discovered_cursor_end(
-    *, value: str, cursor_type: str | None, cursor_grain: str | None
-) -> str:
-    """Convert a discovered string maximum to its canonical exclusive partition end."""
-
-    return str(
-        _advance_discovered_cursor_end(
-            value=value,
-            cursor_type=cursor_type,
-            cursor_grain=cursor_grain,
-        )
     )
 
 
@@ -308,10 +264,12 @@ def _compute_raw_end(
     return min_bound(values=exclusive_ends, cursor_type=cursor_type or CursorType.TIMESTAMP)
 
 
-def _subtract_duration(*, value: CursorScalar, duration: str) -> CursorScalar | None:
+def _subtract_duration(*, value: CursorScalar, duration: Duration | str) -> CursorScalar | None:
     """Subtract a duration string from a cursor value."""
 
-    parsed: Duration | None = Duration.parse(duration)
+    parsed: Duration | None = (
+        duration if isinstance(duration, Duration) else Duration.parse(duration)
+    )
     if parsed is None:
         return None
 
@@ -333,15 +291,17 @@ def _normalize_timestamp_grain(*, value: CursorScalar, grain: str) -> CursorScal
 def _apply_cursor_start_floor(
     *,
     current_start: CursorScalar,
-    cursor_start: str | None,
+    cursor_start: CursorScalar | str | None,
     cursor_type: str | None,
 ) -> CursorScalar:
     if cursor_start is None:
         return current_start
     if cursor_type == CursorType.TIMESTAMP:
         current_scalar: CursorScalar = current_start
-        floor_scalar: CursorScalar | None = try_parse(
-            raw=cursor_start, cursor_type=CursorType.TIMESTAMP
+        floor_scalar: CursorScalar | None = (
+            cursor_start
+            if isinstance(cursor_start, TimestampValue | DateValue | IntegerValue)
+            else try_parse(raw=cursor_start, cursor_type=CursorType.TIMESTAMP)
         )
         current_timestamp: TimestampValue | None = (
             current_scalar
@@ -364,8 +324,10 @@ def _apply_cursor_start_floor(
         return current_start
     if cursor_type == CursorType.INTEGER:
         current_integer: CursorScalar = current_start
-        floor_integer: CursorScalar | None = try_parse(
-            raw=cursor_start, cursor_type=CursorType.INTEGER
+        floor_integer: CursorScalar | None = (
+            cursor_start
+            if isinstance(cursor_start, TimestampValue | DateValue | IntegerValue)
+            else try_parse(raw=cursor_start, cursor_type=CursorType.INTEGER)
         )
         if current_integer is not None and floor_integer is not None:
             return max_bound(

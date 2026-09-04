@@ -9,67 +9,9 @@ from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
 from sqlbuild.cursor_algebra.main.exclusive_to_inclusive import exclusive_to_inclusive
 from sqlbuild.cursor_algebra.main.inclusive_to_exclusive import inclusive_to_exclusive
-from sqlbuild.cursor_algebra.main.observed_partition import observed_partition
 from sqlbuild.cursor_algebra.main.render import render
 from sqlbuild.cursor_algebra.main.try_parse import try_parse
-from sqlbuild.cursor_algebra.models import AlignedInterval, TimestampValue
 from sqlbuild.cursor_algebra.types import CursorScalar
-
-
-def discovered_cursor_partition(
-    *, value: object, cursor_type: str | None, cursor_grain: str | None
-) -> tuple[object, object]:
-    """Return the grain-aligned partition containing one observed physical value."""
-
-    if cursor_type not in {CursorType.INTEGER, CursorType.TIMESTAMP}:
-        return value, value
-    parsed: CursorScalar | None = try_parse(raw=value, cursor_type=cursor_type)
-    if parsed is None:
-        return value, value
-    grain: CursorGrain | None = (
-        None
-        if cursor_type == CursorType.INTEGER
-        else CursorGrain(
-            cursor_grain
-            or (CursorGrain.SECOND if isinstance(parsed, TimestampValue) else CursorGrain.DAY)
-        )
-    )
-    partition: AlignedInterval = observed_partition(value=parsed, grain=grain)
-    if isinstance(value, str):
-        return render(value=partition.start), render(value=partition.end)
-    return partition.start.value, partition.end.value
-
-
-def advance_discovered_cursor_end(
-    *, value: object, cursor_type: str | None, cursor_grain: str | None
-) -> object:
-    """Convert an observed physical maximum to its exclusive partition end."""
-
-    return discovered_cursor_partition(
-        value=value,
-        cursor_type=cursor_type,
-        cursor_grain=cursor_grain,
-    )[1]
-
-
-def advance_cursor_end(
-    *,
-    value: str,
-    cursor_type: str | None,
-    cursor_grain: str | None,
-) -> str:
-    """Return the exclusive stored bound for an inclusive end value (adds one step)."""
-
-    effective_type: str = cursor_type or CursorType.TIMESTAMP
-    parsed: CursorScalar | None = try_parse(raw=value, cursor_type=effective_type)
-    if parsed is None:
-        return value
-    grain: CursorGrain | None = (
-        None
-        if effective_type == CursorType.INTEGER
-        else CursorGrain(cursor_grain or CursorGrain.SECOND)
-    )
-    return render(value=inclusive_to_exclusive(value=parsed, grain=grain))
 
 
 def inclusive_cursor_end(
@@ -124,19 +66,19 @@ def resolve_bounded_cursor_override(
         return None
     effective_type: str = cursor_type or CursorType.TIMESTAMP
     start: CursorScalar | None = try_parse(raw=start_cursor_override, cursor_type=effective_type)
-    exclusive_end: CursorScalar | None = try_parse(
-        raw=advance_cursor_end(
-            value=end_cursor_override,
-            cursor_type=cursor_type,
-            cursor_grain=cursor_grain,
-        ),
-        cursor_type=effective_type,
+    inclusive_end: CursorScalar | None = try_parse(
+        raw=end_cursor_override, cursor_type=effective_type
     )
-    if start is None or exclusive_end is None:
+    if start is None or inclusive_end is None:
         return None
+    grain: CursorGrain | None = (
+        None
+        if effective_type == CursorType.INTEGER
+        else CursorGrain(cursor_grain or CursorGrain.SECOND)
+    )
     return CursorBounds(
         start=start,
-        end=exclusive_end,
+        end=inclusive_to_exclusive(value=inclusive_end, grain=grain),
     )
 
 

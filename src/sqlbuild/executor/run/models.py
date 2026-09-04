@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -15,11 +15,18 @@ from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     CursorBounds,
+    Duration,
     FutureCursorSafetyEvidence,
     MaximumStartSafetyEvidence,
     ModelPlanEntry,
 )
+from sqlbuild.compiler.planner.types import CursorGrain, CursorType
 from sqlbuild.compiler.python_nodes.types import SkipMode
+from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
+from sqlbuild.cursor_algebra.main.compare import compare
+from sqlbuild.cursor_algebra.main.parse import parse
+from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue
+from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
@@ -28,6 +35,7 @@ from sqlbuild.executor.run.types import (
     ExecutionPhase,
     HookPhase,
     MicrobatchBatchRunner,
+    RuntimeCursorWatermarkMode,
     WatermarkResolver,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
@@ -38,13 +46,25 @@ from sqlbuild.spec.contracts.models import FutureCursorsConfig, SourceEntry, Sta
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True, init=False)
 class BatchWindow:
     """One batch window with start (inclusive) and end (exclusive) bounds."""
 
-    start: str
-    end: str
+    start: CursorScalar
+    end: CursorScalar
     index: int
+
+    def __init__(self, *, start: CursorScalar | str, end: CursorScalar | str, index: int) -> None:
+        bounds: CursorBounds = CursorBounds(start=start, end=end)
+        if not isinstance(
+            bounds.start, TimestampValue | DateValue | IntegerValue
+        ) or not isinstance(bounds.end, TimestampValue | DateValue | IntegerValue):
+            raise CursorAlgebraError("batch windows require concrete cursor scalars")
+        if compare(left=bounds.start, right=bounds.end) > 0:
+            raise CursorAlgebraError("batch window start must not exceed end")
+        object.__setattr__(self, "start", bounds.start)
+        object.__setattr__(self, "end", bounds.end)
+        object.__setattr__(self, "index", index)
 
 
 @dataclass(frozen=True)
@@ -225,45 +245,174 @@ class ModelMaterializationContext:
     watermark_resolver: WatermarkResolver | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True, init=False)
 class RuntimeCursorInputRelation:
-    """String-serialized cursor input relation consumed by the phase-2 executor."""
+    """Typed cursor input relation consumed by runtime bound resolution."""
 
     relation: str
     cursor_column: str
-    cursor_grain: str | None = None
+    cursor_grain: CursorGrain | None = None
     is_model_backed: bool = False
     is_runtime_produced: bool = False
-    terminal_cursor_start: str | None = None
-    terminal_cursor_end: str | None = None
+    terminal_cursor_start: CursorScalar | None = None
+    terminal_cursor_end: CursorScalar | None = None
+
+    def __init__(
+        self,
+        *,
+        relation: str,
+        cursor_column: str,
+        cursor_grain: CursorGrain | str | None = None,
+        is_model_backed: bool = False,
+        is_runtime_produced: bool = False,
+        terminal_cursor_start: CursorScalar | str | None = None,
+        terminal_cursor_end: CursorScalar | str | None = None,
+    ) -> None:
+        object.__setattr__(self, "relation", relation)
+        object.__setattr__(self, "cursor_column", cursor_column)
+        object.__setattr__(
+            self,
+            "cursor_grain",
+            CursorGrain(cursor_grain) if cursor_grain is not None else None,
+        )
+        object.__setattr__(self, "is_model_backed", is_model_backed)
+        object.__setattr__(self, "is_runtime_produced", is_runtime_produced)
+        object.__setattr__(
+            self,
+            "terminal_cursor_start",
+            self._optional_inferred_scalar(value=terminal_cursor_start),
+        )
+        object.__setattr__(
+            self,
+            "terminal_cursor_end",
+            self._optional_inferred_scalar(value=terminal_cursor_end),
+        )
+
+    @staticmethod
+    def _optional_inferred_scalar(*, value: CursorScalar | str | None) -> CursorScalar | None:
+        if value is None or isinstance(value, TimestampValue | DateValue | IntegerValue):
+            return value
+        bounds: CursorBounds = CursorBounds(start=value, end=value)
+        if isinstance(bounds.start, BoundSentinel):
+            raise CursorAlgebraError("runtime cursor inputs require concrete terminal bounds")
+        return bounds.start
 
     @property
     def is_runtime_owned(self) -> bool:
         return self.is_runtime_produced
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True, init=False)
 class RuntimeCursorSpec:
     """Cursor configuration inputs for runtime-owned bound resolution."""
 
     cursor_column: str
-    cursor_type: str | None
-    cursor_grain: str | None
-    cursor_start: str | None
+    cursor_type: CursorType | None
+    cursor_grain: CursorGrain | None
+    cursor_start: CursorScalar | None
     cursor_input_relations: tuple[RuntimeCursorInputRelation, ...]
-    cursor_end: str | None = None
-    cursor_watermark_mode: str = "all"
+    cursor_end: CursorScalar | None = None
+    cursor_watermark_mode: RuntimeCursorWatermarkMode = RuntimeCursorWatermarkMode.ALL
     microbatch_strategy: str | None = None
     incremental_strategy: str | None = None
     incremental_mode: str | None = None
-    start_cursor_override: str | None = None
-    end_cursor_override: str | None = None
-    lookback: str | None = None
-    backfill_duration: str | None = None
+    start_cursor_override: CursorScalar | None = None
+    end_cursor_override: CursorScalar | None = None
+    lookback: Duration | None = None
+    backfill_duration: Duration | None = None
     read_destination_cursor: bool = True
     future_cursor_config: FutureCursorsConfig | None = None
     start_cursor_config: StartCursorsConfig | None = None
     invocation_time: datetime | None = None
+
+    def __init__(self, **values: Any) -> None:
+        defaults: dict[str, object] = {
+            "cursor_end": None,
+            "cursor_watermark_mode": RuntimeCursorWatermarkMode.ALL,
+            "microbatch_strategy": None,
+            "incremental_strategy": None,
+            "incremental_mode": None,
+            "start_cursor_override": None,
+            "end_cursor_override": None,
+            "lookback": None,
+            "backfill_duration": None,
+            "read_destination_cursor": True,
+            "future_cursor_config": None,
+            "start_cursor_config": None,
+            "invocation_time": None,
+        }
+        defaults.update(values)
+        cursor_type_raw: object = defaults["cursor_type"]
+        cursor_type: CursorType | None = (
+            CursorType(str(cursor_type_raw)) if cursor_type_raw is not None else None
+        )
+        defaults["cursor_type"] = cursor_type
+        cursor_grain_raw: object = defaults["cursor_grain"]
+        defaults["cursor_grain"] = (
+            CursorGrain(str(cursor_grain_raw)) if cursor_grain_raw is not None else None
+        )
+        defaults["cursor_watermark_mode"] = RuntimeCursorWatermarkMode(
+            str(defaults["cursor_watermark_mode"])
+        )
+        for field_name in (
+            "cursor_start",
+            "cursor_end",
+            "start_cursor_override",
+            "end_cursor_override",
+        ):
+            raw: object | None = defaults[field_name]
+            defaults[field_name] = (
+                parse(raw=raw, cursor_type=cursor_type or CursorType.TIMESTAMP)
+                if raw is not None
+                and not isinstance(raw, TimestampValue | DateValue | IntegerValue)
+                else raw
+            )
+        relations: tuple[RuntimeCursorInputRelation, ...] = cast(
+            tuple[RuntimeCursorInputRelation, ...], defaults["cursor_input_relations"]
+        )
+        defaults["cursor_input_relations"] = tuple(
+            RuntimeCursorInputRelation(
+                relation=relation.relation,
+                cursor_column=relation.cursor_column,
+                cursor_grain=(
+                    CursorGrain(str(relation.cursor_grain))
+                    if relation.cursor_grain is not None
+                    else None
+                ),
+                is_model_backed=relation.is_model_backed,
+                is_runtime_produced=relation.is_runtime_produced,
+                terminal_cursor_start=(
+                    parse(raw=relation.terminal_cursor_start, cursor_type=cursor_type)
+                    if relation.terminal_cursor_start is not None
+                    and not isinstance(
+                        relation.terminal_cursor_start,
+                        TimestampValue | DateValue | IntegerValue,
+                    )
+                    and cursor_type is not None
+                    else relation.terminal_cursor_start
+                ),
+                terminal_cursor_end=(
+                    parse(raw=relation.terminal_cursor_end, cursor_type=cursor_type)
+                    if relation.terminal_cursor_end is not None
+                    and not isinstance(
+                        relation.terminal_cursor_end,
+                        TimestampValue | DateValue | IntegerValue,
+                    )
+                    and cursor_type is not None
+                    else relation.terminal_cursor_end
+                ),
+            )
+            for relation in relations
+        )
+        for field_name in ("lookback", "backfill_duration"):
+            raw_duration: object | None = defaults[field_name]
+            defaults[field_name] = (
+                Duration.parse(str(raw_duration))
+                if raw_duration is not None and not isinstance(raw_duration, Duration)
+                else raw_duration
+            )
+        for field_name in self.__dataclass_fields__:
+            object.__setattr__(self, field_name, defaults[field_name])
 
 
 @dataclass(frozen=True)

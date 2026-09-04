@@ -1,23 +1,27 @@
-"""Published cursor replay-policy operation."""
+"""Public typed cursor replay policy entrypoint."""
+
+from __future__ import annotations
 
 from sqlbuild.compiler.planner._helpers.resolve.cursor import (
-    apply_cursor_replay_policy as _apply_cursor_replay_policy,
+    apply_typed_cursor_replay_policy as _apply_typed_cursor_replay_policy,
 )
+from sqlbuild.compiler.planner.models import Duration
+from sqlbuild.cursor_algebra.types import CursorScalar
 
 
-def apply_cursor_replay_policy(
+def apply_typed_cursor_replay_policy(
     *,
-    start: str,
-    end: str,
-    cursor_start: str | None,
+    start: CursorScalar,
+    end: CursorScalar,
+    cursor_start: CursorScalar | str | None,
     cursor_type: str | None,
-    lookback: str | None,
-    backfill_duration: str | None,
+    lookback: Duration | str | None,
+    backfill_duration: Duration | str | None,
     has_start_override: bool,
-) -> str:
-    """Apply replay, lookback, and configured lower-bound policy to a cursor start."""
+) -> CursorScalar:
+    """Apply replay policy without crossing a string serialization boundary."""
 
-    return _apply_cursor_replay_policy(
+    return _apply_typed_cursor_replay_policy(
         start=start,
         end=end,
         cursor_start=cursor_start,

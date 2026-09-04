@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
-    advance_cursor_end,
-    inclusive_cursor_end,
-)
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
+from sqlbuild.cursor_algebra.main.exclusive_to_inclusive import exclusive_to_inclusive
+from sqlbuild.cursor_algebra.main.inclusive_to_exclusive import inclusive_to_exclusive
+from sqlbuild.cursor_algebra.main.parse import parse
+from sqlbuild.cursor_algebra.main.render import render
+from sqlbuild.cursor_algebra.types import CursorScalar
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     AdvanceCursorEndTestCase,
     CursorEndRoundTripTestCase,
@@ -72,26 +73,22 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
             cursor_grain=None,
             expected_end="201",
         ),
-        AdvanceCursorEndTestCase(
-            description="unparsable value is returned unchanged",
-            value="__SQB_CURSOR_END__",
-            cursor_type=CursorType.TIMESTAMP,
-            cursor_grain=None,
-            expected_end="__SQB_CURSOR_END__",
-        ),
     ],
     ids=lambda case: case.description,
 )
 def test_given_inclusive_value_when_advancing_then_returns_exclusive_bound(
     test_case: AdvanceCursorEndTestCase,
 ) -> None:
-    result: str = advance_cursor_end(
-        value=test_case.value,
-        cursor_type=test_case.cursor_type,
-        cursor_grain=test_case.cursor_grain,
+    cursor_type: CursorType = CursorType(test_case.cursor_type or CursorType.TIMESTAMP)
+    grain: CursorGrain | None = {
+        CursorType.INTEGER: None,
+        CursorType.TIMESTAMP: CursorGrain(test_case.cursor_grain or CursorGrain.SECOND),
+    }[cursor_type]
+    result: CursorScalar = inclusive_to_exclusive(
+        value=parse(raw=test_case.value, cursor_type=cursor_type), grain=grain
     )
 
-    assert result == test_case.expected_end
+    assert render(value=result) == test_case.expected_end
 
 
 @pytest.mark.parametrize(
@@ -138,16 +135,17 @@ def test_given_inclusive_value_when_advancing_then_returns_exclusive_bound(
 def test_given_inclusive_value_when_advancing_then_inclusive_end_is_exact_inverse(
     test_case: CursorEndRoundTripTestCase,
 ) -> None:
-    exclusive_bound: str = advance_cursor_end(
-        value=test_case.inclusive_value,
-        cursor_type=test_case.cursor_type,
-        cursor_grain=test_case.cursor_grain,
+    cursor_type: CursorType = CursorType(test_case.cursor_type or CursorType.TIMESTAMP)
+    grain: CursorGrain | None = {
+        CursorType.INTEGER: None,
+        CursorType.TIMESTAMP: CursorGrain(test_case.cursor_grain or CursorGrain.SECOND),
+    }[cursor_type]
+    exclusive_bound: CursorScalar = inclusive_to_exclusive(
+        value=parse(raw=test_case.inclusive_value, cursor_type=cursor_type), grain=grain
+    )
+    round_tripped: CursorScalar = exclusive_to_inclusive(
+        value=exclusive_bound,
+        grain=grain,
     )
 
-    round_tripped: str = inclusive_cursor_end(
-        end=exclusive_bound,
-        cursor_type=test_case.cursor_type,
-        cursor_grain=test_case.cursor_grain,
-    )
-
-    assert round_tripped == test_case.expected_round_trip
+    assert render(value=round_tripped) == test_case.expected_round_trip

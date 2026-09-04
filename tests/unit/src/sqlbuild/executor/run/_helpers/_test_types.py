@@ -43,6 +43,15 @@ class CursorSentinelSubstitutionErrorTestCase:
     expected_error_fragment: str
 
 
+@dataclass(frozen=True, kw_only=True)
+class CursorSentinelSubstitutionTestCase:
+    description: str
+    start: str
+    end: str
+    sql: str
+    expected_sql: str
+
+
 @dataclass(frozen=True)
 class BuildQualifiedNameTestCase:
     description: str
