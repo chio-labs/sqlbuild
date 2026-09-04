@@ -16,6 +16,7 @@ from sqlbuild.runtime.output_capture.constants import (
     DEFAULT_OUTPUT_QUEUE_CAPACITY,
     DEFAULT_OUTPUT_SHUTDOWN_TIMEOUT_SECONDS,
     MIN_OUTPUT_RECORD_BYTES,
+    OUTPUT_LOSS_SUMMARY_RECORD_TYPE,
 )
 from sqlbuild.runtime.output_capture.exceptions import OutputCaptureInputError
 from sqlbuild.runtime.output_capture.models import OutputCaptureSummary, OutputRecord
@@ -182,7 +183,7 @@ class OutputCaptureDispatcher:
             message=f"SQLBuild output export dropped {dropped_before_summary} record(s)",
             external_context=self._context,
             priority=OutputRecordPriority.TERMINAL,
-            record_type="loss_summary",
+            record_type=OUTPUT_LOSS_SUMMARY_RECORD_TYPE,
             dropped_records=dropped_before_summary,
         )
         self._put(record)

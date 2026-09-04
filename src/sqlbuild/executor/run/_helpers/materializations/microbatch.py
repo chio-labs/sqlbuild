@@ -45,6 +45,8 @@ from sqlbuild.compiler.planner.types import (
     OnSchemaChange,
     PlanReason,
 )
+from sqlbuild.cursor_algebra.main.cap_from_end import cap_from_end
+from sqlbuild.cursor_algebra.main.cap_from_start import cap_from_start
 from sqlbuild.cursor_algebra.main.exclusive_end_from_observed_max import (
     exclusive_end_from_observed_max,
 )
@@ -52,6 +54,8 @@ from sqlbuild.cursor_algebra.main.floor_to_grain import floor_to_grain
 from sqlbuild.cursor_algebra.main.next_boundary import next_boundary
 from sqlbuild.cursor_algebra.main.parse import parse
 from sqlbuild.cursor_algebra.main.render import render
+from sqlbuild.cursor_algebra.main.split_into_batches import split_into_batches
+from sqlbuild.cursor_algebra.models import AlignedInterval, IntegerValue
 from sqlbuild.cursor_algebra.types import CursorScalar
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
@@ -733,9 +737,9 @@ def _enforce_microbatch_limit(
         }
     ):
         selected_batches: tuple[BatchWindow, ...] = (
-            batch_plan.batches[-context.entry.microbatch_limit :]
+            cap_from_end(intervals=batch_plan.batches, count=context.entry.microbatch_limit)
             if action == MicrobatchLimitAction.CAP_FROM_END
-            else batch_plan.batches[: context.entry.microbatch_limit]
+            else cap_from_start(intervals=batch_plan.batches, count=context.entry.microbatch_limit)
         )
         selected_batches = tuple(
             replace(batch, index=index) for index, batch in enumerate(selected_batches)
@@ -3297,19 +3301,11 @@ def _compute_integer_batches(
     if size_int <= 0 or start_int >= end_int:
         return ()
 
-    windows: list[BatchWindow] = []
-    index: int = 0
-    current: int = start_int
-    while current < end_int:
-        batch_end: int = min(current + size_int, end_int)
-        windows.append(
-            BatchWindow(
-                start=str(current),
-                end=str(batch_end),
-                index=index,
-            )
-        )
-        current = batch_end
-        index += 1
-
-    return tuple(windows)
+    interval: AlignedInterval = AlignedInterval(
+        start=IntegerValue(value=start_int), end=IntegerValue(value=end_int), grain=None
+    )
+    batches: tuple[AlignedInterval, ...] = split_into_batches(interval=interval, step=size_int)
+    return tuple(
+        BatchWindow(start=render(value=batch.start), end=render(value=batch.end), index=index)
+        for index, batch in enumerate(batches)
+    )

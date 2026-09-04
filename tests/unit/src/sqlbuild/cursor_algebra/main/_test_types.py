@@ -30,4 +30,20 @@ class IntervalOperationsTestCase:
     """Expected batch count for composed integer interval operations."""
 
     description: str
+    start: int
+    end: int
+    step: int
     expected_batch_count: int
+    expected_final_end: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class TemporalSplitTestCase:
+    """Expected calendar-aware temporal batch boundaries."""
+
+    description: str
+    grain: CursorGrain
+    start: str
+    end: str
+    step: int
+    expected_boundaries: tuple[str, ...]

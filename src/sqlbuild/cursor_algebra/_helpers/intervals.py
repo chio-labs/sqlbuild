@@ -3,7 +3,11 @@
 from datetime import datetime, timedelta
 
 from sqlbuild.compiler.planner.types import CursorGrain
-from sqlbuild.cursor_algebra._helpers.arithmetic import advance_scalar, floor_scalar
+from sqlbuild.cursor_algebra._helpers.arithmetic import (
+    advance_scalar,
+    advance_scalar_by,
+    floor_scalar,
+)
 from sqlbuild.cursor_algebra._helpers.comparison import compare_scalars, comparison_value
 from sqlbuild.cursor_algebra.constants import GRAIN_FIXED_STEP
 from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
@@ -89,12 +93,7 @@ def split_interval(*, interval: AlignedInterval, step: int) -> tuple[AlignedInte
     batches: list[AlignedInterval] = []
     start: CursorScalar = interval.start
     while compare_scalars(left=start, right=interval.end) < 0:
-        end: CursorScalar = start
-        for _ in range(step):
-            if isinstance(end, IntegerValue):
-                end = IntegerValue(value=end.value + 1)
-            elif interval.grain is not None:
-                end = advance_scalar(value=end, grain=interval.grain)
+        end: CursorScalar = advance_scalar_by(value=start, grain=interval.grain, steps=step)
         if compare_scalars(left=end, right=interval.end) > 0:
             end = interval.end
         batches.append(AlignedInterval(start=start, end=end, grain=interval.grain))

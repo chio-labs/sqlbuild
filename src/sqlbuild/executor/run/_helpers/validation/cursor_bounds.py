@@ -38,6 +38,7 @@ from sqlbuild.compiler.planner.types import (
     MicrobatchStrategy,
 )
 from sqlbuild.cursor_algebra.constants import GRAIN_ORDER
+from sqlbuild.cursor_algebra.main.clamp import clamp
 from sqlbuild.cursor_algebra.main.compare import compare
 from sqlbuild.cursor_algebra.main.exclusive_to_inclusive import exclusive_to_inclusive
 from sqlbuild.cursor_algebra.main.floor_to_grain import floor_to_grain
@@ -48,7 +49,12 @@ from sqlbuild.cursor_algebra.main.parse import parse
 from sqlbuild.cursor_algebra.main.render import render
 from sqlbuild.cursor_algebra.main.sentinel_from_token import sentinel_from_token
 from sqlbuild.cursor_algebra.main.try_parse import try_parse
-from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue
+from sqlbuild.cursor_algebra.models import (
+    AlignedInterval,
+    DateValue,
+    IntegerValue,
+    TimestampValue,
+)
 from sqlbuild.cursor_algebra.types import CursorScalar
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run.models import RuntimeCursorSpec
@@ -389,6 +395,23 @@ def _clamp_cursor_end(
     if compare(left=parse(raw=bounds.start, cursor_type=effective_type), right=end_value) >= 0:
         return CursorBounds(start=cursor_end, end=cursor_end)
     if compare(left=parse(raw=bounds.end, cursor_type=effective_type), right=end_value) > 0:
+        if effective_type == CursorType.INTEGER:
+            start_value: CursorScalar = parse(raw=bounds.start, cursor_type=CursorType.INTEGER)
+            current_end_value: CursorScalar = parse(raw=bounds.end, cursor_type=CursorType.INTEGER)
+            if (
+                isinstance(start_value, IntegerValue)
+                and isinstance(current_end_value, IntegerValue)
+                and isinstance(end_value, IntegerValue)
+            ):
+                original: AlignedInterval = AlignedInterval(
+                    start=start_value, end=current_end_value, grain=None
+                )
+                ceiling: AlignedInterval = AlignedInterval(
+                    start=start_value, end=end_value, grain=None
+                )
+                clamped: AlignedInterval | None = clamp(interval=original, bounds=ceiling)
+                if clamped is not None:
+                    return CursorBounds(start=bounds.start, end=cursor_end)
         return CursorBounds(start=bounds.start, end=cursor_end)
     return bounds
 

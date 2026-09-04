@@ -46,7 +46,7 @@ class BinaryOutputTee:
             )
         except BaseException:
             pass
-        return result if isinstance(result, int) else len(offered)
+        return len(accepted)
 
     def flush(self) -> None:
         self._sink.flush()

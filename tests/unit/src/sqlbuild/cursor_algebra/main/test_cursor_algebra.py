@@ -31,6 +31,7 @@ from tests.unit.src.sqlbuild.cursor_algebra.main._test_types import (
     CursorAlgebraMatrixCase,
     IntegerOrderingCase,
     IntervalOperationsTestCase,
+    TemporalSplitTestCase,
 )
 from tests.unit.src.sqlbuild.cursor_algebra.main.helpers import build_temporal_values
 
@@ -154,8 +155,21 @@ def test_given_integer_strings_when_selecting_bounds_then_uses_numeric_order(
     "test_case",
     [
         IntervalOperationsTestCase(
-            description="six_values_in_two_value_batches", expected_batch_count=3
-        )
+            description="six_values_in_two_value_batches",
+            start=0,
+            end=6,
+            step=2,
+            expected_batch_count=3,
+            expected_final_end=6,
+        ),
+        IntervalOperationsTestCase(
+            description="large_integer_range_uses_arithmetic_steps",
+            start=0,
+            end=200_000_000,
+            step=10_000_000,
+            expected_batch_count=20,
+            expected_final_end=200_000_000,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -163,14 +177,21 @@ def test_given_typed_interval_when_composing_operations_then_boundaries_remain_c
     test_case: IntervalOperationsTestCase,
 ) -> None:
     interval: AlignedInterval = AlignedInterval(
-        start=IntegerValue(value=0), end=IntegerValue(value=6), grain=None
+        start=IntegerValue(value=test_case.start),
+        end=IntegerValue(value=test_case.end),
+        grain=None,
     )
     bounds: AlignedInterval = AlignedInterval(
-        start=IntegerValue(value=2), end=IntegerValue(value=6), grain=None
+        start=IntegerValue(value=test_case.start + test_case.step),
+        end=IntegerValue(value=test_case.end),
+        grain=None,
     )
-    batches: tuple[AlignedInterval, ...] = split_into_batches(interval=interval, step=2)
+    batches: tuple[AlignedInterval, ...] = split_into_batches(
+        interval=interval, step=test_case.step
+    )
 
     assert len(batches) == test_case.expected_batch_count
+    assert batches[-1].end == IntegerValue(value=test_case.expected_final_end)
     assert clamp(interval=interval, bounds=bounds) == bounds
     assert merge(intervals=batches) == (interval,)
     assert cap_from_start(intervals=batches, count=1) == batches[:1]
@@ -184,6 +205,42 @@ def test_given_typed_interval_when_composing_operations_then_boundaries_remain_c
     assert sentinel_from_token(token=sentinel_to_token(sentinel=BoundSentinel.START)) == (
         BoundSentinel.START
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TemporalSplitTestCase(
+            description="two_month_calendar_batches",
+            grain=CursorGrain.MONTH,
+            start="2025-01-01T00:00:00",
+            end="2025-06-01T00:00:00",
+            step=2,
+            expected_boundaries=(
+                "2025-01-01T00:00:00",
+                "2025-03-01T00:00:00",
+                "2025-05-01T00:00:00",
+                "2025-06-01T00:00:00",
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_temporal_interval_when_splitting_then_advances_once_per_batch(
+    test_case: TemporalSplitTestCase,
+) -> None:
+    start: CursorScalar = parse(raw=test_case.start, cursor_type=CursorType.TIMESTAMP)
+    end: CursorScalar = parse(raw=test_case.end, cursor_type=CursorType.TIMESTAMP)
+    interval: AlignedInterval = AlignedInterval(start=start, end=end, grain=test_case.grain)
+    batches: tuple[AlignedInterval, ...] = split_into_batches(
+        interval=interval, step=test_case.step
+    )
+    boundaries: tuple[str, ...] = (
+        render(value=batches[0].start),
+        *(render(value=batch.end) for batch in batches),
+    )
+
+    assert boundaries == test_case.expected_boundaries
 
 
 if __name__ == "__main__":
