@@ -29,6 +29,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry
 from tests.integration.src.sqlbuild.compiler.planner._helpers._test_types import (
+    GatherCappedProducerSnapshotTestCase,
     GatherCursorSnapshotTestCase,
     GatherEmptySnapshotTestCase,
     GatherInvalidCursorScopeTestCase,
@@ -67,6 +68,92 @@ _ORDERS_KEY: CompiledObjectKey = CompiledObjectKey(
 _REVENUE_KEY: CompiledObjectKey = CompiledObjectKey(
     resource_type=CompiledResourceType.MODEL, name="revenue"
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        GatherCappedProducerSnapshotTestCase(
+            description="capped producer uses physical availability",
+            expected_availability_ends=("2025-10-15T00:00:00",),
+            expected_availability_ranges=(("2025-08-15 00:00:00", "2025-10-15T00:00:00"),),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_unselected_capped_terminal_producer_when_gathering_then_physical_range_is_authoritative(
+    adapter: DuckDbAdapter,
+    connection: Any,
+    execute: Any,
+    test_case: GatherCappedProducerSnapshotTestCase,
+) -> None:
+    connection.execute("CREATE TABLE staging.capped_events (event_time TIMESTAMP)")
+    connection.execute("INSERT INTO staging.capped_events VALUES ('2025-08-15'), ('2025-09-15')")
+    connection.execute("CREATE TABLE staging.downstream_events (event_time TIMESTAMP)")
+    connection.execute("INSERT INTO staging.downstream_events VALUES ('2025-01-01')")
+    project: CompiledProject = build_project_with_targets(
+        incremental_models=(
+            _IncrementalModelSpec(
+                name="capped_events",
+                schema="staging",
+                cursor="event_time",
+                ref_names=(),
+                extra_config={
+                    "cursor_type": "timestamp",
+                    "cursor_grain": "month",
+                    "incremental_mode": "microbatch",
+                    "microbatch_strategy": "watermark",
+                    "cursor_start": "2025-01-01",
+                    "cursor_end": "2025-12-01",
+                    "microbatch_limit": {
+                        "max_batches": 2,
+                        "action": "cap_from_end",
+                    },
+                },
+            ),
+            _IncrementalModelSpec(
+                name="downstream_events",
+                schema="staging",
+                cursor="event_time",
+                ref_names=("capped_events",),
+                extra_config={
+                    "cursor_type": "timestamp",
+                    "cursor_grain": "month",
+                    "incremental_mode": "microbatch",
+                    "microbatch_strategy": "watermark",
+                    "cursor_watermark_mode": "all",
+                    "cursor_inputs": {
+                        "capped_events": {
+                            "column": "event_time",
+                            "roles": ["filter", "watermark"],
+                        }
+                    },
+                },
+            ),
+        )
+    )
+    downstream_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.MODEL,
+        name="downstream_events",
+    )
+
+    snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        execute=execute,
+        selected_keys=frozenset(model.key for model in project.models),
+        cursor_scope=CursorSnapshotScope(
+            model_keys=frozenset({downstream_key}),
+            runtime_producer_keys=frozenset({downstream_key}),
+        ),
+    )
+
+    cursor_snapshot: ModelCursorSnapshot = snapshot.cursor_snapshots["downstream_events"]
+    assert cursor_snapshot.upstream_terminal_starts == ()
+    assert cursor_snapshot.upstream_terminal_ends == ()
+    assert cursor_snapshot.upstream_availability_ends == test_case.expected_availability_ends
+    assert cursor_snapshot.upstream_availability_ranges == test_case.expected_availability_ranges
 
 
 @pytest.mark.parametrize(

@@ -61,6 +61,21 @@ class LoaderWatermarkBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class CappedMicrobatchBuildE2ETestCase:
+    description: str
+    limit_action: str
+    expected_first_ids: tuple[int, ...]
+    expected_final_ids: tuple[int, ...]
+    run_count: int
+
+
+@dataclass(frozen=True)
+class CappedMicrobatchScenarioE2ETestCase:
+    description: str
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
 class EnumContractBuildE2ETestCase:
     """Test case for enum-backed contract enforcement."""
 

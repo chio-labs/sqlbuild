@@ -16,6 +16,7 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileModelConfig
+from sqlbuild.compiler.planner.constants import CURSOR_GRAIN_BATCH_SIZE
 from sqlbuild.compiler.planner.models import Duration
 from sqlbuild.compiler.planner.types import (
     ContractPolicy,
@@ -267,7 +268,7 @@ def _validate_incremental_batching(
         known_input_names=known_input_names,
         inputs=_CursorInputValidation(values=values, ref_count=ref_count),
     )
-    resolved_limit: int | None = _validate_model_microbatch_limit(
+    resolved_limit, resolved_limit_action = _validate_model_microbatch_limit(
         model_name=model_name,
         max_microbatches=values.max_microbatches,
         microbatch_limit=values.microbatch_limit,
@@ -279,6 +280,9 @@ def _validate_incremental_batching(
             max_microbatches=resolved_limit,
             lookback=values.lookback,
             batch_size=values.batch_size,
+            incremental_strategy=values.strategy,
+            action=resolved_limit_action,
+            cursor_grain=values.cursor_grain,
         )
 
 
@@ -532,16 +536,19 @@ def _validate_model_microbatch_limit(
     max_microbatches: object | None,
     microbatch_limit: object | None,
     microbatch_strategy: str | None,
-) -> int | None:
+) -> tuple[int | None, MicrobatchLimitAction | None]:
     if max_microbatches is not None and microbatch_limit is not None:
         raise CompileInputError(
             f"model '{model_name}': use either max_microbatches or microbatch_limit, not both"
         )
     if microbatch_limit is None:
         return (
-            max_microbatches
-            if isinstance(max_microbatches, int) and not isinstance(max_microbatches, bool)
-            else None
+            (
+                max_microbatches
+                if isinstance(max_microbatches, int) and not isinstance(max_microbatches, bool)
+                else None
+            ),
+            None,
         )
     if not isinstance(microbatch_limit, dict) or set(microbatch_limit) != {
         MICROBATCH_LIMIT_MAX_BATCHES_KEY,
@@ -568,7 +575,7 @@ def _validate_model_microbatch_limit(
             f"model '{model_name}': microbatch_limit is only valid with "
             "microbatch_strategy=watermark"
         )
-    return max_batches
+    return max_batches, MicrobatchLimitAction(action)
 
 
 def _validate_known_cursor_inputs(
@@ -640,27 +647,55 @@ def _validate_watermark_cursor_inputs(
 
 
 def _validate_static_watermark_limit(
-    *, model_name: str, max_microbatches: int, lookback: str | None, batch_size: object | None
+    *,
+    model_name: str,
+    max_microbatches: int,
+    lookback: str | None,
+    batch_size: object | None,
+    incremental_strategy: str | None,
+    action: MicrobatchLimitAction | None,
+    cursor_grain: str | None,
 ) -> None:
+    effective_batch_size: object = batch_size
+    if batch_size == EFFECTIVE_BATCH_SIZE_TOKEN and cursor_grain is not None:
+        effective_batch_size = CURSOR_GRAIN_BATCH_SIZE.get(cursor_grain, batch_size)
+    effective_lookback: str | None = lookback
     if (
-        lookback is None
-        or not isinstance(batch_size, str)
-        or batch_size == EFFECTIVE_BATCH_SIZE_TOKEN
+        effective_lookback is None
+        and action == MicrobatchLimitAction.CAP_FROM_START
+        and incremental_strategy in {IncrementalStrategy.DELETE_INSERT, IncrementalStrategy.MERGE}
+        and isinstance(effective_batch_size, str)
     ):
+        effective_lookback = effective_batch_size
+    if effective_lookback is None or not isinstance(effective_batch_size, str):
         return
-    lookback_duration: Duration | None = Duration.parse(lookback)
-    batch_duration: Duration | None = Duration.parse(batch_size)
-    if (
-        lookback_duration is None
-        or batch_duration is None
-        or lookback_duration.has_calendar_component
-        or batch_duration.has_calendar_component
-        or batch_duration.fixed_seconds == 0
-    ):
+    lookback_duration: Duration | None = Duration.parse(effective_lookback)
+    batch_duration: Duration | None = Duration.parse(effective_batch_size)
+    if lookback_duration is None or batch_duration is None:
+        return
+    if not lookback_duration.has_calendar_component and not batch_duration.has_calendar_component:
+        if batch_duration.fixed_seconds == 0:
+            return
+        lookback_batches: int = (
+            lookback_duration.fixed_seconds + batch_duration.fixed_seconds - 1
+        ) // batch_duration.fixed_seconds
+    elif lookback_duration.fixed_seconds == 0 and batch_duration.fixed_seconds == 0:
+        if batch_duration.total_months == 0:
+            return
+        lookback_batches = (
+            lookback_duration.total_months + batch_duration.total_months - 1
+        ) // batch_duration.total_months
+    else:
+        if action == MicrobatchLimitAction.CAP_FROM_START:
+            raise CompileInputError(
+                f"model '{model_name}': cap_from_start cannot prove forward progress when "
+                "lookback and batch_size mix calendar and fixed duration components; use "
+                "compatible fixed or calendar durations"
+            )
         return
     required: int = (
-        lookback_duration.fixed_seconds + batch_duration.fixed_seconds - 1
-    ) // batch_duration.fixed_seconds + 1
+        lookback_batches + 1 + (1 if action == MicrobatchLimitAction.CAP_FROM_START else 0)
+    )
     if max_microbatches < required:
         raise CompileInputError(
             f"model '{model_name}': max_microbatches {max_microbatches} is below the "

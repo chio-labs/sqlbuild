@@ -25,6 +25,26 @@ class AnalysisCacheTestCase:
 
 
 @dataclass(frozen=True)
+class WatermarkLimitValidationTestCase:
+    description: str
+    incremental_strategy: str
+    batch_size: str
+    lookback: str | None
+    max_batches: int
+    action: str
+    expected_error_fragment: str | None
+
+
+@dataclass(frozen=True)
+class AvailabilityStartFloorTestCase:
+    description: str
+    ranges: tuple[tuple[str | None, str], ...]
+    mode: str
+    resolved_end: str
+    expected_start: str | None
+
+
+@dataclass(frozen=True)
 class RetentionValidationErrorTestCase:
     description: str
     config_values: dict[str, object]

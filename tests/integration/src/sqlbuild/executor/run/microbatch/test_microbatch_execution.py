@@ -641,11 +641,36 @@ def test_given_microbatch_model_when_executing_then_succeeds(
             microbatch_limit_action=MicrobatchLimitAction.CAP_FROM_END,
             expected_microbatch_limit_count=3,
             expected_microbatch_limit_warning=True,
-        )
+        ),
+        MicrobatchSuccessTestCase(
+            description="integer cap from start executes earliest batches only",
+            setup_sql=(
+                _INT_SOURCE_SQL,
+                _INT_SOURCE_DATA,
+                "CREATE TABLE main.orders (id INTEGER, batch_id INTEGER, payload VARCHAR)",
+            ),
+            model_sql=_INT_MODEL_SQL,
+            target_schema="main",
+            target_name="orders",
+            incremental_strategy="delete_insert",
+            cursor_column="batch_id",
+            cursor_type="integer",
+            batch_size="25",
+            microbatch_start="0",
+            microbatch_end="100",
+            expected_row_count=2,
+            expected_batch_count=2,
+            expected_warning_count=1,
+            expected_query_results=(("SELECT id FROM main.orders ORDER BY id", ((1,), (2,))),),
+            microbatch_limit=2,
+            microbatch_limit_action=MicrobatchLimitAction.CAP_FROM_START,
+            expected_microbatch_limit_count=4,
+            expected_microbatch_limit_warning=True,
+        ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_deferred_watermark_range_when_capping_from_end_then_latest_batches_execute(
+def test_given_deferred_watermark_range_when_capping_then_selected_batches_execute(
     test_case: MicrobatchSuccessTestCase,
     adapter: DuckDbAdapter,
     connection: Any,

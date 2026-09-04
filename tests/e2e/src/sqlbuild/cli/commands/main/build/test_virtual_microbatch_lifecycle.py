@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
+    CappedMicrobatchScenarioE2ETestCase,
     VirtualConcurrentMicrobatchE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
@@ -86,6 +88,94 @@ def test_given_virtual_history_loss_when_reconciling_then_synthetic_events_stay_
         db_path=warehouse_path,
         sql="SELECT id, value FROM dev__dev.orders ORDER BY id",
     ) == [(1, "1"), (2, "2"), (3, "3"), (4, "4")]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (CappedMicrobatchScenarioE2ETestCase("virtual capped dependency preserves gap", 0),),
+    ids=lambda case: case.description,
+)
+def test_given_virtual_capped_producer_watermark_jump_when_building_then_frontier_preserves_gap(
+    tmp_path: Path, test_case: CappedMicrobatchScenarioE2ETestCase
+) -> None:
+    project_dir, warehouse_path, state_path = prepare_virtual_microbatch_lifecycle_project(
+        tmp_path=tmp_path,
+        project_name="virtual_capped_dependency",
+        model_sql=timestamp_microbatch_model_sql(
+            value_expression="payload",
+            batch_concurrency=1,
+            replay_policy="forward_only",
+            extra_config=(
+                "cursor_start '2026-01-01T00:00:00',\n"
+                "cursor_end '2026-01-01T12:00:00',\n"
+                "microbatch_limit (max_batches 3, action cap_from_end),"
+            ),
+        ),
+    )
+    (project_dir / "models" / "downstream_orders.sql").write_text(
+        dedent(
+            """
+            MODEL (
+              materialized incremental,
+              incremental_strategy delete_insert,
+              incremental_mode microbatch,
+              microbatch_strategy watermark,
+              cursor_watermark_mode all,
+              cursor event_time,
+              cursor_type timestamp,
+              cursor_grain hour,
+              cursor_start '2026-01-01T00:00:00',
+              cursor_inputs (
+                orders (column event_time, roles [filter, watermark]),
+              ),
+              batch_size 1h,
+              lookback 1h,
+            );
+
+            SELECT id, event_time, value FROM __ref("orders")
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    initial: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert initial.returncode == test_case.expected_exit_code, initial.stdout + initial.stderr
+    execute_duckdb(
+        db_path=warehouse_path,
+        sql=(
+            "INSERT INTO raw.raw_events VALUES "
+            "(8, '2026-01-01 08:30:00', '8'), "
+            "(9, '2026-01-01 09:30:00', '9'), "
+            "(10, '2026-01-01 10:30:00', '10')"
+        ),
+    )
+
+    jumped: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+
+    assert jumped.returncode == test_case.expected_exit_code, jumped.stdout + jumped.stderr
+    assert query_duckdb(
+        db_path=warehouse_path,
+        sql="SELECT id FROM dev__dev.downstream_orders ORDER BY id",
+    ) == [(2,), (3,), (4,), (8,), (9,), (10,)]
+    assert (
+        query_duckdb(
+            db_path=state_path,
+            sql=(
+                "SELECT partition_start, partition_end "
+                "FROM sqlbuild_state.microbatch_events "
+                "WHERE model_name = 'downstream_orders' "
+                "AND record_type = 'partition_completion' "
+                "AND partition_start >= '2026-01-01T04:00:00' "
+                "AND partition_end <= '2026-01-01T08:00:00'"
+            ),
+        )
+        == []
+    )
 
 
 @pytest.mark.parametrize(
