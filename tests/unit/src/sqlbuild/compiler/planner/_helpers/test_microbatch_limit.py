@@ -27,6 +27,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     ConfiguredMicrobatchPolicyTestCase,
@@ -98,7 +99,10 @@ def test_given_nested_model_policy_when_applying_outer_limit_then_precedence_is_
     assert limited_entry.microbatch_limit == test_case.expected_limit
     assert limited_entry.microbatch_limit_action == MicrobatchLimitAction(test_case.expected_action)
     assert limited_entry.microbatch_range is not None
-    assert limited_entry.microbatch_range.start == test_case.expected_range_start
+    assert (
+        sentinel_to_token(sentinel=limited_entry.microbatch_range.start)
+        == test_case.expected_range_start
+    )
     assert limited_entry.microbatch_safety_limit == test_case.expected_safety_limit
     assert len(warnings) == test_case.expected_warning_count
 
@@ -276,8 +280,14 @@ def test_given_planner_owned_range_when_applying_limit_then_expected_decision_is
     assert (warning is not None) is test_case.expected_warning
     assert isinstance(warning, PlanWarning) is test_case.expected_warning
     assert limited_entry.microbatch_range is not None
-    assert limited_entry.microbatch_range.start == test_case.expected_range_start
-    assert limited_entry.microbatch_range.end == test_case.expected_range_end
+    assert (
+        sentinel_to_token(sentinel=limited_entry.microbatch_range.start)
+        == test_case.expected_range_start
+    )
+    assert (
+        sentinel_to_token(sentinel=limited_entry.microbatch_range.end)
+        == test_case.expected_range_end
+    )
 
 
 @pytest.mark.parametrize(

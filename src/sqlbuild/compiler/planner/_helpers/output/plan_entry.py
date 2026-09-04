@@ -63,8 +63,6 @@ from sqlbuild.compiler.planner._helpers.resolve.resolve import resolve_model_sql
 from sqlbuild.compiler.planner._helpers.warehouse.source_deferral import build_source_read_map
 from sqlbuild.compiler.planner.constants import (
     METADATA_NAME_FILTER_LIMIT,
-    MICROBATCH_END_SENTINEL,
-    MICROBATCH_START_SENTINEL,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.changes._model_changes import detect_model_changes
@@ -120,6 +118,11 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.compiler.references.main._render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
+from sqlbuild.cursor_algebra.main.parse import parse
+from sqlbuild.cursor_algebra.main.render import render
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
+from sqlbuild.cursor_algebra.models import TimestampValue
+from sqlbuild.cursor_algebra.types import BoundSentinel
 from sqlbuild.spec.contracts.models import (
     FutureCursorsConfig,
     LocalConfig,
@@ -902,14 +905,14 @@ def resolve_cursor_overrides(
 
     if cursor_overrides is not None and cursor_type == CursorType.TIMESTAMP:
         if cursor_overrides.start_ts is not None:
-            resolved_start = cursor_overrides.start_ts
+            resolved_start = render(value=cursor_overrides.start_ts)
         if cursor_overrides.end_ts is not None:
-            resolved_end = cursor_overrides.end_ts
+            resolved_end = render(value=cursor_overrides.end_ts)
     elif cursor_overrides is not None and cursor_type == CursorType.INTEGER:
         if cursor_overrides.start_int is not None:
-            resolved_start = cursor_overrides.start_int
+            resolved_start = render(value=cursor_overrides.start_int)
         if cursor_overrides.end_int is not None:
-            resolved_end = cursor_overrides.end_int
+            resolved_end = render(value=cursor_overrides.end_int)
 
     cursor_start: str | None = _get_cursor_start(model)
     cursor_end: str | None = _get_cursor_end(model)
@@ -1395,7 +1398,7 @@ def _apply_future_safety(
 ) -> CursorBounds | None:
     if bounds is None:
         return None
-    if bounds.end == MICROBATCH_END_SENTINEL:
+    if bounds.end == BoundSentinel.END:
         return bounds
     return apply_future_cursor_safety(
         bounds=bounds,
@@ -1496,8 +1499,8 @@ def _build_logical_ddl_from_adapter(
                     destination=qualified_name,
                     sql=resolved_sql,
                     cursor_column=cursor_column,
-                    cursor_start=cursor_bounds.start,
-                    cursor_end=cursor_bounds.end,
+                    cursor_start=sentinel_to_token(sentinel=cursor_bounds.start),
+                    cursor_end=sentinel_to_token(sentinel=cursor_bounds.end),
                     cursor_type=cursor_type,
                 )
             )
@@ -1570,19 +1573,39 @@ def _build_cursor_input_relations(
                 CursorInputRelation(
                     relation=relation,
                     cursor_column=input_cursor_column,
-                    cursor_grain=_resolve_cursor_input_grain(
-                        ref=ref,
-                        models_by_name=models_by_name,
+                    cursor_grain=(
+                        CursorGrain(input_grain)
+                        if (
+                            input_grain := _resolve_cursor_input_grain(
+                                ref=ref, models_by_name=models_by_name
+                            )
+                        )
+                        is not None
+                        else None
                     ),
                     is_model_backed=(
                         ref.ref_kind == SqlReferenceKind.REF and ref.ref_name in model_locations
                     ),
                     is_runtime_produced=ref.ref_name in runtime_cursor_producer_names,
                     terminal_cursor_start=(
-                        _get_cursor_start(producer_model) if producer_model is not None else None
+                        parse(
+                            raw=_get_cursor_start(producer_model),
+                            cursor_type=_get_config_str(model=model, key="cursor_type")
+                            or CursorType.TIMESTAMP,
+                        )
+                        if producer_model is not None
+                        and _get_cursor_start(producer_model) is not None
+                        else None
                     ),
                     terminal_cursor_end=(
-                        _get_cursor_end(producer_model) if producer_model is not None else None
+                        parse(
+                            raw=_get_cursor_end(producer_model),
+                            cursor_type=_get_config_str(model=model, key="cursor_type")
+                            or CursorType.TIMESTAMP,
+                        )
+                        if producer_model is not None
+                        and _get_cursor_end(producer_model) is not None
+                        else None
                     ),
                 )
             )
@@ -1706,7 +1729,7 @@ def _runtime_cursor_producer_names(
 def _build_runtime_placeholder_bounds() -> CursorBounds:
     """Return placeholder cursor bounds for runtime-owned models."""
 
-    return CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL)
+    return CursorBounds(start=BoundSentinel.START, end=BoundSentinel.END)
 
 
 def _resolve_cursor_input_relation(
@@ -1863,11 +1886,12 @@ def _rolling_window_bounds(
         moment = moment.astimezone(UTC)
     anchor: datetime = _floor_utc_grain(moment=moment, grain=grain)
     bounds: CursorBounds = CursorBounds(
-        start=duration.subtract_from(anchor).isoformat(), end=anchor.isoformat()
+        start=TimestampValue(value=duration.subtract_from(anchor)),
+        end=TimestampValue(value=anchor),
     )
     cursor_start: str | None = _get_cursor_start(model)
     if cursor_start is not None and _cursor_order_key(
-        value=bounds.start, cursor_type=CursorType.TIMESTAMP
+        value=sentinel_to_token(sentinel=bounds.start), cursor_type=CursorType.TIMESTAMP
     ) < _cursor_order_key(value=cursor_start, cursor_type=CursorType.TIMESTAMP):
         bounds = replace(bounds, start=cursor_start)
     return _clamp_cursor_end(bounds=bounds, model=model)
@@ -1892,15 +1916,15 @@ def _clamp_cursor_end(*, bounds: CursorBounds | None, model: CompiledModel) -> C
     cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
     if bounds is None or cursor_end is None:
         return bounds
-    if bounds.start == MICROBATCH_START_SENTINEL or bounds.end == MICROBATCH_END_SENTINEL:
+    if bounds.start == BoundSentinel.START or bounds.end == BoundSentinel.END:
         return bounds
-    if _cursor_order_key(value=bounds.start, cursor_type=cursor_type) >= _cursor_order_key(
-        value=cursor_end, cursor_type=cursor_type
-    ):
+    if _cursor_order_key(
+        value=sentinel_to_token(sentinel=bounds.start), cursor_type=cursor_type
+    ) >= _cursor_order_key(value=cursor_end, cursor_type=cursor_type):
         return replace(bounds, start=cursor_end, end=cursor_end)
-    if _cursor_order_key(value=bounds.end, cursor_type=cursor_type) > _cursor_order_key(
-        value=cursor_end, cursor_type=cursor_type
-    ):
+    if _cursor_order_key(
+        value=sentinel_to_token(sentinel=bounds.end), cursor_type=cursor_type
+    ) > _cursor_order_key(value=cursor_end, cursor_type=cursor_type):
         return replace(bounds, end=cursor_end)
     return bounds
 

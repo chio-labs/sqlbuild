@@ -15,7 +15,6 @@ from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     CursorBounds,
-    CursorInputRelation,
     FutureCursorSafetyEvidence,
     MaximumStartSafetyEvidence,
     ModelPlanEntry,
@@ -227,6 +226,23 @@ class ModelMaterializationContext:
 
 
 @dataclass(frozen=True)
+class RuntimeCursorInputRelation:
+    """String-serialized cursor input relation consumed by the phase-2 executor."""
+
+    relation: str
+    cursor_column: str
+    cursor_grain: str | None = None
+    is_model_backed: bool = False
+    is_runtime_produced: bool = False
+    terminal_cursor_start: str | None = None
+    terminal_cursor_end: str | None = None
+
+    @property
+    def is_runtime_owned(self) -> bool:
+        return self.is_runtime_produced
+
+
+@dataclass(frozen=True)
 class RuntimeCursorSpec:
     """Cursor configuration inputs for runtime-owned bound resolution."""
 
@@ -234,7 +250,7 @@ class RuntimeCursorSpec:
     cursor_type: str | None
     cursor_grain: str | None
     cursor_start: str | None
-    cursor_input_relations: tuple[CursorInputRelation, ...]
+    cursor_input_relations: tuple[RuntimeCursorInputRelation, ...]
     cursor_end: str | None = None
     cursor_watermark_mode: str = "all"
     microbatch_strategy: str | None = None

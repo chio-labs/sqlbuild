@@ -6,6 +6,7 @@ import pytest
 
 from sqlbuild.compiler.planner._helpers.resolve.cursor import compute_cursor_bounds
 from sqlbuild.compiler.planner.models import CursorBounds, ModelCursorSnapshot
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CursorStartBoundsTestCase,
 )
@@ -120,5 +121,5 @@ def test_given_cursor_start_when_computing_bounds_then_applies_lower_floor(
     )
 
     assert cursor_bounds is not None
-    assert cursor_bounds.start == test_case.expected_start
-    assert cursor_bounds.end == test_case.expected_end
+    assert sentinel_to_token(sentinel=cursor_bounds.start) == test_case.expected_start
+    assert sentinel_to_token(sentinel=cursor_bounds.end) == test_case.expected_end

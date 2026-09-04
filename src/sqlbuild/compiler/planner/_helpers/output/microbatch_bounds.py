@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
@@ -19,6 +18,7 @@ from sqlbuild.compiler.planner.main.execution.microbatch_limit import (
 from sqlbuild.compiler.planner.models import CursorBounds, Duration
 from sqlbuild.compiler.planner.types import CursorType, IncrementalMode
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
 _CAP_ACTIONS: frozenset[MicrobatchLimitAction] = frozenset(
@@ -42,40 +42,56 @@ def cap_microbatch_bounds(
     }:
         return bounds
     if cursor_type == CursorType.INTEGER:
+        if not isinstance(bounds.start, IntegerValue) or not isinstance(bounds.end, IntegerValue):
+            return bounds
+        start: int = bounds.start.value
+        end: int = bounds.end.value
         try:
-            start: int = int(Decimal(bounds.start))
-            end: int = int(Decimal(bounds.end))
-            size: int = int(Decimal(batch_size))
-        except (InvalidOperation, ValueError, OverflowError):
+            size: int = int(batch_size)
+        except ValueError:
             return bounds
         if size <= 0:
             return bounds
         if action == MicrobatchLimitAction.CAP_FROM_START:
-            return CursorBounds(start=bounds.start, end=str(min(end, start + size * max_batches)))
+            return CursorBounds(
+                start=bounds.start,
+                end=IntegerValue(value=min(end, start + size * max_batches)),
+            )
         batch_count: int = max(0, (end - start + size - 1) // size)
         skipped_batches: int = max(0, batch_count - max_batches)
-        return CursorBounds(start=str(start + size * skipped_batches), end=bounds.end)
+        return CursorBounds(
+            start=IntegerValue(value=start + size * skipped_batches), end=bounds.end
+        )
 
     if cursor_type != CursorType.TIMESTAMP:
         return bounds
     duration: Duration | None = Duration.parse(batch_size)
     if duration is None:
         return bounds
-    try:
-        start_at: datetime = datetime.fromisoformat(bounds.start)
-        end_at: datetime = datetime.fromisoformat(bounds.end)
-    except (TypeError, ValueError):
+    if not isinstance(bounds.start, DateValue | TimestampValue) or not isinstance(
+        bounds.end, DateValue | TimestampValue
+    ):
         return bounds
+    start_at: datetime = (
+        bounds.start.value
+        if isinstance(bounds.start, TimestampValue)
+        else datetime.combine(bounds.start.value, datetime.min.time())
+    )
+    end_at: datetime = (
+        bounds.end.value
+        if isinstance(bounds.end, TimestampValue)
+        else datetime.combine(bounds.end.value, datetime.min.time())
+    )
     if action == MicrobatchLimitAction.CAP_FROM_START:
         capped_end: datetime = start_at
         for _ in range(max_batches):
             capped_end = min(duration.add_to(capped_end), end_at)
-        return CursorBounds(start=bounds.start, end=capped_end.isoformat())
+        return CursorBounds(start=bounds.start, end=TimestampValue(value=capped_end))
     boundaries: list[datetime] = [start_at]
     while boundaries[-1] < end_at:
         boundaries.append(min(duration.add_to(boundaries[-1]), end_at))
     capped_start: datetime = boundaries[max(0, len(boundaries) - 1 - max_batches)]
-    return CursorBounds(start=capped_start.isoformat(), end=bounds.end)
+    return CursorBounds(start=TimestampValue(value=capped_start), end=bounds.end)
 
 
 def validate_capped_watermark_inputs(

@@ -9,6 +9,7 @@ from sqlbuild.compiler.planner.main.execution.future_cursor_safety import apply_
 from sqlbuild.compiler.planner.main.execution.future_cursor_warning import future_cursor_cap_warning
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.spec.contracts.models import FutureCursorsConfig
 from sqlbuild.spec.contracts.types import FutureCursorAction
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import FutureCursorSafetyTestCase
@@ -19,7 +20,7 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import FutureCurs
     [
         FutureCursorSafetyTestCase(
             description="zero-day cap stops at the invocation day boundary",
-            bounds=CursorBounds("2026-08-30T00:00:00", "2030-01-01T00:00:00"),
+            bounds=CursorBounds(start="2026-08-30T00:00:00", end="2030-01-01T00:00:00"),
             config=FutureCursorsConfig("0d", FutureCursorAction.CAP),
             invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
             cursor_grain=CursorGrain.DAY,
@@ -30,7 +31,7 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import FutureCurs
         ),
         FutureCursorSafetyTestCase(
             description="timestamp cap advances equality horizon by one second",
-            bounds=CursorBounds("2026-09-01T00:00:00", "2030-01-01T00:00:01"),
+            bounds=CursorBounds(start="2026-09-01T00:00:00", end="2030-01-01T00:00:01"),
             config=FutureCursorsConfig("2d", FutureCursorAction.CAP),
             invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
             cursor_grain=CursorGrain.SECOND,
@@ -41,7 +42,7 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import FutureCurs
         ),
         FutureCursorSafetyTestCase(
             description="date cap retains final inclusive day",
-            bounds=CursorBounds("2026-09-01", "2030-01-02"),
+            bounds=CursorBounds(start="2026-09-01", end="2030-01-02"),
             config=FutureCursorsConfig("2d", FutureCursorAction.CAP),
             invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
             cursor_grain=CursorGrain.DAY,
@@ -52,7 +53,7 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import FutureCurs
         ),
         FutureCursorSafetyTestCase(
             description="future start is preserved when end is within horizon",
-            bounds=CursorBounds("2030-01-01", "2026-09-02"),
+            bounds=CursorBounds(start="2030-01-01", end="2026-09-02"),
             config=FutureCursorsConfig("2d", FutureCursorAction.CAP),
             invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
             cursor_grain=CursorGrain.DAY,
@@ -63,7 +64,7 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import FutureCurs
         ),
         FutureCursorSafetyTestCase(
             description="month grain caps at next month boundary",
-            bounds=CursorBounds("2026-01-01T00:00:00", "2030-01-01T00:00:00"),
+            bounds=CursorBounds(start="2026-01-01T00:00:00", end="2030-01-01T00:00:00"),
             config=FutureCursorsConfig("1mo", FutureCursorAction.CAP),
             invocation_time=datetime(2026, 1, 15, 12, 0, tzinfo=UTC),
             cursor_grain=CursorGrain.MONTH,
@@ -74,7 +75,7 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import FutureCurs
         ),
         FutureCursorSafetyTestCase(
             description="year grain caps at next year boundary",
-            bounds=CursorBounds("2026-01-01T00:00:00", "2030-01-01T00:00:00"),
+            bounds=CursorBounds(start="2026-01-01T00:00:00", end="2030-01-01T00:00:00"),
             config=FutureCursorsConfig("1y", FutureCursorAction.CAP),
             invocation_time=datetime(2026, 6, 15, 12, 0, tzinfo=UTC),
             cursor_grain=CursorGrain.YEAR,
@@ -85,7 +86,7 @@ from tests.unit.src.sqlbuild.compiler.planner.main._test_types import FutureCurs
         ),
         FutureCursorSafetyTestCase(
             description="exclusive end equal to horizon is accepted",
-            bounds=CursorBounds("2026-09-01T00:00:00", "2026-09-03T12:00:01"),
+            bounds=CursorBounds(start="2026-09-01T00:00:00", end="2026-09-03T12:00:01"),
             config=FutureCursorsConfig("2d", FutureCursorAction.ERROR),
             invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
             cursor_grain=CursorGrain.SECOND,
@@ -109,8 +110,8 @@ def test_given_effective_cursor_when_applying_cap_then_expected_bounds_are_retur
         has_complete_override=test_case.has_complete_override,
     )
 
-    assert result.start == test_case.expected_start
-    assert result.end == test_case.expected_end
+    assert sentinel_to_token(sentinel=result.start) == test_case.expected_start
+    assert sentinel_to_token(sentinel=result.end) == test_case.expected_end
     assert (result.future_safety is not None) is test_case.expected_has_safety
     assert (future_cursor_cap_warning(result) is not None) is test_case.expected_has_safety
 
@@ -120,7 +121,7 @@ def test_given_effective_cursor_when_applying_cap_then_expected_bounds_are_retur
     [
         FutureCursorSafetyTestCase(
             description="future end fails closed",
-            bounds=CursorBounds("2026-09-01", "2030-01-01"),
+            bounds=CursorBounds(start="2026-09-01", end="2030-01-01"),
             config=FutureCursorsConfig("2d", FutureCursorAction.ERROR),
             invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
             cursor_grain=CursorGrain.DAY,
@@ -132,7 +133,7 @@ def test_given_effective_cursor_when_applying_cap_then_expected_bounds_are_retur
         ),
         FutureCursorSafetyTestCase(
             description="future start independently fails closed",
-            bounds=CursorBounds("2030-01-01", "2026-09-02"),
+            bounds=CursorBounds(start="2030-01-01", end="2026-09-02"),
             config=FutureCursorsConfig("2d", FutureCursorAction.ERROR),
             invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
             cursor_grain=CursorGrain.DAY,
@@ -164,7 +165,7 @@ def test_given_future_effective_cursor_when_applying_error_then_fails_closed(
     [
         FutureCursorSafetyTestCase(
             description="complete override bypasses safety",
-            bounds=CursorBounds("2029-01-01", "2030-01-01"),
+            bounds=CursorBounds(start="2029-01-01", end="2030-01-01"),
             config=FutureCursorsConfig("2d", FutureCursorAction.ERROR),
             invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
             cursor_grain=CursorGrain.DAY,
@@ -175,7 +176,7 @@ def test_given_future_effective_cursor_when_applying_error_then_fails_closed(
         ),
         FutureCursorSafetyTestCase(
             description="absent max distance disables safety",
-            bounds=CursorBounds("2026-09-01", "2030-01-01"),
+            bounds=CursorBounds(start="2026-09-01", end="2030-01-01"),
             config=FutureCursorsConfig(action=FutureCursorAction.ERROR),
             invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
             cursor_grain=CursorGrain.DAY,
@@ -199,6 +200,6 @@ def test_given_bypass_condition_when_applying_safety_then_bounds_are_unchanged(
         has_complete_override=test_case.has_complete_override,
     )
 
-    assert result.start == test_case.expected_start
-    assert result.end == test_case.expected_end
+    assert sentinel_to_token(sentinel=result.start) == test_case.expected_start
+    assert sentinel_to_token(sentinel=result.end) == test_case.expected_end
     assert (result.future_safety is not None) is test_case.expected_has_safety

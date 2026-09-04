@@ -13,6 +13,7 @@ from sqlbuild.compiler.planner.models import (
     MaximumStartPolicyInputs,
     ModelCursorSnapshot,
 )
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.spec.contracts.models import FutureCursorsConfig, StartCursorsConfig
 from sqlbuild.spec.contracts.types import FutureCursorAction
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
@@ -185,7 +186,7 @@ def test_given_target_cursor_when_computing_automatic_start_then_applies_eligibi
     )
 
     assert bounds is not None
-    assert bounds.start == test_case.expected_start
+    assert sentinel_to_token(sentinel=bounds.start) == test_case.expected_start
     assert (bounds.maximum_start_safety is not None) is test_case.expected_has_safety
 
 
@@ -306,7 +307,7 @@ def test_given_future_start_and_end_policies_when_resolving_then_each_horizon_is
         has_complete_override=False,
     )
 
-    assert bounds.start == "2026-09-01"
-    assert bounds.end == test_case.expected_end
+    assert sentinel_to_token(sentinel=bounds.start) == "2026-09-01"
+    assert sentinel_to_token(sentinel=bounds.end) == test_case.expected_end
     assert bounds.maximum_start_safety is not None
     assert (bounds.future_safety is not None) is test_case.expected_future_end_safety

@@ -48,6 +48,7 @@ from sqlbuild.cursor_algebra.main.min_bound import min_bound
 from sqlbuild.cursor_algebra.main.parse import parse
 from sqlbuild.cursor_algebra.main.render import render
 from sqlbuild.cursor_algebra.main.sentinel_from_token import sentinel_from_token
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.cursor_algebra.main.try_parse import try_parse
 from sqlbuild.cursor_algebra.models import (
     AlignedInterval,
@@ -55,16 +56,16 @@ from sqlbuild.cursor_algebra.models import (
     IntegerValue,
     TimestampValue,
 )
-from sqlbuild.cursor_algebra.types import CursorScalar
+from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
-from sqlbuild.executor.run.models import RuntimeCursorSpec
+from sqlbuild.executor.run.models import RuntimeCursorInputRelation, RuntimeCursorSpec
 from sqlbuild.executor.run.types import WatermarkResolver
 from sqlbuild.spec.contracts.constants import ZERO_DAY_CURSOR_DURATION
 from sqlbuild.spec.contracts.models import StartCursorsConfig
 
 
 def has_runtime_owned_cursor_watermarks(
-    cursor_input_relations: tuple[CursorInputRelation, ...],
+    cursor_input_relations: tuple[CursorInputRelation | RuntimeCursorInputRelation, ...],
 ) -> bool:
     """Return whether any cursor input is produced by this invocation."""
 
@@ -90,7 +91,28 @@ def build_runtime_cursor_spec(
         cursor_grain=entry.cursor_grain,
         cursor_start=entry.cursor_start,
         cursor_end=entry.cursor_end,
-        cursor_input_relations=entry.cursor_input_relations,
+        cursor_input_relations=tuple(
+            RuntimeCursorInputRelation(
+                relation=relation.relation,
+                cursor_column=relation.cursor_column,
+                cursor_grain=(
+                    relation.cursor_grain.value if relation.cursor_grain is not None else None
+                ),
+                is_model_backed=relation.is_model_backed,
+                is_runtime_produced=relation.is_runtime_produced,
+                terminal_cursor_start=(
+                    render(value=relation.terminal_cursor_start)
+                    if relation.terminal_cursor_start is not None
+                    else None
+                ),
+                terminal_cursor_end=(
+                    render(value=relation.terminal_cursor_end)
+                    if relation.terminal_cursor_end is not None
+                    else None
+                ),
+            )
+            for relation in entry.cursor_input_relations
+        ),
         cursor_watermark_mode=(
             entry.cursor_watermark_mode
             or (
@@ -138,7 +160,7 @@ def resolve_runtime_cursor_bounds(
     )
     if bounded_override is not None:
         return bounded_override
-    physical_inputs: tuple[tuple[tuple[str, str], CursorInputRelation], ...] = tuple(
+    physical_inputs: tuple[tuple[tuple[str, str], RuntimeCursorInputRelation], ...] = tuple(
         sorted(
             {
                 (cursor_input.relation, cursor_input.cursor_column): cursor_input
@@ -189,7 +211,7 @@ def resolve_runtime_cursor_bounds(
     upstream_availability_ends: list[object] = []
     input_evidence: list[CursorInputEvidence] = []
     input_index: int
-    physical_input: tuple[tuple[str, str], CursorInputRelation]
+    physical_input: tuple[tuple[str, str], RuntimeCursorInputRelation]
     for input_index, physical_input in enumerate(physical_inputs, start=1):
         relation_column, cursor_input = physical_input
         terminal_start: str | None = cursor_input.terminal_cursor_start
@@ -245,11 +267,17 @@ def resolve_runtime_cursor_bounds(
                     relation=relation_column[0],
                     cursor_column=relation_column[1],
                     minimum=(
-                        _normalize_bound(value=minimum, is_end=False)
+                        parse(
+                            raw=_normalize_bound(value=minimum, is_end=False),
+                            cursor_type=cursor_type or CursorType.TIMESTAMP,
+                        )
                         if minimum is not None
                         else None
                     ),
-                    maximum=normalized_maximum,
+                    maximum=parse(
+                        raw=normalized_maximum,
+                        cursor_type=cursor_type or CursorType.TIMESTAMP,
+                    ),
                 )
             )
     if not upstream_maxes:
@@ -331,23 +359,38 @@ def resolve_runtime_cursor_bounds(
     bounds: CursorBounds = apply_maximum_start_policy(
         bounds=CursorBounds(start=start, end=end),
         snapshot=ModelCursorSnapshot(
-            target_max=_normalize_bound(value=target_max_raw, is_end=False),
-            upstream_mins=_normalize_bounds(
-                values=upstream_mins,
+            target_max=_parse_optional_normalized(
+                value=_normalize_bound(value=target_max_raw, is_end=False),
                 cursor_type=cursor_type,
-                effective_grain=effective_grain,
             ),
-            upstream_maxes=_normalize_bounds(
-                values=upstream_maxes,
-                cursor_type=cursor_type,
-                effective_grain=effective_grain,
-            ),
-            physical_target_max=_normalize_bound(value=target_max_raw, is_end=False),
-            target_eligible_max=(
-                _normalize_effective_timestamp_bound(
-                    value=target_eligible_max_raw,
+            upstream_mins=tuple(
+                parse(raw=value, cursor_type=cursor_type or CursorType.TIMESTAMP)
+                for value in _normalize_bounds(
+                    values=upstream_mins,
                     cursor_type=cursor_type,
                     effective_grain=effective_grain,
+                )
+            ),
+            upstream_maxes=tuple(
+                parse(raw=value, cursor_type=cursor_type or CursorType.TIMESTAMP)
+                for value in _normalize_bounds(
+                    values=upstream_maxes,
+                    cursor_type=cursor_type,
+                    effective_grain=effective_grain,
+                )
+            ),
+            physical_target_max=_parse_optional_normalized(
+                value=_normalize_bound(value=target_max_raw, is_end=False),
+                cursor_type=cursor_type,
+            ),
+            target_eligible_max=(
+                _parse_optional_normalized(
+                    value=_normalize_effective_timestamp_bound(
+                        value=target_eligible_max_raw,
+                        cursor_type=cursor_type,
+                        effective_grain=effective_grain,
+                    ),
+                    cursor_type=cursor_type,
                 )
                 if target_eligible_max_raw is not None
                 else None
@@ -392,12 +435,14 @@ def _clamp_cursor_end(
         return bounds
     effective_type: str = cursor_type or CursorType.TIMESTAMP
     end_value: CursorScalar = parse(raw=cursor_end, cursor_type=effective_type)
-    if compare(left=parse(raw=bounds.start, cursor_type=effective_type), right=end_value) >= 0:
+    if isinstance(bounds.start, BoundSentinel) or isinstance(bounds.end, BoundSentinel):
+        return bounds
+    if compare(left=bounds.start, right=end_value) >= 0:
         return CursorBounds(start=cursor_end, end=cursor_end)
-    if compare(left=parse(raw=bounds.end, cursor_type=effective_type), right=end_value) > 0:
+    if compare(left=bounds.end, right=end_value) > 0:
         if effective_type == CursorType.INTEGER:
-            start_value: CursorScalar = parse(raw=bounds.start, cursor_type=CursorType.INTEGER)
-            current_end_value: CursorScalar = parse(raw=bounds.end, cursor_type=CursorType.INTEGER)
+            start_value: CursorScalar = bounds.start
+            current_end_value: CursorScalar = bounds.end
             if (
                 isinstance(start_value, IntegerValue)
                 and isinstance(current_end_value, IntegerValue)
@@ -430,6 +475,14 @@ def _normalize_bounds(
         if value is not None:
             normalized.append(value)
     return tuple(normalized)
+
+
+def _parse_optional_normalized(
+    *, value: str | None, cursor_type: str | None
+) -> CursorScalar | None:
+    if value is None:
+        return None
+    return parse(raw=value, cursor_type=cursor_type or CursorType.TIMESTAMP)
 
 
 def _normalize_effective_timestamp_bound(
@@ -590,7 +643,7 @@ def resolve_effective_timestamp_grain(
     *,
     cursor_type: str | None,
     downstream_grain: str | None,
-    cursor_input_relations: tuple[CursorInputRelation, ...],
+    cursor_input_relations: tuple[CursorInputRelation | RuntimeCursorInputRelation, ...],
     microbatch_strategy: str | None = None,
 ) -> str | None:
     """Return the coarsest timestamp grain participating in runtime-owned replay."""
@@ -600,7 +653,7 @@ def resolve_effective_timestamp_grain(
     if microbatch_strategy == MicrobatchStrategy.WATERMARK:
         return downstream_grain or CursorGrain.SECOND
     effective: str = downstream_grain or CursorGrain.SECOND
-    cursor_input: CursorInputRelation
+    cursor_input: CursorInputRelation | RuntimeCursorInputRelation
     for cursor_input in cursor_input_relations:
         input_grain: str = cursor_input.cursor_grain or CursorGrain.SECOND
         if GRAIN_ORDER[CursorGrain(input_grain)] > GRAIN_ORDER[CursorGrain(effective)]:
@@ -613,8 +666,8 @@ def substitute_cursor_sentinels(*, sql: str, bounds: CursorBounds) -> str:
 
     if sentinel_from_token(token=MICROBATCH_START_SENTINEL) is None:
         raise ExecutorInputError("invalid start cursor marker")
-    result: str = sql.replace(MICROBATCH_START_SENTINEL, bounds.start)
-    result = result.replace(MICROBATCH_END_SENTINEL, bounds.end)
+    result: str = sql.replace(MICROBATCH_START_SENTINEL, sentinel_to_token(sentinel=bounds.start))
+    result = result.replace(MICROBATCH_END_SENTINEL, sentinel_to_token(sentinel=bounds.end))
     _, has_intrinsics = resolve_cursor_intrinsics(sql=result)
     if has_intrinsics or MICROBATCH_START_SENTINEL in result or MICROBATCH_END_SENTINEL in result:
         raise ExecutorInputError("executable model SQL contains unresolved cursor markers")

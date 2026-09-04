@@ -6,6 +6,14 @@ from sqlbuild.executor.run.types import AuditGateReuseReason, AuditGateStatus, E
 
 
 @dataclass(frozen=True)
+class RuntimeCursorSpecBoundaryTestCase:
+    description: str
+    expected_grain: str
+    expected_start: str
+    expected_end: str
+
+
+@dataclass(frozen=True)
 class LifecycleProgressTestCase:
     description: str
     expected_event_types: tuple[str, ...]

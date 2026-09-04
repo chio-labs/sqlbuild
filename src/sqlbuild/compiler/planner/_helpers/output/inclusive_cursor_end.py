@@ -122,13 +122,21 @@ def resolve_bounded_cursor_override(
 
     if start_cursor_override is None or end_cursor_override is None:
         return None
-    return CursorBounds(
-        start=start_cursor_override,
-        end=advance_cursor_end(
+    effective_type: str = cursor_type or CursorType.TIMESTAMP
+    start: CursorScalar | None = try_parse(raw=start_cursor_override, cursor_type=effective_type)
+    exclusive_end: CursorScalar | None = try_parse(
+        raw=advance_cursor_end(
             value=end_cursor_override,
             cursor_type=cursor_type,
             cursor_grain=cursor_grain,
         ),
+        cursor_type=effective_type,
+    )
+    if start is None or exclusive_end is None:
+        return None
+    return CursorBounds(
+        start=start,
+        end=exclusive_end,
     )
 
 

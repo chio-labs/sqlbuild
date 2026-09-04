@@ -13,11 +13,11 @@ from sqlbuild.compiler.planner._helpers.resolve.cursor import compute_cursor_bou
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CursorBounds,
-    CursorInputRelation,
     ModelCursorSnapshot,
     ModelPlanEntry,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, CursorWatermarkMode
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run._helpers.materializations.microbatch import (
     _clamp_intervals_to_model_domain,
@@ -34,6 +34,7 @@ from sqlbuild.executor.run.models import (
     MicrobatchTargets,
     ModelExecutionResult,
     ModelMaterializationContext,
+    RuntimeCursorInputRelation,
     RuntimeCursorSpec,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
@@ -140,7 +141,11 @@ def test_given_monthly_physical_maximum_when_planning_and_resolving_then_availab
             cursor_grain="month",
             cursor_start="2026-07-01",
             cursor_input_relations=(
-                CursorInputRelation("main.producer_events", "event_time", cursor_grain="month"),
+                RuntimeCursorInputRelation(
+                    relation="main.producer_events",
+                    cursor_column="event_time",
+                    cursor_grain="month",
+                ),
             ),
             cursor_watermark_mode=test_case.watermark_mode,
             microbatch_strategy="watermark",
@@ -149,7 +154,8 @@ def test_given_monthly_physical_maximum_when_planning_and_resolving_then_availab
 
     assert planner_bounds is not None
     assert runtime_bounds is not None
-    assert planner_bounds.end == runtime_bounds.end == test_case.expected_end
+    assert planner_bounds.end == runtime_bounds.end
+    assert sentinel_to_token(sentinel=planner_bounds.end) == test_case.expected_end
 
 
 @pytest.mark.parametrize(
@@ -189,9 +195,9 @@ def test_given_watermark_model_with_coarse_producer_when_resolving_then_producer
             cursor_grain=test_case.consumer_grain,
             cursor_start="2026-04-01",
             cursor_input_relations=(
-                CursorInputRelation(
-                    "main.producer_events",
-                    "event_time",
+                RuntimeCursorInputRelation(
+                    relation="main.producer_events",
+                    cursor_column="event_time",
                     cursor_grain=test_case.producer_grain,
                 ),
             ),
@@ -201,7 +207,7 @@ def test_given_watermark_model_with_coarse_producer_when_resolving_then_producer
     )
 
     assert bounds is not None
-    assert bounds.end == test_case.expected_end
+    assert sentinel_to_token(sentinel=bounds.end) == test_case.expected_end
 
 
 @pytest.mark.parametrize(
@@ -319,16 +325,18 @@ def test_given_any_watermarks_when_one_input_is_empty_then_runtime_uses_populate
             cursor_grain="day",
             cursor_start="2026-01-01",
             cursor_input_relations=(
-                CursorInputRelation("main.empty_events", "event_time"),
-                CursorInputRelation("main.live_events", "event_time"),
+                RuntimeCursorInputRelation(
+                    relation="main.empty_events", cursor_column="event_time"
+                ),
+                RuntimeCursorInputRelation(relation="main.live_events", cursor_column="event_time"),
             ),
             cursor_watermark_mode="any",
         ),
     )
 
     assert bounds is not None
-    assert bounds.start == "2026-07-01T00:00:00"
-    assert bounds.end == test_case.expected_outcome
+    assert sentinel_to_token(sentinel=bounds.start) == "2026-07-01T00:00:00"
+    assert sentinel_to_token(sentinel=bounds.end) == test_case.expected_outcome
 
 
 @pytest.mark.parametrize(
@@ -365,8 +373,12 @@ def test_given_all_watermarks_when_one_input_is_empty_then_runtime_fails_closed(
                 cursor_grain="day",
                 cursor_start="2026-01-01",
                 cursor_input_relations=(
-                    CursorInputRelation("main.empty_events", "event_time"),
-                    CursorInputRelation("main.live_events", "event_time"),
+                    RuntimeCursorInputRelation(
+                        relation="main.empty_events", cursor_column="event_time"
+                    ),
+                    RuntimeCursorInputRelation(
+                        relation="main.live_events", cursor_column="event_time"
+                    ),
                 ),
                 cursor_watermark_mode="all",
             ),
@@ -404,9 +416,9 @@ def test_given_terminal_model_watermark_when_relation_is_empty_then_runtime_uses
             cursor_grain="day",
             cursor_start="2025-01-01",
             cursor_input_relations=(
-                CursorInputRelation(
-                    "main.archive_events",
-                    "event_time",
+                RuntimeCursorInputRelation(
+                    relation="main.archive_events",
+                    cursor_column="event_time",
                     terminal_cursor_start="2025-01-01",
                     terminal_cursor_end="2025-12-01",
                 ),
@@ -416,8 +428,8 @@ def test_given_terminal_model_watermark_when_relation_is_empty_then_runtime_uses
     )
 
     assert bounds is not None
-    assert bounds.start == "2025-01-01T00:00:00"
-    assert bounds.end == test_case.expected_outcome
+    assert sentinel_to_token(sentinel=bounds.start) == "2025-01-01T00:00:00"
+    assert sentinel_to_token(sentinel=bounds.end) == test_case.expected_outcome
 
 
 @pytest.mark.parametrize(
@@ -440,7 +452,7 @@ def test_given_nonempty_terminal_and_live_watermarks_when_mode_all_then_archive_
     )
 
     assert bounds is not None
-    assert bounds.end == test_case.expected_outcome
+    assert sentinel_to_token(sentinel=bounds.end) == test_case.expected_outcome
 
 
 @pytest.mark.parametrize(
@@ -463,7 +475,7 @@ def test_given_nonempty_terminal_and_live_watermarks_when_mode_any_then_live_end
     )
 
     assert bounds is not None
-    assert bounds.end == test_case.expected_outcome
+    assert sentinel_to_token(sentinel=bounds.end) == test_case.expected_outcome
 
 
 @pytest.mark.parametrize(
@@ -600,7 +612,7 @@ def test_given_full_refresh_wholly_after_cursor_end_when_planning_then_no_batch_
             build_integer_reconciliation_plan_entry(),
             microbatch_strategy="rolling_window",
             cursor_end="30",
-            microbatch_range=CursorBounds("30", "30"),
+            microbatch_range=CursorBounds(start="30", end="30"),
         ),
         adapter=adapter,
         connection=connection,
@@ -623,7 +635,7 @@ def test_given_full_refresh_wholly_after_cursor_end_when_planning_then_no_batch_
     )
 
     assert len(plan.batches) == test_case.expected_outcome
-    assert plan.resolved_range == CursorBounds("30", "30")
+    assert plan.resolved_range == CursorBounds(start="30", end="30")
     result: ModelExecutionResult = execute_microbatch_entry(
         context=context, declared_columns=(), is_full_refresh=True
     )
@@ -651,7 +663,7 @@ def test_given_no_work_full_refresh_with_absent_destination_when_executing_then_
             build_integer_reconciliation_plan_entry(),
             microbatch_strategy="rolling_window",
             cursor_end="30",
-            microbatch_range=CursorBounds("30", "30"),
+            microbatch_range=CursorBounds(start="30", end="30"),
         ),
         adapter=adapter,
         connection=connection,
@@ -693,7 +705,7 @@ def test_given_no_work_first_run_with_absent_destination_when_executing_then_res
     context: ModelMaterializationContext = ModelMaterializationContext(
         entry=replace(
             build_integer_reconciliation_plan_entry(),
-            microbatch_range=CursorBounds("10", "10"),
+            microbatch_range=CursorBounds(start="10", end="10"),
         ),
         adapter=adapter,
         connection=connection,

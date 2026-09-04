@@ -54,6 +54,7 @@ from sqlbuild.cursor_algebra.main.floor_to_grain import floor_to_grain
 from sqlbuild.cursor_algebra.main.next_boundary import next_boundary
 from sqlbuild.cursor_algebra.main.parse import parse
 from sqlbuild.cursor_algebra.main.render import render
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.cursor_algebra.main.split_into_batches import split_into_batches
 from sqlbuild.cursor_algebra.models import AlignedInterval, IntegerValue
 from sqlbuild.cursor_algebra.types import CursorScalar
@@ -590,8 +591,12 @@ def execute_microbatch_entry(
         batch_size=batch_plan.effective_batch_size,
         rows_affected=batch_outcome.rows_affected,
         microbatch_applied_intervals=batch_outcome.applied_intervals,
-        cursor_range_start=None if resolved_range is None else resolved_range.start,
-        cursor_range_end=None if resolved_range is None else resolved_range.end,
+        cursor_range_start=(
+            None if resolved_range is None else sentinel_to_token(sentinel=resolved_range.start)
+        ),
+        cursor_range_end=(
+            None if resolved_range is None else sentinel_to_token(sentinel=resolved_range.end)
+        ),
         cursor_type=context.entry.cursor_type,
         cursor_grain=context.entry.cursor_grain,
         future_cursor_safety=(resolved_range.future_safety if resolved_range is not None else None),
@@ -639,8 +644,12 @@ def _no_work_microbatch_result(
         promoted_relation=promoted_relation,
         batch_count=0,
         batch_size=batch_plan.effective_batch_size,
-        cursor_range_start=None if resolved_range is None else resolved_range.start,
-        cursor_range_end=None if resolved_range is None else resolved_range.end,
+        cursor_range_start=(
+            None if resolved_range is None else sentinel_to_token(sentinel=resolved_range.start)
+        ),
+        cursor_range_end=(
+            None if resolved_range is None else sentinel_to_token(sentinel=resolved_range.end)
+        ),
         cursor_type=context.entry.cursor_type,
         cursor_grain=context.entry.cursor_grain,
         warning_messages=tuple(state.warnings),
@@ -1495,8 +1504,8 @@ def _serial_microbatch_context(
         scope=scope,
         history=(),
         run_type=_microbatch_run_type(context=context),
-        run_start=resolved_range.start,
-        run_end=resolved_range.end,
+        run_start=sentinel_to_token(sentinel=resolved_range.start),
+        run_end=sentinel_to_token(sentinel=resolved_range.end),
         batch_size=batch_size,
         origin_run_id=context.run_id,
         execution_run_started_at=datetime.now(tz=UTC),
@@ -1566,8 +1575,8 @@ def _prepare_microbatch_history(
             requirement_id: str = deterministic_microbatch_event_id(
                 scope=scope,
                 record_type=MicrobatchRecordType.REPLAY_REQUIREMENT,
-                partition_start=resolved_range.start,
-                partition_end=resolved_range.end,
+                partition_start=sentinel_to_token(sentinel=resolved_range.start),
+                partition_end=sentinel_to_token(sentinel=resolved_range.end),
                 completion_reason=requirement_reason,
             )
             requirement = MicrobatchEvent(
@@ -1577,8 +1586,8 @@ def _prepare_microbatch_history(
                 origin_run_id=context.run_id,
                 execution_run_id=context.run_id,
                 run_type=run_type,
-                run_start=resolved_range.start,
-                run_end=resolved_range.end,
+                run_start=sentinel_to_token(sentinel=resolved_range.start),
+                run_end=sentinel_to_token(sentinel=resolved_range.end),
                 batch_size=batch_size,
                 cursor_column=context.entry.cursor_column or "",
                 cursor_type=context.entry.cursor_type or "",
@@ -1607,8 +1616,16 @@ def _prepare_microbatch_history(
         scope=scope,
         history=effective_history,
         run_type=run_type,
-        run_start=requirement.run_start if requirement is not None else resolved_range.start,
-        run_end=requirement.run_end if requirement is not None else resolved_range.end,
+        run_start=(
+            requirement.run_start
+            if requirement is not None
+            else sentinel_to_token(sentinel=resolved_range.start)
+        ),
+        run_end=(
+            requirement.run_end
+            if requirement is not None
+            else sentinel_to_token(sentinel=resolved_range.end)
+        ),
         batch_size=requirement.batch_size if requirement is not None else batch_size,
         replay_requirement_id=(
             requirement.replay_requirement_id if requirement is not None else None
@@ -2012,8 +2029,8 @@ def _accounting_intervals(
     ]
     if envelope is not None:
         if not starts:
-            starts.append(envelope.start)
-        ends.append(envelope.end)
+            starts.append(sentinel_to_token(sentinel=envelope.start))
+        ends.append(sentinel_to_token(sentinel=envelope.end))
     if context.entry.cursor_start is not None and not starts:
         starts.append(context.entry.cursor_start)
     if not starts or not ends:
@@ -3082,7 +3099,12 @@ def _plan_microbatch_windows(
         )
     work_intervals: tuple[MicrobatchInterval, ...] = merge_intervals(
         intervals=(
-            (MicrobatchInterval(start=microbatch_range.start, end=microbatch_range.end),)
+            (
+                MicrobatchInterval(
+                    start=sentinel_to_token(sentinel=microbatch_range.start),
+                    end=sentinel_to_token(sentinel=microbatch_range.end),
+                ),
+            )
             if microbatch_range.start != microbatch_range.end
             else ()
         ),
@@ -3094,10 +3116,16 @@ def _plan_microbatch_windows(
         cursor_type=cursor_type,
     )
     batches: tuple[BatchWindow, ...] = (
-        (BatchWindow(start=microbatch_range.start, end=microbatch_range.end, index=0),)
+        (
+            BatchWindow(
+                start=sentinel_to_token(sentinel=microbatch_range.start),
+                end=sentinel_to_token(sentinel=microbatch_range.end),
+                index=0,
+            ),
+        )
         if is_full_refresh
         and microbatch_range.start == microbatch_range.end
-        and microbatch_range.start != entry.cursor_end
+        and sentinel_to_token(sentinel=microbatch_range.start) != entry.cursor_end
         else tuple(replace(batch, index=index) for index, batch in enumerate(computed_batches))
     )
     resolved_range: CursorBounds = (
@@ -3157,12 +3185,12 @@ def _format_resolved_microbatch_progress(
     """Format the concrete runtime-owned range before its first batch starts."""
 
     start: str = cursor_bound_display(
-        value=bounds.start,
+        value=sentinel_to_token(sentinel=bounds.start),
         cursor_type=cursor_type,
         cursor_grain=cursor_grain,
     )
     end: str = inclusive_cursor_end(
-        end=bounds.end,
+        end=sentinel_to_token(sentinel=bounds.end),
         cursor_type=cursor_type,
         cursor_grain=cursor_grain,
     )

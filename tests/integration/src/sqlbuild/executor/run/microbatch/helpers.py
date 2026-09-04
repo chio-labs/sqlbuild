@@ -43,6 +43,7 @@ from sqlbuild.executor.run.models import (
     HookSkipResult,
     ModelExecutionResult,
     ModelMaterializationContext,
+    RuntimeCursorInputRelation,
     RuntimeCursorSpec,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
@@ -79,13 +80,13 @@ def resolve_nonempty_terminal_bounds(
             cursor_grain="day",
             cursor_start="2025-01-01",
             cursor_input_relations=(
-                CursorInputRelation(
-                    "main.archive_events",
-                    "event_time",
+                RuntimeCursorInputRelation(
+                    relation="main.archive_events",
+                    cursor_column="event_time",
                     terminal_cursor_start="2025-01-01",
                     terminal_cursor_end="2025-12-01",
                 ),
-                CursorInputRelation("main.live_events", "event_time"),
+                RuntimeCursorInputRelation(relation="main.live_events", cursor_column="event_time"),
             ),
             cursor_watermark_mode=mode,
         ),

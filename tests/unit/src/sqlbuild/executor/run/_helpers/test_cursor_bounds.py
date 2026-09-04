@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import cast
 
 import duckdb
@@ -9,16 +10,33 @@ import pytest
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.resolve.cursor import normalize_cursor_snapshot_grain
 from sqlbuild.compiler.planner.exceptions import FutureCursorSafetyError
-from sqlbuild.compiler.planner.models import CursorBounds, CursorInputRelation, ModelCursorSnapshot
-from sqlbuild.compiler.planner.types import CursorGrain, CursorType, CursorWatermarkMode
+from sqlbuild.compiler.planner.models import (
+    CursorBounds,
+    CursorInputRelation,
+    ModelCursorSnapshot,
+    ModelPlanEntry,
+)
+from sqlbuild.compiler.planner.types import (
+    CursorGrain,
+    CursorType,
+    CursorWatermarkMode,
+    MaterializationType,
+    PlanAction,
+    PlanReason,
+)
+from sqlbuild.cursor_algebra.main.render import render
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
+    build_runtime_cursor_spec,
     resolve_runtime_cursor_bounds,
     substitute_cursor_sentinels,
 )
-from sqlbuild.executor.run.models import RuntimeCursorSpec
+from sqlbuild.executor.run.models import RuntimeCursorInputRelation, RuntimeCursorSpec
 from sqlbuild.spec.contracts.models import FutureCursorsConfig, StartCursorsConfig
 from sqlbuild.spec.contracts.types import FutureCursorAction
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
@@ -29,6 +47,7 @@ from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
     RuntimeCursorFailureTestCase,
     RuntimeCursorOverrideTestCase,
     RuntimeCursorPolicyTestCase,
+    RuntimeCursorSpecBoundaryTestCase,
     RuntimeCursorStartTestCase,
     RuntimeExistingTargetOverrideTestCase,
     RuntimeFutureCursorTestCase,
@@ -41,6 +60,59 @@ from tests.unit.src.sqlbuild.executor.run._helpers.helpers import (
     FakeCursorAdapter,
     RecordingCursorAdapter,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        RuntimeCursorSpecBoundaryTestCase(
+            description="date timestamp and grain retain boundary formats",
+            expected_grain="day",
+            expected_start="2026-01-01",
+            expected_end="2026-02-01T00:00:00+00:00",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_typed_planner_cursor_input_when_building_runtime_spec_then_renders_strings(
+    test_case: RuntimeCursorSpecBoundaryTestCase,
+) -> None:
+    entry: ModelPlanEntry = ModelPlanEntry(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="events"),
+        name="events",
+        relative_path=Path("models/events.sql"),
+        materialization_type=MaterializationType.INCREMENTAL,
+        action=PlanAction.INCREMENTAL_DELETE_INSERT,
+        reason=PlanReason.NORMAL_INCREMENTAL,
+        destination=CompiledRelationLocation(
+            database=None,
+            schema="main",
+            name="events",
+            qualified_name="main.events",
+        ),
+        fingerprint_query_sql="SELECT 1",
+        resolved_sql="SELECT 1",
+        logical_ddl="",
+        cursor_column="event_at",
+        cursor_type=CursorType.TIMESTAMP,
+        cursor_input_relations=(
+            CursorInputRelation(
+                relation="main.archive_events",
+                cursor_column="event_at",
+                cursor_grain=CursorGrain.DAY,
+                terminal_cursor_start=test_case.expected_start,
+                terminal_cursor_end=test_case.expected_end,
+            ),
+        ),
+    )
+
+    relation: RuntimeCursorInputRelation = build_runtime_cursor_spec(
+        entry=entry
+    ).cursor_input_relations[0]
+
+    assert relation.cursor_grain == test_case.expected_grain
+    assert relation.terminal_cursor_start == test_case.expected_start
+    assert relation.terminal_cursor_end == test_case.expected_end
 
 
 @pytest.mark.parametrize(
@@ -70,7 +142,7 @@ def test_given_future_runtime_watermark_when_resolving_then_cap_uses_invocation_
             cursor_grain=CursorGrain.SECOND,
             cursor_start=None,
             cursor_input_relations=(
-                CursorInputRelation(relation="upstream_data", cursor_column="cursor_value"),
+                RuntimeCursorInputRelation(relation="upstream_data", cursor_column="cursor_value"),
             ),
             future_cursor_config=FutureCursorsConfig("2d", FutureCursorAction.CAP),
             invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
@@ -78,10 +150,10 @@ def test_given_future_runtime_watermark_when_resolving_then_cap_uses_invocation_
     )
 
     assert bounds is not None
-    assert bounds.start == test_case.expected_start
-    assert bounds.end == test_case.expected_end
+    assert sentinel_to_token(sentinel=bounds.start) == test_case.expected_start
+    assert sentinel_to_token(sentinel=bounds.end) == test_case.expected_end
     assert bounds.future_safety is not None
-    assert bounds.future_safety.discovered_end == "2030-01-01T00:00:01"
+    assert render(value=bounds.future_safety.discovered_end) == "2030-01-01T00:00:01"
 
 
 @pytest.mark.parametrize(
@@ -112,7 +184,9 @@ def test_given_future_runtime_watermark_and_error_policy_when_resolving_then_fai
                 cursor_grain=CursorGrain.SECOND,
                 cursor_start=None,
                 cursor_input_relations=(
-                    CursorInputRelation(relation="upstream_data", cursor_column="cursor_value"),
+                    RuntimeCursorInputRelation(
+                        relation="upstream_data", cursor_column="cursor_value"
+                    ),
                 ),
                 future_cursor_config=FutureCursorsConfig("2d", FutureCursorAction.ERROR),
                 invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
@@ -156,8 +230,8 @@ def test_given_future_target_and_multiple_inputs_when_capping_then_start_and_inp
             cursor_grain=CursorGrain.SECOND,
             cursor_start=None,
             cursor_input_relations=(
-                CursorInputRelation(relation="input_b", cursor_column="cursor_value"),
-                CursorInputRelation(relation="input_a", cursor_column="cursor_value"),
+                RuntimeCursorInputRelation(relation="input_b", cursor_column="cursor_value"),
+                RuntimeCursorInputRelation(relation="input_a", cursor_column="cursor_value"),
             ),
             future_cursor_config=FutureCursorsConfig("2d", FutureCursorAction.CAP),
             invocation_time=datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
@@ -165,8 +239,8 @@ def test_given_future_target_and_multiple_inputs_when_capping_then_start_and_inp
     )
 
     assert bounds is not None
-    assert bounds.start == test_case.expected_start
-    assert bounds.end == test_case.expected_end
+    assert sentinel_to_token(sentinel=bounds.start) == test_case.expected_start
+    assert sentinel_to_token(sentinel=bounds.end) == test_case.expected_end
     assert bounds.future_safety is not None
     assert bounds.future_safety.determining_relation == test_case.expected_determining_relation
     assert tuple(item.relation for item in bounds.future_safety.inputs) == (
@@ -247,7 +321,7 @@ def test_given_runtime_cursor_start_when_resolving_bounds_then_applies_lower_flo
             cursor_grain=None,
             cursor_start=test_case.cursor_start,
             cursor_input_relations=(
-                CursorInputRelation(
+                RuntimeCursorInputRelation(
                     relation="upstream_data",
                     cursor_column="cursor_value",
                 ),
@@ -256,8 +330,8 @@ def test_given_runtime_cursor_start_when_resolving_bounds_then_applies_lower_flo
     )
 
     assert cursor_bounds is not None
-    assert cursor_bounds.start == test_case.expected_start
-    assert cursor_bounds.end == test_case.expected_end
+    assert sentinel_to_token(sentinel=cursor_bounds.start) == test_case.expected_start
+    assert sentinel_to_token(sentinel=cursor_bounds.end) == test_case.expected_end
 
 
 @pytest.mark.parametrize(
@@ -312,9 +386,9 @@ def test_given_multiple_physical_watermarks_when_resolving_then_reads_standalone
             cursor_grain=None,
             cursor_start=None,
             cursor_input_relations=(
-                CursorInputRelation(relation="z_watermark", cursor_column="cursor_value"),
-                CursorInputRelation(relation="a_watermark", cursor_column="cursor_value"),
-                CursorInputRelation(relation="a_watermark", cursor_column="cursor_value"),
+                RuntimeCursorInputRelation(relation="z_watermark", cursor_column="cursor_value"),
+                RuntimeCursorInputRelation(relation="a_watermark", cursor_column="cursor_value"),
+                RuntimeCursorInputRelation(relation="a_watermark", cursor_column="cursor_value"),
             ),
         ),
     )
@@ -376,8 +450,8 @@ def test_given_multiple_integer_watermarks_when_resolving_then_uses_numeric_orde
             cursor_grain=None,
             cursor_start=None,
             cursor_input_relations=(
-                CursorInputRelation(relation="input_a", cursor_column="cursor_value"),
-                CursorInputRelation(relation="input_b", cursor_column="cursor_value"),
+                RuntimeCursorInputRelation(relation="input_a", cursor_column="cursor_value"),
+                RuntimeCursorInputRelation(relation="input_b", cursor_column="cursor_value"),
             ),
             cursor_watermark_mode=test_case.mode,
         ),
@@ -421,12 +495,12 @@ def test_given_date_and_timestamp_watermarks_when_resolving_then_normalizes_comp
             cursor_grain=CursorGrain.HOUR,
             cursor_start=None,
             cursor_input_relations=(
-                CursorInputRelation(
+                RuntimeCursorInputRelation(
                     relation="date_watermark",
                     cursor_column="cursor_value",
                     cursor_grain=CursorGrain.DAY,
                 ),
-                CursorInputRelation(
+                RuntimeCursorInputRelation(
                     relation="timestamp_watermark",
                     cursor_column="cursor_value",
                     cursor_grain=CursorGrain.HOUR,
@@ -436,8 +510,8 @@ def test_given_date_and_timestamp_watermarks_when_resolving_then_normalizes_comp
     )
 
     assert bounds is not None
-    assert bounds.start == test_case.expected_start
-    assert bounds.end == test_case.expected_end
+    assert sentinel_to_token(sentinel=bounds.start) == test_case.expected_start
+    assert sentinel_to_token(sentinel=bounds.end) == test_case.expected_end
 
 
 @pytest.mark.parametrize(
@@ -499,7 +573,7 @@ def test_given_non_datetime_cursor_when_resolving_bounds_then_end_bound_includes
             cursor_grain=test_case.cursor_grain,
             cursor_start=None,
             cursor_input_relations=(
-                CursorInputRelation(
+                RuntimeCursorInputRelation(
                     relation="upstream_data",
                     cursor_column="cursor_value",
                 ),
@@ -508,8 +582,8 @@ def test_given_non_datetime_cursor_when_resolving_bounds_then_end_bound_includes
     )
 
     assert cursor_bounds is not None
-    assert cursor_bounds.start == test_case.expected_start
-    assert cursor_bounds.end == test_case.expected_end
+    assert sentinel_to_token(sentinel=cursor_bounds.start) == test_case.expected_start
+    assert sentinel_to_token(sentinel=cursor_bounds.end) == test_case.expected_end
 
 
 @pytest.mark.parametrize(
@@ -589,7 +663,7 @@ def test_given_cursor_overrides_when_resolving_runtime_bounds_then_clamps_to_req
             cursor_grain=test_case.cursor_grain,
             cursor_start=None,
             cursor_input_relations=(
-                CursorInputRelation(
+                RuntimeCursorInputRelation(
                     relation="upstream_data",
                     cursor_column="cursor_value",
                 ),
@@ -600,8 +674,8 @@ def test_given_cursor_overrides_when_resolving_runtime_bounds_then_clamps_to_req
     )
 
     assert cursor_bounds is not None
-    assert cursor_bounds.start == test_case.expected_start
-    assert cursor_bounds.end == test_case.expected_end
+    assert sentinel_to_token(sentinel=cursor_bounds.start) == test_case.expected_start
+    assert sentinel_to_token(sentinel=cursor_bounds.end) == test_case.expected_end
 
 
 @pytest.mark.parametrize(
@@ -648,7 +722,7 @@ def test_given_existing_newer_target_when_resolving_explicit_replay_then_uses_re
             cursor_grain=test_case.cursor_grain,
             cursor_start=test_case.cursor_start,
             cursor_input_relations=(
-                CursorInputRelation(
+                RuntimeCursorInputRelation(
                     relation="upstream_data",
                     cursor_column="cursor_value",
                     cursor_grain=test_case.cursor_grain,
@@ -703,7 +777,7 @@ def test_given_existing_target_relation_when_resolving_bounds_then_starts_from_t
             cursor_grain=None,
             cursor_start=None,
             cursor_input_relations=(
-                CursorInputRelation(
+                RuntimeCursorInputRelation(
                     relation="upstream_data",
                     cursor_column="cursor_value",
                 ),
@@ -712,8 +786,8 @@ def test_given_existing_target_relation_when_resolving_bounds_then_starts_from_t
     )
 
     assert cursor_bounds is not None
-    assert cursor_bounds.start == test_case.expected_start
-    assert cursor_bounds.end == test_case.expected_end
+    assert sentinel_to_token(sentinel=cursor_bounds.start) == test_case.expected_start
+    assert sentinel_to_token(sentinel=cursor_bounds.end) == test_case.expected_end
 
 
 @pytest.mark.parametrize(
@@ -748,7 +822,7 @@ def test_given_target_max_query_failure_when_resolving_bounds_then_propagates_er
                 cursor_grain=None,
                 cursor_start=None,
                 cursor_input_relations=(
-                    CursorInputRelation(
+                    RuntimeCursorInputRelation(
                         relation="upstream_data",
                         cursor_column="cursor_value",
                     ),
@@ -789,8 +863,8 @@ def test_given_multiple_runtime_inputs_when_resolving_then_uses_common_watermark
             cursor_grain=None,
             cursor_start=None,
             cursor_input_relations=(
-                CursorInputRelation(relation="fast_input", cursor_column="cursor_value"),
-                CursorInputRelation(relation="slow_input", cursor_column="cursor_value"),
+                RuntimeCursorInputRelation(relation="fast_input", cursor_column="cursor_value"),
+                RuntimeCursorInputRelation(relation="slow_input", cursor_column="cursor_value"),
             ),
         ),
     )
@@ -832,8 +906,8 @@ def test_given_all_runtime_inputs_when_one_is_empty_then_resolution_fails_closed
                 cursor_grain=None,
                 cursor_start=None,
                 cursor_input_relations=(
-                    CursorInputRelation(relation="fast_input", cursor_column="cursor_value"),
-                    CursorInputRelation(relation="slow_input", cursor_column="cursor_value"),
+                    RuntimeCursorInputRelation(relation="fast_input", cursor_column="cursor_value"),
+                    RuntimeCursorInputRelation(relation="slow_input", cursor_column="cursor_value"),
                 ),
             ),
         )
@@ -877,7 +951,7 @@ def test_given_runtime_replay_policy_when_resolving_then_matches_planner_policy(
             cursor_grain=None,
             cursor_start=None,
             cursor_input_relations=(
-                CursorInputRelation(relation="upstream_data", cursor_column="cursor_value"),
+                RuntimeCursorInputRelation(relation="upstream_data", cursor_column="cursor_value"),
             ),
             lookback=test_case.lookback,
             backfill_duration=test_case.backfill_duration,
@@ -923,7 +997,7 @@ def test_given_mixed_runtime_grains_when_capping_start_then_matches_planner_norm
             cursor_grain=CursorGrain.HOUR,
             cursor_start=None,
             cursor_input_relations=(
-                CursorInputRelation(
+                RuntimeCursorInputRelation(
                     relation="upstream_data",
                     cursor_column="cursor_value",
                     cursor_grain=CursorGrain.DAY,
@@ -952,7 +1026,8 @@ def test_given_mixed_runtime_grains_when_capping_start_then_matches_planner_norm
         bounds.maximum_start_safety.highest_eligible_target_max
         == planner_snapshot.target_eligible_max
     )
-    assert planner_snapshot.physical_target_max == "2026-09-03T15:00:00"
+    assert planner_snapshot.physical_target_max is not None
+    assert render(value=planner_snapshot.physical_target_max) == "2026-09-03T15:00:00"
 
 
 @pytest.mark.parametrize(
@@ -988,7 +1063,7 @@ def test_given_full_refresh_runtime_discovery_when_resolving_then_ignores_old_ta
             cursor_grain=None,
             cursor_start=None,
             cursor_input_relations=(
-                CursorInputRelation(relation="upstream_data", cursor_column="cursor_value"),
+                RuntimeCursorInputRelation(relation="upstream_data", cursor_column="cursor_value"),
             ),
             read_destination_cursor=test_case.read_destination_cursor,
         ),
@@ -1053,7 +1128,7 @@ def test_given_complete_override_when_runtime_resolution_invoked_then_returns_wi
             cursor_grain=test_case.cursor_grain,
             cursor_start=None,
             cursor_input_relations=(
-                CursorInputRelation(
+                RuntimeCursorInputRelation(
                     relation="missing_runtime_input",
                     cursor_column="cursor_value",
                     is_runtime_produced=True,

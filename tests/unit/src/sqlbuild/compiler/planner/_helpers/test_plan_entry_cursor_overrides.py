@@ -28,6 +28,7 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     AuthoritativeCursorOverrideTestCase,
     MicrobatchCursorEndPlanTestCase,
@@ -434,4 +435,4 @@ def test_given_snapshot_cursor_grain_when_planning_then_dml_bound_matches_query_
     )
 
     assert bounds is not None
-    assert bounds.end == test_case.expected_end
+    assert sentinel_to_token(sentinel=bounds.end) == test_case.expected_end
