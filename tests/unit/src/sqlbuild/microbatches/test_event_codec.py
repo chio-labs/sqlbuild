@@ -1,5 +1,7 @@
 """Compatibility coverage for persisted microbatch event decoding."""
 
+from dataclasses import replace
+
 import pytest
 
 from sqlbuild.microbatches.classes.event_codec import MicrobatchEventCodec
@@ -10,6 +12,7 @@ from sqlbuild.microbatches.models import (
     MicrobatchInterval,
 )
 from tests.unit.src.sqlbuild.microbatches._test_types import (
+    MicrobatchEventCursorEncodingTestCase,
     RetiredRecordDecodingTestCase,
     UnknownRecordDecodingTestCase,
 )
@@ -17,6 +20,46 @@ from tests.unit.src.sqlbuild.microbatches.helpers import (
     completion_event,
     event_row_with_record_type,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchEventCursorEncodingTestCase(
+            description="offset timestamp cursor fields remain state-table strings",
+            run_start="2026-01-01T08:00:00+08:00",
+            run_end="2026-01-02T08:00:00+08:00",
+            partition_start="2026-01-01T08:00:00+08:00",
+            partition_end="2026-01-01T09:00:00+08:00",
+            expected_values=(
+                "2026-01-01T08:00:00+08:00",
+                "2026-01-02T08:00:00+08:00",
+                "2026-01-01T08:00:00+08:00",
+                "2026-01-01T09:00:00+08:00",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_cursor_event_when_encoding_then_preserves_state_table_string_formats(
+    test_case: MicrobatchEventCursorEncodingTestCase,
+) -> None:
+    event: MicrobatchEvent = completion_event(
+        event_id="timestamp-event",
+        start=test_case.partition_start,
+        end=test_case.partition_end,
+    )
+    event = replace(
+        event,
+        run_start=test_case.run_start,
+        run_end=test_case.run_end,
+        cursor_type="timestamp",
+        cursor_grain="hour",
+    )
+
+    values: tuple[object | None, ...] = MicrobatchEventCodec.values(event)
+
+    assert values[17:21] == test_case.expected_values
 
 
 @pytest.mark.parametrize(

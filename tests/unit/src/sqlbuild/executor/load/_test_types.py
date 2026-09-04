@@ -9,6 +9,7 @@ from typing import Any
 from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.python_nodes.types import SkipMode
+from sqlbuild.cursor_algebra.types import CursorScalar
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SourceColumnEntry
 
@@ -105,6 +106,22 @@ class LoaderCursorKindTestCase:
     description: str
     value: int | bool | datetime | date | str
     expected_cursor_kind: CursorKind | None
+
+
+@dataclass(frozen=True, kw_only=True)
+class LoaderCursorParseTestCase:
+    description: str
+    value: object
+    expected_value: CursorScalar
+    expected_rendered: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class LoaderCursorParseErrorTestCase:
+    description: str
+    value: object
+    expected_error_type: type[Exception]
+    expected_error_fragment: str
 
 
 @dataclass(frozen=True)

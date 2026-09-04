@@ -26,6 +26,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import IncrementalMode, PlanReason
 from sqlbuild.compiler.python_nodes.types import PythonIdentityStatus
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 
 
 def format_plan_json(
@@ -151,8 +152,8 @@ def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
         model["cursor_type"] = entry.cursor_type
     if entry.cursor_bounds is not None:
         model["cursor_bounds"] = {
-            "start": entry.cursor_bounds.start,
-            "end": entry.cursor_bounds.end,
+            "start": sentinel_to_token(sentinel=entry.cursor_bounds.start),
+            "end": sentinel_to_token(sentinel=entry.cursor_bounds.end),
         }
     future_safety: FutureCursorSafetyEvidence | None = (
         entry.microbatch_range.future_safety
@@ -207,8 +208,8 @@ def _serialize_cursor_details(*, details: CursorPlanDetails) -> dict[str, object
     resolved_bounds: dict[str, str] | None = None
     if details.resolved_bounds is not None:
         resolved_bounds = {
-            "start": details.resolved_bounds.start,
-            "end": details.resolved_bounds.end,
+            "start": sentinel_to_token(sentinel=details.resolved_bounds.start),
+            "end": sentinel_to_token(sentinel=details.resolved_bounds.end),
         }
     return {
         "requested_bounds": {

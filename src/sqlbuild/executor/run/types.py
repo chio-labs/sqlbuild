@@ -42,6 +42,14 @@ class WatermarkResolver(Protocol):
     ) -> tuple[object | None, object | None]: ...
 
 
+class RuntimeCursorWatermarkMode(StrEnum):
+    """Runtime watermark aggregation mode, including the legacy empty-input behavior."""
+
+    ALL = "all"
+    ANY = "any"
+    LEGACY = "legacy"
+
+
 class ExecutionPhase(StrEnum):
     PRE_HOOK = "pre_hook"
     STAGING = "staging"

@@ -18,6 +18,7 @@ from sqlbuild.compiler.planner.main.execution.future_cursor_warning import futur
 from sqlbuild.compiler.planner.main.execution.maximum_start_warning import maximum_start_cap_warning
 from sqlbuild.compiler.planner.models import CursorBounds, ModelPlanEntry
 from sqlbuild.compiler.planner.types import IncrementalStrategy, OnSchemaChange
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.auditing.models import AuditExecutionResult
@@ -271,8 +272,12 @@ def execute_incremental_entry(
         )
 
     effective_bounds: CursorBounds | None = preparation.runtime_cursor_bounds or entry.cursor_bounds
-    cursor_start: str | None = effective_bounds.start if effective_bounds else None
-    cursor_end: str | None = effective_bounds.end if effective_bounds else None
+    cursor_start: str | None = (
+        sentinel_to_token(sentinel=effective_bounds.start) if effective_bounds else None
+    )
+    cursor_end: str | None = (
+        sentinel_to_token(sentinel=effective_bounds.end) if effective_bounds else None
+    )
 
     try:
         with diagnostics_context(sqlbuild_phase="dml", sqlbuild_action_name="apply"):

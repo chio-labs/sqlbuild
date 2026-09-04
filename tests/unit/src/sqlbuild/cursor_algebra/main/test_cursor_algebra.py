@@ -1,6 +1,6 @@
 """Exhaustive invariant tests for typed cursor interval algebra."""
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
 
@@ -25,13 +25,14 @@ from sqlbuild.cursor_algebra.main.render import render
 from sqlbuild.cursor_algebra.main.sentinel_from_token import sentinel_from_token
 from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.cursor_algebra.main.split_into_batches import split_into_batches
-from sqlbuild.cursor_algebra.models import AlignedInterval, IntegerValue
+from sqlbuild.cursor_algebra.models import AlignedInterval, IntegerValue, TimestampValue
 from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar
 from tests.unit.src.sqlbuild.cursor_algebra.main._test_types import (
     CursorAlgebraMatrixCase,
     IntegerOrderingCase,
     IntervalOperationsTestCase,
     TemporalSplitTestCase,
+    TimestampTimezonePolicyTestCase,
 )
 from tests.unit.src.sqlbuild.cursor_algebra.main.helpers import build_temporal_values
 
@@ -43,6 +44,66 @@ POSITIONS: tuple[datetime, ...] = (
 
 
 TEMPORAL_VALUES: tuple[object, ...] = build_temporal_values(positions=POSITIONS)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        TimestampTimezonePolicyTestCase(
+            description="aware plus eight timestamp normalizes while preserving source text",
+            raw="2026-01-01T08:00:00+08:00",
+            directly_constructed_value=datetime(
+                2026,
+                1,
+                1,
+                8,
+                tzinfo=timezone(timedelta(hours=8)),
+            ),
+            expected_value=datetime(2026, 1, 1, tzinfo=UTC),
+            expected_passthrough="2026-01-01T08:00:00+08:00",
+            grain=CursorGrain.HOUR,
+            expected_exclusive_end="2026-01-01T01:00:00+00:00",
+        ),
+        TimestampTimezonePolicyTestCase(
+            description="aware datetime normalizes and renders as UTC",
+            raw=datetime(
+                2026,
+                1,
+                1,
+                8,
+                tzinfo=timezone(timedelta(hours=8)),
+            ),
+            directly_constructed_value=datetime(
+                2026,
+                1,
+                1,
+                8,
+                tzinfo=timezone(timedelta(hours=8)),
+            ),
+            expected_value=datetime(2026, 1, 1, tzinfo=UTC),
+            expected_passthrough="2026-01-01T00:00:00+00:00",
+            grain=CursorGrain.HOUR,
+            expected_exclusive_end="2026-01-01T01:00:00+00:00",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_aware_timestamp_when_parsing_and_deriving_then_uses_utc_policy(
+    test_case: TimestampTimezonePolicyTestCase,
+) -> None:
+    parsed: CursorScalar = parse(raw=test_case.raw, cursor_type=CursorType.TIMESTAMP)
+    derived_end: CursorScalar = exclusive_end_from_observed_max(value=parsed, grain=test_case.grain)
+
+    assert parsed == TimestampValue(value=test_case.expected_value)
+    assert (
+        compare(
+            left=parsed,
+            right=TimestampValue(value=test_case.directly_constructed_value),
+        )
+        == 0
+    )
+    assert render(value=parsed) == test_case.expected_passthrough
+    assert render(value=derived_end) == test_case.expected_exclusive_end
 
 
 @pytest.mark.parametrize(

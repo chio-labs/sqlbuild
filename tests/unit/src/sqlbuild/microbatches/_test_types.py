@@ -65,3 +65,21 @@ class UnknownRecordDecodingTestCase:
     description: str
     unknown_record_type: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class MicrobatchEventCursorEncodingTestCase:
+    description: str
+    run_start: str
+    run_end: str
+    partition_start: str
+    partition_end: str
+    expected_values: tuple[str, str, str, str]
+
+
+@dataclass(frozen=True, kw_only=True)
+class MicrobatchAwareOffsetIdentityTestCase:
+    description: str
+    partition_start: str
+    partition_end: str
+    expected_event_id: str

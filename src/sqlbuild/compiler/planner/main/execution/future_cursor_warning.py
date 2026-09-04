@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.planner.models import CursorBounds, FutureCursorSafetyEvidence
+from sqlbuild.cursor_algebra.main.render import render
 
 
 def future_cursor_cap_warning(bounds: CursorBounds | None) -> str | None:
@@ -13,6 +14,7 @@ def future_cursor_cap_warning(bounds: CursorBounds | None) -> str | None:
     evidence: FutureCursorSafetyEvidence = bounds.future_safety
     return (
         "FUTURE CURSOR CAPPED: discovered bounds "
-        f"['{evidence.discovered_start}', '{evidence.discovered_end}'), applied bounds "
-        f"['{evidence.applied_start}', '{evidence.applied_end}')."
+        f"['{render(value=evidence.discovered_start)}', "
+        f"'{render(value=evidence.discovered_end)}'), applied bounds "
+        f"['{render(value=evidence.applied_start)}', '{render(value=evidence.applied_end)}')."
     )

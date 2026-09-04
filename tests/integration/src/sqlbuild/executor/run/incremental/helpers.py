@@ -88,9 +88,9 @@ def build_incremental_plan_entry(
     qualified: str = f"{target_schema or ''}.{target_name}".lstrip(".")
     action: PlanAction = _STRATEGY_TO_ACTION[incremental_strategy]
     cursor_bounds: CursorBounds | None = {
-        True: None,
-        False: CursorBounds(start=cast(str, cursor_start), end=cast(str, cursor_end)),
-    }[cursor_start is None or cursor_end is None]
+        True: lambda: None,
+        False: lambda: CursorBounds(start=cast(str, cursor_start), end=cast(str, cursor_end)),
+    }[cursor_start is None or cursor_end is None]()
     input_relations: tuple[CursorInputRelation, ...] = tuple(
         CursorInputRelation(
             relation=relation,

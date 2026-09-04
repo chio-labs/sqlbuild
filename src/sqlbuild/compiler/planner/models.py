@@ -34,6 +34,8 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
     ChangeKind,
+    CursorGrain,
+    CursorWatermarkMode,
     GraphResourceKind,
     LocalNodePlanAction,
     LocalNodePlanReason,
@@ -54,6 +56,10 @@ from sqlbuild.compiler.planner.types import (
 from sqlbuild.compiler.source_freshness.models import (
     DirectSourceFreshnessPlanningResult,
 )
+from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
+from sqlbuild.cursor_algebra.main.parse import parse
+from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue
+from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.models import (
     FutureCursorsConfig,
@@ -126,44 +132,70 @@ class GraphIdentityNode:
     local_hash: str | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True, init=False)
 class CursorOverrides:
     """Typed cursor override values from CLI flags."""
 
-    start_ts: str | None = None
-    end_ts: str | None = None
-    start_int: str | None = None
-    end_int: str | None = None
+    start_ts: CursorScalar | None = None
+    end_ts: CursorScalar | None = None
+    start_int: CursorScalar | None = None
+    end_int: CursorScalar | None = None
 
-    def __post_init__(self) -> None:
-        field_name: str
-        value: str | None
-        for field_name, value in (
-            ("--start-cursor-ts", self.start_ts),
-            ("--end-cursor-ts", self.end_ts),
-        ):
-            if value is not None:
-                try:
-                    datetime.fromisoformat(value)
-                except (ValueError, TypeError) as error:
-                    raise PlannerInputError(
-                        f"{field_name} value '{value}' is not a valid ISO timestamp: {error}"
-                    ) from None
-        for field_name, value in (
-            ("--start-cursor-int", self.start_int),
-            ("--end-cursor-int", self.end_int),
-        ):
-            if value is not None:
-                try:
-                    decimal_value: Decimal = Decimal(value)
-                    if decimal_value != int(decimal_value):
-                        raise PlannerInputError(
-                            f"{field_name} value '{value}' is not a whole number"
-                        )
-                except InvalidOperation:
-                    raise PlannerInputError(
-                        f"{field_name} value '{value}' is not a valid integer"
-                    ) from None
+    def __init__(
+        self,
+        *,
+        start_ts: str | CursorScalar | None = None,
+        end_ts: str | CursorScalar | None = None,
+        start_int: str | CursorScalar | None = None,
+        end_int: str | CursorScalar | None = None,
+    ) -> None:
+        object.__setattr__(
+            self,
+            "start_ts",
+            self._parse_timestamp(field_name="--start-cursor-ts", value=start_ts),
+        )
+        object.__setattr__(
+            self, "end_ts", self._parse_timestamp(field_name="--end-cursor-ts", value=end_ts)
+        )
+        object.__setattr__(
+            self,
+            "start_int",
+            self._parse_integer(field_name="--start-cursor-int", value=start_int),
+        )
+        object.__setattr__(
+            self, "end_int", self._parse_integer(field_name="--end-cursor-int", value=end_int)
+        )
+
+    @staticmethod
+    def _parse_timestamp(
+        *, field_name: str, value: str | CursorScalar | None
+    ) -> CursorScalar | None:
+        if value is None or not isinstance(value, str):
+            return value
+        try:
+            datetime.fromisoformat(value)
+        except (ValueError, TypeError) as error:
+            raise PlannerInputError(
+                f"{field_name} value '{value}' is not a valid ISO timestamp: {error}"
+            ) from None
+        return parse(raw=value, cursor_type="timestamp")
+
+    @staticmethod
+    def _parse_integer(*, field_name: str, value: str | CursorScalar | None) -> CursorScalar | None:
+        if value is None or not isinstance(value, str):
+            return value
+        try:
+            decimal_value: Decimal = Decimal(value)
+            if decimal_value != int(decimal_value):
+                raise PlannerInputError(f"{field_name} value '{value}' is not a whole number")
+            parsed: CursorScalar = parse(raw=value, cursor_type="integer")
+            if isinstance(parsed, IntegerValue):
+                return parsed
+        except InvalidOperation:
+            raise PlannerInputError(
+                f"{field_name} value '{value}' is not a valid integer"
+            ) from None
+        raise PlannerInputError(f"{field_name} value '{value}' is not a valid integer")
 
 
 @dataclass(frozen=True)
@@ -194,25 +226,80 @@ class PathSelector:
     downstream: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True, init=False)
 class ModelCursorSnapshot:
     """Cursor MIN/MAX values gathered from warehouse for one incremental model."""
 
-    target_max: str | None
-    upstream_mins: tuple[str, ...]
-    upstream_maxes: tuple[str, ...]
-    physical_target_max: str | None = field(default=None, compare=False)
-    target_eligible_max: str | None = None
+    target_max: CursorScalar | None
+    upstream_mins: tuple[CursorScalar, ...]
+    upstream_maxes: tuple[CursorScalar, ...]
+    physical_target_max: CursorScalar | None = field(default=None, compare=False)
+    target_eligible_max: CursorScalar | None = None
     target_relation: str | None = field(default=None, compare=False)
     destination_cursor_column: str | None = field(default=None, compare=False)
     input_evidence: tuple[CursorInputEvidence, ...] = field(default=(), compare=False)
     expected_watermark_count: int = field(default=0, compare=False)
     unavailable_watermark_tags: tuple[str, ...] = ()
-    cursor_watermark_mode: str = "all"
-    upstream_terminal_starts: tuple[str, ...] = ()
-    upstream_terminal_ends: tuple[str, ...] = ()
-    upstream_end_inputs: tuple[tuple[str | None, str | None], ...] = ()
-    upstream_availability_ends: tuple[str, ...] = ()
+    cursor_watermark_mode: CursorWatermarkMode = CursorWatermarkMode.ALL
+    upstream_terminal_starts: tuple[CursorScalar, ...] = ()
+    upstream_terminal_ends: tuple[CursorScalar, ...] = ()
+    upstream_end_inputs: tuple[tuple[CursorScalar | None, CursorScalar | None], ...] = ()
+    upstream_availability_ends: tuple[CursorScalar, ...] = ()
+
+    def __init__(self, **values: Any) -> None:
+        defaults: dict[str, object] = {
+            "physical_target_max": None,
+            "target_eligible_max": None,
+            "target_relation": None,
+            "destination_cursor_column": None,
+            "input_evidence": (),
+            "expected_watermark_count": 0,
+            "unavailable_watermark_tags": (),
+            "cursor_watermark_mode": CursorWatermarkMode.ALL,
+            "upstream_terminal_starts": (),
+            "upstream_terminal_ends": (),
+            "upstream_end_inputs": (),
+            "upstream_availability_ends": (),
+        }
+        defaults.update(values)
+        field_name: str
+        for field_name in self.__dataclass_fields__:
+            object.__setattr__(self, field_name, defaults[field_name])
+        self.__post_init__()
+
+    def __post_init__(self) -> None:
+        for field_name in ("target_max", "physical_target_max", "target_eligible_max"):
+            object.__setattr__(
+                self, field_name, CursorBounds._parse_optional(raw=getattr(self, field_name))
+            )
+        for field_name in (
+            "upstream_mins",
+            "upstream_maxes",
+            "upstream_terminal_starts",
+            "upstream_terminal_ends",
+            "upstream_availability_ends",
+        ):
+            object.__setattr__(
+                self,
+                field_name,
+                tuple(
+                    CursorBounds._parse_inferred(raw=value) for value in getattr(self, field_name)
+                ),
+            )
+        object.__setattr__(
+            self,
+            "upstream_end_inputs",
+            tuple(
+                (
+                    CursorBounds._parse_optional(raw=physical),
+                    CursorBounds._parse_optional(raw=terminal),
+                )
+                for physical, terminal in self.upstream_end_inputs
+            ),
+        )
+        object.__setattr__(
+            self, "cursor_watermark_mode", CursorWatermarkMode(self.cursor_watermark_mode)
+        )
 
     @property
     def watermarks_available(self) -> bool:
@@ -221,59 +308,177 @@ class ModelCursorSnapshot:
         return not self.unavailable_watermark_tags
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True, init=False)
 class CursorBounds:
     """Effective cursor start and end values for one incremental model."""
 
-    start: str
-    end: str
+    start: Bound
+    end: Bound
     future_safety: FutureCursorSafetyEvidence | None = None
     maximum_start_safety: MaximumStartSafetyEvidence | None = None
 
+    def __init__(
+        self,
+        *,
+        start: Bound | str,
+        end: Bound | str,
+        future_safety: FutureCursorSafetyEvidence | None = None,
+        maximum_start_safety: MaximumStartSafetyEvidence | None = None,
+    ) -> None:
+        object.__setattr__(self, "start", CursorBounds._parse_bound(raw=start))
+        object.__setattr__(self, "end", CursorBounds._parse_bound(raw=end))
+        object.__setattr__(self, "future_safety", future_safety)
+        object.__setattr__(self, "maximum_start_safety", maximum_start_safety)
 
-@dataclass(frozen=True)
+    @staticmethod
+    def _parse_inferred(*, raw: object) -> CursorScalar:
+        if isinstance(raw, TimestampValue | DateValue | IntegerValue):
+            return raw
+        try:
+            return parse(raw=str(raw), cursor_type="integer")
+        except CursorAlgebraError:
+            return parse(raw=str(raw), cursor_type="timestamp")
+
+    @staticmethod
+    def _parse_optional(*, raw: object | None) -> CursorScalar | None:
+        return None if raw is None else CursorBounds._parse_inferred(raw=raw)
+
+    @staticmethod
+    def _parse_bound(*, raw: object) -> Bound:
+        if isinstance(raw, BoundSentinel):
+            return raw
+        if raw == BoundSentinel.START.value:
+            return BoundSentinel.START
+        if raw == BoundSentinel.END.value:
+            return BoundSentinel.END
+        return CursorBounds._parse_inferred(raw=raw)
+
+
+@dataclass(frozen=True, kw_only=True, init=False)
 class CursorInputEvidence:
     """Observed bounds for one physical cursor input."""
 
     relation: str
     cursor_column: str
-    minimum: str | None
-    maximum: str
+    minimum: CursorScalar | None
+    maximum: CursorScalar
+
+    def __init__(
+        self,
+        *,
+        relation: str,
+        cursor_column: str,
+        minimum: CursorScalar | str | None,
+        maximum: CursorScalar | str,
+    ) -> None:
+        object.__setattr__(self, "relation", relation)
+        object.__setattr__(self, "cursor_column", cursor_column)
+        object.__setattr__(self, "minimum", minimum)
+        object.__setattr__(self, "maximum", maximum)
+        self.__post_init__()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "minimum", CursorBounds._parse_optional(raw=self.minimum))
+        object.__setattr__(self, "maximum", CursorBounds._parse_inferred(raw=self.maximum))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True, init=False)
 class FutureCursorSafetyEvidence:
     """Structured evidence for one applied future-cursor cap."""
 
     action: FutureCursorAction
     max_distance: str
-    invocation_time: str
-    discovered_start: str
-    discovered_end: str
-    applied_start: str
-    applied_end: str
-    maximum_allowed_start: str
-    maximum_allowed_end: str
+    invocation_time: CursorScalar
+    discovered_start: CursorScalar
+    discovered_end: CursorScalar
+    applied_start: CursorScalar
+    applied_end: CursorScalar
+    maximum_allowed_start: CursorScalar
+    maximum_allowed_end: CursorScalar
     future_start_detected: bool
     future_end_detected: bool
     determining_relation: str | None
     determining_cursor_column: str | None
     inputs: tuple[CursorInputEvidence, ...] = ()
 
+    def __init__(self, **values: Any) -> None:
+        values.setdefault("inputs", ())
+        field_name: str
+        for field_name in self.__dataclass_fields__:
+            object.__setattr__(self, field_name, values[field_name])
+        self.__post_init__()
 
-@dataclass(frozen=True)
+    def __post_init__(self) -> None:
+        for field_name in (
+            "invocation_time",
+            "discovered_start",
+            "discovered_end",
+            "applied_start",
+            "applied_end",
+            "maximum_allowed_start",
+            "maximum_allowed_end",
+        ):
+            object.__setattr__(
+                self, field_name, CursorBounds._parse_inferred(raw=getattr(self, field_name))
+            )
+
+
+@dataclass(frozen=True, kw_only=True, init=False)
 class MaximumStartSafetyEvidence:
     """Structured evidence for an automatic-start eligibility decision."""
 
     action: FutureCursorAction
     max_ahead: str
-    invocation_time: str
-    physical_target_max: str
-    highest_eligible_target_max: str | None
-    effective_start: str
-    maximum_allowed_start: str
+    invocation_time: CursorScalar
+    physical_target_max: CursorScalar
+    highest_eligible_target_max: CursorScalar | None
+    effective_start: CursorScalar
+    maximum_allowed_start: CursorScalar
     target_relation: str
     cursor_column: str
+
+    def __init__(
+        self,
+        *,
+        action: FutureCursorAction,
+        max_ahead: str,
+        invocation_time: CursorScalar | str,
+        physical_target_max: CursorScalar | str,
+        highest_eligible_target_max: CursorScalar | str | None,
+        effective_start: CursorScalar | str,
+        maximum_allowed_start: CursorScalar | str,
+        target_relation: str,
+        cursor_column: str,
+    ) -> None:
+        for field_name, value in (
+            ("action", action),
+            ("max_ahead", max_ahead),
+            ("invocation_time", invocation_time),
+            ("physical_target_max", physical_target_max),
+            ("highest_eligible_target_max", highest_eligible_target_max),
+            ("effective_start", effective_start),
+            ("maximum_allowed_start", maximum_allowed_start),
+            ("target_relation", target_relation),
+            ("cursor_column", cursor_column),
+        ):
+            object.__setattr__(self, field_name, value)
+        self.__post_init__()
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "invocation_time",
+            "physical_target_max",
+            "effective_start",
+            "maximum_allowed_start",
+        ):
+            object.__setattr__(
+                self, field_name, CursorBounds._parse_inferred(raw=getattr(self, field_name))
+            )
+        object.__setattr__(
+            self,
+            "highest_eligible_target_max",
+            CursorBounds._parse_optional(raw=self.highest_eligible_target_max),
+        )
 
 
 @dataclass(frozen=True)
@@ -375,17 +580,52 @@ class Duration:
         return moment.replace(year=year, month=month, day=day)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True, init=False)
 class CursorInputRelation:
     """One cursor-bearing input relation for runtime range discovery."""
 
     relation: str
     cursor_column: str
-    cursor_grain: str | None = None
+    cursor_grain: CursorGrain | None = None
     is_model_backed: bool = False
     is_runtime_produced: bool = False
-    terminal_cursor_start: str | None = None
-    terminal_cursor_end: str | None = None
+    terminal_cursor_start: CursorScalar | None = None
+    terminal_cursor_end: CursorScalar | None = None
+
+    def __init__(
+        self,
+        *,
+        relation: str,
+        cursor_column: str,
+        cursor_grain: CursorGrain | str | None = None,
+        is_model_backed: bool = False,
+        is_runtime_produced: bool = False,
+        terminal_cursor_start: CursorScalar | str | None = None,
+        terminal_cursor_end: CursorScalar | str | None = None,
+    ) -> None:
+        object.__setattr__(self, "relation", relation)
+        object.__setattr__(self, "cursor_column", cursor_column)
+        object.__setattr__(self, "cursor_grain", cursor_grain)
+        object.__setattr__(self, "is_model_backed", is_model_backed)
+        object.__setattr__(self, "is_runtime_produced", is_runtime_produced)
+        object.__setattr__(self, "terminal_cursor_start", terminal_cursor_start)
+        object.__setattr__(self, "terminal_cursor_end", terminal_cursor_end)
+        self.__post_init__()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "cursor_grain",
+            CursorGrain(self.cursor_grain) if self.cursor_grain is not None else None,
+        )
+        object.__setattr__(
+            self,
+            "terminal_cursor_start",
+            CursorBounds._parse_optional(raw=self.terminal_cursor_start),
+        )
+        object.__setattr__(
+            self, "terminal_cursor_end", CursorBounds._parse_optional(raw=self.terminal_cursor_end)
+        )
 
     @property
     def is_runtime_owned(self) -> bool:

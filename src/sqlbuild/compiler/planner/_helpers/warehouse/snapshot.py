@@ -6,7 +6,7 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -38,12 +38,10 @@ from sqlbuild.compiler.planner._helpers.graph.loader_dag import (
     build_upstream_intermediate_source_map,
 )
 from sqlbuild.compiler.planner._helpers.output.cursor_type_check import classify_cursor_sql_type
-from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import inclusive_cursor_end
 from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
     effectively_full_refreshed_model_names,
 )
 from sqlbuild.compiler.planner._helpers.resolve.cursor import (
-    advance_discovered_cursor_end,
     normalize_cursor_snapshot_grain,
     resolve_effective_timestamp_grain,
 )
@@ -64,6 +62,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import (
     ContractPolicy,
+    CursorGrain,
     CursorType,
     CursorWatermarkMode,
     MaterializationType,
@@ -72,6 +71,14 @@ from sqlbuild.compiler.planner.types import (
 from sqlbuild.compiler.references.main._render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
+from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
+from sqlbuild.cursor_algebra.main.compare import compare
+from sqlbuild.cursor_algebra.main.exclusive_to_inclusive import exclusive_to_inclusive
+from sqlbuild.cursor_algebra.main.observed_partition import observed_partition
+from sqlbuild.cursor_algebra.main.parse import parse
+from sqlbuild.cursor_algebra.main.render import render
+from sqlbuild.cursor_algebra.models import DateValue
+from sqlbuild.cursor_algebra.types import CursorScalar
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.spec.contracts.models import SourceEntry, StartCursorsConfig
 
@@ -86,6 +93,7 @@ class _PhysicalCursorQuery:
     cursor_column: str
     min_tags: tuple[str, ...]
     max_tags: tuple[str, ...]
+    cursor_type: str = CursorType.TIMESTAMP
 
 
 @dataclass(frozen=True)
@@ -96,9 +104,9 @@ class _UpstreamCursorInfo:
     tag_max: str
     relation: str
     cursor_column: str
-    cursor_grain: str | None = None
-    terminal_cursor_start: str | None = None
-    terminal_cursor_end: str | None = None
+    cursor_grain: CursorGrain | None = None
+    terminal_cursor_start: CursorScalar | None = None
+    terminal_cursor_end: CursorScalar | None = None
 
 
 @dataclass(frozen=True)
@@ -115,7 +123,7 @@ class _CursorModelInfo:
     effective_cursor_grain: str | None = None
     start_cursor_config: StartCursorsConfig | None = None
     has_start_override: bool = False
-    cursor_watermark_mode: str = "all"
+    cursor_watermark_mode: CursorWatermarkMode = CursorWatermarkMode.ALL
     microbatch_strategy: str | None = None
 
 
@@ -600,7 +608,7 @@ def _gather_cursor_snapshots(
 
     queries: list[_PhysicalCursorQuery] = _build_cursor_queries(cursor_models)
     cursor_start: float = time.monotonic()
-    results: dict[str, str] = _execute_cursor_queries(
+    results: dict[str, CursorScalar] = _execute_cursor_queries(
         queries=queries,
         connection=connection,
         execute=execute,
@@ -701,6 +709,8 @@ def _collect_cursor_models(
             target_tag = f"{model.name}__target__max"
             target_relation = model.destination.qualified_name
 
+        cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
+        cursor_grain: str | None = _get_config_str(model=model, key="cursor_grain")
         upstreams: list[_UpstreamCursorInfo] = []
         input_name: str
         upstream_cursor_col: str
@@ -743,22 +753,33 @@ def _collect_cursor_models(
                     tag_max=f"{model.name}__{ref.ref_name}__max",
                     relation=upstream_relation,
                     cursor_column=upstream_cursor_col,
-                    cursor_grain=_cursor_input_grain(ref=ref, model_map=model_map),
+                    cursor_grain=(
+                        CursorGrain(input_grain)
+                        if (input_grain := _cursor_input_grain(ref=ref, model_map=model_map))
+                        is not None
+                        else None
+                    ),
                     terminal_cursor_start=(
-                        _get_config_str(model=model_map[ref.ref_name], key="cursor_start")
+                        _parse_optional_cursor(
+                            value=_get_config_str(
+                                model=model_map[ref.ref_name], key="cursor_start"
+                            ),
+                            cursor_type=cursor_type,
+                        )
                         if ref.ref_kind == SqlReferenceKind.REF and ref.ref_name in model_map
                         else None
                     ),
                     terminal_cursor_end=(
-                        _get_config_str(model=model_map[ref.ref_name], key="cursor_end")
+                        _parse_optional_cursor(
+                            value=_get_config_str(model=model_map[ref.ref_name], key="cursor_end"),
+                            cursor_type=cursor_type,
+                        )
                         if ref.ref_kind == SqlReferenceKind.REF and ref.ref_name in model_map
                         else None
                     ),
                 )
             )
 
-        cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
-        cursor_grain: str | None = _get_config_str(model=model, key="cursor_grain")
         cursor_models.append(
             _CursorModelInfo(
                 model_name=model.name,
@@ -781,8 +802,9 @@ def _collect_cursor_models(
                     model=model,
                     cursor_overrides=inputs.cursor_overrides,
                 ),
-                cursor_watermark_mode=_get_config_str(model=model, key="cursor_watermark_mode")
-                or "all",
+                cursor_watermark_mode=CursorWatermarkMode(
+                    _get_config_str(model=model, key="cursor_watermark_mode") or "all"
+                ),
                 microbatch_strategy=_get_config_str(model=model, key="microbatch_strategy"),
             )
         )
@@ -793,17 +815,25 @@ def _collect_cursor_models(
 def _build_cursor_queries(cursor_models: list[_CursorModelInfo]) -> list[_PhysicalCursorQuery]:
     """Group logical cursor requests by physical relation and column."""
 
-    grouped_tags: dict[tuple[str, str], tuple[list[str], list[str]]] = {}
+    grouped_tags: dict[tuple[str, str, str], tuple[list[str], list[str]]] = {}
     info: _CursorModelInfo
     for info in cursor_models:
         if info.target_tag is not None and info.target_relation is not None:
-            target_key: tuple[str, str] = (info.target_relation, info.cursor_column)
+            target_key: tuple[str, str, str] = (
+                info.target_relation,
+                info.cursor_column,
+                info.cursor_type or CursorType.TIMESTAMP,
+            )
             target_tags: tuple[list[str], list[str]] = grouped_tags.setdefault(target_key, ([], []))
             if info.target_tag not in target_tags[1]:
                 target_tags[1].append(info.target_tag)
         upstream: _UpstreamCursorInfo
         for upstream in info.upstreams:
-            upstream_key: tuple[str, str] = (upstream.relation, upstream.cursor_column)
+            upstream_key: tuple[str, str, str] = (
+                upstream.relation,
+                upstream.cursor_column,
+                info.cursor_type or CursorType.TIMESTAMP,
+            )
             upstream_tags: tuple[list[str], list[str]] = grouped_tags.setdefault(
                 upstream_key, ([], [])
             )
@@ -816,10 +846,11 @@ def _build_cursor_queries(cursor_models: list[_CursorModelInfo]) -> list[_Physic
         _PhysicalCursorQuery(
             relation=relation,
             cursor_column=cursor_column,
+            cursor_type=cursor_type,
             min_tags=tuple(tags[0]),
             max_tags=tuple(tags[1]),
         )
-        for (relation, cursor_column), tags in grouped_tags.items()
+        for (relation, cursor_column, cursor_type), tags in grouped_tags.items()
     ]
 
 
@@ -834,6 +865,12 @@ def _cursor_input_grain(
         if upstream_model is not None
         else None
     )
+
+
+def _parse_optional_cursor(*, value: str | None, cursor_type: str | None) -> CursorScalar | None:
+    if value is None:
+        return None
+    return parse(raw=value, cursor_type=cursor_type or CursorType.TIMESTAMP)
 
 
 def _has_start_override(*, model: CompiledModel, cursor_overrides: CursorOverrides | None) -> bool:
@@ -853,15 +890,15 @@ def _execute_cursor_queries(
     connection: Any,
     execute: AdapterExecute[Any, Any],
     on_progress: Callable[[str], None] | None,
-) -> dict[str, str]:
+) -> dict[str, CursorScalar]:
     """Execute standalone physical cursor queries and fan values out to logical tags."""
 
-    results: dict[str, str] = {}
+    results: dict[str, CursorScalar] = {}
     total: int = len(queries)
     query_index: int
     query: _PhysicalCursorQuery
     for query_index, query in enumerate(queries, start=1):
-        query_results: dict[str, str] = _execute_cursor_query(
+        query_results: dict[str, CursorScalar] = _execute_cursor_query(
             query=query,
             query_index=query_index,
             total=total,
@@ -882,7 +919,7 @@ def _execute_cursor_query(
     connection: Any,
     execute: AdapterExecute[Any, Any],
     on_progress: Callable[[str], None] | None,
-) -> dict[str, str]:
+) -> dict[str, CursorScalar]:
     """Execute one physical cursor query and fan out its returned values."""
 
     bounds: str = ",".join(("min",) if query.min_tags else ())
@@ -921,7 +958,7 @@ def _execute_cursor_query(
         on_progress(f"Inspected cursor bounds {identity} ({elapsed:.2f}s)")
     if not rows:
         return {}
-    output: dict[str, str] = {}
+    output: dict[str, CursorScalar] = {}
     row: Any = rows[0]
     value_index: int = 0
     if query.min_tags:
@@ -929,35 +966,44 @@ def _execute_cursor_query(
         if min_value is not None:
             min_tag: str
             for min_tag in query.min_tags:
-                output[min_tag] = str(min_value)
+                output[min_tag] = _parse_warehouse_cursor(value=min_value)
         value_index += 1
     if query.max_tags:
         max_value: Any = row[value_index]
         if max_value is not None:
             max_tag: str
             for max_tag in query.max_tags:
-                output[max_tag] = str(max_value)
+                output[max_tag] = _parse_warehouse_cursor(value=max_value)
     return output
+
+
+def _parse_warehouse_cursor(*, value: object) -> CursorScalar:
+    """Parse a physical cursor value independently of a possibly incorrect declaration."""
+
+    try:
+        return parse(raw=value, cursor_type=CursorType.INTEGER)
+    except CursorAlgebraError:
+        return parse(raw=value, cursor_type=CursorType.TIMESTAMP)
 
 
 def _gather_eligible_target_maxes(
     *,
     cursor_models: list[_CursorModelInfo],
-    results: dict[str, str],
+    results: dict[str, CursorScalar],
     adapter: BaseAdapter,
     connection: Any,
     execute: AdapterExecute[Any, Any],
     invocation_time: datetime | None,
-) -> dict[str, str]:
+) -> dict[str, CursorScalar]:
     """Query highest eligible target cursors only when physical MAX is beyond policy."""
 
     if invocation_time is None:
         return results
-    eligible_results: dict[str, str] = dict(results)
+    eligible_results: dict[str, CursorScalar] = dict(results)
     info: _CursorModelInfo
     for info in cursor_models:
         config: StartCursorsConfig | None = info.start_cursor_config
-        target_max: str | None = results.get(info.target_tag) if info.target_tag else None
+        target_max: CursorScalar | None = results.get(info.target_tag) if info.target_tag else None
         if (
             config is None
             or config.max_ahead is None
@@ -967,23 +1013,22 @@ def _gather_eligible_target_maxes(
             or info.has_start_override
         ):
             continue
-        horizon: str = maximum_allowed_start(
-            discovered_value=target_max,
-            cursor_grain=info.effective_cursor_grain,
-            invocation_time=invocation_time,
-            max_ahead=config.max_ahead,
+        horizon: CursorScalar = parse(
+            raw=maximum_allowed_start(
+                discovered_value=render(value=target_max),
+                cursor_grain=info.effective_cursor_grain,
+                invocation_time=invocation_time,
+                max_ahead=config.max_ahead,
+            ),
+            cursor_type=CursorType.TIMESTAMP,
         )
-        if _cursor_comparison_key(target_max) <= _cursor_comparison_key(horizon):
+        if compare(left=target_max, right=horizon) <= 0:
             continue
-        try:
-            date.fromisoformat(target_max)
-            horizon_is_date = True
-        except ValueError:
-            horizon_is_date = False
+        horizon_is_date: bool = isinstance(horizon, DateValue)
         eligible_sql: str = adapter.render_max_cursor_at_or_before(
             relation=info.target_relation,
             cursor_column=info.cursor_column,
-            maximum_allowed=horizon,
+            maximum_allowed=render(value=horizon),
             cursor_type=info.cursor_type,
             is_date=horizon_is_date,
         )
@@ -997,7 +1042,7 @@ def _gather_eligible_target_maxes(
             ) from error
         if rows and rows[0][0] is not None:
             eligible_results[f"{info.model_name}__target__eligible_max"] = _normalize_cursor_grain(
-                value=str(rows[0][0]),
+                value=parse(raw=rows[0][0], cursor_type=info.cursor_type or CursorType.TIMESTAMP),
                 cursor_type=info.cursor_type,
                 cursor_grain=info.effective_cursor_grain,
             )
@@ -1005,8 +1050,8 @@ def _gather_eligible_target_maxes(
 
 
 def _normalize_cursor_grain(
-    *, value: str, cursor_type: str | None, cursor_grain: str | None
-) -> str:
+    *, value: CursorScalar, cursor_type: str | None, cursor_grain: str | None
+) -> CursorScalar:
     snapshot: ModelCursorSnapshot = normalize_cursor_snapshot_grain(
         cursor_snapshot=ModelCursorSnapshot(
             target_max=None,
@@ -1020,43 +1065,42 @@ def _normalize_cursor_grain(
     return snapshot.target_eligible_max or value
 
 
-def _cursor_comparison_key(value: str) -> datetime:
-    try:
-        return datetime.combine(date.fromisoformat(value), datetime.min.time())
-    except ValueError:
-        parsed: datetime = datetime.fromisoformat(value)
-        return parsed.astimezone(UTC).replace(tzinfo=None) if parsed.tzinfo is not None else parsed
-
-
 def _assemble_cursor_snapshots(
     *,
     cursor_models: list[_CursorModelInfo],
-    results: dict[str, str],
+    results: dict[str, CursorScalar],
 ) -> dict[str, ModelCursorSnapshot]:
     """Fan batch query results back into per-model cursor snapshots."""
 
     snapshots: dict[str, ModelCursorSnapshot] = {}
     info: _CursorModelInfo
     for info in cursor_models:
-        target_max: str | None = results.get(info.target_tag) if info.target_tag else None
+        target_max: CursorScalar | None = results.get(info.target_tag) if info.target_tag else None
 
-        upstream_mins: list[str] = []
-        upstream_maxes: list[str] = []
+        upstream_mins: list[CursorScalar] = []
+        upstream_maxes: list[CursorScalar] = []
         input_evidence: list[CursorInputEvidence] = []
         unavailable_watermark_tags: list[str] = []
-        terminal_starts: list[str] = []
-        terminal_ends: list[str] = []
-        end_inputs: list[tuple[str | None, str | None]] = []
-        availability_ends: list[str] = []
+        terminal_starts: list[CursorScalar] = []
+        terminal_ends: list[CursorScalar] = []
+        end_inputs: list[tuple[CursorScalar | None, CursorScalar | None]] = []
+        availability_ends: list[CursorScalar] = []
         upstream: _UpstreamCursorInfo
         for upstream in info.upstreams:
-            min_val: str | None = results.get(upstream.tag_min)
-            max_val: str | None = results.get(upstream.tag_max)
-            effective_max: str | None = (
-                inclusive_cursor_end(
-                    end=upstream.terminal_cursor_end,
-                    cursor_type=info.cursor_type,
-                    cursor_grain=upstream.cursor_grain or info.effective_cursor_grain,
+            min_val: CursorScalar | None = results.get(upstream.tag_min)
+            max_val: CursorScalar | None = results.get(upstream.tag_max)
+            effective_max: CursorScalar | None = (
+                exclusive_to_inclusive(
+                    value=upstream.terminal_cursor_end,
+                    grain=(
+                        None
+                        if info.cursor_type == CursorType.INTEGER
+                        else CursorGrain(
+                            upstream.cursor_grain
+                            or info.effective_cursor_grain
+                            or CursorGrain.SECOND
+                        )
+                    ),
                 )
                 if upstream.terminal_cursor_end is not None
                 else max_val
@@ -1089,13 +1133,20 @@ def _assemble_cursor_snapshots(
                 terminal_ends.append(upstream.terminal_cursor_end)
             end_inputs.append((max_val, upstream.terminal_cursor_end))
             if info.microbatch_strategy == MicrobatchStrategy.WATERMARK:
-                availability_end: str | None = upstream.terminal_cursor_end
+                availability_end: CursorScalar | None = upstream.terminal_cursor_end
                 if availability_end is None and max_val is not None:
-                    availability_end = advance_discovered_cursor_end(
+                    availability_end = observed_partition(
                         value=max_val,
-                        cursor_type=info.cursor_type,
-                        cursor_grain=upstream.cursor_grain or info.effective_cursor_grain,
-                    )
+                        grain=(
+                            None
+                            if info.cursor_type == CursorType.INTEGER
+                            else CursorGrain(
+                                upstream.cursor_grain
+                                or info.effective_cursor_grain
+                                or CursorGrain.SECOND
+                            )
+                        ),
+                    ).end
                 if availability_end is not None:
                     availability_ends.append(availability_end)
 

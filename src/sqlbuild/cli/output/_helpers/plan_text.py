@@ -43,6 +43,7 @@ from sqlbuild.compiler.planner.types import (
     WarningSeverity,
 )
 from sqlbuild.compiler.python_nodes.types import PythonIdentityStatus, PythonRunPhase
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.aligned_name_value import format_aligned_name_value
 from sqlbuild.presentation.main.append_overflow_line import append_overflow_line
@@ -1026,12 +1027,12 @@ def _format_cursor_range(*, bounds: CursorBounds, entry: ModelPlanEntry) -> str:
     """Render a cursor range with an inclusive end bound."""
 
     start: str = cursor_bound_display(
-        value=bounds.start,
+        value=sentinel_to_token(sentinel=bounds.start),
         cursor_type=entry.cursor_type,
         cursor_grain=entry.cursor_grain,
     )
     inclusive_end: str = inclusive_cursor_end(
-        end=bounds.end,
+        end=sentinel_to_token(sentinel=bounds.end),
         cursor_type=entry.cursor_type,
         cursor_grain=entry.cursor_grain,
     )

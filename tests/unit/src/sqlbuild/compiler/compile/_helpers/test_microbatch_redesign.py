@@ -1,5 +1,7 @@
 """Behavior-focused coverage for the explicit microbatch cursor contract."""
 
+from datetime import date, datetime
+
 import pytest
 
 from sqlbuild.compiler.compile._helpers.config.model_validation import (
@@ -13,6 +15,7 @@ from sqlbuild.compiler.planner._helpers.resolve.cursor import (
 )
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import _watermark_type_is_compatible
 from sqlbuild.compiler.planner.models import CursorBounds, CursorInputRelation, ModelCursorSnapshot
+from sqlbuild.cursor_algebra.models import DateValue, TimestampValue
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     resolve_effective_timestamp_grain as resolve_runtime_effective_timestamp_grain,
 )
@@ -367,7 +370,8 @@ def test_given_sufficient_cap_from_end_limit_when_validating_then_config_is_acce
     "test_case",
     (
         MicrobatchRedesignBehaviorTestCase(
-            description="any uses furthest watermark", expected_outcome="2026-07-21"
+            description="any uses furthest watermark",
+            expected_outcome=DateValue(value=date(2026, 7, 21)),
         ),
     ),
     ids=lambda case: case.description,
@@ -400,7 +404,8 @@ def test_given_any_watermarks_when_computing_bounds_then_furthest_usable_input_w
     "test_case",
     (
         MicrobatchRedesignBehaviorTestCase(
-            description="empty terminal domain", expected_outcome="2025-12-01"
+            description="empty terminal domain",
+            expected_outcome=DateValue(value=date(2025, 12, 1)),
         ),
     ),
     ids=lambda case: case.description,
@@ -427,7 +432,7 @@ def test_given_empty_terminal_model_when_computing_bounds_then_cursor_end_is_ava
     )
 
     assert bounds is not None
-    assert bounds.start == "2025-01-01T00:00:00"
+    assert bounds.start == TimestampValue(value=datetime(2025, 1, 1))
     assert bounds.end == test_case.expected_outcome
 
 
@@ -435,7 +440,8 @@ def test_given_empty_terminal_model_when_computing_bounds_then_cursor_end_is_ava
     "test_case",
     (
         MicrobatchRedesignBehaviorTestCase(
-            description="all terminal end replaces physical maximum", expected_outcome="2025-12-01"
+            description="all terminal end replaces physical maximum",
+            expected_outcome=DateValue(value=date(2025, 12, 1)),
         ),
     ),
     ids=lambda case: case.description,
@@ -472,7 +478,8 @@ def test_given_nonempty_terminal_and_live_inputs_when_mode_all_then_terminal_end
     "test_case",
     (
         MicrobatchRedesignBehaviorTestCase(
-            description="any live end wins", expected_outcome="2026-07-03"
+            description="any live end wins",
+            expected_outcome=DateValue(value=date(2026, 7, 3)),
         ),
     ),
     ids=lambda case: case.description,
@@ -510,7 +517,7 @@ def test_given_nonempty_terminal_and_live_inputs_when_mode_any_then_live_end_win
     (
         MicrobatchRedesignBehaviorTestCase(
             description="all mode uses earliest exclusive input availability",
-            expected_outcome="2026-04-05T00:00:00",
+            expected_outcome=TimestampValue(value=datetime(2026, 4, 5)),
         ),
     ),
     ids=lambda case: case.description,

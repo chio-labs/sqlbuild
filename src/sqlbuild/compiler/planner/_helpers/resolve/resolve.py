@@ -36,7 +36,6 @@ from sqlbuild.compiler.planner._helpers.resolve.refs import (
 from sqlbuild.compiler.planner._helpers.resolve.sources import (
     resolve_source_references,
 )
-from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.execution.future_cursor_safety import apply_future_cursor_safety
 from sqlbuild.compiler.planner.models import (
@@ -53,6 +52,8 @@ from sqlbuild.compiler.references.main.assert_no_unresolved_sql_markers import (
     assert_no_unresolved_sql_markers,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
+from sqlbuild.cursor_algebra.types import BoundSentinel
 from sqlbuild.spec.contracts.models import FutureCursorsConfig, SourceEntry, StartCursorsConfig
 
 
@@ -146,11 +147,11 @@ def resolve_model_sql(
         query_sql, _ = resolve_cursor_intrinsics(
             sql=query_sql,
             start_sql=adapter.render_cursor_bound_literal(
-                value=cursor_bounds.start,
+                value=sentinel_to_token(sentinel=cursor_bounds.start),
                 cursor_type=cursor_type,
             ),
             end_sql=adapter.render_cursor_bound_literal(
-                value=cursor_bounds.end,
+                value=sentinel_to_token(sentinel=cursor_bounds.end),
                 cursor_type=cursor_type,
             ),
         )
@@ -240,7 +241,7 @@ def _compute_model_cursor_bounds(
     invocation_time: datetime | None = context.invocation_time
     is_microbatch: bool = incremental_mode == IncrementalMode.MICROBATCH
     if is_microbatch:
-        return CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL)
+        return CursorBounds(start=BoundSentinel.START, end=BoundSentinel.END)
 
     bounded_override: CursorBounds | None = resolve_bounded_cursor_override(
         start_cursor_override=start_cursor_override,
@@ -274,7 +275,7 @@ def _compute_model_cursor_bounds(
         return None
 
     if runtime_owned:
-        return CursorBounds(start=MICROBATCH_START_SENTINEL, end=MICROBATCH_END_SENTINEL)
+        return CursorBounds(start=BoundSentinel.START, end=BoundSentinel.END)
     if cursor_snapshot is None:
         return None
 
