@@ -1,5 +1,8 @@
 """CLI execution output constants."""
 
+from sqlbuild.executor.clone.types import CloneAction
+from sqlbuild.spec.contracts.types import FutureCursorAction, MicrobatchLimitAction
+
 INTEGRATION_RESULT_PATH_ENV: str = "SQLBUILD_INTEGRATION_RESULT_PATH"
 INTEGRATION_RESULT_SCHEMA_VERSION: int = 1
 INTEGRATION_RESULT_RECORD_KIND: str = "integration_result"
@@ -55,17 +58,7 @@ INTEGRATION_CHECK_STATUSES: frozenset[str] = frozenset({"error", "fail", "pass",
 INTEGRATION_CHECK_SEVERITIES: frozenset[str] = frozenset({"error", "warn"})
 INTEGRATION_CHECK_ATTACHMENT_KINDS: frozenset[str] = frozenset({"end", "model", "source"})
 INTEGRATION_CHECK_RUN_SCOPE_PHASES: frozenset[str] = frozenset({"delta_and_final", "final"})
-INTEGRATION_CLONE_ACTIONS: frozenset[str] = frozenset(
-    {
-        "cloned",
-        "copied",
-        "failed",
-        "recreated_function",
-        "recreated_view",
-        "skipped_missing_dependency",
-        "warning_missing_source",
-    }
-)
+INTEGRATION_CLONE_ACTIONS: frozenset[str] = frozenset(action.value for action in CloneAction)
 INTEGRATION_SKIP_MODES: frozenset[str] = frozenset({"hard", "soft"})
 INTEGRATION_FUTURE_CURSOR_KEYS: frozenset[str] = frozenset(
     {
@@ -101,7 +94,9 @@ INTEGRATION_MAXIMUM_START_KEYS: frozenset[str] = frozenset(
         "relation",
     }
 )
-INTEGRATION_MAXIMUM_START_ACTIONS: frozenset[str] = frozenset({"cap", "error"})
+INTEGRATION_MAXIMUM_START_ACTIONS: frozenset[str] = frozenset(
+    action.value for action in FutureCursorAction
+)
 INTEGRATION_MAXIMUM_START_INPUT_KEYS: frozenset[str] = frozenset({"relation", "cursor_column"})
 INTEGRATION_MAXIMUM_START_REQUIRED_KEYS: frozenset[str] = frozenset(
     {
@@ -121,17 +116,13 @@ INTEGRATION_MICROBATCH_KEYS: frozenset[str] = frozenset(
         "batch_concurrency",
         "batch_count",
         "batch_size",
-        "causal_history_status",
-        "causal_replay_interval_count",
         "concurrent_enabled",
         "contiguous_frontier",
-        "consumer_frontier_event_count",
         "count",
         "global_concurrency",
         "known_gap_count",
         "limit",
         "physical_generation_id",
-        "producer_completion_event_count",
         "recovery_batch_count",
         "replay_requirement_id",
         "replay_requirement_state",
@@ -149,13 +140,10 @@ INTEGRATION_MICROBATCH_COUNT_KEYS: frozenset[str] = frozenset(
     {
         "batch_concurrency",
         "batch_count",
-        "causal_replay_interval_count",
         "count",
-        "consumer_frontier_event_count",
         "global_concurrency",
         "known_gap_count",
         "limit",
-        "producer_completion_event_count",
         "recovery_batch_count",
         "synthetic_completion_count",
         "unaccounted_interval_count",
@@ -165,7 +153,9 @@ INTEGRATION_MICROBATCH_COUNT_KEYS: frozenset[str] = frozenset(
 INTEGRATION_MICROBATCH_RUN_TYPES: frozenset[str] = frozenset(
     {"backfill", "normal", "replay_on_change"}
 )
-INTEGRATION_MICROBATCH_LIMIT_ACTIONS: frozenset[str] = frozenset({"error", "warn"})
+INTEGRATION_MICROBATCH_LIMIT_ACTIONS: frozenset[str] = frozenset(
+    action.value for action in MicrobatchLimitAction
+)
 INTEGRATION_MICROBATCH_PARTITION_POLICIES: frozenset[str] = frozenset(
     {"recover_all", "recover_empty", "synthesize"}
 )

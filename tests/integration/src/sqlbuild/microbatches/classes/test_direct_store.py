@@ -9,12 +9,16 @@ import pytest
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.microbatches.classes.direct_store import DirectMicrobatchEventStore
-from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchWriteResult
+from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope, MicrobatchWriteResult
 from tests.integration.src.sqlbuild.microbatches.classes._test_types import (
     DirectStorePublicationTestCase,
     DirectStoreSuccessiveWriteTestCase,
+    RetiredDirectStoreRecordTestCase,
 )
-from tests.integration.src.sqlbuild.microbatches.classes.helpers import build_events
+from tests.integration.src.sqlbuild.microbatches.classes.helpers import (
+    build_events,
+    insert_raw_event_record_type,
+)
 
 
 class _RecordingDuckDbAdapter(DuckDbAdapter):
@@ -24,6 +28,49 @@ class _RecordingDuckDbAdapter(DuckDbAdapter):
     def _execute(self, *, connection: Any, sql: str) -> Any:
         self.statement_recorder.record(sql)
         return super()._execute(connection=connection, sql=sql)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        RetiredDirectStoreRecordTestCase(
+            description="producer completion row",
+            retired_record_type="producer_completion",
+            expected_event_count=1,
+        ),
+        RetiredDirectStoreRecordTestCase(
+            description="consumer frontier row",
+            retired_record_type="consumer_frontier",
+            expected_event_count=1,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_retired_rows_when_reading_direct_history_then_only_active_events_are_returned(
+    test_case: RetiredDirectStoreRecordTestCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    store: DirectMicrobatchEventStore = DirectMicrobatchEventStore(
+        adapter=adapter, connection=connection
+    )
+    try:
+        active: MicrobatchEvent = build_events(count=1)[0]
+        store.write(active)
+        retired: MicrobatchEvent = build_events(count=1, start_at=1)[0]
+        insert_raw_event_record_type(
+            connection=connection,
+            event=retired,
+            record_type=test_case.retired_record_type,
+        )
+
+        scope: MicrobatchScope = active.scope
+        history: tuple[MicrobatchEvent, ...] = store.read_scope_history(scope)
+
+        assert len(history) == test_case.expected_event_count
+        assert tuple(event.event_id for event in history) == (active.event_id,)
+    finally:
+        adapter.close(connection)
 
 
 @pytest.mark.parametrize(

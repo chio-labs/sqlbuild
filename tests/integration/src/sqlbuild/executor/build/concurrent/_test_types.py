@@ -51,4 +51,22 @@ class MicrobatchSchedulerTestCase:
     expected_max_active_models: int
     expected_row_count: int
     expected_completion_count: int
+    expected_synthetic_completion_count: int
     expected_unattributed_batches: int
+
+
+@dataclass(frozen=True)
+class StatelessSequentialMicrobatchTestCase:
+    """Expected behavior across repeated stateless sequential builds."""
+
+    description: str
+    model_limit_sql: str
+    initial_source_sql: str
+    incremental_source_sql: str
+    expected_initial_batch_count: int
+    expected_repeated_batch_count: int
+    expected_incremental_batch_count: int
+    expected_initial_rows: tuple[tuple[object, ...], ...]
+    expected_repeated_rows: tuple[tuple[object, ...], ...]
+    expected_incremental_rows: tuple[tuple[object, ...], ...]
+    expected_state_statement_count: int = 0

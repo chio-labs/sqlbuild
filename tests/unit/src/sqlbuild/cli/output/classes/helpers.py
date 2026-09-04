@@ -1,5 +1,11 @@
 """Builders for terminal integration-result tests."""
 
+from collections.abc import Mapping
+from typing import cast
+
+from sqlbuild.cli.output.models import IntegrationAssetResult
+from sqlbuild.runtime.observability.types import JSONValue
+
 
 def build_valid_integration_payload() -> dict[str, object]:
     """Return one valid canonical asset integration envelope mapping."""
@@ -30,3 +36,32 @@ def build_valid_integration_payload() -> dict[str, object]:
         "asset": {"kind": "model", "name": "orders", "status": "success"},
         "checks": [],
     }
+
+
+def build_maximum_start_safety(action: str) -> Mapping[str, JSONValue]:
+    """Return valid maximum-start metadata for one canonical action."""
+
+    return cast(
+        dict[str, JSONValue],
+        {
+            "action": action,
+            "max_ahead": "0d",
+            "invocation_time": "2026-09-02T12:00:00+00:00",
+            "physical_target_max": "2026-09-03",
+            "highest_eligible_target_max": "2026-09-02",
+            "effective_start": "2026-09-02",
+            "maximum_allowed_start": "2026-09-02",
+            "input": {"relation": "main.orders", "cursor_column": "order_date"},
+        },
+    )
+
+
+def build_integration_asset_with_maximum_start(action: str) -> IntegrationAssetResult:
+    """Construct an asset carrying canonical maximum-start action metadata."""
+
+    return IntegrationAssetResult(
+        kind="model",
+        name="orders",
+        status="success",
+        maximum_start_safety=build_maximum_start_safety(action),
+    )

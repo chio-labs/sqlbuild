@@ -75,7 +75,6 @@ class CursorPlanDetails:
     declared_batch_size: str | None
     effective_batch_size: str | None
     planned_batch_count: int | None
-    causal_resolution: str | None = None
 
 
 @dataclass(frozen=True)
@@ -259,6 +258,7 @@ class IntegrationResultEnvelope:
     error_type: str | None = None
     skip_code: str | None = None
     skip_mode: str | None = None
+    projection_degraded: bool = False
     asset: IntegrationAssetResult | None = None
     checks: tuple[IntegrationCheckResult, ...] = ()
 
@@ -348,6 +348,10 @@ class IntegrationResultEnvelope:
             ("skip_mode", self.skip_mode),
         ):
             validate_optional_identifier(value=value, field_name=field_name)
+        if type(self.projection_degraded) is not bool:
+            raise ObservabilityValidationError(
+                "integration result projection_degraded must be boolean"
+            )
         self._validate_result_identity()
         self._validate_terminal_facts()
 

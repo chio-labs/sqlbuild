@@ -52,9 +52,6 @@ from sqlbuild.compiler.planner._helpers.resolve.lineage import resolve_lineage_r
 from sqlbuild.compiler.planner._helpers.resolve.maximum_start import maximum_allowed_start
 from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.execution.microbatch_limit import (
-    _resolve_microbatch_limit_config,
-)
 from sqlbuild.compiler.planner.models import (
     CursorInputEvidence,
     CursorOverrides,
@@ -77,7 +74,6 @@ from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.spec.contracts.models import SourceEntry, StartCursorsConfig
-from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
 
@@ -103,7 +99,6 @@ class _UpstreamCursorInfo:
     cursor_grain: str | None = None
     terminal_cursor_start: str | None = None
     terminal_cursor_end: str | None = None
-    producer_microbatch_limit_action: MicrobatchLimitAction | None = None
 
 
 @dataclass(frozen=True)
@@ -759,13 +754,6 @@ def _collect_cursor_models(
                         if ref.ref_kind == SqlReferenceKind.REF and ref.ref_name in model_map
                         else None
                     ),
-                    producer_microbatch_limit_action=(
-                        _resolve_microbatch_limit_config(
-                            values=model_map[ref.ref_name].config.values
-                        )[1]
-                        if ref.ref_kind == SqlReferenceKind.REF and ref.ref_name in model_map
-                        else None
-                    ),
                 )
             )
 
@@ -1060,32 +1048,23 @@ def _assemble_cursor_snapshots(
         terminal_ends: list[str] = []
         end_inputs: list[tuple[str | None, str | None]] = []
         availability_ends: list[str] = []
-        availability_ranges: list[tuple[str | None, str]] = []
         upstream: _UpstreamCursorInfo
         for upstream in info.upstreams:
             min_val: str | None = results.get(upstream.tag_min)
             max_val: str | None = results.get(upstream.tag_max)
-            producer_is_capped: bool = upstream.producer_microbatch_limit_action in {
-                MicrobatchLimitAction.CAP_FROM_END,
-                MicrobatchLimitAction.CAP_FROM_START,
-            }
-            terminal_start: str | None = (
-                None if producer_is_capped else upstream.terminal_cursor_start
-            )
-            terminal_end: str | None = None if producer_is_capped else upstream.terminal_cursor_end
             effective_max: str | None = (
                 inclusive_cursor_end(
-                    end=terminal_end,
+                    end=upstream.terminal_cursor_end,
                     cursor_type=info.cursor_type,
                     cursor_grain=upstream.cursor_grain or info.effective_cursor_grain,
                 )
-                if terminal_end is not None
+                if upstream.terminal_cursor_end is not None
                 else max_val
             )
             if min_val is not None:
                 upstream_mins.append(min_val)
-            elif terminal_start is not None:
-                upstream_mins.append(terminal_start)
+            elif upstream.terminal_cursor_start is not None:
+                upstream_mins.append(upstream.terminal_cursor_start)
             elif target_max is None and info.cursor_watermark_mode == CursorWatermarkMode.ALL:
                 unavailable_watermark_tags.append(upstream.tag_min)
             if effective_max is not None:
@@ -1095,19 +1074,22 @@ def _assemble_cursor_snapshots(
                     CursorInputEvidence(
                         relation=upstream.relation,
                         cursor_column=upstream.cursor_column,
-                        minimum=min_val or terminal_start,
+                        minimum=min_val or upstream.terminal_cursor_start,
                         maximum=effective_max,
                     )
                 )
-            elif terminal_end is None and info.cursor_watermark_mode == CursorWatermarkMode.ALL:
+            elif (
+                upstream.terminal_cursor_end is None
+                and info.cursor_watermark_mode == CursorWatermarkMode.ALL
+            ):
                 unavailable_watermark_tags.append(upstream.tag_max)
-            if terminal_start is not None:
-                terminal_starts.append(terminal_start)
-            if terminal_end is not None:
-                terminal_ends.append(terminal_end)
-            end_inputs.append((max_val, terminal_end))
+            if upstream.terminal_cursor_start is not None:
+                terminal_starts.append(upstream.terminal_cursor_start)
+            if upstream.terminal_cursor_end is not None:
+                terminal_ends.append(upstream.terminal_cursor_end)
+            end_inputs.append((max_val, upstream.terminal_cursor_end))
             if info.microbatch_strategy == MicrobatchStrategy.WATERMARK:
-                availability_end: str | None = terminal_end
+                availability_end: str | None = upstream.terminal_cursor_end
                 if availability_end is None and max_val is not None:
                     availability_end = advance_discovered_cursor_end(
                         value=max_val,
@@ -1116,15 +1098,6 @@ def _assemble_cursor_snapshots(
                     )
                 if availability_end is not None:
                     availability_ends.append(availability_end)
-                    availability_ranges.append(
-                        (
-                            min_val
-                            if upstream.producer_microbatch_limit_action
-                            == MicrobatchLimitAction.CAP_FROM_END
-                            else None,
-                            availability_end,
-                        )
-                    )
 
         snapshots[info.model_name] = ModelCursorSnapshot(
             target_max=target_max,
@@ -1142,7 +1115,6 @@ def _assemble_cursor_snapshots(
             upstream_terminal_ends=tuple(terminal_ends),
             upstream_end_inputs=tuple(end_inputs) if terminal_ends else (),
             upstream_availability_ends=tuple(availability_ends),
-            upstream_availability_ranges=tuple(availability_ranges),
         )
 
     return snapshots

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date, datetime
 
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.planner.models import CursorBounds, ModelCursorSnapshot
@@ -22,6 +23,17 @@ class CursorBoundsTestCase:
     cursor_type: str | None = None
     cursor_start: str | None = None
     cursor_grain: str | None = None
+
+
+@dataclass(frozen=True)
+class DiscoveredCursorPartitionTestCase:
+    """Expected canonical partition for one observed physical cursor value."""
+
+    description: str
+    value: str | date | datetime
+    cursor_grain: str | None
+    expected_start: str | date | datetime
+    expected_end: str | date | datetime
 
 
 @dataclass(frozen=True)

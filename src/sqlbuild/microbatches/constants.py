@@ -76,3 +76,7 @@ MICROBATCH_DIRECT_INDEXES: dict[str, tuple[str, ...]] = {
         "created_at",
     ),
 }
+
+RETIRED_MICROBATCH_RECORD_TYPES: frozenset[str] = frozenset(
+    {"producer_completion", "consumer_frontier"}
+)

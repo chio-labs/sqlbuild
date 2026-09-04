@@ -8,9 +8,11 @@ from dataclasses import replace
 from pathlib import Path
 from threading import Event, Thread
 from typing import Any, cast
+from unittest.mock import Mock
 
 import pytest
 
+from sqlbuild.cli.output.classes import execution_event_writer
 from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
 from sqlbuild.cli.output.classes.terminal_event_index import (
     TerminalEventIndex,
@@ -26,17 +28,24 @@ from sqlbuild.cli.output.models import (
     IntegrationResultEnvelope,
     TerminalEventClaim,
 )
+from sqlbuild.executor.clone.types import CloneAction
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import LifecycleEvent
+from sqlbuild.spec.contracts.types import FutureCursorAction, MicrobatchLimitAction
 from tests.unit.src.sqlbuild.cli.output.classes._test_types import (
     EnvelopeFieldValidationTestCase,
+    IntegrationActionContractTestCase,
     MaximumStartMetadataValidationTestCase,
+    ProjectionDegradationTestCase,
     StructuralMetadataValidationTestCase,
     TerminalProjectionTestCase,
 )
-from tests.unit.src.sqlbuild.cli.output.classes.helpers import build_valid_integration_payload
+from tests.unit.src.sqlbuild.cli.output.classes.helpers import (
+    build_integration_asset_with_maximum_start,
+    build_valid_integration_payload,
+)
 from tests.unit.src.sqlbuild.runtime.observability.helpers import lifecycle_event
 
 
@@ -119,6 +128,63 @@ def test_given_unsafe_structural_metadata_when_constructing_asset_then_validatio
             status="success",
             microbatch=cast(Mapping[str, Any], test_case.value),
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        IntegrationActionContractTestCase(f"clone action {action.value}", action.value)
+        for action in CloneAction
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_canonical_clone_action_when_constructing_asset_then_integration_contract_accepts_it(
+    test_case: IntegrationActionContractTestCase,
+) -> None:
+    asset: IntegrationAssetResult = IntegrationAssetResult(
+        kind="model", name="orders", status="success", action=test_case.expected_action
+    )
+
+    assert asset.action == test_case.expected_action
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        IntegrationActionContractTestCase(f"maximum start action {action.value}", action.value)
+        for action in FutureCursorAction
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_canonical_maximum_start_action_when_constructing_asset_then_contract_accepts_it(
+    test_case: IntegrationActionContractTestCase,
+) -> None:
+    asset: IntegrationAssetResult = build_integration_asset_with_maximum_start(
+        test_case.expected_action
+    )
+
+    assert asset.maximum_start_safety["action"] == test_case.expected_action
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        IntegrationActionContractTestCase(f"microbatch action {action.value}", action.value)
+        for action in MicrobatchLimitAction
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_canonical_microbatch_action_when_constructing_asset_then_contract_accepts_it(
+    test_case: IntegrationActionContractTestCase,
+) -> None:
+    asset: IntegrationAssetResult = IntegrationAssetResult(
+        kind="model",
+        name="orders",
+        status="success",
+        microbatch={"action": test_case.expected_action},
+    )
+
+    assert asset.microbatch["action"] == test_case.expected_action
 
 
 @pytest.mark.parametrize(
@@ -329,6 +395,57 @@ def test_given_terminal_and_result_when_writing_then_canonical_envelope_is_flush
     assert payload["asset"]["kind"] == "model"  # type: ignore[index]
     assert payload["asset"]["name"] == "orders"  # type: ignore[index]
     assert payload["asset"]["status"] == "success"  # type: ignore[index]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ProjectionDegradationTestCase(
+            description="successful execution with invalid optional projection",
+            expected_warning=(
+                "warning: integration output degraded: injected projection failure; "
+                "warehouse execution completed successfully"
+            ),
+            expected_degraded=True,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_successful_execution_when_integration_projection_fails_then_degraded_record_is_written(
+    test_case: ProjectionDegradationTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    path: Path = tmp_path / "events.jsonl"
+    index: TerminalEventIndex = TerminalEventIndex()
+    index.consume(
+        lifecycle_event(
+            "resource_attempt_completed",
+            run_id="run-1",
+            resource_id="model:orders",
+            resource_attempt_id="attempt-1",
+            payload={"resource_kind": "model", "resource_name": "orders", "attempt_number": 1},
+        )
+    )
+    monkeypatch.setattr(
+        execution_event_writer,
+        "build_integration_result",
+        Mock(side_effect=ObservabilityValidationError("injected projection failure")),
+    )
+
+    with terminal_event_index_scope(index):
+        writer: ExecutionEventWriter = ExecutionEventWriter(path=path)
+        writer.write_build_result(
+            result=ModelExecutionResult(model_name="orders", status=ExecutionStatus.SUCCESS),
+            plan=None,
+        )
+        writer.close()
+
+    payload: dict[str, object] = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["projection_degraded"] is test_case.expected_degraded
+    assert payload["asset"]["microbatch"] == {}  # type: ignore[index]
+    assert test_case.expected_warning in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(

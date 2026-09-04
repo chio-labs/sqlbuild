@@ -5,7 +5,12 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
-from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import advance_cursor_end
+from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
+    advance_cursor_end,
+)
+from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
+    advance_discovered_cursor_end as _advance_discovered_cursor_end,
+)
 from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
@@ -87,7 +92,7 @@ def compute_cursor_bounds(
         apply_maximum_start_policy,
     )
 
-    bounds = apply_maximum_start_policy(
+    return apply_maximum_start_policy(
         bounds=bounds,
         snapshot=cursor_snapshot,
         cursor_type=cursor_type,
@@ -97,11 +102,6 @@ def compute_cursor_bounds(
         backfill_duration=backfill_duration,
         policy=maximum_start_policy or MaximumStartPolicyInputs(),
         has_start_override=start_cursor_override is not None,
-    )
-    return bounds.clamp_to_availability(
-        ranges=cursor_snapshot.upstream_availability_ranges,
-        cursor_watermark_mode=cursor_snapshot.cursor_watermark_mode,
-        cursor_type=cursor_type,
     )
 
 
@@ -177,17 +177,6 @@ def normalize_cursor_snapshot_grain(
             for physical, terminal in cursor_snapshot.upstream_end_inputs
         ),
         upstream_availability_ends=cursor_snapshot.upstream_availability_ends,
-        upstream_availability_ranges=tuple(
-            (
-                (
-                    _floor_timestamp_string(value=start, grain=effective_grain)
-                    if start is not None
-                    else None
-                ),
-                _floor_timestamp_string(value=end, grain=effective_grain),
-            )
-            for start, end in cursor_snapshot.upstream_availability_ranges
-        ),
     )
 
 
@@ -237,32 +226,14 @@ def _advance_inclusive_operator_end(
 def advance_discovered_cursor_end(
     *, value: str, cursor_type: str | None, cursor_grain: str | None
 ) -> str:
-    if cursor_type is None:
-        return value
-    if cursor_type == CursorType.TIMESTAMP and cursor_grain in {
-        CursorGrain.MONTH,
-        CursorGrain.YEAR,
-    }:
-        plain_date: date | None
-        try:
-            plain_date = date.fromisoformat(value)
-        except ValueError:
-            plain_date = None
-        duration: Duration = Duration(
-            months=1 if cursor_grain == CursorGrain.MONTH else 0,
-            years=1 if cursor_grain == CursorGrain.YEAR else 0,
+    """Convert a discovered string maximum to its canonical exclusive partition end."""
+
+    return str(
+        _advance_discovered_cursor_end(
+            value=value,
+            cursor_type=cursor_type,
+            cursor_grain=cursor_grain,
         )
-        if plain_date is not None:
-            advanced: datetime = duration.add_to(datetime.combine(plain_date, datetime.min.time()))
-            return advanced.date().isoformat()
-        try:
-            return duration.add_to(datetime.fromisoformat(value)).isoformat()
-        except ValueError:
-            return value
-    return advance_cursor_end(
-        value=value,
-        cursor_type=cursor_type,
-        cursor_grain=cursor_grain,
     )
 
 

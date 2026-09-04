@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta, timezone
+
 import pytest
 
+from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
+    discovered_cursor_partition,
+)
 from sqlbuild.compiler.planner._helpers.resolve.cursor import compute_cursor_bounds
 from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
@@ -13,7 +18,98 @@ from sqlbuild.compiler.planner.models import CursorBounds, ModelCursorSnapshot
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
 from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     CursorBoundsTestCase,
+    DiscoveredCursorPartitionTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DiscoveredCursorPartitionTestCase(
+            "month boundary date", date(2026, 7, 1), "month", date(2026, 7, 1), date(2026, 8, 1)
+        ),
+        DiscoveredCursorPartitionTestCase(
+            "month middle date", date(2026, 7, 15), "month", date(2026, 7, 1), date(2026, 8, 1)
+        ),
+        DiscoveredCursorPartitionTestCase(
+            "month final date", date(2026, 7, 31), "month", date(2026, 7, 1), date(2026, 8, 1)
+        ),
+        DiscoveredCursorPartitionTestCase(
+            "month middle timestamp string",
+            "2026-07-15T12:30:45",
+            "month",
+            "2026-07-01T00:00:00",
+            "2026-08-01T00:00:00",
+        ),
+        DiscoveredCursorPartitionTestCase(
+            "month final timezone timestamp",
+            datetime(2026, 7, 31, 23, 59, 59, tzinfo=timezone(timedelta(hours=5, minutes=30))),
+            "month",
+            datetime(2026, 7, 1, tzinfo=timezone(timedelta(hours=5, minutes=30))),
+            datetime(2026, 8, 1, tzinfo=timezone(timedelta(hours=5, minutes=30))),
+        ),
+        DiscoveredCursorPartitionTestCase(
+            "year boundary date", date(2026, 1, 1), "year", date(2026, 1, 1), date(2027, 1, 1)
+        ),
+        DiscoveredCursorPartitionTestCase(
+            "year middle date", date(2026, 7, 15), "year", date(2026, 1, 1), date(2027, 1, 1)
+        ),
+        DiscoveredCursorPartitionTestCase(
+            "year final timestamp",
+            datetime(2026, 12, 31, 23, 59, 59),
+            "year",
+            datetime(2026, 1, 1),
+            datetime(2027, 1, 1),
+        ),
+        DiscoveredCursorPartitionTestCase(
+            "day middle timestamp",
+            datetime(2026, 7, 15, 12, 30),
+            "day",
+            datetime(2026, 7, 15),
+            datetime(2026, 7, 16),
+        ),
+        DiscoveredCursorPartitionTestCase(
+            "day plain date", "2026-07-15", "day", "2026-07-15", "2026-07-16"
+        ),
+        DiscoveredCursorPartitionTestCase(
+            "plain date without grain",
+            "2026-07-15",
+            None,
+            "2026-07-15",
+            "2026-07-16",
+        ),
+        DiscoveredCursorPartitionTestCase(
+            "naive timestamp without grain",
+            "2026-07-15T12:30:45",
+            None,
+            "2026-07-15T12:30:45",
+            "2026-07-15T12:30:46",
+        ),
+        DiscoveredCursorPartitionTestCase(
+            "hour middle timestamp",
+            datetime(2026, 7, 15, 12, 30, 59),
+            "hour",
+            datetime(2026, 7, 15, 12),
+            datetime(2026, 7, 15, 13),
+        ),
+        DiscoveredCursorPartitionTestCase(
+            "hour plain date",
+            "2026-07-15",
+            "hour",
+            "2026-07-15T00:00:00",
+            "2026-07-15T01:00:00",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_observed_timestamp_when_resolving_partition_then_boundaries_are_grain_aligned(
+    test_case: DiscoveredCursorPartitionTestCase,
+) -> None:
+    assert discovered_cursor_partition(
+        value=test_case.value,
+        cursor_type=CursorType.TIMESTAMP,
+        cursor_grain=test_case.cursor_grain,
+    ) == (test_case.expected_start, test_case.expected_end)
 
 
 @pytest.mark.parametrize(

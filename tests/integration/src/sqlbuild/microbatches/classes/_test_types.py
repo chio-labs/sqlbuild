@@ -22,7 +22,7 @@ class DirectStoreSuccessiveWriteTestCase:
 
 
 @dataclass(frozen=True)
-class CausalStoreTestCase:
+class RetiredDirectStoreRecordTestCase:
     description: str
-    expected_inserted: int
-    expected_existing: int
+    retired_record_type: str
+    expected_event_count: int

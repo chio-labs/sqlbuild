@@ -67,13 +67,6 @@ class GatherSelectedCursorScopeTestCase:
 
 
 @dataclass(frozen=True)
-class GatherCappedProducerSnapshotTestCase:
-    description: str
-    expected_availability_ends: tuple[str, ...]
-    expected_availability_ranges: tuple[tuple[str | None, str], ...]
-
-
-@dataclass(frozen=True)
 class GatherOverrideCursorSnapshotTestCase:
     description: str
     expected_target_max: str

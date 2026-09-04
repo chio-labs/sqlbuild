@@ -737,7 +737,7 @@ class PostgresStateBackend(StateBackend):
                 params,
             )
             rows: list[tuple[Any, ...]] = cursor.fetchall()
-        return tuple(MicrobatchEventCodec.from_row(tuple(row)) for row in rows)
+        return MicrobatchEventCodec.from_rows(tuple(row) for row in rows)
 
     def read_microbatch_retention_history(
         self, *, connection: Any, schema: str
@@ -750,7 +750,7 @@ class PostgresStateBackend(StateBackend):
                 [VIRTUAL_MICROBATCH_SCOPE_KIND],
             )
             rows: list[tuple[Any, ...]] = cursor.fetchall()
-        return tuple(MicrobatchEventCodec.from_row(tuple(row)) for row in rows)
+        return MicrobatchEventCodec.from_rows(tuple(row) for row in rows)
 
     def read_microbatch_model_history(
         self, *, connection: Any, schema: str, scope: MicrobatchScope
@@ -765,7 +765,7 @@ class PostgresStateBackend(StateBackend):
                 [scope.scope_kind, scope.model_name, f"{warehouse_realm}:%"],
             )
             rows: list[tuple[Any, ...]] = cursor.fetchall()
-        return tuple(MicrobatchEventCodec.from_row(tuple(row)) for row in rows)
+        return MicrobatchEventCodec.from_rows(tuple(row) for row in rows)
 
     def upsert_physical_relation(
         self, *, connection: Any, schema: str, record: PhysicalRelationRecord

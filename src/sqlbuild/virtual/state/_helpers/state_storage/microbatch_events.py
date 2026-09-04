@@ -81,7 +81,7 @@ def read_duckdb_microbatch_scope_history(
         "ORDER BY created_at, event_id",
         params,
     ).fetchall()
-    return tuple(MicrobatchEventCodec.from_row(tuple(row)) for row in rows)
+    return MicrobatchEventCodec.from_rows(tuple(row) for row in rows)
 
 
 def read_duckdb_microbatch_retention_history(
@@ -94,7 +94,7 @@ def read_duckdb_microbatch_retention_history(
         "WHERE scope_kind = ? ORDER BY created_at, event_id",
         [VIRTUAL_MICROBATCH_SCOPE_KIND],
     ).fetchall()
-    return tuple(MicrobatchEventCodec.from_row(tuple(row)) for row in rows)
+    return MicrobatchEventCodec.from_rows(tuple(row) for row in rows)
 
 
 def read_duckdb_microbatch_model_history(
@@ -109,4 +109,4 @@ def read_duckdb_microbatch_model_history(
         "ORDER BY created_at, event_id",
         [scope.scope_kind, scope.model_name, f"{warehouse_realm}:%"],
     ).fetchall()
-    return tuple(MicrobatchEventCodec.from_row(tuple(row)) for row in rows)
+    return MicrobatchEventCodec.from_rows(tuple(row) for row in rows)

@@ -37,3 +37,20 @@ class MaximumStartMetadataValidationTestCase:
     description: str
     value: object
     expected_error: str
+
+
+@dataclass(frozen=True)
+class IntegrationActionContractTestCase:
+    """One canonical action expected to remain valid in integration output."""
+
+    description: str
+    expected_action: str
+
+
+@dataclass(frozen=True)
+class ProjectionDegradationTestCase:
+    """Expected behavior after optional integration projection fails."""
+
+    description: str
+    expected_warning: str
+    expected_degraded: bool

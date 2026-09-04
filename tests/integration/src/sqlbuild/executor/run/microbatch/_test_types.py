@@ -6,7 +6,6 @@ from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.planner.types import OnSchemaChange
 from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
-from sqlbuild.microbatches.models import CausalDependencySnapshot
 from sqlbuild.spec.contracts.models import FutureCursorsConfig
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
@@ -39,25 +38,12 @@ class RuntimeWatermarkGrainTestCase:
 
 
 @dataclass(frozen=True)
-class CappedProducerAvailabilityTestCase:
+class PlannerRuntimeCursorParityTestCase:
+    """Expected planner/runtime availability parity for one watermark mode."""
+
     description: str
-    cursor_type: str
-    sql_type: str
-    cursor_grain: str | None
-    producer_values_sql: str
-    target_values_sql: str
-    cursor_start: str
-    cursor_end: str
-    limit_action: MicrobatchLimitAction
-    expected_start: str
+    watermark_mode: str
     expected_end: str
-
-
-@dataclass(frozen=True)
-class EmptyCappedProducerTestCase:
-    description: str
-    limit_action: MicrobatchLimitAction
-    expected_error_fragment: str
 
 
 @dataclass(frozen=True)
@@ -114,8 +100,6 @@ class MicrobatchSuccessTestCase:
     microbatch_limit_action: MicrobatchLimitAction | None = None
     expected_microbatch_limit_count: int | None = None
     expected_microbatch_limit_warning: bool = False
-    causal_dependencies: tuple[CausalDependencySnapshot, ...] = field(default_factory=tuple)
-    expected_causal_replay_intervals: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

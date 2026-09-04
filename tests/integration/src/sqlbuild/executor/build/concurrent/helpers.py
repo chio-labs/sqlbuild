@@ -36,6 +36,35 @@ class _NoProviderSession:
         return None
 
 
+class RecordingDuckDbAdapter(DuckDbAdapter):
+    """DuckDB adapter that records every statement executed through the contract."""
+
+    def __init__(self) -> None:
+        self.executed_sql: list[str] = []
+        self._recording_lock = threading.Lock()
+
+    def _execute(self, *, connection: Any, sql: str) -> Any:
+        with self._recording_lock:
+            self.executed_sql.append(sql)
+        return super()._execute(connection=connection, sql=sql)
+
+    def clear_executed_sql(self) -> None:
+        """Discard statements recorded by earlier build phases."""
+
+        with self._recording_lock:
+            self.executed_sql.clear()
+
+    def microbatch_state_statements(self) -> tuple[str, ...]:
+        """Return statements that reference the direct microbatch state table."""
+
+        return tuple(
+            filter(
+                lambda sql: "_sqlbuild_microbatches" in sql.lower(),
+                self.executed_sql,
+            )
+        )
+
+
 def _build_real_provider_session(discovered: DiscoveredProjectInputs) -> Any:
     return build_provider_session(discovered_providers=discovered.providers)
 
@@ -112,6 +141,20 @@ def run_concurrent_build(
         for conn in worker_connections:
             adapter.close(conn)
         adapter.close(scheduler_connection)
+
+
+def read_order_batch_rows(
+    *, adapter: DuckDbAdapter, db_path: Path
+) -> tuple[tuple[object, ...], ...]:
+    """Read the stable order/batch projection from the microbatch target."""
+
+    connection: Any = adapter.connect({"database": str(db_path)})
+    try:
+        return tuple(
+            connection.execute("SELECT id, batch_id FROM main.orders ORDER BY id").fetchall()
+        )
+    finally:
+        adapter.close(connection)
 
 
 def build_ordering_trace_callbacks(

@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
 
-from sqlbuild.microbatches.constants import MICROBATCH_COLUMNS
+from sqlbuild.microbatches.constants import (
+    MICROBATCH_COLUMNS,
+    RETIRED_MICROBATCH_RECORD_TYPES,
+)
 from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
 from sqlbuild.microbatches.types import (
     MicrobatchCompletionType,
@@ -14,6 +18,8 @@ from sqlbuild.microbatches.types import (
     MicrobatchRunType,
     UnaccountedPartitionPolicy,
 )
+
+_RECORD_TYPE_COLUMN_INDEX: int = MICROBATCH_COLUMNS.index("record_type")
 
 
 class MicrobatchEventCodec:
@@ -82,6 +88,7 @@ class MicrobatchEventCodec:
                 values["virtual_model_version_hash"]
             ),
         )
+
         return MicrobatchEvent(
             event_id=str(values["event_id"]),
             record_type=MicrobatchRecordType(values["record_type"]),
@@ -127,6 +134,16 @@ class MicrobatchEventCodec:
             observed_at=MicrobatchEventCodec._optional_datetime(values["observed_at"]),
             synthetic_reason=MicrobatchEventCodec._optional_str(values["synthetic_reason"]),
             unaccounted_policy=MicrobatchEventCodec._optional_policy(values["unaccounted_policy"]),
+        )
+
+    @staticmethod
+    def from_rows(rows: Iterable[tuple[Any, ...]]) -> tuple[MicrobatchEvent, ...]:
+        """Decode active events while ignoring explicitly retired record types."""
+
+        return tuple(
+            MicrobatchEventCodec.from_row(row)
+            for row in rows
+            if str(row[_RECORD_TYPE_COLUMN_INDEX]) not in RETIRED_MICROBATCH_RECORD_TYPES
         )
 
     @staticmethod

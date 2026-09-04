@@ -36,15 +36,6 @@ class WatermarkLimitValidationTestCase:
 
 
 @dataclass(frozen=True)
-class AvailabilityStartFloorTestCase:
-    description: str
-    ranges: tuple[tuple[str | None, str], ...]
-    mode: str
-    resolved_end: str
-    expected_start: str | None
-
-
-@dataclass(frozen=True)
 class RetentionValidationErrorTestCase:
     description: str
     config_values: dict[str, object]

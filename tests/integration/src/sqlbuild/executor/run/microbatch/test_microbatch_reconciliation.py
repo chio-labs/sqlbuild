@@ -9,13 +9,15 @@ import pytest
 
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.planner._helpers.resolve.cursor import compute_cursor_bounds
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
     CursorBounds,
     CursorInputRelation,
+    ModelCursorSnapshot,
     ModelPlanEntry,
 )
-from sqlbuild.compiler.planner.types import BackfillAction
+from sqlbuild.compiler.planner.types import BackfillAction, CursorWatermarkMode
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run._helpers.materializations.microbatch import (
     _clamp_intervals_to_model_domain,
@@ -43,10 +45,9 @@ from sqlbuild.microbatches.models import (
 )
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 from tests.integration.src.sqlbuild.executor.run.microbatch._test_types import (
-    CappedProducerAvailabilityTestCase,
-    EmptyCappedProducerTestCase,
     MicrobatchBehaviorTestCase,
     MicrobatchReconciliationChunkTestCase,
+    PlannerRuntimeCursorParityTestCase,
     RuntimeWatermarkGrainTestCase,
 )
 from tests.integration.src.sqlbuild.executor.run.microbatch.helpers import (
@@ -87,59 +88,46 @@ class _RecordingEventStore:
 @pytest.mark.parametrize(
     "test_case",
     (
-        CappedProducerAvailabilityTestCase(
-            description="timestamp cap from start uses physical maximum instead of terminal end",
-            cursor_type="timestamp",
-            sql_type="TIMESTAMP",
-            cursor_grain="month",
-            producer_values_sql="('2025-02-15')",
-            target_values_sql="('2025-01-01')",
-            cursor_start="2025-01-01",
-            cursor_end="2025-12-01",
-            limit_action=MicrobatchLimitAction.CAP_FROM_START,
-            expected_start="2025-01-01T00:00:00",
-            expected_end="2025-03-01T00:00:00",
+        PlannerRuntimeCursorParityTestCase(
+            description="monthly all watermark floors physical maximum",
+            watermark_mode=CursorWatermarkMode.ALL,
+            expected_end="2026-08-01T00:00:00",
         ),
-        CappedProducerAvailabilityTestCase(
-            description="timestamp cap from end intersects physical minimum and maximum",
-            cursor_type="timestamp",
-            sql_type="TIMESTAMP",
-            cursor_grain="month",
-            producer_values_sql="('2025-08-15'), ('2025-09-15')",
-            target_values_sql="('2025-01-01')",
-            cursor_start="2025-01-01",
-            cursor_end="2025-12-01",
-            limit_action=MicrobatchLimitAction.CAP_FROM_END,
-            expected_start="2025-08-01T00:00:00",
-            expected_end="2025-10-01T00:00:00",
-        ),
-        CappedProducerAvailabilityTestCase(
-            description="integer cap from end intersects physical minimum and maximum",
-            cursor_type="integer",
-            sql_type="INTEGER",
-            cursor_grain=None,
-            producer_values_sql="(10), (20)",
-            target_values_sql="(0)",
-            cursor_start="0",
-            cursor_end="100",
-            limit_action=MicrobatchLimitAction.CAP_FROM_END,
-            expected_start="10",
-            expected_end="21",
+        PlannerRuntimeCursorParityTestCase(
+            description="monthly any watermark floors physical maximum",
+            watermark_mode=CursorWatermarkMode.ANY,
+            expected_end="2026-08-01T00:00:00",
         ),
     ),
     ids=lambda case: case.description,
 )
-def test_given_capped_terminal_producer_when_resolving_consumer_then_uses_physical_availability(
+def test_given_monthly_physical_maximum_when_planning_and_resolving_then_availability_ends_match(
     adapter: DuckDbAdapter,
     connection: Any,
-    test_case: CappedProducerAvailabilityTestCase,
+    test_case: PlannerRuntimeCursorParityTestCase,
 ) -> None:
-    connection.execute(f"CREATE TABLE main.target_events (cursor_value {test_case.sql_type})")
-    connection.execute(f"CREATE TABLE main.producer_events (cursor_value {test_case.sql_type})")
-    connection.execute(f"INSERT INTO main.target_events VALUES {test_case.target_values_sql}")
-    connection.execute(f"INSERT INTO main.producer_events VALUES {test_case.producer_values_sql}")
+    physical_maximum: str = "2026-07-15 12:00:00"
+    planner_bounds: CursorBounds | None = compute_cursor_bounds(
+        cursor_snapshot=ModelCursorSnapshot(
+            target_max=None,
+            upstream_mins=("2026-07-01 00:00:00",),
+            upstream_maxes=(physical_maximum,),
+            cursor_watermark_mode=test_case.watermark_mode,
+        ),
+        cursor_type="timestamp",
+        cursor_start="2026-07-01",
+        lookback=None,
+        backfill_duration=None,
+        start_cursor_override=None,
+        end_cursor_override=None,
+        is_microbatch=False,
+        cursor_grain="month",
+    )
+    connection.execute("CREATE TABLE main.target_events (event_time TIMESTAMP)")
+    connection.execute("CREATE TABLE main.producer_events (event_time TIMESTAMP)")
+    connection.execute("INSERT INTO main.producer_events VALUES (?)", [physical_maximum])
 
-    bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
+    runtime_bounds: CursorBounds | None = resolve_runtime_cursor_bounds(
         adapter=adapter,
         connection=connection,
         target_relation="main.target_events",
@@ -147,88 +135,31 @@ def test_given_capped_terminal_producer_when_resolving_consumer_then_uses_physic
         target_schema="main",
         target_name="target_events",
         spec=RuntimeCursorSpec(
-            cursor_column="cursor_value",
-            cursor_type=test_case.cursor_type,
-            cursor_grain=test_case.cursor_grain,
-            cursor_start=test_case.cursor_start,
+            cursor_column="event_time",
+            cursor_type="timestamp",
+            cursor_grain="month",
+            cursor_start="2026-07-01",
             cursor_input_relations=(
-                CursorInputRelation(
-                    "main.producer_events",
-                    "cursor_value",
-                    cursor_grain=test_case.cursor_grain,
-                    terminal_cursor_start=test_case.cursor_start,
-                    terminal_cursor_end=test_case.cursor_end,
-                    producer_microbatch_limit_action=test_case.limit_action,
-                ),
+                CursorInputRelation("main.producer_events", "event_time", cursor_grain="month"),
             ),
-            cursor_watermark_mode="all",
+            cursor_watermark_mode=test_case.watermark_mode,
             microbatch_strategy="watermark",
         ),
     )
 
-    assert bounds == CursorBounds(start=test_case.expected_start, end=test_case.expected_end)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    (
-        EmptyCappedProducerTestCase(
-            description="empty cap from start producer",
-            limit_action=MicrobatchLimitAction.CAP_FROM_START,
-            expected_error_fragment="required cursor watermark is empty",
-        ),
-        EmptyCappedProducerTestCase(
-            description="empty cap from end producer",
-            limit_action=MicrobatchLimitAction.CAP_FROM_END,
-            expected_error_fragment="required cursor watermark is empty",
-        ),
-    ),
-    ids=lambda case: case.description,
-)
-def test_given_empty_capped_terminal_producer_when_resolving_all_then_fails_closed(
-    adapter: DuckDbAdapter,
-    connection: Any,
-    test_case: EmptyCappedProducerTestCase,
-) -> None:
-    connection.execute("CREATE TABLE main.target_events (event_time TIMESTAMP)")
-    connection.execute("CREATE TABLE main.producer_events (event_time TIMESTAMP)")
-
-    with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
-        resolve_runtime_cursor_bounds(
-            adapter=adapter,
-            connection=connection,
-            target_relation="main.target_events",
-            target_database=None,
-            target_schema="main",
-            target_name="target_events",
-            spec=RuntimeCursorSpec(
-                cursor_column="event_time",
-                cursor_type="timestamp",
-                cursor_grain="day",
-                cursor_start="2025-01-01",
-                cursor_input_relations=(
-                    CursorInputRelation(
-                        "main.producer_events",
-                        "event_time",
-                        terminal_cursor_start="2025-01-01",
-                        terminal_cursor_end="2025-12-01",
-                        producer_microbatch_limit_action=test_case.limit_action,
-                    ),
-                ),
-                cursor_watermark_mode="all",
-                microbatch_strategy="watermark",
-            ),
-        )
+    assert planner_bounds is not None
+    assert runtime_bounds is not None
+    assert planner_bounds.end == runtime_bounds.end == test_case.expected_end
 
 
 @pytest.mark.parametrize(
     "test_case",
     (
         RuntimeWatermarkGrainTestCase(
-            description="monthly producer exposes an exclusive monthly availability end",
+            description="midmonth producer maximum exposes the next monthly boundary",
             consumer_grain="hour",
             producer_grain="month",
-            producer_maximum="2026-04-01 00:00:00",
+            producer_maximum="2026-04-15 12:00:00",
             expected_end="2026-05-01T00:00:00",
         ),
     ),

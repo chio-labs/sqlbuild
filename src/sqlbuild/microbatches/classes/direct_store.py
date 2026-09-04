@@ -113,7 +113,7 @@ class DirectMicrobatchEventStore:
                 scope=scope, render_qualified_name=self._adapter.render_qualified_name
             ),
         )
-        return tuple(MicrobatchEventCodec.from_row(row) for row in cursor.fetchall())
+        return MicrobatchEventCodec.from_rows(cursor.fetchall())
 
     def read_model_history(self, scope: MicrobatchScope) -> tuple[MicrobatchEvent, ...]:
         return self.read_scope_history(

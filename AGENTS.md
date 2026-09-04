@@ -29,6 +29,7 @@
 - NEVER implement a mutable lifecycle state machine in raw warehouse state tables in direct mode. Do not represent progress by repeatedly updating one row through statuses such as `PLANNED`, `RUNNING`, and `COMPLETE`.
 - Model lifecycle state as immutable, append-only events or facts with deterministic event IDs and idempotent writes. Derive current status by projecting event history, following the existing microbatch requirement/completion pattern. Retention pruning is cleanup, not a lifecycle update.
 - Design every warehouse-DML/state-publication failure window for reconciliation from durable events and physical warehouse evidence. If append-only state cannot represent a proposed direct-mode feature safely, stop and resolve the architecture explicitly rather than adding mutable transitions.
+- Sequential microbatch execution (`batch_concurrency = 1`) is fully stateless: zero reads and zero writes of `_sqlbuild_microbatches`. The state table is strictly a concurrency-coordination feature. Reintroducing state reads or writes into the sequential path requires an explicit user-approved design decision, never incidental wiring.
 
 ## Delivery Workflow
 
@@ -50,3 +51,14 @@
 - Prioritize concrete correctness, authorization, data-loss, and mutation risks within systems the project manages. Distinguish those from unsupported external misuse or purely theoretical states.
 - Keep fixes within the requested scope. Do not expand supported behavior, permissions, operational cost, or system ownership without a short product decision from the user.
 - Do not add safeguards solely for impossible or unsupported states. Record residual risks when a concern is real but outside the current contract.
+
+## Bounded Review Process
+
+Orchestrating agents must run reviews as a single bounded cycle, not an open-ended loop:
+
+1. The orchestrator first performs its own targeted diff scan of dangerous seams (boundaries, gates, exit codes, state writes, deleted-symbol references) — not a line-by-line style review.
+2. Exactly one independent read-only review pass runs on the complete combined diff, scoped to concrete correctness, data-loss, authorization, and behavioral-regression risks, with file:line evidence required for every finding. The reviewer must be explicitly told not to propose architecture expansions.
+3. Findings are hypotheses, never mandates. A validated in-scope correctness bug is fixed; any finding whose fix would expand behavior, state, permissions, or ownership is escalated to the user as a product decision — accept the reviewer's finding, never its solution, without validation. This rule exists because converting a correct review finding directly into an unapproved stateful implementation caused a production defect.
+4. One follow-up pass verifies only the fixed findings and their affected boundaries — never a fresh full re-review, never broad suites.
+5. Do not run overlapping review agents, issue "look for more things to harden" prompts, or enter review→fix→review loops. Valid out-of-scope findings become tickets, not opportunistic fixes.
+6. After the single review cycle, the mechanical gates (`make test` where warranted, `make check-ci`, repository CI) are the final arbiter.

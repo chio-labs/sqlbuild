@@ -202,3 +202,10 @@ class PostgresMicrobatchStateRoundTripTestCase:
 
     description: str
     expected_event_count: int
+
+
+@dataclass(frozen=True)
+class PostgresRetiredMicrobatchRecordTestCase:
+    description: str
+    retired_record_type: str
+    expected_event_count: int
