@@ -11,7 +11,7 @@ from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
 
 @dataclass(frozen=True, kw_only=True)
 class TimestampValue:
-    """Timestamp cursor value; the datetime retains its original UTC offset."""
+    """Timestamp cursor value; aware datetimes are normalized to UTC at ingestion."""
 
     value: datetime
     source_text: str | None = field(default=None, compare=False, repr=False)
