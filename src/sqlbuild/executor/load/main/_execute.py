@@ -16,6 +16,7 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.cost.classes.cost_context import CostContext
+from sqlbuild.cursor_algebra.types import CursorScalar
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load._helpers.cursors import (
     exclusive_cursor_end,
@@ -271,7 +272,7 @@ def _apply_source_write_strategy(
             raise ExecutorInputError(
                 f"Source '{source_entry.name}' write_strategy delete_insert requires cursor_column"
             )
-        cursor_bounds: tuple[object | None, object | None] = load_staging_cursor_bounds(
+        cursor_bounds: tuple[CursorScalar | None, CursorScalar | None] = load_staging_cursor_bounds(
             adapter=adapter,
             connection=connection,
             staging=staging,

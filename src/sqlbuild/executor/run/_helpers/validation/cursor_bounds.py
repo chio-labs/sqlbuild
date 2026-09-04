@@ -4,22 +4,17 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal
+from datetime import UTC, datetime
 from functools import partial
-from typing import Any, cast
+from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
-from sqlbuild.compiler.planner.main.execution.bounded_cursor_override import (
-    resolve_bounded_cursor_override,
+from sqlbuild.compiler.planner.main.execution.cursor_replay_policy import (
+    apply_typed_cursor_replay_policy,
 )
-from sqlbuild.compiler.planner.main.execution.cursor_replay_policy import apply_cursor_replay_policy
 from sqlbuild.compiler.planner.main.execution.future_cursor_safety import apply_future_cursor_safety
-from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import (
-    _advance_discovered_cursor_end as advance_discovered_cursor_end,
-)
 from sqlbuild.compiler.planner.main.execution.maximum_start_safety import apply_maximum_start_policy
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
@@ -34,12 +29,14 @@ from sqlbuild.compiler.planner.types import (
     BackfillAction,
     CursorGrain,
     CursorType,
-    CursorWatermarkMode,
     MicrobatchStrategy,
 )
 from sqlbuild.cursor_algebra.constants import GRAIN_ORDER
 from sqlbuild.cursor_algebra.main.clamp import clamp
 from sqlbuild.cursor_algebra.main.compare import compare
+from sqlbuild.cursor_algebra.main.exclusive_end_from_observed_max import (
+    exclusive_end_from_observed_max,
+)
 from sqlbuild.cursor_algebra.main.exclusive_to_inclusive import exclusive_to_inclusive
 from sqlbuild.cursor_algebra.main.floor_to_grain import floor_to_grain
 from sqlbuild.cursor_algebra.main.inclusive_to_exclusive import inclusive_to_exclusive
@@ -48,23 +45,23 @@ from sqlbuild.cursor_algebra.main.min_bound import min_bound
 from sqlbuild.cursor_algebra.main.parse import parse
 from sqlbuild.cursor_algebra.main.render import render
 from sqlbuild.cursor_algebra.main.sentinel_from_token import sentinel_from_token
-from sqlbuild.cursor_algebra.main.try_parse import try_parse
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.cursor_algebra.models import (
     AlignedInterval,
     DateValue,
     IntegerValue,
     TimestampValue,
 )
-from sqlbuild.cursor_algebra.types import CursorScalar
+from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
-from sqlbuild.executor.run.models import RuntimeCursorSpec
-from sqlbuild.executor.run.types import WatermarkResolver
+from sqlbuild.executor.run.models import RuntimeCursorInputRelation, RuntimeCursorSpec
+from sqlbuild.executor.run.types import RuntimeCursorWatermarkMode, WatermarkResolver
 from sqlbuild.spec.contracts.constants import ZERO_DAY_CURSOR_DURATION
 from sqlbuild.spec.contracts.models import StartCursorsConfig
 
 
 def has_runtime_owned_cursor_watermarks(
-    cursor_input_relations: tuple[CursorInputRelation, ...],
+    cursor_input_relations: tuple[CursorInputRelation | RuntimeCursorInputRelation, ...],
 ) -> bool:
     """Return whether any cursor input is produced by this invocation."""
 
@@ -90,13 +87,24 @@ def build_runtime_cursor_spec(
         cursor_grain=entry.cursor_grain,
         cursor_start=entry.cursor_start,
         cursor_end=entry.cursor_end,
-        cursor_input_relations=entry.cursor_input_relations,
+        cursor_input_relations=tuple(
+            RuntimeCursorInputRelation(
+                relation=relation.relation,
+                cursor_column=relation.cursor_column,
+                cursor_grain=relation.cursor_grain,
+                is_model_backed=relation.is_model_backed,
+                is_runtime_produced=relation.is_runtime_produced,
+                terminal_cursor_start=relation.terminal_cursor_start,
+                terminal_cursor_end=relation.terminal_cursor_end,
+            )
+            for relation in entry.cursor_input_relations
+        ),
         cursor_watermark_mode=(
             entry.cursor_watermark_mode
             or (
-                CursorWatermarkMode.ALL
+                RuntimeCursorWatermarkMode.ALL
                 if entry.microbatch_strategy == MicrobatchStrategy.WATERMARK
-                else "legacy"
+                else RuntimeCursorWatermarkMode.LEGACY
             )
         ),
         microbatch_strategy=entry.microbatch_strategy,
@@ -129,16 +137,11 @@ def resolve_runtime_cursor_bounds(
 ) -> CursorBounds | None:
     """Resolve concrete runtime cursor bounds from target and upstream relations."""
 
-    cursor_type: str | None = spec.cursor_type
-    bounded_override: CursorBounds | None = resolve_bounded_cursor_override(
-        start_cursor_override=spec.start_cursor_override,
-        end_cursor_override=spec.end_cursor_override,
-        cursor_type=cursor_type,
-        cursor_grain=spec.cursor_grain,
-    )
+    cursor_type: CursorType | None = spec.cursor_type
+    bounded_override: CursorBounds | None = _resolve_typed_bounded_override(spec=spec)
     if bounded_override is not None:
         return bounded_override
-    physical_inputs: tuple[tuple[tuple[str, str], CursorInputRelation], ...] = tuple(
+    physical_inputs: tuple[tuple[tuple[str, str], RuntimeCursorInputRelation], ...] = tuple(
         sorted(
             {
                 (cursor_input.relation, cursor_input.cursor_column): cursor_input
@@ -148,22 +151,22 @@ def resolve_runtime_cursor_bounds(
     )
     if not physical_inputs:
         return None
-    effective_grain: str | None = resolve_effective_timestamp_grain(
+    effective_grain: CursorGrain | None = resolve_effective_timestamp_grain(
         cursor_type=cursor_type,
         downstream_grain=spec.cursor_grain,
         cursor_input_relations=spec.cursor_input_relations,
         microbatch_strategy=spec.microbatch_strategy,
     )
-    discovered_grain: str | None = (
+    discovered_grain: CursorGrain | None = (
         effective_grain
         if spec.cursor_grain is not None
         or any(item.cursor_grain is not None for item in spec.cursor_input_relations)
         else None
     )
 
-    target_max_raw: object | None = None
+    target_max: CursorScalar | None = None
     if spec.read_destination_cursor:
-        target_max_raw = _query_target_max_raw(
+        target_max = _query_target_max(
             adapter=adapter,
             connection=connection,
             target_relation=target_relation,
@@ -171,33 +174,34 @@ def resolve_runtime_cursor_bounds(
             target_schema=target_schema,
             target_name=target_name,
             cursor_column=spec.cursor_column,
+            cursor_type=cursor_type,
         )
-    target_eligible_max_raw: object | None = _query_eligible_target_max_raw(
+    target_eligible_max: CursorScalar | None = _query_eligible_target_max(
         adapter=adapter,
         connection=connection,
         target_relation=target_relation,
         cursor_column=spec.cursor_column,
         cursor_type=cursor_type,
         cursor_grain=effective_grain,
-        target_max_raw=target_max_raw,
+        target_max=target_max,
         spec=spec,
     )
 
-    read_minimum: bool = target_max_raw is None
-    upstream_mins: list[object] = []
-    upstream_maxes: list[object] = []
-    upstream_availability_ends: list[object] = []
+    read_minimum: bool = target_max is None
+    upstream_mins: list[CursorScalar] = []
+    upstream_maxes: list[CursorScalar] = []
+    upstream_availability_ends: list[CursorScalar] = []
     input_evidence: list[CursorInputEvidence] = []
     input_index: int
-    physical_input: tuple[tuple[str, str], CursorInputRelation]
+    physical_input: tuple[tuple[str, str], RuntimeCursorInputRelation]
     for input_index, physical_input in enumerate(physical_inputs, start=1):
         relation_column, cursor_input = physical_input
-        terminal_start: str | None = cursor_input.terminal_cursor_start
-        terminal_end: str | None = cursor_input.terminal_cursor_end
-        input_grain: str | None = cursor_input.cursor_grain or discovered_grain
-        minimum: object | None
-        maximum: object | None
-        minimum, maximum = _query_watermark_raw(
+        terminal_start: CursorScalar | None = cursor_input.terminal_cursor_start
+        terminal_end: CursorScalar | None = cursor_input.terminal_cursor_end
+        input_grain: CursorGrain | None = cursor_input.cursor_grain or discovered_grain
+        minimum: CursorScalar | None
+        maximum: CursorScalar | None
+        minimum, maximum = _query_watermark_values(
             adapter=adapter,
             connection=connection,
             relation=relation_column[0],
@@ -207,16 +211,17 @@ def resolve_runtime_cursor_bounds(
             total=len(physical_inputs),
             on_progress=on_progress,
             watermark_resolver=watermark_resolver,
+            cursor_type=cursor_type,
         )
-        terminal_maximum: object | None = _terminal_inclusive_maximum(
+        terminal_maximum: CursorScalar | None = _terminal_inclusive_maximum(
             value=terminal_end, cursor_type=cursor_type, cursor_grain=input_grain
         )
         if terminal_maximum is not None:
             maximum = terminal_maximum
         if read_minimum and minimum is None and terminal_start is not None:
-            minimum = _raw_terminal_bound(value=terminal_start, cursor_type=cursor_type)
+            minimum = terminal_start
         if maximum is None or (read_minimum and minimum is None):
-            if spec.cursor_watermark_mode == CursorWatermarkMode.ALL:
+            if spec.cursor_watermark_mode == RuntimeCursorWatermarkMode.ALL:
                 raise ExecutorInputError(
                     f"required cursor watermark is empty: {relation_column[0]}.{relation_column[1]}"
                 )
@@ -228,34 +233,28 @@ def resolve_runtime_cursor_bounds(
             cursor_type == CursorType.TIMESTAMP
             and spec.microbatch_strategy == MicrobatchStrategy.WATERMARK
         ):
-            availability_end: object = (
-                _raw_terminal_bound(value=terminal_end, cursor_type=cursor_type)
+            availability_end: CursorScalar = (
+                terminal_end
                 if terminal_end is not None
-                else advance_discovered_cursor_end(
+                else _exclusive_end_from_observed(
                     value=maximum,
                     cursor_type=cursor_type,
                     cursor_grain=input_grain,
                 )
             )
             upstream_availability_ends.append(availability_end)
-        normalized_maximum: str | None = _normalize_bound(value=maximum, is_end=False)
-        if normalized_maximum is not None:
-            input_evidence.append(
-                CursorInputEvidence(
-                    relation=relation_column[0],
-                    cursor_column=relation_column[1],
-                    minimum=(
-                        _normalize_bound(value=minimum, is_end=False)
-                        if minimum is not None
-                        else None
-                    ),
-                    maximum=normalized_maximum,
-                )
+        input_evidence.append(
+            CursorInputEvidence(
+                relation=relation_column[0],
+                cursor_column=relation_column[1],
+                minimum=minimum,
+                maximum=maximum,
             )
+        )
     if not upstream_maxes:
         return None
-    upstream_min_raw: object | None = (
-        _minimum_bound_raw(
+    upstream_min: CursorScalar | None = (
+        _minimum_bound(
             values=upstream_mins,
             cursor_type=cursor_type,
             effective_grain=effective_grain,
@@ -263,53 +262,46 @@ def resolve_runtime_cursor_bounds(
         if upstream_mins
         else None
     )
-    aggregate: Callable[..., object] = (
-        _maximum_bound_raw
-        if spec.cursor_watermark_mode == CursorWatermarkMode.ANY
-        else _minimum_bound_raw
+    aggregate: Callable[..., CursorScalar] = (
+        _maximum_bound
+        if spec.cursor_watermark_mode == RuntimeCursorWatermarkMode.ANY
+        else _minimum_bound
     )
     watermark_timestamp: bool = (
         cursor_type == CursorType.TIMESTAMP
         and spec.microbatch_strategy == MicrobatchStrategy.WATERMARK
     )
-    upstream_max_raw: object = aggregate(
+    upstream_max: CursorScalar = aggregate(
         values=(upstream_availability_ends if watermark_timestamp else upstream_maxes),
         cursor_type=cursor_type,
         effective_grain=(CursorGrain.SECOND if watermark_timestamp else effective_grain),
     )
     if cursor_type == CursorType.TIMESTAMP and effective_grain is not None:
-        start_raw: object | None = (
-            target_max_raw if target_max_raw is not None else upstream_min_raw
-        )
-        if start_raw is None:
+        start_value: CursorScalar | None = target_max if target_max is not None else upstream_min
+        if start_value is None:
             return None
-        start: str | None = _normalize_bound(
-            value=_normalize_raw_temporal_grain(value=start_raw, grain=effective_grain),
-            is_end=False,
-        )
-        end: str | None = _normalize_bound(
-            value=(
-                _normalize_raw_temporal_grain(value=upstream_max_raw, grain=effective_grain)
-                if watermark_timestamp and discovered_grain is not None
-                else upstream_max_raw
-                if watermark_timestamp
-                else advance_discovered_cursor_end(
-                    value=upstream_max_raw,
-                    cursor_type=cursor_type,
-                    cursor_grain=discovered_grain,
-                )
-            ),
-            is_end=False,
+        start: CursorScalar = floor_to_grain(value=start_value, grain=effective_grain)
+        end: CursorScalar = (
+            floor_to_grain(value=upstream_max, grain=effective_grain)
+            if watermark_timestamp and discovered_grain is not None
+            else upstream_max
+            if watermark_timestamp
+            else _exclusive_end_from_observed(
+                value=upstream_max,
+                cursor_type=cursor_type,
+                cursor_grain=discovered_grain,
+            )
         )
     else:
-        start: str | None = (
-            _normalize_bound(value=target_max_raw, is_end=False)
-            if target_max_raw is not None
-            else _normalize_bound(value=upstream_min_raw, is_end=False)
+        start_optional: CursorScalar | None = target_max if target_max is not None else upstream_min
+        if start_optional is None:
+            return None
+        start = start_optional
+        end = _exclusive_end_from_observed(
+            value=upstream_max,
+            cursor_type=cursor_type,
+            cursor_grain=discovered_grain,
         )
-        end: str | None = _normalize_bound(value=upstream_max_raw, is_end=True)
-    if start is None or end is None:
-        return None
     if spec.end_cursor_override is not None:
         end = _apply_cursor_end_ceiling(
             current_end=end,
@@ -319,7 +311,7 @@ def resolve_runtime_cursor_bounds(
         )
     if spec.start_cursor_override is not None:
         start = spec.start_cursor_override
-    start = apply_cursor_replay_policy(
+    start = apply_typed_cursor_replay_policy(
         start=start,
         end=end,
         cursor_start=spec.cursor_start,
@@ -331,25 +323,23 @@ def resolve_runtime_cursor_bounds(
     bounds: CursorBounds = apply_maximum_start_policy(
         bounds=CursorBounds(start=start, end=end),
         snapshot=ModelCursorSnapshot(
-            target_max=_normalize_bound(value=target_max_raw, is_end=False),
-            upstream_mins=_normalize_bounds(
-                values=upstream_mins,
-                cursor_type=cursor_type,
-                effective_grain=effective_grain,
+            target_max=target_max,
+            upstream_mins=tuple(
+                _normalize_temporal(value=value, cursor_type=cursor_type, grain=effective_grain)
+                for value in upstream_mins
             ),
-            upstream_maxes=_normalize_bounds(
-                values=upstream_maxes,
-                cursor_type=cursor_type,
-                effective_grain=effective_grain,
+            upstream_maxes=tuple(
+                _normalize_temporal(value=value, cursor_type=cursor_type, grain=effective_grain)
+                for value in upstream_maxes
             ),
-            physical_target_max=_normalize_bound(value=target_max_raw, is_end=False),
+            physical_target_max=target_max,
             target_eligible_max=(
-                _normalize_effective_timestamp_bound(
-                    value=target_eligible_max_raw,
+                _normalize_temporal(
+                    value=target_eligible_max,
                     cursor_type=cursor_type,
-                    effective_grain=effective_grain,
+                    grain=effective_grain,
                 )
-                if target_eligible_max_raw is not None
+                if target_eligible_max is not None
                 else None
             ),
             target_relation=target_relation,
@@ -386,18 +376,20 @@ def resolve_runtime_cursor_bounds(
 
 
 def _clamp_cursor_end(
-    *, bounds: CursorBounds, cursor_end: str | None, cursor_type: str | None
+    *, bounds: CursorBounds, cursor_end: CursorScalar | None, cursor_type: CursorType | None
 ) -> CursorBounds:
     if cursor_end is None:
         return bounds
-    effective_type: str = cursor_type or CursorType.TIMESTAMP
-    end_value: CursorScalar = parse(raw=cursor_end, cursor_type=effective_type)
-    if compare(left=parse(raw=bounds.start, cursor_type=effective_type), right=end_value) >= 0:
-        return CursorBounds(start=cursor_end, end=cursor_end)
-    if compare(left=parse(raw=bounds.end, cursor_type=effective_type), right=end_value) > 0:
+    effective_type: CursorType = cursor_type or CursorType.TIMESTAMP
+    end_value: CursorScalar = cursor_end
+    if isinstance(bounds.start, BoundSentinel) or isinstance(bounds.end, BoundSentinel):
+        return bounds
+    if compare(left=bounds.start, right=end_value) >= 0:
+        return CursorBounds(start=end_value, end=end_value)
+    if compare(left=bounds.end, right=end_value) > 0:
         if effective_type == CursorType.INTEGER:
-            start_value: CursorScalar = parse(raw=bounds.start, cursor_type=CursorType.INTEGER)
-            current_end_value: CursorScalar = parse(raw=bounds.end, cursor_type=CursorType.INTEGER)
+            start_value: CursorScalar = bounds.start
+            current_end_value: CursorScalar = bounds.end
             if (
                 isinstance(start_value, IntegerValue)
                 and isinstance(current_end_value, IntegerValue)
@@ -411,34 +403,17 @@ def _clamp_cursor_end(
                 )
                 clamped: AlignedInterval | None = clamp(interval=original, bounds=ceiling)
                 if clamped is not None:
-                    return CursorBounds(start=bounds.start, end=cursor_end)
-        return CursorBounds(start=bounds.start, end=cursor_end)
+                    return CursorBounds(start=bounds.start, end=end_value)
+        return CursorBounds(start=bounds.start, end=end_value)
     return bounds
 
 
-def _normalize_bounds(
-    *, values: list[object], cursor_type: str | None, effective_grain: str | None
-) -> tuple[str, ...]:
-    normalized: list[str] = []
-    item: object
-    for item in values:
-        value: str | None = _normalize_effective_timestamp_bound(
-            value=item,
-            cursor_type=cursor_type,
-            effective_grain=effective_grain,
-        )
-        if value is not None:
-            normalized.append(value)
-    return tuple(normalized)
-
-
-def _normalize_effective_timestamp_bound(
-    *, value: object, cursor_type: str | None, effective_grain: str | None
-) -> str | None:
-    normalized_value: object = value
-    if cursor_type == CursorType.TIMESTAMP and effective_grain is not None:
-        normalized_value = _normalize_raw_temporal_grain(value=value, grain=effective_grain)
-    return _normalize_bound(value=normalized_value, is_end=False)
+def _normalize_temporal(
+    *, value: CursorScalar, cursor_type: CursorType | None, grain: CursorGrain | None
+) -> CursorScalar:
+    if cursor_type == CursorType.TIMESTAMP and grain is not None:
+        return floor_to_grain(value=value, grain=grain)
+    return value
 
 
 def _query_watermark_raw(
@@ -473,6 +448,37 @@ def _query_watermark_raw(
         cursor_column=cursor_column,
         read_minimum=read_minimum,
         query=query,
+    )
+
+
+def _query_watermark_values(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    relation: str,
+    cursor_column: str,
+    cursor_type: CursorType | None,
+    read_minimum: bool,
+    query_index: int,
+    total: int,
+    on_progress: Callable[[str], None] | None,
+    watermark_resolver: WatermarkResolver | None,
+) -> tuple[CursorScalar | None, CursorScalar | None]:
+    minimum_raw, maximum_raw = _query_watermark_raw(
+        adapter=adapter,
+        connection=connection,
+        relation=relation,
+        cursor_column=cursor_column,
+        read_minimum=read_minimum,
+        query_index=query_index,
+        total=total,
+        on_progress=on_progress,
+        watermark_resolver=watermark_resolver,
+    )
+    effective_type: CursorType = cursor_type or CursorType.TIMESTAMP
+    return (
+        parse(raw=minimum_raw, cursor_type=effective_type) if minimum_raw is not None else None,
+        parse(raw=maximum_raw, cursor_type=effective_type) if maximum_raw is not None else None,
     )
 
 
@@ -516,94 +522,79 @@ def _execute_watermark_query(
     return None, row[0]
 
 
-def _minimum_bound_raw(
-    *, values: list[object], cursor_type: str | None, effective_grain: str | None
-) -> object:
-    """Choose a conservative minimum across compatible raw watermark values."""
+def _minimum_bound(
+    *,
+    values: list[CursorScalar],
+    cursor_type: CursorType | None,
+    effective_grain: CursorGrain | None,
+) -> CursorScalar:
+    """Choose a conservative minimum across typed watermark values."""
 
-    if cursor_type == CursorType.TIMESTAMP:
-        grain: str = effective_grain or CursorGrain.SECOND
-        normalized: list[object] = [
-            _normalize_raw_temporal_grain(value=value, grain=grain) for value in values
-        ]
-        try:
-            selected: object = min_bound(values=normalized, cursor_type=cursor_type)
-        except ValueError as error:
-            raise ExecutorInputError(
-                "runtime timestamp watermark returned incompatible value type"
-            ) from error
-        return values[normalized.index(selected)]
-    if cursor_type == CursorType.INTEGER:
-        return min_bound(values=values, cursor_type=cursor_type)
-    return min(values)
+    normalized: list[CursorScalar] = [
+        _normalize_temporal(value=value, cursor_type=cursor_type, grain=effective_grain)
+        for value in values
+    ]
+    selected: CursorScalar = min_bound(
+        values=normalized, cursor_type=cursor_type or CursorType.TIMESTAMP
+    )
+    return values[normalized.index(selected)]
 
 
-def _maximum_bound_raw(
-    *, values: list[object], cursor_type: str | None, effective_grain: str | None
-) -> object:
-    """Choose the furthest usable alternative watermark value."""
+def _maximum_bound(
+    *,
+    values: list[CursorScalar],
+    cursor_type: CursorType | None,
+    effective_grain: CursorGrain | None,
+) -> CursorScalar:
+    """Choose the furthest usable alternative typed watermark value."""
 
-    if cursor_type == CursorType.TIMESTAMP:
-        grain: str = effective_grain or CursorGrain.SECOND
-        normalized: list[object] = [
-            _normalize_raw_temporal_grain(value=value, grain=grain) for value in values
-        ]
-        try:
-            selected: object = max_bound(values=normalized, cursor_type=cursor_type)
-        except ValueError as error:
-            raise ExecutorInputError(
-                "runtime timestamp watermark returned incompatible value type"
-            ) from error
-        return values[normalized.index(selected)]
-    if cursor_type == CursorType.INTEGER:
-        return max_bound(values=values, cursor_type=cursor_type)
-    return max(values)
-
-
-def _raw_terminal_bound(*, value: str, cursor_type: str | None) -> object:
-    if cursor_type == CursorType.INTEGER:
-        return parse(raw=value, cursor_type=CursorType.INTEGER).value
-    return datetime.fromisoformat(value)
+    normalized: list[CursorScalar] = [
+        _normalize_temporal(value=value, cursor_type=cursor_type, grain=effective_grain)
+        for value in values
+    ]
+    selected: CursorScalar = max_bound(
+        values=normalized, cursor_type=cursor_type or CursorType.TIMESTAMP
+    )
+    return values[normalized.index(selected)]
 
 
 def _terminal_inclusive_maximum(
-    *, value: str | None, cursor_type: str | None, cursor_grain: str | None
-) -> object | None:
+    *,
+    value: CursorScalar | None,
+    cursor_type: CursorType | None,
+    cursor_grain: CursorGrain | None,
+) -> CursorScalar | None:
     if value is None:
         return None
     if cursor_type == CursorType.INTEGER:
-        return exclusive_to_inclusive(
-            value=parse(raw=value, cursor_type=CursorType.INTEGER), grain=None
-        ).value
-    parsed: CursorScalar | None = try_parse(raw=value, cursor_type=CursorType.TIMESTAMP)
-    if parsed is None:
-        return None
+        return exclusive_to_inclusive(value=value, grain=None)
+    parsed: CursorScalar = value
     if isinstance(parsed, DateValue):
         parsed = TimestampValue(value=datetime.combine(parsed.value, datetime.min.time()))
     inclusive: CursorScalar = exclusive_to_inclusive(
         value=parsed, grain=CursorGrain(cursor_grain or CursorGrain.SECOND)
     )
-    return inclusive.value
+    return inclusive
 
 
 def resolve_effective_timestamp_grain(
     *,
-    cursor_type: str | None,
-    downstream_grain: str | None,
-    cursor_input_relations: tuple[CursorInputRelation, ...],
+    cursor_type: CursorType | str | None,
+    downstream_grain: CursorGrain | str | None,
+    cursor_input_relations: tuple[CursorInputRelation | RuntimeCursorInputRelation, ...],
     microbatch_strategy: str | None = None,
-) -> str | None:
+) -> CursorGrain | None:
     """Return the coarsest timestamp grain participating in runtime-owned replay."""
 
     if cursor_type != CursorType.TIMESTAMP:
         return None
     if microbatch_strategy == MicrobatchStrategy.WATERMARK:
-        return downstream_grain or CursorGrain.SECOND
-    effective: str = downstream_grain or CursorGrain.SECOND
-    cursor_input: CursorInputRelation
+        return CursorGrain(downstream_grain or CursorGrain.SECOND)
+    effective: CursorGrain = CursorGrain(downstream_grain or CursorGrain.SECOND)
+    cursor_input: CursorInputRelation | RuntimeCursorInputRelation
     for cursor_input in cursor_input_relations:
-        input_grain: str = cursor_input.cursor_grain or CursorGrain.SECOND
-        if GRAIN_ORDER[CursorGrain(input_grain)] > GRAIN_ORDER[CursorGrain(effective)]:
+        input_grain: CursorGrain = CursorGrain(cursor_input.cursor_grain or CursorGrain.SECOND)
+        if GRAIN_ORDER[input_grain] > GRAIN_ORDER[effective]:
             effective = input_grain
     return effective
 
@@ -613,15 +604,15 @@ def substitute_cursor_sentinels(*, sql: str, bounds: CursorBounds) -> str:
 
     if sentinel_from_token(token=MICROBATCH_START_SENTINEL) is None:
         raise ExecutorInputError("invalid start cursor marker")
-    result: str = sql.replace(MICROBATCH_START_SENTINEL, bounds.start)
-    result = result.replace(MICROBATCH_END_SENTINEL, bounds.end)
+    result: str = sql.replace(MICROBATCH_START_SENTINEL, sentinel_to_token(sentinel=bounds.start))
+    result = result.replace(MICROBATCH_END_SENTINEL, sentinel_to_token(sentinel=bounds.end))
     _, has_intrinsics = resolve_cursor_intrinsics(sql=result)
     if has_intrinsics or MICROBATCH_START_SENTINEL in result or MICROBATCH_END_SENTINEL in result:
         raise ExecutorInputError("executable model SQL contains unresolved cursor markers")
     return result
 
 
-def _query_target_max_raw(
+def _query_target_max(
     *,
     adapter: BaseAdapter,
     connection: Any,
@@ -630,7 +621,8 @@ def _query_target_max_raw(
     target_schema: str | None,
     target_name: str,
     cursor_column: str,
-) -> object | None:
+    cursor_type: CursorType | None,
+) -> CursorScalar | None:
     """Read the target cursor high-water mark or None when the target does not exist."""
 
     if not adapter.relation_exists(
@@ -645,24 +637,23 @@ def _query_target_max_raw(
     row: Any = cursor.fetchone()
     if row is None or row[0] is None:
         return None
-    return row[0]
+    return parse(raw=row[0], cursor_type=cursor_type or CursorType.TIMESTAMP)
 
 
-def _query_eligible_target_max_raw(
+def _query_eligible_target_max(
     *,
     adapter: BaseAdapter,
     connection: Any,
     target_relation: str,
     cursor_column: str,
-    cursor_type: str | None,
-    cursor_grain: str | None,
-    target_max_raw: object | None,
+    cursor_type: CursorType | None,
+    cursor_grain: CursorGrain | None,
+    target_max: CursorScalar | None,
     spec: RuntimeCursorSpec,
-) -> object | None:
+) -> CursorScalar | None:
     """Read the target MAX at or below the automatic-start horizon when recovery is needed."""
 
     config: StartCursorsConfig | None = spec.start_cursor_config
-    target_max: str | None = _normalize_bound(value=target_max_raw, is_end=False)
     if (
         config is None
         or config.max_ahead is None
@@ -672,135 +663,106 @@ def _query_eligible_target_max_raw(
         or spec.start_cursor_override is not None
     ):
         return None
-    horizon: str = _maximum_allowed_start(
+    horizon: CursorScalar = _maximum_allowed_start(
         discovered_value=target_max,
         cursor_grain=cursor_grain,
         invocation_time=spec.invocation_time,
         max_ahead=config.max_ahead,
     )
-    if datetime.fromisoformat(target_max) <= datetime.fromisoformat(horizon):
+    if compare(left=target_max, right=horizon) <= 0:
         return None
     eligible_sql: str = adapter.render_max_cursor_at_or_before(
         relation=target_relation,
         cursor_column=cursor_column,
-        maximum_allowed=horizon,
+        maximum_allowed=render(value=horizon),
         cursor_type=cursor_type,
-        is_date=_is_plain_date(target_max_raw),
+        is_date=isinstance(target_max, DateValue),
     )
     cursor: Any = adapter.execute(
         connection=connection,
         sql=eligible_sql,
     )
     row: Any = cursor.fetchone()
-    return None if row is None else row[0]
+    return (
+        None
+        if row is None or row[0] is None
+        else parse(raw=row[0], cursor_type=CursorType.TIMESTAMP)
+    )
 
 
 def _maximum_allowed_start(
-    *, discovered_value: str, cursor_grain: str | None, invocation_time: datetime, max_ahead: str
-) -> str:
+    *,
+    discovered_value: CursorScalar,
+    cursor_grain: CursorGrain | None,
+    invocation_time: datetime,
+    max_ahead: str,
+) -> CursorScalar:
     duration: Duration | None = Duration.parse(max_ahead)
     if duration is None and max_ahead == ZERO_DAY_CURSOR_DURATION:
         duration = Duration()
     if duration is None:
         raise ExecutorInputError(f"invalid cursors.start.max_ahead '{max_ahead}'")
     maximum: datetime = duration.add_to(invocation_time.astimezone(UTC).replace(tzinfo=None))
-    floored: object = _normalize_raw_temporal_grain(
-        value=maximum, grain=cursor_grain or CursorGrain.SECOND
+    normalized: TimestampValue = TimestampValue(value=maximum)
+    if isinstance(discovered_value, TimestampValue) and discovered_value.value.tzinfo is not None:
+        normalized = TimestampValue(value=maximum.replace(tzinfo=UTC))
+    floored: CursorScalar = floor_to_grain(
+        value=normalized, grain=cursor_grain or CursorGrain.SECOND
     )
-    if not isinstance(floored, datetime):
-        raise ExecutorInputError("maximum automatic start could not be normalized")
-    if _is_plain_date_string(discovered_value):
-        return floored.date().isoformat()
-    parsed: datetime = datetime.fromisoformat(discovered_value)
-    return (
-        floored.replace(tzinfo=UTC).isoformat()
-        if parsed.tzinfo is not None
-        else floored.isoformat()
-    )
-
-
-def _is_plain_date_string(value: str) -> bool:
-    try:
-        date.fromisoformat(value)
-        return True
-    except ValueError:
-        return False
-
-
-def _is_plain_date(value: object) -> bool:
-    """Return whether a value is a date that is not also a datetime."""
-
-    return isinstance(value, date) and not isinstance(value, datetime)
-
-
-def _normalize_raw_temporal_grain(*, value: object, grain: str) -> object:
-    parsed: CursorScalar | None = try_parse(raw=value, cursor_type=CursorType.TIMESTAMP)
-    if parsed is None:
-        return value
-    return floor_to_grain(value=parsed, grain=CursorGrain(grain)).value
-
-
-def _normalize_bound(*, value: object, is_end: bool) -> str | None:
-    if isinstance(value, datetime):
-        normalized: datetime = value + timedelta(seconds=1) if is_end else value
-        return normalized.isoformat()
-    if _is_plain_date(value):
-        plain_date: date = cast(date, value)
-        normalized_date: date = plain_date + timedelta(days=1) if is_end else plain_date
-        return normalized_date.isoformat()
-    if isinstance(value, (int, Decimal)):
-        normalized_int: int = int(value) + 1 if is_end else int(value)
-        return str(normalized_int)
-    if value is None:
-        return None
-    return str(value)
+    if isinstance(discovered_value, DateValue) and isinstance(floored, TimestampValue):
+        return DateValue(value=floored.value.date())
+    return floored
 
 
 def _apply_cursor_end_ceiling(
     *,
-    current_end: str,
-    end_cursor_override: str,
-    cursor_type: str | None,
-    effective_grain: str | None,
-) -> str:
+    current_end: CursorScalar,
+    end_cursor_override: CursorScalar,
+    cursor_type: CursorType | None,
+    effective_grain: CursorGrain | None,
+) -> CursorScalar:
     """Clamp the discovered exclusive end down to the inclusive `--end-cursor-ts` override."""
 
     if cursor_type == CursorType.TIMESTAMP:
-        current_value: CursorScalar | None = try_parse(
-            raw=current_end, cursor_type=CursorType.TIMESTAMP
-        )
-        override_value: CursorScalar | None = try_parse(
-            raw=end_cursor_override, cursor_type=CursorType.TIMESTAMP
-        )
-        if current_value is None or override_value is None:
-            return current_end
-        grain: CursorGrain = CursorGrain(effective_grain or CursorGrain.SECOND)
+        grain: CursorGrain = effective_grain or CursorGrain.SECOND
         exclusive_override: CursorScalar = inclusive_to_exclusive(
-            value=floor_to_grain(value=override_value, grain=grain), grain=grain
+            value=floor_to_grain(value=end_cursor_override, grain=grain), grain=grain
         )
-        return render(
-            value=min_bound(
-                values=(current_value, exclusive_override), cursor_type=CursorType.TIMESTAMP
-            )
-        )
+        return min_bound(values=(current_end, exclusive_override), cursor_type=CursorType.TIMESTAMP)
     if cursor_type == CursorType.INTEGER:
-        current_integer: CursorScalar | None = try_parse(
-            raw=current_end, cursor_type=CursorType.INTEGER
-        )
-        override_integer: CursorScalar | None = try_parse(
-            raw=end_cursor_override, cursor_type=CursorType.INTEGER
-        )
-        if not isinstance(current_integer, IntegerValue) or not isinstance(
-            override_integer, IntegerValue
+        if not isinstance(current_end, IntegerValue) or not isinstance(
+            end_cursor_override, IntegerValue
         ):
             return current_end
-        return render(
-            value=min_bound(
-                values=(
-                    current_integer,
-                    inclusive_to_exclusive(value=override_integer, grain=None),
-                ),
-                cursor_type=CursorType.INTEGER,
-            )
+        return min_bound(
+            values=(
+                current_end,
+                inclusive_to_exclusive(value=end_cursor_override, grain=None),
+            ),
+            cursor_type=CursorType.INTEGER,
         )
     return current_end
+
+
+def _exclusive_end_from_observed(
+    *, value: CursorScalar, cursor_type: CursorType | None, cursor_grain: CursorGrain | None
+) -> CursorScalar:
+    grain: CursorGrain | None = (
+        None
+        if cursor_type == CursorType.INTEGER
+        else cursor_grain
+        or (CursorGrain.DAY if isinstance(value, DateValue) else CursorGrain.SECOND)
+    )
+    return exclusive_end_from_observed_max(value=value, grain=grain)
+
+
+def _resolve_typed_bounded_override(*, spec: RuntimeCursorSpec) -> CursorBounds | None:
+    if spec.start_cursor_override is None or spec.end_cursor_override is None:
+        return None
+    grain: CursorGrain | None = (
+        None if spec.cursor_type == CursorType.INTEGER else spec.cursor_grain or CursorGrain.SECOND
+    )
+    return CursorBounds(
+        start=spec.start_cursor_override,
+        end=inclusive_to_exclusive(value=spec.end_cursor_override, grain=grain),
+    )

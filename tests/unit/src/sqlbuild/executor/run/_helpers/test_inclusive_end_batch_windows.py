@@ -9,8 +9,12 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import advance_cursor_end
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
+from sqlbuild.cursor_algebra.main.compare import compare
+from sqlbuild.cursor_algebra.main.inclusive_to_exclusive import inclusive_to_exclusive
+from sqlbuild.cursor_algebra.main.parse import parse
+from sqlbuild.cursor_algebra.main.render import render
+from sqlbuild.cursor_algebra.types import CursorScalar
 from sqlbuild.executor.run._helpers.materializations.microbatch import compute_batch_windows
 from sqlbuild.executor.run.models import BatchWindow
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
@@ -49,10 +53,12 @@ from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
 def test_given_inclusive_end_when_building_batch_windows_then_final_value_is_included(
     test_case: InclusiveEndBatchWindowTestCase,
 ) -> None:
-    exclusive_end: str = advance_cursor_end(
-        value=test_case.inclusive_end,
-        cursor_type=test_case.cursor_type,
-        cursor_grain=test_case.cursor_grain,
+    inclusive_end: CursorScalar = parse(
+        raw=test_case.inclusive_end, cursor_type=test_case.cursor_type
+    )
+    exclusive_end: CursorScalar = inclusive_to_exclusive(
+        value=inclusive_end,
+        grain=CursorGrain(test_case.cursor_grain or CursorGrain.SECOND),
     )
 
     windows: tuple[BatchWindow, ...] = compute_batch_windows(
@@ -63,8 +69,8 @@ def test_given_inclusive_end_when_building_batch_windows_then_final_value_is_inc
     )
 
     final_window: BatchWindow = windows[-1]
-    final_value_included: bool = test_case.inclusive_end < final_window.end
+    final_value_included: bool = compare(left=inclusive_end, right=final_window.end) < 0
 
     assert len(windows) == test_case.expected_batch_count
-    assert final_window.end == test_case.expected_final_window_end
+    assert render(value=final_window.end) == test_case.expected_final_window_end
     assert final_value_included == test_case.expected_final_value_included

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild.cursor_algebra.main.render import render
+
 
 class PlannerInputError(ValueError):
     """Raised when planner inputs cannot be resolved safely."""
@@ -36,10 +38,17 @@ class MaximumAutomaticStartError(PlannerInputError):
             detail: str = " on a non-idempotent materialization" if non_idempotent else ""
             message = (
                 "maximum automatic start policy exceeded"
-                f"{detail}: physical target MAX='{evidence.physical_target_max}', "
-                f"highest eligible MAX={evidence.highest_eligible_target_max!r}, "
-                f"effective post-lookback start='{evidence.effective_start}', "
-                f"horizon='{evidence.maximum_allowed_start}', action={evidence.action.value}, "
+                f"{detail}: physical target MAX='{render(value=evidence.physical_target_max)}', "
+                "highest eligible MAX="
+                f"{self._render_optional_repr(evidence.highest_eligible_target_max)}, "
+                "effective post-lookback start="
+                f"'{render(value=evidence.effective_start)}', "
+                f"horizon='{render(value=evidence.maximum_allowed_start)}', "
+                f"action={evidence.action.value}, "
                 f"input={evidence.target_relation}.{evidence.cursor_column}"
             )
         super().__init__(message or "maximum automatic start policy exceeded")
+
+    @staticmethod
+    def _render_optional_repr(value: Any | None) -> str:
+        return "None" if value is None else repr(render(value=value))

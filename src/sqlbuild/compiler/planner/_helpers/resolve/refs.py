@@ -34,6 +34,7 @@ from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matchi
 from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
 from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 
 _REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
 _SEED_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SEED)
@@ -287,10 +288,10 @@ def _build_cursor_subquery(
     lower_operator: str = ">=" if lower_bound_inclusive else ">"
     upper_operator: str = "<=" if cursor_type is None else "<"
     start_literal: str = adapter.render_cursor_bound_literal(
-        value=bounds.start, cursor_type=cursor_type
+        value=sentinel_to_token(sentinel=bounds.start), cursor_type=cursor_type
     )
     end_literal: str = adapter.render_cursor_bound_literal(
-        value=bounds.end, cursor_type=cursor_type
+        value=sentinel_to_token(sentinel=bounds.end), cursor_type=cursor_type
     )
     derived_alias: str = (
         " AS __cursor_ref" if inject_alias and adapter.requires_derived_table_aliases() else ""

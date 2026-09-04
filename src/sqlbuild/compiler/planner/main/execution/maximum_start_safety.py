@@ -7,9 +7,11 @@ from sqlbuild.compiler.planner._helpers.resolve.maximum_start import (
 )
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
+    Duration,
     MaximumStartPolicyInputs,
     ModelCursorSnapshot,
 )
+from sqlbuild.cursor_algebra.types import CursorScalar
 
 
 def apply_maximum_start_policy(
@@ -18,9 +20,9 @@ def apply_maximum_start_policy(
     snapshot: ModelCursorSnapshot,
     cursor_type: str | None,
     cursor_grain: str | None,
-    cursor_start: str | None,
-    lookback: str | None,
-    backfill_duration: str | None,
+    cursor_start: CursorScalar | str | None,
+    lookback: Duration | str | None,
+    backfill_duration: Duration | str | None,
     policy: MaximumStartPolicyInputs,
     has_start_override: bool,
 ) -> CursorBounds:

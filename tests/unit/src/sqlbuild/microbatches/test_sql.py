@@ -13,6 +13,9 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
+from sqlbuild.compiler.planner.types import CursorType
+from sqlbuild.cursor_algebra.main.parse import parse
+from sqlbuild.cursor_algebra.main.render import render
 from sqlbuild.microbatches._helpers.sql import (
     build_create_table_sql,
     build_insert_many_sql,
@@ -26,6 +29,7 @@ from sqlbuild.microbatches.main.deterministic_event_id import (
 from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
 from sqlbuild.microbatches.types import MicrobatchRecordType
 from tests.unit.src.sqlbuild.microbatches._test_types import (
+    MicrobatchAwareOffsetIdentityTestCase,
     MicrobatchDdlAdapterTestCase,
     MicrobatchSqlBehaviorTestCase,
 )
@@ -33,6 +37,44 @@ from tests.unit.src.sqlbuild.microbatches.helpers import (
     SCOPE,
     completion_for_sql,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MicrobatchAwareOffsetIdentityTestCase(
+            description="stored aware offsets retain deterministic identity",
+            partition_start="2026-01-01T08:00:00+08:00",
+            partition_end="2026-01-01T09:00:00+08:00",
+            expected_event_id="d15ad5651a6a2461e611a3ac97c708fa74c3dab481e9feacbd976c0b34a85ed4",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_stored_aware_offsets_when_parsing_then_deterministic_identity_is_unchanged(
+    test_case: MicrobatchAwareOffsetIdentityTestCase,
+) -> None:
+    stored_id: str = deterministic_microbatch_event_id(
+        scope=SCOPE,
+        record_type=MicrobatchRecordType.PARTITION_COMPLETION,
+        partition_start=test_case.partition_start,
+        partition_end=test_case.partition_end,
+        completion_reason="initial:F2",
+    )
+    round_trip_id: str = deterministic_microbatch_event_id(
+        scope=SCOPE,
+        record_type=MicrobatchRecordType.PARTITION_COMPLETION,
+        partition_start=render(
+            value=parse(raw=test_case.partition_start, cursor_type=CursorType.TIMESTAMP)
+        ),
+        partition_end=render(
+            value=parse(raw=test_case.partition_end, cursor_type=CursorType.TIMESTAMP)
+        ),
+        completion_reason="initial:F2",
+    )
+
+    assert stored_id == test_case.expected_event_id
+    assert round_trip_id == test_case.expected_event_id
 
 
 @pytest.mark.parametrize(

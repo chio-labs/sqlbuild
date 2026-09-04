@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
 
 from sqlbuild.cli.output.models import CursorPlanDetails
 from sqlbuild.cli.output.types import CursorBoundsOwner, CursorResolutionStatus
@@ -18,6 +17,7 @@ from sqlbuild.compiler.planner.types import (
     MicrobatchStrategy,
 )
 from sqlbuild.cursor_algebra.constants import GRAIN_ORDER
+from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue
 from sqlbuild.spec.contracts.constants import EFFECTIVE_BATCH_SIZE_TOKEN
 
 
@@ -100,22 +100,33 @@ def _count_batches(*, bounds: CursorBounds, batch_size: str, cursor_type: str) -
         duration: Duration | None = Duration.parse(batch_size)
         if duration is None:
             return None
-        try:
-            current: datetime = datetime.fromisoformat(bounds.start)
-            end: datetime = datetime.fromisoformat(bounds.end)
-        except (TypeError, ValueError):
+        if not isinstance(bounds.start, DateValue | TimestampValue) or not isinstance(
+            bounds.end, DateValue | TimestampValue
+        ):
             return None
+        current: datetime = (
+            bounds.start.value
+            if isinstance(bounds.start, TimestampValue)
+            else datetime.combine(bounds.start.value, datetime.min.time())
+        )
+        end: datetime = (
+            bounds.end.value
+            if isinstance(bounds.end, TimestampValue)
+            else datetime.combine(bounds.end.value, datetime.min.time())
+        )
         count: int = 0
         while current < end:
             current = min(duration.add_to(current), end)
             count += 1
         return count
     if cursor_type == CursorType.INTEGER:
+        if not isinstance(bounds.start, IntegerValue) or not isinstance(bounds.end, IntegerValue):
+            return None
+        start: int = bounds.start.value
+        end: int = bounds.end.value
         try:
-            start: int = int(Decimal(bounds.start))
-            end = int(Decimal(bounds.end))
-            size: int = int(Decimal(batch_size))
-        except (InvalidOperation, ValueError, OverflowError):
+            size: int = int(batch_size)
+        except ValueError:
             return None
         if size <= 0 or start >= end:
             return 0

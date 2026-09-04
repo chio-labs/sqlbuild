@@ -21,6 +21,7 @@ from sqlbuild.compiler.references.main._quoted_reference_call_pattern import (
 )
 from sqlbuild.compiler.references.main._render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.spec.contracts.models import SourceColumnEntry, SourceEntry
 
 _SOURCE_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SOURCE)
@@ -426,10 +427,10 @@ def _build_cursor_subquery(
     lower_operator: str = ">=" if lower_bound_inclusive else ">"
     upper_operator: str = "<=" if cursor_type is None else "<"
     start_literal: str = adapter.render_cursor_bound_literal(
-        value=bounds.start, cursor_type=cursor_type
+        value=sentinel_to_token(sentinel=bounds.start), cursor_type=cursor_type
     )
     end_literal: str = adapter.render_cursor_bound_literal(
-        value=bounds.end, cursor_type=cursor_type
+        value=sentinel_to_token(sentinel=bounds.end), cursor_type=cursor_type
     )
     return (
         f"(SELECT * FROM {resolved_source}"

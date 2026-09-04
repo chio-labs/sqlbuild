@@ -19,6 +19,7 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import IncrementalStrategy, PlanAction
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.executor.build.constants import INCREMENTAL_ACTIONS
 from sqlbuild.virtual.state.models import PhysicalRelationAncestryRecord, PhysicalRelationRecord
 from sqlbuild.virtual.state.types import PhysicalArtifactType
@@ -203,7 +204,7 @@ def _cursor_start_for_append_seed(*, entry: ModelPlanEntry) -> str:
         raise PlannerInputError(
             f"bounded append seeding for '{entry.name}' requires cursor bounds and cursor_column"
         )
-    return entry.cursor_bounds.start
+    return sentinel_to_token(sentinel=entry.cursor_bounds.start)
 
 
 def resolve_virtual_seed_selection(
