@@ -29,19 +29,19 @@ def test_given_nested_and_private_files_when_discovering_then_returns_public_exp
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     declaration = """
-from sqlbuild.event_exporters import event_exporter
+from sqlbuild.sinks import lifecycle_event_sink
 
-@event_exporter
+@lifecycle_event_sink
 def publish(event):
     pass
 """
     write_repo_files(
         tmp_path,
         {
-            "event_exporters/nested/public.py": declaration,
-            "event_exporters/_private.py": declaration,
-            "event_exporters/_private_dir/hidden.py": declaration,
-            "event_exporters/nested/__init__.py": declaration,
+            "sinks/nested/public.py": declaration,
+            "sinks/_private.py": declaration,
+            "sinks/_private_dir/hidden.py": declaration,
+            "sinks/nested/__init__.py": declaration,
         },
     )
 
@@ -50,7 +50,7 @@ def publish(event):
     )
 
     assert tuple(exporter.name for exporter in exporters) == (test_case.expected_name,)
-    assert exporters[0].relative_path.as_posix() == "event_exporters/nested/public.py"
+    assert exporters[0].relative_path.as_posix() == "sinks/nested/public.py"
 
 
 @pytest.mark.parametrize(
@@ -72,11 +72,11 @@ from sqlbuild.providers import Provider
 class Sink(Provider):
     pass
 """,
-            "event_exporters/publish.py": """
+            "sinks/publish.py": """
 from providers.sink import Sink
-from sqlbuild.event_exporters import LifecycleEvent, event_exporter
+from sqlbuild.sinks import LifecycleEvent, lifecycle_event_sink
 
-@event_exporter
+@lifecycle_event_sink
 def publish(event: LifecycleEvent, sink: Sink) -> None:
     pass
 """,
@@ -111,10 +111,10 @@ from sqlbuild.providers import Provider
 class Sink(Provider):
     pass
 """,
-            "event_exporters/publish.py": """
-from sqlbuild.event_exporters import event_exporter
+            "sinks/publish.py": """
+from sqlbuild.sinks import lifecycle_event_sink
 
-@event_exporter
+@lifecycle_event_sink
 def publish(event, sink):
     pass
 """,
@@ -159,9 +159,9 @@ def test_given_invalid_signature_when_discovering_then_rejects_before_execution(
     write_repo_files(
         tmp_path,
         {
-            "event_exporters/invalid.py": (
-                "from sqlbuild.event_exporters import event_exporter\n\n"
-                f"@event_exporter\n{test_case.body}\n"
+            "sinks/invalid.py": (
+                "from sqlbuild.sinks import lifecycle_event_sink\n\n"
+                f"@lifecycle_event_sink\n{test_case.body}\n"
             )
         },
     )
@@ -181,17 +181,17 @@ def test_given_duplicate_names_when_discovering_then_rejects_deterministically(
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     declaration = """
-from sqlbuild.event_exporters import event_exporter
+from sqlbuild.sinks import lifecycle_event_sink
 
-@event_exporter(name="duplicate")
+@lifecycle_event_sink(name="duplicate")
 def publish(event):
     pass
 """
     write_repo_files(
         tmp_path,
         {
-            "event_exporters/first.py": declaration,
-            "event_exporters/second.py": declaration,
+            "sinks/first.py": declaration,
+            "sinks/second.py": declaration,
         },
     )
 
@@ -254,12 +254,12 @@ from sqlbuild.providers import Provider
 class Sink(Provider):
     pass
 """,
-            "event_exporters/invalid.py": (
+            "sinks/invalid.py": (
                 "from providers.sink import Sink\n"
-                "from sqlbuild.event_exporters import event_exporter\n"
+                "from sqlbuild.sinks import lifecycle_event_sink\n"
                 "from sqlbuild.providers import Provider\n\n"
                 "class Other(Provider):\n    pass\n\n"
-                f"@event_exporter\n{test_case.declaration}\n"
+                f"@lifecycle_event_sink\n{test_case.declaration}\n"
             ),
         },
     )
@@ -282,10 +282,10 @@ def test_given_decorated_function_alias_when_discovering_then_declares_exporter_
     write_repo_files(
         tmp_path,
         {
-            "event_exporters/aliased.py": """
-from sqlbuild.event_exporters import event_exporter
+            "sinks/aliased.py": """
+from sqlbuild.sinks import lifecycle_event_sink
 
-@event_exporter
+@lifecycle_event_sink
 def publish(event) -> None:
     pass
 
@@ -299,3 +299,22 @@ alias = publish
     )
 
     assert tuple(exporter.name for exporter in exporters) == (test_case.expected_name,)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (EventExporterDiscoveryTestCase("legacy exporter directory", "replaced by sinks"),),
+    ids=lambda case: case.description,
+)
+def test_given_legacy_exporter_directory_when_discovering_then_reports_migration(
+    test_case: EventExporterDiscoveryTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {"event_exporters/publish.py": "def publish(event):\n    del event\n"},
+    )
+
+    with pytest.raises(EventExporterDiscoveryError, match=test_case.expected_name):
+        discover_event_exporter_functions(project_dir=tmp_path)

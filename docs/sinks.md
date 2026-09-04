@@ -1,23 +1,29 @@
-# Event exporters
+# Typed sinks
 
-Project event exporters consume already validated, redacted, immutable `LifecycleEvent` values.
-They are asynchronous, bounded, isolated, destination-neutral, and best effort. They cannot change
-an execution result and are not durable history.
+Project sinks consume one declared record type. Lifecycle-event and command-output contracts are
+separate even when both sinks use the same provider instance and remote service. Delivery is
+bounded, isolated, destination-neutral, and best effort. A sink cannot change an execution result
+and is not durable history.
 
-## Declare an exporter
+The former `sqlbuild.event_exporters`, `sqlbuild.output_capture`, `event_exporters/`, and
+`[event_exporters]` interfaces have been replaced. Move declarations to `sinks/`, import the typed
+APIs below from `sqlbuild.sinks`, and move lifecycle filters to `[sinks.lifecycle]`. Legacy project
+directories and configuration fail with an explicit migration error rather than silently disabling
+publication.
 
-SQLBuild imports public `event_exporters/**/*.py` files in sorted path order. It ignores
+## Declare a lifecycle-event sink
+
+SQLBuild imports public `sinks/**/*.py` files in sorted path order. It ignores
 `__init__.py` and any file below a path component beginning with `_`. Only functions defined in the
-module and decorated with the public API are exporters.
+module and decorated with the public API are sinks.
 
 ```python
-# event_exporters/publish.py
+# sinks/publish.py
 from providers.destination_client import DestinationClient
-from sqlbuild.event_exporters import LifecycleEvent, event_exporter
-from sqlbuild.observability import lifecycle_event_to_json
+from sqlbuild.sinks import LifecycleEvent, lifecycle_event_sink, lifecycle_event_to_json
 
 
-@event_exporter(
+@lifecycle_event_sink(
     name="publish_lifecycle",
     event_kinds={"run", "resource", "statement"},
     min_severity="info",
@@ -36,8 +42,47 @@ def publish_lifecycle(
 The function must be synchronous, declare `event` first, use only named parameters, have no
 defaults or variadics, and return `None` if annotated. `event` may be unannotated or exactly
 `LifecycleEvent`. Every later parameter is injected by provider name and may be unannotated or
-annotated with exactly that discovered provider class. Exporter names are unique lower-snake-case
+annotated with exactly that discovered provider class. Sink names are unique lower-snake-case
 identifiers; the default name is the function name.
+
+## Declare a command-output sink
+
+Remote stdout/stderr publication is disabled unless a public function under `sinks/` is explicitly
+decorated with `@command_output_sink`. Lifecycle-event sinks never receive command output.
+
+```python
+# sinks/publish.py
+from providers.destination_client import DestinationClient
+from sqlbuild.sinks import (
+    CommandOutputRecord,
+    command_output_sink,
+    command_output_to_json,
+)
+
+
+@command_output_sink(name="publish_command_output", streams={"stdout", "stderr"})
+def publish_command_output(
+    record: CommandOutputRecord,
+    destination_client: DestinationClient,
+) -> None:
+    destination_client.publish(
+        route="sqlbuild.command_output.v1",
+        key=record.record_id,
+        payload=command_output_to_json(record).encode("utf-8"),
+    )
+```
+
+The function must be synchronous, declare `record` first, and follow the same provider-parameter
+rules as a lifecycle sink. `streams` defaults to both streams and may explicitly narrow delivery to
+`stdout` or `stderr`. Loss summaries are delivered to every command-output sink because a shared
+bounded queue can lose records from either stream.
+
+`CommandOutputRecord` is a canonical versioned envelope. Records are ANSI-free, line-oriented,
+UTF-8-size-bounded chunks with invocation/run correlation, per-invocation sequence, stream,
+chunk position, producer metadata, and opaque JSON-compatible integration context. A
+`command_output_loss` record reports bounded-queue loss. This stream is troubleshooting data: it is
+potentially sensitive, may be lossy, and is not execution evidence. Exact host-local bytes remain in
+the invocation's `stdout.log` and `stderr.log` compute logs.
 
 A minimal destination-neutral provider shape is:
 
@@ -72,18 +117,18 @@ serialization, retry, acknowledgement, and durability.
 Declaration filters opt in; runtime configuration can only narrow them:
 
 ```toml
-[event_exporters]
+[sinks.lifecycle]
 event_kinds = ["run", "resource", "operation", "statement"]
 min_severity = "info"
 
-[event_exporters.named.publish_lifecycle]
+[sinks.lifecycle.named.publish_lifecycle]
 event_kinds = ["resource", "statement"]
 min_severity = "warning"
 ```
 
 Effective kinds are the intersection of declaration, global, and named sets. Effective minimum
 severity is the strictest of all three. Omitting declaration options means all kinds at `debug`.
-Unknown exporter names, keys, kinds, or severities fail before execution.
+Unknown lifecycle sink names, keys, kinds, or severities fail before execution.
 
 | Lifecycle event | Export kind | Severity | Queue priority |
 | --- | --- | --- | --- |
@@ -96,24 +141,26 @@ Unknown exporter names, keys, kinds, or severities fail before execution.
 | `invocation_completed`, `run_completed`, `resource_attempt_completed`, `resource_attempt_skipped`, `operation_completed`, `statement_completed` | Corresponding kind | `info` | 2 |
 | Any `*_failed` event | Corresponding kind | `error` | 3 |
 
-Diagnostics never enter exporter queues.
+Diagnostics and command output never enter lifecycle-event queues.
 
 ## Discovery and provider lifetime
 
-Startup first imports exporter modules and collects declarations without framework provider
-discovery. If there are no decorated public exporters, SQLBuild does not discover, construct, or set
-up providers and does not create exporter threads. Exporter modules are ordinary Python modules, so
+Startup first imports sink modules and collects declarations without framework provider discovery.
+If there are no decorated public sinks, SQLBuild does not discover, construct, or set up providers
+and does not create delivery threads. Sink modules are ordinary Python modules, so
 their own imports and import-time side effects still run; keep declarations import-safe. Otherwise
 normal project discovery finds provider classes, validates name/type
 injection, constructs providers, and calls each required provider's `setup` at most once on first
 use. Shared providers are torn down once in reverse setup order.
 
-Shutdown stops exporter acceptance, performs a bounded drain, and only then requests provider
-teardown. Each exporter invocation runs on its own daemon isolation thread. A call has a one-second
-default timeout; after timeout that exporter is blocked from later invocations. Python cannot kill
+Shutdown stops lifecycle-event acceptance, performs a bounded drain, and only then requests provider
+teardown. Each lifecycle sink invocation runs on its own daemon isolation thread. A call has a one-second
+default timeout; after timeout that sink is blocked from later invocations. Python cannot kill
 the thread or reverse destination side effects. Provider teardown is deferred until all live
 invocations return, so a forever-hung daemon retains its provider session until process exit. A
-provider is never torn down while live exporter code can access it.
+provider is never torn down while live sink code can access it. Command-output capture has its own
+bounded queue, batching, and shutdown deadline, then uses the already-bound command-scoped provider
+instances.
 
 ## Queueing and accounting
 
