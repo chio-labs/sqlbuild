@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.82.2](https://github.com/chio-labs/sqlbuild/compare/v0.82.1...v0.82.2) (2026-09-04)
+
+
+### Bug Fixes
+
+* harden typed seams for durations, node kinds, destinations, config, severity, and state literals ([#526](https://github.com/chio-labs/sqlbuild/issues/526)) ([ca965b7](https://github.com/chio-labs/sqlbuild/commit/ca965b78f524ac9cb62321e7a916fbf49d2b271c))
+
 ## [0.82.1](https://github.com/chio-labs/sqlbuild/compare/v0.82.0...v0.82.1) (2026-09-04)
 
 
