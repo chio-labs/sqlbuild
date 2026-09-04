@@ -32,15 +32,15 @@ def test_given_provider_exporter_when_building_then_receives_redacted_events_bef
     monkeypatch.setenv("EXPORTER_IMPORT_PATH", str(import_path))
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
-        project_name="event_exporter_project",
+        project_name="lifecycle_event_sink_project",
         repo_files={
             "sqlbuild_project.toml": dedent(
                 """
-                name = "event_exporter_project"
+                name = "lifecycle_event_sink_project"
                 adapter = "duckdb"
 
                 [connection]
-                database = "event_exporter_project.duckdb"
+                database = "lifecycle_event_sink_project.duckdb"
                 """
             ).strip()
             + "\n",
@@ -73,10 +73,10 @@ def test_given_provider_exporter_when_building_then_receives_redacted_events_bef
                 """
             ).strip()
             + "\n",
-            "event_exporters/events.py": dedent(
+            "sinks/events.py": dedent(
                 """
                 from providers.event_sink import EventSink
-                from sqlbuild.event_exporters import LifecycleEvent, event_exporter
+                from sqlbuild.sinks import LifecycleEvent, lifecycle_event_sink
                 import os
                 from pathlib import Path
 
@@ -84,11 +84,11 @@ def test_given_provider_exporter_when_building_then_receives_redacted_events_bef
                 with _import_path.open("a", encoding="utf-8") as _stream:
                     _stream.write("imported\\n")
 
-                @event_exporter
+                @lifecycle_event_sink
                 def export_event(event: LifecycleEvent, event_sink: EventSink) -> None:
                     event_sink.write(event)
 
-                @event_exporter
+                @lifecycle_event_sink
                 def failing_exporter(event: LifecycleEvent, event_sink: EventSink) -> None:
                     del event, event_sink
                     raise RuntimeError("destination credentials must not be reported")
@@ -156,7 +156,7 @@ def test_given_no_exporters_and_exploding_provider_when_non_provider_command_run
                 f"Path({str(marker_path)!r}).write_text('imported', encoding='utf-8')\n"
                 "raise RuntimeError('provider must not import')\n"
             ),
-            "event_exporters/helpers.py": (
+            "sinks/helpers.py": (
                 "from pathlib import Path\n"
                 f"Path({str(helper_marker_path)!r}).write_text('imported', encoding='utf-8')\n"
                 "def encode(value):\n    return value\n"

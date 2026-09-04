@@ -5,6 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+from sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks import (
+    discover_command_output_sink_functions,
+)
 from sqlbuild.compiler.discovery._helpers.filesystem.core import (
     discover_adapter_file,
     discover_audit_files,
@@ -36,6 +39,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
     DiscoveredAuditFile,
     DiscoveredCheckFunction,
+    DiscoveredCommandOutputSink,
     DiscoveredConstantFile,
     DiscoveredEnumFile,
     DiscoveredEventExporter,
@@ -159,6 +163,12 @@ def build_discovered_project_inputs(
         event_exporters: tuple[DiscoveredEventExporter, ...] = discover_event_exporter_functions(
             project_dir=project_dir, providers=providers
         )
+        command_output_sinks: tuple[DiscoveredCommandOutputSink, ...] = (
+            discover_command_output_sink_functions(
+                project_dir=project_dir,
+                providers=providers,
+            )
+        )
         python_paths: set[Path] = {provider.relative_path for provider in providers}
         python_paths.update(node.relative_path for node in python_nodes.loaders)
         python_paths.update(node.relative_path for node in python_nodes.tasks)
@@ -167,6 +177,7 @@ def build_discovered_project_inputs(
         python_paths.update(file.relative_path for file in materialization_files)
         python_paths.update(function.relative_path for function in hook_functions)
         python_paths.update(exporter.relative_path for exporter in event_exporters)
+        python_paths.update(sink.relative_path for sink in command_output_sinks)
         python_lifecycle.completed(metadata={"item_count": len(python_paths)})
     loader_functions: tuple[DiscoveredLoaderFunction, ...] = tuple(
         python_nodes.loaders
@@ -199,6 +210,7 @@ def build_discovered_project_inputs(
         check_functions=check_functions,
         hook_functions=hook_functions,
         event_exporters=event_exporters,
+        command_output_sinks=command_output_sinks,
         providers=providers,
         adapter_file=adapter_file,
     )

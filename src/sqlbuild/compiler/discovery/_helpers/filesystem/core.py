@@ -60,6 +60,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
     DiscoveredAuditFile,
     DiscoveredCheckFunction,
+    DiscoveredCommandOutputSink,
     DiscoveredConstantFile,
     DiscoveredEnumFile,
     DiscoveredEventExporter,
@@ -96,7 +97,6 @@ from sqlbuild.compiler.scopes.constants import (
     LOCAL_DECLARATION_DIRECTORIES,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
-from sqlbuild.event_exporters import get_event_exporter_definition
 from sqlbuild.observability import LifecycleEvent
 from sqlbuild.provider.exceptions import ProviderInputError
 from sqlbuild.providers import Provider
@@ -115,7 +115,10 @@ from sqlbuild.python_nodes.models import (
     TaskDefinition,
 )
 from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORTER_EVENT_PARAMETER_NAME
-from sqlbuild.runtime.event_exporting.models import EventExporterDefinition
+from sqlbuild.runtime.event_exporting.models import LifecycleEventSinkDefinition
+from sqlbuild.sinks import (
+    get_lifecycle_event_sink_definition,
+)
 from sqlbuild.spec.contracts.models import SchemaModelEntry, SchemaSeedEntry, SourceEntry
 
 _PYTHON_NODE_KIND_FOLDERS: tuple[str, ...] = ("loaders", "tasks", "assets", "checks")
@@ -943,9 +946,14 @@ def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider,
         cached_event_exporter_extensions,
     )
 
-    cached: tuple[tuple[DiscoveredProvider, ...], tuple[DiscoveredEventExporter, ...]] | None = (
-        cached_event_exporter_extensions(project_dir=project_dir)
-    )
+    cached: (
+        tuple[
+            tuple[DiscoveredProvider, ...],
+            tuple[DiscoveredEventExporter, ...],
+            tuple[DiscoveredCommandOutputSink, ...],
+        ]
+        | None
+    ) = cached_event_exporter_extensions(project_dir=project_dir)
     if cached is not None:
         return cached[0]
     providers_root: Path = project_dir / "providers"
@@ -996,15 +1004,20 @@ def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider,
 def discover_event_exporter_functions(
     *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] = ()
 ) -> tuple[DiscoveredEventExporter, ...]:
-    """Discover validated exporter declarations under event_exporters/."""
+    """Discover validated lifecycle-event sink declarations under sinks/."""
 
     from sqlbuild.runtime.event_exporting.main.cached_event_exporter_extensions import (
         cached_event_exporter_extensions,
     )
 
-    cached: tuple[tuple[DiscoveredProvider, ...], tuple[DiscoveredEventExporter, ...]] | None = (
-        cached_event_exporter_extensions(project_dir=project_dir)
-    )
+    cached: (
+        tuple[
+            tuple[DiscoveredProvider, ...],
+            tuple[DiscoveredEventExporter, ...],
+            tuple[DiscoveredCommandOutputSink, ...],
+        ]
+        | None
+    ) = cached_event_exporter_extensions(project_dir=project_dir)
     if cached is not None:
         return cached[1]
     declarations: tuple[DiscoveredEventExporterDeclaration, ...] = (
@@ -1020,17 +1033,19 @@ def discover_event_exporter_functions(
 def discover_event_exporter_declarations(
     *, project_dir: Path
 ) -> tuple[DiscoveredEventExporterDeclaration, ...]:
-    """Import exporter modules and collect declarations without discovering providers."""
+    """Import sink modules and collect lifecycle declarations without discovering providers."""
 
-    exporters_root: Path = project_dir / "event_exporters"
+    if (project_dir / "event_exporters").exists():
+        raise EventExporterDiscoveryError(
+            "event_exporters/ was replaced by sinks/ and @lifecycle_event_sink"
+        )
+    exporters_root: Path = project_dir / "sinks"
     if not exporters_root.is_dir():
         return ()
     discovered: list[DiscoveredEventExporterDeclaration] = []
     seen_names: dict[str, Path] = {}
     for file_path in _public_python_files(root=exporters_root):
-        module: ModuleType = _load_event_exporter_module(
-            file_path=file_path, project_dir=project_dir
-        )
+        module: ModuleType = _load_sink_module(file_path=file_path, project_dir=project_dir)
         seen_function_ids: set[int] = set()
         for _, value in inspect.getmembers(module, inspect.isfunction):
             if value.__module__ != module.__name__:
@@ -1039,7 +1054,9 @@ def discover_event_exporter_declarations(
             if function_id in seen_function_ids:
                 continue
             seen_function_ids.add(function_id)
-            definition: EventExporterDefinition | None = get_event_exporter_definition(value)
+            definition: LifecycleEventSinkDefinition | None = get_lifecycle_event_sink_definition(
+                value
+            )
             if definition is None:
                 continue
             existing_path: Path | None = seen_names.get(definition.name)
@@ -1666,11 +1683,21 @@ def _load_provider_module(*, file_path: Path, project_dir: Path) -> ModuleType:
     return module
 
 
-def _load_event_exporter_module(*, file_path: Path, project_dir: Path) -> ModuleType:
+def _load_sink_module(*, file_path: Path, project_dir: Path) -> ModuleType:
     module_name: str = ".".join(file_path.relative_to(project_dir).with_suffix("").parts)
+    _evict_stale_project_package_modules(
+        root_module=module_name.split(".", maxsplit=1)[0],
+        project_dir=project_dir,
+    )
+    existing_module: ModuleType | None = sys.modules.get(module_name)
+    if existing_module is not None:
+        existing_file: object = getattr(existing_module, "__file__", None)
+        if isinstance(existing_file, str) and Path(existing_file).resolve() == file_path.resolve():
+            return existing_module
+        sys.modules.pop(module_name, None)
     spec: ModuleSpec | None = importlib.util.spec_from_file_location(module_name, file_path)
     if spec is None or spec.loader is None:
-        raise EventExporterDiscoveryError(f"Could not load event exporter file {file_path}")
+        raise EventExporterDiscoveryError(f"Could not load sink file {file_path}")
     module: ModuleType = importlib.util.module_from_spec(spec)
     old_path: list[str] = list(sys.path)
     sys.path.insert(0, str(project_dir))
@@ -1679,7 +1706,7 @@ def _load_event_exporter_module(*, file_path: Path, project_dir: Path) -> Module
         spec.loader.exec_module(module)
     except Exception as error:
         raise EventExporterDiscoveryError(
-            f"Failed to import event exporter file {file_path.relative_to(project_dir)}: {error}"
+            f"Failed to import sink file {file_path.relative_to(project_dir)}: {error}"
         ) from error
     finally:
         sys.path = old_path

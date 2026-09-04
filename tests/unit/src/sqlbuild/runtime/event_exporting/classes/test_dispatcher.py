@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from typing import cast
 
 import pytest
@@ -15,11 +16,66 @@ from sqlbuild.runtime.event_exporting.models import (
     EventExporterCounts,
     EventExportSummary,
 )
+from sqlbuild.runtime.output_capture.constants import COMMAND_OUTPUT_LOSS_RECORD_TYPE
+from sqlbuild.runtime.output_capture.models import BoundCommandOutputSink
+from sqlbuild.sinks import CommandOutputRecord, CommandOutputStream
 from tests.unit.src.sqlbuild.runtime.event_exporting.classes._test_types import (
     EventExporterDispatcherTestCase,
     HealthIntervalTestCase,
 )
 from tests.unit.src.sqlbuild.runtime.event_exporting.classes.helpers import lifecycle_event
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (EventExporterDispatcherTestCase("loss summary bypasses stream filter", 1),),
+    ids=lambda case: case.description,
+)
+def test_given_stream_filter_when_output_loss_occurs_then_sink_receives_loss_summary(
+    test_case: EventExporterDispatcherTestCase,
+) -> None:
+    records: list[CommandOutputRecord] = []
+
+    def publish(*, record: CommandOutputRecord) -> None:
+        records.append(record)
+
+    dispatcher: EventExporterDispatcher = EventExporterDispatcher(exporters=())
+    dispatcher.bind_command_output_sinks(
+        (
+            BoundCommandOutputSink(
+                name="stdout_only",
+                function=publish,
+                provider_arguments={},
+                streams=frozenset({CommandOutputStream.STDOUT}),
+            ),
+        )
+    )
+    dispatcher.export_output(
+        (
+            CommandOutputRecord(
+                invocation_id="invocation",
+                sequence=0,
+                occurred_at=datetime.now(UTC),
+                stream=CommandOutputStream.STDERR,
+                message="filtered\n",
+                external_context={},
+            ),
+            CommandOutputRecord(
+                invocation_id="invocation",
+                sequence=1,
+                occurred_at=datetime.now(UTC),
+                stream=CommandOutputStream.STDERR,
+                message="SQLBuild output export dropped 2 record(s)",
+                external_context={},
+                record_type=COMMAND_OUTPUT_LOSS_RECORD_TYPE,
+                dropped_records=2,
+            ),
+        )
+    )
+    _ = dispatcher.shutdown()
+
+    assert len(records) == test_case.expected_delivered
+    assert records[0].record_type == COMMAND_OUTPUT_LOSS_RECORD_TYPE
 
 
 @pytest.mark.parametrize(

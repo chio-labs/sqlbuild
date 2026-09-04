@@ -44,10 +44,10 @@ from sqlbuild.spec.contracts.models import (
     CursorsConfig,
     DbtConfig,
     DefaultsConfig,
-    EventExporterFilterConfig,
-    EventExportersConfig,
     FutureCursorsConfig,
     JanitorConfig,
+    LifecycleEventSinkFilterConfig,
+    LifecycleEventSinksConfig,
     LocalClonePolicy,
     LocalConfig,
     LocalDbtConfig,
@@ -62,6 +62,7 @@ from sqlbuild.spec.contracts.models import (
     ScenarioSnapshotLimitsConfig,
     ScopesConfig,
     SettingsConfig,
+    SinksConfig,
     SnapshotsConfig,
     StartCursorsConfig,
     StateConfig,
@@ -92,6 +93,7 @@ _BATCH_CONCURRENCY_CONFIG_KEY: str = "batch_concurrency"
 _MAX_BATCHES_CONFIG_KEY: str = "max_batches"
 _EVENT_EXPORTER_FILTER_KEYS: frozenset[str] = frozenset({"event_kinds", "min_severity"})
 _EVENT_EXPORTER_KEYS: frozenset[str] = _EVENT_EXPORTER_FILTER_KEYS | frozenset({"named"})
+_LEGACY_EVENT_EXPORTERS_CONFIG_KEY: str = "event_exporters"
 _CURSOR_DURATION_PATTERN: re.Pattern[str] = re.compile(
     r"^(?=.*[1-9])(?:(\d+)y)?(?:(\d+)mo)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$"
 )
@@ -102,6 +104,8 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
 
     file_path: Path = _resolve_project_config_path(project_dir=project_dir)
     payload: dict[str, object] = _load_config_mapping(file_path=file_path)
+    if _LEGACY_EVENT_EXPORTERS_CONFIG_KEY in payload:
+        raise ProjectConfigError(f"{file_path} event_exporters was replaced by sinks.lifecycle")
 
     name: str = _require_str(payload=payload, key="name", file_path=file_path)
     adapter: str = _require_str(payload=payload, key="adapter", file_path=file_path)
@@ -141,9 +145,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
     )
     scenario: ScenarioConfig = _load_scenario(payload=payload.get("scenario"), file_path=file_path)
     dbt: DbtConfig = _load_dbt(payload=payload.get("dbt"), file_path=file_path)
-    event_exporters: EventExportersConfig = _load_event_exporters(
-        payload=payload.get("event_exporters"), file_path=file_path
-    )
+    sinks: SinksConfig = _load_sinks(payload=payload.get("sinks"), file_path=file_path)
     if janitor.enabled and janitor.delete_tracked_only and not settings.query_change_tracking:
         raise ProjectConfigError(
             f"{file_path} janitor.delete_tracked_only requires "
@@ -171,29 +173,49 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         snapshots=snapshots,
         scenario=scenario,
         dbt=dbt,
-        event_exporters=event_exporters,
+        sinks=sinks,
     )
 
 
-def _load_event_exporters(*, payload: object, file_path: Path) -> EventExportersConfig:
+def _load_sinks(*, payload: object, file_path: Path) -> SinksConfig:
+    if payload is None:
+        return SinksConfig()
+    if not isinstance(payload, dict):
+        raise ProjectConfigError(f"{file_path} sinks must be a mapping")
+    mapping: dict[str, object] = cast(dict[str, object], payload)
+    _validate_allowed_keys(
+        mapping=mapping,
+        allowed_keys=frozenset({"lifecycle"}),
+        label="sinks",
+        file_path=file_path,
+    )
+    return SinksConfig(
+        lifecycle=_load_lifecycle_sinks(
+            payload=mapping.get("lifecycle"),
+            file_path=file_path,
+        )
+    )
+
+
+def _load_lifecycle_sinks(*, payload: object, file_path: Path) -> LifecycleEventSinksConfig:
     from sqlbuild.runtime.event_exporting.constants import (
         EVENT_EXPORT_KINDS,
         EVENT_EXPORT_SEVERITIES,
     )
 
     if payload is None:
-        return EventExportersConfig()
+        return LifecycleEventSinksConfig()
     if not isinstance(payload, dict):
-        raise ProjectConfigError(f"{file_path} event_exporters must be a mapping")
+        raise ProjectConfigError(f"{file_path} sinks.lifecycle must be a mapping")
     config_mapping: dict[str, object] = cast(dict[str, object], payload)
     _validate_allowed_keys(
         mapping=config_mapping,
         allowed_keys=_EVENT_EXPORTER_KEYS,
-        label="event_exporters",
+        label="sinks.lifecycle",
         file_path=file_path,
     )
 
-    def load_filter(*, value: object, label: str) -> EventExporterFilterConfig:
+    def load_filter(*, value: object, label: str) -> LifecycleEventSinkFilterConfig:
         if not isinstance(value, dict):
             raise ProjectConfigError(f"{file_path} {label} must be a mapping")
         filter_mapping: dict[str, object] = cast(dict[str, object], value)
@@ -228,21 +250,21 @@ def _load_event_exporters(*, payload: object, file_path: Path) -> EventExporters
                     + ", ".join(EVENT_EXPORT_SEVERITIES)
                 )
             severity = severity_value
-        return EventExporterFilterConfig(event_kinds=kinds, min_severity=severity)
+        return LifecycleEventSinkFilterConfig(event_kinds=kinds, min_severity=severity)
 
     named_value: object = config_mapping.get("named", {})
     if not isinstance(named_value, dict):
-        raise ProjectConfigError(f"{file_path} event_exporters.named must be a mapping")
-    named: dict[str, EventExporterFilterConfig] = {}
+        raise ProjectConfigError(f"{file_path} sinks.lifecycle.named must be a mapping")
+    named: dict[str, LifecycleEventSinkFilterConfig] = {}
     for name, value in named_value.items():
         if not isinstance(name, str) or not name:
-            raise ProjectConfigError(f"{file_path} event_exporters.named contains an invalid name")
-        named[name] = load_filter(value=value, label=f"event_exporters.named.{name}")
+            raise ProjectConfigError(f"{file_path} sinks.lifecycle.named contains an invalid name")
+        named[name] = load_filter(value=value, label=f"sinks.lifecycle.named.{name}")
     defaults_mapping: dict[str, object] = {
         key: value for key, value in config_mapping.items() if key in _EVENT_EXPORTER_FILTER_KEYS
     }
-    return EventExportersConfig(
-        defaults=load_filter(value=defaults_mapping, label="event_exporters"),
+    return LifecycleEventSinksConfig(
+        defaults=load_filter(value=defaults_mapping, label="sinks.lifecycle"),
         named=named,
     )
 

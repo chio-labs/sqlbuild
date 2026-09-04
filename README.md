@@ -206,7 +206,7 @@ Runtime operator and extension contracts:
 
 - [Execution observability and local troubleshooting](docs/execution-observability.md)
 - [SQLite and PostgreSQL execution history](docs/execution-history.md)
-- [Project event exporters](docs/event-exporters.md)
+- [Typed lifecycle and command-output sinks](docs/sinks.md)
 
 ## Contributing
 
