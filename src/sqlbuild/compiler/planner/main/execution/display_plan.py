@@ -57,9 +57,7 @@ def build_display_only_sqlbuild_plan(
                 incremental_strategy=get_config_str(
                     values=model.config.values, key="incremental_strategy"
                 ),
-                incremental_mode=get_config_str(
-                    values=model.config.values, key="incremental_mode"
-                ),
+                incremental_mode=get_config_str(values=model.config.values, key="incremental_mode"),
                 cursor_column=get_config_str(values=model.config.values, key="cursor_column"),
                 cursor_type=get_config_str(values=model.config.values, key="cursor_type"),
                 backfill=BackfillResult(

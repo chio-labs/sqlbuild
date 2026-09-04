@@ -314,9 +314,7 @@ def test_given_qualified_intermediate_destination_when_building_map_then_parses_
 
     entries: dict[str, SourceEntry] = build_intermediate_source_map(
         project=project,
-        selected_keys=frozenset(
-            {CompiledObjectKey(CompiledResourceType.SOURCE, "fetch_orders")}
-        ),
+        selected_keys=frozenset({CompiledObjectKey(CompiledResourceType.SOURCE, "fetch_orders")}),
     )
 
     entry: SourceEntry = entries["fetch_orders"]

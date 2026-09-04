@@ -46,9 +46,9 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     (
         MicrobatchCursorEndPlanTestCase(
             description="timestamp microbatch keeps runtime sentinels and clamps concrete range",
-                cursor_type="timestamp",
-                cursor_grain="month",
-                authored_cursor_grain={"cursor_grain": "month"},
+            cursor_type="timestamp",
+            cursor_grain="month",
+            authored_cursor_grain={"cursor_grain": "month"},
             batch_size="1mo",
             cursor_end="2025-12-01",
             target_max="2025-10-01",
@@ -58,9 +58,9 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
         ),
         MicrobatchCursorEndPlanTestCase(
             description="integer microbatch keeps runtime sentinels and clamps concrete range",
-                cursor_type="integer",
-                cursor_grain=None,
-                authored_cursor_grain={},
+            cursor_type="integer",
+            cursor_grain=None,
+            authored_cursor_grain={},
             batch_size="5",
             cursor_end="20",
             target_max="10",
@@ -179,9 +179,9 @@ def test_given_explicit_cursor_overrides_without_snapshot_when_planning_then_use
     [
         AuthoritativeCursorOverrideTestCase(
             description="timestamp hour override controls normal and microbatch ranges",
-                cursor_type="timestamp",
-                cursor_grain="hour",
-                authored_cursor_grain={"cursor_grain": "hour"},
+            cursor_type="timestamp",
+            cursor_grain="hour",
+            authored_cursor_grain={"cursor_grain": "hour"},
             batch_size="1h",
             start_override="2026-01-02T10:00:00",
             end_override="2026-01-02T12:00:00",
@@ -189,9 +189,9 @@ def test_given_explicit_cursor_overrides_without_snapshot_when_planning_then_use
         ),
         AuthoritativeCursorOverrideTestCase(
             description="plain date day override controls normal and microbatch ranges",
-                cursor_type="timestamp",
-                cursor_grain="day",
-                authored_cursor_grain={"cursor_grain": "day"},
+            cursor_type="timestamp",
+            cursor_grain="day",
+            authored_cursor_grain={"cursor_grain": "day"},
             batch_size="1d",
             start_override="2026-01-02",
             end_override="2026-01-04",
@@ -199,9 +199,9 @@ def test_given_explicit_cursor_overrides_without_snapshot_when_planning_then_use
         ),
         AuthoritativeCursorOverrideTestCase(
             description="integer override controls normal and microbatch ranges",
-                cursor_type="integer",
-                cursor_grain=None,
-                authored_cursor_grain={},
+            cursor_type="integer",
+            cursor_grain=None,
+            authored_cursor_grain={},
             batch_size="5",
             start_override="10",
             end_override="20",
@@ -226,7 +226,7 @@ def test_given_runtime_owned_missing_snapshot_when_overrides_complete_then_all_r
                 "incremental_strategy": "delete_insert",
                 "cursor": "cursor_value",
                 "cursor_type": test_case.cursor_type,
-                    **test_case.authored_cursor_grain,
+                **test_case.authored_cursor_grain,
             }
         ),
         destination=CompiledRelationLocation(

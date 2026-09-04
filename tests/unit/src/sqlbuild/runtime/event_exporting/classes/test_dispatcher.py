@@ -495,9 +495,7 @@ def test_given_mixed_eligible_queue_when_high_priority_displaces_then_attempts_c
     dispatcher: EventExporterDispatcher = EventExporterDispatcher(
         exporters=(
             BoundEventExporter("first", first, {}),
-            BoundEventExporter(
-                "second", second, {}, min_severity=EventExportSeverity.INFO
-            ),
+            BoundEventExporter("second", second, {}, min_severity=EventExportSeverity.INFO),
         ),
         queue_capacity=1,
         invocation_timeout_seconds=1,
