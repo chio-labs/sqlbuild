@@ -7,7 +7,7 @@ import hashlib
 import re
 import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import ExitStack
 from contextvars import ContextVar, Token
 from types import TracebackType
@@ -23,6 +23,10 @@ from sqlbuild.runtime.observability._helpers.identity import (
     statement_scope,
 )
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
+from sqlbuild.runtime.observability.classes.statement_monitor import (
+    StatementMonitor,
+)
+from sqlbuild.runtime.observability.constants import STATEMENT_HEARTBEAT_THRESHOLD_SECONDS
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import ExecutionIdentity
 from sqlbuild.runtime.observability.types import JSONValue
@@ -47,6 +51,10 @@ class StatementLifecycle:
         intent: str,
         batch_size: int | None = None,
         statement_id: str | None = None,
+        query_id_provider: Callable[[], str | None] | None = None,
+        heartbeat_threshold_seconds: float = STATEMENT_HEARTBEAT_THRESHOLD_SECONDS,
+        heartbeat_interval_seconds: float | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._adapter: str = adapter
         self._sql: str = sql
@@ -60,6 +68,11 @@ class StatementLifecycle:
         self._owner: StatementLifecycle | None = None
         self._owner_token: Token[StatementLifecycle | None] | None = None
         self._execution_owner_key: _ExecutionOwnerKey | None = None
+        self._query_id_provider: Callable[[], str | None] | None = query_id_provider
+        self._monitor: StatementMonitor | None = None
+        self._heartbeat_threshold_seconds: float = heartbeat_threshold_seconds
+        self._heartbeat_interval_seconds: float | None = heartbeat_interval_seconds
+        self._clock: Callable[[], float] = clock
         self._pending_completion: tuple[str | None, str | None, int | None, int | None] | None = (
             None
         )
@@ -71,6 +84,8 @@ class StatementLifecycle:
         if owner is not None and owner._execution_owner_key == execution_owner_key:
             self._owner = owner
             self._statement_id = owner.statement_id
+            if self._query_id_provider is not None:
+                owner.set_query_id_provider(self._query_id_provider)
             return self
         if current_execution_identity() is None:
             self._stack.enter_context(invocation_scope())
@@ -81,10 +96,22 @@ class StatementLifecycle:
         identity: ExecutionIdentity = self._stack.enter_context(statement_scope(self._statement_id))
         self._statement_id = identity.statement_id
         self._dispatcher = dispatcher
-        self._started_monotonic = time.monotonic()
+        self._started_monotonic = self._clock()
         self._execution_owner_key = execution_owner_key
         self._publish(event_type="statement_started", payload=self._base_payload())
         self._owner_token = _STATEMENT_LIFECYCLE_OWNER.set(self)
+        self._monitor = StatementMonitor(
+            on_submitted=lambda query_id: self.submitted(query_id=query_id),
+            on_heartbeat=lambda elapsed_seconds, query_id: self.heartbeat(
+                elapsed_seconds=elapsed_seconds, query_id=query_id
+            ),
+            threshold_seconds=self._heartbeat_threshold_seconds,
+            interval_seconds=self._heartbeat_interval_seconds,
+            clock=self._clock,
+        )
+        if self._query_id_provider is not None:
+            self._monitor.set_query_id_provider(self._query_id_provider)
+        self._monitor.start()
         return self
 
     @property
@@ -104,6 +131,28 @@ class StatementLifecycle:
             payload["job_id"] = job_id
         self._publish(event_type="statement_submitted", payload=payload)
 
+    def set_query_id_provider(self, provider: Callable[[], str | None]) -> None:
+        """Expose an adapter's non-blocking query-ID reader to the active monitor."""
+
+        if self._owner is not None:
+            self._owner.set_query_id_provider(provider)
+            return
+        monitor: StatementMonitor | None = self._monitor
+        if monitor is not None:
+            monitor.set_query_id_provider(provider)
+
+    def heartbeat(self, *, elapsed_seconds: float, query_id: str | None = None) -> None:
+        """Publish one bounded progress fact for a statement still executing."""
+
+        if self._owner is not None:
+            self._owner.heartbeat(elapsed_seconds=elapsed_seconds, query_id=query_id)
+            return
+        payload: dict[str, JSONValue] = self._base_payload()
+        payload["duration_ms"] = max(0.0, elapsed_seconds * 1000.0)
+        if query_id is not None:
+            payload["query_id"] = query_id
+        self._publish(event_type="statement_heartbeat", payload=payload)
+
     def completed(
         self,
         *,
@@ -121,11 +170,14 @@ class StatementLifecycle:
                 row_count=row_count,
             )
             return
+        discovered_query_id: str | None = self._stop_monitor()
+        if query_id is None:
+            query_id = discovered_query_id
         if self._pending_failure is not None:
             error, pending_query_id, pending_job_id = self._pending_failure
             self.failed(
                 error=error,
-                query_id=pending_query_id,
+                query_id=pending_query_id if pending_query_id is not None else query_id,
                 job_id=pending_job_id,
             )
             return
@@ -161,6 +213,9 @@ class StatementLifecycle:
             self._terminal = True
             self._owner._defer_failed(error=error, query_id=query_id, job_id=job_id)
             return
+        discovered_query_id: str | None = self._stop_monitor()
+        if query_id is None:
+            query_id = discovered_query_id
         payload: dict[str, JSONValue] = self._terminal_payload()
         payload["error_type"] = type(error).__name__[:_MAX_ERROR_VALUE_LENGTH]
         error_code: str | None = _error_code(error=error)
@@ -193,6 +248,7 @@ class StatementLifecycle:
                 else:
                     self.failed(error=exc_value)
         finally:
+            self._stop_monitor()
             if self._owner_token is not None:
                 _STATEMENT_LIFECYCLE_OWNER.reset(self._owner_token)
                 self._owner_token = None
@@ -212,8 +268,15 @@ class StatementLifecycle:
     def _terminal_payload(self) -> dict[str, JSONValue]:
         payload: dict[str, JSONValue] = self._base_payload()
         started: float = self._started_monotonic if self._started_monotonic is not None else 0.0
-        payload["duration_ms"] = max(0.0, (time.monotonic() - started) * 1000.0)
+        payload["duration_ms"] = max(0.0, (self._clock() - started) * 1000.0)
         return payload
+
+    def _stop_monitor(self) -> str | None:
+        monitor: StatementMonitor | None = self._monitor
+        if monitor is None:
+            return None
+        self._monitor = None
+        return monitor.stop()
 
     def _publish(self, *, event_type: str, payload: Mapping[str, JSONValue]) -> None:
         if self._dispatcher is None:

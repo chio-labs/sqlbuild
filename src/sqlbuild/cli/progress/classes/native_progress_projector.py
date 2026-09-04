@@ -9,7 +9,11 @@ from contextvars import ContextVar, Token
 from typing import TextIO, cast
 
 from sqlbuild.presentation.classes.cli_style import CliStyle
-from sqlbuild.runtime.observability.constants import RESOURCE_TERMINALS, RETRY_SCHEDULED_EVENT
+from sqlbuild.runtime.observability.constants import (
+    RESOURCE_TERMINALS,
+    RETRY_SCHEDULED_EVENT,
+    STATEMENT_FAILED_EVENT,
+)
 from sqlbuild.runtime.observability.models import LifecycleEvent
 
 _VISIBLE_OPERATION_LABELS: Mapping[str, str] = {
@@ -70,6 +74,10 @@ _TTY_RESOURCE_OWNER_OPERATIONS: frozenset[str] = frozenset(
 _RESOURCE_START: str = "resource_attempt_started"
 _OPERATION_START: str = "operation_started"
 _OPERATION_TERMINALS: frozenset[str] = frozenset({"operation_completed", "operation_failed"})
+_STATEMENT_START: str = "statement_started"
+_STATEMENT_SUBMITTED: str = "statement_submitted"
+_STATEMENT_HEARTBEAT: str = "statement_heartbeat"
+_STATEMENT_TERMINALS: frozenset[str] = frozenset({"statement_completed", "statement_failed"})
 
 
 class NativeProgressProjector:
@@ -89,6 +97,9 @@ class NativeProgressProjector:
         self._rendered_terminal_ids: set[str] = set()
         self._operation_starts: dict[str, LifecycleEvent] = {}
         self._enriched_resource_names: set[str] = set()
+        self._resource_names: dict[str, str] = {}
+        self._statement_starts: dict[str, LifecycleEvent] = {}
+        self._statement_query_ids: dict[str, str] = {}
 
     def install(self) -> Token[NativeProgressProjector | None]:
         """Install this projector for presentation adapters in the invocation context."""
@@ -140,6 +151,14 @@ class NativeProgressProjector:
                 self._consume_operation_terminal(event)
             elif event.event_type == RETRY_SCHEDULED_EVENT:
                 self._consume_retry_scheduled(event)
+            elif event.event_type == _STATEMENT_START:
+                self._consume_statement_start(event)
+            elif event.event_type == _STATEMENT_SUBMITTED:
+                self._consume_statement_submitted(event)
+            elif event.event_type == _STATEMENT_HEARTBEAT:
+                self._consume_statement_heartbeat(event)
+            elif event.event_type in _STATEMENT_TERMINALS:
+                self._consume_statement_terminal(event)
 
     def consume_resource_terminal(
         self,
@@ -219,6 +238,7 @@ class NativeProgressProjector:
         ):
             return
         self._resource_ids_by_name[resource_name].add(resource_id)
+        self._resource_names[resource_id] = resource_name
         self._render_prior_attempts(resource_id=resource_id, resource_name=resource_name)
         self._attempts_by_id[attempt_id] = event
         if self._is_tty and resource_name in self._enriched_resource_names:
@@ -377,6 +397,70 @@ class NativeProgressProjector:
         self._write(
             f"    retry {failed_attempt}->{next_attempt} in {float(delay_ms) / 1000.0:.2f}s"
         )
+
+    def _consume_statement_start(self, event: LifecycleEvent) -> None:
+        statement_id: str | None = event.statement_id
+        if statement_id is None or event.resource_id not in self._resource_names:
+            return
+        self._statement_starts[statement_id] = event
+        self._write(f"    statement  {self._statement_context(event)}  START")
+
+    def _consume_statement_submitted(self, event: LifecycleEvent) -> None:
+        statement_id: str | None = event.statement_id
+        query_id: object = event.payload.get("query_id")
+        if (
+            statement_id is None
+            or statement_id not in self._statement_starts
+            or not isinstance(query_id, str)
+        ):
+            return
+        if self._statement_query_ids.get(statement_id) == query_id:
+            return
+        self._statement_query_ids[statement_id] = query_id
+        start: LifecycleEvent = self._statement_starts.get(statement_id, event)
+        self._write(f"    statement  {self._statement_context(start)}  query_id={query_id}")
+
+    def _consume_statement_heartbeat(self, event: LifecycleEvent) -> None:
+        if event.statement_id not in self._statement_starts:
+            return
+        duration: object = event.payload.get("duration_ms")
+        if not isinstance(duration, int | float):
+            return
+        query_id: str | None = self._statement_query_id(event)
+        query_suffix: str = f"  query_id={query_id}" if query_id is not None else ""
+        self._write(
+            f"    statement  {self._statement_context(event)}  "
+            f"RUNNING {float(duration) / 1000.0:.1f}s{query_suffix}"
+        )
+
+    def _consume_statement_terminal(self, event: LifecycleEvent) -> None:
+        statement_id: str | None = event.statement_id
+        if statement_id is None or statement_id not in self._statement_starts:
+            return
+        start: LifecycleEvent = self._statement_starts.pop(statement_id, event)
+        query_id: str | None = self._statement_query_id(event)
+        if event.event_type == STATEMENT_FAILED_EVENT:
+            query_suffix: str = f"  query_id={query_id}" if query_id is not None else ""
+            self._write(f"    statement  {self._statement_context(start)}  FAIL{query_suffix}")
+        self._statement_query_ids.pop(statement_id, None)
+
+    def _statement_query_id(self, event: LifecycleEvent) -> str | None:
+        query_id: object = event.payload.get("query_id")
+        if isinstance(query_id, str):
+            return query_id
+        statement_id: str | None = event.statement_id
+        return None if statement_id is None else self._statement_query_ids.get(statement_id)
+
+    def _statement_context(self, event: LifecycleEvent) -> str:
+        resource_name: str = self._resource_names.get(event.resource_id or "", "warehouse")
+        operation: LifecycleEvent | None = self._operation_starts.get(event.operation_id or "")
+        phase: object | None = None if operation is None else operation.payload.get("phase")
+        if not isinstance(phase, str) and operation is not None:
+            phase = operation.payload.get("operation_name")
+        if not isinstance(phase, str):
+            phase = event.payload.get("intent", "execute")
+        statement_kind: object = event.payload.get("statement_kind", "UNKNOWN")
+        return f"model={resource_name}  phase={phase}  kind={statement_kind}"
 
     def _write(self, line: str) -> None:
         self._stream.write(f"{line}\n")

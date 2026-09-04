@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
+from sqlbuild.cursor_algebra.types import BoundSentinel
+
 PATH_SELECTOR_EXPLICIT_ROOT_ERROR: str = (
     "path selectors require an explicit root: use 'models/', 'tasks/', 'assets/', "
     "'checks/', or 'loaders/'"
@@ -36,8 +39,8 @@ MODEL_PLACEHOLDERS_CONFIG_KEY: str = "placeholders"
 MODEL_PRE_HOOKS_CONFIG_KEY: str = "pre_hooks"
 MODEL_POST_HOOKS_CONFIG_KEY: str = "post_hooks"
 MODEL_CONTRACT_CONFIG_KEY: str = "contract"
-MICROBATCH_START_SENTINEL: str = "__SQB_CURSOR_START__"
-MICROBATCH_END_SENTINEL: str = "__SQB_CURSOR_END__"
+MICROBATCH_START_SENTINEL: str = sentinel_to_token(sentinel=BoundSentinel.START)
+MICROBATCH_END_SENTINEL: str = sentinel_to_token(sentinel=BoundSentinel.END)
 METADATA_NAME_FILTER_LIMIT: int = 250
 SCENARIO_ARTIFACT_PREFIX: str = "__sqb_"
 SCENARIO_HASH_PREFIX_LENGTH: int = 12
@@ -56,11 +59,3 @@ SCENARIO_PLAN_MISSING_RELATION_TARGET: str = "S509"
 SCENARIO_PLAN_INTERNAL: str = "S599"
 
 WHOLE_DAY_CURSOR_GRAINS: frozenset[str] = frozenset({"day", "month", "year"})
-CURSOR_GRAIN_BATCH_SIZE: dict[str, str] = {
-    "second": "1s",
-    "minute": "1m",
-    "hour": "1h",
-    "day": "1d",
-    "month": "1mo",
-    "year": "1y",
-}

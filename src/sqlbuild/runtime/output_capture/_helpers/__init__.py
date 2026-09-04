@@ -1,0 +1,1 @@
+"""Output capture implementation helpers."""

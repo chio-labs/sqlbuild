@@ -17,16 +17,8 @@ from sqlbuild.compiler.planner.types import (
     IncrementalMode,
     MicrobatchStrategy,
 )
+from sqlbuild.cursor_algebra.constants import GRAIN_ORDER
 from sqlbuild.spec.contracts.constants import EFFECTIVE_BATCH_SIZE_TOKEN
-
-_GRAIN_ORDER: dict[str, int] = {
-    CursorGrain.SECOND: 0,
-    CursorGrain.MINUTE: 1,
-    CursorGrain.HOUR: 2,
-    CursorGrain.DAY: 3,
-    CursorGrain.MONTH: 4,
-    CursorGrain.YEAR: 5,
-}
 
 
 def build_cursor_plan_details(*, entry: ModelPlanEntry) -> CursorPlanDetails | None:
@@ -84,7 +76,7 @@ def _effective_grain(*, entry: ModelPlanEntry) -> str | None:
         return effective
     for relation in entry.cursor_input_relations:
         relation_grain: str = relation.cursor_grain or CursorGrain.SECOND
-        if _GRAIN_ORDER[relation_grain] > _GRAIN_ORDER[effective]:
+        if GRAIN_ORDER[CursorGrain(relation_grain)] > GRAIN_ORDER[CursorGrain(effective)]:
             effective = relation_grain
     return effective
 
