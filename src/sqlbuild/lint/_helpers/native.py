@@ -19,6 +19,7 @@ from sqlbuild.lint.constants import (
     RULE_HEADER_WHITESPACE,
     RULE_LEADING_COMMENT_DESCRIPTION,
     VIOLATION_SEVERITY_FAULT,
+    VIOLATION_SEVERITY_WARNING,
 )
 from sqlbuild.lint.models import HeaderSpan, LintConfig, LintViolation
 
@@ -177,7 +178,7 @@ def _lint_header_whitespace(
             column=position[1],
             code=RULE_HEADER_WHITESPACE,
             message=f"{header.kind}() header contains trailing whitespace",
-            severity="warning",
+            severity=VIOLATION_SEVERITY_WARNING,
             engine="sqlbuild",
         ),
     )

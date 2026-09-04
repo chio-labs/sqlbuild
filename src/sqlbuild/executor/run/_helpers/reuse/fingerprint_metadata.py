@@ -411,7 +411,7 @@ def _audit_gate_status(
     if any(result.outcome == AuditOutcome.ERROR for result in audit_results):
         return AuditGateStatus.FAILED.value
     error_audits: tuple[AuditIdentity, ...] = tuple(
-        audit for audit in identity.audits if audit.severity == AuditSeverity.ERROR.value
+        audit for audit in identity.audits if audit.severity == AuditSeverity.ERROR
     )
     audit: AuditIdentity
     for audit in error_audits:
@@ -438,7 +438,7 @@ def _result_matches_identity(
 ) -> bool:
     return (
         result.audit_name == audit_identity.audit_name
-        and result.severity.value == audit_identity.severity
+        and result.severity == audit_identity.severity
         and result.attachment_kind.value == audit_identity.attachment_kind
         and result.attached_target_name == audit_identity.attached_target_name
         and result.attached_column_name == audit_identity.attached_column_name

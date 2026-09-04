@@ -27,7 +27,7 @@ def build_audit_gate_identity(*, audits: tuple[AuditPlanEntry, ...]) -> AuditGat
     blocking_payloads: tuple[dict[str, object], ...] = tuple(
         execution_payload(audit)
         for audit in audit_identities
-        if audit.severity == AuditSeverity.ERROR.value
+        if audit.severity == AuditSeverity.ERROR
     )
     return AuditGateIdentity(
         binding_set_hash=hash_payload(binding_payloads),

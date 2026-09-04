@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlbuild.cli.output.models import IntegrationCheckResult, IntegrationResultEnvelope
 from sqlbuild.cli.output.types import IntegrationOutputKind
+from sqlbuild.compiler.auditing.types import AuditSeverity
 
 
 def assert_exhaustive_enum_partition[EnumT: StrEnum](
@@ -89,7 +90,7 @@ def build_check_integration_envelope(
                 dag_check_id=check_id,
                 passed=True,
                 status="pass",
-                severity="error",
+                severity=AuditSeverity.ERROR,
                 asset_name="orders",
                 attachment_kind="model",
                 attached_column_name="order_id",

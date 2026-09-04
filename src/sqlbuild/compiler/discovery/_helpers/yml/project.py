@@ -12,6 +12,7 @@ from typing import cast
 import yaml
 from yaml import YAMLError
 
+from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.compile.constants import MAX_MICROBATCHES_CONFIG_KEY
 from sqlbuild.compiler.discovery.constants import (
     CONFIG_CONCURRENCY_KEY,
@@ -71,6 +72,7 @@ from sqlbuild.spec.contracts.models import (
 )
 from sqlbuild.spec.contracts.types import (
     ColumnContractMode,
+    EventExportSeverity,
     FutureCursorAction,
     MicrobatchLimitAction,
     TableType,
@@ -240,14 +242,14 @@ def _load_lifecycle_sinks(*, payload: object, file_path: Path) -> LifecycleEvent
                     + ", ".join(sorted(unknown))
                 )
         severity_value: object = filter_mapping.get("min_severity")
-        severity: str | None = None
+        severity: EventExportSeverity | None = None
         if severity_value is not None:
             if not isinstance(severity_value, str) or severity_value not in EVENT_EXPORT_SEVERITIES:
                 raise ProjectConfigError(
                     f"{file_path} {label}.min_severity must be one of: "
                     + ", ".join(EVENT_EXPORT_SEVERITIES)
                 )
-            severity = severity_value
+            severity = EventExportSeverity(severity_value)
         return LifecycleEventSinkFilterConfig(event_kinds=kinds, min_severity=severity)
 
     named_value: object = config_mapping.get("named", {})
@@ -464,9 +466,18 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
     if concurrency < 1:
         raise ProjectConfigError("settings.concurrency must be >= 1")
     table_promotion_mode: str | None = _optional_str(payload=mapping, key="table_promotion_mode")
-    default_audit_severity: str | None = _optional_str(
+    raw_default_audit_severity: str | None = _optional_str(
         payload=mapping, key="default_audit_severity"
     )
+    default_audit_severity: AuditSeverity | None = None
+    if raw_default_audit_severity is not None:
+        try:
+            default_audit_severity = AuditSeverity(raw_default_audit_severity)
+        except ValueError as error:
+            allowed: str = ", ".join(item.value for item in AuditSeverity)
+            raise ProjectConfigError(
+                f"settings.default_audit_severity must be one of: {allowed}"
+            ) from error
     default_audit_run_scope: str | None = _optional_str(
         payload=mapping, key="default_audit_run_scope"
     )

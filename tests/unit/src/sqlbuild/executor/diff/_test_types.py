@@ -36,3 +36,12 @@ class ResolveBoundedCursorsErrorTestCase:
     bounded: str | None
     expected_error_fragment: str
     expected_code: str
+
+
+@dataclass(frozen=True)
+class WrongTypedBoundedCursorTestCase:
+    description: str
+    config_values: dict[str, object]
+    bounded: str
+    expected_key: str
+    expected_type: str

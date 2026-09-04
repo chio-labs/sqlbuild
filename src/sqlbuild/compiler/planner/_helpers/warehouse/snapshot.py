@@ -80,6 +80,8 @@ from sqlbuild.cursor_algebra.main.render import render
 from sqlbuild.cursor_algebra.models import DateValue
 from sqlbuild.cursor_algebra.types import CursorScalar
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
+from sqlbuild.spec.contracts.main.get_config_cursor_bound import get_config_cursor_bound
+from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 from sqlbuild.spec.contracts.models import SourceEntry, StartCursorsConfig
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
@@ -672,8 +674,8 @@ def _collect_cursor_models(
             if model_key not in inputs.selected_keys:
                 continue
 
-        cursor_column: str | None = _get_config_str(model=model, key="cursor")
-        materialized: str | None = _get_config_str(model=model, key="materialized")
+        cursor_column: str | None = get_config_str(values=model.config.values, key="cursor")
+        materialized: str | None = get_config_str(values=model.config.values, key="materialized")
         if materialized != MaterializationType.INCREMENTAL or cursor_column is None:
             continue
 
@@ -709,8 +711,8 @@ def _collect_cursor_models(
             target_tag = f"{model.name}__target__max"
             target_relation = model.destination.qualified_name
 
-        cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
-        cursor_grain: str | None = _get_config_str(model=model, key="cursor_grain")
+        cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
+        cursor_grain: str | None = get_config_str(values=model.config.values, key="cursor_grain")
         upstreams: list[_UpstreamCursorInfo] = []
         input_name: str
         upstream_cursor_col: str
@@ -761,8 +763,8 @@ def _collect_cursor_models(
                     ),
                     terminal_cursor_start=(
                         _parse_optional_cursor(
-                            value=_get_config_str(
-                                model=model_map[ref.ref_name], key="cursor_start"
+                            value=get_config_cursor_bound(
+                                values=model_map[ref.ref_name].config.values, key="cursor_start"
                             ),
                             cursor_type=cursor_type,
                         )
@@ -771,7 +773,9 @@ def _collect_cursor_models(
                     ),
                     terminal_cursor_end=(
                         _parse_optional_cursor(
-                            value=_get_config_str(model=model_map[ref.ref_name], key="cursor_end"),
+                            value=get_config_cursor_bound(
+                                values=model_map[ref.ref_name].config.values, key="cursor_end"
+                            ),
                             cursor_type=cursor_type,
                         )
                         if ref.ref_kind == SqlReferenceKind.REF and ref.ref_name in model_map
@@ -792,7 +796,9 @@ def _collect_cursor_models(
                 effective_cursor_grain=resolve_effective_timestamp_grain(
                     cursor_type=cursor_type,
                     downstream_grain=cursor_grain,
-                    microbatch_strategy=_get_config_str(model=model, key="microbatch_strategy"),
+                    microbatch_strategy=get_config_str(
+                        values=model.config.values, key="microbatch_strategy"
+                    ),
                     cursor_input_grains=tuple(upstream.cursor_grain for upstream in upstreams),
                 ),
                 start_cursor_config=resolve_start_cursor_config(
@@ -803,9 +809,11 @@ def _collect_cursor_models(
                     cursor_overrides=inputs.cursor_overrides,
                 ),
                 cursor_watermark_mode=CursorWatermarkMode(
-                    _get_config_str(model=model, key="cursor_watermark_mode") or "all"
+                    get_config_str(values=model.config.values, key="cursor_watermark_mode") or "all"
                 ),
-                microbatch_strategy=_get_config_str(model=model, key="microbatch_strategy"),
+                microbatch_strategy=get_config_str(
+                    values=model.config.values, key="microbatch_strategy"
+                ),
             )
         )
 
@@ -861,7 +869,7 @@ def _cursor_input_grain(
         return None
     upstream_model: CompiledModel | None = model_map.get(ref.ref_name)
     return (
-        _get_config_str(model=upstream_model, key="cursor_grain")
+        get_config_str(values=upstream_model.config.values, key="cursor_grain")
         if upstream_model is not None
         else None
     )
@@ -876,7 +884,7 @@ def _parse_optional_cursor(*, value: str | None, cursor_type: str | None) -> Cur
 def _has_start_override(*, model: CompiledModel, cursor_overrides: CursorOverrides | None) -> bool:
     if cursor_overrides is None:
         return False
-    cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
+    cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
     if cursor_type == CursorType.TIMESTAMP:
         return cursor_overrides.start_ts is not None
     if cursor_type == CursorType.INTEGER:
@@ -1247,9 +1255,15 @@ def _validate_watermark_contract_column(
         upstream_model: CompiledModel | None = model_map.get(ref.ref_name)
         if upstream_model is None:
             return
-        upstream_cursor: str | None = _get_config_str(model=upstream_model, key="cursor")
-        upstream_cursor_type: str | None = _get_config_str(model=upstream_model, key="cursor_type")
-        consumer_cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
+        upstream_cursor: str | None = get_config_str(
+            values=upstream_model.config.values, key="cursor"
+        )
+        upstream_cursor_type: str | None = get_config_str(
+            values=upstream_model.config.values, key="cursor_type"
+        )
+        consumer_cursor_type: str | None = get_config_str(
+            values=model.config.values, key="cursor_type"
+        )
         if (
             upstream_cursor is not None
             and upstream_cursor.lower() == cursor_column.lower()
@@ -1302,7 +1316,7 @@ def _validate_watermark_contract_column(
         return
     if cursor_column.lower() in {name.lower() for name in declared_names}:
         declared_type: str | None = declared_types.get(cursor_column.lower())
-        cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
+        cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
         if declared_type is not None and not _watermark_type_is_compatible(
             declared_type=declared_type, cursor_type=cursor_type
         ):
@@ -1328,10 +1342,3 @@ def _watermark_type_is_compatible(*, declared_type: str, cursor_type: str | None
     except (TypeError, ValueError):
         return True
     return classify_cursor_sql_type(declared_type) == expected
-
-
-def _get_config_str(*, model: CompiledModel, key: str) -> str | None:
-    """Extract a string config value from model config."""
-
-    raw: object | None = model.config.values.get(key)
-    return raw if isinstance(raw, str) else None

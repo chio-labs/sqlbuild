@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from sqlbuild.compiler.auditing.types import AuditSeverity
+
 
 @dataclass(frozen=True)
 class DagTarget:
@@ -87,7 +89,7 @@ class DagCheck:
     checked_asset_ids: tuple[str, ...]
     path: str | None = None
     description: str | None = None
-    severity: str | None = None
+    severity: AuditSeverity | None = None
     tags: tuple[str, ...] = field(default_factory=tuple)
     group: str | None = None
     meta: dict[str, object] = field(default_factory=dict)

@@ -6,9 +6,11 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 
+from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.cost.constants import DEFAULT_USD_PER_CREDIT
 from sqlbuild.spec.contracts.types import (
     ColumnContractMode,
+    EventExportSeverity,
     FutureCursorAction,
     MicrobatchLimitAction,
     SourceFreshnessStrategy,
@@ -168,7 +170,7 @@ class SettingsConfig:
     microbatch_concurrency: bool = False
     microbatch_unaccounted_partition_policy: str = "synthesize"
     table_promotion_mode: str | None = None
-    default_audit_severity: str | None = None
+    default_audit_severity: AuditSeverity | None = None
     default_audit_run_scope: str | None = None
 
 
@@ -338,7 +340,7 @@ class LifecycleEventSinkFilterConfig:
     """Destination-neutral runtime narrowing for lifecycle-event sinks."""
 
     event_kinds: frozenset[str] | None = None
-    min_severity: str | None = None
+    min_severity: EventExportSeverity | None = None
 
 
 @dataclass(frozen=True)
@@ -435,7 +437,7 @@ class SchemaAuditInstance:
     arguments: dict[str, object] = field(default_factory=dict)
     name: str | None = None
     description: str | None = None
-    severity: str | None = None
+    severity: AuditSeverity | None = None
     run_scope: str | None = None
     always_run: bool = False
     location: SourceLocation | None = field(default=None, compare=False, repr=False)

@@ -19,6 +19,7 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
+from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 
 def build_display_only_sqlbuild_plan(
@@ -53,12 +54,14 @@ def build_display_only_sqlbuild_plan(
                 fingerprint_query_sql=model.query_sql,
                 resolved_sql=model.query_sql,
                 logical_ddl="",
-                incremental_strategy=_as_optional_string(
-                    model.config.values.get("incremental_strategy")
+                incremental_strategy=get_config_str(
+                    values=model.config.values, key="incremental_strategy"
                 ),
-                incremental_mode=_as_optional_string(model.config.values.get("incremental_mode")),
-                cursor_column=_as_optional_string(model.config.values.get("cursor_column")),
-                cursor_type=_as_optional_string(model.config.values.get("cursor_type")),
+                incremental_mode=get_config_str(
+                    values=model.config.values, key="incremental_mode"
+                ),
+                cursor_column=get_config_str(values=model.config.values, key="cursor_column"),
+                cursor_type=get_config_str(values=model.config.values, key="cursor_type"),
                 backfill=BackfillResult(
                     action=(
                         BackfillAction.FULL
@@ -67,7 +70,7 @@ def build_display_only_sqlbuild_plan(
                     )
                 ),
                 custom_materialization_name=(
-                    _as_optional_string(model.config.values.get("materialized"))
+                    get_config_str(values=model.config.values, key="materialized")
                     if materialization_type == MaterializationType.CUSTOM
                     else None
                 ),
@@ -95,7 +98,3 @@ def _display_action(
     if materialization_type == MaterializationType.CUSTOM:
         return PlanAction.CUSTOM
     return PlanAction.CREATE_TABLE
-
-
-def _as_optional_string(value: object) -> str | None:
-    return value if isinstance(value, str) else None

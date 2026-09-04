@@ -126,6 +126,7 @@ class MicrobatchCursorEndPlanTestCase:
     description: str
     cursor_type: str
     cursor_grain: str | None
+    authored_cursor_grain: dict[str, object]
     batch_size: str
     cursor_end: str
     target_max: str
@@ -833,6 +834,7 @@ class AuthoritativeCursorOverrideTestCase:
     description: str
     cursor_type: str
     cursor_grain: str | None
+    authored_cursor_grain: dict[str, object]
     batch_size: str
     start_override: str
     end_override: str

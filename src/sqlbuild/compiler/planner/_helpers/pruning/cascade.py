@@ -20,6 +20,7 @@ from sqlbuild.compiler.planner.models import (
     ResolvedModelAction,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanReason
+from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 _APPROX_SECONDS_PER_MONTH: int = 2_629_746
 
@@ -63,9 +64,11 @@ def resolve_cascades(
         change: ChangeDetectionResult | None = changes.models.get(key.name)
         if model is None or change is None:
             continue
-        cursor_type: str | None = _get_config_str(model=model, key="cursor_type")
+        cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
         model_cursor_types[model.name] = cursor_type
-        local_policy: str | None = _get_config_str(model=model, key="replay_on_change")
+        local_policy: str | None = get_config_str(
+            values=model.config.values, key="replay_on_change"
+        )
         cascade: CascadeResult | None = resolve_cascade(
             model_name=model.name,
             own_backfill=change.backfill,
@@ -285,11 +288,6 @@ def _backfill_rank(*, action: BackfillAction, duration: str | None) -> tuple[int
         if td is not None:
             duration_seconds = int(td.total_seconds())
     return (action_rank, duration_seconds)
-
-
-def _get_config_str(*, model: CompiledModel, key: str) -> str | None:
-    value: object | None = model.config.values.get(key)
-    return value if isinstance(value, str) else None
 
 
 def _reason_for_change(change: ChangeDetectionResult) -> PlanReason:

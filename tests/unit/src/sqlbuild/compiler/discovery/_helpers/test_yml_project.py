@@ -1067,6 +1067,19 @@ microbatch_concurrency = "yes"
             ),
         ),
         LoadProjectConfigErrorTestCase(
+            description="raises when default audit severity is unknown",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+default_audit_severity = "critical"
+""".strip(),
+            expected_error_fragment=(
+                "settings.default_audit_severity must be one of: warn, error"
+            ),
+        ),
+        LoadProjectConfigErrorTestCase(
             description="raises when project unaccounted policy is unknown",
             project_file_contents="""
 name = "demo"

@@ -6,9 +6,11 @@ from sqlbuild.adapter.contract.models import CursorValue
 from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.diff._helpers.bounds import resolve_bounded_cursors
+from sqlbuild.spec.contracts.exceptions import ConfigValueTypeError
 from tests.unit.src.sqlbuild.executor.diff._test_types import (
     ResolveBoundedCursorsErrorTestCase,
     ResolveBoundedCursorsTestCase,
+    WrongTypedBoundedCursorTestCase,
 )
 from tests.unit.src.sqlbuild.executor.diff.helpers import (
     assert_cursor_matches_expectation,
@@ -62,6 +64,15 @@ from tests.unit.src.sqlbuild.executor.diff.helpers import (
             expected_cursor_column="event_time",
             expected_start_cursor=None,
             expected_end_cursor_kind=CursorKind.TIMESTAMP,
+            expected_fallback=False,
+        ),
+        ResolveBoundedCursorsTestCase(
+            description="treats an empty cursor string as present",
+            config_values={"cursor": "", "cursor_type": "integer"},
+            bounded="10",
+            expected_cursor_column="",
+            expected_start_cursor=CursorValue(kind=CursorKind.INTEGER, value=10),
+            expected_end_cursor_kind=None,
             expected_fallback=False,
         ),
     ],
@@ -123,3 +134,30 @@ def test_given_invalid_bounded_diff_config_when_resolving_cursors_then_raises_cl
         )
 
     assert error_info.value.code == test_case.expected_code
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        WrongTypedBoundedCursorTestCase(
+            description="integer cursor column",
+            config_values={"cursor": 7, "cursor_type": "integer"},
+            bounded="10",
+            expected_key="cursor",
+            expected_type="a string",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_wrong_typed_cursor_when_resolving_bounded_diff_then_raises_config_error(
+    test_case: WrongTypedBoundedCursorTestCase,
+) -> None:
+    with pytest.raises(ConfigValueTypeError) as error_info:
+        resolve_bounded_cursors(
+            model=build_fake_model(config_values=test_case.config_values),
+            bounded=test_case.bounded,
+        )
+
+    assert error_info.value.key == test_case.expected_key
+    assert error_info.value.expected == test_case.expected_type
+    assert error_info.value.actual_type is int

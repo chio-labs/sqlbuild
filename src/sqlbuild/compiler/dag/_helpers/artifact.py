@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
+from enum import StrEnum
 
+from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.compile.main.function_node_type import function_node_type
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
@@ -443,7 +445,7 @@ def _build_python_check(*, node: DiscoveredPythonNode, python_graph: PythonNodeG
         checked_asset_ids=checked_asset_ids,
         path=str(node.relative_path),
         description=node.description,
-        severity=(node.check.severity.value if node.check is not None else None),
+        severity=(AuditSeverity(node.check.severity.value) if node.check is not None else None),
         tags=node.tags,
         group=node.group,
         meta=node.meta or {},
@@ -593,6 +595,8 @@ def _qualified_name(*, database: str | None, schema: str | None, name: str) -> s
 
 
 def _drop_none(value: object) -> object:
+    if isinstance(value, StrEnum):
+        return value.value
     if isinstance(value, dict):
         result: dict[object, object] = {}
         for key, item in value.items():

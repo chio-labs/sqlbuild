@@ -2,40 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
-
 from sqlbuild.compiler.compile.models import CompiledModel
 from sqlbuild.compiler.planner.types import IncrementalStrategy
-
-
-def get_config_str(*, model: CompiledModel, key: str) -> str | None:
-    """Extract a string config value from model config."""
-
-    raw: object | None = model.config.values.get(key)
-    return raw if isinstance(raw, str) else None
-
-
-def get_config_cursor_start(model: CompiledModel) -> str | None:
-    """Extract cursor_start as a normalized string value."""
-
-    raw: object | None = model.config.values.get("cursor_start")
-    if raw is None:
-        return None
-    if isinstance(raw, datetime):
-        return raw.isoformat()
-    if isinstance(raw, date):
-        return raw.isoformat()
-    if isinstance(raw, int):
-        return str(raw)
-    if isinstance(raw, str):
-        return raw
-    return None
+from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 
 def get_config_append_cursor_inclusive(model: CompiledModel) -> bool:
     """Return effective append cursor lower-bound inclusivity."""
 
-    strategy: str | None = get_config_str(model=model, key="incremental_strategy")
+    strategy: str | None = get_config_str(values=model.config.values, key="incremental_strategy")
     if strategy != IncrementalStrategy.APPEND:
         return True
     raw: object | None = model.config.values.get("append_cursor_inclusive")
