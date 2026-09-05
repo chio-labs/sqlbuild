@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from sqlbuild.compiler.compile.constants import (
@@ -24,6 +25,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
+from sqlbuild.compiler.planner._helpers.sql_tests.comments import uncommented_pattern_matches
 from tests.integration.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     ExecuteChainTestCase,
 )
@@ -99,13 +101,26 @@ def build_test_and_project(
     model_name: str
     query_sql: str
     for model_name, query_sql in test_case.model_queries.items():
+        dependency_names: tuple[str, ...] = tuple(
+            match.group(1)
+            for match in uncommented_pattern_matches(
+                pattern=re.compile(r'__ref\("([^"]+)"\)'), sql=query_sql
+            )
+        )
+        dependencies: tuple[CompiledObjectKey, ...] = tuple(
+            CompiledObjectKey(
+                resource_type=CompiledResourceType.MODEL,
+                name=dependency_name,
+            )
+            for dependency_name in dict.fromkeys(dependency_names)
+        )
         models.append(
             CompiledModel(
                 key=CompiledObjectKey(
                     resource_type=CompiledResourceType.MODEL,
                     name=model_name,
                 ),
-                deps=(),
+                deps=dependencies,
                 name=model_name,
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql=query_sql,

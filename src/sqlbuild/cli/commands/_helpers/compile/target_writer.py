@@ -7,10 +7,11 @@ from pathlib import Path
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.models import WrittenTarget
+from sqlbuild.cli.paths.main._sql_test_output_path import sql_test_output_path
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.main.execution.sql_test_assembly import build_sql_test_plan_entry
-from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput, SqlTestPlanEntry
+from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 
 _COMPILED_DIR: str = "compiled"
@@ -22,7 +23,6 @@ _AUDITS_DIR: str = "audits"
 _GENERIC_DIR: str = "generic"
 _SINGULAR_DIR: str = "singular"
 _TESTS_DIR: str = "tests"
-_CHAIN_DIR: str = "_chain_"
 _MANIFEST_FILE: str = "manifest.json"
 _SQL_FILE_SUFFIX: str = ".sql"
 
@@ -223,7 +223,7 @@ def _write_tests(
 
     managed_paths: set[Path] = set()
     for entry in plan_output.test_entries:
-        test_path: Path = target_dir / _COMPILED_DIR / _TESTS_DIR / _test_output_path(entry)
+        test_path: Path = target_dir / _COMPILED_DIR / _TESTS_DIR / sql_test_output_path(entry)
         _write_sql(
             path=test_path,
             sql=build_sql_test_comparison_sql(
@@ -252,7 +252,7 @@ def _write_static_tests(
             adapter=adapter,
             sql_analysis_enabled=project.settings.sql_analysis,
         )
-        test_path: Path = target_dir / _COMPILED_DIR / _TESTS_DIR / _test_output_path(entry)
+        test_path: Path = target_dir / _COMPILED_DIR / _TESTS_DIR / sql_test_output_path(entry)
         _write_sql(
             path=test_path,
             sql=build_sql_test_comparison_sql(
@@ -359,20 +359,3 @@ def _static_audit_file_name(
     if attached_target_name is not None and attached_column_name is not None:
         return f"{name}__{attached_column_name}{_SQL_FILE_SUFFIX}"
     return f"{name}{_SQL_FILE_SUFFIX}"
-
-
-def _test_folder(entry: SqlTestPlanEntry) -> Path:
-    """Determine the SQL-native test output folder."""
-
-    model_names: list[str] = [step.model_name for step in entry.chain]
-    unique_names: list[str] = sorted(set(model_names))
-    if len(unique_names) <= 1:
-        return Path(unique_names[0] if unique_names else entry.name)
-    return Path(_CHAIN_DIR) / "__".join(unique_names)
-
-
-def _test_output_path(entry: SqlTestPlanEntry) -> Path:
-    if entry.case_name is None or entry.source_path is None:
-        return _test_folder(entry) / f"{entry.name}{_SQL_FILE_SUFFIX}"
-    source_path: Path = entry.source_path.with_suffix("")
-    return source_path / f"block_{entry.block_index}__{entry.case_name}{_SQL_FILE_SUFFIX}"

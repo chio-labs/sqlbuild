@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from sqlbuild.compiler.compile._helpers.analysis.ctes import (
     extract_top_level_ctes_with_sql_analysis,
 )
@@ -121,6 +123,7 @@ def extract_assertion_target_model_names(*, assertion_sql: tuple[str, ...]) -> t
     return tuple(dict.fromkeys(targets))
 
 
+@lru_cache(maxsize=4096)
 def _extract_sql_test_ctes_with_scanner(
     *, sql: str, file_label: str
 ) -> tuple[CompileSqlTestCte, ...]:
