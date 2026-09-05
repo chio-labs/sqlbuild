@@ -79,15 +79,28 @@ def project_audit_result_batch_impl(
         _LAST_AUDIT_RESULT_PROJECTION.set(projection)
         return projection
 
-    records: tuple[AuditResultRecord, ...] = _build_records(
-        plan=plan,
-        results=executed,
-        identity=identity,
-        storage_database=database,
-        storage_schema=schema,
-    )
-    for record in records:
-        _ = _publish_audit_completed(record)
+    try:
+        records: tuple[AuditResultRecord, ...] = _build_records(
+            plan=plan,
+            results=executed,
+            identity=identity,
+            storage_database=database,
+            storage_schema=schema,
+        )
+        for record in records:
+            _ = _publish_audit_completed(record)
+    except Exception as error:
+        _LOGGER.warning(
+            "Audit result projection degraded: attempted=%d written=0 failed=%d (%s)",
+            len(executed),
+            len(executed),
+            error,
+        )
+        projection = AuditResultProjection(
+            attempted_count=len(executed), failed_count=len(executed)
+        )
+        _LAST_AUDIT_RESULT_PROJECTION.set(projection)
+        return projection
     try:
         write_audit_result_records(
             connection=connection,
@@ -107,14 +120,10 @@ def project_audit_result_batch_impl(
             len(records),
             error,
         )
-        projection = AuditResultProjection(
-            attempted_count=len(records), failed_count=len(records)
-        )
+        projection = AuditResultProjection(attempted_count=len(records), failed_count=len(records))
         _LAST_AUDIT_RESULT_PROJECTION.set(projection)
         return projection
-    projection = AuditResultProjection(
-        attempted_count=len(records), written_count=len(records)
-    )
+    projection = AuditResultProjection(attempted_count=len(records), written_count=len(records))
     _LAST_AUDIT_RESULT_PROJECTION.set(projection)
     return projection
 

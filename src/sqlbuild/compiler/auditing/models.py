@@ -23,12 +23,21 @@ class MeasurementThresholdBound:
         if self.operator in {ThresholdOperator.BELOW, ThresholdOperator.ABOVE}:
             if self.limit is None or self.lower is not None or self.upper is not None:
                 raise MeasurementAuditError(f"{self.operator.value} threshold requires limit only")
+            if isinstance(self.limit, bool):
+                raise MeasurementAuditError("measurement threshold limit must not be boolean")
+            object.__setattr__(self, "limit", float(self.limit))
             if not isfinite(self.limit):
                 raise MeasurementAuditError("measurement threshold limit must be finite")
             return
 
         if self.limit is not None or self.lower is None or self.upper is None:
             raise MeasurementAuditError("outside threshold requires lower and upper only")
+        if isinstance(self.lower, bool):
+            raise MeasurementAuditError("measurement threshold lower must not be boolean")
+        if isinstance(self.upper, bool):
+            raise MeasurementAuditError("measurement threshold upper must not be boolean")
+        object.__setattr__(self, "lower", float(self.lower))
+        object.__setattr__(self, "upper", float(self.upper))
         if not isfinite(self.lower):
             raise MeasurementAuditError("measurement threshold lower must be finite")
         if not isfinite(self.upper):

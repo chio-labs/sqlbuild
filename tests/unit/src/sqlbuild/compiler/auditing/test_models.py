@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.audits import below
 from sqlbuild.compiler.auditing.models import (
     MeasurementContract,
     MeasurementThresholdBound,
@@ -9,10 +10,13 @@ from sqlbuild.compiler.auditing.models import (
 )
 from sqlbuild.compiler.auditing.types import ThresholdOperator
 from tests.unit.src.sqlbuild.compiler.auditing._test_types import (
+    BooleanThresholdTestCase,
     InvalidMeasurementContractTestCase,
     InvalidThresholdBoundTestCase,
     InvalidThresholdNestingTestCase,
     InvalidThresholdPolicyTestCase,
+    ThresholdLimitCoercionTestCase,
+    ThresholdRangeCoercionTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.auditing.helpers import (
     build_measurement_threshold_bound,
@@ -159,6 +163,74 @@ INVALID_CONTRACT_CASES: tuple[InvalidMeasurementContractTestCase, ...] = (
         expected_error_message="measurement contract sample_unit must be non-empty",
     ),
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ThresholdLimitCoercionTestCase(
+            description="integer public API limit",
+            input_limit=5,
+            expected_limit=5.0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_integer_limit_when_using_below_helper_then_limit_is_float(
+    test_case: ThresholdLimitCoercionTestCase,
+) -> None:
+    bound: MeasurementThresholdBound = below(test_case.input_limit)
+
+    assert bound.limit == test_case.expected_limit
+    assert type(bound.limit) is float
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ThresholdRangeCoercionTestCase(
+            description="integer direct range",
+            input_lower=1,
+            input_upper=5,
+            expected_lower=1.0,
+            expected_upper=5.0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_integer_range_when_constructing_bound_then_bounds_are_floats(
+    test_case: ThresholdRangeCoercionTestCase,
+) -> None:
+    bound: MeasurementThresholdBound = MeasurementThresholdBound(
+        operator=ThresholdOperator.OUTSIDE,
+        lower=test_case.input_lower,
+        upper=test_case.input_upper,
+    )
+
+    assert (bound.lower, bound.upper) == (test_case.expected_lower, test_case.expected_upper)
+    assert type(bound.lower) is float
+    assert type(bound.upper) is float
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BooleanThresholdTestCase(
+            description="boolean limit",
+            input_limit=True,
+            expected_error_message="measurement threshold limit must not be boolean",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_boolean_limit_when_constructing_bound_then_it_is_rejected(
+    test_case: BooleanThresholdTestCase,
+) -> None:
+    with pytest.raises(ValueError, match=test_case.expected_error_message):
+        MeasurementThresholdBound(
+            operator=ThresholdOperator.BELOW,
+            limit=test_case.input_limit,
+        )
 
 
 @pytest.mark.parametrize(

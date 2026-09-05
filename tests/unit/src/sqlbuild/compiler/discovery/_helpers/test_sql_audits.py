@@ -83,6 +83,14 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
                 },
             ),
         ),
+        ParseSqlAuditFileTestCase(
+            description="treats measurement function calls in select as violations SQL",
+            contents="AUDIT (); SELECT measure(x), evidence(y) FROM t",
+            expected_names=(None,),
+            expected_sql_bodies=("SELECT measure(x), evidence(y) FROM t",),
+            expected_audit_indexes=(1,),
+            expected_header_values=({},),
+        ),
     ],
     ids=lambda case: case.description,
 )

@@ -109,8 +109,10 @@ def _parse_single_sql_audit_block(
         sql_body = cleandoc(body)
         if not sql_body:
             raise SqlAuditParseError(f"SQL audit '{file_path}' must define SQL after AUDIT(...)")
-        if _find_top_level_keywords(text=sql_body, keyword="MEASURE") or _find_top_level_keywords(
-            text=sql_body, keyword="EVIDENCE"
+        body_code_start: int = _skip_space_and_comments(text=sql_body, start=0)
+        if body_code_start in (
+            *_find_top_level_keywords(text=sql_body, keyword="MEASURE"),
+            *_find_top_level_keywords(text=sql_body, keyword="EVIDENCE"),
         ):
             raise SqlAuditParseError(
                 f"Violation audit '{file_path}' must use a bare SELECT body, not MEASURE/EVIDENCE"
@@ -206,9 +208,11 @@ def _parse_measurement_body(*, body: str, file_path: Path) -> tuple[str, str | N
         )
         position = _skip_space_and_comments(text=body, start=position)
     if position != len(body):
-        label: str = "duplicate MEASURE/EVIDENCE block" if _keyword_at_any(
-            text=body, position=position, keywords=("MEASURE", "EVIDENCE")
-        ) else "bare SQL outside MEASURE/EVIDENCE blocks"
+        label: str = (
+            "duplicate MEASURE/EVIDENCE block"
+            if _keyword_at_any(text=body, position=position, keywords=("MEASURE", "EVIDENCE"))
+            else "bare SQL outside MEASURE/EVIDENCE blocks"
+        )
         raise SqlAuditParseError(f"Measurement audit '{file_path}' has {label}")
     return cast(str, measure_sql), evidence_sql
 
@@ -222,9 +226,9 @@ def _extract_delimited_query(
                 f"Measurement audit '{file_path}' must define exactly one MEASURE(...) block"
             )
         return None, position
-    open_index: int = _keyword_open_paren(
-        text=text[position:], keyword=keyword, file_path=file_path
-    ) + position
+    open_index: int = (
+        _keyword_open_paren(text=text[position:], keyword=keyword, file_path=file_path) + position
+    )
     close_index: int = _find_matching_parenthesis(
         text=text, open_index=open_index, file_path=file_path, label=keyword
     )
@@ -287,8 +291,10 @@ def _find_top_level_keywords(*, text: str, keyword: str) -> tuple[int, ...]:
             depth += 1
         elif character == _CLOSE_PAREN:
             depth = max(0, depth - 1)
-        elif depth == 0 and character.upper() == keyword[0] and _keyword_at(
-            text=text, keyword=keyword, position=index
+        elif (
+            depth == 0
+            and character.upper() == keyword[0]
+            and _keyword_at(text=text, keyword=keyword, position=index)
         ):
             after: int = _skip_space_and_comments(text=text, start=index + len(keyword))
             if after < len(text) and text[after] == _OPEN_PAREN:
@@ -370,9 +376,7 @@ def _keyword_at(*, text: str, keyword: str, position: int) -> bool:
 
 
 def _keyword_at_any(*, text: str, position: int, keywords: tuple[str, ...]) -> bool:
-    return any(
-        _keyword_at(text=text, keyword=keyword, position=position) for keyword in keywords
-    )
+    return any(_keyword_at(text=text, keyword=keyword, position=position) for keyword in keywords)
 
 
 def _validate_audit_names(*, file_path: Path, blocks: tuple[DiscoveredAuditBlock, ...]) -> None:

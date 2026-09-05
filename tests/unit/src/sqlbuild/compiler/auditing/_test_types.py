@@ -40,3 +40,26 @@ class InvalidMeasurementContractTestCase:
 class InvalidThresholdPolicyTestCase:
     description: str
     expected_error_message: str
+
+
+@dataclass(frozen=True)
+class ThresholdLimitCoercionTestCase:
+    description: str
+    input_limit: int
+    expected_limit: float
+
+
+@dataclass(frozen=True)
+class ThresholdRangeCoercionTestCase:
+    description: str
+    input_lower: int
+    input_upper: int
+    expected_lower: float
+    expected_upper: float
+
+
+@dataclass(frozen=True)
+class BooleanThresholdTestCase:
+    description: str
+    input_limit: bool
+    expected_error_message: str

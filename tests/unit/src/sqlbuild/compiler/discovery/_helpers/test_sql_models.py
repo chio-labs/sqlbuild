@@ -318,6 +318,24 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
             expected_query="SELECT 1",
         ),
         ParseModelSqlHeaderTestCase(
+            description="accepts ordinary outside audit argument",
+            contents="MODEL (audits [custom_check (outside 5)]); SELECT 1",
+            expected_header_values={
+                "audits": [{"custom_check": {"outside": 5}}],
+            },
+            expected_query="SELECT 1",
+        ),
+        ParseModelSqlHeaderTestCase(
+            description="accepts outside threshold shorthand in threshold policy",
+            contents=("MODEL (audits [rate (thresholds (warn (outside 1 5)))]); SELECT 1"),
+            expected_header_values={
+                "audits": [
+                    {"rate": {"thresholds": {"warn": {"outside": (1, 5)}}}},
+                ],
+            },
+            expected_query="SELECT 1",
+        ),
+        ParseModelSqlHeaderTestCase(
             description="accepts relation calls as audit argument values",
             contents="""
         MODEL (
