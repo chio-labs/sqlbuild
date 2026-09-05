@@ -3,6 +3,7 @@
 from collections.abc import Mapping
 from types import MappingProxyType
 
+from sqlbuild.runtime.event_exporting.types import LifecycleEventKind
 from sqlbuild.runtime.observability.constants import LIFECYCLE_EVENT_CATALOG
 from sqlbuild.spec.contracts.types import EventExportSeverity
 
@@ -13,9 +14,7 @@ DEFAULT_EVENT_EXPORT_NOTIFICATION_QUEUE_CAPACITY: int = 256
 DEFAULT_EVENT_EXPORT_HEALTH_INTERVAL_SECONDS: float = 30.0
 EVENT_EXPORTER_EVENT_PARAMETER_NAME: str = "event"
 EVENT_EXPORT_SEVERITIES: tuple[str, ...] = tuple(item.value for item in EventExportSeverity)
-EVENT_EXPORT_KINDS: frozenset[str] = frozenset(
-    {"invocation", "run", "resource", "operation", "statement", "retry"}
-)
+EVENT_EXPORT_KINDS: frozenset[str] = frozenset(kind.value for kind in LifecycleEventKind)
 INVOCATION_TERMINAL_EVENT_TYPES: frozenset[str] = frozenset(
     {"invocation_completed", "invocation_failed"}
 )

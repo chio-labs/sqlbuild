@@ -58,6 +58,7 @@ from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredAdapterFile,
     DiscoveredAssetFunction,
+    DiscoveredAuditFactory,
     DiscoveredAuditFile,
     DiscoveredCheckFunction,
     DiscoveredCommandOutputSink,
@@ -101,6 +102,9 @@ from sqlbuild.observability import LifecycleEvent
 from sqlbuild.provider.exceptions import ProviderInputError
 from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.main.read_asset_definition import read_asset_definition
+from sqlbuild.python_nodes.main.read_audit_factory_definition import (
+    read_audit_factory_definition,
+)
 from sqlbuild.python_nodes.main.read_check_definition import read_check_definition
 from sqlbuild.python_nodes.main.read_factory_definition import read_factory_definition
 from sqlbuild.python_nodes.main.read_hook_definition import read_hook_definition
@@ -108,6 +112,8 @@ from sqlbuild.python_nodes.main.read_loader_definition import read_loader_defini
 from sqlbuild.python_nodes.main.read_task_definition import read_task_definition
 from sqlbuild.python_nodes.models import (
     AssetDefinition,
+    AuditCase,
+    AuditFactoryDefinition,
     CheckDefinition,
     FactoryDefinition,
     HookDefinition,
@@ -137,6 +143,7 @@ class _PythonNodeDiscoveryBucket:
     tasks: list[DiscoveredTaskFunction] = field(default_factory=list)
     assets: list[DiscoveredAssetFunction] = field(default_factory=list)
     checks: list[DiscoveredCheckFunction] = field(default_factory=list)
+    audit_factories: list[DiscoveredAuditFactory] = field(default_factory=list)
 
     def add_loader(self, item: DiscoveredLoaderFunction) -> None:
         self.loaders.append(item)
@@ -149,6 +156,9 @@ class _PythonNodeDiscoveryBucket:
 
     def add_check(self, item: DiscoveredCheckFunction) -> None:
         self.checks.append(item)
+
+    def add_audit_factory(self, item: DiscoveredAuditFactory) -> None:
+        self.audit_factories.append(item)
 
 
 @dataclass(frozen=True)
@@ -851,6 +861,7 @@ def discover_python_node_functions(
         tasks=tuple(bucket.tasks),
         assets=tuple(bucket.assets),
         checks=tuple(bucket.checks),
+        audit_factories=tuple(bucket.audit_factories),
     )
 
 
@@ -1351,6 +1362,13 @@ def _append_module_python_nodes(
     node_folder: str,
     provider_by_name: dict[str, DiscoveredProvider],
 ) -> None:
+    _append_module_audit_factories(
+        bucket=bucket,
+        module=module,
+        file_path=file_path,
+        project_dir=project_dir,
+        node_folder=node_folder,
+    )
     if node_folder != PYTHON_FACTORY_FOLDER:
         for _, value in inspect.getmembers(module, inspect.isfunction):
             if value.__module__ != module.__name__:
@@ -1392,6 +1410,104 @@ def _append_module_python_nodes(
                     f"{file_path.relative_to(project_dir)} returned item {index} that is not "
                     "a SQLBuild task, asset, loader, or check"
                 )
+
+
+def _append_module_audit_factories(
+    *,
+    bucket: _PythonNodeDiscoveryBucket,
+    module: ModuleType,
+    file_path: Path,
+    project_dir: Path,
+    node_folder: str,
+) -> None:
+    """Collect audit factories without routing them through Python-node discovery."""
+
+    for _, value in inspect.getmembers(module, inspect.isfunction):
+        if value.__module__ != module.__name__:
+            continue
+        definition: AuditFactoryDefinition | None = read_audit_factory_definition(value)
+        if definition is None:
+            continue
+        relative_path: Path = file_path.relative_to(project_dir)
+        if node_folder != PYTHON_FACTORY_FOLDER:
+            raise PythonNodeDiscoveryError(
+                f"Audit factory '{definition.name}' in {relative_path} must live under factories/"
+            )
+        if _python_node_definition_names(value):
+            kinds: str = ", ".join(_python_node_definition_names(value))
+            raise PythonNodeDiscoveryError(
+                f"Audit factory '{definition.name}' in {relative_path} cannot also be decorated "
+                f"as a Python-node kind ({kinds})"
+            )
+        existing: DiscoveredAuditFactory | None = next(
+            (item for item in bucket.audit_factories if item.name == definition.name), None
+        )
+        if existing is not None:
+            raise PythonNodeDiscoveryError(
+                f"Duplicate audit factory name '{definition.name}' found in "
+                f"{existing.relative_path} and {relative_path}"
+            )
+        cases: tuple[AuditCase, ...] = _call_audit_factory(
+            factory=value,
+            definition=definition,
+            file_path=file_path,
+            project_dir=project_dir,
+        )
+        bucket.add_audit_factory(
+            DiscoveredAuditFactory(
+                name=definition.name,
+                function=value,
+                file_path=file_path,
+                relative_path=relative_path,
+                line=inspect.getsourcelines(value)[1],
+                cases=cases,
+            )
+        )
+
+
+def _python_node_definition_names(function: Callable[..., object]) -> tuple[str, ...]:
+    definitions: tuple[tuple[str, object | None], ...] = (
+        ("factory", read_factory_definition(function)),
+        ("loader", read_loader_definition(function)),
+        ("task", read_task_definition(function)),
+        ("asset", read_asset_definition(function)),
+        ("check", read_check_definition(function)),
+    )
+    return tuple(name for name, definition in definitions if definition is not None)
+
+
+def _call_audit_factory(
+    *,
+    factory: Callable[..., object],
+    definition: AuditFactoryDefinition,
+    file_path: Path,
+    project_dir: Path,
+) -> tuple[AuditCase, ...]:
+    relative_path: Path = file_path.relative_to(project_dir)
+    if inspect.signature(factory).parameters:
+        raise PythonNodeDiscoveryError(
+            f"Audit factory '{definition.name}' in {relative_path} must not require arguments"
+        )
+    try:
+        result: object = factory()
+    except Exception as error:
+        raise PythonNodeDiscoveryError(
+            f"Audit factory '{definition.name}' in {relative_path} failed during discovery: {error}"
+        ) from error
+    if not isinstance(result, list | tuple):
+        raise PythonNodeDiscoveryError(
+            f"Audit factory '{definition.name}' in {relative_path} must return a list or tuple "
+            "of AuditCase instances"
+        )
+    cases: list[AuditCase] = []
+    for index, item in enumerate(result):
+        if not isinstance(item, AuditCase):
+            raise PythonNodeDiscoveryError(
+                f"Audit factory '{definition.name}' in {relative_path} returned item {index} "
+                "that is not an AuditCase"
+            )
+        cases.append(item)
+    return tuple(cases)
 
 
 def _append_python_node_function(

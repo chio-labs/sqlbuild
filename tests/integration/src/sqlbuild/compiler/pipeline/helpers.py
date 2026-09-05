@@ -6,16 +6,56 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
+from sqlbuild.compiler.compile.models import CompileAdapterContext, CompileAuditInput
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.runtime.contracts.models import ConnectionHooks
+from sqlbuild.sql_values.types import CollectionRendering
 
 _SCHEMA_FIXTURE_PATH: Path = (
     Path(__file__).resolve().parents[5] / "fixtures" / "dbt_manifest_v12_schema.json"
 )
+_AUDIT_FACTORY_ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
+    value_renderer=DuckDbAdapter(),
+    collection_rendering=CollectionRendering.VALUE_LIST,
+    python_functions_inherit_default_namespace=True,
+)
+
+
+def compile_audits_for_project(*, project_dir: Path) -> tuple[CompileAuditInput, ...]:
+    """Compile one project's audit inputs with the real DuckDB compiler path."""
+
+    return build_compile_inputs(
+        discovered_inputs=discover_project_inputs(project_dir=project_dir),
+        adapter_context=_AUDIT_FACTORY_ADAPTER_CONTEXT,
+        run_id="integration_run",
+    ).audit_inputs
+
+
+def audit_input_projection(
+    *, audits: tuple[CompileAuditInput, ...]
+) -> tuple[tuple[object, ...], ...]:
+    """Project attachment-relevant fields for direct/generated equivalence."""
+
+    return tuple(
+        (
+            audit.name,
+            audit.audit_file.relative_path,
+            audit.sql_body,
+            audit.attached_target_kind,
+            audit.attached_target_name,
+            audit.attached_column_name,
+            audit.severity,
+            audit.run_scope,
+            audit.always_run,
+        )
+        for audit in audits
+    )
 
 
 def run_compile_pipeline_for_project(

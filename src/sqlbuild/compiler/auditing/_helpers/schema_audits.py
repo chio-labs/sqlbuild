@@ -5,8 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
-from sqlbuild.compiler.auditing.constants import SCHEMA_AUDIT_OPTION_KEYS
-from sqlbuild.compiler.auditing.types import AuditSeverity
+from sqlbuild.compiler.auditing.constants import (
+    MEASUREMENT_OUTSIDE_BOUND_VALUE_COUNT,
+    MEASUREMENT_THRESHOLD_ERROR_KEY,
+    MEASUREMENT_THRESHOLD_WARN_KEY,
+    SCHEMA_AUDIT_OPTION_KEYS,
+)
+from sqlbuild.compiler.auditing.exceptions import MeasurementAuditError
+from sqlbuild.compiler.auditing.models import MeasurementThresholdBound, MeasurementThresholds
+from sqlbuild.compiler.auditing.types import AuditSeverity, ThresholdOperator
 from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
     validate_resource_identity,
 )
@@ -105,6 +112,18 @@ def parse_audit_instance_impl(
         key="always_run",
         error_class=error_class,
     )
+    thresholds: MeasurementThresholds | None = parse_measurement_thresholds(
+        raw_value=argument_mapping.get("thresholds"),
+        file_path=file_path,
+        label=option_label,
+        error_class=error_class,
+    )
+    minimum_samples: int | None = parse_minimum_samples(
+        raw_value=argument_mapping.get("minimum_samples"),
+        file_path=file_path,
+        label=option_label,
+        error_class=error_class,
+    )
     arguments: dict[str, object] = {
         key: value for key, value in argument_mapping.items() if key not in SCHEMA_AUDIT_OPTION_KEYS
     }
@@ -116,7 +135,93 @@ def parse_audit_instance_impl(
         severity=severity,
         run_scope=run_scope,
         always_run=always_run,
+        thresholds=thresholds,
+        minimum_samples=minimum_samples,
     )
+
+
+def parse_measurement_thresholds(
+    *,
+    raw_value: object | None,
+    file_path: Path,
+    label: str,
+    error_class: type[Exception],
+) -> MeasurementThresholds | None:
+    """Parse authored warn/error directional measurement thresholds."""
+
+    if raw_value is None:
+        return None
+    if not isinstance(raw_value, dict):
+        raise error_class(f"{file_path} {label} 'thresholds' must be a mapping")
+    threshold_mapping: dict[str, object] = cast(dict[str, object], raw_value)
+    unknown: tuple[str, ...] = tuple(
+        key
+        for key in threshold_mapping
+        if key not in {MEASUREMENT_THRESHOLD_WARN_KEY, MEASUREMENT_THRESHOLD_ERROR_KEY}
+    )
+    if unknown:
+        raise error_class(
+            f"{file_path} {label} 'thresholds' has unsupported keys: {', '.join(unknown)}"
+        )
+    try:
+        return MeasurementThresholds(
+            warn=_parse_threshold_bound(threshold_mapping.get(MEASUREMENT_THRESHOLD_WARN_KEY)),
+            error=_parse_threshold_bound(threshold_mapping.get(MEASUREMENT_THRESHOLD_ERROR_KEY)),
+        )
+    except MeasurementAuditError as error:
+        raise error_class(f"{file_path} {label} invalid thresholds: {error}") from error
+
+
+def parse_minimum_samples(
+    *,
+    raw_value: object | None,
+    file_path: Path,
+    label: str,
+    error_class: type[Exception],
+) -> int | None:
+    """Parse an optional non-negative minimum sample requirement."""
+
+    if raw_value is None:
+        return None
+    if isinstance(raw_value, bool) or not isinstance(raw_value, int) or raw_value < 0:
+        raise error_class(f"{file_path} {label} 'minimum_samples' must be a non-negative integer")
+    return raw_value
+
+
+def _parse_threshold_bound(raw_value: object | None) -> MeasurementThresholdBound | None:
+    if raw_value is None:
+        return None
+    if not isinstance(raw_value, dict) or len(raw_value) != 1:
+        raise MeasurementAuditError(
+            "each threshold must be exactly one of below, above, or outside"
+        )
+    bound_mapping: dict[str, object] = cast(dict[str, object], raw_value)
+    raw_operator, raw_limit = next(iter(bound_mapping.items()))
+    try:
+        operator: ThresholdOperator = ThresholdOperator(raw_operator)
+    except ValueError as error:
+        raise MeasurementAuditError(
+            "threshold operator must be one of below, above, or outside"
+        ) from error
+    if operator == ThresholdOperator.OUTSIDE:
+        if (
+            not isinstance(raw_limit, tuple)
+            or len(raw_limit) != MEASUREMENT_OUTSIDE_BOUND_VALUE_COUNT
+            or any(
+                isinstance(item, bool) or not isinstance(item, (int, float))
+                for item in raw_limit
+            )
+        ):
+            raise MeasurementAuditError("outside threshold requires two numeric values")
+        lower, upper = cast(tuple[int | float, int | float], raw_limit)
+        return MeasurementThresholdBound(
+            operator=operator,
+            lower=float(lower),
+            upper=float(upper),
+        )
+    if isinstance(raw_limit, bool) or not isinstance(raw_limit, (int, float)):
+        raise MeasurementAuditError(f"{operator.value} threshold requires one numeric value")
+    return MeasurementThresholdBound(operator=operator, limit=float(raw_limit))
 
 
 def _optional_named_string(

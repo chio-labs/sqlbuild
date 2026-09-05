@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 
+from sqlbuild.compiler.auditing.models import MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.cost.constants import DEFAULT_USD_PER_CREDIT
 from sqlbuild.spec.contracts.types import (
@@ -440,6 +441,8 @@ class SchemaAuditInstance:
     severity: AuditSeverity | None = None
     run_scope: str | None = None
     always_run: bool = False
+    thresholds: MeasurementThresholds | None = None
+    minimum_samples: int | None = None
     location: SourceLocation | None = field(default=None, compare=False, repr=False)
 
 

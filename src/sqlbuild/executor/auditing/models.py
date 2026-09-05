@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
+from sqlbuild.compiler.auditing.models import MeasurementThresholds
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
+    AuditEvaluationMode,
     AuditOutcome,
     AuditRunScope,
     AuditSeverity,
@@ -28,3 +31,13 @@ class AuditExecutionResult:
     attached_target_name: str | None = None
     attached_column_name: str | None = None
     reused: bool = False
+    evaluation_mode: AuditEvaluationMode = AuditEvaluationMode.VIOLATIONS
+    measured_value: float | None = None
+    sample_count: int | None = None
+    sample_unit: str | None = None
+    minimum_samples: int | None = None
+    thresholds: MeasurementThresholds | None = None
+    evidence_rows: tuple[Mapping[str, object], ...] = ()
+    evidence_truncated: bool = False
+    evidence_error: str | None = None
+    evidence_sql: str | None = None

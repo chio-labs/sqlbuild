@@ -2,7 +2,7 @@
 
 This package owns backend-neutral, append-only storage contracts for canonical
 `LifecycleEvent` and `OpaqueLifecycleEvent` facts. Diagnostic and compute logs are separate concerns
-and are never accepted by `EventLogStorage`.
+and are never accepted by `LifecycleEventLogStorage`.
 
 ## Durability and idempotency
 
@@ -63,7 +63,7 @@ Install `sqlbuild[postgres]` only in deployed processes that construct it. Core,
 SQLite imports do not load or require `psycopg`.
 
 PostgreSQL startup applies forward-only transactional migrations under an advisory lock, so all
-instances should run the same SQLBuild version during rollout. Back up `sqlbuild_event_log` as the
+instances should run the same SQLBuild version during rollout. Back up `sqlbuild_lifecycle_event_log` as the
 authoritative append-only history and `sqlbuild_storage_migrations` with the normal database backup
 policy. `sqlbuild_run_projection` is disposable serving state and can be rebuilt transactionally
 from the event log with `reconcile()`. Restore and disaster-recovery procedures must preserve event

@@ -54,7 +54,9 @@ INTEGRATION_FAILED_PHASES: frozenset[str] = frozenset(
         "type_enforcement",
     }
 )
-INTEGRATION_CHECK_STATUSES: frozenset[str] = frozenset({"error", "fail", "pass", "warn"})
+INTEGRATION_CHECK_STATUSES: frozenset[str] = frozenset(
+    {"error", "fail", "insufficient", "pass", "warn"}
+)
 INTEGRATION_CHECK_SEVERITIES: frozenset[str] = frozenset({"error", "warn"})
 INTEGRATION_CHECK_ATTACHMENT_KINDS: frozenset[str] = frozenset({"end", "model", "source"})
 INTEGRATION_CHECK_RUN_SCOPE_PHASES: frozenset[str] = frozenset({"delta_and_final", "final"})

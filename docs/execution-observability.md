@@ -7,7 +7,7 @@ record that answers the question instead of treating every JSON or log file as i
 
 | Record | Purpose | Authority and retention |
 | --- | --- | --- |
-| `LifecycleEvent` | Immutable facts about invocation, run, resource-attempt, operation, retry, and statement lifecycles | Canonical execution evidence. An explicitly attached `EventLogStorage` is authoritative once the fact is durable. SQLite and PostgreSQL retain facts until an operator removes the database or applies an external retention policy. |
+| `LifecycleEvent` | Immutable facts about invocation, run, resource-attempt, operation, retry, and statement lifecycles | Canonical execution evidence. An explicitly attached `LifecycleEventLogStorage` is authoritative once the fact is durable. SQLite and PostgreSQL retain facts until an operator removes the database or applies an external retention policy. |
 | `DiagnosticLog` | Structured framework and user diagnostics | Explanatory only. It cannot establish that work started, completed, failed, skipped, or retried. Local compute-log retention applies. |
 | `stdout.log` and `stderr.log` | Exact process output for one invocation | Troubleshooting data, not execution truth. Local compute-log retention applies. |
 | `CommandOutputRecord` | Normalized, ANSI-free, line-oriented stdout/stderr chunks for an explicitly configured remote sink | Potentially sensitive, bounded, and potentially lossy troubleshooting data. It is not execution evidence and destination retention is project-owned. |

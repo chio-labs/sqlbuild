@@ -1,13 +1,13 @@
 # Execution history storage
 
-`EventLogStorage` stores canonical immutable lifecycle facts. `RunStorage` serves an atomically
+`LifecycleEventLogStorage` stores canonical immutable lifecycle facts. `RunStorage` serves an atomically
 published, rebuildable run projection. Diagnostic and compute logs are never accepted by either
 contract. The public types, filters, pages, records, errors, and helper functions are exported from
 `sqlbuild.execution_history`.
 
 ## Public contracts
 
-`EventLogStorage` provides `append_event`, `append_events`, `get_events`, `get_schema_version`,
+`LifecycleEventLogStorage` provides `append_event`, `append_events`, `get_events`, `get_schema_version`,
 `upgrade_schema`, `close`, `dispose`, and context management. `RunStorage` provides `get_run`,
 `get_runs`, `project`, `rebuild_from_events`, the schema/lifecycle methods, and context management.
 The concrete SQLite and PostgreSQL classes additionally provide transactional
@@ -68,7 +68,7 @@ uses `<project_dir>/.sqlbuild/history.sqlite3`; passing `path` selects an exact 
 be `":memory:"`. Do not pass both. Startup creates/migrates schema version 1 and reconciles the run
 projection from all event facts.
 
-Schema v1 has `execution_history_metadata`, append-only `event_log`, and disposable
+Schema v1 has `execution_history_metadata`, append-only `lifecycle_event_log`, and disposable
 `run_projection` tables plus run, invocation, type, and created-time indexes. SQLite uses WAL mode,
 foreign keys, a configurable 5000 ms default busy timeout, a process-local reentrant lock, and
 transactions for append/projection publication. Multiple processes may use SQLite subject to normal
@@ -120,7 +120,7 @@ with PostgresExecutionHistory(os.environ["SQLBUILD_HISTORY_DSN"]) as history:
 
 The DSN must be resolved from a secret before construction. SQLBuild neither retains it for
 diagnostics nor includes it in exceptions or `repr`. PostgreSQL schema v1 uses
-`sqlbuild_storage_migrations`, authoritative `sqlbuild_event_log`, and disposable
+`sqlbuild_storage_migrations`, authoritative `sqlbuild_lifecycle_event_log`, and disposable
 `sqlbuild_run_projection`. Startup takes a transaction-scoped advisory migration lock, performs
 forward-only migrations, and reconciles projection. All instances should run the same SQLBuild
 version during rollout.
@@ -133,7 +133,7 @@ content raises `IntegrityConflictError`. This is storage idempotency, not export
 delivery.
 
 Grant deployed application roles only the required schema/table privileges and reserve migration,
-backup, retention, and destructive privileges for operators. Back up `sqlbuild_event_log` and
+backup, retention, and destructive privileges for operators. Back up `sqlbuild_lifecycle_event_log` and
 `sqlbuild_storage_migrations`, preserving event IDs, canonical JSON, identity sequence values, and
 storage namespace. `sqlbuild_run_projection` can be rebuilt with `reconcile()`. PostgreSQL performs
 no automatic retention, partitioning, or archival.

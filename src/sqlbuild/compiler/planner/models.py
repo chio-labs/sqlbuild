@@ -12,8 +12,10 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RetentionRequest
+from sqlbuild.compiler.auditing.models import MeasurementThresholds
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
+    AuditEvaluationMode,
     AuditRunScope,
     AuditSeverity,
 )
@@ -1063,6 +1065,14 @@ class AuditPlanEntry:
     severity: AuditSeverity
     requested_run_scope: AuditRunScope
     effective_run_scope: AuditRunScope
+    evaluation_mode: AuditEvaluationMode = AuditEvaluationMode.VIOLATIONS
+    value_column: str | None = None
+    sample_count_column: str | None = None
+    sample_unit: str | None = None
+    thresholds: MeasurementThresholds | None = None
+    minimum_samples: int | None = None
+    evidence_resolved_sql: str | None = None
+    evidence_unresolved_sql: str | None = None
     scope_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
     attached_target_kind: AttachedAuditTargetKind | None = None
     attached_target_name: str | None = None

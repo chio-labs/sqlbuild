@@ -19,6 +19,16 @@ from sqlbuild.sql_values.models import SqlValue
 
 
 @dataclass(frozen=True)
+class AuditFactoryAttachmentTestCase:
+    description: str
+    model_header: str
+    factory_cases: str
+    expected_error_fragment: str | None = None
+    expected_audit_names: tuple[str, ...] = ()
+    expected_warning_code: str | None = None
+
+
+@dataclass(frozen=True)
 class AnalysisCacheTestCase:
     description: str
     expected_count: int

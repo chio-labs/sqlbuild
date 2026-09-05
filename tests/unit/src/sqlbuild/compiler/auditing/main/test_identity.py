@@ -2,16 +2,31 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from sqlbuild.compiler.auditing.main.identity import build_audit_gate_identity
-from sqlbuild.compiler.auditing.models import AuditGateIdentity
-from sqlbuild.compiler.auditing.types import AuditAttachmentKind, AuditRunScope, AuditSeverity
+from sqlbuild.compiler.auditing.models import (
+    AuditGateIdentity,
+    AuditIdentity,
+    MeasurementThresholdBound,
+    MeasurementThresholds,
+)
+from sqlbuild.compiler.auditing.types import (
+    AuditAttachmentKind,
+    AuditEvaluationMode,
+    AuditRunScope,
+    AuditSeverity,
+    ThresholdOperator,
+)
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from tests.unit.src.sqlbuild.compiler.auditing.main._test_types import (
     AuditGateAggregateIdentityTestCase,
     AuditGateIdentityTestCase,
     AuditGateSingleFieldIdentityTestCase,
+    AuditIdentityPinTestCase,
+    MeasurementIdentityTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.auditing.main.helpers import build_audit_plan_entry
 
@@ -235,3 +250,71 @@ def test_given_single_audit_field_difference_when_building_identity_then_hashes_
         left_identity.audits[0].execution_fingerprint
         == right_identity.audits[0].execution_fingerprint
     ) is test_case.expected_execution_equal
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AuditIdentityPinTestCase(
+            description="legacy violations identity",
+            expected_binding_key="cae9802d734a0cca987c20db0e3b5b7dbd8c50d1bd33ac723be5ffae20a8531c",
+            expected_definition_fingerprint=(
+                "72c819ac3eae9817f0b78b0617b2d4bd3cd0fd1468d1ced1871cfd3c77dfa881"
+            ),
+            expected_execution_fingerprint=(
+                "9d82b16a8ae96cae2a8b906272c5dcf53c521e71135645f7fbd088b52d76742d"
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_existing_violations_audit_when_hashing_then_legacy_identity_is_byte_identical(
+    test_case: AuditIdentityPinTestCase,
+) -> None:
+    audit: AuditPlanEntry = build_audit_plan_entry(
+        name="not_null_orders",
+        unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
+        resolved_sql="SELECT order_id FROM dev.orders WHERE order_id IS NULL",
+    )
+
+    identity: AuditIdentity = build_audit_gate_identity(audits=(audit,)).audits[0]
+
+    assert identity.binding_key == test_case.expected_binding_key
+    assert identity.definition_fingerprint == test_case.expected_definition_fingerprint
+    assert identity.execution_fingerprint == test_case.expected_execution_fingerprint
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [MeasurementIdentityTestCase(description="measurement contract change", expected_identity_changed=True)],
+    ids=lambda case: case.description,
+)
+def test_given_measurement_contract_or_evidence_change_when_hashing_then_identity_changes(
+    test_case: MeasurementIdentityTestCase,
+) -> None:
+    base: AuditPlanEntry = replace(
+        build_audit_plan_entry(
+            name="valid_rate",
+            unresolved_sql='SELECT 100 AS rate FROM __ref("orders")',
+            resolved_sql="SELECT 100 AS rate FROM dev.orders",
+        ),
+        evaluation_mode=AuditEvaluationMode.MEASUREMENT,
+        value_column="rate",
+        thresholds=MeasurementThresholds(
+            warn=MeasurementThresholdBound(operator=ThresholdOperator.BELOW, limit=100.0)
+        ),
+        evidence_unresolved_sql='SELECT * FROM __ref("orders") WHERE valid = false',
+        evidence_resolved_sql="SELECT * FROM dev.orders WHERE valid = false",
+    )
+    changed: AuditPlanEntry = replace(base, value_column="valid_rate")
+
+    base_identity: AuditIdentity = build_audit_gate_identity(audits=(base,)).audits[0]
+    changed_identity: AuditIdentity = build_audit_gate_identity(audits=(changed,)).audits[0]
+
+    assert (base_identity.binding_key != changed_identity.binding_key) is test_case.expected_identity_changed
+    assert (
+        base_identity.definition_fingerprint != changed_identity.definition_fingerprint
+    ) is test_case.expected_identity_changed
+    assert (
+        base_identity.execution_fingerprint != changed_identity.execution_fingerprint
+    ) is test_case.expected_identity_changed

@@ -25,6 +25,10 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_table_function_names,
     validate_model_references,
 )
+from sqlbuild.compiler.compile._helpers.audit_factories.core import (
+    merge_validated_model_audits,
+    parse_model_header_audit_factories,
+)
 from sqlbuild.compiler.compile._helpers.config.model_validation import (
     validate_contract_config,
     validate_custom_materialization_config,
@@ -83,12 +87,11 @@ from sqlbuild.compiler.compile.models import (
     MacroExpansionResult,
     ModelInputBuildContext,
 )
-from sqlbuild.compiler.compile.types import (
-    CompileContextKey,
-)
+from sqlbuild.compiler.compile.types import CompileContextKey
 from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_columns
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
+    DiscoveredAuditFactory,
     DiscoveredHookFunction,
     DiscoveredProjectInputs,
     DiscoveredSchemaFile,
@@ -432,6 +435,7 @@ def _build_model_inputs(
             model_schema_columns=model_schema_columns,
             model_schema_name=model_schema.name if model_schema is not None else None,
             model_schema_description=model_schema.description if model_schema is not None else None,
+            audit_factories=discovered_inputs.audit_factories,
         )
         model_config: CompileModelConfig = strip_model_header_metadata_from_config(expanded_config)
         header_schema_entry, enum_columns = resolve_enum_contract_columns(
@@ -1365,16 +1369,17 @@ def build_model_header_schema_entry(
     model_schema_columns: tuple[SchemaColumn, ...] | None = None,
     model_schema_name: str | None = None,
     model_schema_description: str | None = None,
+    audit_factories: tuple[DiscoveredAuditFactory, ...] = (),
 ) -> SchemaModelEntry | None:
     """Normalize model-owned MODEL(...) metadata into the existing schema entry shape."""
 
     raw_description: object | None = model_header_values.get("description")
     raw_columns: object | None = model_header_values.get("columns")
     raw_audits: object | None = model_header_values.get("audits")
+    raw_audit_factories: object | None = model_header_values.get("audit_factories")
     if (
-        raw_description is None
-        and raw_columns is None
-        and raw_audits is None
+        raw_description is None and raw_columns is None
+        and raw_audits is None and raw_audit_factories is None
         and model_schema_columns is None
     ):
         return None
@@ -1401,6 +1406,15 @@ def build_model_header_schema_entry(
         raw_audits=raw_audits,
         file_path=file_path,
         label="model",
+    )
+    generated_audits: tuple[SchemaAuditInstance, ...] = parse_model_header_audit_factories(
+        raw_audit_factories=raw_audit_factories,
+        file_path=file_path, model_name=model_name,
+        audit_factories=audit_factories,
+    )
+    audits = merge_validated_model_audits(
+        direct_audits=audits, generated_audits=generated_audits,
+        model_name=model_name, file_path=file_path,
     )
     type_enforcement: bool | None = (
         True if any(column.type is not None for column in columns) else None

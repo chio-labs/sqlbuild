@@ -5,7 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlbuild.compiler.auditing.types import AuditSeverity
+from sqlbuild.compiler.auditing.constants import (
+    MEASUREMENT_MINIMUM_SAMPLES_HEADER_KEY,
+    MEASUREMENT_THRESHOLDS_HEADER_KEY,
+)
+from sqlbuild.compiler.auditing.main._parse_audit_instance import (
+    parse_measurement_thresholds,
+    parse_minimum_samples,
+)
+from sqlbuild.compiler.auditing.models import MeasurementThresholds
+from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
 from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_ref_names,
     build_known_seed_names,
@@ -140,11 +149,33 @@ def build_audit_inputs(
                 collection_rendering=scoped_declarations.collection_rendering,
             )
             expanded_sql_body: str = expansion.sql
+            evidence_expansion: AuthoredSqlExpansionResult | None = None
+            expanded_evidence_sql: str | None = None
+            if audit_block.evidence_sql is not None:
+                evidence_expansion = expand_authored_sql_result(
+                    sql=audit_block.evidence_sql,
+                    file_path=audit_file.file_path,
+                    effective_vars=effective_vars,
+                    loaded_macros=loaded_macros,
+                    macro_context=macro_context,
+                    declarations=scoped_declarations.declarations,
+                    declaration_resolver=scoped_declarations.resolver,
+                    value_renderer=scoped_declarations.value_renderer,
+                    collection_rendering=scoped_declarations.collection_rendering,
+                )
+                expanded_evidence_sql = evidence_expansion.sql
             reject_cursor_intrinsics(
                 sql=expanded_sql_body,
                 context=f"Audit '{audit_block.name or audit_file.file_path.stem}'",
             )
-            references: tuple[CompileSqlReference, ...] = extract_sql_references(expanded_sql_body)
+            if expanded_evidence_sql is not None:
+                reject_cursor_intrinsics(
+                    sql=expanded_evidence_sql,
+                    context=f"Audit '{audit_block.name or audit_file.file_path.stem}' evidence",
+                )
+            references: tuple[CompileSqlReference, ...] = _combined_references(
+                expanded_sql_body, expanded_evidence_sql
+            )
             validate_audit_references(
                 references=references,
                 audit_file=audit_file,
@@ -161,11 +192,36 @@ def build_audit_inputs(
             header_always_run: bool = _bool_from_dict(
                 values=audit_block.header_values, key="always_run"
             )
-            resolved_severity: AuditSeverity = resolve_audit_severity(
-                instance_severity=header_severity,
-                default_severity=default_audit_severity,
-                audit_label=str(audit_file.relative_path),
+            thresholds: MeasurementThresholds | None = parse_measurement_thresholds(
+                raw_value=audit_block.header_values.get("thresholds"),
+                file_path=audit_file.relative_path,
+                label="standalone measurement audit",
+                error_class=CompileInputError,
             )
+            minimum_samples: int | None = parse_minimum_samples(
+                raw_value=audit_block.header_values.get("minimum_samples"),
+                file_path=audit_file.relative_path,
+                label="standalone measurement audit",
+                error_class=CompileInputError,
+            )
+            if audit_block.evaluation_mode == AuditEvaluationMode.MEASUREMENT:
+                if header_severity is not None:
+                    raise CompileInputError(
+                        f"{audit_file.relative_path}: measurement audits must not define severity; "
+                        "severity derives from thresholds"
+                    )
+                if thresholds is None:
+                    raise CompileInputError(
+                        f"{audit_file.relative_path}: standalone measurement audit must define "
+                        "thresholds in its AUDIT header"
+                    )
+                resolved_severity: AuditSeverity = measurement_policy_severity(thresholds)
+            else:
+                resolved_severity = resolve_audit_severity(
+                    instance_severity=header_severity,
+                    default_severity=default_audit_severity,
+                    audit_label=str(audit_file.relative_path),
+                )
             resolved_run_scope: str = resolve_audit_run_scope(
                 instance_run_scope=header_run_scope,
                 default_run_scope=default_audit_run_scope,
@@ -175,11 +231,24 @@ def build_audit_inputs(
                     audit_file=audit_file,
                     audit_block=audit_block,
                     sql_body=expanded_sql_body,
+                    evaluation_mode=audit_block.evaluation_mode,
+                    measurement_contract=audit_block.measurement_contract,
+                    thresholds=thresholds,
+                    minimum_samples=minimum_samples,
+                    measure_sql=(
+                        expanded_sql_body
+                        if audit_block.evaluation_mode == AuditEvaluationMode.MEASUREMENT
+                        else None
+                    ),
+                    evidence_sql=expanded_evidence_sql,
                     references=references,
                     severity=resolved_severity,
                     run_scope=resolved_run_scope,
                     always_run=header_always_run,
-                    declaration_usages=expansion.usages,
+                    declaration_usages=(
+                        expansion.usages
+                        + (() if evidence_expansion is None else evidence_expansion.usages)
+                    ),
                 )
             )
     model_input: CompileModelInput
@@ -342,6 +411,23 @@ def build_attached_audit_input(
         raise CompileInputError(
             f"{owner_file} references unknown generic audit '{audit_instance.definition_name}'"
         )
+    evaluation_mode: AuditEvaluationMode = definition[1].evaluation_mode
+    if evaluation_mode == AuditEvaluationMode.MEASUREMENT:
+        if audit_instance.severity is not None:
+            raise CompileInputError(
+                f"{owner_file} audit '{audit_instance.definition_name}': measurement audit "
+                "attachments must not define severity; severity derives from thresholds"
+            )
+        if audit_instance.thresholds is None:
+            raise CompileInputError(
+                f"{owner_file} audit '{audit_instance.definition_name}': measurement audit "
+                "attachments must define at least one threshold"
+            )
+    elif audit_instance.thresholds is not None or audit_instance.minimum_samples is not None:
+        raise CompileInputError(
+            f"{owner_file} audit '{audit_instance.definition_name}': thresholds and "
+            "minimum_samples are only valid for measurement audits"
+        )
     merged_arguments: dict[str, object] = merge_audit_arguments(
         owner_file=owner_file,
         definition_name=audit_instance.definition_name,
@@ -354,6 +440,14 @@ def build_attached_audit_input(
         owner_file=owner_file,
         definition_name=audit_instance.definition_name,
     )
+    rendered_evidence_sql: str | None = None
+    if definition[1].evidence_sql is not None:
+        rendered_evidence_sql = render_generic_audit_sql(
+            sql=definition[1].evidence_sql,
+            arguments=merged_arguments,
+            owner_file=owner_file,
+            definition_name=audit_instance.definition_name,
+        )
     scoped_declarations: DeclarationExpansionContext = resolve_declaration_expansion(
         context=context.declaration_expansion,
         file_path=definition[0].file_path,
@@ -374,11 +468,33 @@ def build_attached_audit_input(
         collection_rendering=scoped_declarations.collection_rendering,
     )
     expanded_sql_body: str = expansion.sql
+    evidence_expansion: AuthoredSqlExpansionResult | None = None
+    expanded_evidence_sql: str | None = None
+    if rendered_evidence_sql is not None:
+        evidence_expansion = expand_authored_sql_result(
+            sql=rendered_evidence_sql,
+            file_path=definition[0].file_path,
+            effective_vars=context.effective_vars,
+            loaded_macros=context.loaded_macros,
+            macro_context=context.macro_context,
+            declarations=scoped_declarations.declarations,
+            declaration_resolver=scoped_declarations.resolver,
+            value_renderer=scoped_declarations.value_renderer,
+            collection_rendering=scoped_declarations.collection_rendering,
+        )
+        expanded_evidence_sql = evidence_expansion.sql
     reject_cursor_intrinsics(
         sql=expanded_sql_body,
         context=f"Audit '{audit_instance.definition_name}'",
     )
-    references: tuple[CompileSqlReference, ...] = extract_sql_references(expanded_sql_body)
+    if expanded_evidence_sql is not None:
+        reject_cursor_intrinsics(
+            sql=expanded_evidence_sql,
+            context=f"Audit '{audit_instance.definition_name}' evidence",
+        )
+    references: tuple[CompileSqlReference, ...] = _combined_references(
+        expanded_sql_body, expanded_evidence_sql
+    )
     validate_audit_references(
         references=references,
         audit_file=definition[0],
@@ -387,10 +503,14 @@ def build_attached_audit_input(
         known_source_names=context.known_source_names,
     )
     audit_label: str = f"{owner_file} audit '{audit_instance.definition_name}'"
-    resolved_severity: AuditSeverity = resolve_audit_severity(
-        instance_severity=audit_instance.severity,
-        default_severity=context.default_audit_severity,
-        audit_label=audit_label,
+    resolved_severity: AuditSeverity = (
+        measurement_policy_severity(audit_instance.thresholds)
+        if audit_instance.thresholds is not None
+        else resolve_audit_severity(
+            instance_severity=audit_instance.severity,
+            default_severity=context.default_audit_severity,
+            audit_label=audit_label,
+        )
     )
     resolved_run_scope: str = resolve_audit_run_scope(
         instance_run_scope=audit_instance.run_scope,
@@ -406,6 +526,14 @@ def build_attached_audit_input(
         audit_file=definition[0],
         audit_block=definition[1],
         sql_body=expanded_sql_body,
+        evaluation_mode=evaluation_mode,
+        measurement_contract=definition[1].measurement_contract,
+        thresholds=audit_instance.thresholds,
+        minimum_samples=audit_instance.minimum_samples,
+        measure_sql=(
+            expanded_sql_body if evaluation_mode == AuditEvaluationMode.MEASUREMENT else None
+        ),
+        evidence_sql=expanded_evidence_sql,
         name=audit_instance.name,
         references=references,
         attached_target_kind=attached_target_kind,
@@ -414,7 +542,9 @@ def build_attached_audit_input(
         severity=resolved_severity,
         run_scope=resolved_run_scope,
         always_run=audit_instance.always_run,
-        declaration_usages=expansion.usages,
+        declaration_usages=(
+            expansion.usages + (() if evidence_expansion is None else evidence_expansion.usages)
+        ),
     )
 
 
@@ -432,6 +562,15 @@ def index_generic_audit_definitions(
             raise CompileInputError(
                 f"Generic audit definition {audit_file.relative_path} must contain exactly "
                 "one AUDIT block"
+            )
+        block: DiscoveredAuditBlock = audit_file.blocks[0]
+        if block.evaluation_mode == AuditEvaluationMode.MEASUREMENT and (
+            MEASUREMENT_THRESHOLDS_HEADER_KEY in block.header_values
+            or MEASUREMENT_MINIMUM_SAMPLES_HEADER_KEY in block.header_values
+        ):
+            raise CompileInputError(
+                f"Generic measurement audit definition {audit_file.relative_path} must not "
+                "define thresholds or minimum_samples in its AUDIT header; attachment owns policy"
             )
         definition_name: str = audit_file.file_path.stem
         if definition_name in definitions:
@@ -558,6 +697,12 @@ def resolve_audit_severity(
     return AuditSeverity.ERROR
 
 
+def measurement_policy_severity(thresholds: MeasurementThresholds) -> AuditSeverity:
+    """Return the effective scheduling severity for a measurement policy."""
+
+    return AuditSeverity.ERROR if thresholds.error is not None else AuditSeverity.WARN
+
+
 def resolve_audit_run_scope(
     *,
     instance_run_scope: str | None,
@@ -619,3 +764,13 @@ def _bool_from_dict(*, values: dict[str, object], key: str) -> bool:
 
     raw: object | None = values.get(key)
     return raw if isinstance(raw, bool) else False
+
+
+def _combined_references(*sql_values: str | None) -> tuple[CompileSqlReference, ...]:
+    """Extract references from independently compiled measurement/evidence queries."""
+
+    references: list[CompileSqlReference] = []
+    for sql in sql_values:
+        if sql is not None:
+            references.extend(extract_sql_references(sql))
+    return tuple(dict.fromkeys(references))

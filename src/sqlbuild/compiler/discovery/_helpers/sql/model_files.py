@@ -7,6 +7,7 @@ from bisect import bisect_right
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlbuild.compiler.auditing.types import ThresholdOperator
 from sqlbuild.compiler.discovery.exceptions import (
     DiscoveryError,
     ModelHeaderSyntaxError,
@@ -518,15 +519,25 @@ class _ModelHeaderParser:
                 raise ModelHeaderSyntaxError(
                     f"unexpected token '{key}' without a value; quote values with spaces"
                 )
-            values[key] = (
-                self._parse_hook_field_value(key)
-                if key in _MODEL_HEADER_HOOK_FIELD_NAMES
-                else self._parse_value()
-            )
+            if key == ThresholdOperator.OUTSIDE:
+                values[key] = self._parse_outside_threshold()
+            elif key in _MODEL_HEADER_HOOK_FIELD_NAMES:
+                values[key] = self._parse_hook_field_value(key)
+            else:
+                values[key] = self._parse_value()
             self._match_symbol(_MODEL_HEADER_COMMA)
         if end_symbol is not None:
             self._consume_symbol(end_symbol)
         return values
+
+    def _parse_outside_threshold(self) -> tuple[object, object]:
+        """Parse the directional threshold shorthand ``outside LOW HIGH``."""
+
+        lower: object = self._parse_value()
+        if self._is_at_end_symbol(_MODEL_HEADER_CLOSE_PAREN):
+            raise ModelHeaderSyntaxError("outside threshold requires lower and upper values")
+        upper: object = self._parse_value()
+        return lower, upper
 
     def _parse_value(self) -> object:
         token: _ModelHeaderToken = self._peek()

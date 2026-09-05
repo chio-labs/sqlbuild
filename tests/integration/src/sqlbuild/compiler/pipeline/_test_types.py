@@ -4,6 +4,25 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
+class AuditFactoryCompileIntegrationTestCase:
+    description: str
+    expected_audit_count: int
+
+
+@dataclass(frozen=True)
+class MeasurementCompileIntegrationTestCase:
+    description: str
+    expected_minimum_samples: int
+    expected_severity: str
+
+
+@dataclass(frozen=True)
+class MeasurementCompileErrorIntegrationTestCase:
+    description: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class ExpectedModelEntry:
     description: str
     expected_resolved_sql_fragment: str

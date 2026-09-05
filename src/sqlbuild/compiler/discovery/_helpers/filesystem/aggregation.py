@@ -37,6 +37,7 @@ from sqlbuild.compiler.discovery._helpers.yml.project import load_local_config, 
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAdapterFile,
     DiscoveredAssetFunction,
+    DiscoveredAuditFactory,
     DiscoveredAuditFile,
     DiscoveredCheckFunction,
     DiscoveredCommandOutputSink,
@@ -174,6 +175,7 @@ def build_discovered_project_inputs(
         python_paths.update(node.relative_path for node in python_nodes.tasks)
         python_paths.update(node.relative_path for node in python_nodes.assets)
         python_paths.update(node.relative_path for node in python_nodes.checks)
+        python_paths.update(factory.relative_path for factory in python_nodes.audit_factories)
         python_paths.update(file.relative_path for file in materialization_files)
         python_paths.update(function.relative_path for function in hook_functions)
         python_paths.update(exporter.relative_path for exporter in event_exporters)
@@ -185,6 +187,7 @@ def build_discovered_project_inputs(
     task_functions: tuple[DiscoveredTaskFunction, ...] = tuple(python_nodes.tasks)
     asset_functions: tuple[DiscoveredAssetFunction, ...] = tuple(python_nodes.assets)
     check_functions: tuple[DiscoveredCheckFunction, ...] = tuple(python_nodes.checks)
+    audit_factories: tuple[DiscoveredAuditFactory, ...] = tuple(python_nodes.audit_factories)
     return DiscoveredProjectInputs(
         project_config=project_config,
         local_config=local_config,
@@ -208,6 +211,7 @@ def build_discovered_project_inputs(
         task_functions=task_functions,
         asset_functions=asset_functions,
         check_functions=check_functions,
+        audit_factories=audit_factories,
         hook_functions=hook_functions,
         event_exporters=event_exporters,
         command_output_sinks=command_output_sinks,

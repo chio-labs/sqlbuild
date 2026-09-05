@@ -6,7 +6,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.compiler.auditing.types import AuditSeverity
+from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
+from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
@@ -577,6 +578,12 @@ class CompileAuditInput:
     audit_file: DiscoveredAuditFile
     audit_block: DiscoveredAuditBlock
     sql_body: str
+    evaluation_mode: AuditEvaluationMode = AuditEvaluationMode.VIOLATIONS
+    measurement_contract: MeasurementContract | None = None
+    thresholds: MeasurementThresholds | None = None
+    minimum_samples: int | None = None
+    measure_sql: str | None = None
+    evidence_sql: str | None = None
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     attached_target_kind: AttachedAuditTargetKind | str | None = None
     attached_target_name: str | None = None
@@ -719,6 +726,12 @@ class CompiledAudit:
     audit_file: DiscoveredAuditFile
     audit_block: DiscoveredAuditBlock
     sql_body: str
+    evaluation_mode: AuditEvaluationMode = AuditEvaluationMode.VIOLATIONS
+    measurement_contract: MeasurementContract | None = None
+    thresholds: MeasurementThresholds | None = None
+    minimum_samples: int | None = None
+    measure_sql: str | None = None
+    evidence_sql: str | None = None
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     attached_target_kind: AttachedAuditTargetKind | None = None
     attached_target_name: str | None = None
