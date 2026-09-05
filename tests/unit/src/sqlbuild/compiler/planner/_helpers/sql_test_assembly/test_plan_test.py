@@ -299,6 +299,27 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers
             },
         ),
         PlanTestChainTestCase(
+            description="final model expectation resolves the complete unmocked model chain",
+            model_queries={
+                "A": 'SELECT id FROM __source("raw")',
+                "B": 'SELECT id, id * 2 AS doubled FROM __ref("A")',
+                "C": 'SELECT id, doubled + 1 AS final FROM __ref("B")',
+            },
+            mock_ref_ctes={},
+            mock_source_ctes={
+                "raw": "SELECT 1 AS id",
+            },
+            helper_ctes={},
+            expected_model_names=("C",),
+            expected_chain_length=3,
+            expected_sql_fragments={
+                "C": "doubled + 1 AS final",
+            },
+            expected_cte_bodies={
+                "C": "SELECT 1 AS id, 3 AS final",
+            },
+        ),
+        PlanTestChainTestCase(
             description="helper ctes included in mock subquery",
             model_queries={
                 "orders": 'SELECT id, amount FROM __ref("raw")',

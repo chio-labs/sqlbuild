@@ -11,6 +11,7 @@ from sqlbuild.cli.commands._helpers.test.sql_progress import (
     test_outcome_status,
 )
 from sqlbuild.cli.commands.models import (
+    TestCommandRequest,
     TestExecutionPreparation,
     TestInvocation,
 )
@@ -28,6 +29,7 @@ from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.executor.pipeline.main.run import run_test_pipeline
+from sqlbuild.executor.pipeline.models import TestPipelineCallbacks
 from sqlbuild.executor.testing.main.resource_id import sql_test_resource_id
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.presentation.classes.cli_style import CliStyle
@@ -37,12 +39,18 @@ from sqlbuild.presentation.main.surface_header import format_surface_header
 
 def prepare_test_execution(
     *,
+    request: TestCommandRequest,
     invocation: TestInvocation,
     pipeline_result: CompilePipelineResult,
 ) -> TestExecutionPreparation:
     """Prepare nested progress reporting and write the test section header."""
 
     test_count: int = len(pipeline_result.plan_output.test_entries)
+    effective_concurrency: int = resolve_test_concurrency(
+        request=request,
+        pipeline_result=pipeline_result,
+    )
+    worker_count: int = min(effective_concurrency, test_count)
     model_names: set[str] = set()
     for entry in pipeline_result.plan_output.test_entries:
         for step in entry.chain:
@@ -80,6 +88,22 @@ def prepare_test_execution(
         progress=progress,
         execution_connection_progress=execution_connection_progress,
         preflight_progress=preflight_progress,
+        effective_concurrency=effective_concurrency,
+        worker_count=worker_count,
+    )
+
+
+def resolve_test_concurrency(
+    *,
+    request: TestCommandRequest,
+    pipeline_result: CompilePipelineResult,
+) -> int:
+    """Resolve CLI override before the project-wide concurrency setting."""
+
+    return (
+        request.concurrency
+        if request.concurrency is not None
+        else pipeline_result.project.settings.concurrency
     )
 
 
@@ -102,29 +126,32 @@ def execute_test_plan(
             plan=pipeline_result.plan_output,
             connection_config=invocation.connection_config,
             adapter=invocation.adapter,
-            on_connection_start=preparation.execution_connection_progress.on_connection_start,
-            on_connection_complete=lambda connection_count, elapsed_seconds: (
-                preparation.execution_connection_progress.on_connection_complete(
-                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
-                )
-            ),
-            on_connection_error=lambda connection_count, elapsed_seconds: (
-                preparation.execution_connection_progress.on_connection_error(
-                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
-                )
-            ),
-            on_progress=preparation.preflight_progress.report_preflight_progress,
-            on_test_start=lambda entry: preparation.progress.on_item_start(
-                group_name=_test_group_name_from_entry(entry),
-                item_name=format_parameterized_test_label(
-                    name=entry.name,
-                    source_path=entry.source_path,
-                    parameter_schema=entry.parameter_schema,
-                    parameter_values=entry.parameter_values,
+            max_concurrency=preparation.effective_concurrency,
+            callbacks=TestPipelineCallbacks(
+                on_connection_start=(preparation.execution_connection_progress.on_connection_start),
+                on_connection_complete=lambda connection_count, elapsed_seconds: (
+                    preparation.execution_connection_progress.on_connection_complete(
+                        connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                    )
                 ),
-                canonical_resource_name=entry.name,
+                on_connection_error=lambda connection_count, elapsed_seconds: (
+                    preparation.execution_connection_progress.on_connection_error(
+                        connection_count=connection_count, elapsed_seconds=elapsed_seconds
+                    )
+                ),
+                on_progress=preparation.preflight_progress.report_preflight_progress,
+                on_test_start=lambda entry: preparation.progress.on_item_start(
+                    group_name=_test_group_name_from_entry(entry),
+                    item_name=format_parameterized_test_label(
+                        name=entry.name,
+                        source_path=entry.source_path,
+                        parameter_schema=entry.parameter_schema,
+                        parameter_values=entry.parameter_values,
+                    ),
+                    canonical_resource_name=entry.name,
+                ),
+                on_test_complete=on_complete,
             ),
-            on_test_complete=on_complete,
             run_id=pipeline_result.project.run_id,
         )
     finally:
@@ -174,6 +201,9 @@ def _build_on_complete(
 
 
 def _test_group_name_from_entry(entry: SqlTestPlanEntry) -> str:
+    for step in entry.chain:
+        if step.expected_cte_sql is not None:
+            return step.model_name
     if entry.chain:
         return entry.chain[0].model_name
     return "(unknown)"

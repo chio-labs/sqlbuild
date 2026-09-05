@@ -120,7 +120,13 @@ def parse_cli_invocation(
             and not any(option in args.dbt_args for option in DBT_VERBOSE_OPTIONS)
         ):
             args.dbt_args.append("--verbose")
-        if args.command in {CliCommand.AUDIT, CliCommand.BUILD, CliCommand.LOAD, CliCommand.SEED}:
+        if args.command in {
+            CliCommand.AUDIT,
+            CliCommand.BUILD,
+            CliCommand.LOAD,
+            CliCommand.SEED,
+            CliCommand.TEST,
+        }:
             try:
                 args.concurrency = resolve_env_default_concurrency(args.concurrency)
             except argparse.ArgumentTypeError as error:

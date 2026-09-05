@@ -76,6 +76,13 @@ def test_given_output_mode_when_parsing_verbose_command_then_normalizes_consiste
             expected_exit_code=None,
         ),
         AuditConcurrencyParsingTestCase(
+            description="test command cli override",
+            argv=("test", "--concurrency", "5"),
+            environment_value=None,
+            expected_concurrency=5,
+            expected_exit_code=None,
+        ),
+        AuditConcurrencyParsingTestCase(
             description="zero cli rejected",
             argv=("audit", "--concurrency", "0"),
             environment_value=None,
