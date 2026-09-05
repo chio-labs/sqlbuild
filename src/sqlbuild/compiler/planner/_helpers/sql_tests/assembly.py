@@ -54,15 +54,22 @@ from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 
-_REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
-_SOURCE_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SOURCE)
-_SEED_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SEED)
+_REF_PATTERN: re.Pattern[str] = re.compile(
+    quoted_reference_call_pattern(SqlReferenceKind.REF).pattern, re.IGNORECASE
+)
+_SOURCE_PATTERN: re.Pattern[str] = re.compile(
+    quoted_reference_call_pattern(SqlReferenceKind.SOURCE).pattern, re.IGNORECASE
+)
+_SEED_PATTERN: re.Pattern[str] = re.compile(
+    quoted_reference_call_pattern(SqlReferenceKind.SEED).pattern, re.IGNORECASE
+)
 _DBT_REF_PATTERN: re.Pattern[str] = re.compile(
     rf'{reference_call_prefix_pattern_text(SqlReferenceKind.DBT_REF)}"([^"]+)"'
-    r'(?:,\s*"([^"]+)")?\)'
+    r'(?:,\s*"([^"]+)")?\)',
+    re.IGNORECASE,
 )
 _TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
-    reference_call_prefix_pattern_text(SqlReferenceKind.TABLE_FUNCTION)
+    reference_call_prefix_pattern_text(SqlReferenceKind.TABLE_FUNCTION), re.IGNORECASE
 )
 _LEADING_WITH_PATTERN: re.Pattern[str] = re.compile(r"^\s*WITH\b", re.IGNORECASE)
 
