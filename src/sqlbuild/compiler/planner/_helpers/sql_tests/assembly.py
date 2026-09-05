@@ -228,6 +228,7 @@ def plan_test(
                     helper_ctes=helper_ctes,
                     resolved_chain=sql_analysis_resolved,
                     file_label=str(test.test_file.relative_path),
+                    sql_analysis_dialect=adapter.sql_analysis_dialect(),
                 )
             )
             if sql_analysis_sql is not None:
@@ -366,6 +367,7 @@ def _build_assertion_steps(
                     helper_ctes=helper_ctes,
                     resolved_chain=sql_analysis_resolved,
                     file_label=str(test.test_file.relative_path),
+                    sql_analysis_dialect=adapter.sql_analysis_dialect(),
                 )
             )
             if analyzed_assertion_sql is not None and not _has_unresolved_test_reference(
