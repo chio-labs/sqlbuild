@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.82.3](https://github.com/chio-labs/sqlbuild/compare/v0.82.2...v0.82.3) (2026-09-05)
+
+
+### Bug Fixes
+
+* preserve incremental target column types ([#528](https://github.com/chio-labs/sqlbuild/issues/528)) ([ec8fb6f](https://github.com/chio-labs/sqlbuild/commit/ec8fb6f5e892710f3a7321746cc13c05a2a98f11))
+
 ## [0.82.2](https://github.com/chio-labs/sqlbuild/compare/v0.82.1...v0.82.2) (2026-09-04)
 
 
