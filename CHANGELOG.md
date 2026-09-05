@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.82.4](https://github.com/chio-labs/sqlbuild/compare/v0.82.3...v0.82.4) (2026-09-05)
+
+
+### Bug Fixes
+
+* run chained SQL tests concurrently ([#530](https://github.com/chio-labs/sqlbuild/issues/530)) ([08cb4c8](https://github.com/chio-labs/sqlbuild/commit/08cb4c8196d61919d1baf50b84281247bbb19230))
+
 ## [0.82.3](https://github.com/chio-labs/sqlbuild/compare/v0.82.2...v0.82.3) (2026-09-05)
 
 
