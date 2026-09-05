@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from sqlbuild.compiler.compile._helpers.analysis.ctes import (
     extract_top_level_ctes_with_sql_analysis,
 )
@@ -77,6 +79,7 @@ def extract_sql_scenario_expected_model_names(*, sql: str, file_label: str) -> t
     )
 
 
+@lru_cache(maxsize=4096)
 def _extract_sql_scenario_ctes_with_scanner(
     *, sql: str, file_label: str
 ) -> tuple[CompileSqlScenarioCte, ...]:

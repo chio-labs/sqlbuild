@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 from collections import OrderedDict
-from copy import deepcopy
+from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 
 from sqlbuild.compiler.compile.constants import (
@@ -20,10 +21,31 @@ from sqlbuild.compiler.planner._helpers.scenario.relations import (
 )
 from sqlbuild.compiler.planner.models import SqlAnalysisResolvedTestSql
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.sql_analysis.constants import SQL_IDENTIFIER_PREFIX
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
+
+
+@dataclass(frozen=True)
+class _TestSqlAnalysisTemplate:
+    existing_cte_names: frozenset[str]
+    marker_calls: tuple[tuple[str, str], ...]
+    cte_body_sql: str
+
+
+class _TemplateMarkerTargetResolver:
+    def __init__(self, targets: tuple[tuple[str, str, str], ...]) -> None:
+        self._targets: dict[tuple[str, str], str] = {
+            (function_name, referenced_name): target
+            for function_name, referenced_name, target in targets
+        }
+        self.calls: list[tuple[str, str]] = []
+
+    def __call__(self, *, function_name: str, referenced_name: str) -> str | None:
+        self.calls.append((function_name, referenced_name))
+        return self._targets.get((function_name, referenced_name))
 
 
 class _TestAssemblyState:
@@ -190,13 +212,21 @@ def try_resolve_test_model_sql_with_sql_analysis(
     polyglot_module: Any | None = import_polyglot_sql()
     if polyglot_module is None:
         return None
-    parsed_dict: dict[str, Any] | None = _try_parse_test_query(
-        polyglot_module=polyglot_module,
-        query_sql=query_sql,
+    marker_targets: tuple[tuple[str, str, str], ...] = _test_marker_targets(
+        mock_refs=mock_refs,
+        mock_sources=mock_sources,
+        mock_seeds=mock_seeds,
+        mock_dbt_refs=mock_dbt_refs,
+        function_locations=function_locations,
+        resolved_chain=resolved_chain,
     )
-    if parsed_dict is None:
+    template: _TestSqlAnalysisTemplate | None = _analyze_test_query_template(
+        query_sql=query_sql,
+        marker_targets=marker_targets,
+    )
+    if template is None:
         return None
-    state: _TestAssemblyState = _TestAssemblyState(_collect_existing_cte_names(parsed_dict))
+    state: _TestAssemblyState = _TestAssemblyState(set(template.existing_cte_names))
     target_for_marker: _TestMarkerResolver = _TestMarkerResolver(
         state=state,
         mock_refs=mock_refs,
@@ -208,25 +238,88 @@ def try_resolve_test_model_sql_with_sql_analysis(
         resolved_chain=resolved_chain,
         file_label=file_label,
     )
+    for function_name, referenced_name in template.marker_calls:
+        _ = target_for_marker(
+            function_name=function_name,
+            referenced_name=referenced_name,
+        )
+    return _assemble_resolved_test_sql(
+        cte_body_sql=template.cte_body_sql,
+        generated_ctes=state.ctes,
+        reachable_mocks=state.reached,
+    )
+
+
+def _test_marker_targets(
+    *,
+    mock_refs: dict[str, str],
+    mock_sources: dict[str, str],
+    mock_seeds: dict[str, str],
+    mock_dbt_refs: dict[str, str],
+    function_locations: dict[str, str],
+    resolved_chain: dict[str, SqlAnalysisResolvedTestSql],
+) -> tuple[tuple[str, str, str], ...]:
+    targets: list[tuple[str, str, str]] = []
+    targets.extend(
+        (SqlReferenceKind.REF.function_name, name, f"{REF_TEST_CTE_PREFIX}{name}")
+        for name in set(mock_refs) | set(resolved_chain)
+    )
+    targets.extend(
+        (SqlReferenceKind.SOURCE.function_name, name, f"{SOURCE_TEST_CTE_PREFIX}{name}")
+        for name in mock_sources
+    )
+    targets.extend(
+        (SqlReferenceKind.SEED.function_name, name, f"{SEED_TEST_CTE_PREFIX}{name}")
+        for name in mock_seeds
+    )
+    targets.extend(
+        (SqlReferenceKind.DBT_REF.function_name, name, f"{DBT_REF_TEST_CTE_PREFIX}{name}")
+        for name in mock_dbt_refs
+    )
+    targets.extend(_function_marker_targets(function_locations=function_locations))
+    return tuple(sorted(targets))
+
+
+def _function_marker_targets(
+    *, function_locations: dict[str, str]
+) -> tuple[tuple[str, str, str], ...]:
+    targets: list[tuple[str, str, str]] = []
+    for name, location in function_locations.items():
+        targets.append((SqlReferenceKind.UDF.function_name, name, location))
+        targets.append((SqlReferenceKind.TABLE_FUNCTION.function_name, name, location))
+    return tuple(targets)
+
+
+@lru_cache(maxsize=4096)
+def _analyze_test_query_template(
+    *, query_sql: str, marker_targets: tuple[tuple[str, str, str], ...]
+) -> _TestSqlAnalysisTemplate | None:
+    polyglot_module: Any | None = import_polyglot_sql()
+    if polyglot_module is None:
+        return None
+    parsed_dict: dict[str, Any] | None = _try_parse_test_query(
+        polyglot_module=polyglot_module,
+        query_sql=query_sql,
+    )
+    if parsed_dict is None:
+        return None
+    target_for_marker: _TemplateMarkerTargetResolver = _TemplateMarkerTargetResolver(marker_targets)
     _replace_relation_markers_in_polyglot_dict(
         node=parsed_dict,
         polyglot_module=polyglot_module,
         sql_analysis_dialect=None,
         target_for_marker=target_for_marker,
     )
-    outer_sql: str | None = _render_test_outer_sql(
+    cte_body_sql: str | None = _generate_one(
         polyglot_module=polyglot_module,
-        parsed_dict=parsed_dict,
+        expression=parsed_dict,
     )
-    if outer_sql is None:
+    if cte_body_sql is None:
         return None
-
-    return _assemble_resolved_test_sql(
-        polyglot_module=polyglot_module,
-        parsed_dict=parsed_dict,
-        generated_ctes=state.ctes,
-        outer_sql=outer_sql,
-        reachable_mocks=state.reached,
+    return _TestSqlAnalysisTemplate(
+        existing_cte_names=frozenset(_collect_existing_cte_names(parsed_dict)),
+        marker_calls=tuple(target_for_marker.calls),
+        cte_body_sql=cte_body_sql,
     )
 
 
@@ -243,55 +336,73 @@ def _try_parse_test_query(*, polyglot_module: Any, query_sql: str) -> dict[str, 
     return parsed.to_dict()
 
 
-def _render_test_outer_sql(*, polyglot_module: Any, parsed_dict: dict[str, Any]) -> str | None:
-    transformed_without_with: dict[str, Any] = deepcopy(parsed_dict)
-    without_with_select: dict[str, Any] | None = _root_select(transformed_without_with)
-    if without_with_select is not None:
-        without_with_select["with"] = None
-    return _generate_one(polyglot_module=polyglot_module, expression=transformed_without_with)
-
-
 def _assemble_resolved_test_sql(
     *,
-    polyglot_module: Any,
-    parsed_dict: dict[str, Any],
+    cte_body_sql: str,
     generated_ctes: OrderedDict[str, str],
-    outer_sql: str,
     reachable_mocks: set[str],
 ) -> SqlAnalysisResolvedTestSql | None:
-    cte_parts: list[str] = [f"{name} AS ({sql})" for name, sql in generated_ctes.items()]
-    transformed_select: dict[str, Any] | None = _root_select(parsed_dict)
-    transformed_with: dict[str, Any] | None = (
-        transformed_select.get("with") if transformed_select is not None else None
-    )
-    if isinstance(transformed_with, dict):
-        cte: dict[str, Any]
-        for cte in transformed_with.get("ctes", ()):
-            cte_name: str | None = _cte_name(cte)
-            cte_sql: str | None = _generate_one(
-                polyglot_module=polyglot_module,
-                expression={"cte": cte},
-            )
-            if cte_name is not None and cte_sql is not None:
-                cte_parts.append(cte_sql)
-    cte_body_sql: str | None = _generate_one(
-        polyglot_module=polyglot_module, expression=parsed_dict
-    )
-    if cte_body_sql is None:
-        return None
-    if not cte_parts:
+    if not generated_ctes:
         return SqlAnalysisResolvedTestSql(
             resolved_sql=cte_body_sql,
             cte_body_sql=cte_body_sql,
             generated_ctes=generated_ctes,
             reachable_mock_names=frozenset(reachable_mocks),
         )
+    generated_cte_sql: str = ", ".join(f"{name} AS ({sql})" for name, sql in generated_ctes.items())
+    leading_with_end: int | None = _leading_with_prefix_end(cte_body_sql)
+    resolved_sql: str = (
+        f"{cte_body_sql[:leading_with_end]}{generated_cte_sql}, {cte_body_sql[leading_with_end:]}"
+        if leading_with_end is not None
+        else f"WITH {generated_cte_sql} {cte_body_sql}"
+    )
     return SqlAnalysisResolvedTestSql(
-        resolved_sql=f"WITH {', '.join(cte_parts)} {outer_sql}",
+        resolved_sql=resolved_sql,
         cte_body_sql=cte_body_sql,
         generated_ctes=generated_ctes,
         reachable_mock_names=frozenset(reachable_mocks),
     )
+
+
+def _leading_with_prefix_end(sql: str) -> int | None:
+    index: int = _skip_leading_ignorable(sql=sql, start=0)
+    with_end: int | None = _keyword_end(sql=sql, start=index, keyword="WITH")
+    if with_end is None:
+        return None
+    index = _skip_leading_ignorable(sql=sql, start=with_end)
+    recursive_end: int | None = _keyword_end(sql=sql, start=index, keyword="RECURSIVE")
+    if recursive_end is not None:
+        index = _skip_leading_ignorable(sql=sql, start=recursive_end)
+    return index
+
+
+def _skip_leading_ignorable(*, sql: str, start: int) -> int:
+    index: int = start
+    while index < len(sql):
+        if sql[index].isspace():
+            index += 1
+            continue
+        if sql.startswith("--", index):
+            newline_index: int = sql.find("\n", index + 2)
+            index = len(sql) if newline_index == -1 else newline_index + 1
+            continue
+        if sql.startswith("/*", index):
+            comment_end: int = sql.find("*/", index + 2)
+            if comment_end == -1:
+                return index
+            index = comment_end + 2
+            continue
+        return index
+    return index
+
+
+def _keyword_end(*, sql: str, start: int, keyword: str) -> int | None:
+    end: int = start + len(keyword)
+    if sql[start:end].upper() != keyword:
+        return None
+    if end < len(sql) and (sql[end].isalnum() or sql[end] == SQL_IDENTIFIER_PREFIX):
+        return None
+    return end
 
 
 def _collect_existing_cte_names(parsed_dict: dict[str, Any]) -> set[str]:
@@ -315,14 +426,6 @@ def _collect_existing_cte_names(parsed_dict: dict[str, Any]) -> set[str]:
 def _root_select(parsed_dict: dict[str, Any]) -> dict[str, Any] | None:
     select_payload: Any | None = parsed_dict.get("select")
     return select_payload if isinstance(select_payload, dict) else None
-
-
-def _cte_name(cte: dict[str, Any]) -> str | None:
-    alias: Any | None = cte.get("alias")
-    if not isinstance(alias, dict):
-        return None
-    name: Any | None = alias.get("name")
-    return str(name) if name is not None else None
 
 
 def _generate_one(*, polyglot_module: Any, expression: Any) -> str | None:

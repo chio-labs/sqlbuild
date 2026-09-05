@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.constants import (
@@ -31,6 +32,11 @@ from sqlbuild.compiler.planner._helpers.resolve.refs import (
 from sqlbuild.compiler.planner._helpers.sql_tests.analysis_assembly import (
     try_resolve_test_model_sql_with_sql_analysis,
 )
+from sqlbuild.compiler.planner._helpers.sql_tests.comments import (
+    replace_uncommented_pattern,
+    uncommented_matches_by_pattern,
+    uncommented_pattern_matches,
+)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     ChainStep,
@@ -55,7 +61,55 @@ _DBT_REF_PATTERN: re.Pattern[str] = re.compile(
     rf'{reference_call_prefix_pattern_text(SqlReferenceKind.DBT_REF)}"([^"]+)"'
     r'(?:,\s*"([^"]+)")?\)'
 )
+_TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
+    reference_call_prefix_pattern_text(SqlReferenceKind.TABLE_FUNCTION)
+)
 _LEADING_WITH_PATTERN: re.Pattern[str] = re.compile(r"^\s*WITH\b", re.IGNORECASE)
+
+
+@dataclass
+class _TextualChainResolver:
+    model_names: tuple[str, ...]
+    model_map: dict[str, CompiledModel]
+    test: CompiledSqlTest
+    mock_refs: dict[str, str]
+    mock_sources: dict[str, str]
+    mock_seeds: dict[str, str]
+    mock_dbt_refs: dict[str, str]
+    helper_ctes: tuple[CompileSqlTestCte, ...]
+    function_locations: dict[str, CompiledRelationLocation]
+    adapter: BaseAdapter
+    resolved: dict[str, str] = field(default_factory=dict)
+    step_sql: dict[str, str] = field(default_factory=dict)
+    reachable_mocks: set[str] = field(default_factory=set)
+
+    def ensure_through(self, count: int) -> None:
+        for model_name in self.model_names[:count]:
+            if model_name in self.resolved:
+                continue
+            model: CompiledModel | None = self.model_map.get(model_name)
+            if model is None:
+                continue
+            sql: str
+            reached: frozenset[str]
+            sql, reached = _resolve_test_model_sql(
+                query_sql=_resolve_test_model_query_sql(model=model, test=self.test),
+                mock_refs=self.mock_refs,
+                mock_sources=self.mock_sources,
+                mock_seeds=self.mock_seeds,
+                mock_dbt_refs=self.mock_dbt_refs,
+                helper_ctes=self.helper_ctes,
+                resolved_chain=self.resolved,
+                function_locations=self.function_locations,
+                adapter=self.adapter,
+            )
+            self.reachable_mocks.update(reached)
+            self.step_sql[model_name] = sql
+            self.resolved[model_name] = f"({sql})"
+
+    def resolve_all(self) -> dict[str, str]:
+        self.ensure_through(len(self.model_names))
+        return self.resolved
 
 
 def plan_test(
@@ -88,6 +142,11 @@ def plan_test(
     function_locations: dict[str, CompiledRelationLocation] = {
         function.name: function.destination for function in project.functions
     }
+    qualified_function_locations: dict[str, str] = {
+        name: target.qualified_name
+        for name, target in function_locations.items()
+        if target.qualified_name is not None
+    }
     mock_refs: dict[str, str] = _extract_mock_refs(test)
     mock_sources: dict[str, str] = _extract_mock_sources(test)
     mock_seeds: dict[str, str] = _extract_mock_seeds(test)
@@ -111,13 +170,25 @@ def plan_test(
 
     warnings: list[PlanWarning] = []
     reachable_mocks: set[str] = set()
-    resolved: dict[str, str] = {}
     sql_analysis_resolved: dict[str, SqlAnalysisResolvedTestSql] = {}
     function_deps: list[CompiledObjectKey] = []
+    textual_chain: _TextualChainResolver = _TextualChainResolver(
+        model_names=ordered_names,
+        model_map=model_map,
+        test=test,
+        mock_refs=mock_refs,
+        mock_sources=mock_sources,
+        mock_seeds=mock_seeds,
+        mock_dbt_refs=mock_dbt_refs,
+        helper_ctes=helper_ctes,
+        function_locations=function_locations,
+        adapter=adapter,
+    )
 
     chain_steps: list[ChainStep] = []
+    model_index: int
     model_name: str
-    for model_name in ordered_names:
+    for model_index, model_name in enumerate(ordered_names):
         model: CompiledModel | None = model_map.get(model_name)
         if model is None:
             warnings.append(
@@ -137,21 +208,7 @@ def plan_test(
         )
 
         query_sql: str = _resolve_test_model_query_sql(model=model, test=test)
-        step_sql: str
-        step_reachable_mocks: frozenset[str]
-        step_sql, step_reachable_mocks = _resolve_test_model_sql(
-            query_sql=query_sql,
-            mock_refs=mock_refs,
-            mock_sources=mock_sources,
-            mock_seeds=mock_seeds,
-            mock_dbt_refs=mock_dbt_refs,
-            helper_ctes=helper_ctes,
-            resolved_chain=resolved,
-            function_locations=function_locations,
-            adapter=adapter,
-        )
-        reachable_mocks.update(step_reachable_mocks)
-        resolved_value: str = f"({step_sql})"
+        step_sql: str | None = None
         if sql_analysis_enabled:
             sql_analysis_sql: SqlAnalysisResolvedTestSql | None = (
                 try_resolve_test_model_sql_with_sql_analysis(
@@ -160,11 +217,7 @@ def plan_test(
                     mock_sources=mock_sources,
                     mock_seeds=mock_seeds,
                     mock_dbt_refs=mock_dbt_refs,
-                    function_locations={
-                        name: target.qualified_name
-                        for name, target in function_locations.items()
-                        if target.qualified_name is not None
-                    },
+                    function_locations=qualified_function_locations,
                     helper_ctes=helper_ctes,
                     resolved_chain=sql_analysis_resolved,
                     file_label=str(test.test_file.relative_path),
@@ -174,6 +227,9 @@ def plan_test(
                 step_sql = sql_analysis_sql.resolved_sql
                 sql_analysis_resolved[model_name] = sql_analysis_sql
                 reachable_mocks.update(sql_analysis_sql.reachable_mock_names)
+        if step_sql is None:
+            textual_chain.ensure_through(model_index + 1)
+            step_sql = textual_chain.step_sql[model_name]
 
         unresolved_warnings: tuple[PlanWarning, ...] = _validate_resolved_sql(
             resolved_sql=step_sql,
@@ -181,8 +237,6 @@ def plan_test(
             model_name=model_name,
         )
         warnings.extend(unresolved_warnings)
-
-        resolved[model_name] = resolved_value
 
         expected_cte_sql: str = expected_map.get(model_name, "")
         chain_steps.append(
@@ -197,12 +251,14 @@ def plan_test(
         assertion_map=assertion_map,
         test=test,
         function_locations=function_locations,
+        qualified_function_locations=qualified_function_locations,
         helper_ctes=helper_ctes,
-        resolved_chain=resolved,
+        textual_chain=textual_chain,
         sql_analysis_resolved=sql_analysis_resolved,
         adapter=adapter,
         sql_analysis_enabled=sql_analysis_enabled,
     )
+    reachable_mocks.update(textual_chain.reachable_mocks)
 
     unreachable_ref: str
     for unreachable_ref in sorted(set(mock_refs) - reachable_mocks):
@@ -275,8 +331,9 @@ def _build_assertion_steps(
     assertion_map: dict[str, str],
     test: CompiledSqlTest,
     function_locations: dict[str, CompiledRelationLocation],
+    qualified_function_locations: dict[str, str],
     helper_ctes: tuple[CompileSqlTestCte, ...],
-    resolved_chain: dict[str, str],
+    textual_chain: _TextualChainResolver,
     sql_analysis_resolved: dict[str, SqlAnalysisResolvedTestSql],
     adapter: BaseAdapter,
     sql_analysis_enabled: bool,
@@ -298,11 +355,7 @@ def _build_assertion_steps(
                     mock_sources=mock_sources,
                     mock_seeds=mock_seeds,
                     mock_dbt_refs=mock_dbt_refs,
-                    function_locations={
-                        name: target.qualified_name
-                        for name, target in function_locations.items()
-                        if target.qualified_name is not None
-                    },
+                    function_locations=qualified_function_locations,
                     helper_ctes=helper_ctes,
                     resolved_chain=sql_analysis_resolved,
                     file_label=str(test.test_file.relative_path),
@@ -315,7 +368,7 @@ def _build_assertion_steps(
         if resolved_assertion_sql is None:
             resolved_assertion_sql = _resolve_assertion_sql(
                 sql=assertion_sql,
-                resolved_chain=resolved_chain,
+                resolved_chain=textual_chain.resolve_all(),
                 mock_refs=mock_refs,
                 mock_sources=mock_sources,
                 mock_seeds=mock_seeds,
@@ -422,7 +475,7 @@ def _extract_assertion_ref_targets(*, assertion_map: dict[str, str]) -> tuple[st
     sql: str
     for sql in assertion_map.values():
         match: re.Match[str]
-        for match in _REF_PATTERN.finditer(sql):
+        for match in uncommented_pattern_matches(pattern=_REF_PATTERN, sql=sql):
             targets.append(match.group(1))
     return tuple(dict.fromkeys(targets))
 
@@ -477,7 +530,7 @@ def _build_assertion_chain_ctes(
     cte_parts: list[str] = []
     seen_names: set[str] = set()
     match: re.Match[str]
-    for match in _REF_PATTERN.finditer(assertion_sql):
+    for match in uncommented_pattern_matches(pattern=_REF_PATTERN, sql=assertion_sql):
         name: str = match.group(1)
         if name in seen_names or name not in resolved_chain:
             continue
@@ -534,24 +587,26 @@ def _resolve_test_model_sql(
 ) -> tuple[str, frozenset[str]]:
     """Replace refs and sources in model SQL and return it with reached mock names."""
 
+    ref_matches: tuple[re.Match[str], ...]
+    source_matches: tuple[re.Match[str], ...]
+    seed_matches: tuple[re.Match[str], ...]
+    dbt_ref_matches: tuple[re.Match[str], ...]
+    ref_matches, source_matches, seed_matches, dbt_ref_matches = uncommented_matches_by_pattern(
+        patterns=(_REF_PATTERN, _SOURCE_PATTERN, _SEED_PATTERN, _DBT_REF_PATTERN),
+        sql=query_sql,
+    )
     reachable_mocks: set[str] = {
         match.group(1)
-        for match in _REF_PATTERN.finditer(query_sql)
+        for match in ref_matches
         if match.group(1) in mock_refs and match.group(1) not in resolved_chain
     }
     reachable_mocks.update(
-        match.group(1)
-        for match in _SOURCE_PATTERN.finditer(query_sql)
-        if match.group(1) in mock_sources
+        match.group(1) for match in source_matches if match.group(1) in mock_sources
     )
-    reachable_mocks.update(
-        match.group(1)
-        for match in _SEED_PATTERN.finditer(query_sql)
-        if match.group(1) in mock_seeds
-    )
+    reachable_mocks.update(match.group(1) for match in seed_matches if match.group(1) in mock_seeds)
     reachable_mocks.update(
         name
-        for match in _DBT_REF_PATTERN.finditer(query_sql)
+        for match in dbt_ref_matches
         if (name := _dbt_ref_fixture_name(package_name=match.group(1), model_name=match.group(2)))
         in mock_dbt_refs
     )
@@ -601,10 +656,18 @@ def _resolve_test_model_sql(
             )
         return match.group(0)
 
-    result: str = _REF_PATTERN.sub(_replace_ref, query_sql)
-    result = _SOURCE_PATTERN.sub(_replace_source, result)
-    result = _SEED_PATTERN.sub(_replace_seed, result)
-    result = _DBT_REF_PATTERN.sub(_replace_dbt_ref, result)
+    result: str = replace_uncommented_pattern(
+        pattern=_REF_PATTERN, replacement=_replace_ref, sql=query_sql
+    )
+    result = replace_uncommented_pattern(
+        pattern=_SOURCE_PATTERN, replacement=_replace_source, sql=result
+    )
+    result = replace_uncommented_pattern(
+        pattern=_SEED_PATTERN, replacement=_replace_seed, sql=result
+    )
+    result = replace_uncommented_pattern(
+        pattern=_DBT_REF_PATTERN, replacement=_replace_dbt_ref, sql=result
+    )
     result = resolve_udf_references(
         query_sql=result,
         function_locations=function_locations,
@@ -626,9 +689,25 @@ def _validate_resolved_sql(
 ) -> tuple[PlanWarning, ...]:
     """Check for unresolved refs and sources in resolved test SQL."""
 
+    patterns: tuple[re.Pattern[str], ...] = (
+        _REF_PATTERN,
+        _SOURCE_PATTERN,
+        _SEED_PATTERN,
+        _DBT_REF_PATTERN,
+    )
+    if not any(pattern.search(resolved_sql) for pattern in patterns):
+        return ()
     warnings: list[PlanWarning] = []
+    ref_matches: tuple[re.Match[str], ...]
+    source_matches: tuple[re.Match[str], ...]
+    seed_matches: tuple[re.Match[str], ...]
+    dbt_ref_matches: tuple[re.Match[str], ...]
+    ref_matches, source_matches, seed_matches, dbt_ref_matches = uncommented_matches_by_pattern(
+        patterns=patterns,
+        sql=resolved_sql,
+    )
     ref_match: re.Match[str]
-    for ref_match in _REF_PATTERN.finditer(resolved_sql):
+    for ref_match in ref_matches:
         ref_name: str = ref_match.group(1)
         warnings.append(
             PlanWarning(
@@ -642,7 +721,7 @@ def _validate_resolved_sql(
             )
         )
     source_match: re.Match[str]
-    for source_match in _SOURCE_PATTERN.finditer(resolved_sql):
+    for source_match in source_matches:
         source_name: str = source_match.group(1)
         warnings.append(
             PlanWarning(
@@ -656,7 +735,7 @@ def _validate_resolved_sql(
             )
         )
     seed_match: re.Match[str]
-    for seed_match in _SEED_PATTERN.finditer(resolved_sql):
+    for seed_match in seed_matches:
         seed_name: str = seed_match.group(1)
         warnings.append(
             PlanWarning(
@@ -670,7 +749,7 @@ def _validate_resolved_sql(
             )
         )
     dbt_ref_match: re.Match[str]
-    for dbt_ref_match in _DBT_REF_PATTERN.finditer(resolved_sql):
+    for dbt_ref_match in dbt_ref_matches:
         dbt_ref_name: str = _dbt_ref_fixture_name(
             package_name=dbt_ref_match.group(1), model_name=dbt_ref_match.group(2)
         )
@@ -688,14 +767,17 @@ def _validate_resolved_sql(
 
 
 def _has_unresolved_test_reference(sql: str) -> bool:
-    normalized_sql: str = sql.lower()
-    return (
-        _REF_PATTERN.search(normalized_sql) is not None
-        or _SOURCE_PATTERN.search(normalized_sql) is not None
-        or _SEED_PATTERN.search(normalized_sql) is not None
-        or _DBT_REF_PATTERN.search(normalized_sql) is not None
-        or SqlReferenceKind.TABLE_FUNCTION.function_name in normalized_sql
+    reference_matches: tuple[tuple[re.Match[str], ...], ...] = uncommented_matches_by_pattern(
+        patterns=(
+            _REF_PATTERN,
+            _SOURCE_PATTERN,
+            _SEED_PATTERN,
+            _DBT_REF_PATTERN,
+            _TABLE_FUNCTION_PATTERN,
+        ),
+        sql=sql,
     )
+    return any(reference_matches)
 
 
 def _wrap_mock_with_helpers(
@@ -742,12 +824,12 @@ def _topo_sort_model_chain(
         seen = seen | {node}
         model: CompiledModel | None = model_map.get(node)
         if model is not None:
-            query_sql: str = model_query_overrides.get(node, model.query_sql)
-            dependency_names: set[str] = {
-                match.group(1)
-                for match in _REF_PATTERN.finditer(query_sql)
-                if match.group(1) not in mock_ref_names and match.group(1) in model_map
-            }
+            dependency_names: set[str] = _test_model_dependency_names(
+                model=model,
+                query_override=model_query_overrides.get(node),
+                model_map=model_map,
+                mock_ref_names=mock_ref_names,
+            )
             dependency_name: str
             for dependency_name in sorted(dependency_names):
                 seen, result = _visit(node=dependency_name, seen=seen, result=result)
@@ -757,6 +839,27 @@ def _topo_sort_model_chain(
         visited, ordered = _visit(node=name, seen=visited, result=ordered)
 
     return tuple(ordered)
+
+
+def _test_model_dependency_names(
+    *,
+    model: CompiledModel,
+    query_override: str | None,
+    model_map: dict[str, CompiledModel],
+    mock_ref_names: frozenset[str],
+) -> set[str]:
+    if query_override is not None:
+        candidates: set[str] = {
+            match.group(1)
+            for match in uncommented_pattern_matches(pattern=_REF_PATTERN, sql=query_override)
+        }
+    else:
+        candidates = {
+            dependency.name
+            for dependency in model.deps
+            if dependency.resource_type == CompiledResourceType.MODEL
+        }
+    return {name for name in candidates if name not in mock_ref_names and name in model_map}
 
 
 def _extract_mock_refs(test: CompiledSqlTest) -> dict[str, str]:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from pathlib import Path
 from types import MappingProxyType
@@ -33,6 +34,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
+from sqlbuild.compiler.planner._helpers.sql_tests.comments import uncommented_pattern_matches
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     PlanTestChainTestCase,
 )
@@ -154,7 +156,15 @@ def build_test_and_project(
                     resource_type=CompiledResourceType.MODEL,
                     name=model_name,
                 ),
-                deps=(),
+                deps=tuple(
+                    CompiledObjectKey(
+                        resource_type=CompiledResourceType.MODEL,
+                        name=dependency_name,
+                    )
+                    for dependency_name in _model_dependencies(
+                        query_sql=query_sql,
+                    )
+                ),
                 name=model_name,
                 relative_path=Path(f"models/{model_name}.sql"),
                 query_sql=query_sql,
@@ -209,6 +219,17 @@ def build_test_and_project(
     )
 
     return compiled_test, project
+
+
+def _model_dependencies(*, query_sql: str) -> tuple[str, ...]:
+    return tuple(
+        dict.fromkeys(
+            match.group(1)
+            for match in uncommented_pattern_matches(
+                pattern=re.compile(r'__ref\("([^"]+)"\)'), sql=query_sql
+            )
+        )
+    )
 
 
 def _build_model_query_overrides(

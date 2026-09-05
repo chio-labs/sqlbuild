@@ -37,6 +37,17 @@ class DbtShapedCompilePerformanceGuardTestCase:
 
 
 @dataclass(frozen=True)
+class SqlTestHeavyCompilePerformanceGuardTestCase:
+    description: str
+    model_count: int
+    test_count: int
+    chain_depth: int
+    fixture_row_count: int
+    expected_min_compiled_test_bytes: int
+    expected_max_seconds: float
+
+
+@dataclass(frozen=True)
 class NamespaceCompileTestCase:
     description: str
     repo_files: dict[str, str]
