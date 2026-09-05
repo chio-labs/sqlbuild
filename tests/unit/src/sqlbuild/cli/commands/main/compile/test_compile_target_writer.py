@@ -14,7 +14,7 @@ from sqlbuild.cli.commands._helpers.compile.target_writer import (
 )
 from sqlbuild.cli.commands.models import WrittenTarget
 from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.planner.models import PlanOutput, SqlTestPlanEntry
+from sqlbuild.compiler.planner.models import ChainStep, PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     TargetWriterTestCase,
@@ -85,6 +85,46 @@ def test_given_plan_output_when_writing_target_then_expected_files_are_written(
     assert json.loads(manifest_path.read_text()) == manifest
     assert manifest_path.stat().st_mtime_ns == unchanged_mtime_ns
     assert not (tmp_path / "target" / "run").exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        TargetWriterTestCase(
+            description="long chain uses a bounded deterministic artifact directory",
+            model_count=20,
+            expected_max_component_bytes=200,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_long_test_chain_when_writing_target_then_artifact_component_is_bounded(
+    test_case: TargetWriterTestCase,
+    tmp_path: Path,
+) -> None:
+    plan_output: PlanOutput = build_target_writer_plan_output()
+    template: SqlTestPlanEntry = plan_output.test_entries[0]
+    long_entry: SqlTestPlanEntry = replace(
+        template,
+        chain=tuple(
+            ChainStep(
+                model_name=f"model_{index:02d}_{'x' * 40}",
+                resolved_sql="SELECT 1 AS value",
+            )
+            for index in range(test_case.model_count)
+        ),
+    )
+
+    _ = write_compile_target(
+        target_dir=tmp_path / "target",
+        adapter=DuckDbAdapter(),
+        plan_output=replace(plan_output, test_entries=(long_entry,)),
+    )
+
+    artifact: Path = next((tmp_path / "target" / "compiled" / "tests").rglob("*.sql"))
+    assert len(artifact.parent.name.encode()) <= test_case.expected_max_component_bytes
+    assert artifact.parent.name.startswith("model_00_")
+    assert f"model_{test_case.model_count - 1:02d}_" in artifact.parent.name
 
 
 @pytest.mark.parametrize(
