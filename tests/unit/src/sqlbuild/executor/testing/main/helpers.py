@@ -48,6 +48,27 @@ def build_comparison_test_entry_with_helper_ctes(
     )
 
 
+def build_transitive_comparison_test_entry() -> SqlTestPlanEntry:
+    return SqlTestPlanEntry(
+        key=CompiledObjectKey(
+            resource_type=CompiledResourceType.SQL_TEST,
+            name="final_orders_chain",
+        ),
+        name="final_orders_chain",
+        chain=(
+            ChainStep(
+                model_name="stg_orders",
+                resolved_sql="WITH shared AS (SELECT 1 AS order_id) SELECT * FROM shared",
+            ),
+            ChainStep(
+                model_name="final_orders",
+                resolved_sql=("WITH shared AS (SELECT 1 AS order_id) SELECT order_id FROM shared"),
+                expected_cte_sql="SELECT 1 AS order_id",
+            ),
+        ),
+    )
+
+
 def build_table_function_test_entry(
     *,
     sql_analysis_enabled: bool = True,

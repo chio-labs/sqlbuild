@@ -36,7 +36,10 @@ def execute_sql_test(
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
     )
-    error_model_name: str = test_entry.chain[0].model_name if test_entry.chain else test_entry.name
+    error_model_name: str = next(
+        (step.model_name for step in test_entry.chain if step.expected_cte_sql is not None),
+        test_entry.name,
+    )
     try:
         validate_unit_test_sql_length(
             sql=comparison_sql,

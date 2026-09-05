@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 import pytest
@@ -13,8 +14,11 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import ChainStep, PlanOutput, SqlTestPlanEntry
+from sqlbuild.executor.pipeline._helpers import testing as testing_pipeline
 from sqlbuild.executor.pipeline._helpers.testing import run_test_pipeline
+from sqlbuild.executor.pipeline.models import TestPipelineCallbacks as PipelineCallbacks
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
+from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.observability import (
     EventDispatcher,
     LifecycleEvent,
@@ -22,6 +26,7 @@ from sqlbuild.observability import (
     invocation_scope,
 )
 from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import (
+    SqlTestConcurrencyTestCase,
     SqlTestFunctionPreflightTestCase,
     SqlTestOperationLifecycleTestCase,
 )
@@ -91,8 +96,10 @@ def test_given_sql_test_with_missing_function_when_running_pipeline_then_returns
             plan=plan,
             connection_config={"database": str(tmp_path / "test.duckdb")},
             adapter=DuckDbAdapter(),
-            on_test_start=lambda _entry: order.append("callback_start"),
-            on_test_complete=lambda _result: order.append("callback_complete"),
+            callbacks=PipelineCallbacks(
+                on_test_start=lambda _entry: order.append("callback_start"),
+                on_test_complete=lambda _result: order.append("callback_complete"),
+            ),
             run_id="test-run",
         )
 
@@ -189,3 +196,77 @@ def test_given_parameterized_chain_when_running_then_one_operation_owns_statemen
     assert all(
         event.resource_attempt_id == operation_events[0].resource_attempt_id for event in events
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SqlTestConcurrencyTestCase(
+            description="two workers overlap using isolated connections",
+            test_count=2,
+            max_concurrency=2,
+            expected_connection_count=2,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_concurrent_workers_when_running_tests_then_execution_overlaps_on_isolated_connections(
+    test_case: SqlTestConcurrencyTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries: tuple[SqlTestPlanEntry, ...] = tuple(
+        SqlTestPlanEntry(
+            key=CompiledObjectKey(
+                resource_type=CompiledResourceType.SQL_TEST,
+                name=f"test_{index}",
+            ),
+            name=f"test_{index}",
+            chain=(
+                ChainStep(
+                    model_name=f"model_{index}",
+                    resolved_sql=f"SELECT {index} AS value",
+                    expected_cte_sql=f"SELECT {index} AS value",
+                ),
+            ),
+        )
+        for index in range(test_case.test_count)
+    )
+    overlap_barrier: threading.Barrier = threading.Barrier(test_case.expected_connection_count)
+    connection_ids: list[int] = []
+    connection_ids_lock: threading.Lock = threading.Lock()
+
+    def execute_with_overlap(
+        *, test_entry: SqlTestPlanEntry, adapter: DuckDbAdapter, connection: object
+    ) -> SqlTestExecutionResult:
+        del adapter
+        with connection_ids_lock:
+            connection_ids.append(id(connection))
+        overlap_barrier.wait(timeout=2)
+        return SqlTestExecutionResult(
+            test_name=test_entry.name,
+            outcome=SqlTestOutcome.PASS,
+        )
+
+    monkeypatch.setattr(testing_pipeline, "execute_sql_test", execute_with_overlap)
+    completed_names: list[str] = []
+    started_names: list[str] = []
+
+    results: tuple[SqlTestExecutionResult, ...] = run_test_pipeline(
+        plan=PlanOutput(test_entries=entries),
+        connection_config={"database": str(tmp_path / "test.duckdb")},
+        adapter=DuckDbAdapter(),
+        max_concurrency=test_case.max_concurrency,
+        callbacks=PipelineCallbacks(
+            on_test_start=lambda entry: started_names.append(entry.name),
+            on_test_complete=lambda result: completed_names.append(result.test_name),
+        ),
+    )
+
+    expected_names: tuple[str, ...] = tuple(
+        f"test_{index}" for index in range(test_case.test_count)
+    )
+    assert tuple(result.test_name for result in results) == expected_names
+    assert started_names == list(expected_names)
+    assert completed_names == list(expected_names)
+    assert len(set(connection_ids)) == test_case.expected_connection_count

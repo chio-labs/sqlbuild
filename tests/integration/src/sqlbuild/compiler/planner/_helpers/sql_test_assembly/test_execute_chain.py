@@ -170,6 +170,29 @@ SELECT 1
             },
         ),
         ExecuteChainTestCase(
+            description="final model expectation executes the complete unmocked model chain",
+            model_queries={
+                "A": 'SELECT id, amount FROM __source("raw")',
+                "B": 'SELECT id, amount * 2 AS doubled FROM __ref("A")',
+                "C": 'SELECT id, doubled + 1 AS final FROM __ref("B")',
+            },
+            mock_ref_ctes={},
+            mock_source_ctes={
+                "raw": "SELECT 1 AS id, 50 AS amount",
+            },
+            helper_ctes={},
+            expected_model_names=("C",),
+            expected_cte_bodies={
+                "C": "SELECT 1 AS id, 101 AS final",
+            },
+            expected_chain_length=3,
+            expected_results={
+                "A": ((1, 50),),
+                "B": ((1, 100),),
+                "C": ((1, 101),),
+            },
+        ),
+        ExecuteChainTestCase(
             description=("helper cte feeds into mock and result is executable"),
             model_queries={
                 "orders": ('SELECT id, amount FROM __ref("raw_orders")'),
