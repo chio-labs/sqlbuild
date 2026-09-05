@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from sqlbuild.compiler.planner.models import AuditPlanEntry
+from sqlbuild.compiler.planner.models import AuditPlanEntry, SqlTestPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
@@ -14,6 +14,7 @@ from sqlbuild.executor.build.models import (
     BuildInitialState,
     BuildRuntimeParams,
 )
+from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
 
 
@@ -28,6 +29,18 @@ class AuditPipelineCallbacks:
     on_audit_physical_complete: Callable[[AuditExecutionResult], None] | None = None
     on_audit_complete: Callable[[AuditExecutionResult], None] | None = None
     on_audit_error: Callable[[AuditPlanEntry], None] | None = None
+
+
+@dataclass(frozen=True)
+class TestPipelineCallbacks:
+    """Optional connection, setup, and item callbacks for SQL test execution."""
+
+    on_connection_start: Callable[[int], None] | None = None
+    on_connection_complete: ConnectionElapsedCallback | None = None
+    on_connection_error: ConnectionElapsedCallback | None = None
+    on_progress: Callable[[str], None] | None = None
+    on_test_start: Callable[[SqlTestPlanEntry], None] | None = None
+    on_test_complete: Callable[[SqlTestExecutionResult], None] | None = None
 
 
 @dataclass(frozen=True)

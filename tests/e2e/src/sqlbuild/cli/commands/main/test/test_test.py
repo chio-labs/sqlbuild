@@ -32,8 +32,8 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_exit_code=0,
             expected_stdout_fragment="PASS=5",
             expected_stdout_fragments=(
-                "Execution  sqb test  (concurrency: 1)",
-                "Connecting to duckdb...",
+                "Execution  sqb test  (concurrency: 5)",
+                "Connecting to duckdb (5 connections)...",
                 "\u2713 Warehouse connected  duckdb",
                 "expect  expected stg_orders",
                 "expect  expected fact_orders",
@@ -42,11 +42,11 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "expect  expected table_fn returns_customer_orders",
             ),
             expected_ordered_stdout_fragments=(
-                "Execution  sqb test  (concurrency: 1)",
                 "Compiling project...",
                 "Compiled project. (<time>)",
+                "Execution  sqb test  (concurrency: 5)",
                 "Test ready  5 selected, 5 models",
-                "Connecting to duckdb...",
+                "Connecting to duckdb (5 connections)...",
                 "\u2713 Warehouse connected  duckdb  (<time>)",
                 "Preparing test functions...",
                 "Prepared test functions. (<time>)",
@@ -69,7 +69,7 @@ def test_given_waffle_shop_project_when_running_test_then_all_tests_pass(
     assert build_result.returncode == 0, build_result.stdout + build_result.stderr
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "test"), project_dir=project_dir
+        command=("--no-color", "test", "--concurrency", "5"), project_dir=project_dir
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr

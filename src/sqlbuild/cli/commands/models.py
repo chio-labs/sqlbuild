@@ -1262,6 +1262,7 @@ class TestCommandRequest:
     cli_vars: dict[str, object] | None = None
     json_output: bool = False
     json_output_path: Path | None = None
+    concurrency: int | None = None
 
 
 @dataclass(frozen=True)
@@ -1312,6 +1313,8 @@ class TestExecutionPreparation:
     progress: NestedCommandProgressCallbacks
     execution_connection_progress: ConnectionProgressReporter
     preflight_progress: TransientStatusReporter
+    effective_concurrency: int
+    worker_count: int
 
 
 @dataclass(frozen=True)
