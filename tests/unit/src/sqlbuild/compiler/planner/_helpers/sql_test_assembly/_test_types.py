@@ -44,3 +44,10 @@ class AssertionChainCteErrorTestCase:
     assertion_sql: str
     resolved_chain: dict[str, str]
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class RepeatedFixturePlanTestCase:
+    description: str
+    fixture_ids: tuple[int, ...]
+    expected_sql_fragments: tuple[str, ...]
