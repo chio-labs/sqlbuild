@@ -154,3 +154,4 @@ WARNING_CHECK_SEVERITY_EXCLUSIONS: frozenset[PythonCheckSeverity] = frozenset(
     {PythonCheckSeverity.ERROR}
 )
 WARNING_CHECK_SEVERITY: str = PythonCheckSeverity.WARN.value
+INSUFFICIENT_CHECK_STATUS: str = "insufficient"

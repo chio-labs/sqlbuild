@@ -173,6 +173,7 @@ class AuditCase:
     description: str | None = None
     thresholds: MeasurementThresholds | None = None
     minimum_samples: int | None = None
+    evidence_limit: int | None = None
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"^[a-z][a-z0-9_]*$", self.name):
@@ -188,3 +189,9 @@ class AuditCase:
             or self.minimum_samples < 0
         ):
             raise SharedInputError("AuditCase minimum_samples must be a non-negative integer")
+        if self.evidence_limit is not None and (
+            not isinstance(self.evidence_limit, int)
+            or isinstance(self.evidence_limit, bool)
+            or self.evidence_limit < 0
+        ):
+            raise SharedInputError("AuditCase evidence_limit must be a non-negative integer")

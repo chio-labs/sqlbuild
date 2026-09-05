@@ -124,6 +124,12 @@ def parse_audit_instance_impl(
         label=option_label,
         error_class=error_class,
     )
+    evidence_limit: int | None = parse_evidence_limit(
+        raw_value=argument_mapping.get("evidence_limit"),
+        file_path=file_path,
+        label=option_label,
+        error_class=error_class,
+    )
     arguments: dict[str, object] = {
         key: value for key, value in argument_mapping.items() if key not in SCHEMA_AUDIT_OPTION_KEYS
     }
@@ -137,6 +143,7 @@ def parse_audit_instance_impl(
         always_run=always_run,
         thresholds=thresholds,
         minimum_samples=minimum_samples,
+        evidence_limit=evidence_limit,
     )
 
 
@@ -185,6 +192,22 @@ def parse_minimum_samples(
         return None
     if isinstance(raw_value, bool) or not isinstance(raw_value, int) or raw_value < 0:
         raise error_class(f"{file_path} {label} 'minimum_samples' must be a non-negative integer")
+    return raw_value
+
+
+def parse_evidence_limit(
+    *,
+    raw_value: object | None,
+    file_path: Path,
+    label: str,
+    error_class: type[Exception],
+) -> int | None:
+    """Parse an optional non-negative retained evidence row limit."""
+
+    if raw_value is None:
+        return None
+    if isinstance(raw_value, bool) or not isinstance(raw_value, int) or raw_value < 0:
+        raise error_class(f"{file_path} {label} 'evidence_limit' must be a non-negative integer")
     return raw_value
 
 

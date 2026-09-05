@@ -13,6 +13,11 @@ contract. The public types, filters, pages, records, errors, and helper function
 The concrete SQLite and PostgreSQL classes additionally provide transactional
 `append_and_project`, `reconcile`, and `check_health` operations.
 
+`EventLogStorage` remains a deprecated compatibility alias for `LifecycleEventLogStorage`. Storage
+tables use the lifecycle-specific names `lifecycle_event_log` in SQLite and
+`sqlbuild_lifecycle_event_log` in PostgreSQL; the former `event_log` and `sqlbuild_event_log` names
+are retired.
+
 Each newly stored event receives a positive, increasing `storage_order`, opaque stable `cursor`,
 and UTC `received_at`. Pages ascend in storage order. `after_cursor` is exclusive,
 `next_cursor` identifies the last returned record and is `None` for an empty page, and `has_more`

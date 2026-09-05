@@ -443,6 +443,7 @@ class SchemaAuditInstance:
     always_run: bool = False
     thresholds: MeasurementThresholds | None = None
     minimum_samples: int | None = None
+    evidence_limit: int | None = None
     location: SourceLocation | None = field(default=None, compare=False, repr=False)
 
 

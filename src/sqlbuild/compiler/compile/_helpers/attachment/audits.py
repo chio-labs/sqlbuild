@@ -534,6 +534,7 @@ def build_attached_audit_input(
             expanded_sql_body if evaluation_mode == AuditEvaluationMode.MEASUREMENT else None
         ),
         evidence_sql=expanded_evidence_sql,
+        evidence_limit=audit_instance.evidence_limit,
         name=audit_instance.name,
         references=references,
         attached_target_kind=attached_target_kind,

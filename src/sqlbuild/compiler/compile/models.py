@@ -584,6 +584,7 @@ class CompileAuditInput:
     minimum_samples: int | None = None
     measure_sql: str | None = None
     evidence_sql: str | None = None
+    evidence_limit: int | None = None
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     attached_target_kind: AttachedAuditTargetKind | str | None = None
     attached_target_name: str | None = None
@@ -732,6 +733,7 @@ class CompiledAudit:
     minimum_samples: int | None = None
     measure_sql: str | None = None
     evidence_sql: str | None = None
+    evidence_limit: int | None = None
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     attached_target_kind: AttachedAuditTargetKind | None = None
     attached_target_name: str | None = None

@@ -1073,6 +1073,7 @@ class AuditPlanEntry:
     minimum_samples: int | None = None
     evidence_resolved_sql: str | None = None
     evidence_unresolved_sql: str | None = None
+    evidence_limit: int | None = None
     scope_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
     attached_target_kind: AttachedAuditTargetKind | None = None
     attached_target_name: str | None = None

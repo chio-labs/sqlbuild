@@ -19,7 +19,7 @@ from sqlbuild.cli.progress.classes.native_progress_projector import (
 )
 from sqlbuild.cli.progress.main._expectation_detail import format_expectation_detail
 from sqlbuild.cli.progress.main._expectation_name import format_expectation_name
-from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
+from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
 from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
@@ -878,14 +878,16 @@ def format_build_footer(
     counts: ExecutionCounts = _count_build_footer_results(
         result=result, python_node_results=python_node_results
     )
+    insufficient_count: int = result.insufficient_count
     elapsed_str: str = f"{elapsed:.2f}s"
     counts_summary: str = format_summary_footer(
         counts=(
             ("PASS", counts.pass_count),
             ("WARN", counts.warn_count),
             ("FAIL", counts.fail_count),
+            ("INSUFFICIENT", insufficient_count),
             ("SKIP", counts.skip_count),
-            ("TOTAL", counts.total_count),
+            ("TOTAL", counts.total_count + insufficient_count),
         ),
         use_color=style.use_color,
         elapsed=elapsed_str,
@@ -1125,8 +1127,13 @@ def _format_warning_details(*, result: BuildExecutionResult, style: CliStyle) ->
                 name: str = audit_r.audit_name
                 if audit_r.attached_column_name:
                     name = f"{audit_r.audit_name} ({audit_r.attached_column_name})"
-                row_label: str = "row" if audit_r.row_count == 1 else "rows"
-                model_warnings.append(f"    audit {name} returned {audit_r.row_count} {row_label}")
+                if audit_r.evaluation_mode == AuditEvaluationMode.MEASUREMENT:
+                    model_warnings.append(f"    audit {name} measured {audit_r.measured_value}")
+                else:
+                    row_label: str = "row" if audit_r.row_count == 1 else "rows"
+                    model_warnings.append(
+                        f"    audit {name} returned {audit_r.row_count} {row_label}"
+                    )
         warning_msg: str
         for warning_msg in model_result.warning_messages:
             model_warnings.append(f"    {warning_msg}")
@@ -1259,6 +1266,8 @@ def _audit_outcome_display(outcome: AuditOutcome) -> str:
         return "WARN"
     if outcome == AuditOutcome.ERROR:
         return "FAIL"
+    if outcome == AuditOutcome.INSUFFICIENT:
+        return "INSUFFICIENT"
     return str(outcome)
 
 
@@ -1325,6 +1334,8 @@ def _worst_audit_outcome(results: list[AuditExecutionResult]) -> AuditOutcome:
     has_warn: bool = any(r.outcome == AuditOutcome.WARN for r in results)
     if has_warn:
         return AuditOutcome.WARN
+    if any(r.outcome == AuditOutcome.INSUFFICIENT for r in results):
+        return AuditOutcome.INSUFFICIENT
     return AuditOutcome.PASS
 
 

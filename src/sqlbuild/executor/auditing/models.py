@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.auditing.models import MeasurementThresholds
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
@@ -13,7 +15,35 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
+from sqlbuild.spec.contracts.models import SourceEntry
+
+
+@dataclass(frozen=True)
+class AuditExecutionContext:
+    """Warehouse and rendering inputs shared by one audit execution."""
+
+    adapter: BaseAdapter
+    connection: Any
+    model_locations: dict[str, CompiledRelationLocation]
+    seed_locations: dict[str, CompiledRelationLocation]
+    source_map: dict[str, SourceEntry]
+    relation_overrides: dict[str, str] | None
+    run_scope_phase: AuditRunScope
+
+
+@dataclass(frozen=True)
+class AuditResultProjection:
+    """Best-effort audit history projection counts for command reporting."""
+
+    attempted_count: int = 0
+    written_count: int = 0
+    failed_count: int = 0
+
+    @property
+    def degraded(self) -> bool:
+        return self.failed_count > 0
 
 
 @dataclass(frozen=True)
@@ -41,3 +71,4 @@ class AuditExecutionResult:
     evidence_truncated: bool = False
     evidence_error: str | None = None
     evidence_sql: str | None = None
+    execution_error: str | None = None

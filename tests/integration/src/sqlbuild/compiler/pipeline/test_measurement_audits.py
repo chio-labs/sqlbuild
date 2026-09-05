@@ -50,6 +50,7 @@ def test_given_attached_measurement_audit_when_compiling_then_full_contract_reac
                     valid_order_rate (
                       condition "order_id IS NOT NULL",
                       minimum_samples 2,
+                      evidence_limit 7,
                       thresholds (
                         warn (below 100),
                         error (below 99.9)
@@ -97,6 +98,7 @@ def test_given_attached_measurement_audit_when_compiling_then_full_contract_reac
     assert compiled.thresholds is not None and compiled.thresholds.error is not None
     assert compiled.thresholds.error.operator == ThresholdOperator.BELOW
     assert compiled.minimum_samples == test_case.expected_minimum_samples
+    assert compiled.evidence_limit == 7
     assert "order_id IS NOT NULL" in compiled.sql_body
     assert compiled.evidence_sql is not None and "NOT (order_id IS NOT NULL)" in compiled.evidence_sql
 
@@ -106,6 +108,7 @@ def test_given_attached_measurement_audit_when_compiling_then_full_contract_reac
     assert planned.sample_unit == "rows"
     assert planned.thresholds == compiled.thresholds
     assert planned.minimum_samples == test_case.expected_minimum_samples
+    assert planned.evidence_limit == 7
     assert planned.severity.value == test_case.expected_severity
     assert "main.orders" in planned.resolved_sql
     assert "__ref" in planned.unresolved_sql

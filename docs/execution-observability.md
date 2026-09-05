@@ -16,6 +16,7 @@ record that answers the question instead of treating every JSON or log file as i
 | `RunRecord` | Current run summary rebuilt from durable run facts | Disposable serving state. Rebuild it from the event log; never use it as the only lifecycle authority. |
 | Integration-result JSONL | Bounded resource terminal plus integration enrichment | Canonical SQLBuild-owned integration side channel, but still a projection/consumer of lifecycle facts rather than event history. |
 | Final `--json` or `--json-output` document | Aggregate command result | A separate end-of-command projection. It is not enabled by integration-result output and is not lifecycle authority. |
+| `_sqlbuild_audit_results` | Append-only audit-result facts in the active warehouse | Best-effort observability projection with deterministic IDs and idempotent writes. It never changes audit gating or lifecycle truth. |
 
 Compute logs, command-output records, final output, full SQL artifacts, user messages, and
 Python/check metadata can contain sensitive data. Lifecycle, integration-result, and sink-health records intentionally exclude
@@ -87,6 +88,11 @@ to restore the terminal index's observed order among records from the same invoc
 callback without matching terminal evidence emits no record, and final aggregate JSON omits that
 incomplete resource rather than inventing an outcome. Closing the writer emits nothing.
 
+Each confirmed audit also emits `audit_completed`. The event records audit/attachment identity,
+evaluation mode, outcome, severity and run scope, plus applicable measurement, threshold and bounded
+evidence details. `pass` and `insufficient` are non-failing outcomes; `insufficient` remains distinct
+for consumers.
+
 An explicit writer path takes precedence over `SQLBUILD_INTEGRATION_RESULT_PATH`. Integration-result
 files are opened in append mode, so an integration that reuses a path must truncate or rotate it
 before starting a new invocation. The hidden `--event-output` transport option is available only on
@@ -99,6 +105,19 @@ each validated envelope into Dagster asset materializations and checks, then use
 aggregate JSON only where end-of-command enrichment is still needed. The removed Dagster live v1
 JSONL format is neither authoritative nor supported; CHI-192 replaced it with integration-result
 envelopes.
+
+## Audit-result projection
+
+Native warehouse adapters best-effort append confirmed audits to `_sqlbuild_audit_results`. Typed
+columns cover result/run/audit identity, timestamps and target, evaluation mode and outcome,
+violation or measured value, sample count/unit and minimum samples. Threshold policy and bounded
+evidence use JSON columns with evidence count/truncation/error diagnostics. Rendered measurement,
+evidence and executed SQL are retained in dedicated columns for inspection.
+
+Rows are immutable facts rather than lifecycle state. Deterministic result IDs make retries
+idempotent. A projection write failure preserves the audit outcome and command exit code, reports
+attempted/written/failed counts, and sets `projection_degraded`; lifecycle events and configured
+sinks fail independently.
 
 ## Local paths and troubleshooting
 
@@ -189,6 +208,7 @@ cache under `target/sqlbuild/`.
 | Compute-log open or write fails | SQLBuild reports best-effort diagnostics, preserves console operation, and preserves the command result. The capture may be absent or incomplete. |
 | Integration-result path creation, open, append, flush, or close fails | The error is not best effort and can fail the command or integration-output phase. The JSONL file may contain a valid prefix. |
 | Final `--json-output` directory creation or write fails | The error can fail the command output phase. SQLBuild does not claim that the aggregate document was published. |
+| Native audit-result projection fails | The confirmed audit outcome and exit code are preserved; projection accounting reports the failure and `projection_degraded` is set. |
 | Exporter module discovery, declaration validation, provider construction, or provider setup fails | Startup fails before command execution because project extension configuration is invalid. |
 | Export queue overflow or priority displacement | Eligible attempts are counted `dropped`; command correctness is unchanged. |
 | Exporter raises or times out | The attempt is counted `failed`; that exporter is isolated and a timed-out exporter is blocked from later calls. Command correctness is unchanged. |

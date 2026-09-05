@@ -11,12 +11,13 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild.cli.output._helpers.future_cursor_safety import serialize_future_cursor_safety
+from sqlbuild.cli.output._helpers.integration_result import _render_measurement_thresholds
 from sqlbuild.cli.output._helpers.maximum_start_safety import serialize_maximum_start_safety
 from sqlbuild.cli.output.classes.terminal_event_index import (
     TerminalEventIndex,
     current_terminal_event_index,
 )
-from sqlbuild.compiler.auditing.types import AuditOutcome
+from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditOutcome
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
     PlanOutput,
@@ -974,7 +975,7 @@ def _format_audit_checks(
                 "kind": "audit",
                 "name": result.audit_name,
                 "check_id": _audit_check_id(result),
-                "passed": result.outcome == AuditOutcome.PASS,
+                "passed": result.outcome in {AuditOutcome.PASS, AuditOutcome.INSUFFICIENT},
                 "status": result.outcome.value,
                 "severity": result.severity.value,
                 "row_count": result.row_count,
@@ -988,6 +989,22 @@ def _format_audit_checks(
                 "attached_column_name": result.attached_column_name,
                 "run_scope_phase": result.run_scope_phase.value,
                 "reused": result.reused,
+                "evaluation_mode": result.evaluation_mode.value,
+                "measured_value": result.measured_value,
+                "sample_count": result.sample_count,
+                "sample_unit": result.sample_unit,
+                "minimum_samples": result.minimum_samples,
+                "thresholds": _render_measurement_thresholds(result.thresholds),
+                "evidence_count": (
+                    len(result.evidence_rows)
+                    if result.evaluation_mode == AuditEvaluationMode.MEASUREMENT
+                    else None
+                ),
+                "evidence_truncated": (
+                    result.evidence_truncated
+                    if result.evaluation_mode == AuditEvaluationMode.MEASUREMENT
+                    else None
+                ),
             }
         )
         for result in results

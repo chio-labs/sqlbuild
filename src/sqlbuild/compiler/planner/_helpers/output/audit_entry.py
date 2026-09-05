@@ -120,6 +120,7 @@ def plan_audit(
         minimum_samples=audit.minimum_samples,
         evidence_resolved_sql=evidence_resolved_sql,
         evidence_unresolved_sql=audit.evidence_sql,
+        evidence_limit=audit.evidence_limit,
         scope_deps=audit.scope_deps,
         attached_target_kind=attached_target_kind,
         attached_target_name=attached_target_name,

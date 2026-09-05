@@ -118,6 +118,7 @@ class AuditProgressReporter:
             AuditOutcome.PASS: "PASS",
             AuditOutcome.WARN: "WARN",
             AuditOutcome.ERROR: "FAIL",
+            AuditOutcome.INSUFFICIENT: "INSUFFICIENT",
         }[result.outcome]
         name: str = result.audit_name
         if result.attached_column_name is not None:

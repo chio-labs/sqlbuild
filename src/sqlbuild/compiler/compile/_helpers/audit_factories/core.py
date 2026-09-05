@@ -98,6 +98,7 @@ def parse_model_header_audit_factories(
                     description=case.description,
                     thresholds=case.thresholds,
                     minimum_samples=case.minimum_samples,
+                    evidence_limit=case.evidence_limit,
                     location=SourceLocation(
                         path=factory.relative_path,
                         line=factory.line,

@@ -943,6 +943,7 @@ def _assemble_compiled_audit(audit_input: CompileAuditInput) -> CompiledAudit:
         minimum_samples=audit_input.minimum_samples,
         measure_sql=audit_input.measure_sql,
         evidence_sql=audit_input.evidence_sql,
+        evidence_limit=audit_input.evidence_limit,
         references=audit_input.references,
         attached_target_kind=normalized_target_kind,
         attached_target_name=audit_input.attached_target_name,

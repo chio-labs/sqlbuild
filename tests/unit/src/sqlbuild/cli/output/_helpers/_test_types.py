@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from sqlbuild.compiler.auditing.types import AuditOutcome
+
 
 @dataclass(frozen=True)
 class MicrobatchExecutionProtocolTestCase:
@@ -46,3 +48,11 @@ class AuditExecutionProtocolTestCase:
     expected_target_kind: str
     expected_configured_concurrency: int = 1
     expected_worker_count: int = 1
+
+
+@dataclass(frozen=True)
+class MeasurementAuditOutputTestCase:
+    description: str
+    outcome: AuditOutcome
+    expected_status: str
+    expected_passed: bool

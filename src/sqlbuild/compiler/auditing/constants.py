@@ -18,5 +18,6 @@ SCHEMA_AUDIT_OPTION_KEYS: frozenset[str] = frozenset(
         "always_run",
         "thresholds",
         "minimum_samples",
+        "evidence_limit",
     }
 )
