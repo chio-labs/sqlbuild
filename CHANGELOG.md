@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.82.5](https://github.com/chio-labs/sqlbuild/compare/v0.82.4...v0.82.5) (2026-09-05)
+
+
+### Bug Fixes
+
+* bound and accelerate SQL test compilation ([#533](https://github.com/chio-labs/sqlbuild/issues/533)) ([0e0eff9](https://github.com/chio-labs/sqlbuild/commit/0e0eff913d9d9290fe4f3e3bd806ff3be93c4fa7))
+
 ## [0.82.4](https://github.com/chio-labs/sqlbuild/compare/v0.82.3...v0.82.4) (2026-09-05)
 
 
