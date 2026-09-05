@@ -57,9 +57,7 @@ def test_given_threshold_helpers_when_called_then_directional_bounds_are_returne
 ) -> None:
     assert below(10).operator is ThresholdOperator.BELOW
     assert above(20).operator is ThresholdOperator.ABOVE
-    outside_bound: MeasurementThresholdBound = outside(
-        lower=test_case.lower, upper=test_case.upper
-    )
+    outside_bound: MeasurementThresholdBound = outside(lower=test_case.lower, upper=test_case.upper)
     assert outside_bound.operator is test_case.expected_operator
     assert (outside_bound.lower, outside_bound.upper) == (test_case.lower, test_case.upper)
 

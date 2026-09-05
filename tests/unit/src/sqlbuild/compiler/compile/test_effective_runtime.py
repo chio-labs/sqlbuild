@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.attachment.core import resolve_run_id
+from sqlbuild.compiler.compile._helpers.render.context_templates import resolve_run_id
 from sqlbuild.compiler.compile.main.effective_runtime import build_effective_runtime_config
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.contracts.models import (

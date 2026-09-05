@@ -286,7 +286,11 @@ def test_given_existing_violations_audit_when_hashing_then_legacy_identity_is_by
 
 @pytest.mark.parametrize(
     "test_case",
-    [MeasurementIdentityTestCase(description="measurement contract change", expected_identity_changed=True)],
+    [
+        MeasurementIdentityTestCase(
+            description="measurement contract change", expected_identity_changed=True
+        )
+    ],
     ids=lambda case: case.description,
 )
 def test_given_measurement_contract_or_evidence_change_when_hashing_then_identity_changes(
@@ -311,7 +315,9 @@ def test_given_measurement_contract_or_evidence_change_when_hashing_then_identit
     base_identity: AuditIdentity = build_audit_gate_identity(audits=(base,)).audits[0]
     changed_identity: AuditIdentity = build_audit_gate_identity(audits=(changed,)).audits[0]
 
-    assert (base_identity.binding_key != changed_identity.binding_key) is test_case.expected_identity_changed
+    assert (
+        base_identity.binding_key != changed_identity.binding_key
+    ) is test_case.expected_identity_changed
     assert (
         base_identity.definition_fingerprint != changed_identity.definition_fingerprint
     ) is test_case.expected_identity_changed

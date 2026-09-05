@@ -104,9 +104,7 @@ def plan_audit(
         effective_run_scope=effective_run_scope,
         evaluation_mode=audit.evaluation_mode,
         value_column=(
-            None
-            if audit.measurement_contract is None
-            else audit.measurement_contract.value_column
+            None if audit.measurement_contract is None else audit.measurement_contract.value_column
         ),
         sample_count_column=(
             None

@@ -98,9 +98,7 @@ def execute_audit_impl(  # noqa: PLR0913
         else:
             row_count: int = len(rows)
             outcome: AuditOutcome = (
-                AuditOutcome.PASS
-                if row_count == 0
-                else AuditOutcome(audit.severity.value)
+                AuditOutcome.PASS if row_count == 0 else AuditOutcome(audit.severity.value)
             )
             result = _base_result(
                 audit=audit,
@@ -261,9 +259,7 @@ def _render_sql(  # noqa: PLR0913
             relation_overrides=relation_overrides,
         )
     )
-    _ = assert_no_unresolved_sql_markers(
-        sql=sql, context=f"audit '{audit.name}' {context}"
-    )
+    _ = assert_no_unresolved_sql_markers(sql=sql, context=f"audit '{audit.name}' {context}")
     return sql
 
 
@@ -362,9 +358,9 @@ def _bounded_evidence(
             for key, value in _row_mapping(cursor=cursor, row=raw_row).items()
         }
         candidate: list[Mapping[str, object]] = [*retained, safe_row]
-        serialized: bytes = json.dumps(
-            candidate, sort_keys=True, separators=(",", ":")
-        ).encode("utf-8")
+        serialized: bytes = json.dumps(candidate, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
         if len(serialized) > MAX_EVIDENCE_SERIALIZED_BYTES:
             truncated = True
             break

@@ -20,7 +20,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
 )
 
 _PROJECT_FILE: str = 'name = "demo"\nadapter = "duckdb"\n'
-_AUDIT_FILE: str = "AUDIT (); SELECT * FROM __ref(\"@model\") WHERE NOT (@expression)"
+_AUDIT_FILE: str = 'AUDIT (); SELECT * FROM __ref("@model") WHERE NOT (@expression)'
 
 
 @pytest.mark.parametrize(
@@ -84,10 +84,16 @@ def unused_quality():
     "test_case",
     [
         AuditFactoryAttachmentTestCase(
-            "unknown factory", "audit_factories [missing]", "return []", "unknown audit factory 'missing'"
+            "unknown factory",
+            "audit_factories [missing]",
+            "return []",
+            "unknown audit factory 'missing'",
         ),
         AuditFactoryAttachmentTestCase(
-            "duplicate reference", "audit_factories [quality, quality]", "return []", "more than once"
+            "duplicate reference",
+            "audit_factories [quality, quality]",
+            "return []",
+            "more than once",
         ),
         AuditFactoryAttachmentTestCase(
             "duplicate case",

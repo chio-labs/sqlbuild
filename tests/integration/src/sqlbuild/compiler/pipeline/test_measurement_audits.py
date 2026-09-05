@@ -100,7 +100,9 @@ def test_given_attached_measurement_audit_when_compiling_then_full_contract_reac
     assert compiled.minimum_samples == test_case.expected_minimum_samples
     assert compiled.evidence_limit == 7
     assert "order_id IS NOT NULL" in compiled.sql_body
-    assert compiled.evidence_sql is not None and "NOT (order_id IS NOT NULL)" in compiled.evidence_sql
+    assert (
+        compiled.evidence_sql is not None and "NOT (order_id IS NOT NULL)" in compiled.evidence_sql
+    )
 
     assert planned.evaluation_mode == AuditEvaluationMode.MEASUREMENT
     assert planned.value_column == "valid_rate"
@@ -199,8 +201,7 @@ def test_given_measurement_attachment_with_severity_when_compiling_then_conflict
         {
             "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
             "models/orders.sql": (
-                "MODEL (audits [rate (severity warn, thresholds (warn (below 100)))]); "
-                "SELECT 1"
+                "MODEL (audits [rate (severity warn, thresholds (warn (below 100)))]); SELECT 1"
             ),
             "audits/generic/rate.sql": """
                 AUDIT (evaluation measurement, value rate);

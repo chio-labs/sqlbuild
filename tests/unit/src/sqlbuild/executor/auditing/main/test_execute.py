@@ -46,12 +46,24 @@ def test_given_non_single_measurement_row_when_executed_then_returns_execution_e
 @pytest.mark.parametrize(
     "test_case",
     [
-        InvalidMeasurementCase("missing value", ("other", "total_rows"), (95, 10), "missing value column"),
-        InvalidMeasurementCase("null value", ("valid_rate", "total_rows"), (None, 10), "must not be NULL"),
-        InvalidMeasurementCase("text value", ("valid_rate", "total_rows"), ("95", 10), "must be numeric"),
-        InvalidMeasurementCase("missing count", ("valid_rate", "other"), (95, 10), "missing sample count column"),
-        InvalidMeasurementCase("negative count", ("valid_rate", "total_rows"), (95, -1), "non-negative integer"),
-        InvalidMeasurementCase("fraction count", ("valid_rate", "total_rows"), (95, 1.5), "non-negative integer"),
+        InvalidMeasurementCase(
+            "missing value", ("other", "total_rows"), (95, 10), "missing value column"
+        ),
+        InvalidMeasurementCase(
+            "null value", ("valid_rate", "total_rows"), (None, 10), "must not be NULL"
+        ),
+        InvalidMeasurementCase(
+            "text value", ("valid_rate", "total_rows"), ("95", 10), "must be numeric"
+        ),
+        InvalidMeasurementCase(
+            "missing count", ("valid_rate", "other"), (95, 10), "missing sample count column"
+        ),
+        InvalidMeasurementCase(
+            "negative count", ("valid_rate", "total_rows"), (95, -1), "non-negative integer"
+        ),
+        InvalidMeasurementCase(
+            "fraction count", ("valid_rate", "total_rows"), (95, 1.5), "non-negative integer"
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -84,7 +96,12 @@ def test_given_valid_measurement_when_executed_then_maps_outcome(
     result: AuditExecutionResult = execute_entry(
         entry=build_entry(),
         adapter=Adapter(
-            [Cursor(columns=("VALID_RATE", "TOTAL_ROWS"), rows=[(test_case.value, test_case.sample_count)])]
+            [
+                Cursor(
+                    columns=("VALID_RATE", "TOTAL_ROWS"),
+                    rows=[(test_case.value, test_case.sample_count)],
+                )
+            ]
         ),
     )
     assert result.outcome == test_case.expected_outcome

@@ -16,7 +16,6 @@ from sqlbuild.compiler.compile._helpers.attachment.core import (
     build_effective_vars,
     build_model_inputs,
     build_seed_inputs,
-    resolve_run_id,
 )
 from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import build_declaration_scope
 from sqlbuild.compiler.compile._helpers.attachment.functions import build_sql_function_inputs
@@ -33,6 +32,7 @@ from sqlbuild.compiler.compile._helpers.audit_factories.core import (
     build_audit_factory_orphan_diagnostics,
 )
 from sqlbuild.compiler.compile._helpers.config.deprecation import build_cursor_alias_diagnostics
+from sqlbuild.compiler.compile._helpers.render.context_templates import resolve_run_id
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_public_declaration_indexes,
     build_public_model_schema_index,

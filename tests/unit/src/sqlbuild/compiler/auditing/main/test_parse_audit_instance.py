@@ -93,7 +93,11 @@ def test_given_invalid_audit_option_when_parsing_then_raises_clear_error(
 
 @pytest.mark.parametrize(
     "test_case",
-    [MeasurementPolicyParsingTestCase(description="all threshold operators", expected_minimum_samples=0)],
+    [
+        MeasurementPolicyParsingTestCase(
+            description="all threshold operators", expected_minimum_samples=0
+        )
+    ],
     ids=lambda case: case.description,
 )
 def test_given_all_directional_thresholds_when_parsing_then_typed_policies_are_returned(

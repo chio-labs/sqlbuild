@@ -28,9 +28,7 @@ def write_audit_completion_output(
     pass_count: int = sum(1 for r in results if r.outcome == AuditOutcome.PASS)
     warn_count: int = sum(1 for r in results if r.outcome == AuditOutcome.WARN)
     fail_count: int = sum(1 for r in results if r.outcome == AuditOutcome.ERROR)
-    insufficient_count: int = sum(
-        1 for r in results if r.outcome == AuditOutcome.INSUFFICIENT
-    )
+    insufficient_count: int = sum(1 for r in results if r.outcome == AuditOutcome.INSUFFICIENT)
     invocation.progress_stream.write(
         "\n"
         + format_summary_footer(
@@ -47,10 +45,10 @@ def write_audit_completion_output(
     )
     invocation.progress_stream.flush()
     payload: str = format_audit_execution_json(
-            results=results,
-            configured_concurrency=configured_concurrency,
-            worker_count=worker_count,
-        )
+        results=results,
+        configured_concurrency=configured_concurrency,
+        worker_count=worker_count,
+    )
     projection: AuditResultProjection | None = current_audit_result_projection()
     if projection is not None:
         document: dict[str, object] = json.loads(payload)

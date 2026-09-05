@@ -51,9 +51,7 @@ def test_given_audit_and_node_factories_when_discovering_then_both_are_collected
 ) -> None:
     write_repo_files(tmp_path, test_case.files)
 
-    discovered: DiscoveredPythonNodeFunctions = discover_python_node_functions(
-        project_dir=tmp_path
-    )
+    discovered: DiscoveredPythonNodeFunctions = discover_python_node_functions(project_dir=tmp_path)
 
     assert tuple(factory.name for factory in discovered.audit_factories) == (
         test_case.expected_factory_names
@@ -67,9 +65,15 @@ def test_given_audit_and_node_factories_when_discovering_then_both_are_collected
 @pytest.mark.parametrize(
     "test_case",
     [
-        AuditFactoryDiscoveryTestCase("bad shape", {}, expected_error_fragment="must return a list or tuple"),
-        AuditFactoryDiscoveryTestCase("bad item", {}, expected_error_fragment="item 0 that is not an AuditCase"),
-        AuditFactoryDiscoveryTestCase("exception", {}, expected_error_fragment="failed during discovery: boom"),
+        AuditFactoryDiscoveryTestCase(
+            "bad shape", {}, expected_error_fragment="must return a list or tuple"
+        ),
+        AuditFactoryDiscoveryTestCase(
+            "bad item", {}, expected_error_fragment="item 0 that is not an AuditCase"
+        ),
+        AuditFactoryDiscoveryTestCase(
+            "exception", {}, expected_error_fragment="failed during discovery: boom"
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -102,7 +106,11 @@ def broken_factory():
 
 @pytest.mark.parametrize(
     "test_case",
-    [AuditFactoryDiscoveryTestCase("duplicate names", {}, expected_error_fragment="Duplicate audit factory name")],
+    [
+        AuditFactoryDiscoveryTestCase(
+            "duplicate names", {}, expected_error_fragment="Duplicate audit factory name"
+        )
+    ],
     ids=lambda case: case.description,
 )
 def test_given_duplicate_audit_factory_names_when_discovering_then_error_is_raised(

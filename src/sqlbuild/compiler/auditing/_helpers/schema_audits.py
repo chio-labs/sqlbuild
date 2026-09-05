@@ -231,8 +231,7 @@ def _parse_threshold_bound(raw_value: object | None) -> MeasurementThresholdBoun
             not isinstance(raw_limit, tuple)
             or len(raw_limit) != MEASUREMENT_OUTSIDE_BOUND_VALUE_COUNT
             or any(
-                isinstance(item, bool) or not isinstance(item, (int, float))
-                for item in raw_limit
+                isinstance(item, bool) or not isinstance(item, (int, float)) for item in raw_limit
             )
         ):
             raise MeasurementAuditError("outside threshold requires two numeric values")
