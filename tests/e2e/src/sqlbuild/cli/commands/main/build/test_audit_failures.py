@@ -229,9 +229,13 @@ def test_given_audit_failure_projects_when_running_build_then_cli_reports_failur
                     'name = "measurement_audit"\nadapter = "duckdb"\n'
                     '[connection]\ndatabase = "measurement.duckdb"\n'
                 ),
+                "models/orders.sql": (
+                    "MODEL (materialized table); SELECT 1 AS order_id"
+                ),
                 "audits/rate.sql": (
                     "AUDIT (evaluation measurement, value rate, "
-                    "thresholds (error (below 90))); MEASURE (SELECT 80.0 AS rate);"
+                    "thresholds (error (below 90))); "
+                    'MEASURE (SELECT 80.0 AS rate FROM __ref("orders") LIMIT 1);'
                 ),
             },
             command=("--no-color", "audit"),

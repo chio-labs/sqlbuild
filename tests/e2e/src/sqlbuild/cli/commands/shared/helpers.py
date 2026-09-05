@@ -271,6 +271,11 @@ def normalize_cli_output(output: str) -> str:
         normalized,
     )
     normalized = re.sub(
+        r"PASS=\d+  WARN=\d+  FAIL=\d+  INSUFFICIENT=\d+  TOTAL=\d+",
+        "PASS=<n>  WARN=<n>  FAIL=<n>  INSUFFICIENT=<n>  TOTAL=<n>",
+        normalized,
+    )
+    normalized = re.sub(
         r"PASS=\d+  WARN=\d+  FAIL=\d+  TOTAL=\d+",
         "PASS=<n>  WARN=<n>  FAIL=<n>  TOTAL=<n>",
         normalized,

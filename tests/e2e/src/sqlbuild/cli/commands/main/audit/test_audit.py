@@ -37,7 +37,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "Connecting to duckdb...",
                 "\u2713 Warehouse connected  duckdb  (<time>)",
                 "customer_status_snapshot",
-                "PASS=<n>  WARN=<n>  FAIL=<n>  TOTAL=<n>",
+                "PASS=<n>  WARN=<n>  FAIL=<n>  INSUFFICIENT=<n>  TOTAL=<n>",
             ),
         ),
     ],
@@ -132,7 +132,7 @@ def test_given_file_backed_project_when_auditing_serial_and_concurrent_then_json
             description="audit exits nonzero when an audit returns rows",
             expected_exit_code=1,
             expected_stdout_fragment="FAIL=1",
-            expected_stdout_fragments=("PASS=27  WARN=0  FAIL=1  TOTAL=28",),
+            expected_stdout_fragments=("PASS=27  WARN=0  FAIL=1  INSUFFICIENT=0  TOTAL=28",),
         ),
     ],
     ids=lambda case: case.description,
@@ -238,6 +238,7 @@ def test_given_attached_audit_reads_downstream_model_when_building_and_auditing_
         "asset_name": "stg_orders",
         "run_scope_phase": "final",
         "reused": False,
+        "evaluation_mode": "violations",
     }
     assert audit_result.returncode == test_case.expected_exit_code, (
         audit_result.stdout + audit_result.stderr
