@@ -14,6 +14,7 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
+from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.planner.main.execution.future_cursor_warning import future_cursor_cap_warning
 from sqlbuild.compiler.planner.main.execution.maximum_start_warning import maximum_start_cap_warning
 from sqlbuild.compiler.planner.models import CursorBounds, ModelPlanEntry
@@ -72,6 +73,20 @@ class _DeltaPreparation:
 
     resolved_sql: str
     runtime_cursor_bounds: CursorBounds | None
+
+
+@dataclass(frozen=True)
+class _DeltaTypeInputs:
+    """Physical delta and target schema inputs for pre-DML type preparation."""
+
+    target_qualified: str
+    delta_qualified: str
+    target_database: str | None
+    target_schema: str | None
+    delta_table: str
+    target_columns: tuple[ColumnInfo, ...]
+    delta_columns: tuple[ColumnInfo, ...]
+    declared_columns: tuple[ColumnInfo, ...]
 
 
 def execute_incremental_entry(
@@ -156,8 +171,10 @@ def execute_incremental_entry(
         )
 
     try:
-        with diagnostics_context(sqlbuild_phase="schema_change", sqlbuild_action_name="inspect"):
-            delta_columns: tuple[ColumnInfo, ...] = inspect_runtime_relation_schema(
+        with diagnostics_context(
+            sqlbuild_phase="type_enforcement", sqlbuild_action_name="rebuild_delta"
+        ):
+            initial_delta_columns: tuple[ColumnInfo, ...] = inspect_runtime_relation_schema(
                 adapter=adapter,
                 connection=connection,
                 database=target_database,
@@ -171,6 +188,37 @@ def execute_incremental_entry(
                 schema=target_schema,
                 name=target_table,
             )
+            delta_columns, type_warnings = _prepare_incremental_delta_types(
+                adapter=adapter,
+                connection=connection,
+                entry=entry,
+                inputs=_DeltaTypeInputs(
+                    target_qualified=target_qualified,
+                    delta_qualified=delta_qualified,
+                    target_database=target_database,
+                    target_schema=target_schema,
+                    delta_table=delta_table,
+                    target_columns=target_columns,
+                    delta_columns=initial_delta_columns,
+                    declared_columns=declared_columns,
+                ),
+                statement_recorder=statement_recorder,
+            )
+            warnings.extend(type_warnings)
+    except Exception as exc:
+        return build_failed_result(
+            entry=entry,
+            phase=ExecutionPhase.TYPE_ENFORCEMENT,
+            error=str(exc),
+            staging_relation=delta_qualified,
+            warnings=warnings,
+            audit_results=audit_results,
+            statement_recorder=statement_recorder,
+            hook_results=hook_results,
+        )
+
+    try:
+        with diagnostics_context(sqlbuild_phase="schema_change", sqlbuild_action_name="inspect"):
             warnings.extend(
                 _apply_schema_change(
                     adapter=adapter,
@@ -200,36 +248,9 @@ def execute_incremental_entry(
             statement_recorder=statement_recorder,
         )
 
-    if entry.type_enforcement and declared_columns:
-        try:
-            with diagnostics_context(
-                sqlbuild_phase="type_enforcement", sqlbuild_action_name="rebuild_delta"
-            ):
-                enforce_types_staged(
-                    adapter=adapter,
-                    connection=connection,
-                    staging_qualified=delta_qualified,
-                    staging_database=target_database,
-                    staging_schema=target_schema,
-                    staging_table=delta_table,
-                    declared_columns=declared_columns,
-                    table_type=TableType.TRANSIENT,
-                    statement_recorder=statement_recorder,
-                )
-        except Exception as exc:
-            return build_failed_result(
-                entry=entry,
-                phase=ExecutionPhase.TYPE_ENFORCEMENT,
-                error=str(exc),
-                staging_relation=delta_qualified,
-                warnings=warnings,
-                audit_results=audit_results,
-                statement_recorder=statement_recorder,
-            )
-
     try:
         with diagnostics_context(sqlbuild_phase="contract", sqlbuild_action_name="validate_delta"):
-            delta_columns = inspect_runtime_relation_schema(
+            delta_columns: tuple[ColumnInfo, ...] = inspect_runtime_relation_schema(
                 adapter=adapter,
                 connection=connection,
                 database=target_database,
@@ -492,6 +513,73 @@ def _cursor_safety_warnings(bounds: CursorBounds | None) -> list[str]:
     ]
 
 
+def _prepare_incremental_delta_types(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    entry: ModelPlanEntry,
+    inputs: _DeltaTypeInputs,
+    statement_recorder: StatementRecorder,
+) -> tuple[tuple[ColumnInfo, ...], tuple[str, ...]]:
+    """Apply declared types and preserve undeclared target types before schema comparison."""
+
+    authoritative_columns: tuple[ColumnInfo, ...] = (
+        inputs.declared_columns if entry.type_enforcement else ()
+    )
+    authoritative_names: frozenset[str] = frozenset(
+        column.name.lower() for column in authoritative_columns
+    )
+    delta_map: dict[str, ColumnInfo] = {
+        column.name.lower(): column for column in inputs.delta_columns
+    }
+    effective_policy: OnSchemaChange = entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE
+    preserved_columns: list[tuple[ColumnInfo, ColumnInfo]] = []
+    desired_columns: list[ColumnInfo] = list(authoritative_columns)
+    if effective_policy in (OnSchemaChange.APPEND_NEW_COLUMNS, OnSchemaChange.IGNORE):
+        target_column: ColumnInfo
+        for target_column in inputs.target_columns:
+            incoming_column: ColumnInfo | None = delta_map.get(target_column.name.lower())
+            if (
+                incoming_column is not None
+                and target_column.name.lower() not in authoritative_names
+                and not types_equal(
+                    left=target_column.type,
+                    right=incoming_column.type,
+                    dialect=adapter.sql_analysis_dialect_name,
+                )
+            ):
+                desired_columns.append(target_column)
+                preserved_columns.append((incoming_column, target_column))
+
+    if desired_columns:
+        enforce_types_staged(
+            adapter=adapter,
+            connection=connection,
+            staging_qualified=inputs.delta_qualified,
+            staging_database=inputs.target_database,
+            staging_schema=inputs.target_schema,
+            staging_table=inputs.delta_table,
+            declared_columns=tuple(desired_columns),
+            table_type=TableType.TRANSIENT,
+            statement_recorder=statement_recorder,
+        )
+
+    prepared_columns: tuple[ColumnInfo, ...] = inspect_runtime_relation_schema(
+        adapter=adapter,
+        connection=connection,
+        database=inputs.target_database,
+        schema=inputs.target_schema,
+        name=inputs.delta_table,
+    )
+    warnings: tuple[str, ...] = tuple(
+        f"model '{entry.name}' preserved existing target type for "
+        f"'{inputs.target_qualified}.{target.name}': incoming {incoming.type} -> "
+        f"target {target.type} (on_schema_change {effective_policy.value})"
+        for incoming, target in preserved_columns
+    )
+    return prepared_columns, warnings
+
+
 def _apply_schema_change(
     *,
     adapter: BaseAdapter,
@@ -516,7 +604,9 @@ def _apply_schema_change(
         col_lower: str = col.name.lower()
         if col_lower not in target_map:
             added.append(col)
-        elif target_map[col_lower].upper() != col.type.upper():
+        elif not types_equal(
+            left=target_map[col_lower], right=col.type, dialect=adapter.sql_analysis_dialect_name
+        ):
             type_changed.append(col)
 
     for col in target_columns:
