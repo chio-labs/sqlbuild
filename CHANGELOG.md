@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.82.6](https://github.com/chio-labs/sqlbuild/compare/v0.82.5...v0.82.6) (2026-09-05)
+
+
+### Bug Fixes
+
+* preserve adapter SQL in native tests ([#535](https://github.com/chio-labs/sqlbuild/issues/535)) ([c7ab2d6](https://github.com/chio-labs/sqlbuild/commit/c7ab2d6d9a82ad5d810542e91d9046e2e6b509c0))
+
 ## [0.82.5](https://github.com/chio-labs/sqlbuild/compare/v0.82.4...v0.82.5) (2026-09-05)
 
 
