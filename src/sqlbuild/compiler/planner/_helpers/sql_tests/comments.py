@@ -5,10 +5,15 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 
+from sqlbuild.adapter.contract.types import BuiltinAdapter
+
 _SQL_NON_CODE_PATTERN: re.Pattern[str] = re.compile(
     r"'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|"
     r"\$\$.*?\$\$|--[^\n]*|/\*.*?\*/",
     re.DOTALL,
+)
+_SNOWFLAKE_STARTS_WITH_PATTERN: re.Pattern[str] = re.compile(
+    r"\bSTARTS_WITH(?=\s*\()", re.IGNORECASE
 )
 
 
@@ -56,3 +61,15 @@ def replace_uncommented_pattern(
     for match in reversed(uncommented_pattern_matches(pattern=pattern, sql=sql)):
         result = f"{result[: match.start()]}{replacement(match)}{result[match.end() :]}"
     return result
+
+
+def restore_sql_test_dialect_function_names(*, sql: str, dialect: str | None) -> str:
+    """Restore warehouse-supported spellings changed by SQL analysis formatting."""
+
+    if dialect != BuiltinAdapter.SNOWFLAKE:
+        return sql
+    return replace_uncommented_pattern(
+        pattern=_SNOWFLAKE_STARTS_WITH_PATTERN,
+        replacement=lambda _match: "STARTSWITH",
+        sql=sql,
+    )

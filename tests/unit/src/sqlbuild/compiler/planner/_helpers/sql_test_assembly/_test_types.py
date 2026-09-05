@@ -51,3 +51,12 @@ class RepeatedFixturePlanTestCase:
     description: str
     fixture_ids: tuple[int, ...]
     expected_sql_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SqlAnalysisDialectTestCase:
+    description: str
+    query_sql: str
+    dialect: str
+    expected_sql_fragment: str
+    expected_absent_sql_fragment: str
