@@ -7,6 +7,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.executor.run._helpers.execution.schema import inspect_runtime_relation_schema
 
 
@@ -42,25 +43,22 @@ def enforce_types_staged(
             if produced_col.name.lower() == col.name.lower():
                 produced_type = produced_col.type
                 break
-        if produced_type is not None and produced_type.upper() != col.type.upper():
+        if produced_type is not None and not types_equal(
+            left=produced_type,
+            right=col.type,
+            dialect=adapter.sql_analysis_dialect_name,
+        ):
             needs_enforcement = True
             break
 
     if not needs_enforcement:
         return
 
-    projection_parts: list[str] = []
-    produced_col_item: ColumnInfo
-    for produced_col_item in produced_columns:
-        declared_type: str | None = declared_map.get(produced_col_item.name.lower())
-        if declared_type is not None:
-            projection_parts.append(
-                f"CAST({produced_col_item.name} AS {declared_type}) AS {produced_col_item.name}"
-            )
-        else:
-            projection_parts.append(produced_col_item.name)
-
-    projection_sql: str = ", ".join(projection_parts)
+    projection_sql: str = _build_type_enforcement_projection(
+        adapter=adapter,
+        produced_columns=produced_columns,
+        declared_map=declared_map,
+    )
     enforced_qualified: str = f"{staging_qualified}__enforced"
     adapter.create_table_as(
         connection=connection,
@@ -81,3 +79,29 @@ def enforce_types_staged(
         destination=staging_qualified,
         statement_recorder=statement_recorder,
     )
+
+
+def _build_type_enforcement_projection(
+    *,
+    adapter: BaseAdapter,
+    produced_columns: tuple[ColumnInfo, ...],
+    declared_map: dict[str, str],
+) -> str:
+    """Render adapter-aware projections that preserve names while coercing selected columns."""
+
+    projection_parts: list[str] = []
+    produced_column: ColumnInfo
+    for produced_column in produced_columns:
+        declared_type: str | None = declared_map.get(produced_column.name.lower())
+        quoted_column: str = adapter.render_identifier(produced_column.name)
+        if declared_type is None:
+            projection_parts.append(quoted_column)
+        else:
+            projection_parts.append(
+                adapter.render_source_expression_cast(
+                    expression=quoted_column,
+                    target_type=declared_type,
+                    alias=quoted_column,
+                )
+            )
+    return ", ".join(projection_parts)

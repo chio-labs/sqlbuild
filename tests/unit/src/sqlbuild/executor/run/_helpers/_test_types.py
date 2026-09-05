@@ -28,6 +28,12 @@ class PromotionProgressTestCase:
 
 
 @dataclass(frozen=True)
+class StagedTypeProjectionTestCase:
+    description: str
+    expected_sql: str
+
+
+@dataclass(frozen=True)
 class RuntimeFutureCursorTestCase:
     description: str
     expected_start: str
