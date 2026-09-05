@@ -9,6 +9,9 @@ from copy import deepcopy
 from typing import Any
 
 from sqlbuild.adapter.contract.types import BuiltinAdapter
+from sqlbuild.compiler.planner.main.execution.sql_test_dialect import (
+    restore_sql_test_dialect_function_names,
+)
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
@@ -71,9 +74,13 @@ def format_sql(
                 dialect=sql_analysis_dialect or "generic",
             )
         )
-        return _restore_protected_identifiers(
+        restored_sql: str = _restore_protected_identifiers(
             sql=formatted_sql,
             protected_identifiers=protected_identifiers,
+        )
+        return restore_sql_test_dialect_function_names(
+            sql=restored_sql,
+            dialect=sql_analysis_dialect,
         )
     except Exception:
         return sql

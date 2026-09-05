@@ -19,6 +19,9 @@ from sqlbuild.compiler.compile.models import CompileSqlTestCte
 from sqlbuild.compiler.planner._helpers.scenario.relations import (
     _replace_relation_markers_in_polyglot_dict,
 )
+from sqlbuild.compiler.planner._helpers.sql_tests.comments import (
+    restore_sql_test_dialect_function_names,
+)
 from sqlbuild.compiler.planner.models import SqlAnalysisResolvedTestSql
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.constants import SQL_IDENTIFIER_PREFIX
@@ -206,6 +209,7 @@ def try_resolve_test_model_sql_with_sql_analysis(
     helper_ctes: tuple[CompileSqlTestCte, ...],
     resolved_chain: dict[str, SqlAnalysisResolvedTestSql],
     file_label: str,
+    sql_analysis_dialect: str | None,
 ) -> SqlAnalysisResolvedTestSql | None:
     """Return Polyglot-backed readable test SQL or None on import/parse failure."""
 
@@ -223,6 +227,7 @@ def try_resolve_test_model_sql_with_sql_analysis(
     template: _TestSqlAnalysisTemplate | None = _analyze_test_query_template(
         query_sql=query_sql,
         marker_targets=marker_targets,
+        sql_analysis_dialect=sql_analysis_dialect,
     )
     if template is None:
         return None
@@ -292,7 +297,10 @@ def _function_marker_targets(
 
 @lru_cache(maxsize=4096)
 def _analyze_test_query_template(
-    *, query_sql: str, marker_targets: tuple[tuple[str, str, str], ...]
+    *,
+    query_sql: str,
+    marker_targets: tuple[tuple[str, str, str], ...],
+    sql_analysis_dialect: str | None,
 ) -> _TestSqlAnalysisTemplate | None:
     polyglot_module: Any | None = import_polyglot_sql()
     if polyglot_module is None:
@@ -300,6 +308,7 @@ def _analyze_test_query_template(
     parsed_dict: dict[str, Any] | None = _try_parse_test_query(
         polyglot_module=polyglot_module,
         query_sql=query_sql,
+        sql_analysis_dialect=sql_analysis_dialect,
     )
     if parsed_dict is None:
         return None
@@ -307,12 +316,13 @@ def _analyze_test_query_template(
     _replace_relation_markers_in_polyglot_dict(
         node=parsed_dict,
         polyglot_module=polyglot_module,
-        sql_analysis_dialect=None,
+        sql_analysis_dialect=sql_analysis_dialect,
         target_for_marker=target_for_marker,
     )
     cte_body_sql: str | None = _generate_one(
         polyglot_module=polyglot_module,
         expression=parsed_dict,
+        sql_analysis_dialect=sql_analysis_dialect,
     )
     if cte_body_sql is None:
         return None
@@ -323,9 +333,13 @@ def _analyze_test_query_template(
     )
 
 
-def _try_parse_test_query(*, polyglot_module: Any, query_sql: str) -> dict[str, Any] | None:
+def _try_parse_test_query(
+    *, polyglot_module: Any, query_sql: str, sql_analysis_dialect: str | None
+) -> dict[str, Any] | None:
     try:
-        parsed: Any = polyglot_module.parse_one(query_sql, dialect="generic")
+        parsed: Any = polyglot_module.parse_one(
+            query_sql, dialect=sql_analysis_dialect or "generic"
+        )
     except Exception as error:
         log_debug_event(
             logger=_DEBUG_LOGGER,
@@ -428,9 +442,13 @@ def _root_select(parsed_dict: dict[str, Any]) -> dict[str, Any] | None:
     return select_payload if isinstance(select_payload, dict) else None
 
 
-def _generate_one(*, polyglot_module: Any, expression: Any) -> str | None:
+def _generate_one(
+    *, polyglot_module: Any, expression: Any, sql_analysis_dialect: str | None
+) -> str | None:
     try:
-        generated: list[str] = polyglot_module.generate(expression, dialect="generic")
+        generated: list[str] = polyglot_module.generate(
+            expression, dialect=sql_analysis_dialect or "generic"
+        )
     except Exception as error:
         log_debug_event(
             logger=_DEBUG_LOGGER,
@@ -440,4 +458,4 @@ def _generate_one(*, polyglot_module: Any, expression: Any) -> str | None:
         return None
     if len(generated) != 1:
         return None
-    return generated[0]
+    return restore_sql_test_dialect_function_names(sql=generated[0], dialect=sql_analysis_dialect)
