@@ -102,23 +102,11 @@ def run_test_pipeline(
                 metadata={"item_count": len(plan.test_entries)},
                 attributes=OperationAttributes(phase="setup", target_kind="sql_test"),
             ):
-                connection: Any
-                for connection in connections:
-                    connection_missing: dict[CompiledObjectKey, tuple[str, ...]] = (
-                        _prepare_test_functions(
-                            plan=plan,
-                            adapter=adapter,
-                            connection=connection,
-                        )
-                    )
-                    test_key: CompiledObjectKey
-                    missing_names: tuple[str, ...]
-                    for test_key, missing_names in connection_missing.items():
-                        missing_functions_by_test[test_key] = tuple(
-                            dict.fromkeys(
-                                (*missing_functions_by_test.get(test_key, ()), *missing_names)
-                            )
-                        )
+                missing_functions_by_test = _prepare_test_functions(
+                    plan=plan,
+                    adapter=adapter,
+                    connection=connections[0],
+                )
         if resolved_callbacks.on_progress is not None:
             resolved_callbacks.on_progress(
                 f"Prepared test functions. ({time.monotonic() - preflight_start:.2f}s)"
