@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import queue
+import threading
 import time
 from collections.abc import Callable, Iterable
-from typing import Any
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextvars import copy_context
+from dataclasses import dataclass, field
+from typing import Any, cast
 from uuid import uuid4
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -18,13 +23,17 @@ from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.models import FunctionPlanEntry, PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.build.models import FunctionExecutionResult
 from sqlbuild.executor.functions.main._execute import execute_function
+from sqlbuild.executor.pipeline._helpers.connections import (
+    close_connections,
+    open_worker_connections,
+)
+from sqlbuild.executor.pipeline.models import TestPipelineCallbacks
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.testing.constants import SQL_TEST_EXECUTION_ERROR_CODE
 from sqlbuild.executor.testing.main._execute import execute_sql_test
 from sqlbuild.executor.testing.main.resource_id import sql_test_resource_id
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
-from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,
@@ -32,37 +41,59 @@ from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
 from sqlbuild.runtime.observability.models import OperationAttributes
 
 
+@dataclass
+class _AuthoredStartCoordinator:
+    condition: threading.Condition = field(default_factory=threading.Condition)
+    next_index: int = 0
+
+    def wait(self, *, index: int) -> None:
+        with self.condition:
+            _ = self.condition.wait_for(lambda: self.next_index == index)
+            self.next_index += 1
+            self.condition.notify_all()
+
+
 def run_test_pipeline(
     *,
     plan: PlanOutput,
     connection_config: dict[str, object],
     adapter: BaseAdapter,
-    on_connection_start: Callable[[int], None] | None = None,
-    on_connection_complete: ConnectionElapsedCallback | None = None,
-    on_connection_error: ConnectionElapsedCallback | None = None,
-    on_progress: Callable[[str], None] | None = None,
-    on_test_start: Callable[[SqlTestPlanEntry], None] | None = None,
-    on_test_complete: Callable[[SqlTestExecutionResult], None] | None = None,
+    callbacks: TestPipelineCallbacks | None = None,
     run_id: str | None = None,
+    max_concurrency: int = 1,
 ) -> tuple[SqlTestExecutionResult, ...]:
     """Execute all SQL unit tests from a compiled plan."""
 
-    if on_connection_start is not None:
-        on_connection_start(1)
+    entries: tuple[SqlTestPlanEntry, ...] = plan.test_entries
+    if not entries:
+        return ()
+    resolved_callbacks: TestPipelineCallbacks = callbacks or TestPipelineCallbacks()
+    worker_count: int = min(max(1, max_concurrency), len(entries))
+    if resolved_callbacks.on_connection_start is not None:
+        resolved_callbacks.on_connection_start(worker_count)
     canonical_run_id: str = run_id or uuid4().hex
     start: float = time.monotonic()
     try:
-        connection: Any = adapter.connect(connection_config)
-    except Exception:
-        if on_connection_error is not None:
-            on_connection_error(1, elapsed_seconds=time.monotonic() - start)
+        connections: tuple[Any, ...] = open_worker_connections(
+            adapter=adapter,
+            connection_config=connection_config,
+            connection_count=worker_count,
+        )
+    except BaseException:
+        if resolved_callbacks.on_connection_error is not None:
+            resolved_callbacks.on_connection_error(
+                worker_count, elapsed_seconds=time.monotonic() - start
+            )
         raise
-    if on_connection_complete is not None:
-        on_connection_complete(1, elapsed_seconds=time.monotonic() - start)
+    if resolved_callbacks.on_connection_complete is not None:
+        resolved_callbacks.on_connection_complete(
+            worker_count, elapsed_seconds=time.monotonic() - start
+        )
+    active_error: BaseException | None = None
     try:
         preflight_start: float = time.monotonic()
-        if on_progress is not None:
-            on_progress("Preparing test functions...")
+        if resolved_callbacks.on_progress is not None:
+            resolved_callbacks.on_progress("Preparing test functions...")
         missing_functions_by_test: dict[CompiledObjectKey, tuple[str, ...]] = {}
         if any(entry.function_deps for entry in plan.test_entries):
             with OperationLifecycle(
@@ -71,47 +102,167 @@ def run_test_pipeline(
                 metadata={"item_count": len(plan.test_entries)},
                 attributes=OperationAttributes(phase="setup", target_kind="sql_test"),
             ):
-                missing_functions_by_test = _prepare_test_functions(
-                    plan=plan,
-                    adapter=adapter,
-                    connection=connection,
-                )
-        if on_progress is not None:
-            on_progress(f"Prepared test functions. ({time.monotonic() - preflight_start:.2f}s)")
-        results: list[SqlTestExecutionResult] = []
-        entry: SqlTestPlanEntry
-        for entry in plan.test_entries:
-            missing_functions: tuple[str, ...] = missing_functions_by_test.get(entry.key, ())
-            resource_name: str = _test_resource_name(entry)
-            with ResourceAttemptLifecycle(
-                resource_id=sql_test_resource_id(
-                    test_name=entry.name,
-                    source_path=entry.source_path,
-                    block_index=entry.block_index,
-                    case_name=entry.case_name,
-                ),
-                resource_kind="test",
-                resource_name=resource_name,
-                run_id=canonical_run_id,
-            ) as lifecycle:
-                if on_test_start is not None:
-                    on_test_start(entry)
-                result: SqlTestExecutionResult = (
-                    _build_missing_function_result(
-                        test_entry=entry,
-                        missing_functions=missing_functions,
+                connection: Any
+                for connection in connections:
+                    connection_missing: dict[CompiledObjectKey, tuple[str, ...]] = (
+                        _prepare_test_functions(
+                            plan=plan,
+                            adapter=adapter,
+                            connection=connection,
+                        )
                     )
-                    if missing_functions
-                    else execute_sql_test(test_entry=entry, adapter=adapter, connection=connection)
-                )
-                if result.outcome != SqlTestOutcome.PASS:
-                    lifecycle.failed(error_code=result.error_code)
-            results.append(result)
+                    test_key: CompiledObjectKey
+                    missing_names: tuple[str, ...]
+                    for test_key, missing_names in connection_missing.items():
+                        missing_functions_by_test[test_key] = tuple(
+                            dict.fromkeys(
+                                (*missing_functions_by_test.get(test_key, ()), *missing_names)
+                            )
+                        )
+        if resolved_callbacks.on_progress is not None:
+            resolved_callbacks.on_progress(
+                f"Prepared test functions. ({time.monotonic() - preflight_start:.2f}s)"
+            )
+        results: tuple[SqlTestExecutionResult, ...] = _run_tests(
+            entries=entries,
+            adapter=adapter,
+            connections=connections,
+            worker_count=worker_count,
+            missing_functions_by_test=missing_functions_by_test,
+            on_test_start=resolved_callbacks.on_test_start,
+            on_test_complete=resolved_callbacks.on_test_complete,
+            run_id=canonical_run_id,
+        )
+        return results
+    except BaseException as error:
+        active_error = error
+        raise
+    finally:
+        close_connections(adapter=adapter, connections=connections, active_error=active_error)
+
+
+def _run_tests(
+    *,
+    entries: tuple[SqlTestPlanEntry, ...],
+    adapter: BaseAdapter,
+    connections: tuple[Any, ...],
+    worker_count: int,
+    missing_functions_by_test: dict[CompiledObjectKey, tuple[str, ...]],
+    on_test_start: Callable[[SqlTestPlanEntry], None] | None,
+    on_test_complete: Callable[[SqlTestExecutionResult], None] | None,
+    run_id: str,
+) -> tuple[SqlTestExecutionResult, ...]:
+    if worker_count == 1:
+        serial_results: list[SqlTestExecutionResult] = []
+        for entry in entries:
+            result: SqlTestExecutionResult = _execute_test_entry(
+                entry=entry,
+                adapter=adapter,
+                connection=connections[0],
+                missing_functions=missing_functions_by_test.get(entry.key, ()),
+                on_test_start=on_test_start,
+                before_test_start=None,
+                run_id=run_id,
+            )
+            serial_results.append(result)
             if on_test_complete is not None:
                 on_test_complete(result)
-        return tuple(results)
+        return tuple(serial_results)
+
+    connection_pool: queue.Queue[Any] = queue.Queue()
+    for connection in connections:
+        connection_pool.put(connection)
+    start_coordinator: _AuthoredStartCoordinator = _AuthoredStartCoordinator()
+
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        submitted_futures: list[Future[SqlTestExecutionResult]] = []
+        for index, entry in enumerate(entries):
+            submitted_futures.append(
+                cast(
+                    Future[SqlTestExecutionResult],
+                    executor.submit(
+                        copy_context().run,
+                        _execute_test_entry_with_pooled_connection,
+                        entry=entry,
+                        adapter=adapter,
+                        connection_pool=connection_pool,
+                        missing_functions=missing_functions_by_test.get(entry.key, ()),
+                        on_test_start=on_test_start,
+                        before_test_start=lambda index=index: start_coordinator.wait(index=index),
+                        run_id=run_id,
+                    ),
+                )
+            )
+        concurrent_results: list[SqlTestExecutionResult] = []
+        for future in submitted_futures:
+            result = future.result()
+            concurrent_results.append(result)
+            if on_test_complete is not None:
+                on_test_complete(result)
+        return tuple(concurrent_results)
+
+
+def _execute_test_entry_with_pooled_connection(
+    *,
+    entry: SqlTestPlanEntry,
+    adapter: BaseAdapter,
+    connection_pool: queue.Queue[Any],
+    missing_functions: tuple[str, ...],
+    on_test_start: Callable[[SqlTestPlanEntry], None] | None,
+    before_test_start: Callable[[], None] | None,
+    run_id: str,
+) -> SqlTestExecutionResult:
+    connection: Any = connection_pool.get()
+    try:
+        return _execute_test_entry(
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            missing_functions=missing_functions,
+            on_test_start=on_test_start,
+            before_test_start=before_test_start,
+            run_id=run_id,
+        )
     finally:
-        adapter.close(connection)
+        connection_pool.put(connection)
+
+
+def _execute_test_entry(
+    *,
+    entry: SqlTestPlanEntry,
+    adapter: BaseAdapter,
+    connection: Any,
+    missing_functions: tuple[str, ...],
+    on_test_start: Callable[[SqlTestPlanEntry], None] | None,
+    before_test_start: Callable[[], None] | None,
+    run_id: str,
+) -> SqlTestExecutionResult:
+    with ResourceAttemptLifecycle(
+        resource_id=sql_test_resource_id(
+            test_name=entry.name,
+            source_path=entry.source_path,
+            block_index=entry.block_index,
+            case_name=entry.case_name,
+        ),
+        resource_kind="test",
+        resource_name=_test_resource_name(entry),
+        run_id=run_id,
+    ) as lifecycle:
+        if before_test_start is not None:
+            before_test_start()
+        if on_test_start is not None:
+            on_test_start(entry)
+        result: SqlTestExecutionResult = (
+            _build_missing_function_result(
+                test_entry=entry,
+                missing_functions=missing_functions,
+            )
+            if missing_functions
+            else execute_sql_test(test_entry=entry, adapter=adapter, connection=connection)
+        )
+        if result.outcome != SqlTestOutcome.PASS:
+            lifecycle.failed(error_code=result.error_code)
+        return result
 
 
 def _test_resource_name(entry: SqlTestPlanEntry) -> str:

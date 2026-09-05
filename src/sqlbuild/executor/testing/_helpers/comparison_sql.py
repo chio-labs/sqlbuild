@@ -9,6 +9,7 @@ from copy import deepcopy
 from typing import Any
 
 from sqlbuild.adapter.contract.types import BuiltinAdapter
+from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.executor.testing.constants import SQL_TEST_BACKTICK_IDENTIFIER_QUOTE
@@ -92,6 +93,64 @@ def unique_cte_suffix(
     return f"{base_suffix}_{count}", updated_counts
 
 
+def build_chain_comparison_parts(
+    *,
+    test_entry: SqlTestPlanEntry,
+    set_difference_operator: str,
+) -> tuple[OrderedDict[str, str], list[str], list[str], dict[str, int]]:
+    """Build actual/expected CTEs only for explicitly asserted model steps."""
+
+    lifted_ctes: OrderedDict[str, str] = OrderedDict()
+    comparison_ctes: list[str] = []
+    select_parts: list[str] = []
+    cte_name_counts: dict[str, int] = {}
+    step_index: int
+    step: ChainStep
+    for step_index, step in enumerate(test_entry.chain):
+        cte_suffix: str
+        cte_suffix, cte_name_counts = unique_cte_suffix(
+            model_name=step.model_name,
+            cte_name_counts=cte_name_counts,
+        )
+        actual_cte: str = f"__actual__{cte_suffix}"
+        expected_cte: str = f"__expected__{cte_suffix}"
+        if step.expected_cte_sql is None and not _assertion_uses_actual(
+            actual_cte=actual_cte,
+            test_entry=test_entry,
+        ):
+            continue
+        actual_sql: str
+        actual_sql, lifted_ctes = lift_step_ctes(
+            sql=step.resolved_sql,
+            lifted_ctes=lifted_ctes,
+            sql_analysis_enabled=test_entry.sql_analysis_enabled,
+        )
+        comparison_ctes.append(f"{actual_cte} AS ({actual_sql})")
+        if step.expected_cte_sql is None:
+            continue
+        expected_sql: str
+        expected_sql, lifted_ctes = lift_step_ctes(
+            sql=step.expected_cte_sql,
+            lifted_ctes=lifted_ctes,
+            sql_analysis_enabled=test_entry.sql_analysis_enabled,
+        )
+        comparison_ctes.append(f"{expected_cte} AS ({expected_sql})")
+        select_parts.append(
+            "SELECT "
+            f"{step_index} AS step_index, "
+            f"'{_escape_sql_string(step.model_name)}' AS model_name, "
+            f"(SELECT COUNT(*) FROM {actual_cte}) AS actual_count, "
+            f"(SELECT COUNT(*) FROM {expected_cte}) AS expected_count, "
+            f"(SELECT COUNT(*) FROM ("
+            f"SELECT * FROM {actual_cte} {set_difference_operator} SELECT * FROM {expected_cte}"
+            f") AS __sqlbuild_mismatch) AS unexpected_count, "
+            f"(SELECT COUNT(*) FROM ("
+            f"SELECT * FROM {expected_cte} {set_difference_operator} SELECT * FROM {actual_cte}"
+            f") AS __sqlbuild_missing) AS missing_count"
+        )
+    return lifted_ctes, comparison_ctes, select_parts, cte_name_counts
+
+
 def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] | None:
     """Split top-level WITH CTEs from a SQL statement with Polyglot if available."""
 
@@ -156,6 +215,16 @@ def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] |
             protected_identifiers=protected_identifiers,
         ),
     )
+
+
+def _assertion_uses_actual(*, actual_cte: str, test_entry: SqlTestPlanEntry) -> bool:
+    return any(
+        actual_cte.lower() in assertion.resolved_sql.lower() for assertion in test_entry.assertions
+    )
+
+
+def _escape_sql_string(value: str) -> str:
+    return value.replace("'", "''")
 
 
 def _sanitize_cte_suffix(model_name: str) -> str:

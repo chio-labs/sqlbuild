@@ -102,10 +102,11 @@ def plan_test(
     expected_names: tuple[str, ...] = tuple(
         dict.fromkeys((*model_payload.expected_model_names, *assertion_target_names))
     )
-    ordered_names: tuple[str, ...] = _topo_sort_expected(
+    ordered_names: tuple[str, ...] = _topo_sort_model_chain(
         expected_names=expected_names,
         model_map=model_map,
         model_query_overrides=model_payload.model_query_overrides,
+        mock_ref_names=frozenset(mock_refs),
     )
 
     warnings: list[PlanWarning] = []
@@ -723,30 +724,14 @@ def _build_helper_with_clause(
     return "WITH " + ", ".join(parts)
 
 
-def _topo_sort_expected(
+def _topo_sort_model_chain(
     *,
     expected_names: tuple[str, ...],
     model_map: dict[str, CompiledModel],
     model_query_overrides: dict[str, str],
+    mock_ref_names: frozenset[str],
 ) -> tuple[str, ...]:
-    """Sort expected model names in dependency order."""
-
-    expected_set: frozenset[str] = frozenset(expected_names)
-    deps: dict[str, set[str]] = {}
-    name: str
-    for name in expected_names:
-        model: CompiledModel | None = model_map.get(name)
-        if model is None:
-            deps[name] = set()
-            continue
-        query_sql: str = model_query_overrides.get(name, model.query_sql)
-        model_refs: set[str] = set()
-        match: re.Match[str]
-        for match in _REF_PATTERN.finditer(query_sql):
-            ref_name: str = match.group(1)
-            if ref_name in expected_set:
-                model_refs.add(ref_name)
-        deps[name] = model_refs
+    """Sort asserted models and their unmocked model dependencies in execution order."""
 
     ordered: list[str] = []
     visited: set[str] = set()
@@ -755,9 +740,17 @@ def _topo_sort_expected(
         if node in seen:
             return seen, result
         seen = seen | {node}
-        dep: str
-        for dep in sorted(deps.get(node, set())):
-            seen, result = _visit(node=dep, seen=seen, result=result)
+        model: CompiledModel | None = model_map.get(node)
+        if model is not None:
+            query_sql: str = model_query_overrides.get(node, model.query_sql)
+            dependency_names: set[str] = {
+                match.group(1)
+                for match in _REF_PATTERN.finditer(query_sql)
+                if match.group(1) not in mock_ref_names and match.group(1) in model_map
+            }
+            dependency_name: str
+            for dependency_name in sorted(dependency_names):
+                seen, result = _visit(node=dependency_name, seen=seen, result=result)
         return seen, [*result, node]
 
     for name in sorted(expected_names):
