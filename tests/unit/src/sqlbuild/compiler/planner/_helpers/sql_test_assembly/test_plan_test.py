@@ -37,6 +37,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_t
     PlanMacroTestCase,
     PlanTestChainTestCase,
     RepeatedFixturePlanTestCase,
+    SqlAnalysisDialectTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers import (
     build_test_and_project,
@@ -1188,6 +1189,7 @@ def test_given_assertion_analysis_failure_when_planning_then_textual_chain_stays
             helper_ctes=(),
             resolved_chain={},
             file_label="tests/unit/test_chain.sql",
+            sql_analysis_dialect="duckdb",
         )
     )
     assert model_analysis_result is not None
@@ -1214,6 +1216,42 @@ def test_given_assertion_analysis_failure_when_planning_then_textual_chain_stays
     assert "SELECT 1 AS id" in resolved_assertion_sql
     assert "__REF(" not in resolved_assertion_sql.upper()
     assert "FROM (WITH" not in resolved_assertion_sql.upper()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlAnalysisDialectTestCase(
+            description="Snowflake STARTSWITH spelling is preserved",
+            query_sql="SELECT STARTSWITH(name, 'A') AS matches FROM __ref(\"items\")",
+            dialect="snowflake",
+            expected_sql_fragment="STARTSWITH(name, 'A')",
+            expected_absent_sql_fragment="STARTS_WITH",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_adapter_function_when_resolving_with_analysis_then_emits_supported_spelling(
+    test_case: SqlAnalysisDialectTestCase,
+) -> None:
+    result: SqlAnalysisResolvedTestSql | None = (
+        sql_test_assembly.try_resolve_test_model_sql_with_sql_analysis(
+            query_sql=test_case.query_sql,
+            mock_refs={"items": "SELECT 'Alice' AS name"},
+            mock_sources={},
+            mock_seeds={},
+            mock_dbt_refs={},
+            function_locations={},
+            helper_ctes=(),
+            resolved_chain={},
+            file_label="tests/unit/test_dialect.sql",
+            sql_analysis_dialect=test_case.dialect,
+        )
+    )
+
+    assert result is not None
+    assert test_case.expected_sql_fragment in result.resolved_sql
+    assert test_case.expected_absent_sql_fragment not in result.resolved_sql
 
 
 @pytest.mark.parametrize(

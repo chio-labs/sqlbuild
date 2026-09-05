@@ -75,6 +75,37 @@ def test_given_adapter_when_building_comparison_sql_then_it_uses_expected_set_di
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:
         assert expected_fragment in comparison_sql
+    expected_absent_fragment: str
+    for expected_absent_fragment in test_case.expected_absent_fragments:
+        assert expected_absent_fragment not in comparison_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildComparisonSqlTestCase(
+            description="Snowflake comparison formatting preserves STARTSWITH",
+            adapter_name="snowflake",
+            expected_fragments=("STARTSWITH(name, 'A')",),
+            expected_absent_fragments=("STARTS_WITH",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_snowflake_function_when_formatting_comparison_then_emits_supported_spelling(
+    test_case: BuildComparisonSqlTestCase,
+) -> None:
+    adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
+
+    formatted_sql: str = comparison_sql_helpers.format_sql(
+        sql="SELECT STARTSWITH(name, 'A') AS matches FROM items",
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
+    )
+
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in formatted_sql
+    for expected_absent_fragment in test_case.expected_absent_fragments:
+        assert expected_absent_fragment not in formatted_sql
 
 
 @pytest.mark.parametrize(
