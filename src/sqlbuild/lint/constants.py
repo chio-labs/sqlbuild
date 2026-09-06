@@ -61,6 +61,8 @@ RULE_HEADER_PARSE: str = "header-parse"
 PROJECT_CONFIG_FILENAME_KEY: str = "sqlbuild_project.toml"
 LINT_SECTION_KEY: str = "lint"
 MAX_DESCRIPTION_LINES_KEY: str = "max_description_lines"
+LINT_RULE_SELECT_KEY: str = "select"
+LINT_RULE_IGNORE_KEY: str = "ignore"
 
 ADAPTER_DIALECT_TRANSLATIONS: dict[str, str] = {
     "duckdb": "duckdb",
@@ -91,3 +93,6 @@ GENERATED_SQL_MESSAGE_SUFFIX: str = "(in generated SQL)"
 LINE_FEED: str = "\n"
 CARRIAGE_RETURN_LINE_FEED: str = "\r\n"
 TAB_CHARACTER: str = "\t"
+FIX_STATUS_APPLIED: str = "fixed"
+FIX_STATUS_SKIPPED: str = "skipped"
+MAX_FIX_PASSES: int = 8

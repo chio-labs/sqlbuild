@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use polyglot_sql::tokens::Token;
+use polyglot_sql::tokens::{Token, TokenType};
 use polyglot_sql::{Dialect, DialectType, format_by_name};
 
 use crate::sql_lint::constants::LINT_API_VERSION;
@@ -55,7 +55,9 @@ fn format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
     let after = dialect
         .parse(&formatted_neutral)
         .map_err(|error| error.to_string())?;
-    if before != after {
+    let formatted_semantic_tokens = without_statement_terminators(&formatted_tokens);
+    if before != after && !equivalent_semantic_tokens(&semantic_tokens, &formatted_semantic_tokens)
+    {
         return Err("native formatter changed the parsed SQL structure".to_string());
     }
     let second_tokens = dialect
@@ -82,6 +84,43 @@ fn format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
     }
     let changed = formatted != original;
     response(formatted, changed, true, None)
+}
+
+fn equivalent_semantic_tokens(before: &[Token], after: &[Token]) -> bool {
+    before.len() == after.len()
+        && before.iter().enumerate().all(|(index, token)| {
+            let candidate = &after[index];
+            token.token_type == candidate.token_type && equivalent_token_text(before, after, index)
+        })
+}
+
+fn equivalent_token_text(before: &[Token], after: &[Token], index: usize) -> bool {
+    let token = &before[index];
+    let candidate = &after[index];
+    if token.text == candidate.text {
+        return true;
+    }
+    if !token.text.eq_ignore_ascii_case(&candidate.text) {
+        return false;
+    }
+    if matches!(
+        token.token_type,
+        TokenType::QuotedIdentifier
+            | TokenType::String
+            | TokenType::DollarString
+            | TokenType::Number
+    ) {
+        return false;
+    }
+    if matches!(token.token_type, TokenType::Var | TokenType::Identifier) {
+        return before.get(index + 1).is_some_and(|next| {
+            next.token_type == TokenType::LParen
+                && after
+                    .get(index + 1)
+                    .is_some_and(|formatted| formatted.token_type == TokenType::LParen)
+        });
+    }
+    true
 }
 
 #[derive(Debug, Clone)]

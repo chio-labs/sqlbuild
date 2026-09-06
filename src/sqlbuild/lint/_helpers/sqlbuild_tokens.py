@@ -20,6 +20,15 @@ from sqlbuild.lint.constants import (
 from sqlbuild.lint.exceptions import InterpolationRestorationError
 from sqlbuild.lint.models import InterpolationSite
 
+_SQLBUILD_FUNCTION_NAMES: tuple[str, ...] = (
+    "__dbt_ref",
+    "__table_fn",
+    "__source",
+    "__seed",
+    "__udf",
+    "__ref",
+)
+
 
 def neutralize_interpolation(*, body: str) -> tuple[str, tuple[InterpolationSite, ...]]:
     """Replace every interpolation site with a unique sentinel identifier."""
@@ -137,7 +146,16 @@ def _interpolation_site_end(*, body: str, start: int) -> int | None:
         return _template_site_end(body=body, start=start)
     if body.startswith(MACRO_TOKEN, start):
         return _macro_site_end(body=body, start=start)
+    if body.startswith(_SQLBUILD_FUNCTION_NAMES, start):
+        return _sqlbuild_function_site_end(body=body, start=start)
     return None
+
+
+def _sqlbuild_function_site_end(*, body: str, start: int) -> int | None:
+    name_end: int = _identifier_end(body=body, start=start)
+    if name_end >= len(body) or body[name_end] != OPENING_PAREN_CHARACTER:
+        return None
+    return _matching_paren_end(body=body, opening_index=name_end)
 
 
 def _template_site_end(*, body: str, start: int) -> int | None:

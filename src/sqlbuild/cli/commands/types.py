@@ -56,6 +56,7 @@ class CliCommand(StrEnum):
     DBT = "dbt"
     SKILLS = "skills"
     LINT = "lint"
+    FIX = "fix"
     FORMAT = "format"
     KATA = "kata"
     SCOPE = "scope"
@@ -178,6 +179,20 @@ class LintCommandHandler(Protocol):
 
 
 class FormatCommandHandler(Protocol):
+    def __call__(
+        self,
+        project_dir: Path | None,
+        *,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+        check: bool,
+        diff: bool,
+        json_output: bool,
+        no_color: bool,
+    ) -> int: ...
+
+
+class FixCommandHandler(Protocol):
     def __call__(
         self,
         project_dir: Path | None,

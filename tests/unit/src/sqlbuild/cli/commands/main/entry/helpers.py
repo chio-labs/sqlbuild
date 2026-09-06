@@ -86,6 +86,7 @@ def build_handlers(**overrides: Any) -> CliEntrypointHandlers:
         run_skills_update=overrides.get("run_skills_update", noop_handler),
         run_lint=overrides.get("run_lint", noop_handler),
         run_format=overrides.get("run_format", noop_handler),
+        run_fix=overrides.get("run_fix", noop_handler),
         run_scenario=overrides.get("run_scenario", noop_handler),
         run_scenario_capture=overrides.get("run_scenario_capture", noop_handler),
         run_kata=overrides.get("run_kata", noop_handler),

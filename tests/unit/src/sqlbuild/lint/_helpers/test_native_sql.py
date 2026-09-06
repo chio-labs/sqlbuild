@@ -15,6 +15,7 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
     GeneratedRangeFallbackTestCase,
     InvalidNativeSqlResponseTestCase,
     NativeSqlReuseTestCase,
+    ReservedCteLintTestCase,
 )
 
 
@@ -50,6 +51,15 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
                 '{"version":1,"diagnostics":[{"code":"SQBL001","message":"bad","start":0,"end":1}]}'
             ),
             expected_message="invalid code, message, or source span",
+        ),
+        InvalidNativeSqlResponseTestCase(
+            description="fix edit must have a valid authored range",
+            response=(
+                '{"version":1,"diagnostics":[{"code":"SQBL001","message":"bad",'
+                '"remediation":"repair","start":0,"end":1,'
+                '"fix":{"start":1,"end":1,"replacement":"IS"}}]}'
+            ),
+            expected_message="invalid fix edit",
         ),
     ],
     ids=lambda case: case.description,
@@ -119,6 +129,39 @@ def test_given_identical_expanded_bodies_when_linting_then_native_analysis_is_re
 
     assert result == {}
     assert len(calls) == test_case.expected_call_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ReservedCteLintTestCase(
+            description="SQLBuild harness CTE is excluded from generic unused-CTE lint",
+            sql="WITH __expected__items AS (SELECT 1) SELECT 1",
+            expected_violation_count=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_reserved_harness_cte_when_linting_then_framework_input_is_not_reported(
+    test_case: ReservedCteLintTestCase,
+    tmp_path: Path,
+) -> None:
+    target: Path = tmp_path / "test.sql"
+    body: LintBody = LintBody(
+        file_path=target,
+        body_start=0,
+        body_end=len(test_case.sql),
+        lint_text=test_case.sql,
+        passes=(),
+    )
+
+    result: dict[Path, tuple[LintViolation, ...]] = native_sql.run_native_sql_lint(
+        bodies=(body,),
+        contents_by_path={target: test_case.sql},
+        config=LintConfig(dialect="duckdb"),
+    )
+
+    assert sum(len(entries) for entries in result.values()) == test_case.expected_violation_count
 
 
 @pytest.mark.parametrize(

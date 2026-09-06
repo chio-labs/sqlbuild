@@ -69,6 +69,19 @@ class FormatCliTestCase:
 
 
 @dataclass(frozen=True)
+class FixCliTestCase:
+    """Test case for the sqb fix command."""
+
+    description: str
+    original_sql: str
+    arguments: tuple[str, ...]
+    expected_exit_code: int
+    expected_sql: str
+    expected_output_fragments: tuple[str, ...]
+    project_toml: str | None = None
+
+
+@dataclass(frozen=True)
 class ExpandedLintTestCase:
     """Test case for linting the SQL a project actually produces."""
 
@@ -78,6 +91,7 @@ class ExpandedLintTestCase:
     expected_message_fragments: tuple[str, ...]
     expected_ranges: tuple[tuple[int, int, int | None, int | None], ...] = ()
     expected_remediation_fragments: tuple[str, ...] = ()
+    expected_fixable: bool = False
 
 
 @dataclass(frozen=True)

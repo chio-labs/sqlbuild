@@ -256,6 +256,12 @@ def _add_quality_parsers(
     lint_parser.add_argument("--json", action="store_true", default=False)
     _ = add_select_args(lint_parser)
 
+    fix_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.FIX)
+    fix_parser.add_argument("--json", action="store_true", default=False)
+    fix_parser.add_argument("--check", dest="fix_check", action="store_true")
+    fix_parser.add_argument("--diff", dest="fix_diff", action="store_true")
+    _ = add_select_args(fix_parser)
+
     format_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.FORMAT)
     format_parser.add_argument("--json", action="store_true", default=False)
     format_parser.add_argument("--check", dest="format_check", action="store_true")
