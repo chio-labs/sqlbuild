@@ -17,3 +17,13 @@ class LintPerformanceGuardTestCase:
 class LintPerformanceBehaviorTestCase:
     description: str
     expected_maximum: float
+
+
+@dataclass(frozen=True)
+class FixPerformanceGuardTestCase:
+    description: str
+    model_count: int
+    hard_ceiling_seconds: int
+    expected_max_elapsed_seconds: float
+    model_sql: str
+    expected_exit_code: int

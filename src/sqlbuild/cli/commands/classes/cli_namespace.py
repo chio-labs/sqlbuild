@@ -131,6 +131,8 @@ _DEFAULT_VALUES: dict[str, object] = {
     "kata_skills_check": False,
     "format_check": False,
     "format_diff": False,
+    "fix_check": False,
+    "fix_diff": False,
     "scope_target": None,
     "scope_at": None,
     "scope_as_path": None,
@@ -279,6 +281,8 @@ class CliNamespace:
     kata_skills_check: bool
     format_check: bool
     format_diff: bool
+    fix_check: bool
+    fix_diff: bool
     scope_target: str | None
     scope_at: str | None
     scope_as_path: str | None

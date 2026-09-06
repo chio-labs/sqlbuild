@@ -99,6 +99,10 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
             module_name="sqlbuild.cli.commands.main.project._format",
             function_name="run_format_command",
         ),
+        "fix": _lazy_handler(
+            module_name="sqlbuild.cli.commands.main.project._fix",
+            function_name="run_fix_command",
+        ),
         "kata": _lazy_handler(
             module_name="sqlbuild.cli.commands.main.project._kata",
             function_name="run_kata_command",
@@ -267,6 +271,17 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
         ),
         run_format=lambda project_dir, select, exclude, check, diff, json_output, no_color: lazy[
             "format"
+        ](
+            project_dir=project_dir,
+            select=select,
+            exclude=exclude,
+            check=check,
+            diff=diff,
+            json_output=json_output,
+            no_color=no_color,
+        ),
+        run_fix=lambda project_dir, select, exclude, check, diff, json_output, no_color: lazy[
+            "fix"
         ](
             project_dir=project_dir,
             select=select,
