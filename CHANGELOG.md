@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.87.0](https://github.com/chio-labs/sqlbuild/compare/v0.86.0...v0.87.0) (2026-09-06)
+
+
+### Features
+
+* complete native lint and safe fixes ([#552](https://github.com/chio-labs/sqlbuild/issues/552)) ([452cc28](https://github.com/chio-labs/sqlbuild/commit/452cc282367cf1e78c759c0f6bdf75765d7c4bef))
+
 ## [0.86.0](https://github.com/chio-labs/sqlbuild/compare/v0.85.0...v0.86.0) (2026-09-06)
 
 
