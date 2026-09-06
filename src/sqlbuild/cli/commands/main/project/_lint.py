@@ -30,7 +30,7 @@ def run_lint_command(
     prepared: tuple[LintConfig, str | None] = prepare_lint_run(project_dir=base_dir)
     if prepared[1] is not None:
         print(f"WARN  {prepared[1]}")
-    value_renderer, selected_paths = resolve_lint_inputs(
+    value_renderer, selected_paths, discovered_inputs = resolve_lint_inputs(
         project_dir=base_dir,
         select=select,
         exclude=exclude,
@@ -44,6 +44,7 @@ def run_lint_command(
         config=config,
         value_renderer=value_renderer,
         selected_paths=selected_paths,
+        discovered_inputs=discovered_inputs,
     )
     if json_output:
         _ = render_lint_result_json(result=result)

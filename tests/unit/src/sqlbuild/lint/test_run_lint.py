@@ -41,6 +41,16 @@ PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n'
             files={"schemas/order.sql": "SCHEMA (name order, columns (id (type INTEGER)));\n"},
             expected_fault_codes=(),
         ),
+        LintProjectTestCase(
+            description="scoped declaration file preserves every header",
+            files={
+                "models/_enums/status.sql": (
+                    'ENUM (name "status", members [OPEN, CLOSED]);\n'
+                    'ENUM (name "tier", members [ONE, TWO]);\n'
+                )
+            },
+            expected_fault_codes=(),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -97,6 +107,19 @@ def test_given_synthetic_project_when_linting_then_results_match_expected(
             expected_written_fragments={
                 "models/reference.sql": 'FROM __ref("orders")',
             },
+            expected_fault_codes=(),
+            expected_formatted_count=1,
+        ),
+        FormatProjectTestCase(
+            description="measurement audit queries format as separate bodies",
+            files={
+                "audits/generic/measurement.sql": (
+                    "AUDIT (evaluation measurement, value measured_value);\n"
+                    "MEASURE (SELECT COUNT(*) AS measured_value FROM @relation);\n"
+                    "EVIDENCE (SELECT * FROM @relation WHERE @condition);\n"
+                )
+            },
+            expected_written_fragments={"audits/generic/measurement.sql": "MEASURE (SELECT"},
             expected_fault_codes=(),
             expected_formatted_count=1,
         ),

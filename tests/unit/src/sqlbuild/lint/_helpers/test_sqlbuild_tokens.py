@@ -95,6 +95,30 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
             expected_original_texts=('__ref("@model")',),
         ),
         NeutralizeInterpolationTestCase(
+            description="SQLBuild table function and invocation become one sentinel",
+            body=(
+                'SELECT * FROM __table_fn("events")((SELECT ARRAY_AGG(event_id) FROM event_ids))'
+            ),
+            expected_neutralized="SELECT * FROM __sqb_lint_0__",
+            expected_original_texts=(
+                '__table_fn("events")((SELECT ARRAY_AGG(event_id) FROM event_ids))',
+            ),
+        ),
+        NeutralizeInterpolationTestCase(
+            description="escaped SQL quote does not hide a later table function",
+            body="SELECT 'can''t'; SELECT * FROM __table_fn(\"events\")((SELECT 1))",
+            expected_neutralized="SELECT 'can''t'; SELECT * FROM __sqb_lint_0__",
+            expected_original_texts=('__table_fn("events")((SELECT 1))',),
+        ),
+        NeutralizeInterpolationTestCase(
+            description="apostrophe in comment does not hide a later table function",
+            body=(
+                '/* Snowflake\'s table function */\nSELECT * FROM __table_fn("events")((SELECT 1))'
+            ),
+            expected_neutralized=("/* Snowflake's table function */\nSELECT * FROM __sqb_lint_0__"),
+            expected_original_texts=('__table_fn("events")((SELECT 1))',),
+        ),
+        NeutralizeInterpolationTestCase(
             description="SQLBuild fixture CTE name remains ordinary SQL",
             body="SELECT * FROM __expected__model",
             expected_neutralized="SELECT * FROM __expected__model",

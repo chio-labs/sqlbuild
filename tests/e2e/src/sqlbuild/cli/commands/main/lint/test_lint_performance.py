@@ -24,6 +24,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.lint.helpers import (
     SKIPPED_FIX_MODEL_SQL,
     write_lint_performance_project,
     write_pathological_lint_project,
+    write_varied_production_lint_project,
 )
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -98,6 +99,61 @@ def test_given_large_project_when_native_linting_then_finishes_within_budget(
     )
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert elapsed_seconds < test_case.expected_max_elapsed_seconds
+
+
+@pytest.mark.performance
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LintPerformanceGuardTestCase(
+            description="varied production-shaped 3000 model lint stays under eight seconds",
+            model_count=3_000,
+            hard_ceiling_seconds=12,
+            expected_max_elapsed_seconds=8.0,
+            model_sql="",
+        ),
+        LintPerformanceGuardTestCase(
+            description="varied production-shaped 10000 model lint stays under fifteen seconds",
+            model_count=10_000,
+            hard_ceiling_seconds=20,
+            expected_max_elapsed_seconds=15.0,
+            model_sql="",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_varied_production_project_when_linting_then_scales_without_cache_shortcut(
+    tmp_path: Path,
+    test_case: LintPerformanceGuardTestCase,
+) -> None:
+    project_dir: Path = tmp_path / f"varied_lint_{test_case.model_count}"
+    write_varied_production_lint_project(
+        project_dir=project_dir,
+        model_count=test_case.model_count,
+    )
+
+    started_at: float = time.perf_counter()
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        [
+            str(Path(sys.executable).with_name("sqb")),
+            "--project-dir",
+            str(project_dir),
+            "--no-color",
+            "lint",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=test_case.hard_ceiling_seconds,
+    )
+    elapsed_seconds: float = time.perf_counter() - started_at
+    _LOGGER.info(
+        f"varied production lint models={test_case.model_count} "
+        f"elapsed={elapsed_seconds:.3f}s budget={test_case.expected_max_elapsed_seconds:g}s"
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
     assert elapsed_seconds < test_case.expected_max_elapsed_seconds
 
 

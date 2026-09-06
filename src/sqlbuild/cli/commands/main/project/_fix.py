@@ -39,7 +39,7 @@ def run_fix_command(
     value_renderer: TypedSqlValueRenderer | None = None
     selected_paths: frozenset[Path] | None = None
     if select or exclude:
-        value_renderer, selected_paths = resolve_lint_inputs(
+        value_renderer, selected_paths, _discovered_inputs = resolve_lint_inputs(
             project_dir=base_dir,
             select=select,
             exclude=exclude,

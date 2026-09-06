@@ -38,7 +38,7 @@ def run_format_command(
     selected_paths: frozenset[Path] | None = None
     config: LintConfig = prepared[0]
     if select or exclude:
-        value_renderer, selected_paths = resolve_lint_inputs(
+        value_renderer, selected_paths, _discovered_inputs = resolve_lint_inputs(
             project_dir=base_dir,
             select=select,
             exclude=exclude,
