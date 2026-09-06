@@ -28,6 +28,7 @@ from sqlbuild.compiler.planner.main.execution.sql_test_assembly import (
     build_sql_test_plan_entry,
 )
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput
+from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 
 _COMPILED_DIR: str = "compiled"
@@ -59,7 +60,8 @@ def write_compile_target(
         _write_audits(target_dir=target_dir, plan_output=plan_output),
         _write_tests(target_dir=target_dir, adapter=adapter, plan_output=plan_output),
     )
-    _remove_stale_compiled_files(target_dir=target_dir, managed_paths=managed_paths)
+    with record_compile_timing("stale_traversal_ms"):
+        _remove_stale_compiled_files(target_dir=target_dir, managed_paths=managed_paths)
     if manifest is not None:
         _write_manifest(target_dir=target_dir, manifest=manifest)
 
@@ -89,7 +91,8 @@ def write_static_compile_target(
         _write_static_audits(target_dir=target_dir, project=project),
         _write_static_tests(target_dir=target_dir, adapter=adapter, project=project),
     )
-    _remove_stale_compiled_files(target_dir=target_dir, managed_paths=managed_paths)
+    with record_compile_timing("stale_traversal_ms"):
+        _remove_stale_compiled_files(target_dir=target_dir, managed_paths=managed_paths)
     if manifest is not None:
         _write_manifest(target_dir=target_dir, manifest=manifest)
 
@@ -240,14 +243,13 @@ def _write_tests(
     managed_paths: set[Path] = set()
     for entry in plan_output.test_entries:
         test_path: Path = target_dir / _COMPILED_DIR / _TESTS_DIR / sql_test_output_path(entry)
-        _write_sql(
-            path=test_path,
-            sql=build_sql_test_comparison_sql(
+        with record_compile_timing("comparison_render_ms"):
+            comparison_sql: str = build_sql_test_comparison_sql(
                 test_entry=entry,
                 set_difference_operator=adapter.render_set_difference_operator(),
                 sql_analysis_dialect=adapter.sql_analysis_dialect(),
-            ),
-        )
+            )
+        _write_sql(path=test_path, sql=comparison_sql)
         managed_paths.add(test_path)
     return managed_paths
 
@@ -292,21 +294,21 @@ def _write_static_tests(
                     managed_paths.add(cached_path)
                     current_records[record_key] = cached_record
                     continue
-        entry, _warnings = build_sql_test_plan_entry(
-            test=test,
-            project=project,
-            adapter=adapter,
-            sql_analysis_enabled=project.settings.sql_analysis,
-        )
+        with record_compile_timing("test_planning_ms"):
+            entry, _warnings = build_sql_test_plan_entry(
+                test=test,
+                project=project,
+                adapter=adapter,
+                sql_analysis_enabled=project.settings.sql_analysis,
+            )
         test_path: Path = tests_root / sql_test_output_path(entry)
-        _write_sql(
-            path=test_path,
-            sql=build_sql_test_comparison_sql(
+        with record_compile_timing("comparison_render_ms"):
+            comparison_sql: str = build_sql_test_comparison_sql(
                 test_entry=entry,
                 set_difference_operator=adapter.render_set_difference_operator(),
                 sql_analysis_dialect=adapter.sql_analysis_dialect(),
-            ),
-        )
+            )
+        _write_sql(path=test_path, sql=comparison_sql)
         managed_paths.add(test_path)
         if record_key is not None and artifact_identity is not None:
             record: SqlTestArtifactCacheRecord | None = build_sql_test_artifact_cache_record(
@@ -316,10 +318,11 @@ def _write_static_tests(
             )
             if record is not None:
                 current_records[record_key] = record
-    write_sql_test_artifact_cache(
-        cache_dir=project.compile_cache_dir,
-        records=current_records,
-    )
+    with record_compile_timing("cache_publication_ms"):
+        write_sql_test_artifact_cache(
+            cache_dir=project.compile_cache_dir,
+            records=current_records,
+        )
     return managed_paths
 
 
@@ -337,10 +340,11 @@ def _write_sql(*, path: Path, sql: str) -> None:
 
 
 def _write_text_if_changed(*, path: Path, contents: str) -> None:
-    if path.is_file() and path.read_text(encoding="utf-8") == contents:
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(contents, encoding="utf-8")
+    with record_compile_timing("physical_write_ms"):
+        if path.is_file() and path.read_text(encoding="utf-8") == contents:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")
 
 
 def _remove_stale_compiled_files(*, target_dir: Path, managed_paths: set[Path]) -> None:

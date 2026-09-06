@@ -23,6 +23,8 @@ from sqlbuild.cli.commands.models import (
     CompileWriteResult,
 )
 from sqlbuild.cli.commands.types import CompileLineageMode
+from sqlbuild.compiler.profiling.main.collect import collect_compile_timings
+from sqlbuild.compiler.profiling.models import CompileTimingCollector
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.presentation.main.supports_color import supports_color
 
@@ -39,11 +41,13 @@ def run_compile(request: CompileCommandRequest) -> int:
         no_color=request.no_color,
     )
     try:
-        return _run_compile_with_status(
-            request=effective_request,
-            total_start=total_start,
-            status=status,
-        )
+        with collect_compile_timings() as detailed_timings:
+            return _run_compile_with_status(
+                request=effective_request,
+                total_start=total_start,
+                status=status,
+                detailed_timings=detailed_timings,
+            )
     finally:
         if status is not None:
             status.close()
@@ -54,6 +58,7 @@ def _run_compile_with_status(
     request: CompileCommandRequest,
     total_start: float,
     status: TransientStatusReporter | None,
+    detailed_timings: CompileTimingCollector,
 ) -> int:
     """Execute compile after the optional interactive status reporter is initialized."""
 
@@ -96,6 +101,7 @@ def _run_compile_with_status(
         "lineage_ms": analysis.lineage_ms,
         "contracts_ms": analysis.contract_ms,
         "write_ms": write_result.write_ms,
+        **detailed_timings.as_milliseconds(),
         "total_ms": elapsed_ms(total_start),
     }
     exit_code: int = 1 if any(diagnostic.is_error for diagnostic in analysis.diagnostics) else 0

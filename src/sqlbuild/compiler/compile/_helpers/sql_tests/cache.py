@@ -18,6 +18,7 @@ from sqlbuild.compiler.compile._helpers.sql_tests.core import (
 )
 from sqlbuild.compiler.compile.models import CompileSqlTestCte, CompileSqlTestCtes
 from sqlbuild.compiler.compile.types import SqlTestMode
+from sqlbuild.compiler.profiling.main.record import record_compile_timing
 
 _CACHE_VERSION: int = 1
 _CACHE_DATABASE_NAME: str = "sql-test-ctes.sqlite3"
@@ -67,7 +68,8 @@ class _SqlTestCteCache:
         self._connection = None
         try:
             if exc_type is None:
-                connection = self._write_pending(connection=connection)
+                with record_compile_timing("cache_publication_ms"):
+                    connection = self._write_pending(connection=connection)
             elif connection is not None:
                 connection.rollback()
         except (OSError, sqlite3.DatabaseError):
