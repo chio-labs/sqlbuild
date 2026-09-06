@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.83.1](https://github.com/chio-labs/sqlbuild/compare/v0.83.0...v0.83.1) (2026-09-06)
+
+
+### Performance Improvements
+
+* cache unchanged compile artifacts ([#538](https://github.com/chio-labs/sqlbuild/issues/538)) ([0affb0c](https://github.com/chio-labs/sqlbuild/commit/0affb0c2ef273af6200995a760e3852d63c9d04a))
+
 ## [0.83.0](https://github.com/chio-labs/sqlbuild/compare/v0.82.6...v0.83.0) (2026-09-06)
 
 
