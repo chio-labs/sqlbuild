@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.85.0](https://github.com/chio-labs/sqlbuild/compare/v0.84.0...v0.85.0) (2026-09-06)
+
+
+### Features
+
+* make Dagster integration translator-native ([#548](https://github.com/chio-labs/sqlbuild/issues/548)) ([9fa32ff](https://github.com/chio-labs/sqlbuild/commit/9fa32ffee7f6aaa123a0ea7e37982a561d828af8))
+
 ## [0.84.0](https://github.com/chio-labs/sqlbuild/compare/v0.83.4...v0.84.0) (2026-09-06)
 
 
