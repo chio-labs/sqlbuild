@@ -109,3 +109,9 @@ class EventExporterDiscoveryError(DiscoveryError):
     """Raised when project lifecycle event exporters are invalid."""
 
     code: str = "D015"
+
+
+class ProjectPythonPathError(DiscoveryError):
+    """Raised when project-owned Python lives outside a supported extension root."""
+
+    code: str = "D016"
