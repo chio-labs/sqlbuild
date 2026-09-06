@@ -6,7 +6,8 @@ use polyglot_sql::parser::ParserConfig;
 use polyglot_sql::tokens::{Span, Token, TokenType};
 use polyglot_sql::{Dialect, DialectType, Expression, ExpressionWalk, Parser};
 
-use super::models::{LINT_API_VERSION, LintDiagnostic, LintRequest, LintResponse, QueryFacts};
+use crate::sql_lint::constants::LINT_API_VERSION;
+use crate::sql_lint::models::{LintDiagnostic, LintRequest, LintResponse, QueryFacts};
 
 const NULL_COMPARISON: &str = "SQBL001";
 const IMPLICIT_CARTESIAN_JOIN: &str = "SQBL002";
@@ -15,6 +16,7 @@ const UNORDERED_LIMIT: &str = "SQBL004";
 const UNUSED_CTE: &str = "SQBL005";
 const REDUNDANT_DISTINCT: &str = "SQBL006";
 const POSITIONAL_SET_STAR: &str = "SQBL007";
+const TRIVIAL_EQUALITY_TOKEN_COUNT: usize = 3;
 
 const DEFAULT_RULES: [&str; 7] = [
     NULL_COMPARISON,
@@ -26,7 +28,22 @@ const DEFAULT_RULES: [&str; 7] = [
     POSITIONAL_SET_STAR,
 ];
 
-pub(crate) fn lint_json(request_json: &str) -> Result<String, String> {
+struct QueryTokenContext<'a> {
+    tokens: &'a [Token],
+    depths: &'a [usize],
+    direct: &'a [usize],
+    query_end: usize,
+    depth: usize,
+}
+
+struct ExpressionRange {
+    start: usize,
+    end: usize,
+    depth: usize,
+    strip_alias: bool,
+}
+
+pub(crate) fn lint_json_impl(request_json: &str) -> Result<String, String> {
     let request: LintRequest =
         serde_json::from_str(request_json).map_err(|error| error.to_string())?;
     let response = lint(request)?;
@@ -75,18 +92,18 @@ fn enabled_rules(requested: Option<Vec<String>>) -> Result<HashSet<String>, Stri
 }
 
 fn build_facts(expressions: &[Expression], tokens: &[Token]) -> QueryFacts {
-    let mut facts = QueryFacts {
-        null_comparisons: null_comparison_spans(tokens),
-        ..Default::default()
-    };
-    collect_token_query_facts(tokens, &mut facts);
+    let mut facts: QueryFacts = collect_token_query_facts(tokens);
+    facts.null_comparisons = null_comparison_spans(tokens);
     for expression in expressions {
-        collect_unused_ctes(expression, &mut facts.unused_cte_names);
+        facts
+            .unused_cte_names
+            .extend(collect_unused_ctes(expression));
     }
     facts
 }
 
-fn collect_token_query_facts(tokens: &[Token], facts: &mut QueryFacts) {
+fn collect_token_query_facts(tokens: &[Token]) -> QueryFacts {
+    let mut facts = QueryFacts::default();
     let depths = token_depths(tokens);
     for (select_index, token) in tokens.iter().enumerate() {
         if token.token_type != TokenType::Select {
@@ -103,12 +120,22 @@ fn collect_token_query_facts(tokens: &[Token], facts: &mut QueryFacts) {
         {
             facts.unordered_limits.push(tokens[index].span);
         }
-        if let Some(span) = redundant_distinct_span(tokens, &depths, &direct, end, depth) {
+        let context = QueryTokenContext {
+            tokens,
+            depths: &depths,
+            direct: &direct,
+            query_end: end,
+            depth,
+        };
+        if let Some(span) = redundant_distinct_span(&context) {
             facts.redundant_distincts.push(span);
         }
-        collect_from_and_join_facts(tokens, &direct, facts);
+        let (implicit, missing_conditions) = collect_from_and_join_facts(tokens, &direct);
+        facts.implicit_cartesian_joins.extend(implicit);
+        facts.joins_without_condition.extend(missing_conditions);
     }
-    collect_set_operation_facts(tokens, &depths, facts);
+    facts.positional_set_stars = collect_set_operation_facts(tokens, &depths);
+    facts
 }
 
 fn token_depths(tokens: &[Token]) -> Vec<usize> {
@@ -157,13 +184,14 @@ fn first_type(tokens: &[Token], indices: &[usize], token_type: TokenType) -> Opt
         .find(|&index| tokens[index].token_type == token_type)
 }
 
-fn redundant_distinct_span(
-    tokens: &[Token],
-    depths: &[usize],
-    direct: &[usize],
-    query_end: usize,
-    depth: usize,
-) -> Option<Span> {
+fn redundant_distinct_span(context: &QueryTokenContext<'_>) -> Option<Span> {
+    let QueryTokenContext {
+        tokens,
+        depths,
+        direct,
+        query_end,
+        depth,
+    } = context;
     let distinct_position = direct
         .iter()
         .position(|&index| tokens[index].token_type == TokenType::Distinct)?;
@@ -173,14 +201,7 @@ fn redundant_distinct_span(
     {
         return None;
     }
-    let group_position = direct.iter().position(|&index| {
-        tokens[index].token_type == TokenType::Group
-            && direct
-                .iter()
-                .position(|&candidate| candidate == index)
-                .and_then(|position| direct.get(position + 1))
-                .is_some_and(|&next| tokens[next].text.eq_ignore_ascii_case("BY"))
-    })?;
+    let group_position = group_by_position(tokens, direct)?;
     let group_index = direct[group_position];
     let projection_end = first_type(tokens, direct, TokenType::From)
         .filter(|index| *index < group_index)
@@ -200,17 +221,27 @@ fn redundant_distinct_span(
                     | TokenType::Offset
             )
         })
-        .unwrap_or(query_end);
+        .unwrap_or(*query_end);
     let projection_signatures = expression_signatures(
         tokens,
         depths,
-        projection_start,
-        projection_end,
-        depth,
-        true,
+        &ExpressionRange {
+            start: projection_start,
+            end: projection_end,
+            depth: *depth,
+            strip_alias: true,
+        },
     );
-    let group_signatures =
-        expression_signatures(tokens, depths, group_start, group_end, depth, false);
+    let group_signatures = expression_signatures(
+        tokens,
+        depths,
+        &ExpressionRange {
+            start: group_start,
+            end: group_end,
+            depth: *depth,
+            strip_alias: false,
+        },
+    );
     if group_signatures.is_empty()
         || !group_signatures
             .iter()
@@ -221,49 +252,64 @@ fn redundant_distinct_span(
     Some(tokens[direct[distinct_position]].span)
 }
 
+fn group_by_position(tokens: &[Token], direct: &[usize]) -> Option<usize> {
+    direct.windows(2).position(|window| {
+        tokens[window[0]].token_type == TokenType::Group
+            && tokens[window[1]].text.eq_ignore_ascii_case("BY")
+    })
+}
+
 fn expression_signatures(
     tokens: &[Token],
     depths: &[usize],
-    start: usize,
-    end: usize,
-    depth: usize,
-    strip_alias: bool,
+    range: &ExpressionRange,
 ) -> Vec<String> {
-    let mut boundaries: Vec<usize> = (start..end)
-        .filter(|&index| depths[index] == depth && tokens[index].token_type == TokenType::Comma)
-        .collect();
-    boundaries.push(end);
-    let mut segment_start = start;
-    boundaries
-        .into_iter()
-        .map(|segment_end| {
-            let effective_end = if strip_alias {
-                (segment_start..segment_end)
-                    .find(|&index| {
-                        depths[index] == depth && tokens[index].token_type == TokenType::As
-                    })
-                    .unwrap_or(segment_end)
-            } else {
-                segment_end
-            };
-            let signature = tokens[segment_start..effective_end]
-                .iter()
-                .map(|token| token.text.to_ascii_lowercase())
-                .collect::<Vec<_>>()
-                .join(" ");
-            segment_start = segment_end + 1;
-            signature
+    let mut boundaries: Vec<usize> = (range.start..range.end)
+        .filter(|&index| {
+            depths[index] == range.depth && tokens[index].token_type == TokenType::Comma
         })
-        .filter(|signature| !signature.is_empty())
-        .collect()
+        .collect();
+    boundaries.push(range.end);
+    let mut segment_start = range.start;
+    let mut signatures: Vec<String> = Vec::new();
+    for segment_end in boundaries {
+        let effective_end = alias_start(tokens, depths, range, segment_start..segment_end);
+        let parts: Vec<String> = tokens[segment_start..effective_end]
+            .iter()
+            .map(|token| token.text.to_ascii_lowercase())
+            .collect();
+        let signature = parts.join(" ");
+        if !signature.is_empty() {
+            signatures.push(signature);
+        }
+        segment_start = segment_end + 1;
+    }
+    signatures
 }
 
-fn collect_from_and_join_facts(tokens: &[Token], direct: &[usize], facts: &mut QueryFacts) {
+fn alias_start(
+    tokens: &[Token],
+    depths: &[usize],
+    range: &ExpressionRange,
+    segment: std::ops::Range<usize>,
+) -> usize {
+    if !range.strip_alias {
+        return segment.end;
+    }
+    segment
+        .clone()
+        .find(|&index| depths[index] == range.depth && tokens[index].token_type == TokenType::As)
+        .unwrap_or(segment.end)
+}
+
+fn collect_from_and_join_facts(tokens: &[Token], direct: &[usize]) -> (Vec<Span>, Vec<Span>) {
+    let mut implicit: Vec<Span> = Vec::new();
+    let mut missing_conditions: Vec<Span> = Vec::new();
     let Some(from_position) = direct
         .iter()
         .position(|&index| tokens[index].token_type == TokenType::From)
     else {
-        return;
+        return (implicit, missing_conditions);
     };
     let clause_end = direct[from_position + 1..]
         .iter()
@@ -271,7 +317,7 @@ fn collect_from_and_join_facts(tokens: &[Token], direct: &[usize], facts: &mut Q
         .map_or(direct.len(), |offset| from_position + 1 + offset);
     for &index in &direct[from_position + 1..clause_end] {
         if tokens[index].token_type == TokenType::Comma {
-            facts.implicit_cartesian_joins.push(tokens[index].span);
+            implicit.push(tokens[index].span);
         }
     }
     for (position, &index) in direct.iter().enumerate() {
@@ -298,9 +344,10 @@ fn collect_from_and_join_facts(tokens: &[Token], direct: &[usize], facts: &mut Q
             && on_position
                 .is_none_or(|offset| trivial_on_condition(tokens, &condition[offset + 1..]))
         {
-            facts.joins_without_condition.push(tokens[index].span);
+            missing_conditions.push(tokens[index].span);
         }
     }
+    (implicit, missing_conditions)
 }
 
 fn is_post_from_clause(token_type: TokenType) -> bool {
@@ -344,7 +391,7 @@ fn trivial_on_condition(tokens: &[Token], condition: &[usize]) -> bool {
         .collect();
     significant.is_empty()
         || significant.len() == 1 && significant[0].token_type == TokenType::True
-        || significant.len() == 3
+        || significant.len() == TRIVIAL_EQUALITY_TOKEN_COUNT
             && significant[1].token_type == TokenType::Eq
             && matches!(
                 significant[0].token_type,
@@ -354,7 +401,8 @@ fn trivial_on_condition(tokens: &[Token], condition: &[usize]) -> bool {
             && significant[0].text == significant[2].text
 }
 
-fn collect_set_operation_facts(tokens: &[Token], depths: &[usize], facts: &mut QueryFacts) {
+fn collect_set_operation_facts(tokens: &[Token], depths: &[usize]) -> Vec<Span> {
+    let mut spans: Vec<Span> = Vec::new();
     for (index, token) in tokens.iter().enumerate() {
         if !matches!(
             token.token_type,
@@ -375,9 +423,10 @@ fn collect_set_operation_facts(tokens: &[Token], depths: &[usize], facts: &mut Q
             && (select_before_projects_star(tokens, depths, index, depth)
                 || select_after_projects_star(tokens, depths, index, depth))
         {
-            facts.positional_set_stars.push(token.span);
+            spans.push(token.span);
         }
     }
+    spans
 }
 
 fn select_before_projects_star(
@@ -398,7 +447,16 @@ fn select_before_projects_star(
     else {
         return false;
     };
-    projection_projects_star(tokens, depths, start, end, depths[start])
+    projection_projects_star(
+        tokens,
+        depths,
+        &ExpressionRange {
+            start,
+            end,
+            depth: depths[start],
+            strip_alias: false,
+        },
+    )
 }
 
 fn select_after_projects_star(
@@ -421,53 +479,58 @@ fn select_after_projects_star(
     projection_projects_star(
         tokens,
         depths,
-        select,
-        query_end(tokens, depths, select, select_depth),
-        select_depth,
+        &ExpressionRange {
+            start: select,
+            end: query_end(tokens, depths, select, select_depth),
+            depth: select_depth,
+            strip_alias: false,
+        },
     )
 }
 
-fn projection_projects_star(
-    tokens: &[Token],
-    depths: &[usize],
-    start: usize,
-    end: usize,
-    depth: usize,
-) -> bool {
-    (start + 1..end)
-        .take_while(|&index| depths[index] != depth || tokens[index].token_type != TokenType::From)
-        .any(|index| depths[index] == depth && tokens[index].token_type == TokenType::Star)
+fn projection_projects_star(tokens: &[Token], depths: &[usize], range: &ExpressionRange) -> bool {
+    (range.start + 1..range.end)
+        .take_while(|&index| {
+            depths[index] != range.depth || tokens[index].token_type != TokenType::From
+        })
+        .any(|index| depths[index] == range.depth && tokens[index].token_type == TokenType::Star)
 }
 
-fn collect_unused_ctes(expression: &Expression, unused: &mut Vec<String>) {
+fn collect_unused_ctes(expression: &Expression) -> Vec<String> {
+    let mut unused: Vec<String> = Vec::new();
     for node in expression.dfs() {
         match node {
             Expression::Select(select) if select.with.is_some() => {
                 let mut root = select.clone();
-                let with = root.with.take().expect("WITH was checked");
-                collect_unused_for_with(&with, &Expression::Select(root), unused);
+                if let Some(with) = root.with.take() {
+                    unused.extend(collect_unused_for_with(&with, &Expression::Select(root)));
+                }
             }
             Expression::Union(operation) if operation.with.is_some() => {
                 let mut root = operation.clone();
-                let with = root.with.take().expect("WITH was checked");
-                collect_unused_for_with(&with, &Expression::Union(root), unused);
+                if let Some(with) = root.with.take() {
+                    unused.extend(collect_unused_for_with(&with, &Expression::Union(root)));
+                }
             }
             Expression::Intersect(operation) if operation.with.is_some() => {
                 let mut root = operation.clone();
-                let with = root.with.take().expect("WITH was checked");
-                collect_unused_for_with(&with, &Expression::Intersect(root), unused);
+                if let Some(with) = root.with.take() {
+                    unused.extend(collect_unused_for_with(&with, &Expression::Intersect(root)));
+                }
             }
             Expression::Except(operation) if operation.with.is_some() => {
                 let mut root = operation.clone();
-                let with = root.with.take().expect("WITH was checked");
-                collect_unused_for_with(&with, &Expression::Except(root), unused);
+                if let Some(with) = root.with.take() {
+                    unused.extend(collect_unused_for_with(&with, &Expression::Except(root)));
+                }
             }
             _ => {}
         };
     }
+    unused
 }
 
-fn collect_unused_for_with(with: &With, root: &Expression, unused: &mut Vec<String>) {
+fn collect_unused_for_with(with: &With, root: &Expression) -> Vec<String> {
     let names: HashSet<String> = with
         .ctes
         .iter()
@@ -497,12 +560,11 @@ fn collect_unused_for_with(with: &With, root: &Expression, unused: &mut Vec<Stri
             }
         }
     }
-    unused.extend(
-        with.ctes
-            .iter()
-            .filter(|cte| !reachable.contains(&cte.alias.name.to_ascii_lowercase()))
-            .map(|cte| cte.alias.name.clone()),
-    );
+    with.ctes
+        .iter()
+        .filter(|cte| !reachable.contains(&cte.alias.name.to_ascii_lowercase()))
+        .map(|cte| cte.alias.name.clone())
+        .collect()
 }
 
 fn table_names(expression: &Expression) -> HashSet<String> {
@@ -520,38 +582,34 @@ fn diagnostics(
     tokens: &[Token],
     enabled: &HashSet<String>,
 ) -> Vec<LintDiagnostic> {
-    let mut diagnostics = Vec::new();
+    let mut diagnostics: Vec<LintDiagnostic> = Vec::new();
     if enabled.contains(NULL_COMPARISON) {
-        push_spans(
-            &mut diagnostics,
+        diagnostics.extend(diagnostics_for_spans(
             NULL_COMPARISON,
             "Comparison with NULL is never true; use IS NULL or IS NOT NULL",
             &facts.null_comparisons,
-        );
+        ));
     }
     if enabled.contains(IMPLICIT_CARTESIAN_JOIN) {
-        push_spans(
-            &mut diagnostics,
+        diagnostics.extend(diagnostics_for_spans(
             IMPLICIT_CARTESIAN_JOIN,
             "Comma-separated FROM sources create an implicit cartesian join; use explicit JOIN syntax",
             &facts.implicit_cartesian_joins,
-        );
+        ));
     }
     if enabled.contains(JOIN_WITHOUT_CONDITION) {
-        push_spans(
-            &mut diagnostics,
+        diagnostics.extend(diagnostics_for_spans(
             JOIN_WITHOUT_CONDITION,
             "Non-cross join has no meaningful ON or USING condition",
             &facts.joins_without_condition,
-        );
+        ));
     }
     if enabled.contains(UNORDERED_LIMIT) {
-        push_spans(
-            &mut diagnostics,
+        diagnostics.extend(diagnostics_for_spans(
             UNORDERED_LIMIT,
             "LIMIT or OFFSET without ORDER BY produces nondeterministic rows",
             &facts.unordered_limits,
-        );
+        ));
     }
     if enabled.contains(UNUSED_CTE) {
         for span in unused_cte_spans(tokens, &facts.unused_cte_names) {
@@ -563,33 +621,31 @@ fn diagnostics(
         }
     }
     if enabled.contains(REDUNDANT_DISTINCT) {
-        push_spans(
-            &mut diagnostics,
+        diagnostics.extend(diagnostics_for_spans(
             REDUNDANT_DISTINCT,
             "DISTINCT is redundant when the query already groups its output",
             &facts.redundant_distincts,
-        );
+        ));
     }
     if enabled.contains(POSITIONAL_SET_STAR) {
-        push_spans(
-            &mut diagnostics,
+        diagnostics.extend(diagnostics_for_spans(
             POSITIONAL_SET_STAR,
             "Positional set operations with SELECT * are vulnerable to column-order drift",
             &facts.positional_set_stars,
-        );
+        ));
     }
     diagnostics
 }
 
-fn push_spans(
-    diagnostics: &mut Vec<LintDiagnostic>,
+fn diagnostics_for_spans(
     code: &'static str,
     message: &'static str,
     spans: &[Span],
-) {
-    for span in spans {
-        diagnostics.push(diagnostic(code, message, Some(*span)));
-    }
+) -> Vec<LintDiagnostic> {
+    spans
+        .iter()
+        .map(|span| diagnostic(code, message, Some(*span)))
+        .collect()
 }
 
 fn diagnostic(code: &'static str, message: &'static str, span: Option<Span>) -> LintDiagnostic {
@@ -607,7 +663,7 @@ fn unused_cte_spans(tokens: &[Token], unused_names: &[String]) -> Vec<Span> {
         .iter()
         .map(|name| name.to_ascii_lowercase())
         .collect();
-    let mut spans = Vec::new();
+    let mut spans: Vec<Span> = Vec::new();
     for (index, token) in tokens.iter().enumerate() {
         let name = token.text.to_ascii_lowercase();
         let Some(position) = remaining.iter().position(|candidate| candidate == &name) else {
@@ -667,10 +723,13 @@ fn is_assignment_operator(tokens: &[Token], depths: &[usize], operator_index: us
 fn adjacent_null(tokens: &[Token], operator_index: usize, forward: bool) -> bool {
     let mut index = operator_index as isize + if forward { 1 } else { -1 };
     let mut wrappers = 0_usize;
-    while let Some(token) = usize::try_from(index)
-        .ok()
-        .and_then(|value| tokens.get(value))
-    {
+    loop {
+        if index < 0 {
+            return false;
+        }
+        let Some(token) = tokens.get(index as usize) else {
+            return false;
+        };
         if token.token_type == TokenType::Null {
             break;
         }
@@ -692,10 +751,10 @@ fn adjacent_null(tokens: &[Token], operator_index: usize, forward: bool) -> bool
         TokenType::LParen
     };
     for _ in 0..wrappers {
-        let Some(token) = usize::try_from(index)
-            .ok()
-            .and_then(|value| tokens.get(value))
-        else {
+        if index < 0 {
+            return false;
+        }
+        let Some(token) = tokens.get(index as usize) else {
             return false;
         };
         if token.token_type != closing_wrapper {

@@ -1,8 +1,6 @@
 use polyglot_sql::tokens::Span;
 use serde::{Deserialize, Serialize};
 
-pub(crate) const LINT_API_VERSION: u32 = 1;
-
 #[derive(Debug, Default)]
 pub(crate) struct QueryFacts {
     pub null_comparisons: Vec<Span>,

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.e2e.src.sqlbuild.cli.commands.main.lint._test_types import (
     LintPerformanceBehaviorTestCase,
     LintPerformanceGuardTestCase,
@@ -114,8 +115,7 @@ def test_given_one_selected_model_when_native_linting_warm_then_finishes_under_2
         model_count=1,
         model_sql=CLEAN_MODEL_SQL,
     )
-    command: list[str] = [
-        str(Path(sys.executable).with_name("sqb")),
+    arguments: list[str] = [
         "--project-dir",
         str(project_dir),
         "--no-color",
@@ -123,26 +123,14 @@ def test_given_one_selected_model_when_native_linting_warm_then_finishes_under_2
         "--select",
         "model_00000",
     ]
-    warmup: subprocess.CompletedProcess[str] = subprocess.run(
-        command,
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=4,
-    )
-    assert warmup.returncode == 0, warmup.stdout + warmup.stderr
+    warmup_exit_code: int = main(arguments)
+    assert warmup_exit_code == 0
 
     started_at: float = time.perf_counter()
-    result: subprocess.CompletedProcess[str] = subprocess.run(
-        command,
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=4,
-    )
+    exit_code: int = main(arguments)
     elapsed_seconds: float = time.perf_counter() - started_at
 
-    assert result.returncode == 0, result.stdout + result.stderr
+    assert exit_code == 0
     assert elapsed_seconds < test_case.expected_maximum
 
 

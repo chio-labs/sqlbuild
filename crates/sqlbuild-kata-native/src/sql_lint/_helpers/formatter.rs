@@ -3,12 +3,13 @@ use std::str::FromStr;
 use polyglot_sql::tokens::Token;
 use polyglot_sql::{Dialect, DialectType, format_by_name};
 
-use super::models::{FormatRequest, FormatResponse, LINT_API_VERSION};
+use crate::sql_lint::constants::LINT_API_VERSION;
+use crate::sql_lint::models::{FormatRequest, FormatResponse};
 
 const COMMENT_ATTACHMENT_FAILURE: &str =
     "native formatter could not preserve comment token attachments";
 
-pub(crate) fn format_json(request_json: &str) -> Result<String, String> {
+pub(crate) fn format_json_impl(request_json: &str) -> Result<String, String> {
     let request: FormatRequest =
         serde_json::from_str(request_json).map_err(|error| error.to_string())?;
     let response = format_sql(request)?;
@@ -33,13 +34,13 @@ fn format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
     let neutral = neutralize_comments(&original, &comments);
     let before = dialect.parse(&neutral).map_err(|error| error.to_string())?;
     let semantic_tokens = without_statement_terminators(&tokens);
-    let formatted = match format_once(
-        &neutral,
-        &request.dialect,
-        &dialect,
-        &semantic_tokens,
-        &comments,
-    ) {
+    let formatted_context = FormatOnceContext {
+        dialect_name: &request.dialect,
+        dialect: &dialect,
+        original_tokens: &semantic_tokens,
+        comments: &comments,
+    };
+    let formatted = match format_once(&neutral, &formatted_context) {
         Ok(value) => value,
         Err(error) if error == COMMENT_ATTACHMENT_FAILURE => {
             return response(original, false, false, Some(COMMENT_ATTACHMENT_FAILURE));
@@ -63,13 +64,13 @@ fn format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
     let second_comments = comments_in(&formatted, &second_tokens);
     let second_neutral = neutralize_comments(&formatted, &second_comments);
     let second_semantic_tokens = without_statement_terminators(&second_tokens);
-    let second_pass = match format_once(
-        &second_neutral,
-        &request.dialect,
-        &dialect,
-        &second_semantic_tokens,
-        &second_comments,
-    ) {
+    let second_context = FormatOnceContext {
+        dialect_name: &request.dialect,
+        dialect: &dialect,
+        original_tokens: &second_semantic_tokens,
+        comments: &second_comments,
+    };
+    let second_pass = match format_once(&second_neutral, &second_context) {
         Ok(value) => value,
         Err(error) if error == COMMENT_ATTACHMENT_FAILURE => {
             return response(original, false, false, Some(COMMENT_ATTACHMENT_FAILURE));
@@ -91,34 +92,39 @@ struct Comment {
     line: bool,
 }
 
-fn format_once(
-    neutral_sql: &str,
-    dialect_name: &str,
-    dialect: &Dialect,
-    original_tokens: &[Token],
-    comments: &[Comment],
-) -> Result<String, String> {
-    let mut formatted = format_by_name(neutral_sql, dialect_name)
+struct FormatOnceContext<'a> {
+    dialect_name: &'a str,
+    dialect: &'a Dialect,
+    original_tokens: &'a [Token],
+    comments: &'a [Comment],
+}
+
+fn format_once(neutral_sql: &str, context: &FormatOnceContext<'_>) -> Result<String, String> {
+    let mut formatted = format_by_name(neutral_sql, context.dialect_name)
         .map_err(|error| error.to_string())?
         .join(";\n");
-    if comments.is_empty() {
+    if context.comments.is_empty() {
         return Ok(formatted);
     }
-    let formatted_tokens = dialect
+    let formatted_tokens = context
+        .dialect
         .tokenize(&formatted)
         .map_err(|error| error.to_string())?;
-    if original_tokens.len() != formatted_tokens.len()
-        || original_tokens
+    if context.original_tokens.len() != formatted_tokens.len()
+        || context
+            .original_tokens
             .iter()
             .zip(&formatted_tokens)
             .any(|(before, after)| before.token_type != after.token_type)
     {
         return Err(COMMENT_ATTACHMENT_FAILURE.to_string());
     }
-    let mut insertions: Vec<(usize, String)> = comments
+    let mut insertions: Vec<(usize, String)> = context
+        .comments
         .iter()
         .map(|comment| {
-            let previous = original_tokens
+            let previous = context
+                .original_tokens
                 .iter()
                 .rposition(|token| token.span.end <= comment.start);
             let char_offset = previous.map_or(0, |index| formatted_tokens[index].span.end);
@@ -152,7 +158,7 @@ fn without_statement_terminators(tokens: &[Token]) -> Vec<Token> {
 
 fn comments_in(sql: &str, tokens: &[Token]) -> Vec<Comment> {
     let characters: Vec<char> = sql.chars().collect();
-    let mut comments = Vec::new();
+    let mut comments: Vec<Comment> = Vec::new();
     let mut gap_start = 0_usize;
     for token in tokens {
         comments.extend(comments_in_gap(&characters, gap_start, token.span.start));
@@ -163,7 +169,7 @@ fn comments_in(sql: &str, tokens: &[Token]) -> Vec<Comment> {
 }
 
 fn comments_in_gap(characters: &[char], start: usize, end: usize) -> Vec<Comment> {
-    let mut comments = Vec::new();
+    let mut comments: Vec<Comment> = Vec::new();
     let mut index = start;
     while index < end {
         let line = characters[index] == '-' && characters.get(index + 1) == Some(&'-');

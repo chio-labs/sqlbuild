@@ -24,13 +24,13 @@ fn evaluate_json(request_json: &str) -> PyResult<String> {
 
 #[pyfunction]
 fn lint_sql_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::sql_lint::engine::lint_json(request_json))
+    py.detach(|| crate::sql_lint::main::engine::lint_json(request_json))
         .map_err(value_error)
 }
 
 #[pyfunction]
 fn format_sql_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::sql_lint::formatter::format_json(request_json))
+    py.detach(|| crate::sql_lint::main::formatter::format_json(request_json))
         .map_err(value_error)
 }
 
