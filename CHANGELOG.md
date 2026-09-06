@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.82.6](https://github.com/chio-labs/sqlbuild/compare/v0.82.5...v0.82.6) (2026-09-05)
+
+
+### Bug Fixes
+
+* preserve adapter SQL in native tests ([#535](https://github.com/chio-labs/sqlbuild/issues/535)) ([c7ab2d6](https://github.com/chio-labs/sqlbuild/commit/c7ab2d6d9a82ad5d810542e91d9046e2e6b509c0))
+
+## [0.82.5](https://github.com/chio-labs/sqlbuild/compare/v0.82.4...v0.82.5) (2026-09-05)
+
+
+### Bug Fixes
+
+* bound and accelerate SQL test compilation ([#533](https://github.com/chio-labs/sqlbuild/issues/533)) ([0e0eff9](https://github.com/chio-labs/sqlbuild/commit/0e0eff913d9d9290fe4f3e3bd806ff3be93c4fa7))
+
+## [0.82.4](https://github.com/chio-labs/sqlbuild/compare/v0.82.3...v0.82.4) (2026-09-05)
+
+
+### Bug Fixes
+
+* run chained SQL tests concurrently ([#530](https://github.com/chio-labs/sqlbuild/issues/530)) ([08cb4c8](https://github.com/chio-labs/sqlbuild/commit/08cb4c8196d61919d1baf50b84281247bbb19230))
+
 ## [0.82.3](https://github.com/chio-labs/sqlbuild/compare/v0.82.2...v0.82.3) (2026-09-05)
 
 

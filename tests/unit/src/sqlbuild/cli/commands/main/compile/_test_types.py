@@ -11,6 +11,8 @@ class TargetWriterTestCase:
     expected_files: dict[str, str] = field(default_factory=dict)
     initial_files: dict[str, str] = field(default_factory=dict)
     expected_summary_line: str = ""
+    model_count: int = 0
+    expected_max_component_bytes: int = 0
 
 
 @dataclass(frozen=True)

@@ -9,6 +9,10 @@ from copy import deepcopy
 from typing import Any
 
 from sqlbuild.adapter.contract.types import BuiltinAdapter
+from sqlbuild.compiler.planner.main.execution.sql_test_dialect import (
+    restore_sql_test_dialect_function_names,
+)
+from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.executor.testing.constants import SQL_TEST_BACKTICK_IDENTIFIER_QUOTE
@@ -70,9 +74,13 @@ def format_sql(
                 dialect=sql_analysis_dialect or "generic",
             )
         )
-        return _restore_protected_identifiers(
+        restored_sql: str = _restore_protected_identifiers(
             sql=formatted_sql,
             protected_identifiers=protected_identifiers,
+        )
+        return restore_sql_test_dialect_function_names(
+            sql=restored_sql,
+            dialect=sql_analysis_dialect,
         )
     except Exception:
         return sql
@@ -90,6 +98,64 @@ def unique_cte_suffix(
     if count == 1:
         return base_suffix, updated_counts
     return f"{base_suffix}_{count}", updated_counts
+
+
+def build_chain_comparison_parts(
+    *,
+    test_entry: SqlTestPlanEntry,
+    set_difference_operator: str,
+) -> tuple[OrderedDict[str, str], list[str], list[str], dict[str, int]]:
+    """Build actual/expected CTEs only for explicitly asserted model steps."""
+
+    lifted_ctes: OrderedDict[str, str] = OrderedDict()
+    comparison_ctes: list[str] = []
+    select_parts: list[str] = []
+    cte_name_counts: dict[str, int] = {}
+    step_index: int
+    step: ChainStep
+    for step_index, step in enumerate(test_entry.chain):
+        cte_suffix: str
+        cte_suffix, cte_name_counts = unique_cte_suffix(
+            model_name=step.model_name,
+            cte_name_counts=cte_name_counts,
+        )
+        actual_cte: str = f"__actual__{cte_suffix}"
+        expected_cte: str = f"__expected__{cte_suffix}"
+        if step.expected_cte_sql is None and not _assertion_uses_actual(
+            actual_cte=actual_cte,
+            test_entry=test_entry,
+        ):
+            continue
+        actual_sql: str
+        actual_sql, lifted_ctes = lift_step_ctes(
+            sql=step.resolved_sql,
+            lifted_ctes=lifted_ctes,
+            sql_analysis_enabled=test_entry.sql_analysis_enabled,
+        )
+        comparison_ctes.append(f"{actual_cte} AS ({actual_sql})")
+        if step.expected_cte_sql is None:
+            continue
+        expected_sql: str
+        expected_sql, lifted_ctes = lift_step_ctes(
+            sql=step.expected_cte_sql,
+            lifted_ctes=lifted_ctes,
+            sql_analysis_enabled=test_entry.sql_analysis_enabled,
+        )
+        comparison_ctes.append(f"{expected_cte} AS ({expected_sql})")
+        select_parts.append(
+            "SELECT "
+            f"{step_index} AS step_index, "
+            f"'{_escape_sql_string(step.model_name)}' AS model_name, "
+            f"(SELECT COUNT(*) FROM {actual_cte}) AS actual_count, "
+            f"(SELECT COUNT(*) FROM {expected_cte}) AS expected_count, "
+            f"(SELECT COUNT(*) FROM ("
+            f"SELECT * FROM {actual_cte} {set_difference_operator} SELECT * FROM {expected_cte}"
+            f") AS __sqlbuild_mismatch) AS unexpected_count, "
+            f"(SELECT COUNT(*) FROM ("
+            f"SELECT * FROM {expected_cte} {set_difference_operator} SELECT * FROM {actual_cte}"
+            f") AS __sqlbuild_missing) AS missing_count"
+        )
+    return lifted_ctes, comparison_ctes, select_parts, cte_name_counts
 
 
 def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] | None:
@@ -156,6 +222,16 @@ def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] |
             protected_identifiers=protected_identifiers,
         ),
     )
+
+
+def _assertion_uses_actual(*, actual_cte: str, test_entry: SqlTestPlanEntry) -> bool:
+    return any(
+        actual_cte.lower() in assertion.resolved_sql.lower() for assertion in test_entry.assertions
+    )
+
+
+def _escape_sql_string(value: str) -> str:
+    return value.replace("'", "''")
 
 
 def _sanitize_cte_suffix(model_name: str) -> str:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlbuild.cli.commands._helpers.test.execution import (
     execute_test_plan,
     prepare_test_execution,
+    resolve_test_concurrency,
 )
 from sqlbuild.cli.commands._helpers.test.invocation import resolve_test_invocation
 from sqlbuild.cli.commands._helpers.test.outputs import (
@@ -27,19 +28,20 @@ def run_test(request: TestCommandRequest) -> int:
     """Execute the test command."""
 
     invocation: TestInvocation = resolve_test_invocation(request=request)
+    pipeline_result: CompilePipelineResult = compile_test_plan(
+        request=request,
+        invocation=invocation,
+    )
     invocation.progress_stream.write("\n")
     write_execution_header(
         stream=invocation.progress_stream,
         command="sqb test",
         target=None,
-        concurrency=1,
+        concurrency=resolve_test_concurrency(request=request, pipeline_result=pipeline_result),
         use_color=invocation.use_color,
     )
-    pipeline_result: CompilePipelineResult = compile_test_plan(
-        request=request,
-        invocation=invocation,
-    )
     preparation: TestExecutionPreparation = prepare_test_execution(
+        request=request,
         invocation=invocation,
         pipeline_result=pipeline_result,
     )

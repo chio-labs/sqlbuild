@@ -77,6 +77,33 @@ def run_dbt_shaped_compile_benchmark(
     return cold_seconds, warm_seconds
 
 
+def run_test_heavy_compile_benchmark(
+    *,
+    project_dir: Path,
+    model_count: int,
+    test_count: int,
+    chain_depth: int,
+    fixture_row_count: int,
+    expected_max_seconds: float,
+) -> float:
+    skip_actions: dict[bool, Callable[[], None]] = {
+        False: _continue_compile_benchmark,
+        True: _skip_compile_benchmark,
+    }
+    skip_actions[os.environ.get("SQLBUILD_SKIP_PERFORMANCE_TESTS") == "1"]()
+    write_test_heavy_compile_project(
+        project_dir=project_dir,
+        model_count=model_count,
+        test_count=test_count,
+        chain_depth=chain_depth,
+        fixture_row_count=fixture_row_count,
+    )
+    return _run_compile_benchmark(
+        project_dir=project_dir,
+        expected_max_seconds=expected_max_seconds,
+    )
+
+
 def _run_compile_benchmark(*, project_dir: Path, expected_max_seconds: float) -> float:
     with _fail_after_seconds(expected_max_seconds):
         start: float = time.perf_counter()
@@ -95,6 +122,11 @@ def _run_compile_benchmark(*, project_dir: Path, expected_max_seconds: float) ->
 
 def measure_model_sql_bytes(project_dir: Path) -> int:
     return sum(path.stat().st_size for path in (project_dir / "models").glob("*.sql"))
+
+
+def measure_compiled_test_sql_bytes(project_dir: Path) -> int:
+    compiled_tests_dir: Path = project_dir / "target" / "compiled" / "tests"
+    return sum(path.stat().st_size for path in compiled_tests_dir.rglob("*.sql"))
 
 
 @contextmanager
@@ -152,6 +184,41 @@ def write_dbt_shaped_compile_project(*, project_dir: Path, model_count: int) -> 
             target_bytes=_sql_size_target(model_index=index, model_count=model_count),
         )
         (models_dir / f"model_{index:05d}.sql").write_text(model_sql, encoding="utf-8")
+
+
+def write_test_heavy_compile_project(
+    *,
+    project_dir: Path,
+    model_count: int,
+    test_count: int,
+    chain_depth: int,
+    fixture_row_count: int,
+) -> None:
+    models_dir: Path = project_dir / "models"
+    tests_dir: Path = project_dir / "tests" / "unit"
+    models_dir.mkdir(parents=True)
+    tests_dir.mkdir(parents=True)
+    _write_compile_project_config(project_dir)
+    for index in range(model_count):
+        group_offset: int = index % chain_depth
+        model_sql_builder: Callable[..., str] = {
+            True: _test_heavy_base_model_sql,
+            False: _test_heavy_chain_model_sql,
+        }[group_offset == 0]
+        model_sql: str = model_sql_builder(index=index)
+        (models_dir / f"model_{index:05d}.sql").write_text(model_sql, encoding="utf-8")
+    group_count: int = model_count // chain_depth
+    for test_index in range(test_count):
+        cases_per_target: int = 5
+        group_index: int = (test_index // cases_per_target) % group_count
+        base_index: int = group_index * chain_depth
+        target_index: int = base_index + chain_depth - 1
+        test_sql: str = _test_heavy_sql(
+            base_index=base_index,
+            target_index=target_index,
+            fixture_row_count=fixture_row_count,
+        )
+        (tests_dir / f"test_{test_index:05d}.sql").write_text(test_sql, encoding="utf-8")
 
 
 def _write_compile_project_config(project_dir: Path) -> None:
@@ -326,3 +393,57 @@ SELECT
   status
 FROM joined
 '''
+
+
+def _test_heavy_base_model_sql(*, index: int) -> str:
+    return f"""MODEL (materialized view);
+
+SELECT
+  {index} AS id,
+  CAST({index} AS DOUBLE) AS amount,
+  'base' AS status
+"""
+
+
+def _test_heavy_chain_model_sql(*, index: int) -> str:
+    previous_model: str = f"model_{index - 1:05d}"
+    return f'''MODEL (materialized view);
+
+WITH transformed AS (
+  SELECT
+    id + 1 AS id,
+    amount + {index} AS amount,
+    CASE WHEN id % 2 = 0 THEN 'even' ELSE 'odd' END AS status
+  FROM __ref("{previous_model}")
+),
+windowed AS (
+  SELECT
+    id,
+    amount,
+    status,
+    ROW_NUMBER() OVER (PARTITION BY status ORDER BY id) AS row_number,
+    SUM(amount) OVER (PARTITION BY status ORDER BY id) AS running_amount
+  FROM transformed
+)
+SELECT id, amount + running_amount AS amount, status
+FROM windowed
+WHERE row_number >= 1
+'''
+
+
+def _test_heavy_sql(*, base_index: int, target_index: int, fixture_row_count: int) -> str:
+    fixture_rows: str = " UNION ALL\n".join(
+        f"  SELECT {row} AS id, CAST({row} AS DOUBLE) AS amount, 'base' AS status"
+        for row in range(fixture_row_count)
+    )
+    return f"""TEST();
+
+WITH
+__ref__model_{base_index:05d} AS (
+{fixture_rows}
+),
+__expected__model_{target_index:05d} AS (
+  SELECT 1 AS id, CAST(1 AS DOUBLE) AS amount, 'odd' AS status
+)
+SELECT 1
+"""

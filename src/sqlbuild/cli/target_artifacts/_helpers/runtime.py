@@ -8,6 +8,7 @@ from pathlib import Path
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
+from sqlbuild.cli.paths.main._sql_test_output_path import sql_test_output_path
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.models import (
     FunctionPlanEntry,
@@ -26,7 +27,6 @@ _MODELS_DIR: str = "models"
 _FUNCTIONS_DIR: str = "functions"
 _TESTS_DIR: str = "tests"
 _CHECKS_DIR: str = "checks"
-_CHAIN_DIR: str = "_chain_"
 _SQL_FILE_SUFFIX: str = ".sql"
 
 
@@ -118,7 +118,7 @@ def write_test_runtime_target(
         )
         if entry_key not in result_keys:
             continue
-        test_run_path: Path = run_dir / _TESTS_DIR / _test_output_path(entry)
+        test_run_path: Path = run_dir / _TESTS_DIR / sql_test_output_path(entry)
         _write_sql(
             path=test_run_path,
             sql=build_sql_test_comparison_sql(
@@ -181,21 +181,6 @@ def _function_output_path(*, relative_path: Path, language: FunctionLanguage) ->
     ):
         return Path(*parts).with_suffix(_SQL_FILE_SUFFIX)
     return (Path(_FUNCTIONS_DIR) / language_dir / relative_path).with_suffix(_SQL_FILE_SUFFIX)
-
-
-def _test_output_path(entry: SqlTestPlanEntry) -> Path:
-    if entry.case_name is None or entry.source_path is None:
-        return _test_folder(entry) / f"{entry.name}{_SQL_FILE_SUFFIX}"
-    source_path: Path = entry.source_path.with_suffix("")
-    return source_path / f"block_{entry.block_index}__{entry.case_name}{_SQL_FILE_SUFFIX}"
-
-
-def _test_folder(entry: SqlTestPlanEntry) -> Path:
-    model_names: list[str] = [step.model_name for step in entry.chain]
-    unique_names: list[str] = sorted(set(model_names))
-    if len(unique_names) <= 1:
-        return Path(unique_names[0] if unique_names else entry.name)
-    return Path(_CHAIN_DIR) / "__".join(unique_names)
 
 
 def _format_statement(statement: str) -> str:

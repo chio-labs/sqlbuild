@@ -36,6 +36,8 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_t
     AssertionChainCteErrorTestCase,
     PlanMacroTestCase,
     PlanTestChainTestCase,
+    RepeatedFixturePlanTestCase,
+    SqlAnalysisDialectTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers import (
     build_test_and_project,
@@ -45,6 +47,25 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers
 @pytest.mark.parametrize(
     "test_case",
     [
+        PlanTestChainTestCase(
+            description="commented model ref is not added to the test chain",
+            model_queries={
+                "unused_upstream": "SELECT 1 AS id",
+                "orders": 'SELECT `value--label` AS id\n-- FROM __ref("unused_upstream")',
+            },
+            mock_ref_ctes={},
+            mock_source_ctes={},
+            helper_ctes={},
+            expected_model_names=("orders",),
+            expected_chain_length=1,
+            expected_sql_fragments={"orders": "`value--label`"},
+            expected_cte_bodies={"orders": "SELECT 1 AS id"},
+            assertion_ctes={
+                "commented_ref_is_ignored": (
+                    'SELECT 1 AS violation\n-- FROM __ref("unused_upstream")'
+                )
+            },
+        ),
         PlanTestChainTestCase(
             description="single model with mock dbt ref replaces dbt ref in sql",
             model_queries={
@@ -299,6 +320,27 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers
             },
         ),
         PlanTestChainTestCase(
+            description="final model expectation resolves the complete unmocked model chain",
+            model_queries={
+                "A": 'SELECT id FROM __source("raw")',
+                "B": 'SELECT id, id * 2 AS doubled FROM __ref("A")',
+                "C": 'SELECT id, doubled + 1 AS final FROM __ref("B")',
+            },
+            mock_ref_ctes={},
+            mock_source_ctes={
+                "raw": "SELECT 1 AS id",
+            },
+            helper_ctes={},
+            expected_model_names=("C",),
+            expected_chain_length=3,
+            expected_sql_fragments={
+                "C": "doubled + 1 AS final",
+            },
+            expected_cte_bodies={
+                "C": "SELECT 1 AS id, 3 AS final",
+            },
+        ),
+        PlanTestChainTestCase(
             description="helper ctes included in mock subquery",
             model_queries={
                 "orders": 'SELECT id, amount FROM __ref("raw")',
@@ -499,6 +541,140 @@ def test_given_test_and_project_when_planning_then_produces_expected_chain(
     expected_error_fragment: str
     for expected_error_fragment in test_case.expected_error_fragments:
         assert any(expected_error_fragment in w.message for w in warnings)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PlanTestChainTestCase(
+            description="comment and literal refs are ignored without rewriting SQL",
+            model_queries={
+                "orders": (
+                    "SELECT `value--label` AS marker, "
+                    "'-- __ref(\"literal_model\")' AS literal_value\n"
+                    '/* optimizer hint __ref("block_model") */\n'
+                    '-- __ref("line_model")'
+                ),
+                "literal_model": "SELECT 1",
+                "block_model": "SELECT 1",
+                "line_model": "SELECT 1",
+                "literal_assertion_model": "SELECT 1",
+                "block_assertion_model": "SELECT 1",
+                "line_assertion_model": "SELECT 1",
+            },
+            mock_ref_ctes={},
+            mock_source_ctes={},
+            helper_ctes={},
+            expected_model_names=("orders",),
+            expected_chain_length=1,
+            expected_cte_bodies={"orders": "SELECT 1"},
+            assertion_ctes={
+                "comments_are_preserved": (
+                    "SELECT '-- __ref(\"literal_assertion_model\")' AS value\n"
+                    '/* assertion hint __ref("block_assertion_model") */\n'
+                    '-- __ref("line_assertion_model")'
+                )
+            },
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_refs_in_comments_and_literals_when_planning_then_preserves_sql_and_ignores_refs(
+    test_case: PlanTestChainTestCase,
+) -> None:
+    compiled_test: CompiledSqlTest
+    project: CompiledProject
+    compiled_test, project = build_test_and_project(test_case)
+
+    entry, warnings = plan_test(test=compiled_test, project=project, adapter=DuckDbAdapter())
+
+    assert not warnings
+    assert tuple(step.model_name for step in entry.chain) == test_case.expected_model_names
+    assert entry.chain[0].resolved_sql == test_case.model_queries["orders"]
+    assert len(entry.assertions) == 1
+    assert entry.assertions[0].resolved_sql == test_case.assertion_ctes["comments_are_preserved"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RepeatedFixturePlanTestCase(
+            description="two fixture rows stay isolated",
+            fixture_ids=(1, 2),
+            expected_sql_fragments=("SELECT 1 AS id", "SELECT 2 AS id"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_repeated_query_with_different_fixture_rows_when_planning_then_keeps_cases_isolated(
+    test_case: RepeatedFixturePlanTestCase,
+) -> None:
+    entries: list[SqlTestPlanEntry] = []
+    fixture_id: int
+    for fixture_id in test_case.fixture_ids:
+        fixture_case: PlanTestChainTestCase = PlanTestChainTestCase(
+            description=f"fixture case {fixture_id}",
+            model_queries={"orders": 'SELECT id FROM __source("raw")'},
+            mock_ref_ctes={},
+            mock_source_ctes={"raw": f"SELECT {fixture_id} AS id"},
+            helper_ctes={},
+            expected_model_names=("orders",),
+            expected_chain_length=1,
+            expected_cte_bodies={"orders": f"SELECT {fixture_id} AS id"},
+        )
+        compiled_test: CompiledSqlTest
+        project: CompiledProject
+        compiled_test, project = build_test_and_project(fixture_case)
+        entry, warnings = plan_test(
+            test=compiled_test,
+            project=project,
+            adapter=DuckDbAdapter(),
+            sql_analysis_enabled=True,
+        )
+        assert not warnings
+        entries.append(entry)
+
+    for entry, expected_fragment in zip(entries, test_case.expected_sql_fragments, strict=True):
+        assert expected_fragment in entry.chain[0].resolved_sql
+    assert entries[0].chain[0].resolved_sql != entries[1].chain[0].resolved_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PlanTestChainTestCase(
+            description="unresolved marker inside generated mock CTE",
+            model_queries={"orders": 'SELECT id FROM __ref("raw_orders")'},
+            mock_ref_ctes={"raw_orders": 'SELECT id FROM __source("missing_source")'},
+            mock_source_ctes={},
+            helper_ctes={},
+            expected_model_names=("orders",),
+            expected_chain_length=1,
+            expected_warning_count=1,
+            expected_warning_severity=WarningSeverity.ERROR,
+            expected_error_fragments=("missing_source",),
+            expected_cte_bodies={"orders": "SELECT 1 AS id"},
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unresolved_marker_in_mock_when_planning_with_analysis_then_reports_error(
+    test_case: PlanTestChainTestCase,
+) -> None:
+    compiled_test: CompiledSqlTest
+    project: CompiledProject
+    compiled_test, project = build_test_and_project(test_case)
+
+    _, warnings = plan_test(
+        test=compiled_test,
+        project=project,
+        adapter=DuckDbAdapter(),
+        sql_analysis_enabled=True,
+    )
+
+    assert len(warnings) == test_case.expected_warning_count
+    assert warnings[0].severity is test_case.expected_warning_severity
+    assert test_case.expected_error_fragments[0] in warnings[0].message
 
 
 @pytest.mark.parametrize(
@@ -1013,6 +1189,7 @@ def test_given_assertion_analysis_failure_when_planning_then_textual_chain_stays
             helper_ctes=(),
             resolved_chain={},
             file_label="tests/unit/test_chain.sql",
+            sql_analysis_dialect="duckdb",
         )
     )
     assert model_analysis_result is not None
@@ -1039,6 +1216,42 @@ def test_given_assertion_analysis_failure_when_planning_then_textual_chain_stays
     assert "SELECT 1 AS id" in resolved_assertion_sql
     assert "__REF(" not in resolved_assertion_sql.upper()
     assert "FROM (WITH" not in resolved_assertion_sql.upper()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlAnalysisDialectTestCase(
+            description="Snowflake STARTSWITH spelling is preserved",
+            query_sql="SELECT STARTSWITH(name, 'A') AS matches FROM __ref(\"items\")",
+            dialect="snowflake",
+            expected_sql_fragment="STARTSWITH(name, 'A')",
+            expected_absent_sql_fragment="STARTS_WITH",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_adapter_function_when_resolving_with_analysis_then_emits_supported_spelling(
+    test_case: SqlAnalysisDialectTestCase,
+) -> None:
+    result: SqlAnalysisResolvedTestSql | None = (
+        sql_test_assembly.try_resolve_test_model_sql_with_sql_analysis(
+            query_sql=test_case.query_sql,
+            mock_refs={"items": "SELECT 'Alice' AS name"},
+            mock_sources={},
+            mock_seeds={},
+            mock_dbt_refs={},
+            function_locations={},
+            helper_ctes=(),
+            resolved_chain={},
+            file_label="tests/unit/test_dialect.sql",
+            sql_analysis_dialect=test_case.dialect,
+        )
+    )
+
+    assert result is not None
+    assert test_case.expected_sql_fragment in result.resolved_sql
+    assert test_case.expected_absent_sql_fragment not in result.resolved_sql
 
 
 @pytest.mark.parametrize(

@@ -170,6 +170,29 @@ SELECT 1
             },
         ),
         ExecuteChainTestCase(
+            description="final model expectation executes the complete unmocked model chain",
+            model_queries={
+                "A": 'SELECT id, amount FROM __source("raw")',
+                "B": 'SELECT id, amount * 2 AS doubled FROM __ref("A")',
+                "C": 'SELECT id, doubled + 1 AS final FROM __ref("B")',
+            },
+            mock_ref_ctes={},
+            mock_source_ctes={
+                "raw": "SELECT 1 AS id, 50 AS amount",
+            },
+            helper_ctes={},
+            expected_model_names=("C",),
+            expected_cte_bodies={
+                "C": "SELECT 1 AS id, 101 AS final",
+            },
+            expected_chain_length=3,
+            expected_results={
+                "A": ((1, 50),),
+                "B": ((1, 100),),
+                "C": ((1, 101),),
+            },
+        ),
+        ExecuteChainTestCase(
             description=("helper cte feeds into mock and result is executable"),
             model_queries={
                 "orders": ('SELECT id, amount FROM __ref("raw_orders")'),
@@ -412,7 +435,40 @@ def test_given_macro_test_plan_when_executing_then_it_passes_direct_comparison(
                 "stg_orders": ((1, 100),),
                 "fact_orders": ((1, 101),),
             },
-        )
+        ),
+        ExecuteChainTestCase(
+            description="sql_analysis path handles a leading comment before with",
+            model_queries={
+                "orders": (
+                    "-- preserve this model comment\n"
+                    'WITH source_rows AS (SELECT id FROM __source("raw")) '
+                    "SELECT id FROM source_rows"
+                )
+            },
+            mock_ref_ctes={},
+            mock_source_ctes={"raw": "SELECT 1 AS id"},
+            helper_ctes={},
+            expected_model_names=("orders",),
+            expected_cte_bodies={"orders": "SELECT 1 AS id"},
+            expected_chain_length=1,
+            expected_results={"orders": ((1,),)},
+        ),
+        ExecuteChainTestCase(
+            description="sql_analysis path handles many leading comments before plain select",
+            model_queries={
+                "orders": (
+                    "".join(f"-- retained comment {index}\n" for index in range(30))
+                    + 'SELECT id FROM __source("raw")'
+                )
+            },
+            mock_ref_ctes={},
+            mock_source_ctes={"raw": "SELECT 1 AS id"},
+            helper_ctes={},
+            expected_model_names=("orders",),
+            expected_cte_bodies={"orders": "SELECT 1 AS id"},
+            expected_chain_length=1,
+            expected_results={"orders": ((1,),)},
+        ),
     ],
     ids=lambda case: case.description,
 )

@@ -14,6 +14,7 @@ from tests.unit.src.sqlbuild.executor.testing.main.helpers import (
     build_comparison_test_entry,
     build_comparison_test_entry_with_helper_ctes,
     build_table_function_test_entry,
+    build_transitive_comparison_test_entry,
 )
 
 
@@ -74,6 +75,37 @@ def test_given_adapter_when_building_comparison_sql_then_it_uses_expected_set_di
     expected_fragment: str
     for expected_fragment in test_case.expected_fragments:
         assert expected_fragment in comparison_sql
+    expected_absent_fragment: str
+    for expected_absent_fragment in test_case.expected_absent_fragments:
+        assert expected_absent_fragment not in comparison_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BuildComparisonSqlTestCase(
+            description="Snowflake comparison formatting preserves STARTSWITH",
+            adapter_name="snowflake",
+            expected_fragments=("STARTSWITH(name, 'A')",),
+            expected_absent_fragments=("STARTS_WITH",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_snowflake_function_when_formatting_comparison_then_emits_supported_spelling(
+    test_case: BuildComparisonSqlTestCase,
+) -> None:
+    adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
+
+    formatted_sql: str = comparison_sql_helpers.format_sql(
+        sql="SELECT STARTSWITH(name, 'A') AS matches FROM items",
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
+    )
+
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in formatted_sql
+    for expected_absent_fragment in test_case.expected_absent_fragments:
+        assert expected_absent_fragment not in formatted_sql
 
 
 @pytest.mark.parametrize(
@@ -175,6 +207,30 @@ def test_given_matching_helper_ctes_when_building_comparison_sql_then_lifts_once
     for expected_fragment in test_case.expected_fragments:
         assert expected_fragment in comparison_sql
     assert comparison_sql.lower().count("input_values as") == 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        BuildComparisonSqlTestCase(
+            description="unasserted transitive step is omitted",
+            adapter_name="duckdb",
+            expected_fragments=("__actual__final_orders AS", "__expected__final_orders AS"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_unasserted_transitive_steps_when_building_comparison_then_emits_only_expected_model(
+    test_case: BuildComparisonSqlTestCase,
+) -> None:
+    comparison_sql: str = build_sql_test_comparison_sql(
+        test_entry=build_transitive_comparison_test_entry(),
+    )
+
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in comparison_sql
+    assert "__actual__stg_orders AS" not in comparison_sql
+    assert comparison_sql.lower().count("shared as") == 1
 
 
 @pytest.mark.parametrize(

@@ -22,6 +22,14 @@ class SqlTestOperationLifecycleTestCase:
 
 
 @dataclass(frozen=True)
+class SqlTestConcurrencyTestCase:
+    description: str
+    test_count: int
+    max_concurrency: int
+    expected_connection_count: int
+
+
+@dataclass(frozen=True)
 class AuditPipelineLifecycleTestCase:
     description: str
     expected_event_type: str

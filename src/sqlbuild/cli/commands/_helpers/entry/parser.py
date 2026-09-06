@@ -226,6 +226,7 @@ def _add_quality_parsers(
     test_parser.add_argument("--no-sql-validation", action="store_true", default=False)
     test_parser.add_argument("--json", action="store_true", default=False)
     test_parser.add_argument("--target", default=None)
+    test_parser.add_argument("--concurrency", type=int, default=None)
     _ = add_execution_json_output_arg(test_parser)
     _ = add_select_args(test_parser)
     _ = add_vars_args(test_parser)

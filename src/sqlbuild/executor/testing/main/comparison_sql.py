@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from collections import OrderedDict
-
-from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
+from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.executor.testing._helpers.comparison_sql import (
+    build_chain_comparison_parts,
     format_sql,
     lift_step_ctes,
     unique_cte_suffix,
@@ -23,49 +22,10 @@ def build_sql_test_comparison_sql(
     if not test_entry.chain and not test_entry.assertions:
         return ""
 
-    lifted_ctes: OrderedDict[str, str] = OrderedDict()
-    comparison_ctes: list[str] = []
-    select_parts: list[str] = []
-    cte_name_counts: dict[str, int] = {}
-    step_index: int
-    step: ChainStep
-    for step_index, step in enumerate(test_entry.chain):
-        cte_suffix: str
-        cte_suffix, cte_name_counts = unique_cte_suffix(
-            model_name=step.model_name,
-            cte_name_counts=cte_name_counts,
-        )
-        actual_cte: str = f"__actual__{cte_suffix}"
-        expected_cte: str = f"__expected__{cte_suffix}"
-        actual_sql: str
-        actual_sql, lifted_ctes = lift_step_ctes(
-            sql=step.resolved_sql,
-            lifted_ctes=lifted_ctes,
-            sql_analysis_enabled=test_entry.sql_analysis_enabled,
-        )
-        comparison_ctes.append(f"{actual_cte} AS ({actual_sql})")
-        if step.expected_cte_sql is None:
-            continue
-        expected_sql: str
-        expected_sql, lifted_ctes = lift_step_ctes(
-            sql=step.expected_cte_sql,
-            lifted_ctes=lifted_ctes,
-            sql_analysis_enabled=test_entry.sql_analysis_enabled,
-        )
-        comparison_ctes.append(f"{expected_cte} AS ({expected_sql})")
-        select_parts.append(
-            "SELECT "
-            f"{step_index} AS step_index, "
-            f"'{_escape_sql_string(step.model_name)}' AS model_name, "
-            f"(SELECT COUNT(*) FROM {actual_cte}) AS actual_count, "
-            f"(SELECT COUNT(*) FROM {expected_cte}) AS expected_count, "
-            f"(SELECT COUNT(*) FROM ("
-            f"SELECT * FROM {actual_cte} {set_difference_operator} SELECT * FROM {expected_cte}"
-            f") AS __sqlbuild_mismatch) AS unexpected_count, "
-            f"(SELECT COUNT(*) FROM ("
-            f"SELECT * FROM {expected_cte} {set_difference_operator} SELECT * FROM {actual_cte}"
-            f") AS __sqlbuild_missing) AS missing_count"
-        )
+    lifted_ctes, comparison_ctes, select_parts, cte_name_counts = build_chain_comparison_parts(
+        test_entry=test_entry,
+        set_difference_operator=set_difference_operator,
+    )
     assertion_index: int
     for assertion_index, assertion in enumerate(test_entry.assertions, start=len(test_entry.chain)):
         assertion_suffix: str
