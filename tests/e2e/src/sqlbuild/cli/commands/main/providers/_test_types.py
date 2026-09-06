@@ -8,6 +8,12 @@ class EventExporterE2ETestCase:
 
 
 @dataclass(frozen=True)
+class CommandOutputE2ETestCase:
+    description: str
+    expected_context: dict[str, object]
+
+
+@dataclass(frozen=True)
 class NoExporterCommandE2ETestCase:
     description: str
     command: tuple[str, ...]

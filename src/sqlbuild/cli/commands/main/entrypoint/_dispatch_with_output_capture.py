@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from typing import Any
 
@@ -12,6 +12,9 @@ from sqlbuild.runtime.output_capture.classes.dispatcher import OutputCaptureDisp
 from sqlbuild.runtime.output_capture.classes.text_tee import TextOutputTee
 from sqlbuild.runtime.output_capture.main.current_output_capture_context import (
     current_output_capture_context,
+)
+from sqlbuild.runtime.output_capture.main.invocation_context import (
+    invocation_context_from_environment,
 )
 from sqlbuild.runtime.output_capture.models import OutputCaptureContext
 from sqlbuild.runtime.output_capture.types import (
@@ -34,11 +37,14 @@ def configured_output_capture_scope(
         return
     context: OutputCaptureContext | None = current_output_capture_context()
     try:
+        external_context: Mapping[str, object] = (
+            invocation_context_from_environment() if context is None else context.external_context
+        )
         dispatcher: OutputCaptureDispatcher = OutputCaptureDispatcher(
             exporter=exporter_scope,
             invocation_id=identity.invocation_id,
             run_id=identity.run_id,
-            external_context=None if context is None else context.external_context,
+            external_context=external_context,
             failure_callback=failure_callback,
         )
     except BaseException as error:

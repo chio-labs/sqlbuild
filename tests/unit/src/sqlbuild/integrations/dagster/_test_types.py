@@ -11,6 +11,12 @@ class DagsterConstantGuardTestCase:
 
 
 @dataclass(frozen=True)
+class DagsterInvocationContextTestCase:
+    description: str
+    expected_context: dict[str, object]
+
+
+@dataclass(frozen=True)
 class DagsterInsufficientStatusTestCase:
     description: str
     expected_status: str

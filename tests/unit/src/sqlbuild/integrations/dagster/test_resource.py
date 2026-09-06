@@ -38,6 +38,7 @@ from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterCliSelectionTestCase,
     DagsterCliStreamTestCase,
     DagsterFutureCursorMetadataTestCase,
+    DagsterInvocationContextTestCase,
     DagsterLiveFailureLoggingTestCase,
     DagsterManagedLoaderRoutingTestCase,
     DagsterMeasurementMetadataTestCase,
@@ -748,6 +749,97 @@ def test_given_sqlbuild_cli_resource_when_waiting_invocation_then_captures_proce
     assert invocation.is_successful() is test_case.expected_success
     assert invocation.stdout == test_case.expected_stdout
     assert invocation.stderr == test_case.expected_stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagsterInvocationContextTestCase(
+            description="subprocess receives safe Dagster identifiers",
+            expected_context={
+                "integration": {
+                    "name": "dagster",
+                    "run_id": "dagster-run-1",
+                    "job_name": "prices_job",
+                    "step_key": "all_sqlbuild_assets",
+                    "retry_number": 1,
+                }
+            },
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_dagster_context_when_starting_cli_then_generic_context_crosses_subprocess_boundary(
+    test_case: DagsterInvocationContextTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    environment_output_path: Path = tmp_path / "invocation-context.json"
+    context: Any = type(
+        "InvocationContext",
+        (),
+        {
+            "run_id": "dagster-run-1",
+            "job_name": "prices_job",
+            "op_handle": type("OpHandle", (), {"to_string": lambda self: "all_sqlbuild_assets"})(),
+            "retry_number": 1,
+            "has_partition_key": False,
+        },
+    )()
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_fake_sqb_command(
+            root=tmp_path, environment_output_path=environment_output_path
+        ),
+    )
+
+    invocation: SqlBuildCliInvocation = resource.cli(
+        ["compile"], context=context, raise_on_error=False
+    ).wait()
+
+    assert invocation.is_successful() is True
+    assert (
+        json.loads(environment_output_path.read_text(encoding="utf-8"))
+        == test_case.expected_context
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagsterInvocationContextTestCase(
+            description="contextless subprocess clears inherited integration metadata",
+            expected_context={},
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_no_dagster_context_when_starting_cli_then_inherited_context_is_not_forwarded(
+    test_case: DagsterInvocationContextTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    environment_output_path: Path = tmp_path / "invocation-context.json"
+    monkeypatch.setenv(
+        "SQLBUILD_INVOCATION_CONTEXT_JSON",
+        '{"integration":{"name":"stale","run_id":"wrong-run"}}',
+    )
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_fake_sqb_command(
+            root=tmp_path, environment_output_path=environment_output_path
+        ),
+    )
+
+    invocation: SqlBuildCliInvocation = resource.cli(
+        ["compile"], context=None, raise_on_error=False
+    ).wait()
+
+    assert invocation.is_successful() is True
+    assert environment_output_path.read_text(encoding="utf-8") == ""
+    assert test_case.expected_context == {}
 
 
 @pytest.mark.parametrize(

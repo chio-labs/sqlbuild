@@ -118,6 +118,7 @@ def test_given_full_queue_when_terminal_summary_arrives_then_bulk_is_dropped_and
         exporter=exporter,
         queue_capacity=2,
         batch_size=1,
+        max_record_bytes=7,
     )
     dispatcher.append(stream=CommandOutputStream.STDOUT, text="first\n")
     assert exporter.called.wait(timeout=1.0)
@@ -137,6 +138,74 @@ def test_given_full_queue_when_terminal_summary_arrives_then_bulk_is_dropped_and
         "command_output_loss",
     )
     assert tuple(record.dropped_records for record in exporter.records) == (0, 0, 2)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (OutputCaptureTestCase(description="multiline_coalescing", expected_success=True),),
+    ids=lambda case: case.description,
+)
+def test_given_adjacent_lines_when_captured_then_one_bounded_multiline_record_is_exported(
+    test_case: OutputCaptureTestCase,
+) -> None:
+    assert test_case.expected_success is True
+    exporter: RecordingOutputExporter = RecordingOutputExporter()
+    dispatcher: OutputCaptureDispatcher = make_dispatcher(exporter=exporter)
+
+    dispatcher.append(stream=CommandOutputStream.STDOUT, text="first\nsecond\n")
+    summary: CommandOutputCaptureSummary = dispatcher.close()
+
+    assert tuple(record.message for record in exporter.records) == ("first\nsecond\n",)
+    assert summary.accepted == 1
+    assert summary.delivered == 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (OutputCaptureTestCase(description="timed_chunk_flush", expected_success=True),),
+    ids=lambda case: case.description,
+)
+def test_given_low_volume_line_when_flush_interval_elapses_then_output_is_exported_before_close(
+    test_case: OutputCaptureTestCase,
+) -> None:
+    assert test_case.expected_success is True
+    exporter: RecordingOutputExporter = RecordingOutputExporter()
+    dispatcher: OutputCaptureDispatcher = make_dispatcher(exporter=exporter)
+
+    dispatcher.append(stream=CommandOutputStream.STDOUT, text="visible soon\n")
+
+    assert exporter.called.wait(timeout=1.0)
+    assert tuple(record.message for record in exporter.records) == ("visible soon\n",)
+    assert dispatcher.close().flush_complete is True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (OutputCaptureTestCase(description="bursty_verbose_output", expected_success=True),),
+    ids=lambda case: case.description,
+)
+def test_given_verbose_output_burst_when_exporter_is_slow_then_bounded_chunks_avoid_line_queue_loss(
+    test_case: OutputCaptureTestCase,
+) -> None:
+    assert test_case.expected_success is True
+    exporter: BlockingOutputExporter = BlockingOutputExporter()
+    dispatcher: OutputCaptureDispatcher = make_dispatcher(
+        exporter=exporter,
+        queue_capacity=16,
+        batch_size=1,
+        max_record_bytes=1024,
+    )
+    text: str = "SELECT 1;\n" * 1_000
+
+    dispatcher.append(stream=CommandOutputStream.STDOUT, text=text)
+    assert exporter.called.wait(timeout=1.0)
+    exporter.release.set()
+    summary: CommandOutputCaptureSummary = dispatcher.close()
+
+    assert summary.dropped == 0
+    assert summary.accepted < 16
+    assert all(len(record.message.encode("utf-8")) <= 1024 for record in exporter.records)
+    assert "".join(record.message for record in exporter.records) == text
 
 
 @pytest.mark.parametrize(
