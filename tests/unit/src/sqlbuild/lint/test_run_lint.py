@@ -167,6 +167,8 @@ def test_given_non_ascii_sql_when_native_linting_then_span_maps_to_authored_colu
 
     assert tuple(item.code for item in result.violations) == ("SQBL001",)
     assert (result.violations[0].line, result.violations[0].column) == test_case.expected_value
+    assert (result.violations[0].end_line, result.violations[0].end_column) == (2, 45)
+    assert result.violations[0].remediation == ("Use IS NULL or IS NOT NULL when testing for NULL.")
 
 
 @pytest.mark.parametrize(

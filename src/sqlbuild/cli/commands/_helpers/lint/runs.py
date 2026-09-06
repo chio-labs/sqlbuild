@@ -6,6 +6,7 @@ import json
 import tomllib
 from pathlib import Path
 
+from sqlbuild.cli.commands._helpers.lint.diagnostics import format_lint_diagnostics
 from sqlbuild.compiler.discovery.constants import LOCAL_CONFIG_FILENAME
 from sqlbuild.lint.constants import (
     ADAPTER_CONFIG_KEY,
@@ -16,6 +17,7 @@ from sqlbuild.lint.constants import (
     PROJECT_CONFIG_FILENAME_KEY,
 )
 from sqlbuild.lint.models import LintConfig, LintRunResult
+from sqlbuild.presentation.classes.cli_style import CliStyle
 
 
 def resolve_lint_config(*, project_dir: Path) -> LintConfig:
@@ -59,6 +61,8 @@ def prepare_lint_run(*, project_dir: Path) -> tuple[LintConfig, str | None]:
 def render_lint_result(
     *,
     result: LintRunResult,
+    root: Path,
+    use_color: bool,
     show_formatted: bool,
     formatted_heading: str = "Formatted files:",
 ) -> None:
@@ -71,11 +75,13 @@ def render_lint_result(
             print(f"  {formatted_path}")
         print()
     if result.violations:
-        _print_violations(result=result)
-    print(
+        print("\n\n".join(format_lint_diagnostics(result=result, root=root, use_color=use_color)))
+        print()
+    summary: str = (
         f"Completed.  FAULT={len(result.faults)}  WARN={len(result.warnings)}  "
         f"FILES={result.files_checked}"
     )
+    print(_styled_summary(summary=summary, result=result, use_color=use_color))
 
 
 def render_lint_result_json(*, result: LintRunResult) -> None:
@@ -91,10 +97,13 @@ def render_lint_result_json(*, result: LintRunResult) -> None:
                     {
                         "code": violation.code,
                         "column": violation.column,
+                        "end_column": violation.end_column,
+                        "end_line": violation.end_line,
                         "engine": violation.engine,
                         "file": str(violation.file_path),
                         "line": violation.line,
                         "message": violation.message,
+                        "remediation": violation.remediation,
                         "severity": violation.severity,
                     }
                     for violation in result.violations
@@ -107,18 +116,13 @@ def render_lint_result_json(*, result: LintRunResult) -> None:
     )
 
 
-def _print_violations(*, result: LintRunResult) -> None:
-    current_file: Path | None = None
-    violation: object
-    for violation in result.violations:
-        if violation.file_path != current_file:
-            current_file = violation.file_path
-            print(f"{current_file}")
-        print(
-            f"  {violation.line}:{violation.column}  "
-            f"{violation.engine}  {violation.code}  {violation.message}"
-        )
-    print()
+def _styled_summary(*, summary: str, result: LintRunResult, use_color: bool) -> str:
+    style: CliStyle = CliStyle(use_color=use_color)
+    if result.faults:
+        return style.error_strong(summary)
+    if result.warnings:
+        return style.warning_strong(summary)
+    return style.success_strong(summary)
 
 
 def _resolve_int(*, section: dict[str, object], key: str, current: int) -> int:

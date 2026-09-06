@@ -70,6 +70,18 @@ class NativeSqlReuseTestCase:
 
 
 @dataclass(frozen=True)
+class GeneratedRangeFallbackTestCase:
+    """Test case for a diagnostic that crosses generated SQL."""
+
+    description: str
+    authored: str
+    expanded: str
+    diagnostic_start: int
+    diagnostic_end: int
+    expected_position: tuple[int, int]
+
+
+@dataclass(frozen=True)
 class NeutralizeInterpolationTestCase:
     """Test case for interpolation neutralization."""
 

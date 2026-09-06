@@ -85,11 +85,13 @@ def _authored_violation(*, raw_diagnostic: object, body: LintBody, contents: str
     diagnostic: dict[str, object] = cast("dict[str, object]", raw_diagnostic)
     code: object = diagnostic.get("code")
     message: object = diagnostic.get("message")
+    remediation: object = diagnostic.get("remediation")
     start: object = diagnostic.get("start")
     end: object = diagnostic.get("end")
     if (
         not isinstance(code, str)
         or not isinstance(message, str)
+        or not isinstance(remediation, str)
         or not isinstance(start, int)
         or isinstance(start, bool)
         or not isinstance(end, int)
@@ -102,11 +104,20 @@ def _authored_violation(*, raw_diagnostic: object, body: LintBody, contents: str
     mapped: MappedOffset = map_expanded_offset(offset=start, passes=body.passes)
     absolute_offset: int = body.body_start + mapped.offset
     starts: tuple[int, ...] = _line_starts(contents)
-    line_index: int = bisect_right(starts, absolute_offset) - 1
+    line, column = _offset_position(offset=absolute_offset, line_starts=starts)
+    end_position: tuple[int, int] | None = _authored_end_position(
+        start=start,
+        end=end,
+        mapped_start=mapped,
+        absolute_start=absolute_offset,
+        body=body,
+        contents=contents,
+        line_starts=starts,
+    )
     return LintViolation(
         file_path=body.file_path,
-        line=line_index + 1,
-        column=absolute_offset - starts[line_index] + 1,
+        line=line,
+        column=column,
         code=code,
         message=_violation_message(
             message=message,
@@ -116,7 +127,36 @@ def _authored_violation(*, raw_diagnostic: object, body: LintBody, contents: str
         ),
         severity=VIOLATION_SEVERITY_WARNING,
         engine=LINT_ENGINE_NATIVE,
+        end_line=end_position[0] if end_position is not None else None,
+        end_column=end_position[1] if end_position is not None else None,
+        remediation=remediation,
     )
+
+
+def _authored_end_position(
+    *,
+    start: int,
+    end: int,
+    mapped_start: MappedOffset,
+    absolute_start: int,
+    body: LintBody,
+    contents: str,
+    line_starts: tuple[int, ...],
+) -> tuple[int, int] | None:
+    """Map a native exclusive end offset only when authored continuity is provable."""
+
+    if mapped_start.generated:
+        token: str | None = interpolation_text_at(body=contents, start=absolute_start)
+        if token is None:
+            return None
+        return _offset_position(offset=absolute_start + len(token), line_starts=line_starts)
+    if end <= start:
+        return None
+    mapped_last: MappedOffset = map_expanded_offset(offset=end - 1, passes=body.passes)
+    if mapped_last.generated or mapped_last.offset - mapped_start.offset != end - start - 1:
+        return None
+    absolute_end: int = body.body_start + mapped_last.offset + 1
+    return _offset_position(offset=absolute_end, line_starts=line_starts)
 
 
 def _violation_message(
@@ -135,3 +175,8 @@ def _line_starts(value: str) -> tuple[int, ...]:
         0,
         *(index + 1 for index, character in enumerate(value) if character == _NEWLINE_CHARACTER),
     )
+
+
+def _offset_position(*, offset: int, line_starts: tuple[int, ...]) -> tuple[int, int]:
+    line_index: int = bisect_right(line_starts, offset) - 1
+    return line_index + 1, offset - line_starts[line_index] + 1

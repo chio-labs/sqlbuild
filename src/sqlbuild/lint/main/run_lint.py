@@ -71,6 +71,7 @@ def run_lint(
             apply_suppressions(violations=violations, contents_by_path=files)
         ),
         formatted_files=(),
+        source_texts=files,
     )
 
 
