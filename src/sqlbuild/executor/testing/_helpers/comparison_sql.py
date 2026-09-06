@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import re
 from collections import OrderedDict
-from copy import deepcopy
 from typing import Any
 
 from sqlbuild.adapter.contract.types import BuiltinAdapter
@@ -210,9 +209,8 @@ def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] |
             )
         )
 
-    without_with: dict[str, Any] = deepcopy(parsed_dict)
-    without_with["select"]["with"] = None
-    body_sql: str | None = _generate_one(polyglot_module=polyglot_module, expression=without_with)
+    select_dict["with"] = None
+    body_sql: str | None = _generate_one(polyglot_module=polyglot_module, expression=parsed_dict)
     if body_sql is None:
         return None
     return (

@@ -13,6 +13,7 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.analysis.cache import (
     build_analysis_cache_context,
     model_analysis_cache_key,
+    read_model_analyses,
     write_model_analyses,
 )
 from sqlbuild.compiler.compile._helpers.assembly import project as assembly_project
@@ -139,7 +140,7 @@ def test_given_corrupt_analysis_when_compiling_then_reanalyzes_and_repairs_the_e
 ) -> None:
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v4" / "model-analysis.sqlite3"
+    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v5" / "model-analysis.sqlite3"
     with sqlite3.connect(cache_path) as connection:
         persisted_contents: str = connection.execute(
             "SELECT payload FROM model_analysis"
@@ -162,7 +163,7 @@ def test_given_corrupt_analysis_when_compiling_then_reanalyzes_and_repairs_the_e
     _digest, _separator, serialized_payload = repaired_contents.partition("\n")
     repaired_payload: dict[str, object] = json.loads(serialized_payload)
     assert repaired_project.models == cold_project.models
-    assert repaired_payload["v"] == 4
+    assert repaired_payload["v"] == 5
     assert isinstance(repaired_payload["s"], str)
     assert analyzer.call_count == test_case.expected_count
 
@@ -180,7 +181,7 @@ def test_given_non_text_analysis_cache_when_compiling_then_reanalyzes_safely(
 ) -> None:
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     _ = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v4" / "model-analysis.sqlite3"
+    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v5" / "model-analysis.sqlite3"
     with sqlite3.connect(cache_path) as connection:
         _ = connection.execute(
             "UPDATE model_analysis SET payload = ?",
@@ -265,21 +266,36 @@ def test_given_non_text_reference_cache_when_compiling_then_rescans_safely(
 
 @pytest.mark.parametrize(
     "test_case",
-    (AnalysisCacheTestCase(description="unsuccessful result exclusion", expected_count=0),),
+    (AnalysisCacheTestCase(description="deterministic unsuccessful result", expected_count=1),),
     ids=lambda case: case.description,
 )
-def test_given_unsuccessful_analysis_when_writing_then_does_not_persist_it(
+def test_given_unsuccessful_analysis_when_writing_then_reuses_deterministic_result(
     test_case: AnalysisCacheTestCase,
     tmp_path: Path,
 ) -> None:
+    cache_key: str = "a" * 64
+    context: AnalysisCacheContext = AnalysisCacheContext(
+        root=tmp_path,
+        shared_fingerprint="shared",
+    )
     write_model_analyses(
-        context=AnalysisCacheContext(root=tmp_path, shared_fingerprint="shared"),
+        context=context,
         analyses_by_key={
-            "a" * 64: PolyglotAnalysisResult(analysis_succeeded=False),
+            cache_key: PolyglotAnalysisResult(analysis_succeeded=False),
+        },
+        latest_analyses_by_model={
+            "orders": PolyglotAnalysisResult(analysis_succeeded=False),
         },
     )
+    analyses, _, _ = read_model_analyses(
+        context=context,
+        cache_keys=(cache_key,),
+        model_names=("orders",),
+        upstream_model_names_by_key={cache_key: ()},
+    )
 
-    assert len(tuple(tmp_path.rglob("*.sqlite3"))) == test_case.expected_count
+    assert len(analyses) == test_case.expected_count
+    assert analyses[cache_key].analysis_succeeded is False
 
 
 @pytest.mark.parametrize(

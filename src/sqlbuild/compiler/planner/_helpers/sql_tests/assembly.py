@@ -334,6 +334,28 @@ def plan_test(
     return entry, tuple(warnings)
 
 
+def resolve_test_model_chain_names(
+    *, test: CompiledSqlTest, project: CompiledProject
+) -> tuple[str, ...]:
+    """Return the unmocked model closure used to build one SQL test plan."""
+
+    if not isinstance(test.payload, CompiledModelSqlTestPayload):
+        return ()
+    model_map: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    assertion_target_names: tuple[str, ...] = _extract_assertion_ref_targets(
+        assertion_map=_extract_assertion_ctes(test)
+    )
+    expected_names: tuple[str, ...] = tuple(
+        dict.fromkeys((*test.payload.expected_model_names, *assertion_target_names))
+    )
+    return _topo_sort_model_chain(
+        expected_names=expected_names,
+        model_map=model_map,
+        model_query_overrides=test.payload.model_query_overrides,
+        mock_ref_names=frozenset(_extract_mock_refs(test)),
+    )
+
+
 def _build_assertion_steps(
     *,
     assertion_map: dict[str, str],
