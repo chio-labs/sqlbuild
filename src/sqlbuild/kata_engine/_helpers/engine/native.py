@@ -12,7 +12,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
-import sqlbuild._kata_native as _kata_native
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,
@@ -78,7 +78,7 @@ def evaluate_native(
     }
     try:
         response: object = json.loads(
-            _kata_native.evaluate_json(json.dumps(request, sort_keys=True, default=str))
+            _native.evaluate_json(json.dumps(request, sort_keys=True, default=str))
         )
     except (ValueError, TypeError) as error:
         raise KataError(str(error)) from error
@@ -102,7 +102,7 @@ def load_native_config(project_dir: Path) -> dict[str, object]:
     """Load strict kata TOML through the native configuration owner."""
 
     try:
-        payload: object = json.loads(_kata_native.load_config_json(str(project_dir.resolve())))
+        payload: object = json.loads(_native.load_config_json(str(project_dir.resolve())))
     except (ValueError, TypeError) as error:
         raise KataError(str(error)) from error
     if not isinstance(payload, dict):
@@ -114,7 +114,7 @@ def native_catalogue() -> tuple[dict[str, object], ...]:
     """Return native-owned built-in rule metadata."""
 
     try:
-        payload: object = json.loads(_kata_native.catalogue_json())
+        payload: object = json.loads(_native.catalogue_json())
     except (ValueError, TypeError) as error:
         raise KataError(str(error)) from error
     if not isinstance(payload, dict) or not isinstance(payload.get("rules"), list):
@@ -158,7 +158,7 @@ def native_selected_codes(
     }
     try:
         payload: object = json.loads(
-            _kata_native.selected_codes_json(json.dumps(request, sort_keys=True, default=str))
+            _native.selected_codes_json(json.dumps(request, sort_keys=True, default=str))
         )
     except (ValueError, TypeError) as error:
         raise KataError(str(error)) from error
@@ -171,7 +171,7 @@ def render_native_owned_skill(*, content: str, input_fingerprint: str) -> str:
     """Attach Fensu schema-v2 ownership to generated guidance."""
 
     try:
-        return _kata_native.render_owned_skill(content, input_fingerprint)
+        return _native.render_owned_skill(content, input_fingerprint)
     except (ValueError, TypeError) as error:
         raise KataError(str(error)) from error
 
@@ -179,7 +179,7 @@ def render_native_owned_skill(*, content: str, input_fingerprint: str) -> str:
 def native_skill_freshness(*, content: str | None, input_fingerprint: str) -> str:
     """Classify generated guidance through the Fensu ownership contract."""
 
-    return _kata_native.skill_freshness(content, input_fingerprint)
+    return _native.skill_freshness(content, input_fingerprint)
 
 
 def _config_payload(config: KataConfig) -> dict[str, object]:

@@ -1,4 +1,4 @@
-"""Neutralize sqlbuild interpolation so sqruff can parse authored SQL bodies."""
+"""Neutralize SQLBuild interpolation for native SQL analysis and formatting."""
 
 from __future__ import annotations
 

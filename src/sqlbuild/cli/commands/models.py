@@ -17,6 +17,7 @@ from sqlbuild.cli.commands.types import (
     DagCommandHandler,
     DebugCheckStatus,
     DebugCommandHandler,
+    FormatCommandHandler,
     FreshnessSourceStatus,
     LineageCommandHandler,
     LintCommandHandler,
@@ -1431,7 +1432,7 @@ class CliEntrypointHandlers:
     run_playground: Callable[[PlaygroundCommandRequest], int]
     run_skills_update: SkillsUpdateCommandHandler
     run_lint: LintCommandHandler
-    run_format: LintCommandHandler
+    run_format: FormatCommandHandler
     run_scenario: Callable[[ScenarioTestCommandRequest], int]
     run_scenario_capture: Callable[[ScenarioCaptureCommandRequest], int]
     run_kata: Callable[[KataCommandRequest], int]
