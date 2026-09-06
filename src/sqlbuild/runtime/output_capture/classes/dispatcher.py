@@ -14,6 +14,7 @@ from sqlbuild.runtime.output_capture._helpers.text import chunk_text, strip_ansi
 from sqlbuild.runtime.output_capture.constants import (
     COMMAND_OUTPUT_LOSS_RECORD_TYPE,
     DEFAULT_OUTPUT_BATCH_SIZE,
+    DEFAULT_OUTPUT_FLUSH_INTERVAL_SECONDS,
     DEFAULT_OUTPUT_MAX_RECORD_BYTES,
     DEFAULT_OUTPUT_QUEUE_CAPACITY,
     DEFAULT_OUTPUT_SHUTDOWN_TIMEOUT_SECONDS,
@@ -32,7 +33,7 @@ from sqlbuild.runtime.output_capture.types import (
 
 
 class OutputCaptureDispatcher:
-    """Turn stream fragments into line records and export them off execution threads."""
+    """Turn stream fragments into bounded text chunks and export them off execution threads."""
 
     def __init__(
         self,
@@ -67,10 +68,15 @@ class OutputCaptureDispatcher:
         self._capacity: int = queue_capacity
         self._batch_size: int = batch_size
         self._max_record_bytes: int = max_record_bytes
+        self._flush_interval_seconds: float = DEFAULT_OUTPUT_FLUSH_INTERVAL_SECONDS
         self._shutdown_timeout_seconds: float = shutdown_timeout_seconds
         self._clock: Callable[[], datetime] = clock or (lambda: datetime.now(UTC))
         self._failure_callback: Callable[[BaseException], object] | None = failure_callback
         self._queue: deque[CommandOutputRecord] = deque()
+        self._buffer_stream: CommandOutputStream | None = None
+        self._buffer_parts: list[str] = []
+        self._buffer_bytes: int = 0
+        self._buffer_started_at: float | None = None
         self._partials: dict[CommandOutputStream, str] = {
             CommandOutputStream.STDOUT: "",
             CommandOutputStream.STDERR: "",
@@ -106,7 +112,9 @@ class OutputCaptureDispatcher:
                 trailing = lines.pop()
             self._partials[stream] = trailing
             for line in lines:
-                self._enqueue_text(stream=stream, text=line, priority=OutputRecordPriority.BULK)
+                self._buffer_text_fragment(
+                    stream=stream, text=line, immediate_priority=OutputRecordPriority.BULK
+                )
             self._condition.notify()
 
     def close(self) -> CommandOutputCaptureSummary:
@@ -116,11 +124,13 @@ class OutputCaptureDispatcher:
             if self._accepting:
                 for stream, partial in self._partials.items():
                     if partial:
-                        self._enqueue_text(
+                        self._buffer_text_fragment(
                             stream=stream,
                             text=partial,
-                            priority=OutputRecordPriority.TERMINAL,
+                            immediate_priority=OutputRecordPriority.TERMINAL,
                         )
+                        self._flush_buffer(priority=OutputRecordPriority.TERMINAL)
+                self._flush_buffer(priority=OutputRecordPriority.TERMINAL)
                 self._partials = {
                     CommandOutputStream.STDOUT: "",
                     CommandOutputStream.STDERR: "",
@@ -148,11 +158,49 @@ class OutputCaptureDispatcher:
                 flush_complete=self._worker_finished and not self._queue,
             )
 
-    def _enqueue_text(
-        self, *, stream: CommandOutputStream, text: str, priority: OutputRecordPriority
+    def _buffer_text_fragment(
+        self,
+        *,
+        stream: CommandOutputStream,
+        text: str,
+        immediate_priority: OutputRecordPriority,
     ) -> None:
         plain: str = strip_ansi(text)
         chunks: tuple[str, ...] = chunk_text(text=plain, max_bytes=self._max_record_bytes)
+        if len(chunks) > 1:
+            self._flush_buffer(priority=OutputRecordPriority.BULK)
+            self._enqueue_chunks(stream=stream, chunks=chunks, priority=immediate_priority)
+            return
+        chunk: str = chunks[0]
+        if self._buffer_stream is not None and self._buffer_stream is not stream:
+            self._flush_buffer(priority=OutputRecordPriority.BULK)
+        chunk_bytes: int = len(chunk.encode("utf-8"))
+        if self._buffer_parts and self._buffer_bytes + chunk_bytes > self._max_record_bytes:
+            self._flush_buffer(priority=OutputRecordPriority.BULK)
+        if not self._buffer_parts:
+            self._buffer_stream = stream
+            self._buffer_started_at = time.monotonic()
+        self._buffer_parts.append(chunk)
+        self._buffer_bytes += chunk_bytes
+
+    def _flush_buffer(self, *, priority: OutputRecordPriority) -> None:
+        if not self._buffer_parts or self._buffer_stream is None:
+            return
+        stream: CommandOutputStream = self._buffer_stream
+        text: str = "".join(self._buffer_parts)
+        self._buffer_stream = None
+        self._buffer_parts = []
+        self._buffer_bytes = 0
+        self._buffer_started_at = None
+        self._enqueue_chunks(stream=stream, chunks=(text,), priority=priority)
+
+    def _enqueue_chunks(
+        self,
+        *,
+        stream: CommandOutputStream,
+        chunks: tuple[str, ...],
+        priority: OutputRecordPriority,
+    ) -> None:
         for index, chunk in enumerate(chunks):
             record: CommandOutputRecord = CommandOutputRecord(
                 invocation_id=self._invocation_id,
@@ -211,7 +259,18 @@ class OutputCaptureDispatcher:
             while True:
                 with self._condition:
                     while not self._queue and not self._stopping:
-                        self._condition.wait()
+                        if self._buffer_started_at is None:
+                            self._condition.wait()
+                            continue
+                        remaining: float = (
+                            self._buffer_started_at
+                            + self._flush_interval_seconds
+                            - time.monotonic()
+                        )
+                        if remaining > 0:
+                            self._condition.wait(timeout=remaining)
+                            continue
+                        self._flush_buffer(priority=OutputRecordPriority.BULK)
                     if self._force_stop or (not self._queue and self._stopping):
                         return
                     batch: tuple[CommandOutputRecord, ...] = tuple(

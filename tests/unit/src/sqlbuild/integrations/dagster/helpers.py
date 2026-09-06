@@ -269,6 +269,7 @@ def write_fake_sqb_command(
     stderr: str = "",
     exit_code: int = 0,
     expected_args: tuple[str, ...] | None = None,
+    environment_output_path: Path | None = None,
 ) -> list[str]:
     script_path: Path = root / "fake_sqb.py"
     script_path.write_text(
@@ -276,8 +277,14 @@ def write_fake_sqb_command(
             (
                 "from __future__ import annotations",
                 "from pathlib import Path",
+                "import os",
                 "import sys",
                 f"expected_args = {expected_args!r}",
+                f"environment_output_path = {str(environment_output_path)!r}",
+                "if environment_output_path is not None:",
+                "    Path(environment_output_path).write_text(",
+                "        os.environ.get('SQLBUILD_INVOCATION_CONTEXT_JSON', ''), encoding='utf-8'",
+                "    )",
                 "if expected_args is not None and tuple(sys.argv[1:]) != expected_args:",
                 "    actual_args = tuple(sys.argv[1:])",
                 "    sys.stderr.write(f'expected args {expected_args!r}, got {actual_args!r}\\n')",
