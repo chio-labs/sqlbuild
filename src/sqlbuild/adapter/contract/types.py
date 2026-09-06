@@ -65,6 +65,7 @@ class LifeCycleEventKind(StrEnum):
 
 class FrameworkType(StrEnum):
     STRING = "string"
+    INTEGER = "integer"
     TIMESTAMP = "timestamp"
 
 

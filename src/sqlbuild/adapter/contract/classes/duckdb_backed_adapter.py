@@ -835,6 +835,8 @@ class DuckDbBackedAdapter(BaseAdapter):
         match type_name:
             case FrameworkType.STRING:
                 return "VARCHAR"
+            case FrameworkType.INTEGER:
+                return "BIGINT"
             case FrameworkType.TIMESTAMP:
                 return "TIMESTAMP"
 
@@ -996,6 +998,24 @@ class DuckDbBackedAdapter(BaseAdapter):
         *,
         database: str | None,
         schema: str,
+    ) -> tuple[str, ...]:
+        del database, schema
+        return ()
+
+    def render_create_audit_result_table_sql(self, *, database: str | None, schema: str) -> str:
+        from sqlbuild.executor.audit_results.main.create_table_sql import (
+            build_audit_results_create_table_sql,
+        )
+
+        return build_audit_results_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        )
+
+    def render_create_audit_result_index_sqls(
+        self, *, database: str | None, schema: str
     ) -> tuple[str, ...]:
         del database, schema
         return ()

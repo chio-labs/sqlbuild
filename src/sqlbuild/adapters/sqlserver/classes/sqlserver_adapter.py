@@ -721,6 +721,73 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
             "(run_id, node_type, node_name, target_database, target_schema, target_name)",
         )
 
+    def render_create_audit_result_table_sql(self, *, database: str | None, schema: str) -> str:
+        from sqlbuild.executor.audit_results.constants import AUDIT_RESULTS_TABLE_NAME
+        from sqlbuild.executor.audit_results.main.create_table_sql import (
+            build_audit_results_create_table_sql,
+        )
+
+        create_sql: str = build_audit_results_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        ).replace("CREATE TABLE IF NOT EXISTS", "CREATE TABLE", 1)
+        for column in (
+            "result_id",
+            "invocation_id",
+            "run_id",
+            "audit_name",
+            "binding_key",
+            "definition_fingerprint",
+            "execution_fingerprint",
+            "evaluation_mode",
+            "run_scope_phase",
+            "attachment_kind",
+            "severity",
+            "outcome",
+        ):
+            create_sql = create_sql.replace(f"{column} NVARCHAR(MAX)", f"{column} NVARCHAR(450)")
+        escaped_schema: str = schema.replace("'", "''")
+        escaped_table: str = AUDIT_RESULTS_TABLE_NAME.replace("'", "''")
+        exists_sql: str = (
+            "SELECT 1 FROM information_schema.tables "
+            f"WHERE table_schema = '{escaped_schema}' AND table_name = '{escaped_table}'"
+        )
+        if database is not None:
+            escaped_database: str = database.replace("'", "''")
+            exists_sql += f" AND table_catalog = '{escaped_database}'"
+        return f"IF NOT EXISTS ({exists_sql}) {create_sql}"
+
+    def render_create_audit_result_index_sqls(
+        self, *, database: str | None, schema: str
+    ) -> tuple[str, ...]:
+        from sqlbuild.executor.audit_results.constants import AUDIT_RESULTS_TABLE_NAME
+
+        table_name: str | None = self.render_qualified_name(
+            database=database, schema=schema, name=AUDIT_RESULTS_TABLE_NAME
+        )
+        if table_name is None:
+            return ()
+        latest_index_name: str = "_sqlbuild_audit_results_latest_idx"
+        run_id_index_name: str = "_sqlbuild_audit_results_run_id_idx"
+        escaped_table_name: str = table_name.replace("'", "''")
+        escaped_latest_index_name: str = latest_index_name.replace("'", "''")
+        escaped_run_id_index_name: str = run_id_index_name.replace("'", "''")
+        return (
+            "IF NOT EXISTS (SELECT 1 FROM sys.indexes "
+            f"WHERE name = '{escaped_latest_index_name}' "
+            f"AND object_id = OBJECT_ID(N'{escaped_table_name}')) "
+            f"CREATE INDEX {latest_index_name} ON {table_name} "
+            "(audit_name, binding_key, execution_fingerprint, run_scope_phase, "
+            "occurred_at DESC, result_id DESC)",
+            "IF NOT EXISTS (SELECT 1 FROM sys.indexes "
+            f"WHERE name = '{escaped_run_id_index_name}' "
+            f"AND object_id = OBJECT_ID(N'{escaped_table_name}')) "
+            f"CREATE INDEX {run_id_index_name} ON {table_name} "
+            "(run_id, invocation_id, result_id)",
+        )
+
     def render_read_latest_source_freshness_sql(
         self,
         *,
@@ -887,6 +954,8 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
         match type_name:
             case FrameworkType.STRING:
                 return "NVARCHAR(MAX)"
+            case FrameworkType.INTEGER:
+                return "BIGINT"
             case FrameworkType.TIMESTAMP:
                 return "DATETIME2"
 

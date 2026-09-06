@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS execution_history_metadata (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS event_log (
+CREATE TABLE IF NOT EXISTS lifecycle_event_log (
     storage_id INTEGER PRIMARY KEY AUTOINCREMENT,
     event_id TEXT NOT NULL UNIQUE,
     schema_version INTEGER NOT NULL,
@@ -73,9 +73,12 @@ CREATE TABLE IF NOT EXISTS event_log (
     payload_json TEXT NOT NULL,
     content_digest TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS event_log_run_storage ON event_log (run_id, storage_id);
-CREATE INDEX IF NOT EXISTS event_log_invocation_storage ON event_log (invocation_id, storage_id);
-CREATE INDEX IF NOT EXISTS event_log_type_storage ON event_log (event_type, storage_id);
+CREATE INDEX IF NOT EXISTS lifecycle_event_log_run_storage
+    ON lifecycle_event_log (run_id, storage_id);
+CREATE INDEX IF NOT EXISTS lifecycle_event_log_invocation_storage
+    ON lifecycle_event_log (invocation_id, storage_id);
+CREATE INDEX IF NOT EXISTS lifecycle_event_log_type_storage
+    ON lifecycle_event_log (event_type, storage_id);
 CREATE TABLE IF NOT EXISTS run_projection (
     run_id TEXT PRIMARY KEY,
     invocation_id TEXT NOT NULL,
@@ -203,7 +206,7 @@ class SQLiteExecutionHistory:
                 conditions=conditions, values=values, event_filter=event_filter
             )
             sql: str = (
-                "SELECT * FROM event_log WHERE "
+                "SELECT * FROM lifecycle_event_log WHERE "
                 + " AND ".join(conditions)
                 + " ORDER BY storage_id ASC LIMIT ?"
             )
@@ -462,7 +465,7 @@ class SQLiteExecutionHistory:
         stored: list[StoredEvent] = []
         for event, event_id, content, digest in prepared:
             existing: sqlite3.Row | None = self._connection.execute(
-                "SELECT * FROM event_log WHERE event_id = ?", (event_id,)
+                "SELECT * FROM lifecycle_event_log WHERE event_id = ?", (event_id,)
             ).fetchone()
             if existing is not None:
                 if existing["content_digest"] != digest or existing["payload_json"] != content:
@@ -474,7 +477,7 @@ class SQLiteExecutionHistory:
             received_at: str = self._timestamp(datetime.now(UTC))
             envelope: dict[str, object | None] = self._event_envelope(event)
             cursor: sqlite3.Cursor = self._connection.execute(
-                """INSERT INTO event_log (
+                """INSERT INTO lifecycle_event_log (
                     event_id, schema_version, producer, event_type, occurred_at, received_at,
                     invocation_id, run_id, resource_id, resource_attempt_id, operation_id,
                     statement_id, payload_json, content_digest
@@ -497,7 +500,7 @@ class SQLiteExecutionHistory:
                 ),
             )
             row: sqlite3.Row = self._connection.execute(
-                "SELECT * FROM event_log WHERE storage_id = ?", (cursor.lastrowid,)
+                "SELECT * FROM lifecycle_event_log WHERE storage_id = ?", (cursor.lastrowid,)
             ).fetchone()
             stored.append(self._stored_event(row))
         return tuple(stored)
@@ -579,7 +582,7 @@ class SQLiteExecutionHistory:
         if prefix + ":" != _CURSOR_PREFIX or namespace != self._namespace() or position < 1:
             raise InvalidCursorError("event cursor is not valid for this storage")
         exists: sqlite3.Row | None = self._connection.execute(
-            "SELECT 1 FROM event_log WHERE storage_id = ?", (position,)
+            "SELECT 1 FROM lifecycle_event_log WHERE storage_id = ?", (position,)
         ).fetchone()
         if exists is None:
             raise InvalidCursorError("event cursor does not identify a durable event")
@@ -618,7 +621,7 @@ class SQLiteExecutionHistory:
 
     def _read_all_events(self) -> tuple[StoredEvent, ...]:
         rows: list[sqlite3.Row] = list(
-            self._connection.execute("SELECT * FROM event_log ORDER BY storage_id")
+            self._connection.execute("SELECT * FROM lifecycle_event_log ORDER BY storage_id")
         )
         return tuple(self._stored_event(row) for row in rows)
 

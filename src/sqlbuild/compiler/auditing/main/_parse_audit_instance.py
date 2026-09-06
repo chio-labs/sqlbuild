@@ -2,7 +2,11 @@
 
 from pathlib import Path
 
-from sqlbuild.compiler.auditing._helpers.schema_audits import parse_audit_instance_impl
+from sqlbuild.compiler.auditing._helpers.schema_audits import (
+    parse_audit_instance_impl,
+    parse_measurement_thresholds,  # noqa: F401 - sibling-domain role export
+    parse_minimum_samples,  # noqa: F401 - sibling-domain role export
+)
 from sqlbuild.spec.contracts.models import SchemaAuditInstance
 
 

@@ -187,6 +187,7 @@ def build_fingerprint_audit_result(
             AuditOutcome.PASS.value: 0,
             AuditOutcome.WARN.value: 1,
             AuditOutcome.ERROR.value: 1,
+            AuditOutcome.INSUFFICIENT.value: 0,
         }[outcome],
         executed_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
         run_scope_phase=AuditRunScope.FINAL,

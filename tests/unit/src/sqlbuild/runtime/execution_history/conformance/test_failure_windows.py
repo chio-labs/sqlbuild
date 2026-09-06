@@ -6,9 +6,9 @@ import pytest
 
 from sqlbuild.execution_history import (
     EventFilter,
-    EventLogStorage,
     EventPage,
     ExecutionHistoryStorageError,
+    LifecycleEventLogStorage,
     RunRecord,
     RunStorage,
     StoredEvent,
@@ -29,12 +29,12 @@ from tests.unit.src.sqlbuild.runtime.execution_history.conformance.helpers impor
     ids=lambda case: case.description,
 )
 def test_given_append_commits_and_projection_fails_when_rebuilding_then_durable_log_repairs_projection(
-    event_log_factory: Callable[[], EventLogStorage],
+    event_log_factory: Callable[[], LifecycleEventLogStorage],
     project_failing_run_storage: RunStorage,
     run_storage_factory: Callable[[], RunStorage],
     test_case: ContractCase,
 ) -> None:
-    event_log: EventLogStorage = event_log_factory()
+    event_log: LifecycleEventLogStorage = event_log_factory()
 
     with pytest.raises(ExecutionHistoryStorageError, match="injected projection failure"):
         append_and_project(
@@ -56,7 +56,7 @@ def test_given_append_commits_and_projection_fails_when_rebuilding_then_durable_
     ids=lambda case: case.description,
 )
 def test_given_append_fails_when_coordinating_then_projection_is_not_called(
-    append_failing_event_log: EventLogStorage,
+    append_failing_event_log: LifecycleEventLogStorage,
     tracking_run_storage: tuple[RunStorage, Callable[[], int]],
     test_case: ContractCase,
 ) -> None:
@@ -84,7 +84,7 @@ def test_given_append_fails_when_coordinating_then_projection_is_not_called(
     ids=lambda case: case.description,
 )
 def test_given_projection_publication_fails_after_compute_when_rebuilding_same_store_then_no_partial_state_leaks(
-    event_log: EventLogStorage,
+    event_log: LifecycleEventLogStorage,
     atomic_failing_run_storage: RunStorage,
     test_case: ContractCase,
 ) -> None:

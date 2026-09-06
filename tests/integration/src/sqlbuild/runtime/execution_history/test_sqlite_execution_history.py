@@ -76,6 +76,46 @@ class _TransactionFailureConnection:
 
 @pytest.mark.parametrize(
     "test_case",
+    (
+        SQLitePersistenceCase(
+            description="renamed lifecycle table persists facts",
+            expected_event_count=1,
+            expected_run_count=0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_real_sqlite_history_when_appending_then_renamed_table_persists_readable_fact(
+    tmp_path: Path, test_case: SQLitePersistenceCase
+) -> None:
+    path: Path = tmp_path / "history.sqlite3"
+    storage: SQLiteExecutionHistory = SQLiteExecutionHistory(path=path)
+
+    stored: StoredEvent = storage.append_event(lifecycle_event("persisted"))
+    page: EventPage = storage.get_events(event_filter=EventFilter())
+    storage.close()
+
+    inspection: sqlite3.Connection = sqlite3.connect(path)
+    table_names: set[str] = {
+        row[0]
+        for row in inspection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+    persisted_count: int = inspection.execute(
+        "SELECT COUNT(*) FROM lifecycle_event_log"
+    ).fetchone()[0]
+    inspection.close()
+
+    assert stored.event == page.records[0].event
+    assert persisted_count == test_case.expected_event_count
+    assert "lifecycle_event_log" in table_names
+    assert "event_log" not in table_names
+    assert test_case.expected_run_count == 0
+
+
+@pytest.mark.parametrize(
+    "test_case",
     (SQLitePathCase(description="project local default", expected_filename="history.sqlite3"),),
     ids=lambda case: case.description,
 )

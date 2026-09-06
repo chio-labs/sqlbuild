@@ -6,6 +6,15 @@ from sqlbuild.sql_values.types import CollectionRendering
 
 
 @dataclass(frozen=True)
+class AuditFactoryDiscoveryTestCase:
+    description: str
+    files: dict[str, str]
+    expected_factory_names: tuple[str, ...] = ()
+    expected_task_names: tuple[str, ...] = ()
+    expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
 class CanonicalResourceIdentityTestCase:
     description: str
     name: str
@@ -582,6 +591,17 @@ class ParseSqlAuditFileErrorTestCase:
     description: str
     contents: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ParseMeasurementAuditTestCase:
+    description: str
+    contents: str
+    expected_value_column: str
+    expected_sample_count_column: str
+    expected_sample_unit: str
+    expected_measure_fragment: str
+    expected_evidence_fragment: str
 
 
 @dataclass(frozen=True)

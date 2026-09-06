@@ -7,9 +7,9 @@ import pytest
 
 from sqlbuild.execution_history import (
     EventFilter,
-    EventLogStorage,
     EventPage,
     InvalidCursorError,
+    LifecycleEventLogStorage,
     RunFilter,
     RunPage,
     RunRecord,
@@ -39,7 +39,7 @@ from tests.unit.src.sqlbuild.runtime.execution_history.conformance.helpers impor
     ids=lambda case: case.description,
 )
 def test_given_started_run_without_terminal_when_projecting_then_status_remains_unknown(
-    event_log: EventLogStorage, run_storage: RunStorage, test_case: ProjectionCase
+    event_log: LifecycleEventLogStorage, run_storage: RunStorage, test_case: ProjectionCase
 ) -> None:
     stored: tuple[StoredEvent, ...] = event_log.append_events((lifecycle_event("started"),))
 
@@ -62,7 +62,7 @@ def test_given_started_run_without_terminal_when_projecting_then_status_remains_
     ids=lambda case: case.description,
 )
 def test_given_out_of_order_timestamps_and_conflicting_terminals_when_projecting_then_storage_order_wins(
-    event_log: EventLogStorage, run_storage: RunStorage, test_case: ProjectionCase
+    event_log: LifecycleEventLogStorage, run_storage: RunStorage, test_case: ProjectionCase
 ) -> None:
     stored: tuple[StoredEvent, ...] = event_log.append_events(
         (
@@ -88,7 +88,7 @@ def test_given_out_of_order_timestamps_and_conflicting_terminals_when_projecting
     ids=lambda case: case.description,
 )
 def test_given_durable_run_facts_when_projecting_incrementally_and_rebuilding_then_results_match(
-    event_log: EventLogStorage,
+    event_log: LifecycleEventLogStorage,
     run_storage_factory: Callable[[], RunStorage],
     test_case: ContractCase,
 ) -> None:
@@ -116,7 +116,7 @@ def test_given_durable_run_facts_when_projecting_incrementally_and_rebuilding_th
     ids=lambda case: case.description,
 )
 def test_given_multiple_runs_when_paging_then_compound_order_has_no_gaps_or_duplicates(
-    event_log: EventLogStorage, run_storage: RunStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, run_storage: RunStorage, test_case: ContractCase
 ) -> None:
     stored: tuple[StoredEvent, ...] = event_log.append_events(
         tuple(lifecycle_event(f"event-{index}", run_id=f"run-{index}") for index in range(3))
@@ -140,7 +140,7 @@ def test_given_multiple_runs_when_paging_then_compound_order_has_no_gaps_or_dupl
     ids=lambda case: case.description,
 )
 def test_given_projected_runs_when_filtering_then_only_matching_runs_are_returned(
-    event_log: EventLogStorage, run_storage: RunStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, run_storage: RunStorage, test_case: ContractCase
 ) -> None:
     stored: tuple[StoredEvent, ...] = event_log.append_events(
         (
@@ -175,7 +175,7 @@ def test_given_projected_runs_when_filtering_then_only_matching_runs_are_returne
     ids=lambda case: case.description,
 )
 def test_given_projected_runs_when_composing_identity_status_and_created_range_then_boundaries_are_inclusive(
-    event_log: EventLogStorage, run_storage: RunStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, run_storage: RunStorage, test_case: ContractCase
 ) -> None:
     stored: tuple[StoredEvent, ...] = event_log.append_events(
         (
@@ -222,7 +222,7 @@ def test_given_empty_projection_when_reading_then_missing_run_and_page_are_empty
     ids=lambda case: case.description,
 )
 def test_given_already_applied_positions_when_projecting_again_then_projection_does_not_advance(
-    event_log: EventLogStorage, run_storage: RunStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, run_storage: RunStorage, test_case: ContractCase
 ) -> None:
     stored: tuple[StoredEvent, ...] = event_log.append_events((lifecycle_event("started"),))
     first: tuple[RunRecord, ...] = run_storage.project(stored)
@@ -239,7 +239,7 @@ def test_given_already_applied_positions_when_projecting_again_then_projection_d
     ids=lambda case: case.description,
 )
 def test_given_duplicate_durable_position_in_batch_when_projecting_then_fact_is_applied_once(
-    event_log: EventLogStorage, run_storage: RunStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, run_storage: RunStorage, test_case: ContractCase
 ) -> None:
     stored: tuple[StoredEvent, ...] = event_log.append_events((lifecycle_event("started"),))
 
@@ -255,11 +255,11 @@ def test_given_duplicate_durable_position_in_batch_when_projecting_then_fact_is_
     ids=lambda case: case.description,
 )
 def test_given_backend_factories_when_rebuilding_then_harness_remains_backend_neutral(
-    event_log_factory: Callable[[], EventLogStorage],
+    event_log_factory: Callable[[], LifecycleEventLogStorage],
     run_storage_factory: Callable[[], RunStorage],
     test_case: ContractCase,
 ) -> None:
-    event_log: EventLogStorage = event_log_factory()
+    event_log: LifecycleEventLogStorage = event_log_factory()
     run_storage: RunStorage = run_storage_factory()
     _ = event_log.append_event(lifecycle_event("started"))
     page: EventPage = event_log.get_events(event_filter=EventFilter(), limit=100)
@@ -275,7 +275,7 @@ def test_given_backend_factories_when_rebuilding_then_harness_remains_backend_ne
     ids=lambda case: case.description,
 )
 def test_given_global_run_cursor_for_filtered_out_run_when_changing_filter_then_next_match_is_returned(
-    event_log: EventLogStorage, run_storage: RunStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, run_storage: RunStorage, test_case: ContractCase
 ) -> None:
     stored: tuple[StoredEvent, ...] = event_log.append_events(
         (
@@ -306,7 +306,7 @@ def test_given_global_run_cursor_for_filtered_out_run_when_changing_filter_then_
     ids=lambda case: case.description,
 )
 def test_given_interleaved_runs_when_paging_filtered_results_then_global_cursor_is_exclusive_without_gaps(
-    event_log: EventLogStorage, run_storage: RunStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, run_storage: RunStorage, test_case: ContractCase
 ) -> None:
     stored: tuple[StoredEvent, ...] = event_log.append_events(
         (
@@ -363,7 +363,7 @@ def test_given_runs_with_equal_created_time_when_paging_then_run_id_breaks_order
     ids=lambda case: case.description,
 )
 def test_given_invalid_or_foreign_run_cursor_when_reading_then_cursor_error_is_raised(
-    event_log: EventLogStorage,
+    event_log: LifecycleEventLogStorage,
     run_storage: RunStorage,
     run_storage_factory: Callable[[], RunStorage],
     test_case: ContractCase,

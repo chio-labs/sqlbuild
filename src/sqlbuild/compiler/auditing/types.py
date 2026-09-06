@@ -21,7 +21,19 @@ class AuditAttachmentKind(StrEnum):
     END = "end"
 
 
+class AuditEvaluationMode(StrEnum):
+    VIOLATIONS = "violations"
+    MEASUREMENT = "measurement"
+
+
+class ThresholdOperator(StrEnum):
+    BELOW = "below"
+    ABOVE = "above"
+    OUTSIDE = "outside"
+
+
 class AuditOutcome(StrEnum):
     PASS = "pass"
     WARN = "warn"
     ERROR = "error"
+    INSUFFICIENT = "insufficient"

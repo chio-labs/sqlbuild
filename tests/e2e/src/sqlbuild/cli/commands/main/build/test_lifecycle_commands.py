@@ -36,7 +36,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "First run (13)",
             ),
             expected_test_fragment="PASS=5  FAIL=0  TOTAL=5",
-            expected_audit_fragment="PASS=28  WARN=0  FAIL=0  TOTAL=28",
+            expected_audit_fragment="PASS=28  WARN=0  FAIL=0  INSUFFICIENT=0  TOTAL=28",
             expected_run_fragment="\u2713 Completed successfully",
             expected_rerun_reasons={
                 "stg_orders": "no_change",
@@ -70,7 +70,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "\u2713 Warehouse connected  duckdb  (<time>)",
                 "udf       is_completed_order",
                 "\u2713 Completed successfully",
-                "PASS=<n>  WARN=<n>  FAIL=<n>  SKIP=<n>  TOTAL=<n>  (<time>)",
+                "PASS=<n>  WARN=<n>  FAIL=<n>  INSUFFICIENT=<n>  SKIP=<n>  TOTAL=<n>  (<time>)",
             ),
         )
     ],

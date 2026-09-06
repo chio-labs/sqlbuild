@@ -20,6 +20,7 @@ from sqlbuild.integrations.dagster.constants import (
     DEFAULT_SELECTABLE_NODE_KIND_EXCLUSIONS,
     DEFAULT_SELECTABLE_NODE_KIND_MEMBERS,
     DEFAULT_SELECTABLE_NODE_KINDS,
+    INSUFFICIENT_CHECK_STATUS,
     LOAD_SELECTABLE_NODE_KIND_EXCLUSIONS,
     LOAD_SELECTABLE_NODE_KIND_MEMBERS,
     LOAD_SELECTABLE_NODE_KINDS,
@@ -33,6 +34,7 @@ from sqlbuild.integrations.dagster.constants import (
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterConstantGuardTestCase,
+    DagsterInsufficientStatusTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
     assert_exhaustive_enum_partition,
@@ -152,3 +154,14 @@ def test_given_check_severity_enum_when_deriving_warning_severity_then_every_sev
     assert {WARNING_CHECK_SEVERITY} == {
         severity.value for severity in WARNING_CHECK_SEVERITY_MEMBERS
     }
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (DagsterInsufficientStatusTestCase("insufficient is explicit", "insufficient"),),
+    ids=lambda case: case.description,
+)
+def test_given_insufficient_audit_outcome_when_mapping_dagster_status_then_non_fail_value_is_explicit(
+    test_case: DagsterInsufficientStatusTestCase,
+) -> None:
+    assert INSUFFICIENT_CHECK_STATUS == test_case.expected_status

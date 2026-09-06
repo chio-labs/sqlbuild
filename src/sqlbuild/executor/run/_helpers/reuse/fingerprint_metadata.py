@@ -406,6 +406,8 @@ def _audit_result_payloads(
 def _audit_gate_status(
     *, identity: AuditGateIdentity, audit_results: tuple[AuditExecutionResult, ...]
 ) -> str:
+    """Pass when every error audit executed without ERROR; insufficient stays non-blocking."""
+
     if not audit_results:
         return AuditGateStatus.INCOMPLETE.value
     if any(result.outcome == AuditOutcome.ERROR for result in audit_results):
