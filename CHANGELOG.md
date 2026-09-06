@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.83.3](https://github.com/chio-labs/sqlbuild/compare/v0.83.2...v0.83.3) (2026-09-06)
+
+
+### Bug Fixes
+
+* reject Python outside supported project roots ([#542](https://github.com/chio-labs/sqlbuild/issues/542)) ([31030e7](https://github.com/chio-labs/sqlbuild/commit/31030e745715cf0cea5468c4b73350057471e1b5))
+
 ## [0.83.2](https://github.com/chio-labs/sqlbuild/compare/v0.83.1...v0.83.2) (2026-09-06)
 
 
