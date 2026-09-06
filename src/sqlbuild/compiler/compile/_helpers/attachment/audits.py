@@ -536,6 +536,7 @@ def build_attached_audit_input(
         evidence_sql=expanded_evidence_sql,
         evidence_limit=audit_instance.evidence_limit,
         name=audit_instance.name,
+        description=audit_instance.description,
         references=references,
         attached_target_kind=attached_target_kind,
         attached_target_name=attached_target_name,

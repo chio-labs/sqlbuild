@@ -388,6 +388,8 @@ def _audit_result(result: AuditExecutionResult) -> IntegrationCheckResult:
             if result.evaluation_mode == AuditEvaluationMode.MEASUREMENT
             else None
         ),
+        audit_definition_name=result.audit_definition_name,
+        audit_description=result.audit_description,
     )
 
 

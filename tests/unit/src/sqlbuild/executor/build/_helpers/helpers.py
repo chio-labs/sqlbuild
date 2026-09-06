@@ -85,6 +85,7 @@ def build_audit_result(
 ) -> AuditExecutionResult:
     return AuditExecutionResult(
         audit_name=name,
+        audit_definition_name="test_audit",
         attachment_kind=AuditAttachmentKind.MODEL,
         severity={
             AuditOutcome.PASS: AuditSeverity.ERROR,

@@ -228,6 +228,7 @@ def test_given_attached_audit_reads_downstream_model_when_building_and_auditing_
     assert matching_build_check == {
         "kind": "audit",
         "name": "cross_model_consistency",
+        "audit_definition_name": "cross_model_consistency",
         "check_id": "audit:cross_model_consistency:model:stg_orders",
         "passed": True,
         "status": "pass",

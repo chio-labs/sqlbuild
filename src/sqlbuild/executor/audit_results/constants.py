@@ -11,6 +11,8 @@ COLUMN_OCCURRED_AT: str = "occurred_at"
 COLUMN_INVOCATION_ID: str = "invocation_id"
 COLUMN_RUN_ID: str = "run_id"
 COLUMN_AUDIT_NAME: str = "audit_name"
+COLUMN_AUDIT_DEFINITION_NAME: str = "audit_definition_name"
+COLUMN_AUDIT_DESCRIPTION: str = "audit_description"
 COLUMN_BINDING_KEY: str = "binding_key"
 COLUMN_DEFINITION_FINGERPRINT: str = "definition_fingerprint"
 COLUMN_EXECUTION_FINGERPRINT: str = "execution_fingerprint"
@@ -50,6 +52,8 @@ AUDIT_RESULT_COLUMNS: tuple[str, ...] = (
     COLUMN_INVOCATION_ID,
     COLUMN_RUN_ID,
     COLUMN_AUDIT_NAME,
+    COLUMN_AUDIT_DEFINITION_NAME,
+    COLUMN_AUDIT_DESCRIPTION,
     COLUMN_BINDING_KEY,
     COLUMN_DEFINITION_FINGERPRINT,
     COLUMN_EXECUTION_FINGERPRINT,

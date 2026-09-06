@@ -229,6 +229,8 @@ STRING_PAYLOAD_FIELDS: frozenset[str] = frozenset(
         "sql_digest",
         "statement_kind",
         "audit_name",
+        "audit_definition_name",
+        "audit_description",
         "evaluation_mode",
         "outcome",
         "severity",
@@ -443,6 +445,7 @@ LIFECYCLE_EVENT_CATALOG_V1: Mapping[str, LifecycleEventDefinition] = MappingProx
             required_payload=frozenset(
                 {
                     "audit_name",
+                    "audit_definition_name",
                     "evaluation_mode",
                     "outcome",
                     "severity",
@@ -453,6 +456,8 @@ LIFECYCLE_EVENT_CATALOG_V1: Mapping[str, LifecycleEventDefinition] = MappingProx
             allowed=frozenset(
                 {
                     "audit_name",
+                    "audit_definition_name",
+                    "audit_description",
                     "evaluation_mode",
                     "outcome",
                     "severity",

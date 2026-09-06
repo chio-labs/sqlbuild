@@ -39,6 +39,8 @@ def test_given_measurement_outcome_when_projecting_then_status_and_passed_remain
 ) -> None:
     result: AuditExecutionResult = AuditExecutionResult(
         audit_name="valid_rate",
+        audit_definition_name="dq_column_rate",
+        audit_description="Valid row percentage",
         attachment_kind=AuditAttachmentKind.END,
         severity=AuditSeverity.WARN,
         outcome=test_case.outcome,
@@ -50,6 +52,8 @@ def test_given_measurement_outcome_when_projecting_then_status_and_passed_remain
     check: IntegrationCheckResult = _audit_result(result)
 
     assert check.status == test_case.expected_status
+    assert check.audit_definition_name == "dq_column_rate"
+    assert check.audit_description == "Valid row percentage"
     assert check.passed is test_case.expected_passed
 
 
@@ -63,6 +67,7 @@ def test_given_measurement_audit_when_projecting_then_all_summary_fields_are_ret
 ) -> None:
     result: AuditExecutionResult = AuditExecutionResult(
         audit_name="valid_rate",
+        audit_definition_name="test_audit",
         attachment_kind=AuditAttachmentKind.END,
         severity=AuditSeverity.WARN,
         outcome=test_case.outcome,
@@ -107,6 +112,7 @@ def test_given_violations_audit_when_projecting_then_measurement_summary_is_abse
 ) -> None:
     result: AuditExecutionResult = AuditExecutionResult(
         audit_name="not_null",
+        audit_definition_name="test_audit",
         attachment_kind=AuditAttachmentKind.END,
         severity=AuditSeverity.ERROR,
         outcome=test_case.outcome,

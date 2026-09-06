@@ -942,6 +942,7 @@ def _assemble_compiled_audit(audit_input: CompileAuditInput) -> CompiledAudit:
             attached_target_name=audit_input.attached_target_name,
         ),
         name=audit_name,
+        definition_name=(audit_input.audit_block.name or audit_input.audit_file.file_path.stem),
         audit_file=audit_input.audit_file,
         audit_block=audit_input.audit_block,
         sql_body=audit_input.sql_body,
@@ -959,6 +960,7 @@ def _assemble_compiled_audit(audit_input: CompileAuditInput) -> CompiledAudit:
         severity=audit_input.severity,
         run_scope=audit_input.run_scope,
         always_run=audit_input.always_run,
+        description=audit_input.description,
     )
 
 

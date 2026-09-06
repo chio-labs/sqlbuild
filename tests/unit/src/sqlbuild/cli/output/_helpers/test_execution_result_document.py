@@ -113,6 +113,7 @@ def test_given_end_scheduled_model_audit_when_formatting_json_then_logical_ident
 ) -> None:
     result: AuditExecutionResult = AuditExecutionResult(
         audit_name="cross_model_consistency",
+        audit_definition_name="test_audit",
         attachment_kind=AuditAttachmentKind.END,
         attached_target_kind=AttachedAuditTargetKind.MODEL,
         attached_target_name="orders",
@@ -147,6 +148,7 @@ def test_given_measurement_audit_when_formatting_execution_document_then_summary
 ) -> None:
     result: AuditExecutionResult = AuditExecutionResult(
         audit_name="valid_rate",
+        audit_definition_name="test_audit",
         attachment_kind=AuditAttachmentKind.END,
         severity=AuditSeverity.WARN,
         outcome=test_case.outcome,
@@ -198,6 +200,7 @@ def test_given_ordered_audits_when_formatting_json_then_metadata_and_check_order
     results: tuple[AuditExecutionResult, ...] = tuple(
         AuditExecutionResult(
             audit_name=name,
+            audit_definition_name="test_audit",
             attachment_kind=AuditAttachmentKind.END,
             severity=AuditSeverity.ERROR,
             outcome=AuditOutcome.PASS,
