@@ -45,6 +45,8 @@ class SqlTestHeavyCompilePerformanceGuardTestCase:
     fixture_row_count: int
     expected_min_compiled_test_bytes: int
     expected_max_seconds: float
+    expected_warm_max_seconds: float
+    expected_edit_max_seconds: float
 
 
 @dataclass(frozen=True)

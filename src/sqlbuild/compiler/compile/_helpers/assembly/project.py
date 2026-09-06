@@ -115,7 +115,7 @@ from sqlbuild.spec.contracts.models import (
     TargetConfig,
 )
 
-_POLYGLOT_ANALYSIS_WORKERS: int = 2
+_POLYGLOT_ANALYSIS_WORKERS: int = 4
 _POLYGLOT_PARALLEL_ANALYSIS_MIN_MODELS: int = 32
 _POLYGLOT_PARALLEL_REANALYSIS_MIN_MODELS: int = 2
 
@@ -202,6 +202,7 @@ def assemble_compiled_project(
             (inputs.effective_target.schema if inputs.effective_target is not None else None)
             or _str_or_none(inputs.effective_connection.get("schema"))
         ),
+        compile_cache_dir=inputs.compile_cache_dir,
         settings=inputs.effective_settings,
         scenario=resolve_effective_scenario_config(
             project_config=inputs.project_config,
@@ -464,9 +465,16 @@ def _analyze_model_sql_in_parallel(
         if request.cache_key is None or request.cache_key not in cached_analyses
     }
     changed_signature_names: set[str] = {
-        model_name
-        for model_name, output_signature in current_signatures_by_name.items()
-        if previous_signatures.get(model_name) != output_signature
+        _model_name(request.model_input)
+        for request, analysis in zip(requests, analyses, strict=True)
+        if (
+            previous_signatures.get(_model_name(request.model_input))
+            != current_signatures_by_name[_model_name(request.model_input)]
+            or (
+                not analysis.polyglot_analysis.analysis_succeeded
+                and request.cache_key not in cached_analyses
+            )
+        )
     }
     analyses_to_record_by_name.update(
         {model_name: current_analyses_by_name[model_name] for model_name in changed_signature_names}

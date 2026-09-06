@@ -192,6 +192,9 @@ def build_model_inputs(
 ) -> tuple[CompileModelInput, ...]:
     """Attach schema metadata to discovered model files."""
 
+    legacy_schema_files: tuple[DiscoveredSchemaFile, ...] = tuple(
+        schema_file for schema_file in discovered_inputs.schema_files if schema_file.model_entries
+    )
     with cached_sql_reference_extractor(root=reference_cache_dir) as extract_references:
         return _build_model_inputs(
             discovered_inputs=discovered_inputs,
@@ -200,6 +203,7 @@ def build_model_inputs(
             defer_model_sql_validation=defer_model_sql_validation,
             external_sql_reference_resolver=external_sql_reference_resolver,
             extract_references=extract_references,
+            legacy_schema_files=legacy_schema_files,
         )
 
 
@@ -211,6 +215,7 @@ def _build_model_inputs(
     defer_model_sql_validation: bool,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
     extract_references: Callable[[str], tuple[CompileSqlReference, ...]],
+    legacy_schema_files: tuple[DiscoveredSchemaFile, ...],
 ) -> tuple[CompileModelInput, ...]:
 
     effective_vars: dict[str, object] = context.effective_vars
@@ -456,9 +461,7 @@ def _build_model_inputs(
                 (*declaration_expansion.usages, *generated_usages, *hook_expansion.usages)
             )
         )
-        _reject_legacy_schema_match(
-            model_file=model_file, schema_files=discovered_inputs.schema_files
-        )
+        _reject_legacy_schema_match(model_file=model_file, schema_files=legacy_schema_files)
         if header_schema_entry is None:
             model_inputs.append(
                 CompileModelInput(

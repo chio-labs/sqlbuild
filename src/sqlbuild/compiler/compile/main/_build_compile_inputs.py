@@ -25,7 +25,7 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
 from sqlbuild.compiler.compile._helpers.attachment.sources import build_source_inputs
 from sqlbuild.compiler.compile._helpers.attachment.sql_tests import (
     build_scenario_inputs,
-    build_test_inputs,
+    build_test_inputs_with_cache,
 )
 from sqlbuild.compiler.compile._helpers.attachment.target import build_compile_target_context
 from sqlbuild.compiler.compile._helpers.audit_factories.core import (
@@ -161,7 +161,7 @@ def build_compile_inputs(
         declaration_expansion=model_context.declaration_expansion,
         no_sql_validation=no_sql_validation,
     )
-    test_inputs: tuple[CompileSqlTestInput, ...] = build_test_inputs(
+    test_inputs: tuple[CompileSqlTestInput, ...] = build_test_inputs_with_cache(
         discovered_inputs=discovered_inputs,
         effective_vars=effective_vars,
         macro_context=macro_context,
@@ -169,6 +169,7 @@ def build_compile_inputs(
         declaration_expansion=model_context.declaration_expansion,
         external_sql_reference_resolver=external_sql_reference_resolver,
         sql_function_inputs=sql_function_inputs,
+        compile_cache_dir=compile_cache_dir,
     )
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = build_scenario_inputs(
         discovered_inputs=discovered_inputs,

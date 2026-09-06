@@ -6,11 +6,27 @@ import json
 from pathlib import Path
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.models import WrittenTarget
+from sqlbuild.cli.commands._helpers.compile.sql_test_artifact_cache import (
+    artifact_matches_cache_record,
+    build_sql_test_artifact_cache_record,
+    build_sql_test_artifact_identity_context,
+    read_sql_test_artifact_cache,
+    sql_test_artifact_identity,
+    sql_test_artifact_record_key,
+    write_sql_test_artifact_cache,
+)
+from sqlbuild.cli.commands.models import (
+    SqlTestArtifactCacheRecord,
+    SqlTestArtifactIdentityContext,
+    WrittenTarget,
+)
 from sqlbuild.cli.paths.main._sql_test_output_path import sql_test_output_path
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.planner.main.execution.sql_test_assembly import build_sql_test_plan_entry
+from sqlbuild.compiler.planner.main.execution.sql_test_assembly import (
+    _sql_test_model_chain_names,
+    build_sql_test_plan_entry,
+)
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 
@@ -245,14 +261,44 @@ def _write_static_tests(
     """Write offline SQL-native test SQL."""
 
     managed_paths: set[Path] = set()
+    tests_root: Path = target_dir / _COMPILED_DIR / _TESTS_DIR
+    cached_records: dict[str, SqlTestArtifactCacheRecord] = read_sql_test_artifact_cache(
+        cache_dir=project.compile_cache_dir
+    )
+    current_records: dict[str, SqlTestArtifactCacheRecord] = {}
+    identity_context: SqlTestArtifactIdentityContext | None = (
+        build_sql_test_artifact_identity_context(project=project, adapter=adapter)
+        if project.compile_cache_dir is not None
+        else None
+    )
     for test in project.sql_tests:
+        record_key: str | None = None
+        artifact_identity: str | None = None
+        if identity_context is not None:
+            record_key = sql_test_artifact_record_key(test=test)
+            artifact_identity = sql_test_artifact_identity(
+                test=test,
+                model_chain_names=_sql_test_model_chain_names(test=test, project=project),
+                context=identity_context,
+            )
+            cached_record: SqlTestArtifactCacheRecord | None = cached_records.get(record_key)
+            if cached_record is not None:
+                cached_path: Path | None = artifact_matches_cache_record(
+                    tests_root=tests_root,
+                    record=cached_record,
+                    identity=artifact_identity,
+                )
+                if cached_path is not None:
+                    managed_paths.add(cached_path)
+                    current_records[record_key] = cached_record
+                    continue
         entry, _warnings = build_sql_test_plan_entry(
             test=test,
             project=project,
             adapter=adapter,
             sql_analysis_enabled=project.settings.sql_analysis,
         )
-        test_path: Path = target_dir / _COMPILED_DIR / _TESTS_DIR / sql_test_output_path(entry)
+        test_path: Path = tests_root / sql_test_output_path(entry)
         _write_sql(
             path=test_path,
             sql=build_sql_test_comparison_sql(
@@ -262,6 +308,18 @@ def _write_static_tests(
             ),
         )
         managed_paths.add(test_path)
+        if record_key is not None and artifact_identity is not None:
+            record: SqlTestArtifactCacheRecord | None = build_sql_test_artifact_cache_record(
+                tests_root=tests_root,
+                artifact_path=test_path,
+                identity=artifact_identity,
+            )
+            if record is not None:
+                current_records[record_key] = record
+    write_sql_test_artifact_cache(
+        cache_dir=project.compile_cache_dir,
+        records=current_records,
+    )
     return managed_paths
 
 

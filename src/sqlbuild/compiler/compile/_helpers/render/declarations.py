@@ -749,7 +749,7 @@ def _render_scalar(*, value: str | int) -> str:
 
 
 def _find_next_reference_start(*, sql: str, start: int) -> int | None:
-    if MACRO_TOKEN not in sql[start:]:
+    if sql.find("@enum", start) < 0 and sql.find("@const", start) < 0:
         return None
     index: int = start
     while index < len(sql):
