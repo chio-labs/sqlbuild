@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -14,6 +15,7 @@ from sqlbuild.lint.models import LintBody, LintConfig, LintViolation
 from tests.unit.src.sqlbuild.lint._helpers._test_types import (
     GeneratedRangeFallbackTestCase,
     InvalidNativeSqlResponseTestCase,
+    NativeParseIsolationTestCase,
     NativeSqlReuseTestCase,
     ReservedCteLintTestCase,
 )
@@ -89,6 +91,62 @@ def test_given_invalid_native_response_when_linting_then_boundary_fails_closed(
             contents_by_path={target: "SELECT 1"},
             config=LintConfig(dialect="duckdb"),
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativeParseIsolationTestCase(
+            description="one unsupported body",
+            error_message="Parse error at line 2, column 8: unsupported GROUPING SETS",
+            expected_position=(2, 8),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_one_unparseable_body_when_linting_then_other_files_still_complete(
+    test_case: NativeParseIsolationTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    lint_response: Mock = Mock(
+        side_effect=[ValueError(test_case.error_message), '{"version":1,"diagnostics":[]}']
+    )
+    monkeypatch.setattr(native_sql._native, "lint_sql_json", lint_response)
+    monkeypatch.setattr(native_sql, "_MAX_NATIVE_LINT_WORKERS", 1)
+    failed_path: Path = tmp_path / "failed.sql"
+    healthy_path: Path = tmp_path / "healthy.sql"
+    failed_text: str = "SELECT category\nGROUP BY GROUPING SETS ((category))"
+    healthy_text: str = "SELECT 1"
+    bodies: tuple[LintBody, ...] = (
+        LintBody(
+            file_path=failed_path,
+            body_start=0,
+            body_end=len(failed_text),
+            lint_text=failed_text,
+            passes=(),
+        ),
+        LintBody(
+            file_path=healthy_path,
+            body_start=0,
+            body_end=len(healthy_text),
+            lint_text=healthy_text,
+            passes=(),
+        ),
+    )
+
+    result: dict[Path, tuple[LintViolation, ...]] = native_sql.run_native_sql_lint(
+        bodies=bodies,
+        contents_by_path={failed_path: failed_text, healthy_path: healthy_text},
+        config=LintConfig(dialect="snowflake"),
+    )
+
+    assert tuple(result) == (failed_path,)
+    assert result[failed_path][0].code == "L003"
+    assert (result[failed_path][0].line, result[failed_path][0].column) == (
+        test_case.expected_position
+    )
+    assert result[failed_path][0].fix is None
 
 
 @pytest.mark.parametrize(

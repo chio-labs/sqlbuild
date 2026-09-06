@@ -7,7 +7,7 @@ from pathlib import Path
 from sqlbuild.compiler.compile.models import SqlExpansionContext
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.lint._helpers.expansion import build_lint_expansion_context, prepare_lint_body
-from sqlbuild.lint._helpers.headers import scan_headers, sql_body_ranges
+from sqlbuild.lint._helpers.headers import lint_body_ranges, scan_headers
 from sqlbuild.lint._helpers.native import format_native_headers, lint_native_headers
 from sqlbuild.lint._helpers.native_format import format_native_sql_bodies
 from sqlbuild.lint._helpers.native_sql import run_native_sql_lint
@@ -112,7 +112,13 @@ def _apply_fixes(
     current_files: dict[Path, str] = {
         file_path: updated.get(file_path, contents) for file_path, contents in files.items()
     }
-    updated.update(format_native_sql_bodies(files=current_files, config=config))
+    updated.update(
+        format_native_sql_bodies(
+            files=current_files,
+            config=config,
+            project_dir=project_dir,
+        )
+    )
     return updated
 
 
@@ -153,9 +159,15 @@ def _lint_final_contents(
             continue
         body_start: int
         body_end: int
-        for body_start, body_end in sql_body_ranges(contents=final_contents, headers=headers):
+        for body_start, body_end in lint_body_ranges(
+            contents=final_contents,
+            headers=headers,
+            file_path=file_path,
+            project_dir=project_dir,
+        ):
             bodies.append(
                 prepare_lint_body(
+                    project_dir=project_dir,
                     file_path=file_path,
                     contents=final_contents,
                     body_start=body_start,

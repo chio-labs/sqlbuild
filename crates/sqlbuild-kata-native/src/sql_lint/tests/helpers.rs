@@ -2,6 +2,10 @@ use serde_json::{Value, json};
 
 use crate::sql_lint::main::engine::lint_json;
 
+pub(crate) fn nested_function_sql(depth: usize) -> String {
+    format!("SELECT {}1{}", "F(".repeat(depth), ")".repeat(depth))
+}
+
 pub(crate) fn diagnostics(sql: &str) -> Result<Vec<Value>, String> {
     let response = lint_json(
         &json!({

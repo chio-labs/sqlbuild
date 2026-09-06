@@ -11,6 +11,8 @@ PRESERVE_TARGET_VALUE: str = "preserve"
 
 AUDIT_DIRECTORY_NAME: str = "audits"
 GENERIC_AUDIT_DIRECTORY_NAME: str = "generic"
+HOOK_DIRECTORY_NAME: str = "hooks"
+MODEL_DIRECTORY_NAME: str = "models"
 NOT_NULL_AUDIT_NAME: str = "not_null"
 MODEL_AUDIT_OVERRIDE_KEYS: frozenset[str] = frozenset({"by_type", "by_column"})
 MODEL_FULL_REFRESH_CONFIG_KEY: str = "full_refresh"

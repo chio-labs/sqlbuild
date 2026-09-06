@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from sqlbuild.lint.constants import DSL_HEADER_KINDS, IDENTIFIER_SEPARATOR_CHARACTER
+import re
+from functools import cache
+from pathlib import Path
+
+from sqlbuild.compiler.compile.constants import AUDIT_DIRECTORY_NAME
+from sqlbuild.lint.constants import DSL_HEADER_KINDS
 from sqlbuild.lint.models import HeaderSpan
 
 _QUOTE_CHARACTERS: frozenset[str] = frozenset({"'", '"'})
@@ -10,52 +15,85 @@ _ESCAPE_CHARACTER: str = "\\"
 _OPEN_PAREN: str = "("
 _CLOSE_PAREN: str = ")"
 _STATEMENT_TERMINATOR: str = ";"
-_NEWLINE: str = "\n"
-_LINE_COMMENT_START: str = "--"
-_BLOCK_COMMENT_START: str = "/*"
-_BLOCK_COMMENT_END: str = "*/"
 
 
-def scan_headers(*, contents: str) -> tuple[HeaderSpan, ...]:
+def scan_headers(*, contents: str, first_only: bool = False) -> tuple[HeaderSpan, ...]:
     """Return all DSL header spans found in the file contents."""
 
+    return _scan_delimited_regions(contents=contents, kinds=DSL_HEADER_KINDS, first_only=first_only)
+
+
+def measurement_body_ranges(*, contents: str) -> tuple[tuple[int, int], ...]:
+    """Return authored query ranges inside MEASURE and EVIDENCE blocks."""
+
+    blocks: tuple[HeaderSpan, ...] = _scan_delimited_regions(
+        contents=contents, kinds=frozenset({"MEASURE", "EVIDENCE"})
+    )
+    ranges: list[tuple[int, int]] = []
+    for block in blocks:
+        opening_index: int = contents.find(_OPEN_PAREN, block.start, block.end)
+        closing_index: int = contents.rfind(_CLOSE_PAREN, opening_index + 1, block.end)
+        body_start: int = _first_non_whitespace(
+            contents=contents, start=opening_index + 1, end=closing_index
+        )
+        if body_start < closing_index:
+            ranges.append((body_start, closing_index))
+    return tuple(ranges)
+
+
+def lint_body_ranges(
+    *,
+    contents: str,
+    headers: tuple[HeaderSpan, ...],
+    file_path: Path,
+    project_dir: Path,
+) -> tuple[tuple[int, int], ...]:
+    """Return lintable authored bodies using resource-specific DSL boundaries."""
+
+    if file_path.is_relative_to(project_dir / AUDIT_DIRECTORY_NAME):
+        measurement_ranges: tuple[tuple[int, int], ...] = measurement_body_ranges(contents=contents)
+        if measurement_ranges:
+            return measurement_ranges
+    return sql_body_ranges(contents=contents, headers=headers)
+
+
+def _scan_delimited_regions(
+    *, contents: str, kinds: frozenset[str], first_only: bool = False
+) -> tuple[HeaderSpan, ...]:
+    """Return line-leading parenthesized regions with one of the requested names."""
+
     spans: list[HeaderSpan] = []
-    index: int = 0
-    length: int = len(contents)
-    while index < length:
-        if contents.startswith(_LINE_COMMENT_START, index):
-            newline_index: int = contents.find(_NEWLINE, index + len(_LINE_COMMENT_START))
-            index = length if newline_index < 0 else newline_index + 1
+    match: re.Match[str]
+    for match in _delimited_region_pattern(kinds).finditer(contents):
+        kind: str | None = match.group("kind")
+        if kind is None:
             continue
-        if contents.startswith(_BLOCK_COMMENT_START, index):
-            comment_end: int = contents.find(_BLOCK_COMMENT_END, index + len(_BLOCK_COMMENT_START))
-            index = length if comment_end < 0 else comment_end + len(_BLOCK_COMMENT_END)
-            continue
-        character: str = contents[index]
-        if not (character.isalpha() or character == IDENTIFIER_SEPARATOR_CHARACTER):
-            index += 1
-            continue
-        word_end: int = _word_end(contents=contents, start=index)
-        kind: str = contents[index:word_end]
-        if (
-            kind not in DSL_HEADER_KINDS
-            or _is_word_prefix(contents=contents, start=index)
-            or not _is_line_start(contents=contents, start=index)
-        ):
-            index = word_end
-            continue
+        keyword_start: int = match.start("kind")
         span: HeaderSpan | None = _match_header_span(
             contents=contents,
             kind=kind,
-            keyword_start=index,
-            body_start=word_end,
+            keyword_start=keyword_start,
+            body_start=match.end("kind"),
         )
-        if span is None:
-            index = word_end
-            continue
-        spans.append(span)
-        index = span.end
+        if span is not None:
+            spans.append(span)
+            if first_only:
+                break
     return tuple(spans)
+
+
+@cache
+def _delimited_region_pattern(kinds: frozenset[str]) -> re.Pattern[str]:
+    """Build a C-level scanner that skips comments and SQL strings."""
+
+    kind_alternatives: str = "|".join(re.escape(kind) for kind in sorted(kinds))
+    return re.compile(
+        rf"--[^\n]*(?:\n|\Z)"
+        rf"|/\*[\s\S]*?(?:\*/|\Z)"
+        rf"|'(?:''|[^'])*(?:'|\Z)"
+        rf'|"(?:""|[^"])*(?:"|\Z)'
+        rf"|(?m:^[^\S\r\n]*(?P<kind>{kind_alternatives})\b)"
+    )
 
 
 def sql_body_ranges(
@@ -75,29 +113,6 @@ def sql_body_ranges(
     if tail_start < len(contents):
         ranges.append((tail_start, len(contents)))
     return tuple(ranges)
-
-
-def _word_end(*, contents: str, start: int) -> int:
-    index: int = start
-    length: int = len(contents)
-    while index < length and (
-        contents[index].isalnum() or contents[index] == IDENTIFIER_SEPARATOR_CHARACTER
-    ):
-        index += 1
-    return index
-
-
-def _is_word_prefix(*, contents: str, start: int) -> bool:
-    if start == 0:
-        return False
-    previous: str = contents[start - 1]
-    return previous.isalnum() or previous == IDENTIFIER_SEPARATOR_CHARACTER
-
-
-def _is_line_start(*, contents: str, start: int) -> bool:
-    line_start: int = contents.rfind(_NEWLINE, 0, start) + 1
-    prefix: str = contents[line_start:start]
-    return all(character.isspace() for character in prefix)
 
 
 def _match_header_span(

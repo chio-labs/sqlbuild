@@ -70,6 +70,15 @@ class NativeSqlReuseTestCase:
 
 
 @dataclass(frozen=True)
+class NativeParseIsolationTestCase:
+    """Native parser fault that must not stop later bodies."""
+
+    description: str
+    error_message: str
+    expected_position: tuple[int, int]
+
+
+@dataclass(frozen=True)
 class ReservedCteLintTestCase:
     """Test case for SQLBuild harness CTE filtering."""
 

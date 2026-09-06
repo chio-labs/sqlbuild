@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.constants import MACRO_TOKEN, SQL_INTERPOLATION_TOKEN
+import re
+
+from sqlbuild.compiler.compile.constants import (
+    MACRO_TOKEN,
+    SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN,
+    SQL_ARGUMENT_RAW_PARAMETER_PATTERN,
+    SQL_INTERPOLATION_TOKEN,
+)
 from sqlbuild.compiler.compile.models import ExpansionSpan
 from sqlbuild.lint.constants import (
     CLOSING_PAREN_CHARACTER,
@@ -28,37 +35,113 @@ _SQLBUILD_FUNCTION_NAMES: tuple[str, ...] = (
     "__udf",
     "__ref",
 )
+_AUDIT_PARAMETER_SENTINEL_TEMPLATE: str = "__sqlbuild_audit_parameter_{index}__"
+_CONTEXT_SENTINEL_TEMPLATE: str = "__sqlbuild_context_parameter_{index}__"
+_LINE_COMMENT_START: str = "--"
+_BLOCK_COMMENT_START: str = "/*"
+_BLOCK_COMMENT_END: str = "*/"
+_TABLE_FUNCTION_INTRINSIC_NAME: str = "__table_fn"
+_SQLBUILD_FUNCTION_PATTERN: str = "|".join(
+    re.escape(name) for name in sorted(_SQLBUILD_FUNCTION_NAMES)
+)
+_INTERPOLATION_SCAN_PATTERN: re.Pattern[str] = re.compile(
+    rf"--[^\n]*(?:\n|\Z)"
+    rf"|/\*[\s\S]*?(?:\*/|\Z)"
+    rf"|'(?:\\.|''|[^'\\])*(?:'|\Z)"
+    rf'|"(?:\\.|""|[^"\\])*(?:"|\Z)'
+    rf"|(?P<site>@@|\$\{{|@|(?:{_SQLBUILD_FUNCTION_PATTERN})\s*\()"
+)
+
+
+def neutralize_context_interpolation(*, body: str) -> tuple[str, tuple[InterpolationSite, ...]]:
+    """Replace runtime CTX interpolation with parseable generated sentinels."""
+
+    sites: list[InterpolationSite] = []
+    pieces: list[str] = []
+    output_length: int = 0
+    copied_to: int = 0
+    token: str = f"{SQL_INTERPOLATION_TOKEN}CTX:"
+    while True:
+        start: int = body.find(token, copied_to)
+        if start < 0:
+            break
+        end: int | None = _interpolation_site_end(body=body, start=start)
+        if end is None:
+            break
+        literal: str = body[copied_to:start]
+        sentinel: str = _CONTEXT_SENTINEL_TEMPLATE.format(index=len(sites))
+        pieces.extend((literal, sentinel))
+        output_length += len(literal)
+        sites.append(
+            InterpolationSite(
+                sentinel=sentinel,
+                neutralized_start=output_length,
+                neutralized_end=output_length + len(sentinel),
+                original_start=start,
+                original_end=end,
+                original_text=body[start:end],
+            )
+        )
+        output_length += len(sentinel)
+        copied_to = end
+    pieces.append(body[copied_to:])
+    return "".join(pieces), tuple(sites)
+
+
+def neutralize_generic_audit_parameters(*, body: str) -> tuple[str, tuple[InterpolationSite, ...]]:
+    """Replace unbound generic-audit arguments with parseable generated sentinels."""
+
+    matches: list[tuple[int, int, bool]] = []
+    for match in SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN.finditer(body):
+        matches.append((match.start(), match.end(), True))
+    for match in SQL_ARGUMENT_RAW_PARAMETER_PATTERN.finditer(body):
+        matches.append((match.start(), match.end(), False))
+    matches.sort(key=lambda item: item[0])
+
+    sites: list[InterpolationSite] = []
+    pieces: list[str] = []
+    output_length: int = 0
+    copied_to: int = 0
+    for start, end, quoted in matches:
+        literal: str = body[copied_to:start]
+        identifier: str = _AUDIT_PARAMETER_SENTINEL_TEMPLATE.format(index=len(sites))
+        sentinel: str = f"'{identifier}'" if quoted else identifier
+        pieces.extend((literal, sentinel))
+        output_length += len(literal)
+        sites.append(
+            InterpolationSite(
+                sentinel=sentinel,
+                neutralized_start=output_length,
+                neutralized_end=output_length + len(sentinel),
+                original_start=start,
+                original_end=end,
+                original_text=body[start:end],
+            )
+        )
+        output_length += len(sentinel)
+        copied_to = end
+    pieces.append(body[copied_to:])
+    return "".join(pieces), tuple(sites)
 
 
 def neutralize_interpolation(*, body: str) -> tuple[str, tuple[InterpolationSite, ...]]:
     """Replace every interpolation site with a unique sentinel identifier."""
 
+    if not _contains_interpolation_candidate(body=body):
+        return body, ()
     sites: list[InterpolationSite] = []
     pieces: list[str] = []
     neutralized_length: int = 0
     copied_to: int = 0
-    index: int = 0
-    length: int = len(body)
-    quote_character: str | None = None
-    while index < length:
-        character: str = body[index]
-        if quote_character is not None:
-            if character == SQL_ESCAPE_CHARACTER and index + 1 < length:
-                index += 2
-                continue
-            if character == quote_character:
-                quote_character = None
-            index += 1
+    match: re.Match[str]
+    for match in _INTERPOLATION_SCAN_PATTERN.finditer(body):
+        if match.group("site") is None or match.start() < copied_to:
             continue
-        if character in SQL_QUOTE_CHARACTERS:
-            quote_character = character
-            index += 1
-            continue
-        site_end: int | None = _interpolation_site_end(body=body, start=index)
+        site_start: int = match.start()
+        site_end: int | None = _interpolation_site_end(body=body, start=site_start)
         if site_end is None:
-            index += 1
             continue
-        literal: str = body[copied_to:index]
+        literal: str = body[copied_to:site_start]
         sentinel: str = SENTINEL_TEMPLATE.format(index=len(sites))
         pieces.append(literal)
         pieces.append(sentinel)
@@ -68,16 +151,23 @@ def neutralize_interpolation(*, body: str) -> tuple[str, tuple[InterpolationSite
                 sentinel=sentinel,
                 neutralized_start=neutralized_length,
                 neutralized_end=neutralized_length + len(sentinel),
-                original_start=index,
+                original_start=site_start,
                 original_end=site_end,
-                original_text=body[index:site_end],
+                original_text=body[site_start:site_end],
             )
         )
         neutralized_length += len(sentinel)
-        index = site_end
         copied_to = site_end
     pieces.append(body[copied_to:])
     return "".join(pieces), tuple(sites)
+
+
+def _contains_interpolation_candidate(*, body: str) -> bool:
+    return (
+        MACRO_TOKEN in body
+        or TEMPLATE_INTERPOLATION_START in body
+        or any(name in body for name in _SQLBUILD_FUNCTION_NAMES)
+    )
 
 
 def restore_interpolation(*, fixed: str, sites: tuple[InterpolationSite, ...]) -> str:
@@ -140,13 +230,14 @@ def map_neutralized_offset(*, offset: int, sites: tuple[InterpolationSite, ...])
 
 
 def _interpolation_site_end(*, body: str, start: int) -> int | None:
-    if body.startswith(SQL_INTERPOLATION_TOKEN, start):
-        return _interpolation_name_end(body=body, start=start + len(SQL_INTERPOLATION_TOKEN))
-    if body.startswith(TEMPLATE_INTERPOLATION_START, start):
-        return _template_site_end(body=body, start=start)
-    if body.startswith(MACRO_TOKEN, start):
+    character: str = body[start]
+    if character == MACRO_TOKEN:
+        if body.startswith(SQL_INTERPOLATION_TOKEN, start):
+            return _interpolation_name_end(body=body, start=start + len(SQL_INTERPOLATION_TOKEN))
         return _macro_site_end(body=body, start=start)
-    if body.startswith(_SQLBUILD_FUNCTION_NAMES, start):
+    if character == TEMPLATE_INTERPOLATION_START[0]:
+        return _template_site_end(body=body, start=start)
+    if character == IDENTIFIER_EXTRA_CHARACTER and body.startswith(_SQLBUILD_FUNCTION_NAMES, start):
         return _sqlbuild_function_site_end(body=body, start=start)
     return None
 
@@ -155,7 +246,15 @@ def _sqlbuild_function_site_end(*, body: str, start: int) -> int | None:
     name_end: int = _identifier_end(body=body, start=start)
     if name_end >= len(body) or body[name_end] != OPENING_PAREN_CHARACTER:
         return None
-    return _matching_paren_end(body=body, opening_index=name_end)
+    call_end: int | None = _matching_paren_end(body=body, opening_index=name_end)
+    if call_end is None or body[start:name_end] != _TABLE_FUNCTION_INTRINSIC_NAME:
+        return call_end
+    arguments_start: int = call_end
+    while arguments_start < len(body) and body[arguments_start].isspace():
+        arguments_start += 1
+    if arguments_start < len(body) and body[arguments_start] == OPENING_PAREN_CHARACTER:
+        return _matching_paren_end(body=body, opening_index=arguments_start)
+    return call_end
 
 
 def _template_site_end(*, body: str, start: int) -> int | None:
@@ -190,12 +289,23 @@ def _matching_paren_end(*, body: str, opening_index: int) -> int | None:
     length: int = len(body)
     quote_character: str | None = None
     while index < length:
+        if quote_character is None and body.startswith(_LINE_COMMENT_START, index):
+            newline_index: int = body.find("\n", index + len(_LINE_COMMENT_START))
+            index = length if newline_index < 0 else newline_index + 1
+            continue
+        if quote_character is None and body.startswith(_BLOCK_COMMENT_START, index):
+            comment_end: int = body.find(_BLOCK_COMMENT_END, index + len(_BLOCK_COMMENT_START))
+            index = length if comment_end < 0 else comment_end + len(_BLOCK_COMMENT_END)
+            continue
         character: str = body[index]
         if quote_character is not None:
             if character == SQL_ESCAPE_CHARACTER and index + 1 < length:
                 index += 2
                 continue
             if character == quote_character:
+                if index + 1 < length and body[index + 1] == quote_character:
+                    index += 2
+                    continue
                 quote_character = None
             index += 1
             continue
