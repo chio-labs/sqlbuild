@@ -64,6 +64,41 @@ def write_lint_performance_project(*, project_dir: Path, model_count: int, model
         _ = (models_dir / f"model_{index:05d}.sql").write_text(model_sql, encoding="utf-8")
 
 
+def write_varied_production_lint_project(*, project_dir: Path, model_count: int) -> None:
+    """Write varied multi-CTE SQL so native response deduplication cannot hide scaling."""
+
+    write_lint_performance_project(
+        project_dir=project_dir,
+        model_count=0,
+        model_sql=CLEAN_MODEL_SQL,
+    )
+    models_dir: Path = project_dir / "models"
+    for index in range(model_count):
+        ctes: list[str] = [
+            "stage_00 AS (\n"
+            f"  SELECT {index} AS benchmark_id, id, COALESCE(value, 0) AS normalized_value\n"
+            "  FROM benchmark_source\n"
+            ")"
+        ]
+        for stage in range(1, 25):
+            previous: str = f"stage_{stage - 1:02d}"
+            ctes.append(
+                f"stage_{stage:02d} AS (\n"
+                "  SELECT benchmark_id, id, normalized_value,\n"
+                "    ROW_NUMBER() OVER (PARTITION BY benchmark_id ORDER BY id) AS row_number\n"
+                f"  FROM {previous}\n"
+                ")"
+            )
+        sql: str = (
+            'MODEL (description "Varied production-shaped lint benchmark.");\n'
+            "WITH " + ",\n".join(ctes) + "\nSELECT benchmark_id, id, normalized_value\n"
+            "FROM stage_24\n"
+            "WHERE row_number = 1\n"
+            "ORDER BY benchmark_id, id\n"
+        )
+        _ = (models_dir / f"model_{index:05d}.sql").write_text(sql, encoding="utf-8")
+
+
 def write_pathological_lint_project(*, project_dir: Path, predicate_count: int) -> None:
     """Write one valid model containing a long repeated predicate chain."""
 

@@ -4,7 +4,9 @@ use std::str::FromStr;
 use polyglot_sql::expressions::With;
 use polyglot_sql::parser::ParserConfig;
 use polyglot_sql::tokens::{Span, Token, TokenType};
-use polyglot_sql::{Dialect, DialectType, Expression, ExpressionWalk, Parser};
+use polyglot_sql::{
+    ComplexityGuardOptions, Dialect, DialectType, Expression, ExpressionWalk, Parser,
+};
 
 use crate::sql_lint::constants::LINT_API_VERSION;
 use crate::sql_lint::models::{
@@ -18,6 +20,7 @@ const NULL_COMPARISON: LintRuleMetadata = LintRuleMetadata {
     message: "Comparison with NULL is never true",
     remediation: "Use IS NULL or IS NOT NULL when testing for NULL.",
 };
+const MAX_LINT_FUNCTION_CALL_DEPTH: usize = 128;
 const IMPLICIT_CARTESIAN_JOIN: LintRuleMetadata = LintRuleMetadata {
     code: "SQBL002",
     message: "Comma-separated sources create an implicit cartesian join",
@@ -273,6 +276,10 @@ fn lint(request: LintRequest) -> Result<LintResponse, String> {
         tokens.clone(),
         ParserConfig {
             dialect: Some(dialect_type),
+            complexity_guard: ComplexityGuardOptions {
+                max_function_call_depth: Some(MAX_LINT_FUNCTION_CALL_DEPTH),
+                ..Default::default()
+            },
             ..Default::default()
         },
     );
@@ -435,20 +442,20 @@ fn redundant_distinct_span(context: &QueryTokenContext<'_>) -> Option<Span> {
         query_end,
         depth,
     } = context;
-    let distinct_position = direct
-        .iter()
-        .position(|&index| tokens[index].token_type == TokenType::Distinct)?;
+    let group_position = group_by_position(tokens, direct)?;
+    let group_index = direct[group_position];
+    let projection_end = first_type(tokens, direct, TokenType::From)
+        .filter(|index| *index < group_index)
+        .unwrap_or(group_index);
+    let distinct_position = direct.iter().position(|&index| {
+        index < projection_end && tokens[index].token_type == TokenType::Distinct
+    })?;
     if direct
         .get(distinct_position + 1)
         .is_some_and(|&index| tokens[index].token_type == TokenType::On)
     {
         return None;
     }
-    let group_position = group_by_position(tokens, direct)?;
-    let group_index = direct[group_position];
-    let projection_end = first_type(tokens, direct, TokenType::From)
-        .filter(|index| *index < group_index)
-        .unwrap_or(group_index);
     let projection_start = direct[distinct_position] + 1;
     let group_start = *direct.get(group_position + 2)?;
     let group_end = direct[group_position + 2..]

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import sqlbuild._native as _native
-from sqlbuild.lint._helpers.headers import scan_headers, sql_body_ranges
+from sqlbuild.lint._helpers.headers import lint_body_ranges, scan_headers
 from sqlbuild.lint._helpers.sqlbuild_tokens import neutralize_interpolation, restore_interpolation
 from sqlbuild.lint.exceptions import NativeLintError
 from sqlbuild.lint.models import HeaderSpan, LintConfig
@@ -15,7 +15,9 @@ from sqlbuild.lint.models import HeaderSpan, LintConfig
 _NATIVE_FORMAT_API_VERSION: int = 1
 
 
-def format_native_sql_bodies(*, files: dict[Path, str], config: LintConfig) -> dict[Path, str]:
+def format_native_sql_bodies(
+    *, files: dict[Path, str], config: LintConfig, project_dir: Path
+) -> dict[Path, str]:
     """Format supported authored SQL bodies and preserve unsupported bodies unchanged."""
 
     formatted_files: dict[Path, str] = {}
@@ -23,7 +25,13 @@ def format_native_sql_bodies(*, files: dict[Path, str], config: LintConfig) -> d
     for file_path, contents in sorted(files.items()):
         headers: tuple[HeaderSpan, ...] = scan_headers(contents=contents)
         updated: str = contents
-        for body_start, body_end in reversed(sql_body_ranges(contents=contents, headers=headers)):
+        body_ranges: tuple[tuple[int, int], ...] = lint_body_ranges(
+            contents=contents,
+            headers=headers,
+            file_path=file_path,
+            project_dir=project_dir,
+        )
+        for body_start, body_end in reversed(body_ranges):
             body: str = contents[body_start:body_end]
             trailing: str = body[len(body.rstrip()) :]
             core: str = body[: len(body) - len(trailing)] if trailing else body

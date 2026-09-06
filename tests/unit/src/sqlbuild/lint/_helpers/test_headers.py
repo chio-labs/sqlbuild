@@ -61,6 +61,11 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
             ),
             expected_kinds=("MODEL",),
         ),
+        ScanHeadersTestCase(
+            description="standard SQL backslash does not escape closing quote",
+            contents="SCENARIO ();\nSELECT 'C:\\temp\\'\nTEST ();\nSELECT 1\n",
+            expected_kinds=("SCENARIO", "TEST"),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -68,6 +73,27 @@ def test_given_contents_when_scanning_headers_then_kinds_match_expected(
     test_case: ScanHeadersTestCase,
 ) -> None:
     spans: tuple = scan_headers(contents=test_case.contents)
+    assert tuple(span.kind for span in spans) == test_case.expected_kinds
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScanHeadersTestCase(
+            description="first header only",
+            contents="MODEL ();\nSELECT 1\nTEST ();\nSELECT 2\n",
+            expected_kinds=("MODEL",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_single_header_resource_when_scanning_first_only_then_body_is_not_rescanned(
+    test_case: ScanHeadersTestCase,
+) -> None:
+    contents: str = test_case.contents
+
+    spans: tuple = scan_headers(contents=contents, first_only=True)
+
     assert tuple(span.kind for span in spans) == test_case.expected_kinds
 
 

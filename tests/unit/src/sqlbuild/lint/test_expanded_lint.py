@@ -2,19 +2,24 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from sqlbuild.compiler.compile.main.expand_sql_with_spans import expand_sql_with_spans
-from sqlbuild.compiler.compile.models import SqlExpansionContext
-from sqlbuild.lint._helpers.expansion import build_lint_expansion_context
+from sqlbuild.compiler.compile.main.map_expanded_offset import map_expanded_offset
+from sqlbuild.compiler.compile.models import MappedOffset, SqlExpansionContext
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.lint._helpers import expansion
+from sqlbuild.lint._helpers.expansion import build_lint_expansion_context, prepare_lint_body
 from sqlbuild.lint.exceptions import ProjectCompileError
 from sqlbuild.lint.main.run_lint import run_lint
-from sqlbuild.lint.models import LintConfig, LintRunResult
+from sqlbuild.lint.models import LintBody, LintConfig, LintRunResult
 from tests.unit.src.sqlbuild.lint._test_types import (
     ExpandedLintTestCase,
     ExpandedTypedConstantTestCase,
+    LintBehaviorTestCase,
     LintCompileFailureTestCase,
     LintProjectTestCase,
 )
@@ -22,6 +27,40 @@ from tests.unit.src.sqlbuild.lint._test_types import (
 PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n'
 BAD_CONDITION_MACRO: str = 'def bad_condition(ctx):\n    return "value = NULL"\n'
 HEADER: str = 'MODEL (\n  materialized table,\n  description "ok"\n);\n'
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [LintBehaviorTestCase(description="single lint discovery pass", expected_value=1)],
+    ids=lambda case: case.description,
+)
+def test_given_lint_context_when_building_then_project_is_discovered_once(
+    test_case: LintBehaviorTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = (tmp_path / "sqlbuild_project.toml").write_text(PROJECT_TOML, encoding="utf-8")
+    discovery_count: list[int] = [0]
+    discover: Callable[..., DiscoveredProjectInputs] = expansion.discover_project_inputs
+
+    def counted_discovery(
+        *,
+        project_dir: Path,
+        sql_analysis_enabled_override: bool | None = None,
+        extract_output_column_locations: bool = True,
+    ) -> DiscoveredProjectInputs:
+        discovery_count[0] += 1
+        return discover(
+            project_dir=project_dir,
+            sql_analysis_enabled_override=sql_analysis_enabled_override,
+            extract_output_column_locations=extract_output_column_locations,
+        )
+
+    monkeypatch.setattr(expansion, "discover_project_inputs", counted_discovery)
+
+    _ = build_lint_expansion_context(project_dir=tmp_path)
+
+    assert discovery_count[0] == test_case.expected_value
 
 
 @pytest.mark.parametrize(
@@ -177,6 +216,117 @@ def test_given_project_when_linting_expanded_sql_then_positions_are_authored(
     assert any(violation.fix is not None for violation in result.violations) is (
         test_case.expected_fixable
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [LintBehaviorTestCase(description="parameterized measurement audit", expected_value=1)],
+    ids=lambda case: case.description,
+)
+def test_given_generic_audit_arguments_when_linting_then_template_is_analyzed(
+    test_case: LintBehaviorTestCase,
+    tmp_path: Path,
+) -> None:
+    _ = (tmp_path / "sqlbuild_project.toml").write_text(PROJECT_TOML, encoding="utf-8")
+    audit: Path = tmp_path / "audits" / "generic" / "measurement" / "accepted_values_where.sql"
+    audit.parent.mkdir(parents=True)
+    _ = audit.write_text(
+        "AUDIT (evaluation measurement, value measured_value);\n\n"
+        "MEASURE (\n"
+        "  SELECT COUNT(*) AS sample_count, COUNT(@column) AS measured_value\n"
+        "  FROM @relation\n"
+        "  WHERE (@where_condition)\n"
+        ");\n\n"
+        "EVIDENCE (\n"
+        "  SELECT @column, @'values' AS expected_values\n"
+        "  FROM @relation\n"
+        "  WHERE (@where_condition)\n"
+        ");\n",
+        encoding="utf-8",
+    )
+
+    result: LintRunResult = run_lint(project_dir=tmp_path, config=LintConfig(dialect="duckdb"))
+
+    assert result.files_checked == test_case.expected_value
+    assert result.violations == ()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [LintBehaviorTestCase(description="generated audit argument mapping", expected_value=True)],
+    ids=lambda case: case.description,
+)
+def test_given_generic_audit_argument_when_mapping_then_generated_region_is_not_fixable(
+    test_case: LintBehaviorTestCase,
+    tmp_path: Path,
+) -> None:
+    _ = (tmp_path / "sqlbuild_project.toml").write_text(PROJECT_TOML, encoding="utf-8")
+    audit: Path = tmp_path / "audits" / "generic" / "expression.sql"
+    audit.parent.mkdir(parents=True)
+    contents: str = "AUDIT ();\nSELECT 1 FROM @relation\n"
+    _ = audit.write_text(contents, encoding="utf-8")
+    context: SqlExpansionContext = build_lint_expansion_context(project_dir=tmp_path)
+
+    body: LintBody = prepare_lint_body(
+        project_dir=tmp_path,
+        file_path=audit,
+        contents=contents,
+        body_start=10,
+        body_end=len(contents),
+        context=context,
+    )
+    sentinel_offset: int = body.lint_text.index("__sqlbuild_audit_parameter_0__")
+    mapped: MappedOffset = map_expanded_offset(offset=sentinel_offset, passes=body.passes)
+
+    assert mapped.generated is test_case.expected_value
+    assert mapped.offset == contents[10:].index("@relation")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [LintBehaviorTestCase(description="unknown generic-audit macro", expected_value="@unknown")],
+    ids=lambda case: case.description,
+)
+def test_given_unknown_macro_call_in_generic_audit_when_linting_then_it_fails_closed(
+    test_case: LintBehaviorTestCase,
+    tmp_path: Path,
+) -> None:
+    _ = (tmp_path / "sqlbuild_project.toml").write_text(PROJECT_TOML, encoding="utf-8")
+    audit: Path = tmp_path / "audits" / "generic" / "unknown_macro.sql"
+    audit.parent.mkdir(parents=True)
+    _ = audit.write_text("AUDIT ();\nSELECT @unknown()\n", encoding="utf-8")
+
+    with pytest.raises(ProjectCompileError) as error:
+        _ = run_lint(project_dir=tmp_path, config=LintConfig(dialect="duckdb"))
+
+    assert str(test_case.expected_value) in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LintBehaviorTestCase(
+            description="checkout parent names do not classify model resources",
+            expected_value="does not allow @@CTX templates",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_reserved_parent_directories_when_linting_model_then_classification_is_project_relative(
+    test_case: LintBehaviorTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = tmp_path / "audits" / "generic" / "hooks" / "project"
+    project_dir.mkdir(parents=True)
+    _ = (project_dir / "sqlbuild_project.toml").write_text(PROJECT_TOML, encoding="utf-8")
+    model: Path = project_dir / "models" / "demo.sql"
+    model.parent.mkdir()
+    _ = model.write_text(f"{HEADER}SELECT @@CTX:run_id AS value\n", encoding="utf-8")
+
+    with pytest.raises(ProjectCompileError) as error:
+        _ = run_lint(project_dir=project_dir, config=LintConfig(dialect="duckdb"))
+
+    assert str(test_case.expected_value) in str(error.value)
 
 
 @pytest.mark.parametrize(

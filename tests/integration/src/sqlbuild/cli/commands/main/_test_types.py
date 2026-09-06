@@ -20,6 +20,14 @@ class LintDiagnosticIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class LintProjectIntegrationTestCase:
+    """Real CLI project-level lint and fix-check expectations."""
+
+    description: str
+    expected_files_checked: int
+
+
+@dataclass(frozen=True)
 class FixCommandIntegrationTestCase:
     """Real CLI project proving native fixes and convergence."""
 

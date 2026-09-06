@@ -21,12 +21,13 @@ from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
 
 def resolve_lint_inputs(
     *, project_dir: Path, select: tuple[str, ...], exclude: tuple[str, ...]
-) -> tuple[BaseAdapter, frozenset[Path] | None]:
+) -> tuple[BaseAdapter, frozenset[Path] | None, DiscoveredProjectInputs]:
     """Resolve the adapter and optional model-file scope through canonical selectors."""
 
     discovered: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=project_dir,
         sql_analysis_enabled_override=False,
+        extract_output_column_locations=False,
     )
     adapter: BaseAdapter = resolve_adapter(
         adapter_name=resolve_effective_adapter_name(
@@ -36,7 +37,7 @@ def resolve_lint_inputs(
         project_dir=project_dir,
     )
     if not select and not exclude:
-        return adapter, None
+        return adapter, None, discovered
     graph: ProjectGraph = build_project_graph(discovered_inputs=discovered, adapter=adapter)
     selected_keys: frozenset[CompiledObjectKey] = resolve_project_selectors(
         select=select,
@@ -60,4 +61,4 @@ def resolve_lint_inputs(
             "lint selection matched no SQL model files",
             code="S007",
         )
-    return adapter, paths
+    return adapter, paths, discovered

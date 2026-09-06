@@ -4,6 +4,29 @@ use crate::sql_lint::main::engine::lint_json;
 use crate::sql_lint::main::formatter::format_json;
 use crate::sql_lint::tests::{helpers, test_types};
 
+fn nested_function_sql(depth: usize) -> String {
+    format!("SELECT {}1{}", "F(".repeat(depth), ")".repeat(depth))
+}
+
+#[test]
+fn given_production_function_depth_when_linting_then_bounded_parser_accepts_it() {
+    let sql = nested_function_sql(65);
+
+    let diagnostics = helpers::diagnostics(&sql).expect("65 nested calls should remain supported");
+
+    assert!(diagnostics.is_empty());
+}
+
+#[test]
+fn given_excessive_function_depth_when_linting_then_complexity_guard_rejects_it() {
+    let sql = nested_function_sql(129);
+
+    let error = helpers::diagnostics(&sql).expect_err("129 nested calls should remain bounded");
+
+    assert!(error.contains("E_GUARD_FUNCTION_NESTING_DEPTH_EXCEEDED"));
+    assert!(error.contains("configured limit 128"));
+}
+
 #[test]
 fn given_sql_cases_when_linting_then_diagnostics_match() -> Result<(), String> {
     let test_cases = [
@@ -60,6 +83,12 @@ fn given_sql_cases_when_linting_then_diagnostics_match() -> Result<(), String> {
             sql: "SELECT DISTINCT id FROM items GROUP BY id",
             expected_codes: &["SQBL006"],
             expected_anchors: &[("SQBL006", "DISTINCT")],
+        },
+        test_types::LintTestCase {
+            description: "aggregate distinct is not a select modifier",
+            sql: "SELECT category, COUNT(DISTINCT id) FROM items GROUP BY category",
+            expected_codes: &[],
+            expected_anchors: &[],
         },
         test_types::LintTestCase {
             description: "positional set star",
