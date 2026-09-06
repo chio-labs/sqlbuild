@@ -211,6 +211,13 @@ def _parse_seed_entry(*, entry: dict[str, object], file_path: Path) -> SchemaSee
         meta=optional_mapping(
             entry=entry, key="meta", file_path=file_path, label="seed", error_class=SchemaParseError
         ),
+        tags=optional_string_tuple(
+            entry=entry,
+            key="tags",
+            file_path=file_path,
+            label="seed",
+            error_class=SchemaParseError,
+        ),
         csv_settings=_parse_seed_csv_settings(entry=entry, file_path=file_path),
         columns=columns,
     )

@@ -7,6 +7,10 @@ from sqlbuild.executor.node_results.types import NodeResultStatus
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 
+DAGSTER_ASSET_ENABLED_FIELD: str = "_dagster_asset_enabled"
+DAGSTER_CHECK_ENABLED_FIELD: str = "_dagster_check_enabled"
+DAGSTER_CHECK_NAME_FIELD: str = "_dagster_check_name"
+
 DAGSTER_ASSET_NODE_KIND_MEMBERS: frozenset[NodeKind] = frozenset(
     {
         NodeKind.SOURCE,

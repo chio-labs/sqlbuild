@@ -31,6 +31,8 @@ def build_asset_specs(
         if str(node.get("kind")) not in DAGSTER_ASSET_NODE_KINDS:
             continue
         translated_node: Mapping[str, Any] = {**node, "project_name": project_name}
+        if not translator.is_asset_node(translated_node):
+            continue
         deps: list[Any] = []
         for upstream_id in upstream_by_id.get(str(node["id"]), []):
             upstream_node: Mapping[str, Any] | None = nodes_by_id.get(upstream_id)
@@ -95,6 +97,8 @@ def _build_check_specs(
     specs: list[Any] = []
     for check in dag["checks"]:
         check_kind: str = str(check.get("kind"))
+        if not translator.is_asset_check(check):
+            continue
         if check_kind in excluded_kinds:
             continue
         if kinds is not None and check_kind not in kinds:
@@ -102,6 +106,8 @@ def _build_check_specs(
         for asset_id in check.get("checked_asset_ids", ()):
             node: Mapping[str, Any] | None = nodes_by_id.get(str(asset_id))
             if node is None:
+                continue
+            if not translator.is_asset_node(node):
                 continue
             specs.append(
                 dg.AssetCheckSpec(
@@ -115,7 +121,8 @@ def _build_check_specs(
 
 
 def _nodes_by_id(dag: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
-    return {str(node["id"]): node for node in dag["nodes"]}
+    project_name: object = dag.get("project_name")
+    return {str(node["id"]): {**node, "project_name": project_name} for node in dag["nodes"]}
 
 
 def _upstream_by_id(dag: Mapping[str, Any]) -> dict[str, list[str]]:

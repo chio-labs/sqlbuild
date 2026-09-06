@@ -2956,7 +2956,9 @@ database = "physical_db"
 schema = "physical_schema"
 """.strip()
             + "\n",
-            "functions/sql/defaulted.sql": "FUNCTION (returns INTEGER);\n\n1\n",
+            "functions/sql/defaulted.sql": (
+                "FUNCTION (returns INTEGER, tags [reference, daily]);\n\n1\n"
+            ),
             "models/model_defaulted.sql": "MODEL ();\n\nSELECT 1 AS id\n",
             "functions/python/explicit.py": """
 from sqlbuild.functions import udf
@@ -2995,6 +2997,7 @@ def main():
     functions: dict[str, CompileSqlFunctionInput] = {
         entry.name: entry for entry in compile_inputs.sql_function_inputs
     }
+    assert functions["defaulted"].tags == ("reference", "daily")
     assert compile_inputs.model_inputs[0].config.values["database"] == "logical_db"
     assert compile_inputs.model_inputs[0].config.values["schema"] == "logical_schema"
     assert (

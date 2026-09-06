@@ -269,6 +269,11 @@ def build_sql_function_inputs(
                     relative_path=function_file.relative_path,
                     language="SQL",
                 ),
+                tags=_parse_function_tags(
+                    header_values=header_values,
+                    relative_path=function_file.relative_path,
+                    language="SQL",
+                ),
                 declaration_usages=expansion.usages,
             )
         )
@@ -455,6 +460,11 @@ def _build_python_function_input(
             relative_path=python_function_file.relative_path,
             language="Python",
         ),
+        tags=_parse_function_tags(
+            header_values=header_values,
+            relative_path=python_function_file.relative_path,
+            language="Python",
+        ),
     )
 
 
@@ -621,6 +631,24 @@ def _parse_python_packages(*, raw_packages: object | None, relative_path: Path) 
             )
         packages.append(package.strip())
     return tuple(packages)
+
+
+def _parse_function_tags(
+    *, header_values: dict[str, object], relative_path: Path, language: str
+) -> tuple[str, ...]:
+    raw_tags: object | None = header_values.get("tags")
+    if raw_tags is None:
+        return ()
+    if not isinstance(raw_tags, list | tuple):
+        raise CompileInputError(f"{language} function file {relative_path} tags must be a list")
+    tags: list[str] = []
+    for tag in raw_tags:
+        if not isinstance(tag, str) or not tag.strip():
+            raise CompileInputError(
+                f"{language} function file {relative_path} tags entries must be non-empty strings"
+            )
+        tags.append(tag.strip())
+    return tuple(tags)
 
 
 def _expand_function_header_value(

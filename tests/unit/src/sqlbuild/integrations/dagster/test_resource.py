@@ -16,7 +16,10 @@ from _pytest.capture import CaptureResult
 from sqlbuild.cli.output._helpers.maximum_start_safety import serialize_maximum_start_safety
 from sqlbuild.cli.output.models import IntegrationCheckResult, IntegrationResultEnvelope
 from sqlbuild.compiler.planner.models import MaximumStartSafetyEvidence
-from sqlbuild.integrations.dagster import SqlBuildCliResource
+from sqlbuild.integrations.dagster import (
+    SqlBuildCliResource,
+    SqlBuildDagsterTranslator,
+)
 from sqlbuild.integrations.dagster._helpers.invocation import (
     _build_results_from_execution_payload,
     _build_results_from_integration_result,
@@ -40,6 +43,7 @@ from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterMeasurementMetadataTestCase,
     DagsterMicrobatchLimitMetadataTestCase,
     DagsterSelectedCheckTestCase,
+    DagsterTranslatorRuntimeTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
     assert_json_output_file_behavior,
@@ -57,6 +61,17 @@ from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
 )
 
 dg: Any = pytest.importorskip("dagster")
+
+
+class _NamespacedDagsterTranslator(SqlBuildDagsterTranslator):
+    def get_asset_key(self, node: Mapping[str, Any]) -> Any:
+        return dg.AssetKey(["translated", str(node["name"])])
+
+    def get_check_name(self, check: Mapping[str, Any]) -> str:
+        return f"translated__{check['name']}"
+
+    def is_asset_node(self, node: Mapping[str, Any]) -> bool:
+        return str(node.get("kind")) != "source"
 
 
 @pytest.mark.parametrize(
@@ -972,6 +987,72 @@ def test_given_execution_json_when_streaming_then_yields_structured_dagster_even
     assert tuple(result.check_name for result in check_results) == test_case.expected_check_names
     assert tuple(result.severity.value for result in check_results) == (
         test_case.expected_check_severities
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagsterTranslatorRuntimeTestCase(
+            description="custom asset and check identities remain consistent at runtime",
+            payload=(
+                '{"version": 1, "command": "build", "status": "success", '
+                '"summary": {}, "assets": ['
+                '{"kind": "source", "name": "raw_orders", "status": "success"}, '
+                '{"kind": "model", "name": "orders", "status": "success"}], '
+                '"checks": [{"kind": "audit", "name": "not_null", '
+                '"check_id": "audit:not_null:model:orders:order_id", '
+                '"passed": true, "status": "pass", "severity": "error"}]}'
+            ),
+            selected_asset_key=("translated", "orders"),
+            expected_selection=("orders",),
+            expected_asset_keys=(("translated", "orders"),),
+            expected_check_names=("translated__not_null",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_custom_translator_when_selecting_and_streaming_then_runtime_uses_translated_identities(
+    test_case: DagsterTranslatorRuntimeTestCase,
+    tmp_path: Path,
+) -> None:
+    context: Any = type(
+        "TranslatedAssetContext",
+        (),
+        {
+            "selected_asset_keys": {dg.AssetKey(test_case.selected_asset_key)},
+            "selected_asset_check_keys": None,
+        },
+    )()
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    resource: SqlBuildCliResource = SqlBuildCliResource(
+        project_dir=project_dir,
+        sqb_command=write_fake_sqb_command(root=tmp_path, stdout=test_case.payload),
+        dag_path=write_dagster_test_dag(root=tmp_path),
+    )
+
+    invocation: SqlBuildCliInvocation = resource.cli(
+        args=["build"],
+        context=context,
+        translator=_NamespacedDagsterTranslator(),
+    )
+    results: list[Any] = list(invocation.stream())
+
+    results_by_materialization_status: defaultdict[bool, list[Any]] = defaultdict(list)
+    results_by_check_status: defaultdict[bool, list[Any]] = defaultdict(list)
+    for result in results:
+        results_by_materialization_status[isinstance(result, dg.MaterializeResult)].append(result)
+        results_by_check_status[isinstance(result, dg.AssetCheckResult)].append(result)
+
+    assert invocation.selection == test_case.expected_selection
+    assert (
+        tuple(tuple(result.asset_key.path) for result in results_by_materialization_status[True])
+        == test_case.expected_asset_keys
+    )
+    assert (
+        tuple(result.check_name for result in results_by_check_status[True])
+        == test_case.expected_check_names
     )
 
 
