@@ -747,6 +747,7 @@ def test_given_sqlbuild_process_is_still_running_when_emitting_stdout_then_dagst
             expected_check_names=(
                 "audit__forced_warning_failure__daily_revenue",
                 "audit__forced_error_failure__daily_revenue",
+                "audit__forced_measurement_warning__daily_revenue",
             ),
         )
     ],
@@ -794,6 +795,7 @@ def test_given_failing_sqlbuild_audits_when_executing_dagster_then_links_checks_
     assert set(test_case.expected_check_names) <= set(severities)
     assert severities["audit__forced_warning_failure__daily_revenue"] == AssetCheckSeverity.WARN
     assert severities["audit__forced_error_failure__daily_revenue"] == AssetCheckSeverity.ERROR
+    assert severities["audit__forced_measurement_warning__daily_revenue"] == AssetCheckSeverity.WARN
 
 
 @pytest.mark.parametrize(

@@ -204,7 +204,7 @@ _STDOUT_POLL_OUTCOMES: MappingProxyType[bool, Callable[[str, Event], None]] = Ma
 
 
 def add_failing_daily_revenue_audits(*, project_dir: Path) -> None:
-    """Add one failing WARN audit and one failing ERROR audit to the copied project."""
+    """Add violation and measurement failures to the copied project."""
 
     audits_dir: Path = project_dir / "audits" / "generic"
     audits_dir.mkdir(parents=True, exist_ok=True)
@@ -215,6 +215,22 @@ def add_failing_daily_revenue_audits(*, project_dir: Path) -> None:
     )
     (audits_dir / "forced_error_failure.sql").write_text(
         failing_audit_sql,
+        encoding="utf-8",
+    )
+    (audits_dir / "forced_measurement_warning.sql").write_text(
+        """AUDIT (
+  evaluation measurement,
+  value measured_value,
+  sample_count sample_count,
+  sample_unit rows,
+);
+
+MEASURE (
+  SELECT 95.0 AS measured_value, 100 AS sample_count
+  FROM @relation
+  LIMIT 1
+);
+""",
         encoding="utf-8",
     )
     model_path: Path = project_dir / "models" / "marts" / "daily_revenue.sql"
@@ -233,6 +249,10 @@ def add_failing_daily_revenue_audits(*, project_dir: Path) -> None:
     ),
     forced_error_failure (
       severity "error",
+    ),
+    forced_measurement_warning (
+      minimum_samples 100,
+      thresholds (warn (below 100), error (below 90)),
     ),""",
     )
     model_path.write_text(contents, encoding="utf-8")
