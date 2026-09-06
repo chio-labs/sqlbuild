@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
+from sqlbuild.compiler.compile.models import ExpansionSpan
 from sqlbuild.lint._helpers import native_sql
 from sqlbuild.lint.exceptions import NativeLintError
-from sqlbuild.lint.models import LintBody, LintConfig
+from sqlbuild.lint.models import LintBody, LintConfig, LintViolation
 from tests.unit.src.sqlbuild.lint._helpers._test_types import (
+    GeneratedRangeFallbackTestCase,
     InvalidNativeSqlResponseTestCase,
     NativeSqlReuseTestCase,
 )
@@ -38,6 +41,13 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
             response=(
                 '{"version":1,"diagnostics":['
                 '{"code":"SQBL001","message":"bad","start":99,"end":100}]}'
+            ),
+            expected_message="invalid code, message, or source span",
+        ),
+        InvalidNativeSqlResponseTestCase(
+            description="remediation must be present",
+            response=(
+                '{"version":1,"diagnostics":[{"code":"SQBL001","message":"bad","start":0,"end":1}]}'
             ),
             expected_message="invalid code, message, or source span",
         ),
@@ -109,3 +119,68 @@ def test_given_identical_expanded_bodies_when_linting_then_native_analysis_is_re
 
     assert result == {}
     assert len(calls) == test_case.expected_call_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        GeneratedRangeFallbackTestCase(
+            description="diagnostic crossing one macro expansion",
+            authored="SELECT a@macro()b",
+            expanded="SELECT aLIMITb",
+            diagnostic_start=7,
+            diagnostic_end=14,
+            expected_position=(1, 8),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_diagnostic_crossing_generated_sql_when_mapping_then_range_falls_back_to_point(
+    test_case: GeneratedRangeFallbackTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Do not fabricate an authored range when a native span crosses an expansion."""
+
+    response: str = json.dumps(
+        {
+            "version": 1,
+            "diagnostics": [
+                {
+                    "code": "SQBL004",
+                    "message": "bad",
+                    "remediation": "fix it",
+                    "start": test_case.diagnostic_start,
+                    "end": test_case.diagnostic_end,
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(native_sql._native, "lint_sql_json", lambda _request: response)
+    target: Path = tmp_path / "model.sql"
+    body: LintBody = LintBody(
+        file_path=target,
+        body_start=0,
+        body_end=len(test_case.authored),
+        lint_text=test_case.expanded,
+        passes=(
+            (
+                ExpansionSpan(
+                    source_start=8,
+                    source_end=16,
+                    output_start=8,
+                    output_end=13,
+                ),
+            ),
+        ),
+    )
+
+    result: dict[Path, tuple[LintViolation, ...]] = native_sql.run_native_sql_lint(
+        bodies=(body,),
+        contents_by_path={target: test_case.authored},
+        config=LintConfig(dialect="duckdb"),
+    )
+
+    violation: LintViolation = result[target][0]
+    assert (violation.line, violation.column) == test_case.expected_position
+    assert (violation.end_line, violation.end_column) == (None, None)

@@ -15,6 +15,7 @@ from sqlbuild.cli.commands._helpers.lint.selection import resolve_lint_inputs
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.lint.main.run_format import run_format
 from sqlbuild.lint.models import LintConfig, LintRunResult
+from sqlbuild.presentation.main.supports_color import supports_color
 
 
 def run_format_command(
@@ -25,6 +26,7 @@ def run_format_command(
     check: bool = False,
     diff: bool = False,
     json_output: bool = False,
+    no_color: bool = False,
 ) -> int:
     """Apply autofixes in place; non-zero when faults remain after formatting."""
 
@@ -59,6 +61,8 @@ def run_format_command(
     else:
         _ = render_lint_result(
             result=result,
+            root=base_dir,
+            use_color=not no_color and supports_color(),
             show_formatted=True,
             formatted_heading="Would format files:" if check or diff else "Formatted files:",
         )

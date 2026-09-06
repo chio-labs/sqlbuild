@@ -5,6 +5,14 @@ pub(crate) struct LintTestCase {
     pub expected_anchors: &'static [(&'static str, &'static str)],
 }
 
+pub(crate) struct LintMetadataTestCase {
+    pub description: &'static str,
+    pub sql: &'static str,
+    pub expected_code: &'static str,
+    pub expected_message: &'static str,
+    pub expected_remediation: &'static str,
+}
+
 pub(crate) struct FormatTestCase {
     pub description: &'static str,
     pub sql: &'static str,

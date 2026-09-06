@@ -535,6 +535,7 @@ def _dispatch_lint_format_command(
             select=select,
             exclude=tuple(args.exclude),
             json_output=args.json,
+            no_color=args.no_color,
         )
     if args.format_diff and args.json:
         raise CliUserError("format --diff cannot be combined with --json", code="C112")
@@ -545,6 +546,7 @@ def _dispatch_lint_format_command(
         check=args.format_check,
         diff=args.format_diff,
         json_output=args.json,
+        no_color=args.no_color,
     )
 
 

@@ -32,8 +32,16 @@ pub(crate) struct LintResponse {
 pub(crate) struct LintDiagnostic {
     pub code: &'static str,
     pub message: &'static str,
+    pub remediation: &'static str,
     pub start: usize,
     pub end: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct LintRuleMetadata {
+    pub code: &'static str,
+    pub message: &'static str,
+    pub remediation: &'static str,
 }
 
 #[derive(Debug, Deserialize)]

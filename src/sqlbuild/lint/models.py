@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.compiler.compile.models import ExpansionSpan
@@ -53,6 +54,9 @@ class LintViolation:
     message: str
     severity: LintSeverity
     engine: str
+    end_line: int | None = None
+    end_column: int | None = None
+    remediation: str | None = None
 
 
 @dataclass(frozen=True)
@@ -82,6 +86,7 @@ class LintRunResult:
     violations: tuple[LintViolation, ...]
     formatted_files: tuple[Path, ...]
     format_changes: tuple[FormatChange, ...] = ()
+    source_texts: Mapping[Path, str] = field(default_factory=dict, repr=False, compare=False)
 
     @property
     def faults(self) -> tuple[LintViolation, ...]:
