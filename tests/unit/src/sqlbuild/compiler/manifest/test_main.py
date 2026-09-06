@@ -551,6 +551,7 @@ def test_given_source_when_building_manifest_then_produces_correct_node(
             expected_unique_id=f"seed.{_PROJECT}.country_codes",
             expected_resource_type="seed",
             expected_materialized="seed",
+            expected_tags=("reference", "daily"),
         ),
     ],
     ids=lambda case: case.description,
@@ -558,7 +559,7 @@ def test_given_source_when_building_manifest_then_produces_correct_node(
 def test_given_seed_when_building_manifest_then_produces_correct_node(
     test_case: ManifestSeedNodeTestCase,
 ) -> None:
-    seed: CompiledSeed = build_test_seed(name="country_codes")
+    seed: CompiledSeed = build_test_seed(name="country_codes", tags=test_case.expected_tags)
     project: CompiledProject = build_test_project(seeds=(seed,))
     plan_output: PlanOutput = build_test_plan_output()
 
@@ -576,6 +577,8 @@ def test_given_seed_when_building_manifest_then_produces_correct_node(
     assert node["unique_id"] == test_case.expected_unique_id
     assert node["resource_type"] == test_case.expected_resource_type
     assert node["config"]["materialized"] == test_case.expected_materialized
+    assert tuple(node["tags"]) == test_case.expected_tags
+    assert tuple(node["config"]["tags"]) == test_case.expected_tags
 
 
 @pytest.mark.parametrize(

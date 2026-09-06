@@ -137,6 +137,7 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
                 schema_entry=SchemaSeedEntry(
                     name="country_codes",
                     description="Country lookup",
+                    tags=("reference",),
                     columns=(SchemaColumn(name="country_code", type="TEXT"),),
                 ),
                 schema_file=schema_file,
@@ -161,6 +162,7 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
                 destination=function_target,
                 fingerprint_destination=function_target,
                 language=FunctionLanguage.SQL,
+                tags=("normalization",),
             ),
         ),
         models=(
