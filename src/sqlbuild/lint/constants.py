@@ -90,3 +90,4 @@ GENERATED_SQL_MESSAGE_SUFFIX: str = "(in generated SQL)"
 
 LINE_FEED: str = "\n"
 CARRIAGE_RETURN_LINE_FEED: str = "\r\n"
+TAB_CHARACTER: str = "\t"

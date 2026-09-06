@@ -13,6 +13,7 @@ from sqlbuild.cli.commands._helpers.lint.runs import (
 from sqlbuild.cli.commands._helpers.lint.selection import resolve_lint_inputs
 from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import LintConfig, LintRunResult
+from sqlbuild.presentation.main.supports_color import supports_color
 
 
 def run_lint_command(
@@ -21,6 +22,7 @@ def run_lint_command(
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     json_output: bool = False,
+    no_color: bool = False,
 ) -> int:
     """Report lint violations without modifying authored files; non-zero on violations."""
 
@@ -46,5 +48,10 @@ def run_lint_command(
     if json_output:
         _ = render_lint_result_json(result=result)
     else:
-        _ = render_lint_result(result=result, show_formatted=False)
+        _ = render_lint_result(
+            result=result,
+            root=base_dir,
+            use_color=not no_color and supports_color(),
+            show_formatted=False,
+        )
     return 1 if result.violations else 0

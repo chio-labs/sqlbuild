@@ -6,6 +6,20 @@ from sqlbuild.compiler.planner.models import CursorOverrides
 
 
 @dataclass(frozen=True)
+class LintDiagnosticIntegrationTestCase:
+    """Real CLI inputs and expected actionable lint diagnostic fragments."""
+
+    description: str
+    model_name: str
+    source_line: str
+    expected_code: str
+    expected_message: str
+    expected_location: str
+    expected_caret_suffix: str
+    expected_remediation: str
+
+
+@dataclass(frozen=True)
 class LoadCommandIntegrationTestCase:
     description: str
     project_files: dict[str, str]

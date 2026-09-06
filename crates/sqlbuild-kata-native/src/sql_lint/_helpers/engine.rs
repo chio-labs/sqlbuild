@@ -7,25 +7,55 @@ use polyglot_sql::tokens::{Span, Token, TokenType};
 use polyglot_sql::{Dialect, DialectType, Expression, ExpressionWalk, Parser};
 
 use crate::sql_lint::constants::LINT_API_VERSION;
-use crate::sql_lint::models::{LintDiagnostic, LintRequest, LintResponse, QueryFacts};
+use crate::sql_lint::models::{
+    LintDiagnostic, LintRequest, LintResponse, LintRuleMetadata, QueryFacts,
+};
 
-const NULL_COMPARISON: &str = "SQBL001";
-const IMPLICIT_CARTESIAN_JOIN: &str = "SQBL002";
-const JOIN_WITHOUT_CONDITION: &str = "SQBL003";
-const UNORDERED_LIMIT: &str = "SQBL004";
-const UNUSED_CTE: &str = "SQBL005";
-const REDUNDANT_DISTINCT: &str = "SQBL006";
-const POSITIONAL_SET_STAR: &str = "SQBL007";
+const NULL_COMPARISON: LintRuleMetadata = LintRuleMetadata {
+    code: "SQBL001",
+    message: "Comparison with NULL is never true",
+    remediation: "Use IS NULL or IS NOT NULL when testing for NULL.",
+};
+const IMPLICIT_CARTESIAN_JOIN: LintRuleMetadata = LintRuleMetadata {
+    code: "SQBL002",
+    message: "Comma-separated sources create an implicit cartesian join",
+    remediation: "Replace comma-separated sources with an explicit keyed join, or use CROSS JOIN when the cartesian product is intentional.",
+};
+const JOIN_WITHOUT_CONDITION: LintRuleMetadata = LintRuleMetadata {
+    code: "SQBL003",
+    message: "Non-cross join has no meaningful condition",
+    remediation: "Add a meaningful ON or USING condition, or declare an intentional cartesian product with CROSS JOIN.",
+};
+const UNORDERED_LIMIT: LintRuleMetadata = LintRuleMetadata {
+    code: "SQBL004",
+    message: "Row selection is nondeterministic",
+    remediation: "Add ORDER BY with a deterministic tie-breaker before LIMIT or OFFSET.",
+};
+const UNUSED_CTE: LintRuleMetadata = LintRuleMetadata {
+    code: "SQBL005",
+    message: "CTE is unreachable from the final query",
+    remediation: "Reference the CTE from the final query or another reachable CTE, or remove it.",
+};
+const REDUNDANT_DISTINCT: LintRuleMetadata = LintRuleMetadata {
+    code: "SQBL006",
+    message: "DISTINCT is redundant with the grouped output",
+    remediation: "Remove DISTINCT; the equivalent GROUP BY already determines the output groups.",
+};
+const POSITIONAL_SET_STAR: LintRuleMetadata = LintRuleMetadata {
+    code: "SQBL007",
+    message: "Positional set operation is vulnerable to column-order drift",
+    remediation: "Enumerate columns in the same order in every set-operation branch.",
+};
 const TRIVIAL_EQUALITY_TOKEN_COUNT: usize = 3;
 
 const DEFAULT_RULES: [&str; 7] = [
-    NULL_COMPARISON,
-    IMPLICIT_CARTESIAN_JOIN,
-    JOIN_WITHOUT_CONDITION,
-    UNORDERED_LIMIT,
-    UNUSED_CTE,
-    REDUNDANT_DISTINCT,
-    POSITIONAL_SET_STAR,
+    NULL_COMPARISON.code,
+    IMPLICIT_CARTESIAN_JOIN.code,
+    JOIN_WITHOUT_CONDITION.code,
+    UNORDERED_LIMIT.code,
+    UNUSED_CTE.code,
+    REDUNDANT_DISTINCT.code,
+    POSITIONAL_SET_STAR.code,
 ];
 
 struct QueryTokenContext<'a> {
@@ -583,76 +613,63 @@ fn diagnostics(
     enabled: &HashSet<String>,
 ) -> Vec<LintDiagnostic> {
     let mut diagnostics: Vec<LintDiagnostic> = Vec::new();
-    if enabled.contains(NULL_COMPARISON) {
+    if enabled.contains(NULL_COMPARISON.code) {
         diagnostics.extend(diagnostics_for_spans(
-            NULL_COMPARISON,
-            "Comparison with NULL is never true; use IS NULL or IS NOT NULL",
+            &NULL_COMPARISON,
             &facts.null_comparisons,
         ));
     }
-    if enabled.contains(IMPLICIT_CARTESIAN_JOIN) {
+    if enabled.contains(IMPLICIT_CARTESIAN_JOIN.code) {
         diagnostics.extend(diagnostics_for_spans(
-            IMPLICIT_CARTESIAN_JOIN,
-            "Comma-separated FROM sources create an implicit cartesian join; use explicit JOIN syntax",
+            &IMPLICIT_CARTESIAN_JOIN,
             &facts.implicit_cartesian_joins,
         ));
     }
-    if enabled.contains(JOIN_WITHOUT_CONDITION) {
+    if enabled.contains(JOIN_WITHOUT_CONDITION.code) {
         diagnostics.extend(diagnostics_for_spans(
-            JOIN_WITHOUT_CONDITION,
-            "Non-cross join has no meaningful ON or USING condition",
+            &JOIN_WITHOUT_CONDITION,
             &facts.joins_without_condition,
         ));
     }
-    if enabled.contains(UNORDERED_LIMIT) {
+    if enabled.contains(UNORDERED_LIMIT.code) {
         diagnostics.extend(diagnostics_for_spans(
-            UNORDERED_LIMIT,
-            "LIMIT or OFFSET without ORDER BY produces nondeterministic rows",
+            &UNORDERED_LIMIT,
             &facts.unordered_limits,
         ));
     }
-    if enabled.contains(UNUSED_CTE) {
+    if enabled.contains(UNUSED_CTE.code) {
         for span in unused_cte_spans(tokens, &facts.unused_cte_names) {
-            diagnostics.push(diagnostic(
-                UNUSED_CTE,
-                "CTE is declared but never referenced",
-                Some(span),
-            ));
+            diagnostics.push(diagnostic(&UNUSED_CTE, Some(span)));
         }
     }
-    if enabled.contains(REDUNDANT_DISTINCT) {
+    if enabled.contains(REDUNDANT_DISTINCT.code) {
         diagnostics.extend(diagnostics_for_spans(
-            REDUNDANT_DISTINCT,
-            "DISTINCT is redundant when the query already groups its output",
+            &REDUNDANT_DISTINCT,
             &facts.redundant_distincts,
         ));
     }
-    if enabled.contains(POSITIONAL_SET_STAR) {
+    if enabled.contains(POSITIONAL_SET_STAR.code) {
         diagnostics.extend(diagnostics_for_spans(
-            POSITIONAL_SET_STAR,
-            "Positional set operations with SELECT * are vulnerable to column-order drift",
+            &POSITIONAL_SET_STAR,
             &facts.positional_set_stars,
         ));
     }
     diagnostics
 }
 
-fn diagnostics_for_spans(
-    code: &'static str,
-    message: &'static str,
-    spans: &[Span],
-) -> Vec<LintDiagnostic> {
+fn diagnostics_for_spans(rule: &LintRuleMetadata, spans: &[Span]) -> Vec<LintDiagnostic> {
     spans
         .iter()
-        .map(|span| diagnostic(code, message, Some(*span)))
+        .map(|span| diagnostic(rule, Some(*span)))
         .collect()
 }
 
-fn diagnostic(code: &'static str, message: &'static str, span: Option<Span>) -> LintDiagnostic {
+fn diagnostic(rule: &LintRuleMetadata, span: Option<Span>) -> LintDiagnostic {
     let span = span.unwrap_or_default();
     LintDiagnostic {
-        code,
-        message,
+        code: rule.code,
+        message: rule.message,
+        remediation: rule.remediation,
         start: span.start,
         end: span.end,
     }

@@ -173,6 +173,7 @@ class LintCommandHandler(Protocol):
         select: tuple[str, ...],
         exclude: tuple[str, ...],
         json_output: bool,
+        no_color: bool,
     ) -> int: ...
 
 
@@ -186,6 +187,7 @@ class FormatCommandHandler(Protocol):
         check: bool,
         diff: bool,
         json_output: bool,
+        no_color: bool,
     ) -> int: ...
 
 

@@ -120,6 +120,7 @@ def _lint_header_values(
                 message=f"{header.kind}() header could not be parsed: {error}",
                 severity=VIOLATION_SEVERITY_FAULT,
                 engine="sqlbuild",
+                remediation=f"Correct the {header.kind}() header syntax.",
             ),
         )
 
@@ -133,6 +134,7 @@ def _lint_header_values(
                 header=header,
                 code=RULE_DESCRIPTION_PRESENT,
                 message=f"{header.kind}() header requires a description",
+                remediation=f"Add a description to the {header.kind}() header.",
             )
         )
     if header.kind in DESCRIPTION_HEADER_KINDS and isinstance(description, str):
@@ -143,9 +145,8 @@ def _lint_header_values(
                     file_path=file_path,
                     header=header,
                     code=RULE_DESCRIPTION_LENGTH,
-                    message=(
-                        f"description exceeds {config.max_description_lines} lines; trim it by hand"
-                    ),
+                    message=f"Description exceeds {config.max_description_lines} lines",
+                    remediation=f"Shorten the description to {config.max_description_lines} lines.",
                 )
             )
     return tuple(violations)
@@ -180,6 +181,7 @@ def _lint_header_whitespace(
             message=f"{header.kind}() header contains trailing whitespace",
             severity=VIOLATION_SEVERITY_WARNING,
             engine="sqlbuild",
+            remediation="Run sqb format to remove trailing header whitespace.",
         ),
     )
 
@@ -231,12 +233,12 @@ def _relocate_leading_comment(
                 line=position[0],
                 column=position[1],
                 code=RULE_LEADING_COMMENT_DESCRIPTION,
-                message=(
-                    f"relocated leading comment exceeds {config.max_description_lines} lines; "
-                    "trim it by hand"
-                ),
+                message=(f"Relocated leading comment exceeds {config.max_description_lines} lines"),
                 severity=VIOLATION_SEVERITY_FAULT,
                 engine="sqlbuild",
+                remediation=(
+                    f"Shorten the relocated description to {config.max_description_lines} lines."
+                ),
             )
         )
 
@@ -327,6 +329,7 @@ def _violation_for_header_start(
     header: HeaderSpan,
     code: str,
     message: str,
+    remediation: str,
 ) -> LintViolation:
     position: tuple[int, int] = _offset_to_position(
         offset=header.start, line_starts=_line_starts(contents)
@@ -339,6 +342,7 @@ def _violation_for_header_start(
         message=message,
         severity=VIOLATION_SEVERITY_FAULT,
         engine="sqlbuild",
+        remediation=remediation,
     )
 
 
