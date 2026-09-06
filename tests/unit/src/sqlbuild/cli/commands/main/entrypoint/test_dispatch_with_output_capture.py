@@ -12,6 +12,7 @@ from sqlbuild.cli.commands.main.entrypoint._dispatch_with_output_capture import 
 )
 from sqlbuild.observability import ExecutionIdentity
 from sqlbuild.runtime.event_exporting.classes.command_scope import EventExporterCommandScope
+from sqlbuild.runtime.output_capture.constants import INVOCATION_CONTEXT_ENV
 from sqlbuild.sinks import (
     CommandOutputRecord,
     CommandOutputValidationError,
@@ -105,6 +106,38 @@ def test_given_integration_context_when_output_sink_is_configured_then_context_i
     _ = exporter_scope.close()
 
     assert records[0].external_context == {"system": "opaque", "external_run": "42"}
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        OutputCaptureWiringTestCase(
+            description="subprocess_environment_context", expected_success=True
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_environment_context_when_output_sink_is_configured_then_context_crosses_cli_boundary(
+    test_case: OutputCaptureWiringTestCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert test_case.expected_success is True
+    records: list[CommandOutputRecord] = []
+    exporter_scope: EventExporterCommandScope = make_event_exporter_scope(records=records)
+    monkeypatch.setenv(
+        INVOCATION_CONTEXT_ENV,
+        '{"integration":{"name":"dagster","run_id":"dagster-run-1"}}',
+    )
+
+    with configured_output_capture_scope(
+        exporter_scope=exporter_scope,
+        identity=ExecutionIdentity(invocation_id="invocation-1"),
+    ):
+        print("context line")
+    _ = exporter_scope.close()
+
+    assert records[0].external_context == {
+        "integration": {"name": "dagster", "run_id": "dagster-run-1"}
+    }
 
 
 @pytest.mark.parametrize(
