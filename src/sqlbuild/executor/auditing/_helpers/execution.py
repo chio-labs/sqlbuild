@@ -128,9 +128,29 @@ def _measurement_result(  # noqa: PLR0913
         error = "measurement audit is missing its compiled value column or thresholds"
     else:
         row: dict[str, object] = _row_mapping(cursor=cursor, row=rows[0])
-        measured_value, error = _measurement_value(row=row, column=audit.value_column)
-        if error is None and audit.sample_count_column is not None:
+        if audit.sample_count_column is not None:
             sample_count, error = _sample_count(row=row, column=audit.sample_count_column)
+        if error is None:
+            raw_value, value_found = _case_insensitive_value(row=row, column=audit.value_column)
+            if not value_found:
+                error = f"measurement audit result is missing value column '{audit.value_column}'"
+            elif (
+                raw_value is None
+                and audit.minimum_samples is not None
+                and (sample_count is None or sample_count < audit.minimum_samples)
+            ):
+                return replace(
+                    _base_result(
+                        audit=audit,
+                        outcome=AuditOutcome.INSUFFICIENT,
+                        row_count=0,
+                        executed_sql=executed_sql,
+                        run_scope_phase=context.run_scope_phase,
+                    ),
+                    sample_count=sample_count,
+                )
+            else:
+                measured_value, error = _measurement_value(row=row, column=audit.value_column)
 
     if error is not None:
         return replace(

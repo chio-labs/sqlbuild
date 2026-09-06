@@ -29,6 +29,13 @@ class MeasurementOutcomeCase:
 
 
 @dataclass(frozen=True)
+class NullMeasurementOutcomeCase:
+    description: str
+    sample_count: int
+    expected_outcome: AuditOutcome
+
+
+@dataclass(frozen=True)
 class AuditExecutionCase:
     description: str
     expected_outcome: AuditOutcome
