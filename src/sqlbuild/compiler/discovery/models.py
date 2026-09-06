@@ -6,6 +6,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild.compiler.auditing.models import MeasurementContract
+from sqlbuild.compiler.auditing.types import AuditEvaluationMode
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.constants import (
@@ -15,7 +17,7 @@ from sqlbuild.compiler.discovery.constants import (
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.scopes.types import ScopeKind
 from sqlbuild.providers import Provider
-from sqlbuild.python_nodes.models import ColumnLineageRef, RetryPolicy, SqlResourceRef
+from sqlbuild.python_nodes.models import AuditCase, ColumnLineageRef, RetryPolicy, SqlResourceRef
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORT_KINDS
 from sqlbuild.runtime.output_capture.types import CommandOutputStream
@@ -316,6 +318,10 @@ class DiscoveredAuditBlock:
     header_values: dict[str, object]
     sql_body: str
     name: str | None = None
+    evaluation_mode: AuditEvaluationMode = AuditEvaluationMode.VIOLATIONS
+    measurement_contract: MeasurementContract | None = None
+    measure_sql: str | None = None
+    evidence_sql: str | None = None
 
 
 @dataclass(frozen=True)
@@ -444,6 +450,18 @@ class DiscoveredHookFunction:
 
 
 @dataclass(frozen=True)
+class DiscoveredAuditFactory:
+    """A discovered audit factory and its normalized cases."""
+
+    name: str
+    function: Callable[..., object]
+    file_path: Path
+    relative_path: Path
+    line: int
+    cases: tuple[AuditCase, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class DiscoveredEventExporterDeclaration:
     """A discovered exporter declaration before provider binding."""
 
@@ -510,6 +528,7 @@ class DiscoveredPythonNodeFunctions:
     tasks: tuple[DiscoveredTaskFunction, ...] = field(default_factory=tuple)
     assets: tuple[DiscoveredAssetFunction, ...] = field(default_factory=tuple)
     checks: tuple[DiscoveredCheckFunction, ...] = field(default_factory=tuple)
+    audit_factories: tuple[DiscoveredAuditFactory, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -538,6 +557,7 @@ class DiscoveredProjectInputs:
     task_functions: tuple[DiscoveredTaskFunction, ...] = field(default_factory=tuple)
     asset_functions: tuple[DiscoveredAssetFunction, ...] = field(default_factory=tuple)
     check_functions: tuple[DiscoveredCheckFunction, ...] = field(default_factory=tuple)
+    audit_factories: tuple[DiscoveredAuditFactory, ...] = field(default_factory=tuple)
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
     event_exporters: tuple[DiscoveredEventExporter, ...] = field(default_factory=tuple)
     command_output_sinks: tuple[DiscoveredCommandOutputSink, ...] = field(default_factory=tuple)

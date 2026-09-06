@@ -43,7 +43,7 @@ class RunStatus(StrEnum):
     FAILED = "failed"
 
 
-class EventLogStorage(Protocol):
+class LifecycleEventLogStorage(Protocol):
     """Append-only storage for canonical lifecycle events."""
 
     def append_event(self, event: CanonicalLifecycleEvent) -> StoredEvent: ...

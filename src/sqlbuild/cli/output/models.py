@@ -7,7 +7,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.cli.output._helpers.integration_identity import integration_resource_id
 from sqlbuild.cli.output._helpers.integration_validation import (
@@ -22,7 +22,7 @@ from sqlbuild.cli.output.constants import (
     INTEGRATION_ASSET_STATUSES,
     INTEGRATION_CHECK_ATTACHMENT_KINDS,
     INTEGRATION_CHECK_KINDS,
-    INTEGRATION_CHECK_PASS_STATUS,
+    INTEGRATION_CHECK_NON_FAIL_STATUSES,
     INTEGRATION_CHECK_RUN_SCOPE_PHASES,
     INTEGRATION_CHECK_SEVERITIES,
     INTEGRATION_CHECK_STATUSES,
@@ -50,7 +50,11 @@ from sqlbuild.cli.output.types import (
     CursorResolutionStatus,
     IntegrationOutputKind,
 )
-from sqlbuild.compiler.auditing.types import AuditSeverity
+from sqlbuild.compiler.auditing.types import (
+    AuditEvaluationMode,
+    AuditSeverity,
+    ThresholdOperator,
+)
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.runtime.observability.constants import (
     RESOURCE_ATTEMPT_SKIPPED_EVENT,
@@ -190,6 +194,14 @@ class IntegrationCheckResult:
     run_scope_phase: str | None = None
     row_count: int | None = None
     reused: bool | None = None
+    evaluation_mode: str | None = None
+    measured_value: float | None = None
+    sample_count: int | None = None
+    sample_unit: str | None = None
+    minimum_samples: int | None = None
+    thresholds: Mapping[str, object] | None = None
+    evidence_count: int | None = None
+    evidence_truncated: bool | None = None
 
     def __post_init__(self) -> None:
         for field_name, value in (
@@ -205,7 +217,7 @@ class IntegrationCheckResult:
             raise ObservabilityValidationError("integration check status is unsupported")
         if type(self.passed) is not bool:
             raise ObservabilityValidationError("integration check passed must be boolean")
-        if self.passed != (self.status == INTEGRATION_CHECK_PASS_STATUS):
+        if self.passed != (self.status in INTEGRATION_CHECK_NON_FAIL_STATUSES):
             raise ObservabilityValidationError("integration check status and passed are incoherent")
         if self.severity is not None and self.severity not in INTEGRATION_CHECK_SEVERITIES:
             raise ObservabilityValidationError("integration check severity is unsupported")
@@ -231,6 +243,60 @@ class IntegrationCheckResult:
             raise ObservabilityValidationError("integration check row_count must be non-negative")
         if self.reused is not None and type(self.reused) is not bool:
             raise ObservabilityValidationError("integration check reused must be boolean")
+        if self.evaluation_mode is not None and self.evaluation_mode not in {
+            mode.value for mode in AuditEvaluationMode
+        }:
+            raise ObservabilityValidationError("integration check evaluation_mode is unsupported")
+        if self.measured_value is not None and (
+            type(self.measured_value) is not float or not math.isfinite(self.measured_value)
+        ):
+            raise ObservabilityValidationError("integration check measured_value must be finite")
+        for field_name, value in (
+            ("sample_count", self.sample_count),
+            ("minimum_samples", self.minimum_samples),
+            ("evidence_count", self.evidence_count),
+        ):
+            if value is not None and (type(value) is not int or value < 0):
+                raise ObservabilityValidationError(
+                    f"integration check {field_name} must be non-negative"
+                )
+        validate_optional_identifier(value=self.sample_unit, field_name="sample_unit")
+        if self.evidence_truncated is not None and type(self.evidence_truncated) is not bool:
+            raise ObservabilityValidationError(
+                "integration check evidence_truncated must be boolean"
+            )
+        if self.thresholds is not None:
+            self._validate_measurement_thresholds()
+
+    def _validate_measurement_thresholds(self) -> None:
+        thresholds: Mapping[str, object] = cast(Mapping[str, object], self.thresholds)
+        if not set(thresholds).issubset({"warn", "error"}) or not thresholds:
+            raise ObservabilityValidationError("integration check thresholds are invalid")
+        for bound in thresholds.values():
+            if not isinstance(bound, Mapping):
+                raise ObservabilityValidationError("integration check threshold must be an object")
+            typed_bound: Mapping[str, object] = cast(Mapping[str, object], bound)
+            operator: object = typed_bound.get("operator")
+            expected_keys: set[str]
+            if operator in {ThresholdOperator.BELOW.value, ThresholdOperator.ABOVE.value}:
+                expected_keys = {"operator", "limit"}
+            elif operator == ThresholdOperator.OUTSIDE.value:
+                expected_keys = {"operator", "lower", "upper"}
+            else:
+                raise ObservabilityValidationError(
+                    "integration check threshold operator is unsupported"
+                )
+            if set(typed_bound) != expected_keys:
+                raise ObservabilityValidationError("integration check threshold bound is invalid")
+            numeric_values: tuple[object, ...] = tuple(
+                typed_bound[key] for key in expected_keys - {"operator"}
+            )
+            if any(
+                type(value) is not float or not math.isfinite(cast(float, value))
+                for value in numeric_values
+            ):
+                raise ObservabilityValidationError("integration check threshold bound is invalid")
+        _ = encode_integration_json(value=thresholds)
 
 
 @dataclass(frozen=True)

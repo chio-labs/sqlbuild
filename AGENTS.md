@@ -2,6 +2,12 @@
 
 ## Testing
 
+- Actively look for opportunities to add sensible integration and E2E tests, not only unit tests.
+  DuckDB makes real end-to-end coverage cheap in this repository: prefer exercising the real CLI,
+  compiler, executor, and state paths over mocking them. Unit-only coverage of new behavior gives a
+  false sense of completion and lets the product rot; every new feature or behavior change should
+  ship with at least one integration or E2E test proving the complete path works.
+
 - Run targeted pytest commands with xdist by default: `uv run pytest <paths> -n auto --dist loadfile`.
 - Do not run pytest serially unless diagnosing an xdist-specific failure.
 - `make test` is the sanctioned broader local unit and integration check. It is normally acceptable

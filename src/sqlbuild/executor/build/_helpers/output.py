@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
-from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
+from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
 from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclusive_cursor_end
 from sqlbuild.compiler.planner.main.execution.model_execution_annotation import (
@@ -469,6 +469,7 @@ def _format_summary_counts(
     warn_count: int = 0
     fail_count: int = 0
     skip_count: int = 0
+    insufficient_count: int = 0
 
     model_result: ModelExecutionResult
     for model_result in result.model_results:
@@ -486,6 +487,8 @@ def _format_summary_counts(
                 warn_count += 1
             elif audit_result.outcome == AuditOutcome.ERROR:
                 fail_count += 1
+            elif audit_result.outcome == AuditOutcome.INSUFFICIENT:
+                insufficient_count += 1
 
     seed_result: SeedExecutionResult
     for seed_result in result.seed_results:
@@ -521,6 +524,8 @@ def _format_summary_counts(
             warn_count += 1
         elif end_audit.outcome == AuditOutcome.ERROR:
             fail_count += 1
+        elif end_audit.outcome == AuditOutcome.INSUFFICIENT:
+            insufficient_count += 1
 
     source_audit: AuditExecutionResult
     for source_audit in result.source_audit_results:
@@ -530,14 +535,17 @@ def _format_summary_counts(
             warn_count += 1
         elif source_audit.outcome == AuditOutcome.ERROR:
             fail_count += 1
+        elif source_audit.outcome == AuditOutcome.INSUFFICIENT:
+            insufficient_count += 1
 
-    total: int = pass_count + warn_count + fail_count + skip_count
+    total: int = pass_count + warn_count + fail_count + skip_count + insufficient_count
     elapsed_str: str = f"{elapsed_seconds:.2f}s" if elapsed_seconds > 0 else ""
     return format_summary_footer(
         counts=(
             ("PASS", pass_count),
             ("WARN", warn_count),
             ("FAIL", fail_count),
+            ("INSUFFICIENT", insufficient_count),
             ("SKIP", skip_count),
             ("TOTAL", total),
         ),
@@ -665,10 +673,15 @@ def _format_warning_details(result: BuildExecutionResult) -> list[str]:
                 name: str = audit_result.audit_name
                 if audit_result.attached_column_name:
                     name = f"{audit_result.audit_name} ({audit_result.attached_column_name})"
-                row_label: str = "row" if audit_result.row_count == 1 else "rows"
-                model_warnings.append(
-                    f"    audit {name} returned {audit_result.row_count} {row_label}"
-                )
+                if audit_result.evaluation_mode == AuditEvaluationMode.MEASUREMENT:
+                    model_warnings.append(
+                        f"    audit {name} measured {audit_result.measured_value}"
+                    )
+                else:
+                    row_label: str = "row" if audit_result.row_count == 1 else "rows"
+                    model_warnings.append(
+                        f"    audit {name} returned {audit_result.row_count} {row_label}"
+                    )
         warning_msg: str
         for warning_msg in model_result.warning_messages:
             model_warnings.append(f"    {warning_msg}")
@@ -811,6 +824,8 @@ def _worst_audit_outcome(results: list[AuditExecutionResult]) -> AuditOutcome:
     has_warn: bool = any(r.outcome == AuditOutcome.WARN for r in results)
     if has_warn:
         return AuditOutcome.WARN
+    if any(r.outcome == AuditOutcome.INSUFFICIENT for r in results):
+        return AuditOutcome.INSUFFICIENT
     return AuditOutcome.PASS
 
 
@@ -831,6 +846,8 @@ def _audit_outcome_to_display(outcome: AuditOutcome) -> str:
         return "WARN"
     if outcome == AuditOutcome.ERROR:
         return "FAIL"
+    if outcome == AuditOutcome.INSUFFICIENT:
+        return "INSUFFICIENT"
     return str(outcome)
 
 

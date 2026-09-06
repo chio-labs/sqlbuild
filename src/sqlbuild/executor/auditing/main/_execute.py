@@ -1,26 +1,15 @@
-"""Audit execution within build and model lifecycle."""
+"""Audit execution entrypoint."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.auditing.main.render import render_audit_sql
-from sqlbuild.compiler.auditing.types import (
-    AuditOutcome,
-    AuditRunScope,
-    AuditSeverity,
-)
+from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.planner.models import AuditPlanEntry
-from sqlbuild.compiler.references.main.assert_no_unresolved_sql_markers import (
-    assert_no_unresolved_sql_markers,
-)
-from sqlbuild.cost.classes.cost_context import CostContext
-from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
+from sqlbuild.executor.auditing._helpers.execution import execute_audit_impl
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
-from sqlbuild.runtime.observability.models import OperationAttributes
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -38,69 +27,14 @@ def execute_audit(
 ) -> AuditExecutionResult:
     """Execute and evaluate one audit, returning quality failure as result data."""
 
-    with OperationLifecycle(
-        operation_kind="quality",
-        operation_name="audit_evaluation",
-        attributes=OperationAttributes(
-            phase="evaluate",
-            target_kind="audit",
-            scope=quality_scope or audit.attachment_kind.value,
-        ),
-    ) as lifecycle:
-        executed_sql: str = (
-            audit.resolved_sql
-            if relation_overrides is None
-            else render_audit_sql(
-                unresolved_sql=audit.unresolved_sql,
-                model_locations=model_locations,
-                seed_locations=seed_locations,
-                source_map=source_map,
-                adapter=adapter,
-                relation_overrides=relation_overrides,
-            )
-        )
-        _ = assert_no_unresolved_sql_markers(
-            sql=executed_sql,
-            context=f"audit '{audit.name}' executable SQL",
-        )
-
-        resource_name: str = (
-            audit.name
-            if audit.attached_target_name is None
-            else f"{audit.attached_target_name}.{audit.name}"
-        )
-        with CostContext.resource_scope(
-            resource_type="audit",
-            resource_name=resource_name,
-            phase=f"{audit.attachment_kind.value}_audit_{run_scope_phase.value}",
-        ):
-            with diagnostics_context(
-                sqlbuild_phase="audit",
-                sqlbuild_audit_name=audit.name,
-                sqlbuild_column_name=audit.attached_column_name,
-            ):
-                cursor: Any = adapter.execute(connection=connection, sql=executed_sql)
-                rows: list[Any] = cursor.fetchall()
-        row_count: int = len(rows)
-
-        outcome: AuditOutcome
-        if row_count == 0:
-            outcome = AuditOutcome.PASS
-        elif audit.severity == AuditSeverity.ERROR:
-            outcome = AuditOutcome.ERROR
-        else:
-            outcome = AuditOutcome.WARN
-        lifecycle.completed()
-
-    return AuditExecutionResult(
-        audit_name=audit.name,
-        attachment_kind=audit.attachment_kind,
-        severity=audit.severity,
-        outcome=outcome,
-        row_count=row_count,
-        executed_sql=executed_sql,
+    return execute_audit_impl(
+        audit=audit,
+        adapter=adapter,
+        connection=connection,
+        model_locations=model_locations,
+        seed_locations=seed_locations,
+        source_map=source_map,
+        relation_overrides=relation_overrides,
         run_scope_phase=run_scope_phase,
-        attached_target_kind=audit.attached_target_kind,
-        attached_target_name=audit.attached_target_name,
-        attached_column_name=audit.attached_column_name,
+        quality_scope=quality_scope,
     )

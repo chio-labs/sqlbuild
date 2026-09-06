@@ -4,6 +4,7 @@ import json
 from collections import defaultdict
 from collections.abc import Generator, Iterator, Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 from threading import Event
 from typing import Any, cast
@@ -13,7 +14,7 @@ import pytest
 from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.output._helpers.maximum_start_safety import serialize_maximum_start_safety
-from sqlbuild.cli.output.models import IntegrationResultEnvelope
+from sqlbuild.cli.output.models import IntegrationCheckResult, IntegrationResultEnvelope
 from sqlbuild.compiler.planner.models import MaximumStartSafetyEvidence
 from sqlbuild.integrations.dagster import SqlBuildCliResource
 from sqlbuild.integrations.dagster._helpers.invocation import (
@@ -36,6 +37,7 @@ from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterFutureCursorMetadataTestCase,
     DagsterLiveFailureLoggingTestCase,
     DagsterManagedLoaderRoutingTestCase,
+    DagsterMeasurementMetadataTestCase,
     DagsterMicrobatchLimitMetadataTestCase,
     DagsterSelectedCheckTestCase,
 )
@@ -256,6 +258,61 @@ def test_given_two_audit_envelopes_when_projecting_then_each_check_keeps_own_can
     assert tuple(result.metadata["event_sequence"].value for result in results) == (
         test_case.expected_sequences
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagsterMeasurementMetadataTestCase(
+            "insufficient measurement metadata",
+            "insufficient",
+            {
+                "evaluation_mode": "measurement",
+                "measured_value": 99.5,
+                "sample_count": 42,
+                "sample_unit": "rows",
+                "minimum_samples": 100,
+                "thresholds": {"warn": {"operator": "below", "limit": 100.0}},
+                "evidence_count": 2,
+                "evidence_truncated": True,
+            },
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_measurement_check_when_projecting_then_dagster_metadata_and_warning_are_retained(
+    test_case: DagsterMeasurementMetadataTestCase,
+) -> None:
+    envelope: IntegrationResultEnvelope = build_check_integration_envelope(
+        check_id="audit:not_null:model:orders:order_id",
+        name="not_null",
+        event_id="event-measurement",
+        attempt_id="attempt-measurement",
+        event_sequence=5,
+    )
+    check: IntegrationCheckResult = replace(
+        envelope.checks[0],
+        status=test_case.expected_status,
+        **test_case.expected_metadata,
+    )
+    envelope = replace(envelope, checks=(check,))
+
+    results: tuple[Any, ...] = _build_results_from_integration_result(
+        dg=dg,
+        dag=build_dagster_test_dag(),
+        envelope=envelope,
+        command=("sqb", "audit"),
+        context=type("AuditContext", (), {"selected_asset_keys": set()})(),
+        emitted_asset_paths={("analytics", "orders")},
+    )
+
+    assert len(results) == 1
+    result: Any = results[0]
+    assert result.passed is True
+    assert result.severity == dg.AssetCheckSeverity.WARN
+    assert result.metadata["status"].value == test_case.expected_status
+    for key, expected_value in test_case.expected_metadata.items():
+        assert result.metadata[key].value == expected_value
 
 
 @pytest.mark.parametrize(

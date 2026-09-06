@@ -12,6 +12,7 @@ from sqlbuild.python_nodes._helpers.attachment import attach_definition, read_at
 from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORT_KINDS, EVENT_EXPORT_SEVERITIES
 from sqlbuild.runtime.event_exporting.exceptions import EventExporterInputError
 from sqlbuild.runtime.event_exporting.models import LifecycleEventSinkDefinition
+from sqlbuild.runtime.event_exporting.types import LifecycleEventKind
 from sqlbuild.runtime.output_capture._helpers.scope import output_capture_context
 from sqlbuild.runtime.output_capture.exceptions import CommandOutputValidationError
 from sqlbuild.runtime.output_capture.main.command_output_from_json import command_output_from_json
@@ -29,6 +30,7 @@ __all__ = (
     "CommandOutputStream",
     "CommandOutputValidationError",
     "LifecycleEventSinkDefinition",
+    "LifecycleEventKind",
     "LifecycleEvent",
     "command_output_context",
     "command_output_from_json",
@@ -48,7 +50,7 @@ def lifecycle_event_sink(
     function: Callable[..., object] | None = None,
     *,
     name: str | None = None,
-    event_kinds: Iterable[str] | None = None,
+    event_kinds: Iterable[LifecycleEventKind | str] | None = None,
     min_severity: str = "debug",
 ) -> Callable[..., object] | Callable[[Callable[..., object]], Callable[..., object]]:
     """Mark a synchronous function as a canonical lifecycle-event sink."""
@@ -139,17 +141,18 @@ def _sink_name(*, function: Callable[..., object], explicit_name: str | None) ->
     return resolved_name
 
 
-def _event_kinds(values: Iterable[str] | None) -> frozenset[str]:
+def _event_kinds(values: Iterable[LifecycleEventKind | str] | None) -> frozenset[str]:
     try:
-        resolved: frozenset[str] = EVENT_EXPORT_KINDS if values is None else frozenset(values)
-    except TypeError as error:
+        resolved: frozenset[str] = (
+            EVENT_EXPORT_KINDS
+            if values is None
+            else frozenset(LifecycleEventKind(value).value for value in values)
+        )
+    except (TypeError, ValueError) as error:
         raise EventExporterInputError(
             "lifecycle-event sink event_kinds must contain only strings"
         ) from error
-    if not all(isinstance(kind, str) for kind in resolved):
-        raise EventExporterInputError("lifecycle-event sink event_kinds must contain only strings")
-    unknown: frozenset[str] = resolved - EVENT_EXPORT_KINDS
-    if not resolved or unknown:
+    if not resolved:
         raise EventExporterInputError(
             "lifecycle-event sink event_kinds must be a non-empty subset of: "
             + ", ".join(sorted(EVENT_EXPORT_KINDS))

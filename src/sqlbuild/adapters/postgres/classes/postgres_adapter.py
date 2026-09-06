@@ -1363,6 +1363,8 @@ class PostgresAdapter(MicrobatchMixin, BaseAdapter):
         match type_name:
             case FrameworkType.STRING:
                 return "VARCHAR"
+            case FrameworkType.INTEGER:
+                return "BIGINT"
             case FrameworkType.TIMESTAMP:
                 return "TIMESTAMP"
 
@@ -1544,6 +1546,36 @@ class PostgresAdapter(MicrobatchMixin, BaseAdapter):
             "CREATE INDEX IF NOT EXISTS "
             f"{run_id_index_name} ON {table_name} ("
             "run_id, node_type, node_name, target_database, target_schema, target_name)",
+        )
+
+    def render_create_audit_result_table_sql(self, *, database: str | None, schema: str) -> str:
+        from sqlbuild.executor.audit_results.main.create_table_sql import (
+            build_audit_results_create_table_sql,
+        )
+
+        return build_audit_results_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        )
+
+    def render_create_audit_result_index_sqls(
+        self, *, database: str | None, schema: str
+    ) -> tuple[str, ...]:
+        from sqlbuild.executor.audit_results.constants import AUDIT_RESULTS_TABLE_NAME
+
+        table_name: str | None = self.render_qualified_name(
+            database=database, schema=schema, name=AUDIT_RESULTS_TABLE_NAME
+        )
+        if table_name is None:
+            return ()
+        return (
+            "CREATE INDEX IF NOT EXISTS _sqlbuild_audit_results_latest_idx "
+            f"ON {table_name} (audit_name, binding_key, execution_fingerprint, "
+            "run_scope_phase, occurred_at DESC, result_id DESC)",
+            "CREATE INDEX IF NOT EXISTS _sqlbuild_audit_results_run_id_idx "
+            f"ON {table_name} (run_id, invocation_id, result_id)",
         )
 
     def render_read_latest_source_freshness_sql(

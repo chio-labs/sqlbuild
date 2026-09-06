@@ -641,6 +641,45 @@ def test_given_missing_audit_result_when_building_fingerprint_metadata_then_stat
 @pytest.mark.parametrize(
     "test_case",
     [
+        FingerprintAuditGateEdgeTestCase(
+            description="insufficient error audit is non-blocking",
+            plan_severity=AuditSeverity.ERROR.value,
+            result_outcome=AuditOutcome.INSUFFICIENT.value,
+            result_audit_name="not_null_orders",
+            result_column_name="order_id",
+            expected_status=AuditGateStatus.PASSED,
+            expected_result_count=1,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_executed_error_audit_with_insufficient_samples_when_building_gate_then_passes_gate_without_relabeling(
+    test_case: FingerprintAuditGateEdgeTestCase,
+) -> None:
+    audit: AuditPlanEntry = build_fingerprint_audit_plan_entry_with_options(
+        severity=test_case.plan_severity
+    )
+    result: AuditExecutionResult = build_fingerprint_audit_result(
+        outcome=test_case.result_outcome,
+        severity=test_case.plan_severity,
+    )
+
+    metadata_json: str = model_fingerprint_metadata_with_audit_gate(
+        metadata_json="{}",
+        model_audits=(audit,),
+        audit_results=(result,),
+        run_id="run_1",
+    )
+
+    audit_gate: dict[str, object] = json.loads(metadata_json)["audit_gate"]
+    assert audit_gate["status"] == test_case.expected_status.value
+    audit_results: list[dict[str, object]] = audit_gate["results"]  # type: ignore[assignment]
+    assert audit_results[0]["outcome"] == test_case.result_outcome
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         TryWriteFingerprintAuditGateTestCase(
             description="fingerprint write receives audit gate metadata",
             expected_status=AuditGateStatus.PASSED,

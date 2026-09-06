@@ -1,0 +1,94 @@
+"""Audit result warehouse storage constants."""
+
+from sqlbuild.sql_values.types import StateSqlValueType
+
+AUDIT_RESULTS_TABLE_NAME: str = "_sqlbuild_audit_results"
+AUDIT_RESULT_SCHEMA_VERSION: int = 1
+
+COLUMN_RESULT_ID: str = "result_id"
+COLUMN_SCHEMA_VERSION: str = "schema_version"
+COLUMN_OCCURRED_AT: str = "occurred_at"
+COLUMN_INVOCATION_ID: str = "invocation_id"
+COLUMN_RUN_ID: str = "run_id"
+COLUMN_AUDIT_NAME: str = "audit_name"
+COLUMN_BINDING_KEY: str = "binding_key"
+COLUMN_DEFINITION_FINGERPRINT: str = "definition_fingerprint"
+COLUMN_EXECUTION_FINGERPRINT: str = "execution_fingerprint"
+COLUMN_EVALUATION_MODE: str = "evaluation_mode"
+COLUMN_RUN_SCOPE_PHASE: str = "run_scope_phase"
+COLUMN_ATTACHMENT_KIND: str = "attachment_kind"
+COLUMN_ATTACHED_TARGET_KIND: str = "attached_target_kind"
+COLUMN_ATTACHED_TARGET_NAME: str = "attached_target_name"
+COLUMN_ATTACHED_COLUMN_NAME: str = "attached_column_name"
+COLUMN_TARGET_DATABASE: str = "target_database"
+COLUMN_TARGET_SCHEMA: str = "target_schema"
+COLUMN_TARGET_NAME: str = "target_name"
+COLUMN_SEVERITY: str = "severity"
+COLUMN_OUTCOME: str = "outcome"
+COLUMN_EXECUTION_ERROR: str = "execution_error"
+COLUMN_VIOLATION_COUNT: str = "violation_count"
+COLUMN_MEASURED_VALUE: str = "measured_value"
+COLUMN_SAMPLE_COUNT: str = "sample_count"
+COLUMN_SAMPLE_UNIT: str = "sample_unit"
+COLUMN_MINIMUM_SAMPLES: str = "minimum_samples"
+COLUMN_THRESHOLDS_JSON: str = "thresholds_json"
+COLUMN_EVIDENCE_JSON: str = "evidence_json"
+COLUMN_EVIDENCE_COUNT: str = "evidence_count"
+COLUMN_EVIDENCE_TRUNCATED: str = "evidence_truncated"
+COLUMN_EVIDENCE_ERROR: str = "evidence_error"
+COLUMN_MEASUREMENT_SQL: str = "measurement_sql"
+COLUMN_EVIDENCE_SQL: str = "evidence_sql"
+COLUMN_EXECUTED_SQL: str = "executed_sql"
+COLUMN_SQL_DIGEST: str = "sql_digest"
+COLUMN_METADATA_JSON: str = "metadata_json"
+COLUMN_REUSED: str = "reused"
+
+AUDIT_RESULT_COLUMNS: tuple[str, ...] = (
+    COLUMN_RESULT_ID,
+    COLUMN_SCHEMA_VERSION,
+    COLUMN_OCCURRED_AT,
+    COLUMN_INVOCATION_ID,
+    COLUMN_RUN_ID,
+    COLUMN_AUDIT_NAME,
+    COLUMN_BINDING_KEY,
+    COLUMN_DEFINITION_FINGERPRINT,
+    COLUMN_EXECUTION_FINGERPRINT,
+    COLUMN_EVALUATION_MODE,
+    COLUMN_RUN_SCOPE_PHASE,
+    COLUMN_ATTACHMENT_KIND,
+    COLUMN_ATTACHED_TARGET_KIND,
+    COLUMN_ATTACHED_TARGET_NAME,
+    COLUMN_ATTACHED_COLUMN_NAME,
+    COLUMN_TARGET_DATABASE,
+    COLUMN_TARGET_SCHEMA,
+    COLUMN_TARGET_NAME,
+    COLUMN_SEVERITY,
+    COLUMN_OUTCOME,
+    COLUMN_EXECUTION_ERROR,
+    COLUMN_VIOLATION_COUNT,
+    COLUMN_MEASURED_VALUE,
+    COLUMN_SAMPLE_COUNT,
+    COLUMN_SAMPLE_UNIT,
+    COLUMN_MINIMUM_SAMPLES,
+    COLUMN_THRESHOLDS_JSON,
+    COLUMN_EVIDENCE_JSON,
+    COLUMN_EVIDENCE_COUNT,
+    COLUMN_EVIDENCE_TRUNCATED,
+    COLUMN_EVIDENCE_ERROR,
+    COLUMN_MEASUREMENT_SQL,
+    COLUMN_EVIDENCE_SQL,
+    COLUMN_EXECUTED_SQL,
+    COLUMN_SQL_DIGEST,
+    COLUMN_METADATA_JSON,
+    COLUMN_REUSED,
+)
+
+AUDIT_RESULT_COLUMN_TYPES: dict[str, StateSqlValueType] = {
+    **{column: StateSqlValueType.STRING for column in AUDIT_RESULT_COLUMNS},
+    COLUMN_SCHEMA_VERSION: StateSqlValueType.INTEGER,
+    COLUMN_OCCURRED_AT: StateSqlValueType.TEXT_TIMESTAMP,
+    COLUMN_VIOLATION_COUNT: StateSqlValueType.INTEGER,
+    COLUMN_SAMPLE_COUNT: StateSqlValueType.INTEGER,
+    COLUMN_MINIMUM_SAMPLES: StateSqlValueType.INTEGER,
+    COLUMN_EVIDENCE_COUNT: StateSqlValueType.INTEGER,
+}

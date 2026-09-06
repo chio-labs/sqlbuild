@@ -16,10 +16,16 @@ from sqlbuild.cli.output._helpers.execution_result_document import (
     _format_sql_test_step,
     format_audit_execution_json,
 )
+from sqlbuild.compiler.auditing.models import (
+    MeasurementThresholdBound,
+    MeasurementThresholds,
+)
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
+    AuditEvaluationMode,
     AuditOutcome,
     AuditSeverity,
+    ThresholdOperator,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.discovery.models import SqlTestParameterDeclaration
@@ -46,6 +52,7 @@ from sqlbuild.sql_values.types import SqlValueKind
 from tests.unit.src.sqlbuild.cli.output._helpers._test_types import (
     AuditExecutionProtocolTestCase,
     FutureCursorExecutionProtocolTestCase,
+    MeasurementAuditOutputTestCase,
     MicrobatchExecutionProtocolTestCase,
     SqlTestCaseExecutionProtocolTestCase,
     SqlTestDifferenceOutputTestCase,
@@ -121,6 +128,54 @@ def test_given_end_scheduled_model_audit_when_formatting_json_then_logical_ident
     assert check["attachment_kind"] == test_case.expected_attachment_kind
     assert check["attached_target_kind"] == test_case.expected_target_kind
     assert check["asset_name"] == "orders"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MeasurementAuditOutputTestCase(
+            "insufficient measurement summary",
+            AuditOutcome.INSUFFICIENT,
+            "insufficient",
+            True,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_measurement_audit_when_formatting_execution_document_then_summary_is_preserved(
+    test_case: MeasurementAuditOutputTestCase,
+) -> None:
+    result: AuditExecutionResult = AuditExecutionResult(
+        audit_name="valid_rate",
+        attachment_kind=AuditAttachmentKind.END,
+        severity=AuditSeverity.WARN,
+        outcome=test_case.outcome,
+        row_count=0,
+        executed_sql="SELECT 99.5 AS valid_rate",
+        evaluation_mode=AuditEvaluationMode.MEASUREMENT,
+        measured_value=99.5,
+        sample_count=42,
+        sample_unit="rows",
+        minimum_samples=100,
+        thresholds=MeasurementThresholds(
+            warn=MeasurementThresholdBound(operator=ThresholdOperator.BELOW, limit=100.0)
+        ),
+        evidence_rows=({"id": 1},),
+        evidence_truncated=True,
+    )
+
+    check: dict[str, object] = _format_audit_checks(results=(result,))[0]
+
+    assert check["passed"] is test_case.expected_passed
+    assert check["status"] == test_case.expected_status
+    assert check["evaluation_mode"] == "measurement"
+    assert check["measured_value"] == 99.5
+    assert check["sample_count"] == 42
+    assert check["sample_unit"] == "rows"
+    assert check["minimum_samples"] == 100
+    assert check["thresholds"] == {"warn": {"operator": "below", "limit": 100.0}}
+    assert check["evidence_count"] == 1
+    assert check["evidence_truncated"] is True
 
 
 @pytest.mark.parametrize(

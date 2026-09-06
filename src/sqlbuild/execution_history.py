@@ -1,4 +1,4 @@
-"""Typed public execution history storage API."""
+"""Typed public execution history API with a deprecated ``EventLogStorage`` alias."""
 
 from collections.abc import Iterable
 
@@ -38,11 +38,13 @@ from sqlbuild.runtime.execution_history.types import (
     CanonicalLifecycleEvent,
     EventCursor,
     EventFamily,
-    EventLogStorage,
+    LifecycleEventLogStorage,
     RunCursor,
     RunStatus,
     RunStorage,
 )
+
+EventLogStorage: type[LifecycleEventLogStorage] = LifecycleEventLogStorage
 
 __all__ = (
     "DEFAULT_PAGE_LIMIT",
@@ -52,6 +54,7 @@ __all__ = (
     "EventFamily",
     "EventFilter",
     "EventLogStorage",
+    "LifecycleEventLogStorage",
     "EventPage",
     "ExecutionHistoryStorageError",
     "IntegrityConflictError",
@@ -78,7 +81,7 @@ __all__ = (
 
 def append_and_project(
     *,
-    event_log: EventLogStorage,
+    event_log: LifecycleEventLogStorage,
     run_storage: RunStorage,
     events: Iterable[CanonicalLifecycleEvent],
 ) -> tuple[StoredEvent, ...]:

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 
+from sqlbuild.compiler.auditing.types import AuditEvaluationMode
 from sqlbuild.compiler.discovery._helpers.sql.audits import parse_sql_audit_file
 from sqlbuild.compiler.discovery.exceptions import SqlAuditParseError
 from sqlbuild.compiler.discovery.models import DiscoveredAuditBlock
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
+    ParseMeasurementAuditTestCase,
     ParseSqlAuditFileErrorTestCase,
     ParseSqlAuditFileTestCase,
 )
@@ -79,6 +82,14 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
                     "always_run": True,
                 },
             ),
+        ),
+        ParseSqlAuditFileTestCase(
+            description="treats measurement function calls in select as violations SQL",
+            contents="AUDIT (); SELECT measure(x), evidence(y) FROM t",
+            expected_names=(None,),
+            expected_sql_bodies=("SELECT measure(x), evidence(y) FROM t",),
+            expected_audit_indexes=(1,),
+            expected_header_values=({},),
         ),
     ],
     ids=lambda case: case.description,
@@ -213,3 +224,87 @@ def test_given_invalid_sql_audit_file_contents_when_parsing_then_it_raises_clear
 ) -> None:
     with pytest.raises(SqlAuditParseError, match=test_case.expected_error_fragment):
         parse_sql_audit_file(contents=test_case.contents, file_path=Path("audits/orders.sql"))
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseMeasurementAuditTestCase(
+            description="measurement contract and parenthesized SQL strings",
+            contents="""
+                AUDIT (
+                  evaluation measurement,
+                  value valid_rate,
+                  sample_count total_rows,
+                  sample_unit "input rows"
+                );
+                MEASURE (
+                  SELECT COUNT(*) AS total_rows, 'rate (valid)' AS label, 99.5 AS valid_rate
+                );
+                EVIDENCE (
+                  SELECT * FROM orders WHERE note = 'unexpected ) value'
+                );
+            """,
+            expected_value_column="valid_rate",
+            expected_sample_count_column="total_rows",
+            expected_sample_unit="input rows",
+            expected_measure_fragment="rate (valid)",
+            expected_evidence_fragment="unexpected ) value",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_measurement_audit_with_evidence_when_parsing_then_contract_and_queries_are_separate(
+    test_case: ParseMeasurementAuditTestCase,
+) -> None:
+    blocks: tuple[DiscoveredAuditBlock, ...] = parse_sql_audit_file(
+        contents=test_case.contents,
+        file_path=Path("audits/rate.sql"),
+    )
+
+    block: DiscoveredAuditBlock = blocks[0]
+    assert block.evaluation_mode == AuditEvaluationMode.MEASUREMENT
+    assert block.measurement_contract is not None
+    assert block.measurement_contract.value_column == test_case.expected_value_column
+    assert block.measurement_contract.sample_count_column == test_case.expected_sample_count_column
+    assert block.measurement_contract.sample_unit == test_case.expected_sample_unit
+    assert test_case.expected_measure_fragment in cast(str, block.measure_sql)
+    assert test_case.expected_evidence_fragment in cast(str, block.evidence_sql)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseSqlAuditFileErrorTestCase(
+            description="measurement missing value",
+            contents="AUDIT (evaluation measurement); MEASURE (SELECT 1);",
+            expected_error_fragment="must define `value`",
+        ),
+        ParseSqlAuditFileErrorTestCase(
+            description="measurement has evidence only",
+            contents="AUDIT (evaluation measurement, value rate); EVIDENCE (SELECT 1);",
+            expected_error_fragment=r"must define exactly one MEASURE\(\.\.\.\) block",
+        ),
+        ParseSqlAuditFileErrorTestCase(
+            description="measurement has bare body",
+            contents="AUDIT (evaluation measurement, value rate); SELECT 1;",
+            expected_error_fragment=r"must define exactly one MEASURE\(\.\.\.\) block",
+        ),
+        ParseSqlAuditFileErrorTestCase(
+            description="violations audit has measure block",
+            contents="AUDIT (); MEASURE (SELECT 1);",
+            expected_error_fragment="must use a bare SELECT body",
+        ),
+        ParseSqlAuditFileErrorTestCase(
+            description="violations audit has measurement contract",
+            contents="AUDIT (value rate); SELECT 1;",
+            expected_error_fragment="must not define measurement keys",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_evaluation_grammar_when_parsing_then_clear_error_is_raised(
+    test_case: ParseSqlAuditFileErrorTestCase,
+) -> None:
+    with pytest.raises(SqlAuditParseError, match=test_case.expected_error_fragment):
+        parse_sql_audit_file(contents=test_case.contents, file_path=Path("audits/rate.sql"))

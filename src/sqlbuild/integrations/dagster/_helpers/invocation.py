@@ -21,6 +21,7 @@ from sqlbuild.integrations.dagster.constants import (
     DEFAULT_SELECTABLE_NODE_KINDS,
     EVENT_OUTPUT_FLAG,
     EXPLICIT_SELECTION_FLAGS,
+    INSUFFICIENT_CHECK_STATUS,
     JSON_OUTPUT_FLAG,
     JSON_OUTPUT_FLAGS,
     LIVE_EVENT_COMMANDS,
@@ -836,7 +837,10 @@ def _metadata_from_mapping(value: Mapping[str, Any]) -> Mapping[str, Any]:
 
 
 def _dagster_check_severity(*, dg: Any, check: Mapping[str, Any]) -> Any:
-    if str(check.get("severity")) == WARNING_CHECK_SEVERITY:
+    if (
+        str(check.get("status")) == INSUFFICIENT_CHECK_STATUS
+        or str(check.get("severity")) == WARNING_CHECK_SEVERITY
+    ):
         return dg.AssetCheckSeverity.WARN
     return dg.AssetCheckSeverity.ERROR
 

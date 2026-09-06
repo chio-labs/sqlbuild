@@ -22,6 +22,7 @@ from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.diagnostics.classes.diagnostic_record_redactor import DiagnosticRecordRedactor
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.main._execute import execute_audit
+from sqlbuild.executor.auditing.main._project_results import project_audit_result_batch
 from sqlbuild.executor.auditing.main.resource_id import audit_resource_id
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.pipeline._helpers.connections import (
@@ -122,7 +123,7 @@ class _AuditProjection:
         return first_error
 
 
-def run_audit_pipeline(
+def run_audit_pipeline(  # noqa: PLR0913
     *,
     plan: PlanOutput,
     connection_config: dict[str, object],
@@ -161,6 +162,8 @@ def run_audit_pipeline_with_callbacks(
     max_concurrency: int,
     callbacks: AuditPipelineCallbacks,
     run_id: str | None = None,
+    storage_database: str | None = None,
+    storage_schema: str | None = None,
 ) -> tuple[AuditExecutionResult, ...]:
     """Execute selected audits with bounded workers and split physical/public callbacks."""
 
@@ -209,6 +212,8 @@ def run_audit_pipeline_with_callbacks(
                     worker_count=worker_count,
                     callbacks=execution_callbacks,
                     run_id=canonical_run_id,
+                    storage_database=storage_database,
+                    storage_schema=storage_schema,
                 )
                 lifecycle.completed()
                 return results
@@ -231,6 +236,8 @@ class _AuditCompletionRecorder:
             self._lifecycle.record_warning()
         elif result.outcome == AuditOutcome.ERROR:
             self._lifecycle.record_failure()
+        elif result.outcome == AuditOutcome.INSUFFICIENT:
+            pass
         else:
             raise AuditOutcomeError(f"unknown audit outcome: {result.outcome!r}")
         if self._callback is not None:
@@ -262,6 +269,8 @@ def _run_audits(
     worker_count: int,
     callbacks: AuditPipelineCallbacks,
     run_id: str,
+    storage_database: str | None,
+    storage_schema: str | None,
 ) -> tuple[AuditExecutionResult, ...]:
     if not entries:
         return ()
@@ -308,6 +317,14 @@ def _run_audits(
                 callbacks=callbacks,
                 run_id=run_id,
             )
+        project_audit_result_batch(
+            plan=plan,
+            results=results,
+            adapter=adapter,
+            connection=connections[0],
+            storage_database=storage_database,
+            storage_schema=storage_schema,
+        )
         return results
     except BaseException as error:
         active_error = error

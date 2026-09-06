@@ -11,12 +11,15 @@ from types import MappingProxyType
 
 from sqlbuild.runtime.observability.constants import (
     AUDIT_RUN_COUNT_FIELDS,
+    BOOLEAN_PAYLOAD_FIELDS,
     CONFIGURED_CONCURRENCY_FIELD,
     DURATION_MS_FIELD,
     EXIT_CODE_FIELD,
+    FINITE_NUMBER_PAYLOAD_FIELDS,
     FORBIDDEN_STATEMENT_PAYLOAD_FIELDS,
     HOOK_PHASES,
     HOOK_TYPES,
+    JSON_PAYLOAD_FIELDS,
     LIFECYCLE_EVENT_CATALOGS,
     MAX_METADATA_BYTES,
     METADATA_FIELD,
@@ -141,6 +144,22 @@ def _validate_payload_field(*, field_name: str, value: object) -> None:
             raise ObservabilityValidationError(
                 f"payload field {field_name!r} must be a nonnegative integer excluding bool"
             )
+        return
+    if field_name in FINITE_NUMBER_PAYLOAD_FIELDS:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+        ):
+            raise ObservabilityValidationError(
+                f"payload field {field_name!r} must be a finite number excluding bool"
+            )
+        return
+    if field_name in BOOLEAN_PAYLOAD_FIELDS:
+        if not isinstance(value, bool):
+            raise ObservabilityValidationError(f"payload field {field_name!r} must be a boolean")
+        return
+    if field_name in JSON_PAYLOAD_FIELDS:
         return
     if field_name == DURATION_MS_FIELD:
         if (

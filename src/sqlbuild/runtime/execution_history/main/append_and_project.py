@@ -5,14 +5,14 @@ from collections.abc import Iterable
 from sqlbuild.runtime.execution_history.models import StoredEvent
 from sqlbuild.runtime.execution_history.types import (
     CanonicalLifecycleEvent,
-    EventLogStorage,
+    LifecycleEventLogStorage,
     RunStorage,
 )
 
 
 def append_and_project(
     *,
-    event_log: EventLogStorage,
+    event_log: LifecycleEventLogStorage,
     run_storage: RunStorage,
     events: Iterable[CanonicalLifecycleEvent],
 ) -> tuple[StoredEvent, ...]:

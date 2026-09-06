@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile._helpers.attachment.core import (
     build_effective_vars,
-    resolve_run_id,
 )
+from sqlbuild.compiler.compile._helpers.render.context_templates import resolve_run_id
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name

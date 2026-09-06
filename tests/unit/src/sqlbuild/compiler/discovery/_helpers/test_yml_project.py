@@ -10,6 +10,7 @@ from sqlbuild.compiler.discovery._helpers.yml.project import (
     load_project_config,
 )
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
+from sqlbuild.runtime.event_exporting.types import LifecycleEventKind
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from sqlbuild.sql_values.types import CollectionRendering
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
@@ -36,6 +37,34 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
     write_project_config_test_files,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadProjectConfigErrorTestCase(
+            description="audit lifecycle sink filter",
+            project_file_contents=(
+                'name = "demo"\nadapter = "duckdb"\n[sinks.lifecycle]\nevent_kinds = ["audit"]\n'
+            ),
+            expected_error_fragment="audit",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_audit_lifecycle_sink_filter_when_loading_toml_then_kind_is_accepted(
+    tmp_path: Path, test_case: LoadProjectConfigErrorTestCase
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        test_case.project_file_contents, encoding="utf-8"
+    )
+
+    config: ProjectConfig = load_project_config(project_dir=tmp_path)
+
+    assert config.sinks.lifecycle.defaults.event_kinds == frozenset(
+        {test_case.expected_error_fragment}
+    )
+    assert test_case.expected_error_fragment == LifecycleEventKind.AUDIT.value
 
 
 @pytest.mark.parametrize(

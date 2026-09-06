@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from typing import TextIO
 
@@ -135,7 +136,7 @@ def execution_json_payload_with_degradation(
     """Render the execution JSON payload, degrading on projection failures."""
 
     try:
-        return format_build_execution_json(
+        payload: str = format_build_execution_json(
             result=result,
             plan=plan,
             python_node_results=python_node_results,
@@ -144,6 +145,7 @@ def execution_json_payload_with_degradation(
             run_id=run_id,
             cost=(None if cost_record is None else RunCostStore.output_payload(record=cost_record)),
         )
+        return _with_audit_result_projection(payload=payload, result=result)
     except (ObservabilityValidationError, TypeError, ValueError) as error:
         return degraded_execution_json(
             command=command,
@@ -151,6 +153,33 @@ def execution_json_payload_with_degradation(
             error=error,
             execution_succeeded=execution_succeeded,
         )
+
+
+def _with_audit_result_projection(*, payload: str, result: BuildExecutionResult) -> str:
+    document: dict[str, object] = json.loads(payload)
+    attempted: int = result.audit_result_projection_attempted_count
+    written: int = result.audit_result_projection_written_count
+    failed: int = result.audit_result_projection_failed_count
+    document["audit_result_projection"] = {
+        "attempted_count": attempted,
+        "written_count": written,
+        "failed_count": failed,
+    }
+    if failed:
+        document["projection_degraded"] = True
+        reasons: list[object] = list(
+            document.get("projection_degradation_reasons", [])  # type: ignore[arg-type]
+        )
+        reasons.append(
+            {
+                "reason": "audit_result_persistence_failure",
+                "attempted_count": attempted,
+                "written_count": written,
+                "failed_count": failed,
+            }
+        )
+        document["projection_degradation_reasons"] = reasons
+    return json.dumps(document, indent=2) + "\n"
 
 
 def write_no_work_build_json(

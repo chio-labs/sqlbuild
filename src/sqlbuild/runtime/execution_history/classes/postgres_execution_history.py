@@ -59,7 +59,7 @@ _CREATE_SCHEMA: tuple[str, ...] = (
         storage_namespace TEXT NOT NULL,
         migrated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     )""",
-    """CREATE TABLE IF NOT EXISTS sqlbuild_event_log (
+    """CREATE TABLE IF NOT EXISTS sqlbuild_lifecycle_event_log (
         storage_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
         event_id TEXT NOT NULL UNIQUE,
         schema_version INTEGER NOT NULL,
@@ -77,12 +77,12 @@ _CREATE_SCHEMA: tuple[str, ...] = (
         payload_json TEXT NOT NULL,
         content_digest TEXT NOT NULL
     )""",
-    """CREATE INDEX IF NOT EXISTS sqlbuild_event_log_run_storage
-    ON sqlbuild_event_log (run_id, storage_id)""",
-    """CREATE INDEX IF NOT EXISTS sqlbuild_event_log_invocation_storage
-    ON sqlbuild_event_log (invocation_id, storage_id)""",
-    """CREATE INDEX IF NOT EXISTS sqlbuild_event_log_type_storage
-    ON sqlbuild_event_log (event_type, storage_id)""",
+    """CREATE INDEX IF NOT EXISTS sqlbuild_lifecycle_event_log_run_storage
+    ON sqlbuild_lifecycle_event_log (run_id, storage_id)""",
+    """CREATE INDEX IF NOT EXISTS sqlbuild_lifecycle_event_log_invocation_storage
+    ON sqlbuild_lifecycle_event_log (invocation_id, storage_id)""",
+    """CREATE INDEX IF NOT EXISTS sqlbuild_lifecycle_event_log_type_storage
+    ON sqlbuild_lifecycle_event_log (event_type, storage_id)""",
     """CREATE TABLE IF NOT EXISTS sqlbuild_run_projection (
         run_id TEXT PRIMARY KEY,
         invocation_id TEXT NOT NULL,
@@ -196,7 +196,7 @@ class PostgresExecutionHistory:
             conditions=conditions, values=values, event_filter=event_filter
         )
         query: str = (
-            "SELECT * FROM sqlbuild_event_log WHERE "
+            "SELECT * FROM sqlbuild_lifecycle_event_log WHERE "
             + " AND ".join(conditions)
             + " ORDER BY storage_id ASC LIMIT %s"
         )
@@ -556,7 +556,7 @@ class PostgresExecutionHistory:
         for event, event_id, content, digest in prepared:
             envelope: dict[str, object | None] = self._event_envelope(event)
             cursor.execute(
-                """INSERT INTO sqlbuild_event_log (
+                """INSERT INTO sqlbuild_lifecycle_event_log (
                     event_id, schema_version, producer, producer_version, event_type, occurred_at,
                     invocation_id, run_id, resource_id, resource_attempt_id, operation_id,
                     statement_id, payload_json, content_digest
@@ -581,7 +581,10 @@ class PostgresExecutionHistory:
             )
             row: Mapping[str, object] | None = cursor.fetchone()
             if row is None:
-                cursor.execute("SELECT * FROM sqlbuild_event_log WHERE event_id = %s", (event_id,))
+                cursor.execute(
+                    "SELECT * FROM sqlbuild_lifecycle_event_log WHERE event_id = %s",
+                    (event_id,),
+                )
                 row = cursor.fetchone()
             if row is None:
                 raise ExecutionHistoryStorageError(
@@ -682,7 +685,7 @@ class PostgresExecutionHistory:
         if prefix + ":" != _EVENT_CURSOR_PREFIX or namespace != self._namespace() or position < 1:
             raise InvalidCursorError("event cursor is not valid for this storage")
         rows: list[Mapping[str, object]] = self._read_rows(
-            query="SELECT 1 AS present FROM sqlbuild_event_log WHERE storage_id = %s",
+            query="SELECT 1 AS present FROM sqlbuild_lifecycle_event_log WHERE storage_id = %s",
             values=[position],
         )
         if not rows:
@@ -718,7 +721,7 @@ class PostgresExecutionHistory:
         return filtered_conditions, filtered_values
 
     def _read_all_events(self, *, cursor: Any) -> tuple[StoredEvent, ...]:
-        cursor.execute("SELECT * FROM sqlbuild_event_log ORDER BY storage_id")
+        cursor.execute("SELECT * FROM sqlbuild_lifecycle_event_log ORDER BY storage_id")
         rows: list[Mapping[str, object]] = cursor.fetchall()
         return tuple(self._stored_event(row) for row in rows)
 

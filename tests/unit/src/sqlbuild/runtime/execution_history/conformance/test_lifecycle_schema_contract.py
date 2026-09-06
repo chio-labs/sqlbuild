@@ -6,9 +6,9 @@ import pytest
 
 from sqlbuild.execution_history import (
     EventFilter,
-    EventLogStorage,
     EventPage,
     ExecutionHistoryStorageError,
+    LifecycleEventLogStorage,
     RunRecord,
     RunStorage,
     StoredEvent,
@@ -31,16 +31,16 @@ from tests.unit.src.sqlbuild.runtime.execution_history.conformance.helpers impor
     ids=lambda case: case.description,
 )
 def test_given_event_log_lifecycle_when_closing_disposing_and_using_context_then_resources_close_predictably(
-    event_log_factory: Callable[[], EventLogStorage], test_case: ContractCase
+    event_log_factory: Callable[[], LifecycleEventLogStorage], test_case: ContractCase
 ) -> None:
-    context_storage: EventLogStorage = event_log_factory()
+    context_storage: LifecycleEventLogStorage = event_log_factory()
     with context_storage as entered:
         _ = entered.append_event(lifecycle_event("context-event"))
 
     with pytest.raises(ExecutionHistoryStorageError, match="closed"):
         context_storage.get_schema_version()
 
-    storage: EventLogStorage = event_log_factory()
+    storage: LifecycleEventLogStorage = event_log_factory()
     storage.close()
     storage.close()
     storage.dispose()
@@ -82,7 +82,7 @@ def test_given_run_storage_lifecycle_when_closing_disposing_and_using_context_th
     ids=lambda case: case.description,
 )
 def test_given_durable_event_when_inspecting_and_upgrading_current_schema_then_operation_is_idempotent(
-    event_log: EventLogStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, test_case: ContractCase
 ) -> None:
     original: StoredEvent = event_log.append_event(lifecycle_event("preserved"))
     current: int = event_log.get_schema_version()
@@ -106,7 +106,7 @@ def test_given_durable_event_when_inspecting_and_upgrading_current_schema_then_o
     ids=lambda case: case.description,
 )
 def test_given_projected_run_when_inspecting_and_upgrading_current_schema_then_operation_is_idempotent(
-    event_log: EventLogStorage, run_storage: RunStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, run_storage: RunStorage, test_case: ContractCase
 ) -> None:
     stored: tuple[StoredEvent, ...] = event_log.append_events((lifecycle_event("preserved"),))
     projected: tuple[RunRecord, ...] = run_storage.project(stored)
@@ -134,7 +134,7 @@ def test_given_projected_run_when_inspecting_and_upgrading_current_schema_then_o
     ids=lambda case: case.description,
 )
 def test_given_unsupported_event_schema_version_when_upgrading_then_existing_facts_are_preserved(
-    event_log: EventLogStorage, test_case: SchemaVersionCase
+    event_log: LifecycleEventLogStorage, test_case: SchemaVersionCase
 ) -> None:
     original: StoredEvent = event_log.append_event(lifecycle_event("preserved"))
 
@@ -159,7 +159,7 @@ def test_given_unsupported_event_schema_version_when_upgrading_then_existing_fac
     ids=lambda case: case.description,
 )
 def test_given_unsupported_run_schema_version_when_upgrading_then_existing_projection_is_preserved(
-    event_log: EventLogStorage, run_storage: RunStorage, test_case: SchemaVersionCase
+    event_log: LifecycleEventLogStorage, run_storage: RunStorage, test_case: SchemaVersionCase
 ) -> None:
     stored: tuple[StoredEvent, ...] = event_log.append_events((lifecycle_event("preserved"),))
     projected: tuple[RunRecord, ...] = run_storage.project(stored)

@@ -20,12 +20,17 @@ module and decorated with the public API are sinks.
 ```python
 # sinks/publish.py
 from providers.destination_client import DestinationClient
-from sqlbuild.sinks import LifecycleEvent, lifecycle_event_sink, lifecycle_event_to_json
+from sqlbuild.sinks import (
+    LifecycleEvent,
+    LifecycleEventKind,
+    lifecycle_event_sink,
+    lifecycle_event_to_json,
+)
 
 
 @lifecycle_event_sink(
     name="publish_lifecycle",
-    event_kinds={"run", "resource", "statement"},
+    event_kinds={LifecycleEventKind.RUN, LifecycleEventKind.RESOURCE, LifecycleEventKind.AUDIT},
     min_severity="info",
 )
 def publish_lifecycle(
@@ -129,6 +134,10 @@ min_severity = "warning"
 Effective kinds are the intersection of declaration, global, and named sets. Effective minimum
 severity is the strictest of all three. Omitting declaration options means all kinds at `debug`.
 Unknown lifecycle sink names, keys, kinds, or severities fail before execution.
+Python declarations should use `LifecycleEventKind`; TOML continues to use the corresponding string
+values. The `audit` kind carries `audit_completed` after an audit outcome is confirmed. Its payload
+includes audit and attachment identity, evaluation mode, outcome and severity, run scope, optional
+measurement/sample/threshold summary, bounded evidence metadata and rendered audit SQL diagnostics.
 
 | Lifecycle event | Export kind | Severity | Queue priority |
 | --- | --- | --- | --- |
@@ -138,6 +147,7 @@ Unknown lifecycle sink names, keys, kinds, or severities fail before execution.
 | `operation_started` | `operation` | `debug` | 0 |
 | `statement_started`, `statement_submitted` | `statement` | `debug` | 0 |
 | `retry_scheduled` | `retry` | `warning` | 1 |
+| `audit_completed` | `audit` | `info` | 2 |
 | `invocation_completed`, `run_completed`, `resource_attempt_completed`, `resource_attempt_skipped`, `operation_completed`, `statement_completed` | Corresponding kind | `info` | 2 |
 | Any `*_failed` event | Corresponding kind | `error` | 3 |
 
