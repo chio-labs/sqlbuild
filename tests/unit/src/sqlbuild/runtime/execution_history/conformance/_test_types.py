@@ -3,16 +3,16 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from sqlbuild.execution_history import EventFilter, EventLogStorage, RunStorage
+from sqlbuild.execution_history import EventFilter, LifecycleEventLogStorage, RunStorage
 from sqlbuild.runtime.observability.types import JSONValue
 
 
 @dataclass(frozen=True)
 class BackendCase:
     description: str
-    event_log_factory: Callable[[], EventLogStorage]
+    event_log_factory: Callable[[], LifecycleEventLogStorage]
     run_storage_factory: Callable[[], RunStorage]
-    append_failing_event_log_factory: Callable[[], EventLogStorage]
+    append_failing_event_log_factory: Callable[[], LifecycleEventLogStorage]
     project_failing_run_storage_factory: Callable[[], RunStorage]
     atomic_failing_run_storage_factory: Callable[[], RunStorage]
     project_call_count: Callable[[RunStorage], int]

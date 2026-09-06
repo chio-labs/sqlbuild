@@ -9,6 +9,7 @@ from sqlbuild.runtime.event_exporting.exceptions import EventExporterInputError
 from sqlbuild.sinks import (
     CommandOutputSinkDefinition,
     CommandOutputStream,
+    LifecycleEventKind,
     LifecycleEventSinkDefinition,
     command_output_sink,
     get_command_output_sink_definition,
@@ -63,6 +64,27 @@ def test_given_lifecycle_filters_when_decorating_then_options_are_frozen(
     assert definition.name == test_case.expected_name
     assert definition.event_kinds == frozenset({"run", "statement"})
     assert definition.min_severity is EventExportSeverity.INFO
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (SinkApiTestCase("typed lifecycle kinds", "publish"),),
+    ids=lambda case: case.description,
+)
+def test_given_typed_lifecycle_kinds_when_decorating_then_definition_stores_string_values(
+    test_case: SinkApiTestCase,
+) -> None:
+    @lifecycle_event_sink(event_kinds={LifecycleEventKind.AUDIT, LifecycleEventKind.RUN})
+    def publish(event: object) -> None:
+        del event
+
+    definition: LifecycleEventSinkDefinition | None = get_lifecycle_event_sink_definition(
+        cast(Callable[..., object], publish)
+    )
+
+    assert definition is not None
+    assert definition.name == test_case.expected_name
+    assert definition.event_kinds == frozenset({"audit", "run"})
 
 
 @pytest.mark.parametrize(

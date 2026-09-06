@@ -10,12 +10,12 @@ import pytest
 from sqlbuild.execution_history import (
     EventFamily,
     EventFilter,
-    EventLogStorage,
     EventPage,
     IntegrityConflictError,
     InvalidCursorError,
     InvalidEventError,
     InvalidLimitError,
+    LifecycleEventLogStorage,
     StoredEvent,
     canonical_event_content,
     canonical_event_id,
@@ -59,7 +59,7 @@ from tests.unit.src.sqlbuild.runtime.execution_history.conformance.helpers impor
     ids=lambda case: case.description,
 )
 def test_given_durable_events_when_paging_exclusively_then_no_gaps_or_duplicates_occur(
-    event_log: EventLogStorage, test_case: PagingCase
+    event_log: LifecycleEventLogStorage, test_case: PagingCase
 ) -> None:
     events: tuple[LifecycleEvent, ...] = tuple(
         lifecycle_event(f"event-{index}", run_id=f"run-{index}") for index in range(1, 6)
@@ -120,7 +120,7 @@ def test_given_durable_events_when_paging_exclusively_then_no_gaps_or_duplicates
     ids=lambda case: case.description,
 )
 def test_given_mixed_durable_events_when_filtering_then_only_domain_matches_are_returned(
-    event_log: EventLogStorage, test_case: FilterCase
+    event_log: LifecycleEventLogStorage, test_case: FilterCase
 ) -> None:
     _ = event_log.append_events(
         (
@@ -155,7 +155,7 @@ def test_given_mixed_durable_events_when_filtering_then_only_domain_matches_are_
     ids=lambda case: case.description,
 )
 def test_given_events_when_composing_correlations_type_producer_and_time_range_then_only_boundary_match_returns(
-    event_log: EventLogStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, test_case: ContractCase
 ) -> None:
     boundary: datetime = BASE_TIME + timedelta(seconds=1)
     _ = event_log.append_events(
@@ -214,7 +214,7 @@ def test_given_events_when_composing_correlations_type_producer_and_time_range_t
     ids=lambda case: case.description,
 )
 def test_given_opaque_envelopes_when_filtering_then_only_correctly_typed_stable_fields_match(
-    event_log: EventLogStorage, test_case: FilterCase
+    event_log: LifecycleEventLogStorage, test_case: FilterCase
 ) -> None:
     matching: OpaqueLifecycleEvent = opaque_event("opaque-match")
     malformed: OpaqueLifecycleEvent = opaque_event(
@@ -243,7 +243,7 @@ def test_given_opaque_envelopes_when_filtering_then_only_correctly_typed_stable_
     ids=lambda case: case.description,
 )
 def test_given_opaque_envelope_missing_filter_fields_when_querying_without_filter_then_it_is_returned(
-    event_log: EventLogStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, test_case: ContractCase
 ) -> None:
     opaque: OpaqueLifecycleEvent = OpaqueLifecycleEvent(
         raw={"event_id": "minimal-opaque", "schema_version": 2}
@@ -262,7 +262,7 @@ def test_given_opaque_envelope_missing_filter_fields_when_querying_without_filte
     ids=lambda case: case.description,
 )
 def test_given_no_matching_events_when_reading_then_empty_page_has_no_cursor(
-    event_log: EventLogStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, test_case: ContractCase
 ) -> None:
     page: EventPage = event_log.get_events(event_filter=EventFilter(run_id="absent"), limit=100)
 
@@ -277,7 +277,7 @@ def test_given_no_matching_events_when_reading_then_empty_page_has_no_cursor(
     ids=lambda case: case.description,
 )
 def test_given_equivalent_event_id_when_appending_twice_then_second_append_is_noop(
-    event_log: EventLogStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, test_case: ContractCase
 ) -> None:
     event: LifecycleEvent = lifecycle_event("same-event")
 
@@ -295,7 +295,7 @@ def test_given_equivalent_event_id_when_appending_twice_then_second_append_is_no
     ids=lambda case: case.description,
 )
 def test_given_conflicting_event_id_when_appending_then_conflict_does_not_mutate_log(
-    event_log: EventLogStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, test_case: ContractCase
 ) -> None:
     original: LifecycleEvent = lifecycle_event("same-event")
     conflicting: LifecycleEvent = replace(original, producer="different-producer")
@@ -315,7 +315,7 @@ def test_given_conflicting_event_id_when_appending_then_conflict_does_not_mutate
     ids=lambda case: case.description,
 )
 def test_given_conflicting_event_id_within_batch_when_appending_then_no_fact_is_mutated(
-    event_log: EventLogStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, test_case: ContractCase
 ) -> None:
     original: LifecycleEvent = lifecycle_event("same-event")
     conflicting: LifecycleEvent = replace(original, producer="different-producer")
@@ -333,7 +333,7 @@ def test_given_conflicting_event_id_within_batch_when_appending_then_no_fact_is_
     ids=lambda case: case.description,
 )
 def test_given_preexisting_event_and_fresh_then_conflicting_batch_when_appending_then_fresh_fact_is_not_committed(
-    event_log: EventLogStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, test_case: ContractCase
 ) -> None:
     original: LifecycleEvent = lifecycle_event("preexisting")
     _ = event_log.append_event(original)
@@ -358,7 +358,7 @@ def test_given_preexisting_event_and_fresh_then_conflicting_batch_when_appending
     ids=lambda case: case.description,
 )
 def test_given_known_event_represented_opaquely_when_retrying_then_canonical_content_is_equivalent(
-    event_log: EventLogStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, test_case: ContractCase
 ) -> None:
     known: LifecycleEvent = lifecycle_event("equivalent")
     opaque: OpaqueLifecycleEvent = opaque_from_known(known)
@@ -378,7 +378,7 @@ def test_given_known_event_represented_opaquely_when_retrying_then_canonical_con
     ids=lambda case: case.description,
 )
 def test_given_opaque_event_id_reused_with_different_content_when_appending_then_conflict_preserves_original(
-    event_log: EventLogStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, test_case: ContractCase
 ) -> None:
     original: OpaqueLifecycleEvent = opaque_event("opaque-id", producer="producer-a")
     conflicting: OpaqueLifecycleEvent = opaque_event("opaque-id", producer="producer-b")
@@ -402,7 +402,7 @@ def test_given_opaque_event_id_reused_with_different_content_when_appending_then
     ids=lambda case: case.description,
 )
 def test_given_opaque_then_known_same_id_with_different_content_when_appending_then_conflict_is_raised(
-    event_log: EventLogStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, test_case: ContractCase
 ) -> None:
     opaque: OpaqueLifecycleEvent = opaque_event("shared-id")
     known: LifecycleEvent = lifecycle_event("shared-id")
@@ -421,7 +421,7 @@ def test_given_opaque_then_known_same_id_with_different_content_when_appending_t
     ids=lambda case: case.description,
 )
 def test_given_preexisting_opaque_and_fresh_then_conflicting_opaque_batch_when_appending_then_batch_is_atomic(
-    event_log: EventLogStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, test_case: ContractCase
 ) -> None:
     original: OpaqueLifecycleEvent = opaque_event("opaque-existing", producer="producer-a")
     _ = event_log.append_event(original)
@@ -453,7 +453,7 @@ def test_given_preexisting_opaque_and_fresh_then_conflicting_opaque_batch_when_a
     ids=lambda case: case.description,
 )
 def test_given_opaque_envelope_without_valid_event_id_when_appending_then_event_is_rejected(
-    event_log: EventLogStorage, test_case: OpaqueIdCase
+    event_log: LifecycleEventLogStorage, test_case: OpaqueIdCase
 ) -> None:
     malformed: OpaqueLifecycleEvent = OpaqueLifecycleEvent(
         raw={"schema_version": 2, "event_id": test_case.event_id}
@@ -472,7 +472,7 @@ def test_given_opaque_envelope_without_valid_event_id_when_appending_then_event_
     ids=lambda case: case.description,
 )
 def test_given_successful_batch_when_retrying_same_batch_then_no_duplicate_facts_exist(
-    event_log: EventLogStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, test_case: ContractCase
 ) -> None:
     events: tuple[LifecycleEvent, ...] = tuple(
         lifecycle_event(f"batch-{index}", run_id=f"run-{index}") for index in range(3)
@@ -498,7 +498,7 @@ def test_given_successful_batch_when_retrying_same_batch_then_no_duplicate_facts
     ids=lambda case: case.description,
 )
 def test_given_invalid_page_limit_when_reading_then_contract_error_is_raised(
-    event_log: EventLogStorage, test_case: LimitCase
+    event_log: LifecycleEventLogStorage, test_case: LimitCase
 ) -> None:
     with pytest.raises(InvalidLimitError, match=test_case.expected_error):
         event_log.get_events(
@@ -513,9 +513,9 @@ def test_given_invalid_page_limit_when_reading_then_contract_error_is_raised(
     ids=lambda case: case.description,
 )
 def test_given_backend_factory_when_constructing_storage_then_contract_is_reusable(
-    event_log_factory: Callable[[], EventLogStorage], test_case: ContractCase
+    event_log_factory: Callable[[], LifecycleEventLogStorage], test_case: ContractCase
 ) -> None:
-    storage: EventLogStorage = event_log_factory()
+    storage: LifecycleEventLogStorage = event_log_factory()
 
     page: EventPage = storage.get_events(event_filter=EventFilter(), limit=1)
     storage.dispose()
@@ -529,7 +529,7 @@ def test_given_backend_factory_when_constructing_storage_then_contract_is_reusab
     ids=lambda case: case.description,
 )
 def test_given_global_event_cursor_when_changing_filter_then_exclusive_position_remains_valid(
-    event_log: EventLogStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, test_case: ContractCase
 ) -> None:
     _ = event_log.append_events(
         (
@@ -559,7 +559,7 @@ def test_given_global_event_cursor_when_changing_filter_then_exclusive_position_
     ids=lambda case: case.description,
 )
 def test_given_interleaved_events_when_paging_filtered_results_then_global_cursor_is_exclusive_without_gaps(
-    event_log: EventLogStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, test_case: ContractCase
 ) -> None:
     _ = event_log.append_events(
         (
@@ -587,7 +587,7 @@ def test_given_interleaved_events_when_paging_filtered_results_then_global_curso
     ids=lambda case: case.description,
 )
 def test_given_invalid_or_foreign_event_cursor_when_reading_then_cursor_error_is_raised(
-    event_log: EventLogStorage, test_case: ContractCase
+    event_log: LifecycleEventLogStorage, test_case: ContractCase
 ) -> None:
     _ = event_log.append_event(lifecycle_event("only"))
 
@@ -605,12 +605,12 @@ def test_given_invalid_or_foreign_event_cursor_when_reading_then_cursor_error_is
     ids=lambda case: case.description,
 )
 def test_given_cursor_from_other_event_log_when_reading_then_foreign_cursor_is_rejected(
-    event_log: EventLogStorage,
-    event_log_factory: Callable[[], EventLogStorage],
+    event_log: LifecycleEventLogStorage,
+    event_log_factory: Callable[[], LifecycleEventLogStorage],
     test_case: ContractCase,
 ) -> None:
     _ = event_log.append_event(lifecycle_event("local"))
-    foreign: EventLogStorage = event_log_factory()
+    foreign: LifecycleEventLogStorage = event_log_factory()
     _ = foreign.append_event(lifecycle_event("foreign"))
     foreign_page: EventPage = foreign.get_events(event_filter=EventFilter(), limit=1)
 

@@ -23,7 +23,15 @@ MICROBATCH_LIMIT_MAX_BATCHES_KEY: str = "max_batches"
 MICROBATCH_LIMIT_ACTION_KEY: str = "action"
 WATERMARK_CURSOR_INPUT_BLOCK_KEYS: frozenset[str] = frozenset({"column", "roles"})
 MODEL_HEADER_METADATA_KEYS: frozenset[str] = frozenset(
-    {"description", "columns", "model_schema", "audits", "enums", "constants"}
+    {
+        "description",
+        "columns",
+        "model_schema",
+        "audits",
+        "audit_factories",
+        "enums",
+        "constants",
+    }
 )
 
 SQL_WILDCARD_TOKEN: str = "*"

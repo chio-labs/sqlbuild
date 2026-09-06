@@ -7,6 +7,7 @@ from sqlbuild.runtime.event_exporting.main._lifecycle_export_policy_catalog impo
     lifecycle_export_policy_catalog,
 )
 from sqlbuild.runtime.event_exporting.models import LifecycleExportPolicy
+from sqlbuild.runtime.event_exporting.types import LifecycleEventKind
 from sqlbuild.runtime.observability.constants import LIFECYCLE_EVENT_CATALOG
 from tests.unit.src.sqlbuild.runtime.event_exporting._test_types import (
     EventExportPolicyTestCase,
@@ -29,3 +30,19 @@ def test_given_canonical_catalog_when_building_export_policy_then_every_type_is_
     assert policy["resource_attempt_skipped"].severity == "info"
     assert policy["retry_scheduled"].severity == "warning"
     assert policy["statement_submitted"].severity == "debug"
+    assert policy["audit_completed"].kind == LifecycleEventKind.AUDIT
+    assert policy["audit_completed"].severity == "info"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (EventExportPolicyTestCase("typed kind vocabulary is exhaustive", 7),),
+    ids=lambda case: case.description,
+)
+def test_given_lifecycle_catalog_when_deriving_export_dimensions_then_kind_enum_is_exhaustive(
+    test_case: EventExportPolicyTestCase,
+) -> None:
+    policy: Mapping[str, LifecycleExportPolicy] = lifecycle_export_policy_catalog()
+
+    assert {item.kind for item in policy.values()} == {kind.value for kind in LifecycleEventKind}
+    assert len(LifecycleEventKind) == test_case.expected_event_count

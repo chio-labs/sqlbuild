@@ -266,8 +266,18 @@ def normalize_cli_output(output: str) -> str:
 
     normalized: str = re.sub(r"\(\d+\.\d{2}s\)", "(<time>)", output)
     normalized = re.sub(
+        r"PASS=\d+  WARN=\d+  FAIL=\d+  INSUFFICIENT=\d+  SKIP=\d+  TOTAL=\d+  \(<time>\)",
+        "PASS=<n>  WARN=<n>  FAIL=<n>  INSUFFICIENT=<n>  SKIP=<n>  TOTAL=<n>  (<time>)",
+        normalized,
+    )
+    normalized = re.sub(
         r"PASS=\d+  WARN=\d+  FAIL=\d+  SKIP=\d+  TOTAL=\d+  \(<time>\)",
         "PASS=<n>  WARN=<n>  FAIL=<n>  SKIP=<n>  TOTAL=<n>  (<time>)",
+        normalized,
+    )
+    normalized = re.sub(
+        r"PASS=\d+  WARN=\d+  FAIL=\d+  INSUFFICIENT=\d+  TOTAL=\d+",
+        "PASS=<n>  WARN=<n>  FAIL=<n>  INSUFFICIENT=<n>  TOTAL=<n>",
         normalized,
     )
     normalized = re.sub(

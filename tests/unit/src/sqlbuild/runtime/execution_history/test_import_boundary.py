@@ -29,7 +29,8 @@ def test_given_clean_interpreter_when_importing_execution_history_then_optional_
 ) -> None:
     module_names: str = ",".join(repr(name) for name in test_case.expected_forbidden_imports)
     script = (
-        "import sys; import sqlbuild.execution_history; "
+        "import sys; import sqlbuild.execution_history as history; "
+        "assert history.EventLogStorage is history.LifecycleEventLogStorage; "
         f"forbidden=({module_names},); "
         "loaded=tuple(name for name in forbidden if name in sys.modules); print(repr(loaded))"
     )

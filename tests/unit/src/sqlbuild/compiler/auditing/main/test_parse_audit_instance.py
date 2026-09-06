@@ -5,9 +5,10 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.auditing.main._parse_audit_instance import parse_audit_instance
-from sqlbuild.compiler.auditing.types import AuditSeverity
+from sqlbuild.compiler.auditing.types import AuditSeverity, ThresholdOperator
 from sqlbuild.spec.contracts.models import SchemaAuditInstance
 from tests.unit.src.sqlbuild.compiler.auditing.main._test_types import (
+    MeasurementPolicyParsingTestCase,
     ParseAuditInstanceErrorTestCase,
     ParseAuditInstanceTestCase,
 )
@@ -88,3 +89,88 @@ def test_given_invalid_audit_option_when_parsing_then_raises_clear_error(
         )
 
     assert test_case.expected_error_fragment in str(error_info.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MeasurementPolicyParsingTestCase(
+            description="all threshold operators", expected_minimum_samples=0
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_all_directional_thresholds_when_parsing_then_typed_policies_are_returned(
+    test_case: MeasurementPolicyParsingTestCase,
+) -> None:
+    below: SchemaAuditInstance = parse_audit_instance(
+        raw_audit={
+            "rate": {
+                "thresholds": {"warn": {"below": 100}},
+                "minimum_samples": 0,
+                "evidence_limit": 7,
+            }
+        },
+        file_path=Path("models/orders.sql"),
+        label="model orders",
+        error_class=ValueError,
+    )
+    above: SchemaAuditInstance = parse_audit_instance(
+        raw_audit={"rate": {"thresholds": {"error": {"above": 10.5}}}},
+        file_path=Path("models/orders.sql"),
+        label="model orders",
+        error_class=ValueError,
+    )
+    outside: SchemaAuditInstance = parse_audit_instance(
+        raw_audit={"rate": {"thresholds": {"warn": {"outside": (90, 110)}}}},
+        file_path=Path("models/orders.sql"),
+        label="model orders",
+        error_class=ValueError,
+    )
+
+    assert below.thresholds is not None and below.thresholds.warn is not None
+    assert below.thresholds.warn.operator == ThresholdOperator.BELOW
+    assert below.thresholds.warn.limit == 100.0
+    assert below.minimum_samples == test_case.expected_minimum_samples
+    assert below.evidence_limit == 7
+    assert "evidence_limit" not in below.arguments
+    assert above.thresholds is not None and above.thresholds.error is not None
+    assert above.thresholds.error.operator == ThresholdOperator.ABOVE
+    assert outside.thresholds is not None and outside.thresholds.warn is not None
+    assert outside.thresholds.warn.operator == ThresholdOperator.OUTSIDE
+    assert (outside.thresholds.warn.lower, outside.thresholds.warn.upper) == (90.0, 110.0)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseAuditInstanceErrorTestCase(
+            description="invalid measurement policy values",
+            raw_audit={"rate": {"minimum_samples": -1}},
+            expected_error_fragment="non-negative integer",
+        ),
+        ParseAuditInstanceErrorTestCase(
+            description="invalid evidence limit",
+            raw_audit={"rate": {"evidence_limit": True}},
+            expected_error_fragment="'evidence_limit' must be a non-negative integer",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_measurement_policy_options_when_parsing_then_clear_errors_are_raised(
+    test_case: ParseAuditInstanceErrorTestCase,
+) -> None:
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+        parse_audit_instance(
+            raw_audit=test_case.raw_audit,
+            file_path=Path("models/orders.sql"),
+            label="model orders",
+            error_class=ValueError,
+        )
+    with pytest.raises(ValueError, match="outside threshold requires two numeric values"):
+        parse_audit_instance(
+            raw_audit={"rate": {"thresholds": {"warn": {"outside": (90,)}}}},
+            file_path=Path("models/orders.sql"),
+            label="model orders",
+            error_class=ValueError,
+        )

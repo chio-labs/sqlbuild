@@ -228,6 +228,28 @@ STRING_PAYLOAD_FIELDS: frozenset[str] = frozenset(
         "scope",
         "sql_digest",
         "statement_kind",
+        "audit_name",
+        "evaluation_mode",
+        "outcome",
+        "severity",
+        "run_scope_phase",
+        "attachment_kind",
+        "binding_key",
+        "definition_fingerprint",
+        "execution_fingerprint",
+        "attached_target_kind",
+        "attached_target_name",
+        "attached_column_name",
+        "target_database",
+        "target_schema",
+        "target_name",
+        "sample_unit",
+        "evidence_error",
+        "measurement_sql",
+        "evidence_sql",
+        "executed_sql",
+        "execution_error",
+        "result_id",
     }
 )
 NONNEGATIVE_INTEGER_PAYLOAD_FIELDS: frozenset[str] = frozenset(
@@ -251,8 +273,15 @@ NONNEGATIVE_INTEGER_PAYLOAD_FIELDS: frozenset[str] = frozenset(
         "succeeded_count",
         "warn_count",
         "worker_count",
+        "violation_count",
+        "sample_count",
+        "minimum_samples",
+        "evidence_count",
     }
 )
+FINITE_NUMBER_PAYLOAD_FIELDS: frozenset[str] = frozenset({"measured_value"})
+BOOLEAN_PAYLOAD_FIELDS: frozenset[str] = frozenset({"evidence_truncated", "reused"})
+JSON_PAYLOAD_FIELDS: frozenset[str] = frozenset({"thresholds", "evidence"})
 FORBIDDEN_STATEMENT_PAYLOAD_FIELDS: frozenset[str] = frozenset(
     {
         "bindings",
@@ -408,6 +437,56 @@ LIFECYCLE_EVENT_CATALOG_V1: Mapping[str, LifecycleEventDefinition] = MappingProx
                     "error_code",
                 }
             ),
+        ),
+        "audit_completed": LifecycleEventDefinition.create(
+            required_correlations=frozenset({"run_id"}),
+            required_payload=frozenset(
+                {
+                    "audit_name",
+                    "evaluation_mode",
+                    "outcome",
+                    "severity",
+                    "run_scope_phase",
+                    "attachment_kind",
+                }
+            ),
+            allowed=frozenset(
+                {
+                    "audit_name",
+                    "evaluation_mode",
+                    "outcome",
+                    "severity",
+                    "run_scope_phase",
+                    "attachment_kind",
+                    "binding_key",
+                    "definition_fingerprint",
+                    "execution_fingerprint",
+                    "attached_target_kind",
+                    "attached_target_name",
+                    "attached_column_name",
+                    "target_database",
+                    "target_schema",
+                    "target_name",
+                    "violation_count",
+                    "measured_value",
+                    "sample_count",
+                    "sample_unit",
+                    "minimum_samples",
+                    "thresholds",
+                    "evidence",
+                    "evidence_count",
+                    "evidence_truncated",
+                    "evidence_error",
+                    "measurement_sql",
+                    "evidence_sql",
+                    "executed_sql",
+                    "sql_digest",
+                    "execution_error",
+                    "reused",
+                    "result_id",
+                }
+            ),
+            terminal=True,
         ),
         "statement_started": LifecycleEventDefinition.create(
             required_correlations=frozenset({"statement_id"}), allowed=STATEMENT_FIELDS

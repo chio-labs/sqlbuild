@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.planner.types import RetentionPlanPhase
+from sqlbuild.executor.auditing.main._project_results import (
+    AuditResultProjection,
+    project_audit_result_batch,
+)
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build._helpers.retention import (
     apply_retention_phase,
@@ -99,6 +104,23 @@ def execute_build_plan(
         source_audit_results=source_audit_results,
         end_audit_results=end_audit_results,
     )
+    all_audit_results: tuple[AuditExecutionResult, ...] = _all_audit_results(
+        model_results=model_results,
+        source_audit_results=source_audit_results,
+        end_audit_results=end_audit_results,
+    )
+    projection: AuditResultProjection = project_audit_result_batch(
+        plan=plan,
+        results=all_audit_results,
+        adapter=adapter,
+        connection=scheduler_connection,
+    )
+    result = replace(
+        result,
+        audit_result_projection_attempted_count=projection.attempted_count,
+        audit_result_projection_written_count=projection.written_count,
+        audit_result_projection_failed_count=projection.failed_count,
+    )
     if result.status == BuildStatus.SUCCESS:
         _ = reconcile_retention_after_build(
             plan=plan,
@@ -106,3 +128,15 @@ def execute_build_plan(
             connection=scheduler_connection,
         )
     return result
+
+
+def _all_audit_results(
+    *,
+    model_results: tuple[ModelExecutionResult, ...],
+    source_audit_results: tuple[AuditExecutionResult, ...],
+    end_audit_results: tuple[AuditExecutionResult, ...],
+) -> tuple[AuditExecutionResult, ...]:
+    results: list[AuditExecutionResult] = [*source_audit_results, *end_audit_results]
+    for model_result in model_results:
+        results.extend(model_result.audit_results)
+    return tuple(results)

@@ -7,7 +7,7 @@ INTEGRATION_RESULT_PATH_ENV: str = "SQLBUILD_INTEGRATION_RESULT_PATH"
 INTEGRATION_RESULT_SCHEMA_VERSION: int = 1
 INTEGRATION_RESULT_RECORD_KIND: str = "integration_result"
 INTEGRATION_RESOURCE_FAILED_EVENT: str = "resource_attempt_failed"
-INTEGRATION_CHECK_PASS_STATUS: str = "pass"
+INTEGRATION_CHECK_NON_FAIL_STATUSES: frozenset[str] = frozenset({"insufficient", "pass"})
 INTEGRATION_FAILED_STATUS: str = "failed"
 INTEGRATION_SKIPPED_STATUS: str = "skipped"
 INTEGRATION_LOADER_KIND: str = "loader"
@@ -54,7 +54,9 @@ INTEGRATION_FAILED_PHASES: frozenset[str] = frozenset(
         "type_enforcement",
     }
 )
-INTEGRATION_CHECK_STATUSES: frozenset[str] = frozenset({"error", "fail", "pass", "warn"})
+INTEGRATION_CHECK_STATUSES: frozenset[str] = frozenset(
+    {"error", "fail", "insufficient", "pass", "warn"}
+)
 INTEGRATION_CHECK_SEVERITIES: frozenset[str] = frozenset({"error", "warn"})
 INTEGRATION_CHECK_ATTACHMENT_KINDS: frozenset[str] = frozenset({"end", "model", "source"})
 INTEGRATION_CHECK_RUN_SCOPE_PHASES: frozenset[str] = frozenset({"delta_and_final", "final"})

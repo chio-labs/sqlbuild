@@ -1730,6 +1730,8 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         match type_name:
             case FrameworkType.STRING:
                 return "VARCHAR"
+            case FrameworkType.INTEGER:
+                return "BIGINT"
             case FrameworkType.TIMESTAMP:
                 return "TIMESTAMP"
 
@@ -2081,6 +2083,27 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     ) -> tuple[str, ...]:
         """Render optional node result table index DDL statements."""
 
+        del database, schema
+        return ()
+
+    def render_create_audit_result_table_sql(self, *, database: str | None, schema: str) -> str:
+        """Render DDL that creates the audit result table when it is missing."""
+        from sqlbuild.executor.audit_results.main.create_table_sql import (
+            build_audit_results_create_table_sql,
+        )
+
+        return build_audit_results_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+            transient=self.state_tables_transient,
+        )
+
+    def render_create_audit_result_index_sqls(
+        self, *, database: str | None, schema: str
+    ) -> tuple[str, ...]:
+        """Render optional audit result table index DDL statements."""
         del database, schema
         return ()
 

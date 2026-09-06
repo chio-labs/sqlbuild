@@ -1,6 +1,12 @@
 from dataclasses import dataclass, field
 
-from sqlbuild.compiler.auditing.types import AuditAttachmentKind, AuditRunScope, AuditSeverity
+from sqlbuild.compiler.auditing.models import MeasurementThresholds
+from sqlbuild.compiler.auditing.types import (
+    AuditAttachmentKind,
+    AuditOutcome,
+    AuditRunScope,
+    AuditSeverity,
+)
 
 
 @dataclass(frozen=True)
@@ -66,3 +72,40 @@ class ParseAuditInstanceErrorTestCase:
     description: str
     raw_audit: object
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class MeasurementPolicyParsingTestCase:
+    description: str
+    expected_minimum_samples: int
+
+
+@dataclass(frozen=True)
+class AuditIdentityPinTestCase:
+    description: str
+    expected_binding_key: str
+    expected_definition_fingerprint: str
+    expected_execution_fingerprint: str
+
+
+@dataclass(frozen=True)
+class MeasurementIdentityTestCase:
+    description: str
+    expected_identity_changed: bool
+
+
+@dataclass(frozen=True)
+class EvaluateMeasurementTestCase:
+    description: str
+    measured_value: float
+    thresholds: MeasurementThresholds
+    expected_outcome: AuditOutcome
+    sample_count: int | None = None
+    minimum_samples: int | None = None
+
+
+@dataclass(frozen=True)
+class InvalidMeasuredValueTestCase:
+    description: str
+    measured_value: float
+    expected_error_message: str

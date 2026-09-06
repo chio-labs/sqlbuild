@@ -95,5 +95,64 @@ def test_given_completed_execution_when_json_projection_fails_then_exit_status_r
     assert test_case.expected_completion_message in capsys.readouterr().err
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExecutionProjectionFailureTestCase(
+            description="audit result persistence failure",
+            build_status="success",
+            expected_exit_code=0,
+            expected_document_status="success",
+            expected_completion_message="unused",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_audit_history_write_failure_when_formatting_json_then_reports_bounded_degradation(
+    test_case: ExecutionProjectionFailureTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result: BuildExecutionResult = BuildExecutionResult(
+        status=BuildStatus(test_case.build_status),
+        audit_result_projection_attempted_count=3,
+        audit_result_projection_written_count=0,
+        audit_result_projection_failed_count=3,
+    )
+    monkeypatch.setattr(
+        outputs,
+        "format_build_execution_json",
+        Mock(return_value='{"status":"success","projection_degraded":false}\n'),
+    )
+
+    payload: dict[str, object] = json.loads(
+        outputs.execution_json_payload_with_degradation(
+            result=result,
+            plan=Mock(),
+            python_node_results=(),
+            python_check_results=(),
+            command="build",
+            run_id="run",
+            cost_record=None,
+            execution_succeeded=True,
+        )
+    )
+
+    assert payload["status"] == test_case.expected_document_status
+    assert payload["projection_degraded"] is True
+    assert payload["audit_result_projection"] == {
+        "attempted_count": 3,
+        "written_count": 0,
+        "failed_count": 3,
+    }
+    assert payload["projection_degradation_reasons"] == [
+        {
+            "reason": "audit_result_persistence_failure",
+            "attempted_count": 3,
+            "written_count": 0,
+            "failed_count": 3,
+        }
+    ]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-vv"])

@@ -45,6 +45,17 @@ _HOOK_NAME_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}
 class OperationLifecycle:
     """Publish one start and one terminal fact around owned blocking work."""
 
+    @staticmethod
+    def publish_audit_completed(*, payload: dict[str, JSONValue]) -> None:
+        """Publish one confirmed audit completion through the active dispatcher."""
+
+        dispatcher: EventDispatcher | None = current_event_dispatcher()
+        if dispatcher is None:
+            return
+        dispatcher.publish_lifecycle(
+            create_lifecycle_event(event_type="audit_completed", payload=payload)
+        )
+
     def __init__(
         self,
         *,

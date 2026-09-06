@@ -22,7 +22,8 @@ from sqlbuild.cli.output.models import (
     IntegrationResultEnvelope,
 )
 from sqlbuild.cli.output.types import IntegrationOutputKind
-from sqlbuild.compiler.auditing.types import AuditOutcome, AuditSeverity
+from sqlbuild.compiler.auditing.models import MeasurementThresholdBound, MeasurementThresholds
+from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditOutcome, AuditSeverity
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.auditing.main.resource_id import audit_resource_id
@@ -361,7 +362,7 @@ def _audit_result(result: AuditExecutionResult) -> IntegrationCheckResult:
         name=result.audit_name,
         check_id=_audit_check_id(result),
         dag_check_id=_audit_check_id(result),
-        passed=result.outcome == AuditOutcome.PASS,
+        passed=result.outcome in {AuditOutcome.PASS, AuditOutcome.INSUFFICIENT},
         status=result.outcome.value,
         severity=result.severity,
         row_count=result.row_count,
@@ -371,7 +372,45 @@ def _audit_result(result: AuditExecutionResult) -> IntegrationCheckResult:
         attached_target_name=result.attached_target_name,
         run_scope_phase=result.run_scope_phase.value,
         reused=result.reused,
+        evaluation_mode=result.evaluation_mode.value,
+        measured_value=result.measured_value,
+        sample_count=result.sample_count,
+        sample_unit=result.sample_unit,
+        minimum_samples=result.minimum_samples,
+        thresholds=_render_measurement_thresholds(result.thresholds),
+        evidence_count=(
+            len(result.evidence_rows)
+            if result.evaluation_mode == AuditEvaluationMode.MEASUREMENT
+            else None
+        ),
+        evidence_truncated=(
+            result.evidence_truncated
+            if result.evaluation_mode == AuditEvaluationMode.MEASUREMENT
+            else None
+        ),
     )
+
+
+def _render_measurement_thresholds(
+    thresholds: MeasurementThresholds | None,
+) -> Mapping[str, object] | None:
+    if thresholds is None:
+        return None
+    rendered: dict[str, object] = {}
+    for severity, bound in (("warn", thresholds.warn), ("error", thresholds.error)):
+        if bound is not None:
+            rendered[severity] = _render_measurement_threshold_bound(bound)
+    return rendered
+
+
+def _render_measurement_threshold_bound(bound: MeasurementThresholdBound) -> Mapping[str, object]:
+    rendered: dict[str, object] = {"operator": bound.operator.value}
+    if bound.limit is not None:
+        rendered["limit"] = bound.limit
+    else:
+        rendered["lower"] = bound.lower
+        rendered["upper"] = bound.upper
+    return rendered
 
 
 def _audit_check_id(result: AuditExecutionResult) -> str:

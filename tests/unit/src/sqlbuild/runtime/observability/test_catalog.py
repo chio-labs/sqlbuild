@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from sqlbuild.observability import create_lifecycle_event, invocation_scope, run_scope
 from sqlbuild.runtime.observability.classes.run_lifecycle import RunLifecycle
 from sqlbuild.runtime.observability.constants import LIFECYCLE_EVENT_CATALOGS
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
@@ -16,6 +17,7 @@ from sqlbuild.runtime.observability.main.validate_idempotent_duplicate import (
     validate_idempotent_duplicate,
 )
 from sqlbuild.runtime.observability.models import LifecycleEvent
+from sqlbuild.runtime.observability.types import JSONValue
 from tests.unit.src.sqlbuild.runtime.observability._test_types import (
     CatalogVersionCase,
     IdempotencyCase,
@@ -28,6 +30,97 @@ from tests.unit.src.sqlbuild.runtime.observability._test_types import (
     TimestampErrorCase,
 )
 from tests.unit.src.sqlbuild.runtime.observability.helpers import lifecycle_event
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LifecycleErrorCase(
+            description="complete measurement audit payload",
+            event_type="audit_completed",
+            payload={},
+            expected_error="audit_completed",
+            run_id="run-1",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_complete_audit_payload_when_creating_lifecycle_event_then_completed_fact_validates(
+    test_case: LifecycleErrorCase,
+) -> None:
+    payload: dict[str, JSONValue] = {
+        "audit_name": "valid_order_rate",
+        "evaluation_mode": "measurement",
+        "outcome": "warn",
+        "severity": "warn",
+        "run_scope_phase": "final",
+        "attachment_kind": "model",
+        "binding_key": "orders.valid_order_rate",
+        "definition_fingerprint": "definition-123",
+        "execution_fingerprint": "execution-456",
+        "attached_target_kind": "model",
+        "attached_target_name": "orders",
+        "target_database": "analytics",
+        "target_schema": "quality",
+        "target_name": "orders",
+        "measured_value": 99.5,
+        "sample_count": 100,
+        "sample_unit": "rows",
+        "minimum_samples": 50,
+        "thresholds": {"warn": {"below": 100}, "error": {"below": 99}},
+        "evidence": [{"order_id": 42}],
+        "evidence_count": 1,
+        "evidence_truncated": False,
+        "measurement_sql": "SELECT 99.5 AS valid_rate, 100 AS total_rows",
+        "executed_sql": "SELECT 99.5 AS valid_rate, 100 AS total_rows",
+        "sql_digest": "digest-789",
+        "reused": False,
+        "result_id": "result-123",
+    }
+
+    with invocation_scope("invocation-1"), run_scope(test_case.run_id or "run-1"):
+        event: LifecycleEvent = create_lifecycle_event(
+            event_type=test_case.event_type, payload=payload
+        )
+
+    assert event.event_type == test_case.expected_error
+    assert event.run_id == "run-1"
+    assert event.payload["audit_name"] == payload["audit_name"]
+    assert event.payload["thresholds"] == payload["thresholds"]
+    assert event.payload["evidence_count"] == payload["evidence_count"]
+    assert is_terminal_event(event) is True
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LifecycleErrorCase(
+            description="negative audit sample count",
+            event_type="audit_completed",
+            payload={"sample_count": -1},
+            run_id="run-1",
+            expected_error="sample_count.*nonnegative integer",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_audit_payload_when_creating_lifecycle_event_then_typed_field_is_rejected(
+    test_case: LifecycleErrorCase,
+) -> None:
+    with invocation_scope("invocation-1"), run_scope(test_case.run_id or "run-1"):
+        with pytest.raises(ObservabilityValidationError, match=test_case.expected_error):
+            create_lifecycle_event(
+                event_type=test_case.event_type,
+                payload={
+                    "audit_name": "valid_order_rate",
+                    "evaluation_mode": "measurement",
+                    "outcome": "pass",
+                    "severity": "warn",
+                    "run_scope_phase": "final",
+                    "attachment_kind": "model",
+                    "sample_count": -1,
+                },
+            )
 
 
 @pytest.mark.parametrize(

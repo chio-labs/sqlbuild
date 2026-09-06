@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.build._helpers.aggregation import count_insufficient_audits
 from sqlbuild.executor.build.constants import BUILD_SOURCE_FRESHNESS_BLOCKED_CODE
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
@@ -41,6 +42,11 @@ def aggregate_build_result(
     failure_count: int = resource_counts[1]
     skipped_count: int = resource_counts[2]
     warning_count: int = resource_counts[3]
+    insufficient_count: int = count_insufficient_audits(
+        model_results=model_results,
+        source_audit_results=source_audit_results,
+        end_audit_results=end_audit_results,
+    )
     audit_counts: tuple[int, int, bool] = _aggregate_audits(
         source_audit_results=source_audit_results,
         end_audit_results=end_audit_results,
@@ -63,6 +69,7 @@ def aggregate_build_result(
         failure_count=failure_count,
         skipped_count=skipped_count,
         warning_count=warning_count,
+        insufficient_count=insufficient_count,
     )
 
 

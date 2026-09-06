@@ -150,6 +150,8 @@ def execute_audit_plan(
                     on_audit_error=preparation.progress.on_item_error,
                 ),
                 run_id=pipeline_result.project.run_id,
+                storage_database=pipeline_result.project.effective_target_database,
+                storage_schema=pipeline_result.project.effective_target_schema,
             )
     finally:
         preparation.progress.close()

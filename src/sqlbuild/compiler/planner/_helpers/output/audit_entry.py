@@ -50,6 +50,19 @@ def plan_audit(
         sql=resolved_sql,
         context=f"audit '{audit.name}' planned SQL",
     )
+    evidence_resolved_sql: str | None = None
+    if audit.evidence_sql is not None:
+        evidence_resolved_sql = render_audit_sql(
+            unresolved_sql=audit.evidence_sql,
+            model_locations=model_locations,
+            seed_locations=seed_locations,
+            source_map=source_map,
+            adapter=adapter,
+        )
+        assert_no_unresolved_sql_markers(
+            sql=evidence_resolved_sql,
+            context=f"audit '{audit.name}' planned evidence SQL",
+        )
 
     attachment_kind: AuditAttachmentKind
     attached_target_name: str | None
@@ -89,6 +102,23 @@ def plan_audit(
         severity=severity,
         requested_run_scope=requested_run_scope,
         effective_run_scope=effective_run_scope,
+        evaluation_mode=audit.evaluation_mode,
+        value_column=(
+            None if audit.measurement_contract is None else audit.measurement_contract.value_column
+        ),
+        sample_count_column=(
+            None
+            if audit.measurement_contract is None
+            else audit.measurement_contract.sample_count_column
+        ),
+        sample_unit=(
+            None if audit.measurement_contract is None else audit.measurement_contract.sample_unit
+        ),
+        thresholds=audit.thresholds,
+        minimum_samples=audit.minimum_samples,
+        evidence_resolved_sql=evidence_resolved_sql,
+        evidence_unresolved_sql=audit.evidence_sql,
+        evidence_limit=audit.evidence_limit,
         scope_deps=audit.scope_deps,
         attached_target_kind=attached_target_kind,
         attached_target_name=attached_target_name,

@@ -11,6 +11,19 @@ class DagsterConstantGuardTestCase:
 
 
 @dataclass(frozen=True)
+class DagsterInsufficientStatusTestCase:
+    description: str
+    expected_status: str
+
+
+@dataclass(frozen=True)
+class DagsterMeasurementMetadataTestCase:
+    description: str
+    expected_status: str
+    expected_metadata: dict[str, object]
+
+
+@dataclass(frozen=True)
 class DagsterAssetSpecTestCase:
     description: str
     expected_asset_keys: tuple[tuple[str, ...], ...]

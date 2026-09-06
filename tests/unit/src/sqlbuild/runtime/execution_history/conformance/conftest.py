@@ -19,11 +19,11 @@ import pytest
 from sqlbuild.execution_history import (
     CanonicalLifecycleEvent,
     EventFilter,
-    EventLogStorage,
     EventPage,
     ExecutionHistoryStorageError,
     IntegrityConflictError,
     InvalidCursorError,
+    LifecycleEventLogStorage,
     RunFilter,
     RunPage,
     RunRecord,
@@ -49,7 +49,7 @@ BASE_TIME: datetime = datetime(2026, 1, 1, tzinfo=UTC)
 RUN_CURSOR_PREFIX: str = "run:"
 
 
-class InMemoryEventLogStorage:
+class InMemoryLifecycleEventLogStorage:
     """Small test-only implementation used to execute the backend contract."""
 
     def __init__(self) -> None:
@@ -316,7 +316,7 @@ def postgres_dsn() -> str:
     return make_conninfo(dsn, options=f"-c search_path={schema}")
 
 
-def postgres_factory() -> EventLogStorage:
+def postgres_factory() -> LifecycleEventLogStorage:
     """Build an isolated PostgreSQL backend when conformance is explicitly DSN-gated."""
 
     from sqlbuild.postgres_history import PostgresExecutionHistory
@@ -327,8 +327,8 @@ def postgres_factory() -> EventLogStorage:
 class FailingPostgresEventLog:
     """Test-only PostgreSQL append failure decorator."""
 
-    def __new__(cls) -> EventLogStorage:
-        storage: EventLogStorage = postgres_factory()
+    def __new__(cls) -> LifecycleEventLogStorage:
+        storage: LifecycleEventLogStorage = postgres_factory()
 
         def fail(events: Iterable[CanonicalLifecycleEvent]) -> tuple[StoredEvent, ...]:
             raise ExecutionHistoryStorageError("injected append failure")
@@ -514,10 +514,10 @@ def opaque_event(event_id: str) -> OpaqueLifecycleEvent:
     return OpaqueLifecycleEvent(raw={"event_id": event_id, "schema_version": 2})
 
 
-def append_failing_event_log_factory() -> EventLogStorage:
+def append_failing_event_log_factory() -> LifecycleEventLogStorage:
     """Build an event log with append failure injection."""
 
-    storage: InMemoryEventLogStorage = InMemoryEventLogStorage()
+    storage: InMemoryLifecycleEventLogStorage = InMemoryLifecycleEventLogStorage()
     storage.fail_append = True
     return storage
 
@@ -550,7 +550,7 @@ def sqlite_factory() -> SQLiteExecutionHistory:
     return SQLiteExecutionHistory(path=sqlite_path())
 
 
-def sqlite_append_failing_factory() -> EventLogStorage:
+def sqlite_append_failing_factory() -> LifecycleEventLogStorage:
     """Build SQLite event storage with append failure injection."""
 
     return FailingSQLiteEventLog(path=sqlite_path())
@@ -571,7 +571,7 @@ def sqlite_atomic_failing_factory() -> RunStorage:
 BACKEND_CASES: tuple[BackendCase, ...] = (
     BackendCase(
         description="test-only in-memory backend",
-        event_log_factory=InMemoryEventLogStorage,
+        event_log_factory=InMemoryLifecycleEventLogStorage,
         run_storage_factory=InMemoryRunStorage,
         append_failing_event_log_factory=append_failing_event_log_factory,
         project_failing_run_storage_factory=project_failing_run_storage_factory,
@@ -614,7 +614,7 @@ def backend_case(request: pytest.FixtureRequest) -> BackendCase:
 
 
 @pytest.fixture
-def event_log_factory(backend_case: BackendCase) -> Callable[[], EventLogStorage]:
+def event_log_factory(backend_case: BackendCase) -> Callable[[], LifecycleEventLogStorage]:
     """Provide the registered event log factory."""
 
     return backend_case.event_log_factory
@@ -628,10 +628,12 @@ def run_storage_factory(backend_case: BackendCase) -> Callable[[], RunStorage]:
 
 
 @pytest.fixture
-def event_log(event_log_factory: Callable[[], EventLogStorage]) -> Iterator[EventLogStorage]:
+def event_log(
+    event_log_factory: Callable[[], LifecycleEventLogStorage],
+) -> Iterator[LifecycleEventLogStorage]:
     """Yield an isolated event log contract implementation."""
 
-    storage: EventLogStorage = event_log_factory()
+    storage: LifecycleEventLogStorage = event_log_factory()
     with storage:
         yield storage
 
@@ -646,7 +648,7 @@ def run_storage(run_storage_factory: Callable[[], RunStorage]) -> Iterator[RunSt
 
 
 @pytest.fixture
-def append_failing_event_log(backend_case: BackendCase) -> EventLogStorage:
+def append_failing_event_log(backend_case: BackendCase) -> LifecycleEventLogStorage:
     """Provide an event log with deterministic append failure injection."""
 
     return backend_case.append_failing_event_log_factory()

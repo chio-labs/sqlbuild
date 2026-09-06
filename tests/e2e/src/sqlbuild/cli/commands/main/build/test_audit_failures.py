@@ -10,6 +10,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     AuditFailureBuildE2ETestCase,
+    MeasurementAuditCliE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
@@ -196,3 +197,65 @@ def test_given_audit_failure_projects_when_running_build_then_cli_reports_failur
     assert result.returncode == test_case.expected_exit_code
     assert test_case.expected_failure_fragment in result.stdout
     assert test_case.expected_retained_relation_fragment in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MeasurementAuditCliE2ETestCase(
+            description="failing model measurement audit",
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "measurement_build"\nadapter = "duckdb"\n'
+                    '[connection]\ndatabase = "measurement.duckdb"\n'
+                ),
+                "models/orders.sql": (
+                    "MODEL (materialized table, audits [row_rate ("
+                    "thresholds (error (below 90)))]) ; SELECT 1 AS order_id"
+                ),
+                "audits/generic/row_rate.sql": (
+                    "AUDIT (evaluation measurement, value rate); "
+                    "MEASURE (SELECT 80.0 AS rate FROM @relation LIMIT 1);"
+                ),
+            },
+            command=("--no-color", "build", "--select", "orders"),
+            expected_exit_code=1,
+            expected_output="row_rate",
+        ),
+        MeasurementAuditCliE2ETestCase(
+            description="failing standalone measurement audit",
+            repo_files={
+                "sqlbuild_project.toml": (
+                    'name = "measurement_audit"\nadapter = "duckdb"\n'
+                    '[connection]\ndatabase = "measurement.duckdb"\n'
+                ),
+                "models/orders.sql": ("MODEL (materialized table); SELECT 1 AS order_id"),
+                "audits/rate.sql": (
+                    "AUDIT (evaluation measurement, value rate, "
+                    "thresholds (error (below 90))); "
+                    'MEASURE (SELECT 80.0 AS rate FROM __ref("orders") LIMIT 1);'
+                ),
+            },
+            command=("--no-color", "audit"),
+            expected_exit_code=1,
+            expected_output="rate",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_measurement_audit_when_running_cli_then_outcome_controls_exit_and_is_visible(
+    test_case: MeasurementAuditCliE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="measurement_project",
+        repo_files=test_case.repo_files,
+    )
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+    assert result.returncode == test_case.expected_exit_code
+    assert test_case.expected_output in result.stdout
+    assert "FAIL" in result.stdout

@@ -6,6 +6,22 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
+class AuditFactoryFailureBuildE2ETestCase:
+    description: str
+    expected_exit_code: int
+    expected_rows: tuple[tuple[int, int], ...]
+
+
+@dataclass(frozen=True)
+class MeasurementAuditCliE2ETestCase:
+    description: str
+    repo_files: dict[str, str]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_output: str
+
+
+@dataclass(frozen=True)
 class BuildE2ETestCase:
     """Test case for sqb build e2e verification."""
 
