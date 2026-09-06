@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +43,12 @@ from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SeedCsvSettings
 from tests.unit.src.sqlbuild.cli.commands.main.dag.helpers import (
     prepare_python_dag_project,
+)
+from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
+    PlanTestChainTestCase,
+)
+from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers import (
+    build_test_and_project,
 )
 
 
@@ -322,6 +329,28 @@ def build_static_target_writer_project() -> CompiledProject:
                 ),
             ),
         ),
+    )
+
+
+def build_cached_target_writer_project(*, target_dir: Path) -> CompiledProject:
+    """Build a static project containing one cacheable model SQL test."""
+
+    compiled_test, project = build_test_and_project(
+        PlanTestChainTestCase(
+            description="cached target writer project",
+            model_queries={"orders": "SELECT 2 AS order_id"},
+            mock_ref_ctes={},
+            mock_source_ctes={},
+            helper_ctes={},
+            expected_model_names=("orders",),
+            expected_chain_length=1,
+            expected_cte_bodies={"orders": "SELECT 2 AS order_id"},
+        )
+    )
+    return replace(
+        project,
+        compile_cache_dir=target_dir / "cache" / "compiler",
+        sql_tests=(compiled_test,),
     )
 
 

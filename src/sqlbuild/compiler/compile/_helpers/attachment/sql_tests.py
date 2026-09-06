@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import replace
+from pathlib import Path
 
 from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_function_names,
@@ -27,6 +29,7 @@ from sqlbuild.compiler.compile._helpers.render.sql_vars import (
     expand_authored_sql_result,
 )
 from sqlbuild.compiler.compile._helpers.scenarios.core import extract_sql_scenario_ctes
+from sqlbuild.compiler.compile._helpers.sql_tests.cache import cached_sql_test_cte_extractor
 from sqlbuild.compiler.compile._helpers.sql_tests.core import (
     extract_assertion_target_model_names,
     extract_sql_test_ctes,
@@ -74,6 +77,32 @@ _HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
 )
 
 
+def build_test_inputs_with_cache(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    effective_vars: dict[str, object],
+    macro_context: MacroContext,
+    loaded_macros: dict[str, LoadedMacro],
+    declaration_expansion: DeclarationExpansionContext,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
+    sql_function_inputs: tuple[CompileSqlFunctionInput, ...],
+    compile_cache_dir: Path | None,
+) -> tuple[CompileSqlTestInput, ...]:
+    """Build SQL test inputs while reusing exact expanded CTE boundaries."""
+
+    with cached_sql_test_cte_extractor(root=compile_cache_dir) as extract_test_ctes:
+        return build_test_inputs(
+            discovered_inputs=discovered_inputs,
+            effective_vars=effective_vars,
+            macro_context=macro_context,
+            loaded_macros=loaded_macros,
+            declaration_expansion=declaration_expansion,
+            external_sql_reference_resolver=external_sql_reference_resolver,
+            sql_function_inputs=sql_function_inputs,
+            sql_test_cte_extractor=extract_test_ctes,
+        )
+
+
 def build_test_inputs(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -83,10 +112,20 @@ def build_test_inputs(
     declaration_expansion: DeclarationExpansionContext,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = (),
+    sql_test_cte_extractor: Callable[[str, str, SqlTestMode], CompileSqlTestCtes] | None = None,
 ) -> tuple[CompileSqlTestInput, ...]:
     """Build compile-time test inputs from discovered SQL-native test blocks."""
 
     vars_for_substitution: dict[str, object] = effective_vars or {}
+    extract_test_ctes: Callable[[str, str, SqlTestMode], CompileSqlTestCtes] = (
+        sql_test_cte_extractor
+        if sql_test_cte_extractor is not None
+        else lambda sql, file_label, mode: extract_sql_test_ctes(
+            sql=sql,
+            file_label=file_label,
+            mode=mode,
+        )
+    )
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     if external_sql_reference_resolver is not None:
         known_model_names.update(
@@ -191,10 +230,10 @@ def build_test_inputs(
                     sql=expanded_sql_body,
                     context=f"SQL test '{test_block.name or test_file.file_path.stem}'",
                 )
-                test_ctes: CompileSqlTestCtes = extract_sql_test_ctes(
-                    sql=expanded_sql_body,
-                    file_label=str(test_file.relative_path),
-                    mode=test_mode,
+                test_ctes: CompileSqlTestCtes = extract_test_ctes(
+                    expanded_sql_body,
+                    str(test_file.relative_path),
+                    test_mode,
                 )
                 validate_test_ctes(
                     test_ctes=test_ctes,

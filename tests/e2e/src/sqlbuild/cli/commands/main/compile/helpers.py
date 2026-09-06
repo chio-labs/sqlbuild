@@ -85,7 +85,9 @@ def run_test_heavy_compile_benchmark(
     chain_depth: int,
     fixture_row_count: int,
     expected_max_seconds: float,
-) -> float:
+    expected_warm_max_seconds: float,
+    expected_edit_max_seconds: float,
+) -> tuple[float, float, float, float]:
     skip_actions: dict[bool, Callable[[], None]] = {
         False: _continue_compile_benchmark,
         True: _skip_compile_benchmark,
@@ -98,9 +100,31 @@ def run_test_heavy_compile_benchmark(
         chain_depth=chain_depth,
         fixture_row_count=fixture_row_count,
     )
-    return _run_compile_benchmark(
+    cold_seconds: float = _run_compile_benchmark(
         project_dir=project_dir,
         expected_max_seconds=expected_max_seconds,
+    )
+    warm_seconds: float = _run_compile_benchmark(
+        project_dir=project_dir,
+        expected_max_seconds=expected_warm_max_seconds,
+    )
+    _append_benchmark_edit(project_dir / "models" / "model_00000.sql", "model")
+    model_edit_seconds: float = _run_compile_benchmark(
+        project_dir=project_dir,
+        expected_max_seconds=expected_edit_max_seconds,
+    )
+    _append_benchmark_edit(project_dir / "tests" / "unit" / "test_00000.sql", "test")
+    test_edit_seconds: float = _run_compile_benchmark(
+        project_dir=project_dir,
+        expected_max_seconds=expected_edit_max_seconds,
+    )
+    return cold_seconds, warm_seconds, model_edit_seconds, test_edit_seconds
+
+
+def _append_benchmark_edit(path: Path, label: str) -> None:
+    path.write_text(
+        path.read_text(encoding="utf-8") + f"\n-- one {label} edit\n",
+        encoding="utf-8",
     )
 
 

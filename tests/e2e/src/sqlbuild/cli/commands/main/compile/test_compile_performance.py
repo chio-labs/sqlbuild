@@ -173,6 +173,8 @@ def test_given_dbt_shaped_project_when_compiling_cold_and_warm_then_finishes_wit
             fixture_row_count=120,
             expected_min_compiled_test_bytes=2_000_000,
             expected_max_seconds=7.0,
+            expected_warm_max_seconds=3.0,
+            expected_edit_max_seconds=4.0,
         )
     ],
     ids=lambda case: case.description,
@@ -182,20 +184,29 @@ def test_given_test_heavy_project_when_compiling_then_finishes_within_budget(
     test_case: SqlTestHeavyCompilePerformanceGuardTestCase,
 ) -> None:
     project_dir: Path = tmp_path / "test_heavy"
-    elapsed_seconds: float = run_test_heavy_compile_benchmark(
-        project_dir=project_dir,
-        model_count=test_case.model_count,
-        test_count=test_case.test_count,
-        chain_depth=test_case.chain_depth,
-        fixture_row_count=test_case.fixture_row_count,
-        expected_max_seconds=test_case.expected_max_seconds,
+    cold_seconds, warm_seconds, model_edit_seconds, test_edit_seconds = (
+        run_test_heavy_compile_benchmark(
+            project_dir=project_dir,
+            model_count=test_case.model_count,
+            test_count=test_case.test_count,
+            chain_depth=test_case.chain_depth,
+            fixture_row_count=test_case.fixture_row_count,
+            expected_max_seconds=test_case.expected_max_seconds,
+            expected_warm_max_seconds=test_case.expected_warm_max_seconds,
+            expected_edit_max_seconds=test_case.expected_edit_max_seconds,
+        )
     )
     compiled_test_bytes: int = measure_compiled_test_sql_bytes(project_dir)
     _LOGGER.info(
         f"test-heavy compile models={test_case.model_count} tests={test_case.test_count} "
-        f"compiled_test_bytes={compiled_test_bytes} cold={elapsed_seconds:.3f}s "
-        f"budget={test_case.expected_max_seconds:g}s"
+        f"compiled_test_bytes={compiled_test_bytes} cold={cold_seconds:.3f}s "
+        f"warm={warm_seconds:.3f}s model_edit={model_edit_seconds:.3f}s "
+        f"test_edit={test_edit_seconds:.3f}s budgets={test_case.expected_max_seconds:g}s/"
+        f"{test_case.expected_warm_max_seconds:g}s/{test_case.expected_edit_max_seconds:g}s"
     )
 
     assert compiled_test_bytes >= test_case.expected_min_compiled_test_bytes
-    assert elapsed_seconds < test_case.expected_max_seconds
+    assert cold_seconds < test_case.expected_max_seconds
+    assert warm_seconds < test_case.expected_warm_max_seconds
+    assert model_edit_seconds < test_case.expected_edit_max_seconds
+    assert test_edit_seconds < test_case.expected_edit_max_seconds

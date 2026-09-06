@@ -21,6 +21,7 @@ from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
 from sqlbuild.compiler.scopes.main._build_scope_index import build_scope_index
 from sqlbuild.compiler.scopes.main._validate_scope_index import validate_scope_index
 from sqlbuild.compiler.scopes.models import ScopeIndex
+from sqlbuild.compiler.scopes.types import ScopeKind
 
 
 def build_declaration_scope(
@@ -35,9 +36,13 @@ def build_declaration_scope(
         validate_scope_index(index=index)
     except ScopeValidationError as error:
         raise CompileInputError(str(error)) from error
+    has_scoped_declarations: bool = any(
+        declaration.scope is not ScopeKind.GLOBAL for declaration in index.declarations
+    )
     relationships: ScopeRelationshipBuild = (
         build_scope_relationship_grants(discovered_inputs=discovered_inputs, index=index)
-        if discovered_inputs.test_files or discovered_inputs.scenario_files
+        if has_scoped_declarations
+        and (discovered_inputs.test_files or discovered_inputs.scenario_files)
         else ScopeRelationshipBuild()
     )
     if relationships.faults:

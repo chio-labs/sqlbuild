@@ -1,4 +1,4 @@
-"""Versioned project-local cache for successful model SQL analysis facts."""
+"""Versioned project-local cache for deterministic model SQL analysis facts."""
 
 from __future__ import annotations
 
@@ -31,8 +31,8 @@ from sqlbuild.compiler.lineage.types import (
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 
-_ANALYSIS_CACHE_VERSION: int = 4
-_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v4"
+_ANALYSIS_CACHE_VERSION: int = 5
+_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v5"
 _MAX_CACHE_ENTRY_BYTES: int = 10_000_000
 _SHA256_HEX_LENGTH: int = 64
 _CACHE_ENTRY_SEPARATOR: str = "\n"
@@ -229,12 +229,10 @@ def write_model_analyses(
     latest_analyses_by_model: dict[str, PolyglotAnalysisResult] | None = None,
     dependency_signatures_by_key: dict[str, dict[str, str]] | None = None,
 ) -> None:
-    """Transactionally persist successful analyses; cache failures never fail compilation."""
+    """Transactionally persist deterministic analyses; cache failures never fail compilation."""
 
     rows: list[tuple[str, str]] = []
     for cache_key, analysis in analyses_by_key.items():
-        if not analysis.analysis_succeeded:
-            continue
         contents: str = _analysis_contents(cache_key=cache_key, analysis=analysis)
         if len(contents.encode()) <= _MAX_CACHE_ENTRY_BYTES:
             rows.append((cache_key, contents))
@@ -246,12 +244,11 @@ def write_model_analyses(
             model_analysis_output_signature(analysis),
         )
         for model_name, analysis in (latest_analyses_by_model or {}).items()
-        if analysis.analysis_succeeded
     ]
     dependency_rows: list[tuple[str, str, str, str]] = []
     for cache_key, dependencies in (dependency_signatures_by_key or {}).items():
         analysis: PolyglotAnalysisResult | None = analyses_by_key.get(cache_key)
-        if analysis is None or not analysis.analysis_succeeded:
+        if analysis is None:
             continue
         dependency_rows.extend(
             (context.signature_namespace, cache_key, upstream_name, output_signature)
@@ -436,6 +433,7 @@ def _analysis_payload(*, cache_key: str, analysis: PolyglotAnalysisResult) -> di
     return {
         "v": _ANALYSIS_CACHE_VERSION,
         "k": cache_key,
+        "a": analysis.analysis_succeeded,
         "s": model_analysis_output_signature(analysis),
         "c": (
             None
@@ -476,6 +474,9 @@ def _analysis_from_payload(
         raise AnalysisCacheEntryError("analysis cache version mismatch")
     if values["k"] != expected_cache_key:
         raise AnalysisCacheEntryError("analysis cache key mismatch")
+    analysis_succeeded: object = values["a"]
+    if not isinstance(analysis_succeeded, bool):
+        raise AnalysisCacheEntryError("analysis cache success flag must be a boolean")
     output_signature: object = values["s"]
     if not (
         isinstance(output_signature, str)
@@ -497,7 +498,7 @@ def _analysis_from_payload(
         raise AnalysisCacheEntryError("analysis cache has_star must be a boolean")
     return (
         PolyglotAnalysisResult(
-            analysis_succeeded=True,
+            analysis_succeeded=analysis_succeeded,
             columns=columns,
             lineage_columns=lineage_columns,
             has_star=has_star,
