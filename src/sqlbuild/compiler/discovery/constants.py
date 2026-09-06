@@ -13,6 +13,8 @@ YAML_FILE_SUFFIXES: frozenset[str] = frozenset({".yml", ".yaml"})
 RESERVED_MODEL_NAMES: frozenset[str] = frozenset({"_chain_"})
 
 PYTHON_INIT_MODULE_STEM: str = "__init__"
+PYTHON_CACHE_DIRECTORY_NAME: str = "__pycache__"
+LANGUAGE_PYTHON_ROOT_PART_COUNT: int = 2
 PYTHON_LOADER_FOLDER: str = "loaders"
 PYTHON_FACTORY_FOLDER: str = "factories"
 PYTHON_NODE_KIND_VOWELS: frozenset[str] = frozenset({"a", "e", "i", "o", "u"})
