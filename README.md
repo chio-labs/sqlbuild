@@ -89,6 +89,17 @@ SELECT 1
 
 See the [documentation](https://docs.sqlbuild.com) for incremental models, scenarios, loaders, and more.
 
+### Python project layout
+
+Project-owned Python must live in a supported extension location such as `factories/`, `libs/`,
+`macros/`, `providers/`, or another documented Python resource root. Factory locations contain
+normal Python: constants, classes, undecorated helper functions, and modules such as `_helpers.py`
+are allowed, while decorators determine which functions become SQLBuild resources. Compilation
+rejects Python under invented project roots so indirectly importable modules cannot create an
+unofficial project structure. Keep repository pytest tests outside the SQLBuild project's `tests/`
+directory, which is reserved for SQLBuild SQL tests and scenarios. Documented integration paths
+such as `dagster/`, `rivers_pipeline/`, and their `definitions.py` modules are also supported.
+
 ## Kata SQL architecture checks
 
 Kata is SQLBuild's opt-in, error-only SQL model shape checker. It runs offline over the compiled
