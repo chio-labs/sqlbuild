@@ -8,6 +8,7 @@ import pytest
 
 from sqlbuild.integrations.dagster import (
     SqlBuildDagsterTranslator,
+    build_sqlbuild_asset_selection,
     sqlbuild_assets,
     sqlbuild_scenario_checks,
 )
@@ -20,12 +21,15 @@ from sqlbuild.integrations.dagster.exceptions import DagsterDagInputError
 from sqlbuild.integrations.dagster.models import SqlBuildProject
 from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterAssetCheckFilterTestCase,
+    DagsterAssetSelectionTestCase,
     DagsterAssetSpecTestCase,
     DagsterConflictingInputTestCase,
     DagsterDecoratorTestCase,
     DagsterDescriptionTestCase,
+    DagsterExternalAssetOwnershipTestCase,
     DagsterPythonArtifactCompatibilityTestCase,
     DagsterScenarioCheckDecoratorTestCase,
+    DagsterSourceAssetKeyTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
     build_dagster_test_dag,
@@ -84,6 +88,142 @@ def test_given_node_when_translating_description_then_renders_expected_markdown(
     translator: SqlBuildDagsterTranslator = SqlBuildDagsterTranslator()
 
     assert translator.get_description(test_case.node) == test_case.expected_description
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagsterSourceAssetKeyTestCase(
+            description="source metadata defines an external Dagster identity",
+            node={
+                "kind": "source",
+                "asset_key": ["raw", "orders"],
+                "meta": {"dagster": {"asset_key": ["external", "orders"]}},
+            },
+            expected_asset_key=("external", "orders"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_source_dagster_metadata_when_translating_then_uses_authored_asset_key(
+    test_case: DagsterSourceAssetKeyTestCase,
+) -> None:
+    translator: SqlBuildDagsterTranslator = SqlBuildDagsterTranslator()
+
+    asset_key: Any = translator.get_asset_key(test_case.node)
+
+    assert tuple(asset_key.path) == test_case.expected_asset_key
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagsterExternalAssetOwnershipTestCase(
+            description="external source remains a dependency without an owned spec or check",
+            external_asset_key=("raw", "orders"),
+            dependent_asset_key=("analytics", "orders"),
+            expected_check_names=("audit__not_null__order_id",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_external_source_translator_when_building_specs_then_retains_dependency_without_ownership(
+    test_case: DagsterExternalAssetOwnershipTestCase,
+) -> None:
+    class ExternalSourceTranslator(SqlBuildDagsterTranslator):
+        def is_asset_node(self, node: Mapping[str, Any]) -> bool:
+            return str(node.get("kind")) != "source"
+
+        def is_asset_check(self, check: Mapping[str, Any]) -> bool:
+            return str(check.get("kind")) not in {"scenario", "sql_test"}
+
+    dag: Mapping[str, Any] = build_dagster_test_dag()
+    translator: SqlBuildDagsterTranslator = ExternalSourceTranslator()
+
+    asset_specs: tuple[Any, ...] = build_asset_specs(dag=dag, translator=translator)
+    check_specs: tuple[Any, ...] = build_check_specs(dag=dag, translator=translator)
+    specs_by_key: dict[tuple[str, ...], Any] = {tuple(spec.key.path): spec for spec in asset_specs}
+
+    assert test_case.external_asset_key not in specs_by_key
+    assert test_case.external_asset_key in {
+        tuple(dep.asset_key.path) for dep in specs_by_key[test_case.dependent_asset_key].deps
+    }
+    assert tuple(spec.name for spec in check_specs) == test_case.expected_check_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagsterAssetSelectionTestCase(
+            description="name selector",
+            select="orders",
+            exclude=None,
+            expected_asset_keys=(("analytics", "orders"),),
+        ),
+        DagsterAssetSelectionTestCase(
+            description="tag and name intersection",
+            select="tag:daily,orders",
+            exclude=None,
+            expected_asset_keys=(("analytics", "orders"),),
+        ),
+        DagsterAssetSelectionTestCase(
+            description="path selector",
+            select="path:models",
+            exclude=None,
+            expected_asset_keys=(("analytics", "customers"), ("analytics", "orders")),
+        ),
+        DagsterAssetSelectionTestCase(
+            description="upstream graph expansion",
+            select="+orders",
+            exclude=None,
+            expected_asset_keys=(
+                ("analytics", "normalize_email"),
+                ("analytics", "orders"),
+                ("raw", "orders"),
+                ("raw_orders_loader",),
+                ("shared_order_feed",),
+            ),
+        ),
+        DagsterAssetSelectionTestCase(
+            description="path between models",
+            select="raw_orders~orders",
+            exclude=None,
+            expected_asset_keys=(("analytics", "orders"), ("raw", "orders")),
+        ),
+        DagsterAssetSelectionTestCase(
+            description="exclude selector",
+            select="orders customers",
+            exclude="customers",
+            expected_asset_keys=(("analytics", "orders"),),
+        ),
+        DagsterAssetSelectionTestCase(
+            description="unmatched selector produces an empty Dagster selection",
+            select="tag:missing",
+            exclude=None,
+            expected_asset_keys=(),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_sqlbuild_selectors_when_building_asset_selection_then_resolves_dag_membership(
+    test_case: DagsterAssetSelectionTestCase,
+) -> None:
+    dag: Mapping[str, Any] = build_dagster_test_dag()
+
+    @sqlbuild_assets(dag=dag)
+    def assets_def() -> dg.MaterializeResult:
+        return dg.MaterializeResult()
+
+    selection: Any = build_sqlbuild_asset_selection(
+        sqlbuild_assets=[assets_def],
+        dag=dag,
+        sqlbuild_select=test_case.select,
+        sqlbuild_exclude=test_case.exclude,
+    )
+
+    assert tuple(sorted(tuple(key.path) for key in selection.resolve([assets_def]))) == tuple(
+        sorted(test_case.expected_asset_keys)
+    )
 
 
 @pytest.mark.parametrize(

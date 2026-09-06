@@ -9,7 +9,11 @@ from typing import Any
 from sqlbuild.integrations.dagster._helpers.dag import load_sqlbuild_dag
 from sqlbuild.integrations.dagster._helpers.imports import load_dagster
 from sqlbuild.integrations.dagster._helpers.invocation_factory import start_sqlbuild_cli_invocation
+from sqlbuild.integrations.dagster._helpers.translation import translate_sqlbuild_dag
 from sqlbuild.integrations.dagster.classes.sqlbuild_cli_invocation import SqlBuildCliInvocation
+from sqlbuild.integrations.dagster.classes.sqlbuild_dagster_translator import (
+    SqlBuildDagsterTranslator,
+)
 from sqlbuild.integrations.dagster.models import SqlBuildProject
 
 
@@ -47,12 +51,16 @@ class SqlBuildCliResource(load_dagster().ConfigurableResource):  # type: ignore[
         *,
         context: Any = None,
         raise_on_error: bool = True,
+        translator: SqlBuildDagsterTranslator | None = None,
     ) -> SqlBuildCliInvocation:
         """Create a SQLBuild CLI invocation for the provided command arguments."""
 
         loaded_dag: Mapping[str, Any] | None = None
         if self.dag_path is not None:
-            loaded_dag = load_sqlbuild_dag(self.dag_path)
+            loaded_dag = translate_sqlbuild_dag(
+                dag=load_sqlbuild_dag(self.dag_path),
+                translator=translator or SqlBuildDagsterTranslator(),
+            )
         return start_sqlbuild_cli_invocation(
             sqb_command=self.sqb_command,
             args=args,

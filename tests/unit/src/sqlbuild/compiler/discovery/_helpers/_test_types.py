@@ -618,6 +618,7 @@ class ParseSchemaYamlTestCase:
     expected_seed_column_nullables: tuple[tuple[bool | None, ...], ...] | None = None
     expected_seed_databases: tuple[str | None, ...] = ()
     expected_seed_schemas: tuple[str | None, ...] = ()
+    expected_seed_tags: tuple[tuple[str, ...], ...] | None = None
 
 
 @dataclass(frozen=True)

@@ -100,6 +100,16 @@ class DagsterPythonNodesArtifactE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DagsterTranslatorE2ETestCase:
+    """Test case for custom translator execution through real SQLBuild and Dagster."""
+
+    description: str
+    selected_asset_key: tuple[str, ...]
+    expected_selector_file_contents: str
+    expected_table_name: str
+
+
+@dataclass(frozen=True)
 class DagsterComputeLogE2ETestCase:
     """Test case for multiprocess Dagster compute-log capture."""
 

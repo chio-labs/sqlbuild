@@ -22,6 +22,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import expected
             contents="""
         seeds:
           - name: country_codes
+            tags: [reference, daily]
             columns:
               - name: country_code
                 type: VARCHAR
@@ -39,6 +40,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import expected
             expected_seed_column_nullables=((False, True),),
             expected_seed_databases=(None,),
             expected_seed_schemas=(None,),
+            expected_seed_tags=(("reference", "daily"),),
         ),
         ParseSchemaYamlTestCase(
             description="parses seed target overrides",
@@ -128,6 +130,8 @@ def test_given_schema_yaml_variants_when_parsing_then_it_returns_expected_raw_me
     )
     assert tuple(entry.database for entry in seed_entries) == test_case.expected_seed_databases
     assert tuple(entry.schema for entry in seed_entries) == test_case.expected_seed_schemas
+    actual_seed_tags: tuple[tuple[str, ...], ...] = tuple(entry.tags for entry in seed_entries)
+    assert actual_seed_tags == expected_or_actual(test_case.expected_seed_tags, actual_seed_tags)
     assert tuple(actual_model_audit_names) == test_case.expected_model_audit_names
     assert tuple(actual_column_audit_names) == test_case.expected_column_audit_names
 

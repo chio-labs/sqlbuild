@@ -179,6 +179,7 @@ def _build_seed_node(seed: CompiledSeed) -> DagNode:
         target=_dag_target(seed.destination),
         path=str(seed.seed_file.relative_path),
         description=seed.schema_entry.description,
+        tags=seed.schema_entry.tags,
         meta=seed.schema_entry.meta,
         columns=tuple(_schema_column(column) for column in seed.schema_entry.columns),
     )
@@ -195,6 +196,7 @@ def _build_function_node(function: CompiledFunction) -> DagNode:
         path=str(function.relative_path),
         sql=function.body_sql,
         language=function.language.value,
+        tags=function.tags,
         return_kind="table" if function.return_columns else "scalar",
         returns=function.returns,
         columns=tuple(
