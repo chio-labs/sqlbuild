@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sqlbuild.lint.constants import LINT_ENGINE_NATIVE, VIOLATION_SEVERITY_WARNING
-from sqlbuild.lint.models import LintViolation
+from sqlbuild.lint.models import LintEdit, LintViolation
 
 _SUPPRESSION_PREFIX: str = "sqb: ignore"
 _SUPPRESSION_PATTERN: re.Pattern[str] = re.compile(
@@ -52,6 +52,8 @@ def apply_suppressions(
                         line=suppression.directive_line,
                         message=f"Unused suppression for {suppression.code}",
                         remediation="Remove the stale suppression directive.",
+                        contents=contents,
+                        fixable=True,
                     )
                 )
             else:
@@ -76,6 +78,8 @@ def _parse_suppressions(
                     line=index + 1,
                     message="Suppression directive is invalid",
                     remediation="Use '-- sqb: ignore CODE because <reason>'.",
+                    contents=contents,
+                    fixable=False,
                 )
             )
             continue
@@ -95,8 +99,15 @@ def _parse_suppressions(
 
 
 def _suppression_violation(
-    *, file_path: Path, line: int, message: str, remediation: str
+    *,
+    file_path: Path,
+    line: int,
+    message: str,
+    remediation: str,
+    contents: str,
+    fixable: bool,
 ) -> LintViolation:
+    start, end = _line_range(contents=contents, line=line)
     return LintViolation(
         file_path=file_path,
         line=line,
@@ -106,4 +117,24 @@ def _suppression_violation(
         severity=VIOLATION_SEVERITY_WARNING,
         engine=LINT_ENGINE_NATIVE,
         remediation=remediation,
+        fix=(
+            LintEdit(
+                file_path=file_path,
+                code=_SUPPRESSION_DIAGNOSTIC_CODE,
+                start=start,
+                end=end,
+                replacement="",
+            )
+            if fixable
+            else None
+        ),
+        fix_unavailable_reason=(
+            None if fixable else "a valid suppression reason requires user intent"
+        ),
     )
+
+
+def _line_range(*, contents: str, line: int) -> tuple[int, int]:
+    lines: list[str] = contents.splitlines(keepends=True)
+    start: int = sum(len(entry) for entry in lines[: line - 1])
+    return start, start + len(lines[line - 1])

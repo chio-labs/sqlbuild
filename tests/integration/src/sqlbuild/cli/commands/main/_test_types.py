@@ -20,6 +20,17 @@ class LintDiagnosticIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class FixCommandIntegrationTestCase:
+    """Real CLI project proving native fixes and convergence."""
+
+    description: str
+    selected_rules: tuple[str, ...]
+    original_sql: str
+    expected_sql: str
+    expected_fixed_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class LoadCommandIntegrationTestCase:
     description: str
     project_files: dict[str, str]

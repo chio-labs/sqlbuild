@@ -13,6 +13,31 @@ pub(crate) struct LintMetadataTestCase {
     pub expected_remediation: &'static str,
 }
 
+pub(crate) struct LintFixTestCase {
+    pub description: &'static str,
+    pub sql: &'static str,
+    pub expected_code: &'static str,
+    pub expected_replacement: Option<&'static str>,
+}
+
+pub(crate) struct AdditionalLintRuleTestCase {
+    pub description: &'static str,
+    pub sql: &'static str,
+    pub rule: &'static str,
+    pub expected_anchor: Option<&'static str>,
+    pub expected_replacement: Option<&'static str>,
+}
+
+pub(crate) struct DialectLintRuleTestCase {
+    pub description: &'static str,
+    pub sql: &'static str,
+    pub dialect: &'static str,
+    pub rule: &'static str,
+    pub expected_count: usize,
+    pub expected_fix: bool,
+    pub expected_reason: &'static str,
+}
+
 pub(crate) struct FormatTestCase {
     pub description: &'static str,
     pub sql: &'static str,

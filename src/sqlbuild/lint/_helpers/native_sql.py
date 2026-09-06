@@ -8,6 +8,15 @@ from pathlib import Path
 from typing import Any, cast
 
 import sqlbuild._native as _native
+from sqlbuild.compiler.compile.constants import (
+    ASSERT_TEST_CTE_PREFIX,
+    DBT_REF_TEST_CTE_PREFIX,
+    EXPECTED_TEST_CTE_PREFIX,
+    MACRO_TEST_CTE_PREFIX,
+    REF_TEST_CTE_PREFIX,
+    SEED_TEST_CTE_PREFIX,
+    SOURCE_TEST_CTE_PREFIX,
+)
 from sqlbuild.compiler.compile.main.map_expanded_offset import map_expanded_offset
 from sqlbuild.compiler.compile.models import MappedOffset
 from sqlbuild.lint._helpers.sqlbuild_tokens import interpolation_text_at
@@ -18,10 +27,20 @@ from sqlbuild.lint.constants import (
     VIOLATION_SEVERITY_WARNING,
 )
 from sqlbuild.lint.exceptions import NativeLintError
-from sqlbuild.lint.models import LintBody, LintConfig, LintViolation
+from sqlbuild.lint.models import LintBody, LintConfig, LintEdit, LintViolation
 
 _NATIVE_LINT_API_VERSION: int = 1
 _NEWLINE_CHARACTER: str = "\n"
+_UNUSED_CTE_CODE: str = "SQBL005"
+_SQLBUILD_HARNESS_CTE_PREFIXES: tuple[str, ...] = (
+    EXPECTED_TEST_CTE_PREFIX,
+    ASSERT_TEST_CTE_PREFIX,
+    REF_TEST_CTE_PREFIX,
+    SOURCE_TEST_CTE_PREFIX,
+    SEED_TEST_CTE_PREFIX,
+    DBT_REF_TEST_CTE_PREFIX,
+    MACRO_TEST_CTE_PREFIX,
+)
 
 
 def run_native_sql_lint(
@@ -33,7 +52,9 @@ def run_native_sql_lint(
     """Lint expanded bodies in Rust and map diagnostics to authored source."""
 
     violations_by_file: dict[Path, list[LintViolation]] = {}
-    response_cache: dict[tuple[str, str, tuple[str, ...] | None], dict[str, Any]] = {}
+    response_cache: dict[
+        tuple[str, str, tuple[str, ...] | None, tuple[str, ...]], dict[str, Any]
+    ] = {}
     for body in bodies:
         payload: dict[str, object] = {
             "version": _NATIVE_LINT_API_VERSION,
@@ -42,10 +63,13 @@ def run_native_sql_lint(
         }
         if config.enabled_native_rules is not None:
             payload["enabled_rules"] = list(config.enabled_native_rules)
-        cache_key: tuple[str, str, tuple[str, ...] | None] = (
+        if config.ignored_native_rules:
+            payload["ignored_rules"] = list(config.ignored_native_rules)
+        cache_key: tuple[str, str, tuple[str, ...] | None, tuple[str, ...]] = (
             body.lint_text,
             config.dialect,
             config.enabled_native_rules,
+            config.ignored_native_rules,
         )
         response: dict[str, Any] | None = response_cache.get(cache_key)
         if response is None:
@@ -55,13 +79,13 @@ def run_native_sql_lint(
         if not isinstance(raw_diagnostics, list):
             raise NativeLintError("native lint response is missing a diagnostics list")
         for raw_diagnostic in raw_diagnostics:
-            violations_by_file.setdefault(body.file_path, []).append(
-                _authored_violation(
-                    raw_diagnostic=raw_diagnostic,
-                    body=body,
-                    contents=contents_by_path[body.file_path],
-                )
+            violation: LintViolation | None = _authored_violation(
+                raw_diagnostic=raw_diagnostic,
+                body=body,
+                contents=contents_by_path[body.file_path],
             )
+            if violation is not None:
+                violations_by_file.setdefault(body.file_path, []).append(violation)
     return {path: tuple(entries) for path, entries in violations_by_file.items()}
 
 
@@ -79,7 +103,9 @@ def _native_response(*, payload: dict[str, object]) -> dict[str, Any]:
     return {str(key): value for key, value in decoded.items()}
 
 
-def _authored_violation(*, raw_diagnostic: object, body: LintBody, contents: str) -> LintViolation:
+def _authored_violation(
+    *, raw_diagnostic: object, body: LintBody, contents: str
+) -> LintViolation | None:
     if not isinstance(raw_diagnostic, dict):
         raise NativeLintError("native lint diagnostic must be an object")
     diagnostic: dict[str, object] = cast("dict[str, object]", raw_diagnostic)
@@ -88,6 +114,8 @@ def _authored_violation(*, raw_diagnostic: object, body: LintBody, contents: str
     remediation: object = diagnostic.get("remediation")
     start: object = diagnostic.get("start")
     end: object = diagnostic.get("end")
+    raw_fix: object = diagnostic.get("fix")
+    raw_fix_unavailable_reason: object = diagnostic.get("fix_unavailable_reason")
     if (
         not isinstance(code, str)
         or not isinstance(message, str)
@@ -101,8 +129,14 @@ def _authored_violation(*, raw_diagnostic: object, body: LintBody, contents: str
         or end > len(body.lint_text)
     ):
         raise NativeLintError("native lint diagnostic has invalid code, message, or source span")
+    if raw_fix_unavailable_reason is not None and not isinstance(raw_fix_unavailable_reason, str):
+        raise NativeLintError("native lint diagnostic has an invalid fix refusal reason")
     mapped: MappedOffset = map_expanded_offset(offset=start, passes=body.passes)
     absolute_offset: int = body.body_start + mapped.offset
+    if code == _UNUSED_CTE_CODE and contents.startswith(
+        _SQLBUILD_HARNESS_CTE_PREFIXES, absolute_offset
+    ):
+        return None
     starts: tuple[int, ...] = _line_starts(contents)
     line, column = _offset_position(offset=absolute_offset, line_starts=starts)
     end_position: tuple[int, int] | None = _authored_end_position(
@@ -114,6 +148,14 @@ def _authored_violation(*, raw_diagnostic: object, body: LintBody, contents: str
         contents=contents,
         line_starts=starts,
     )
+    fix: LintEdit | None = _authored_fix(
+        raw_fix=raw_fix,
+        code=code,
+        body=body,
+    )
+    fix_unavailable_reason: str | None = raw_fix_unavailable_reason
+    if raw_fix is not None and fix is None:
+        fix_unavailable_reason = "fix overlaps generated SQL or a non-contiguous authored region"
     return LintViolation(
         file_path=body.file_path,
         line=line,
@@ -130,6 +172,47 @@ def _authored_violation(*, raw_diagnostic: object, body: LintBody, contents: str
         end_line=end_position[0] if end_position is not None else None,
         end_column=end_position[1] if end_position is not None else None,
         remediation=remediation,
+        fix=fix,
+        fix_unavailable_reason=fix_unavailable_reason,
+    )
+
+
+def _authored_fix(*, raw_fix: object, code: str, body: LintBody) -> LintEdit | None:
+    """Map a native edit only when both boundaries remain contiguous authored source."""
+
+    if raw_fix is None:
+        return None
+    if not isinstance(raw_fix, dict):
+        raise NativeLintError("native lint diagnostic fix must be an object")
+    payload: dict[str, object] = cast("dict[str, object]", raw_fix)
+    start: object = payload.get("start")
+    end: object = payload.get("end")
+    replacement: object = payload.get("replacement")
+    if (
+        not isinstance(start, int)
+        or isinstance(start, bool)
+        or not isinstance(end, int)
+        or isinstance(end, bool)
+        or not isinstance(replacement, str)
+        or start < 0
+        or end <= start
+        or end > len(body.lint_text)
+    ):
+        raise NativeLintError("native lint diagnostic has an invalid fix edit")
+    mapped_start: MappedOffset = map_expanded_offset(offset=start, passes=body.passes)
+    mapped_last: MappedOffset = map_expanded_offset(offset=end - 1, passes=body.passes)
+    if (
+        mapped_start.generated
+        or mapped_last.generated
+        or mapped_last.offset - mapped_start.offset != end - start - 1
+    ):
+        return None
+    return LintEdit(
+        file_path=body.file_path,
+        code=code,
+        start=body.body_start + mapped_start.offset,
+        end=body.body_start + mapped_last.offset + 1,
+        replacement=replacement,
     )
 
 

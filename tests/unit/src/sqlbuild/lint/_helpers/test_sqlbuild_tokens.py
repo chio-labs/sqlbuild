@@ -89,9 +89,21 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
             expected_original_texts=(),
         ),
         NeutralizeInterpolationTestCase(
-            description="quoted reference marker is left alone",
+            description="SQLBuild reference call becomes one sentinel",
             body='SELECT * FROM __ref("@model")',
-            expected_neutralized='SELECT * FROM __ref("@model")',
+            expected_neutralized="SELECT * FROM __sqb_lint_0__",
+            expected_original_texts=('__ref("@model")',),
+        ),
+        NeutralizeInterpolationTestCase(
+            description="SQLBuild fixture CTE name remains ordinary SQL",
+            body="SELECT * FROM __expected__model",
+            expected_neutralized="SELECT * FROM __expected__model",
+            expected_original_texts=(),
+        ),
+        NeutralizeInterpolationTestCase(
+            description="ordinary double-underscore function remains generic SQL",
+            body="SELECT __custom(value) FROM items",
+            expected_neutralized="SELECT __custom(value) FROM items",
             expected_original_texts=(),
         ),
         NeutralizeInterpolationTestCase(

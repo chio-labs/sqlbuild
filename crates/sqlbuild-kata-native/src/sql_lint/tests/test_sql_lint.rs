@@ -279,12 +279,466 @@ fn given_native_rules_when_linting_then_diagnosis_and_remediation_are_actionable
 }
 
 #[test]
+fn given_fixable_and_ambiguous_findings_when_linting_then_only_proven_edits_are_returned()
+-> Result<(), String> {
+    let test_cases = [
+        test_types::LintFixTestCase {
+            description: "right-hand NULL equality",
+            sql: "SELECT value FROM a WHERE value = NULL",
+            expected_code: "SQBL001",
+            expected_replacement: Some("IS"),
+        },
+        test_types::LintFixTestCase {
+            description: "right-hand NULL inequality",
+            sql: "SELECT value FROM a WHERE value <> NULL",
+            expected_code: "SQBL001",
+            expected_replacement: Some("IS NOT"),
+        },
+        test_types::LintFixTestCase {
+            description: "left-hand NULL comparison requires authored intent",
+            sql: "SELECT value FROM a WHERE NULL = value",
+            expected_code: "SQBL001",
+            expected_replacement: None,
+        },
+        test_types::LintFixTestCase {
+            description: "plain conditionless join",
+            sql: "SELECT a.id FROM a JOIN b",
+            expected_code: "SQBL003",
+            expected_replacement: Some("CROSS JOIN"),
+        },
+        test_types::LintFixTestCase {
+            description: "qualified conditionless join requires intent",
+            sql: "SELECT a.id FROM a LEFT JOIN b",
+            expected_code: "SQBL003",
+            expected_replacement: None,
+        },
+        test_types::LintFixTestCase {
+            description: "conditionless semi join is never rewritten as cross join",
+            sql: "SELECT a.id FROM a SEMI JOIN b",
+            expected_code: "SQBL003",
+            expected_replacement: None,
+        },
+        test_types::LintFixTestCase {
+            description: "redundant distinct",
+            sql: "SELECT DISTINCT id FROM items GROUP BY id",
+            expected_code: "SQBL006",
+            expected_replacement: Some(""),
+        },
+        test_types::LintFixTestCase {
+            description: "single unused select CTE",
+            sql: "WITH unused AS (SELECT 1) SELECT 1",
+            expected_code: "SQBL005",
+            expected_replacement: Some(""),
+        },
+        test_types::LintFixTestCase {
+            description: "reserved framework CTE is never deleted",
+            sql: "WITH __expected__items AS (SELECT 1) SELECT 1",
+            expected_code: "SQBL005",
+            expected_replacement: None,
+        },
+    ];
+
+    for test_case in test_cases {
+        let diagnostics = helpers::diagnostics(test_case.sql)?;
+        let diagnostic = diagnostics
+            .iter()
+            .find(|item| item["code"] == test_case.expected_code)
+            .ok_or_else(|| format!("{} should report", test_case.description))?;
+        assert_eq!(
+            diagnostic["fix"]["replacement"].as_str(),
+            test_case.expected_replacement,
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn given_additional_rule_cases_when_linting_then_findings_and_fixes_match() -> Result<(), String> {
+    let test_cases = [
+        test_types::AdditionalLintRuleTestCase {
+            description: "bare union",
+            sql: "SELECT 1 UNION SELECT 2",
+            rule: "SQBL008",
+            expected_anchor: Some("UNION"),
+            expected_replacement: Some("UNION DISTINCT"),
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "duplicate relation alias",
+            sql: "SELECT x.id FROM alpha AS x JOIN beta AS x ON x.id = x.id",
+            rule: "SQBL009",
+            expected_anchor: Some("x"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "duplicate output alias",
+            sql: "SELECT a AS value, b AS value FROM items",
+            rule: "SQBL010",
+            expected_anchor: Some("value"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "mixed grouping references",
+            sql: "SELECT a, b FROM items GROUP BY 1, b",
+            rule: "SQBL011",
+            expected_anchor: Some("GROUP"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "redundant else null",
+            sql: "SELECT CASE WHEN a THEN b ELSE NULL END FROM items",
+            rule: "SQBL012",
+            expected_anchor: Some("ELSE NULL"),
+            expected_replacement: Some(""),
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "function-like distinct",
+            sql: "SELECT DISTINCT(a) FROM items",
+            rule: "SQBL013",
+            expected_anchor: Some("DISTINCT(a)"),
+            expected_replacement: Some("DISTINCT a"),
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "constant scaffold predicate",
+            sql: "SELECT a FROM items WHERE 1 = 1",
+            rule: "SQBL014",
+            expected_anchor: Some("="),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "consecutive statement terminator",
+            sql: "SELECT 1;;",
+            rule: "SQBL015",
+            expected_anchor: Some(";"),
+            expected_replacement: Some(""),
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "redundant self alias",
+            sql: "SELECT value AS value FROM items",
+            rule: "SQBL016",
+            expected_anchor: Some(" AS value"),
+            expected_replacement: Some(""),
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "constant row count",
+            sql: "SELECT COUNT(1) FROM items",
+            rule: "SQBL017",
+            expected_anchor: Some("1"),
+            expected_replacement: Some("*"),
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "unordered row number",
+            sql: "SELECT ROW_NUMBER() OVER (PARTITION BY id) FROM items",
+            rule: "SQBL018",
+            expected_anchor: Some("ROW_NUMBER"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "literal null in not-in list",
+            sql: "SELECT id FROM items WHERE id NOT IN (1, NULL)",
+            rule: "SQBL019",
+            expected_anchor: Some("NOT"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "set branch arity mismatch",
+            sql: "SELECT a, b FROM first UNION ALL SELECT c FROM second",
+            rule: "SQBL020",
+            expected_anchor: Some("UNION"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "uncontrolled projection star",
+            sql: "SELECT * FROM items",
+            rule: "SQBL021",
+            expected_anchor: Some("*"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "unaliased calculated projection",
+            sql: "SELECT price * quantity FROM items",
+            rule: "SQBL022",
+            expected_anchor: Some("price"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "unused table alias",
+            sql: "SELECT id FROM items AS unused",
+            rule: "SQBL023",
+            expected_anchor: Some("AS unused"),
+            expected_replacement: Some(""),
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "left join rejected in where",
+            sql: "SELECT a.id FROM a LEFT JOIN b AS right_side ON a.id = right_side.id WHERE right_side.active = TRUE",
+            rule: "SQBL024",
+            expected_anchor: Some("LEFT"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "implicit inner join",
+            sql: "SELECT a.id FROM a JOIN b ON a.id = b.id",
+            rule: "SQBL025",
+            expected_anchor: Some("JOIN"),
+            expected_replacement: Some("INNER JOIN"),
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "mixed order directions",
+            sql: "SELECT a, b FROM items ORDER BY a, b DESC",
+            rule: "SQBL026",
+            expected_anchor: Some("ORDER"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "unqualified multi-source column",
+            sql: "SELECT id FROM a JOIN b ON a.id = b.id",
+            rule: "SQBL027",
+            expected_anchor: Some("id"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "mixed single-source qualification",
+            sql: "SELECT items.id, name FROM items",
+            rule: "SQBL028",
+            expected_anchor: Some("name"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "unknown relation qualifier",
+            sql: "SELECT missing.id FROM items AS present",
+            rule: "SQBL029",
+            expected_anchor: Some("missing"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "simple boolean case",
+            sql: "SELECT CASE WHEN amount > 0 THEN TRUE ELSE FALSE END AS positive FROM items",
+            rule: "SQBL030",
+            expected_anchor: Some("CASE WHEN amount > 0 THEN TRUE ELSE FALSE END"),
+            expected_replacement: Some("COALESCE(amount > 0, FALSE)"),
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "unicode before simple boolean case preserves replacement text",
+            sql: "SELECT 'é', CASE WHEN amount > 0 THEN TRUE ELSE FALSE END AS positive FROM items",
+            rule: "SQBL030",
+            expected_anchor: Some("CASE WHEN amount > 0 THEN TRUE ELSE FALSE END"),
+            expected_replacement: Some("COALESCE(amount > 0, FALSE)"),
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "commented boolean case is diagnosed without a fix",
+            sql: "SELECT CASE WHEN amount /* reason */ > 0 THEN TRUE ELSE FALSE END FROM items",
+            rule: "SQBL030",
+            expected_anchor: Some("CASE WHEN amount /* reason */ > 0 THEN TRUE ELSE FALSE END"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "case nested directly in else",
+            sql: "SELECT CASE WHEN a THEN 1 ELSE CASE WHEN b THEN 2 END END FROM items",
+            rule: "SQBL031",
+            expected_anchor: Some("CASE"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "joined relation contributes no values",
+            sql: "SELECT a.id FROM a LEFT JOIN b ON a.id = b.id",
+            rule: "SQBL032",
+            expected_anchor: Some("JOIN"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "explicit union is clean",
+            sql: "SELECT 1 UNION ALL SELECT 2",
+            rule: "SQBL008",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "ordered row number is clean",
+            sql: "SELECT ROW_NUMBER() OVER (PARTITION BY id ORDER BY created_at, id) FROM items",
+            rule: "SQBL018",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "equal set arity is clean",
+            sql: "SELECT a, b FROM first UNION ALL SELECT c, d FROM second",
+            rule: "SQBL020",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "qualified alias is used",
+            sql: "SELECT kept.id FROM items AS kept",
+            rule: "SQBL023",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "left join predicate retained in on is clean",
+            sql: "SELECT a.id FROM a LEFT JOIN b ON a.id = b.id AND b.active = TRUE",
+            rule: "SQBL024",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "explicit inner join is clean",
+            sql: "SELECT a.id FROM a INNER JOIN b ON a.id = b.id",
+            rule: "SQBL025",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "null literal inside not-in subquery expression is not a literal list",
+            sql: "SELECT id FROM items WHERE id NOT IN (SELECT COALESCE(id, NULL) FROM other)",
+            rule: "SQBL019",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "left join null probe preserves unmatched rows",
+            sql: "SELECT a.id FROM a LEFT JOIN b ON a.id = b.id WHERE b.id IS NULL",
+            rule: "SQBL024",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "left join predicate guarded by null probe preserves unmatched rows",
+            sql: "SELECT a.id FROM a LEFT JOIN b ON a.id = b.id WHERE b.active = TRUE OR b.id IS NULL",
+            rule: "SQBL024",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "qualified catalog path is not treated as an unknown relation alias",
+            sql: "SELECT catalog.schema.items.id FROM catalog.schema.items",
+            rule: "SQBL029",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "correlated subquery keeps outer table alias",
+            sql: "SELECT id FROM items AS kept WHERE EXISTS (SELECT 1 FROM other WHERE other.id = kept.id)",
+            rule: "SQBL023",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "asof join is not rewritten as an inner join",
+            sql: "SELECT a.id FROM a ASOF JOIN b ON a.id = b.id",
+            rule: "SQBL025",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "semi join is not rewritten as an inner join",
+            sql: "SELECT a.id FROM a SEMI JOIN b ON a.id = b.id",
+            rule: "SQBL025",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "table alias carrying a column list is retained",
+            sql: "SELECT a, b FROM items AS t(a, b)",
+            rule: "SQBL023",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "bracket list commas do not change set projection arity",
+            sql: "SELECT a, [1, 2, 3] AS arr FROM t UNION ALL SELECT a, [4] AS arr FROM t",
+            rule: "SQBL020",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "quoted output alias is not redundant with an unquoted identifier",
+            sql: "SELECT value AS \"value\" FROM items",
+            rule: "SQBL016",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+    ];
+
+    for test_case in test_cases {
+        let diagnostics = helpers::diagnostics_for_rules(test_case.sql, &[test_case.rule])?;
+        assert_eq!(
+            diagnostics.len(),
+            usize::from(test_case.expected_anchor.is_some()),
+            "{}",
+            test_case.description
+        );
+        let _ = test_case.expected_anchor.map(|expected_anchor| {
+            let diagnostic = &diagnostics[0];
+            let start = diagnostic["start"].as_u64().unwrap_or_default() as usize;
+            let end = diagnostic["end"].as_u64().unwrap_or_default() as usize;
+            let source: String = test_case
+                .sql
+                .chars()
+                .skip(start)
+                .take(end - start)
+                .collect();
+            assert_eq!(source, expected_anchor, "{}", test_case.description);
+            assert_eq!(
+                diagnostic["fix"]["replacement"].as_str(),
+                test_case.expected_replacement,
+                "{}",
+                test_case.description
+            );
+        });
+    }
+    Ok(())
+}
+
+#[test]
+fn given_tsql_bare_union_when_linting_then_diagnostic_has_no_invalid_fix() -> Result<(), String> {
+    let test_cases = [test_types::DialectLintRuleTestCase {
+        description: "T-SQL bare UNION is diagnosed without an invalid fix",
+        sql: "SELECT 1 UNION SELECT 2",
+        dialect: "tsql",
+        rule: "SQBL008",
+        expected_count: 1,
+        expected_fix: false,
+        expected_reason: "the active dialect does not accept explicit UNION DISTINCT",
+    }];
+
+    for test_case in test_cases {
+        let diagnostics =
+            helpers::diagnostics_for_dialect(test_case.sql, test_case.dialect, &[test_case.rule])?;
+        assert_eq!(
+            diagnostics.len(),
+            test_case.expected_count,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            diagnostics[0].get("fix").is_some(),
+            test_case.expected_fix,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            diagnostics[0]["fix_unavailable_reason"], test_case.expected_reason,
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn given_format_cases_when_formatting_then_output_matches() -> Result<(), String> {
     let test_cases = [
         test_types::FormatTestCase {
             description: "comment-free canonical SQL",
             sql: "select a,b from items where a=1",
             expected_sql: "SELECT\n  a,\n  b\nFROM items\nWHERE\n  a = 1",
+            expected_changed: true,
+        },
+        test_types::FormatTestCase {
+            description: "lowercase function canonicalization preserves structure",
+            sql: "select count(1) from items",
+            expected_sql: "SELECT\n  COUNT(1)\nFROM items",
             expected_changed: true,
         },
         test_types::FormatTestCase {

@@ -492,7 +492,7 @@ def _dispatch_local_command(
             project_dir=project_dir,
             select=select,
         )
-    if args.command == CliCommand.LINT or args.command == CliCommand.FORMAT:
+    if args.command in {CliCommand.LINT, CliCommand.FIX, CliCommand.FORMAT}:
         return _dispatch_lint_format_command(
             args=args,
             handlers=handlers,
@@ -534,6 +534,18 @@ def _dispatch_lint_format_command(
             project_dir,
             select=select,
             exclude=tuple(args.exclude),
+            json_output=args.json,
+            no_color=args.no_color,
+        )
+    if args.command == CliCommand.FIX:
+        if args.fix_diff and args.json:
+            raise CliUserError("fix --diff cannot be combined with --json", code="C113")
+        return handlers.run_fix(
+            project_dir,
+            select=select,
+            exclude=tuple(args.exclude),
+            check=args.fix_check,
+            diff=args.fix_diff,
             json_output=args.json,
             no_color=args.no_color,
         )

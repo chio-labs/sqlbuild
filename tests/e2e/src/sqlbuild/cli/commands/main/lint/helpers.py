@@ -21,6 +21,21 @@ SELECT value
 FROM items
 WHERE value = NULL
 """
+SKIPPED_FIX_MODEL_SQL: str = """MODEL (
+  materialized view,
+  description "Synthetic skipped-fix benchmark model."
+);
+
+SELECT id FROM items LIMIT 1
+"""
+CONFLICTING_FIX_MODEL_SQL: str = """MODEL (
+  materialized view,
+  description "Synthetic overlapping-fix benchmark model."
+);
+
+WITH first_unused AS (SELECT 1), second_unused AS (SELECT 2)
+SELECT 3 AS id
+"""
 
 
 def write_lint_performance_project(*, project_dir: Path, model_count: int, model_sql: str) -> None:

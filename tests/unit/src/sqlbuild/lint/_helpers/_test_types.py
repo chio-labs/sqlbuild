@@ -70,6 +70,15 @@ class NativeSqlReuseTestCase:
 
 
 @dataclass(frozen=True)
+class ReservedCteLintTestCase:
+    """Test case for SQLBuild harness CTE filtering."""
+
+    description: str
+    sql: str
+    expected_violation_count: int
+
+
+@dataclass(frozen=True)
 class GeneratedRangeFallbackTestCase:
     """Test case for a diagnostic that crosses generated SQL."""
 
