@@ -4,10 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.compiler.compile.constants import MODEL_DIRECTORY_NAME
 from sqlbuild.compiler.compile.models import SqlExpansionContext
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.scopes.constants import (
+    INHERITED_DECLARATION_DIRECTORIES,
+    LOCAL_DECLARATION_DIRECTORIES,
+)
 from sqlbuild.lint._helpers.expansion import build_lint_expansion_context, prepare_lint_body
-from sqlbuild.lint._helpers.headers import scan_headers, sql_body_ranges
+from sqlbuild.lint._helpers.headers import lint_body_ranges, scan_headers
 from sqlbuild.lint._helpers.native import lint_native_headers
 from sqlbuild.lint._helpers.native_sql import run_native_sql_lint
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
@@ -21,6 +27,7 @@ def run_lint(
     config: LintConfig,
     value_renderer: TypedSqlValueRenderer | None = None,
     selected_paths: frozenset[Path] | None = None,
+    discovered_inputs: DiscoveredProjectInputs | None = None,
 ) -> LintRunResult:
     """Lint all DSL files in the project without modifying anything."""
 
@@ -33,11 +40,22 @@ def run_lint(
         project_dir=project_dir,
         native_enabled=config.native_enabled,
         value_renderer=value_renderer,
+        discovered_inputs=discovered_inputs,
     )
     file_path: Path
     contents: str
     for file_path, contents in sorted(files.items()):
-        headers: tuple[HeaderSpan, ...] = scan_headers(contents=contents)
+        relative_parts: tuple[str, ...] = file_path.relative_to(project_dir).parts
+        declaration_directories: frozenset[str] = (
+            INHERITED_DECLARATION_DIRECTORIES | LOCAL_DECLARATION_DIRECTORIES
+        )
+        headers: tuple[HeaderSpan, ...] = scan_headers(
+            contents=contents,
+            first_only=(
+                relative_parts[:1] == (MODEL_DIRECTORY_NAME,)
+                and not declaration_directories.intersection(relative_parts[1:-1])
+            ),
+        )
         violations.extend(
             lint_native_headers(
                 contents=contents,
@@ -53,6 +71,7 @@ def run_lint(
                     contents=contents,
                     headers=headers,
                     context=context,
+                    project_dir=project_dir,
                 )
             )
 
@@ -80,12 +99,14 @@ def _expansion_context(
     project_dir: Path,
     native_enabled: bool,
     value_renderer: TypedSqlValueRenderer | None,
+    discovered_inputs: DiscoveredProjectInputs | None,
 ) -> SqlExpansionContext | None:
     if not native_enabled:
         return None
     return build_lint_expansion_context(
         project_dir=project_dir,
         value_renderer=value_renderer,
+        discovered_inputs=discovered_inputs,
     )
 
 
@@ -95,13 +116,20 @@ def _prepared_bodies(
     contents: str,
     headers: tuple[HeaderSpan, ...],
     context: SqlExpansionContext,
+    project_dir: Path,
 ) -> tuple[LintBody, ...]:
     bodies: list[LintBody] = []
     body_start: int
     body_end: int
-    for body_start, body_end in sql_body_ranges(contents=contents, headers=headers):
+    for body_start, body_end in lint_body_ranges(
+        contents=contents,
+        headers=headers,
+        file_path=file_path,
+        project_dir=project_dir,
+    ):
         bodies.append(
             prepare_lint_body(
+                project_dir=project_dir,
                 file_path=file_path,
                 contents=contents,
                 body_start=body_start,

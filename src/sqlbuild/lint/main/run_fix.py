@@ -53,6 +53,7 @@ def run_fix(
             files=current,
             config=config,
             context=context,
+            project_dir=project_dir,
         )
         retained: list[LintViolation] = apply_suppressions(
             violations=violations,
@@ -68,7 +69,12 @@ def run_fix(
         current = updated
 
     remaining: list[LintViolation] = apply_suppressions(
-        violations=lint_contents(files=current, config=config, context=context),
+        violations=lint_contents(
+            files=current,
+            config=config,
+            context=context,
+            project_dir=project_dir,
+        ),
         contents_by_path=current,
     )
     records.extend(

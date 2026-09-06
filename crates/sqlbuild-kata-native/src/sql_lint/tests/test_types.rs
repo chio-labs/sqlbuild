@@ -50,3 +50,16 @@ pub(crate) struct InvalidRuleTestCase {
     pub rule: &'static str,
     pub expected_message: &'static str,
 }
+
+pub(crate) struct FunctionDepthTestCase {
+    pub description: &'static str,
+    pub depth: usize,
+    pub expected_diagnostic_count: usize,
+}
+
+pub(crate) struct FunctionDepthFailureTestCase {
+    pub description: &'static str,
+    pub depth: usize,
+    pub expected_code: &'static str,
+    pub expected_limit: &'static str,
+}
