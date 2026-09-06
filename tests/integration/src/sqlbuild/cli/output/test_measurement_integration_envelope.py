@@ -40,6 +40,7 @@ def test_given_measurement_execution_result_when_building_envelope_then_decode_r
 ) -> None:
     result: AuditExecutionResult = AuditExecutionResult(
         audit_name="valid_rate",
+        audit_definition_name="test_audit",
         attachment_kind=AuditAttachmentKind.END,
         severity=AuditSeverity.WARN,
         outcome=test_case.outcome,

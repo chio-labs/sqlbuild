@@ -158,6 +158,7 @@ def build_fingerprint_audit_plan_entry_with_options(
 ) -> AuditPlanEntry:
     return AuditPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=name),
+        definition_name="test_audit",
         name=name,
         resolved_sql=resolved_sql,
         unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
@@ -180,6 +181,7 @@ def build_fingerprint_audit_result(
 ) -> AuditExecutionResult:
     return AuditExecutionResult(
         audit_name=audit_name,
+        audit_definition_name="test_audit",
         attachment_kind=AuditAttachmentKind.MODEL,
         severity=AuditSeverity(severity),
         outcome=AuditOutcome(outcome),

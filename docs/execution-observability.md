@@ -88,10 +88,10 @@ to restore the terminal index's observed order among records from the same invoc
 callback without matching terminal evidence emits no record, and final aggregate JSON omits that
 incomplete resource rather than inventing an outcome. Closing the writer emits nothing.
 
-Each confirmed audit also emits `audit_completed`. The event records audit/attachment identity,
-evaluation mode, outcome, severity and run scope, plus applicable measurement, threshold and bounded
-evidence details. `pass` and `insufficient` are non-failing outcomes; `insufficient` remains distinct
-for consumers.
+Each confirmed audit also emits `audit_completed`. The event records the case name, reusable audit
+definition name, optional authored description, attachment identity, evaluation mode, outcome,
+severity and run scope, plus applicable measurement, threshold and bounded evidence details. `pass`
+and `insufficient` are non-failing outcomes; `insufficient` remains distinct for consumers.
 
 An explicit writer path takes precedence over `SQLBUILD_INTEGRATION_RESULT_PATH`. Integration-result
 files are opened in append mode, so an integration that reuses a path must truncate or rotate it
@@ -109,7 +109,8 @@ envelopes.
 ## Audit-result projection
 
 Native warehouse adapters best-effort append confirmed audits to `_sqlbuild_audit_results`. Typed
-columns cover result/run/audit identity, timestamps and target, evaluation mode and outcome,
+columns cover result/run/audit identity (including definition name and authored description),
+timestamps and target, evaluation mode and outcome,
 violation or measured value, sample count/unit and minimum samples. Threshold policy and bounded
 evidence use JSON columns with evidence count/truncation/error diagnostics. Rendered measurement,
 evidence and executed SQL are retained in dedicated columns for inspection.

@@ -20,6 +20,7 @@ from sqlbuild.cli.output._helpers.integration_validation import (
 from sqlbuild.cli.output.constants import (
     INTEGRATION_ASSET_KINDS,
     INTEGRATION_ASSET_STATUSES,
+    INTEGRATION_AUDIT_KIND,
     INTEGRATION_CHECK_ATTACHMENT_KINDS,
     INTEGRATION_CHECK_KINDS,
     INTEGRATION_CHECK_NON_FAIL_STATUSES,
@@ -202,6 +203,8 @@ class IntegrationCheckResult:
     thresholds: Mapping[str, object] | None = None
     evidence_count: int | None = None
     evidence_truncated: bool | None = None
+    audit_definition_name: str | None = None
+    audit_description: str | None = None
 
     def __post_init__(self) -> None:
         for field_name, value in (
@@ -213,6 +216,10 @@ class IntegrationCheckResult:
         validate_optional_identifier(value=self.dag_check_id, field_name="dag_check_id")
         if self.kind not in INTEGRATION_CHECK_KINDS:
             raise ObservabilityValidationError("integration check kind is unsupported")
+        if self.kind == INTEGRATION_AUDIT_KIND and self.audit_definition_name is None:
+            raise ObservabilityValidationError(
+                "integration audit check requires audit_definition_name"
+            )
         if self.status not in INTEGRATION_CHECK_STATUSES:
             raise ObservabilityValidationError("integration check status is unsupported")
         if type(self.passed) is not bool:
@@ -237,6 +244,7 @@ class IntegrationCheckResult:
             ("attached_column_name", self.attached_column_name),
             ("attached_target_name", self.attached_target_name),
             ("run_scope_phase", self.run_scope_phase),
+            ("audit_definition_name", self.audit_definition_name),
         ):
             validate_optional_identifier(value=value, field_name=field_name)
         if self.row_count is not None and (type(self.row_count) is not int or self.row_count < 0):
@@ -264,6 +272,12 @@ class IntegrationCheckResult:
         if self.evidence_truncated is not None and type(self.evidence_truncated) is not bool:
             raise ObservabilityValidationError(
                 "integration check evidence_truncated must be boolean"
+            )
+        if self.audit_description is not None and (
+            not isinstance(self.audit_description, str) or not self.audit_description.strip()
+        ):
+            raise ObservabilityValidationError(
+                "integration check audit_description must be a non-empty string"
             )
         if self.thresholds is not None:
             self._validate_measurement_thresholds()

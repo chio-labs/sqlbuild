@@ -85,6 +85,7 @@ def build_passing_audit(*, name: str, target_name: str) -> AuditPlanEntry:
 
     return AuditPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=name),
+        definition_name="test_audit",
         name=name,
         resolved_sql=f"SELECT * FROM {target_name} WHERE 1=0",
         unresolved_sql=f'SELECT * FROM __ref("{target_name}") WHERE 1=0',
@@ -101,6 +102,7 @@ def build_failing_audit(*, name: str, target_name: str) -> AuditPlanEntry:
 
     return AuditPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=name),
+        definition_name="test_audit",
         name=name,
         resolved_sql=f"SELECT * FROM {target_name}",
         unresolved_sql=f'SELECT * FROM __ref("{target_name}")',

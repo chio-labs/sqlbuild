@@ -96,6 +96,7 @@ def plan_audit(
     return AuditPlanEntry(
         key=audit.key,
         name=audit.name,
+        definition_name=audit.definition_name,
         resolved_sql=resolved_sql,
         unresolved_sql=audit.sql_body,
         attachment_kind=attachment_kind,
@@ -124,4 +125,5 @@ def plan_audit(
         attached_target_name=attached_target_name,
         attached_column_name=audit.attached_column_name,
         always_run=audit.always_run,
+        description=audit.description,
     )

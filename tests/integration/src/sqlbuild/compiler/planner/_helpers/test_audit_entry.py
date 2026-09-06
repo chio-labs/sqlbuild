@@ -98,6 +98,7 @@ def test_given_audit_when_executing_resolved_sql_then_returns_expected_rows(
         ),
         scope_deps=(),
         name="test_audit",
+        definition_name="test_audit",
         audit_file=_STUB_FILE,
         audit_block=_STUB_BLOCK,
         sql_body=test_case.audit_sql,

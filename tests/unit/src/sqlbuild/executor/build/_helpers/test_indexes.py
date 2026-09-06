@@ -34,6 +34,7 @@ def test_given_end_scheduled_model_audit_when_building_indexes_then_it_is_not_a_
     audit: AuditPlanEntry = AuditPlanEntry(
         key=CompiledObjectKey(CompiledResourceType.AUDIT, "cross_model_consistency"),
         name="cross_model_consistency",
+        definition_name="test_audit",
         resolved_sql="SELECT 1 WHERE FALSE",
         unresolved_sql="SELECT 1 WHERE FALSE",
         attachment_kind=AuditAttachmentKind.END,

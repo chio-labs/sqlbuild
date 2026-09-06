@@ -51,6 +51,7 @@ class AuditExecutionResult:
     """Outcome of one audit execution against a built relation."""
 
     audit_name: str
+    audit_definition_name: str
     attachment_kind: AuditAttachmentKind
     severity: AuditSeverity
     outcome: AuditOutcome
@@ -71,4 +72,5 @@ class AuditExecutionResult:
     evidence_truncated: bool = False
     evidence_error: str | None = None
     evidence_sql: str | None = None
+    audit_description: str | None = None
     execution_error: str | None = None

@@ -262,6 +262,7 @@ def build_test_audit_plan_entry(
 
     return AuditPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=name),
+        definition_name="test_audit",
         name=name,
         resolved_sql=resolved_sql,
         unresolved_sql=resolved_sql,

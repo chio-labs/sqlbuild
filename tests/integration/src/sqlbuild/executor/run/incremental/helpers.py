@@ -146,6 +146,7 @@ def build_test_audit(
 
     return AuditPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=name),
+        definition_name="test_audit",
         name=name,
         resolved_sql=_resolve_audit_sql(
             unresolved_sql=unresolved_sql,
