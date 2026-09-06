@@ -74,18 +74,20 @@ def run_format(
         project_dir=project_dir,
         value_renderer=value_renderer,
     )
+    final_contents: dict[Path, str] = {
+        path: updated_contents.get(path, contents) for path, contents in files.items()
+    }
     return LintRunResult(
         files_checked=len(files),
         violations=sort_violations(
             apply_suppressions(
                 violations=violations,
-                contents_by_path={
-                    path: updated_contents.get(path, contents) for path, contents in files.items()
-                },
+                contents_by_path=final_contents,
             )
         ),
         formatted_files=tuple(sorted(formatted)),
         format_changes=tuple(sorted(changes, key=lambda change: change.file_path)),
+        source_texts=final_contents,
     )
 
 

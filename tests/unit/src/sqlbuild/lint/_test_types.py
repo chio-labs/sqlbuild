@@ -76,6 +76,8 @@ class ExpandedLintTestCase:
     project_files: dict[str, str]
     expected_positions: tuple[tuple[int, int], ...]
     expected_message_fragments: tuple[str, ...]
+    expected_ranges: tuple[tuple[int, int, int | None, int | None], ...] = ()
+    expected_remediation_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

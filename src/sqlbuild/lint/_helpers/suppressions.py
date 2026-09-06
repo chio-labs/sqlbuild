@@ -51,6 +51,7 @@ def apply_suppressions(
                         file_path=file_path,
                         line=suppression.directive_line,
                         message=f"Unused suppression for {suppression.code}",
+                        remediation="Remove the stale suppression directive.",
                     )
                 )
             else:
@@ -73,7 +74,8 @@ def _parse_suppressions(
                 _suppression_violation(
                     file_path=file_path,
                     line=index + 1,
-                    message="Invalid suppression; use '-- sqb: ignore CODE because <reason>'",
+                    message="Suppression directive is invalid",
+                    remediation="Use '-- sqb: ignore CODE because <reason>'.",
                 )
             )
             continue
@@ -92,7 +94,9 @@ def _parse_suppressions(
     return tuple(suppressions), tuple(invalid)
 
 
-def _suppression_violation(*, file_path: Path, line: int, message: str) -> LintViolation:
+def _suppression_violation(
+    *, file_path: Path, line: int, message: str, remediation: str
+) -> LintViolation:
     return LintViolation(
         file_path=file_path,
         line=line,
@@ -101,4 +105,5 @@ def _suppression_violation(*, file_path: Path, line: int, message: str) -> LintV
         message=message,
         severity=VIOLATION_SEVERITY_WARNING,
         engine=LINT_ENGINE_NATIVE,
+        remediation=remediation,
     )

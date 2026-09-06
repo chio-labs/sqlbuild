@@ -9,6 +9,7 @@ import pytest
 from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild.cli.commands.main.project import _lint
 from tests.unit.src.sqlbuild.lint._test_types import (
     FormatCliTestCase,
     LintBehaviorTestCase,
@@ -44,7 +45,14 @@ PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n'
                 "sqlbuild_project.toml": PROJECT_TOML,
             },
             expected_exit_code=1,
-            expected_output_fragments=("native  SQBL001", "WARN=1"),
+            expected_output_fragments=(
+                "warning[SQBL001]: Comparison with NULL is never true",
+                " --> models/null_comparison.sql:2:37",
+                "2 | SELECT value FROM items WHERE value = NULL",
+                "  |                                     ^",
+                "  = help: Use IS NULL or IS NOT NULL when testing for NULL.",
+                "WARN=1",
+            ),
         ),
         LintCliTestCase(
             description="lint uses the local adapter override dialect",
@@ -329,4 +337,38 @@ def test_given_native_warning_when_linting_as_json_then_emits_machine_readable_r
     assert payload["files_checked"] == 1
     assert payload["warnings"] == test_case.expected_value
     assert isinstance(payload["violations"], list)
-    assert payload["violations"][0]["code"] == "SQBL001"
+    violation: dict[str, object] = payload["violations"][0]
+    assert violation["code"] == "SQBL001"
+    assert violation["message"] == "Comparison with NULL is never true"
+    assert violation["remediation"] == "Use IS NULL or IS NOT NULL when testing for NULL."
+    assert (violation["line"], violation["column"]) == (2, 37)
+    assert (violation["end_line"], violation["end_column"]) == (2, 38)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [LintBehaviorTestCase(description="color-capable terminal", expected_value=1)],
+    ids=lambda case: case.description,
+)
+def test_given_color_terminal_when_linting_then_severity_and_caret_are_styled(
+    test_case: LintBehaviorTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = (tmp_path / "sqlbuild_project.toml").write_text(PROJECT_TOML, encoding="utf-8")
+    model: Path = tmp_path / "models" / "warning.sql"
+    model.parent.mkdir()
+    _ = model.write_text(
+        'MODEL (description "ok");\nSELECT value FROM items WHERE value = NULL\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(_lint, "supports_color", lambda: True)
+
+    exit_code: int = _lint.run_lint_command(project_dir=tmp_path)
+
+    assert exit_code == test_case.expected_value
+    output: str = capsys.readouterr().out
+    assert "\033[33m\033[1mwarning[SQBL001]\033[0m" in output
+    assert "\033[33m\033[1m^\033[0m" in output
+    assert "\033[2m= help:\033[0m" in output

@@ -193,6 +193,92 @@ fn given_sql_cases_when_linting_then_diagnostics_match() -> Result<(), String> {
 }
 
 #[test]
+fn given_native_rules_when_linting_then_diagnosis_and_remediation_are_actionable()
+-> Result<(), String> {
+    let test_cases = [
+        test_types::LintMetadataTestCase {
+            description: "NULL comparison guidance",
+            sql: "SELECT value FROM a WHERE value = NULL",
+            expected_code: "SQBL001",
+            expected_message: "Comparison with NULL is never true",
+            expected_remediation: "Use IS NULL or IS NOT NULL when testing for NULL.",
+        },
+        test_types::LintMetadataTestCase {
+            description: "implicit join guidance",
+            sql: "SELECT a.id FROM a, b",
+            expected_code: "SQBL002",
+            expected_message: "Comma-separated sources create an implicit cartesian join",
+            expected_remediation: "Replace comma-separated sources with an explicit keyed join, or use CROSS JOIN when the cartesian product is intentional.",
+        },
+        test_types::LintMetadataTestCase {
+            description: "unconditioned join guidance",
+            sql: "SELECT a.id FROM a JOIN b",
+            expected_code: "SQBL003",
+            expected_message: "Non-cross join has no meaningful condition",
+            expected_remediation: "Add a meaningful ON or USING condition, or declare an intentional cartesian product with CROSS JOIN.",
+        },
+        test_types::LintMetadataTestCase {
+            description: "unordered limit guidance",
+            sql: "SELECT id FROM items LIMIT 1",
+            expected_code: "SQBL004",
+            expected_message: "Row selection is nondeterministic",
+            expected_remediation: "Add ORDER BY with a deterministic tie-breaker before LIMIT or OFFSET.",
+        },
+        test_types::LintMetadataTestCase {
+            description: "unused CTE guidance",
+            sql: "WITH unused AS (SELECT 1) SELECT 1",
+            expected_code: "SQBL005",
+            expected_message: "CTE is unreachable from the final query",
+            expected_remediation: "Reference the CTE from the final query or another reachable CTE, or remove it.",
+        },
+        test_types::LintMetadataTestCase {
+            description: "redundant distinct guidance",
+            sql: "SELECT DISTINCT id FROM items GROUP BY id",
+            expected_code: "SQBL006",
+            expected_message: "DISTINCT is redundant with the grouped output",
+            expected_remediation: "Remove DISTINCT; the equivalent GROUP BY already determines the output groups.",
+        },
+        test_types::LintMetadataTestCase {
+            description: "positional set star guidance",
+            sql: "SELECT * FROM a UNION ALL SELECT * FROM b",
+            expected_code: "SQBL007",
+            expected_message: "Positional set operation is vulnerable to column-order drift",
+            expected_remediation: "Enumerate columns in the same order in every set-operation branch.",
+        },
+    ];
+
+    for test_case in test_cases {
+        let diagnostics = helpers::diagnostics(test_case.sql)?;
+        let diagnostic = diagnostics
+            .first()
+            .ok_or_else(|| format!("{} should report a diagnostic", test_case.description))?;
+        assert_eq!(
+            diagnostic["code"], test_case.expected_code,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            diagnostic["message"], test_case.expected_message,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            diagnostic["remediation"], test_case.expected_remediation,
+            "{}",
+            test_case.description
+        );
+        let start = diagnostic["start"].as_u64().unwrap_or_default();
+        let end = diagnostic["end"].as_u64().unwrap_or_default();
+        assert!(
+            end > start,
+            "{} should report a non-empty range",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn given_format_cases_when_formatting_then_output_matches() -> Result<(), String> {
     let test_cases = [
         test_types::FormatTestCase {
