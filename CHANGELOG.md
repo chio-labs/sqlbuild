@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.87.1](https://github.com/chio-labs/sqlbuild/compare/v0.87.0...v0.87.1) (2026-09-06)
+
+
+### Bug Fixes
+
+* report measurement warnings correctly in Dagster ([#554](https://github.com/chio-labs/sqlbuild/issues/554)) ([77530f4](https://github.com/chio-labs/sqlbuild/commit/77530f42d5404e3e0ac735c7f45fb8bfb143cb82))
+
 ## [0.87.0](https://github.com/chio-labs/sqlbuild/compare/v0.86.0...v0.87.0) (2026-09-06)
 
 
