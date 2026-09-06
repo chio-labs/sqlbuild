@@ -10,13 +10,17 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompilePerformanceGuardTestCase,
     CompileScalingGuardTestCase,
+    DagsterShapedCompilePerformanceGuardTestCase,
     DbtShapedCompilePerformanceGuardTestCase,
     SqlTestHeavyCompilePerformanceGuardTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
+    CompileBenchmarkMeasurement,
+    DagsterShapedCompileBenchmarkResult,
     measure_compiled_test_sql_bytes,
     measure_model_sql_bytes,
     run_advanced_compile_benchmark,
+    run_dagster_shaped_compile_benchmark,
     run_dbt_shaped_compile_benchmark,
     run_test_heavy_compile_benchmark,
 )
@@ -210,3 +214,93 @@ def test_given_test_heavy_project_when_compiling_then_finishes_within_budget(
     assert warm_seconds < test_case.expected_warm_max_seconds
     assert model_edit_seconds < test_case.expected_edit_max_seconds
     assert test_edit_seconds < test_case.expected_edit_max_seconds
+
+
+@pytest.mark.performance
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterShapedCompilePerformanceGuardTestCase(
+            description="Dagster-shaped compile paths stay within production budgets",
+            model_count=976,
+            source_count=232,
+            seed_count=46,
+            function_count=23,
+            macro_count=12,
+            test_count=130,
+            expected_audit_count=700,
+            expected_hook_count=2,
+            expected_min_model_sql_bytes=5_500_000,
+            expected_max_model_sql_bytes=7_000_000,
+            expected_min_compiled_test_bytes=3_300_000,
+            expected_max_compiled_test_bytes=6_500_000,
+            expected_cold_max_seconds=7.0,
+            expected_warm_max_seconds=3.0,
+            expected_edit_max_seconds=4.0,
+            expected_config_edit_max_seconds=8.0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_dagster_shaped_project_when_compiling_and_editing_then_reports_phased_budgets(
+    tmp_path: Path,
+    test_case: DagsterShapedCompilePerformanceGuardTestCase,
+) -> None:
+    project_dir: Path = tmp_path / "dagster_shaped"
+    result: DagsterShapedCompileBenchmarkResult = run_dagster_shaped_compile_benchmark(
+        project_dir=project_dir,
+        model_count=test_case.model_count,
+        source_count=test_case.source_count,
+        seed_count=test_case.seed_count,
+        function_count=test_case.function_count,
+        macro_count=test_case.macro_count,
+        test_count=test_case.test_count,
+        expected_cold_max_seconds=test_case.expected_cold_max_seconds,
+        expected_warm_max_seconds=test_case.expected_warm_max_seconds,
+        expected_edit_max_seconds=test_case.expected_edit_max_seconds,
+        expected_config_edit_max_seconds=test_case.expected_config_edit_max_seconds,
+    )
+    measurements: dict[str, CompileBenchmarkMeasurement] = {
+        "cold": result.cold,
+        "warm": result.warm,
+        "leaf_model_edit": result.leaf_model_edit,
+        "central_model_edit": result.central_model_edit,
+        "test_edit": result.test_edit,
+        "macro_edit": result.macro_edit,
+        "project_config_edit": result.project_config_edit,
+    }
+    for label, measurement in measurements.items():
+        phase_text: str = " ".join(
+            f"{phase}={milliseconds}ms" for phase, milliseconds in measurement.timings_ms.items()
+        )
+        _LOGGER.info(
+            f"dagster-shaped compile path={label} total={measurement.elapsed_seconds:.3f}s "
+            f"{phase_text}"
+        )
+
+    assert result.cold.summary == {
+        "models": test_case.model_count,
+        "selected_models": test_case.model_count,
+        "sources": test_case.source_count,
+        "seeds": test_case.seed_count,
+        "functions": test_case.function_count,
+        "audits": test_case.expected_audit_count,
+        "tests": test_case.test_count,
+        "hooks": test_case.expected_hook_count,
+        "execution_layers": 54,
+        "errors": 0,
+        "warnings": 0,
+    }
+    model_sql_bytes: int = measure_model_sql_bytes(project_dir)
+    compiled_test_bytes: int = measure_compiled_test_sql_bytes(project_dir)
+    assert test_case.expected_min_model_sql_bytes <= model_sql_bytes
+    assert model_sql_bytes <= test_case.expected_max_model_sql_bytes
+    assert test_case.expected_min_compiled_test_bytes <= compiled_test_bytes
+    assert compiled_test_bytes <= test_case.expected_max_compiled_test_bytes
+    assert result.cold.elapsed_seconds < test_case.expected_cold_max_seconds
+    assert result.warm.elapsed_seconds < test_case.expected_warm_max_seconds
+    assert result.leaf_model_edit.elapsed_seconds < test_case.expected_edit_max_seconds
+    assert result.central_model_edit.elapsed_seconds < test_case.expected_edit_max_seconds
+    assert result.test_edit.elapsed_seconds < test_case.expected_edit_max_seconds
+    assert result.macro_edit.elapsed_seconds < test_case.expected_edit_max_seconds
+    assert result.project_config_edit.elapsed_seconds < test_case.expected_config_edit_max_seconds

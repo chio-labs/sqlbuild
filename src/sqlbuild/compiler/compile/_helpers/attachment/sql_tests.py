@@ -65,6 +65,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
     EnumDeclaration,
 )
+from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.compiler.scopes.models import ResourceIdentity, UsageRecord
 from sqlbuild.compiler.scopes.types import ResourceKind, UsageKind
@@ -90,17 +91,18 @@ def build_test_inputs_with_cache(
 ) -> tuple[CompileSqlTestInput, ...]:
     """Build SQL test inputs while reusing exact expanded CTE boundaries."""
 
-    with cached_sql_test_cte_extractor(root=compile_cache_dir) as extract_test_ctes:
-        return build_test_inputs(
-            discovered_inputs=discovered_inputs,
-            effective_vars=effective_vars,
-            macro_context=macro_context,
-            loaded_macros=loaded_macros,
-            declaration_expansion=declaration_expansion,
-            external_sql_reference_resolver=external_sql_reference_resolver,
-            sql_function_inputs=sql_function_inputs,
-            sql_test_cte_extractor=extract_test_ctes,
-        )
+    with record_compile_timing("test_input_compile_ms"):
+        with cached_sql_test_cte_extractor(root=compile_cache_dir) as extract_test_ctes:
+            return build_test_inputs(
+                discovered_inputs=discovered_inputs,
+                effective_vars=effective_vars,
+                macro_context=macro_context,
+                loaded_macros=loaded_macros,
+                declaration_expansion=declaration_expansion,
+                external_sql_reference_resolver=external_sql_reference_resolver,
+                sql_function_inputs=sql_function_inputs,
+                sql_test_cte_extractor=extract_test_ctes,
+            )
 
 
 def build_test_inputs(

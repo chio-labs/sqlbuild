@@ -29,6 +29,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerScopeResolution,
     PlannerSelection,
 )
+from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
@@ -64,26 +65,27 @@ def build_compiled_project(
         resolved_connection=resolved_connection,
     )
     no_cache: bool = analysis_selection is not None and analysis_selection.no_cache
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
-        discovered_inputs=discovered_inputs,
-        adapter_context=CompileAdapterContext(
-            value_renderer=adapter,
-            collection_rendering=resolve_effective_collection_rendering(
-                project_config=discovered_inputs.project_config,
-                declaration_override=None,
+    with record_compile_timing("attachment_ms"):
+        compile_inputs: CompileProjectInputs = build_compile_inputs(
+            discovered_inputs=discovered_inputs,
+            adapter_context=CompileAdapterContext(
+                value_renderer=adapter,
+                collection_rendering=resolve_effective_collection_rendering(
+                    project_config=discovered_inputs.project_config,
+                    declaration_override=None,
+                ),
+                python_functions_inherit_default_namespace=(
+                    adapter.python_functions_inherit_default_namespace()
+                ),
             ),
-            python_functions_inherit_default_namespace=(
-                adapter.python_functions_inherit_default_namespace()
-            ),
-        ),
-        selected_target=selected_target,
-        no_sql_validation=no_sql_validation,
-        defer_model_sql_validation=True,
-        cli_vars=cli_vars,
-        resolved_connection=resolved_connection,
-        external_sql_reference_resolver=external_sql_reference_resolver,
-        no_cache=no_cache,
-    )
+            selected_target=selected_target,
+            no_sql_validation=no_sql_validation,
+            defer_model_sql_validation=True,
+            cli_vars=cli_vars,
+            resolved_connection=resolved_connection,
+            external_sql_reference_resolver=external_sql_reference_resolver,
+            no_cache=no_cache,
+        )
     inference_profile: ExpressionInferenceProfile = adapter.expression_inference_profile()
     analysis_model_names: frozenset[str] | None = _resolve_analysis_model_names(
         compile_inputs=compile_inputs,
