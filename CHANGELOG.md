@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.87.2](https://github.com/chio-labs/sqlbuild/compare/v0.87.1...v0.87.2) (2026-09-06)
+
+
+### Bug Fixes
+
+* batch command output capture ([#556](https://github.com/chio-labs/sqlbuild/issues/556)) ([4bed50c](https://github.com/chio-labs/sqlbuild/commit/4bed50ca4946b66b49581604c49213cb123d8f06))
+
 ## [0.87.1](https://github.com/chio-labs/sqlbuild/compare/v0.87.0...v0.87.1) (2026-09-06)
 
 
