@@ -8,7 +8,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.models import SqlExpansionContext
 from sqlbuild.lint._helpers.expansion import prepare_lint_body
-from sqlbuild.lint._helpers.headers import scan_headers, sql_body_ranges
+from sqlbuild.lint._helpers.headers import lint_body_ranges, scan_headers
 from sqlbuild.lint._helpers.native import format_native_headers, lint_native_headers
 from sqlbuild.lint._helpers.native_sql import run_native_sql_lint
 from sqlbuild.lint.constants import FIX_STATUS_APPLIED
@@ -58,7 +58,11 @@ def apply_header_repairs(
 
 
 def lint_contents(
-    *, files: dict[Path, str], config: LintConfig, context: SqlExpansionContext | None
+    *,
+    files: dict[Path, str],
+    config: LintConfig,
+    context: SqlExpansionContext | None,
+    project_dir: Path,
 ) -> list[LintViolation]:
     violations: list[LintViolation] = []
     bodies: list[LintBody] = []
@@ -74,9 +78,15 @@ def lint_contents(
         )
         if context is None:
             continue
-        for body_start, body_end in sql_body_ranges(contents=contents, headers=headers):
+        for body_start, body_end in lint_body_ranges(
+            contents=contents,
+            headers=headers,
+            file_path=file_path,
+            project_dir=project_dir,
+        ):
             bodies.append(
                 prepare_lint_body(
+                    project_dir=project_dir,
                     file_path=file_path,
                     contents=contents,
                     body_start=body_start,
