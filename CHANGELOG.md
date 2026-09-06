@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.84.0](https://github.com/chio-labs/sqlbuild/compare/v0.83.4...v0.84.0) (2026-09-06)
+
+
+### Features
+
+* replace Sqruff with native SQL lint and format ([#546](https://github.com/chio-labs/sqlbuild/issues/546)) ([e553caa](https://github.com/chio-labs/sqlbuild/commit/e553caaa5adc4f98b4f94b7abd5bb444ad499c49))
+
 ## [0.83.4](https://github.com/chio-labs/sqlbuild/compare/v0.83.3...v0.83.4) (2026-09-06)
 
 
