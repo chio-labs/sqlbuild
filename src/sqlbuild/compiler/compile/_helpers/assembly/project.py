@@ -94,6 +94,7 @@ from sqlbuild.compiler.discovery.main._model_output_column_locations import (
     extract_model_output_column_locations,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
+from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
 from sqlbuild.compiler.scopes.main._validate_scope_index import validate_scope_index
@@ -172,18 +173,20 @@ def assemble_compiled_project(
     )
     model_sql_analysis_by_name: dict[str, _ModelSqlAnalysis] = {}
     if sql_analysis_enabled:
-        model_sql_analysis_by_name = _analyze_model_sql_in_parallel(
-            model_inputs=tuple(
-                model_input
-                for model_input in inputs.model_inputs
-                if analysis_model_names is None or _model_name(model_input) in analysis_model_names
-            ),
-            column_nullability_by_table=column_nullability_by_table,
-            column_types_by_table=column_types_by_table,
-            inference_profile=profile,
-            allow_compact_analysis=allow_compact_analysis,
-            analysis_cache=analysis_cache,
-        )
+        with record_compile_timing("model_analysis_ms"):
+            model_sql_analysis_by_name = _analyze_model_sql_in_parallel(
+                model_inputs=tuple(
+                    model_input
+                    for model_input in inputs.model_inputs
+                    if analysis_model_names is None
+                    or _model_name(model_input) in analysis_model_names
+                ),
+                column_nullability_by_table=column_nullability_by_table,
+                column_types_by_table=column_types_by_table,
+                inference_profile=profile,
+                allow_compact_analysis=allow_compact_analysis,
+                analysis_cache=analysis_cache,
+            )
     scope_index: ScopeIndex = scope_index_with_compile_usages(inputs=inputs)
     try:
         validate_scope_index(index=scope_index)
@@ -531,25 +534,26 @@ def _analyze_model_sql_in_parallel(
             }
         )
     if analysis_cache is not None:
-        write_model_analyses(
-            context=analysis_cache,
-            analyses_by_key={
-                request.cache_key: analysis.polyglot_analysis
-                for request, analysis in zip(requests, analyses, strict=True)
-                if request.cache_key is not None
-                and (
-                    request.cache_key not in cached_analyses
-                    or _model_name(request.model_input) in invalidated_names
-                )
-            },
-            latest_analyses_by_model=analyses_to_record_by_name,
-            dependency_signatures_by_key=_dependency_signatures_by_key(
-                requests=requests,
-                cached_analyses=cached_analyses,
-                invalidated_names=invalidated_names,
-                current_signatures_by_name=current_signatures_by_name,
-            ),
-        )
+        with record_compile_timing("cache_publication_ms"):
+            write_model_analyses(
+                context=analysis_cache,
+                analyses_by_key={
+                    request.cache_key: analysis.polyglot_analysis
+                    for request, analysis in zip(requests, analyses, strict=True)
+                    if request.cache_key is not None
+                    and (
+                        request.cache_key not in cached_analyses
+                        or _model_name(request.model_input) in invalidated_names
+                    )
+                },
+                latest_analyses_by_model=analyses_to_record_by_name,
+                dependency_signatures_by_key=_dependency_signatures_by_key(
+                    requests=requests,
+                    cached_analyses=cached_analyses,
+                    invalidated_names=invalidated_names,
+                    current_signatures_by_name=current_signatures_by_name,
+                ),
+            )
     return {
         _model_name(model_input): analysis
         for model_input, analysis in zip(model_inputs, analyses, strict=True)
