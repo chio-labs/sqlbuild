@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.83.4](https://github.com/chio-labs/sqlbuild/compare/v0.83.3...v0.83.4) (2026-09-06)
+
+
+### Performance Improvements
+
+* add Dagster-shaped compile guard ([#544](https://github.com/chio-labs/sqlbuild/issues/544)) ([a1fe6e7](https://github.com/chio-labs/sqlbuild/commit/a1fe6e7b3f9259f01cebf1af72dbe1bd09b955a4))
+
 ## [0.83.3](https://github.com/chio-labs/sqlbuild/compare/v0.83.2...v0.83.3) (2026-09-06)
 
 
