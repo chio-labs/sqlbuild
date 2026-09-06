@@ -79,6 +79,8 @@ def test_given_executed_measurement_when_projected_then_builds_record_and_lifecy
     assert projection.written_count == 1
     assert projection.degraded is False
     assert records[0].outcome == test_case.expected_outcome.value
+    assert records[0].audit_definition_name == "dq_column_rate"
+    assert records[0].audit_description == "Valid row percentage"
     assert len(records) == 1
     assert records[0].violation_count is None
     assert records[0].measured_value == 95.0
@@ -89,6 +91,8 @@ def test_given_executed_measurement_when_projected_then_builds_record_and_lifecy
     assert len(events) == 1
     assert events[0].event_type == "audit_completed"
     assert events[0].payload["result_id"] == records[0].result_id
+    assert events[0].payload["audit_definition_name"] == "dq_column_rate"
+    assert events[0].payload["audit_description"] == "Valid row percentage"
 
 
 @pytest.mark.parametrize(

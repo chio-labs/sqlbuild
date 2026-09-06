@@ -112,6 +112,7 @@ def test_given_warning_audit_when_run_then_start_and_completed_terminal_wrap_cal
 ) -> None:
     entry: AuditPlanEntry = AuditPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name="warn_audit"),
+        definition_name="test_audit",
         name="warn_audit",
         resolved_sql="SELECT 1",
         unresolved_sql="SELECT 1",
@@ -124,6 +125,7 @@ def test_given_warning_audit_when_run_then_start_and_completed_terminal_wrap_cal
     )
     result: AuditExecutionResult = AuditExecutionResult(
         audit_name="warn_audit",
+        audit_definition_name="test_audit",
         attachment_kind=AuditAttachmentKind.MODEL,
         severity=AuditSeverity.WARN,
         outcome=AuditOutcome.WARN,

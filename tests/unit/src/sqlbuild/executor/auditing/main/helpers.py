@@ -63,6 +63,8 @@ def build_projection_entry() -> AuditPlanEntry:
 def build_projection_result(*, reused: bool = False) -> AuditExecutionResult:
     return AuditExecutionResult(
         audit_name="row_rate",
+        audit_definition_name="dq_column_rate",
+        audit_description="Valid row percentage",
         attachment_kind=AuditAttachmentKind.MODEL,
         severity=AuditSeverity.ERROR,
         outcome=AuditOutcome.WARN,
@@ -85,6 +87,8 @@ def build_entry(
     return AuditPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name="row_rate"),
         name="row_rate",
+        definition_name="dq_column_rate",
+        description="Valid row percentage",
         resolved_sql="SELECT 95 AS VALID_RATE, 10 AS TOTAL_ROWS",
         unresolved_sql="SELECT 95 AS VALID_RATE, 10 AS TOTAL_ROWS",
         attachment_kind=AuditAttachmentKind.MODEL,

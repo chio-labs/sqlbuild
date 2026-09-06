@@ -20,6 +20,7 @@ class AuditResultRecord:
     invocation_id: str
     run_id: str
     audit_name: str
+    audit_definition_name: str
     binding_key: str
     definition_fingerprint: str
     execution_fingerprint: str
@@ -51,3 +52,4 @@ class AuditResultRecord:
     sql_digest: str | None
     metadata_json: str | None
     reused: bool
+    audit_description: str | None = None

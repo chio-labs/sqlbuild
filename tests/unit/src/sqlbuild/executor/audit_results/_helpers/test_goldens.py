@@ -2,41 +2,5 @@
 
 # ruff: noqa: E501
 
-CREATE_TABLE_SQL_GOLDEN: str = (
-    "CREATE TABLE IF NOT EXISTS analytics._sqlbuild_audit_results (result_id VARCHAR NOT NULL, "
-    "schema_version BIGINT NOT NULL, occurred_at TIMESTAMP NOT NULL, invocation_id VARCHAR NOT "
-    "NULL, run_id VARCHAR NOT NULL, audit_name VARCHAR NOT NULL, binding_key VARCHAR NOT NULL, "
-    "definition_fingerprint VARCHAR NOT NULL, execution_fingerprint VARCHAR NOT NULL, "
-    "evaluation_mode VARCHAR NOT NULL, run_scope_phase VARCHAR NOT NULL, attachment_kind VARCHAR "
-    "NOT NULL, attached_target_kind VARCHAR, attached_target_name VARCHAR, attached_column_name "
-    "VARCHAR, target_database VARCHAR, target_schema VARCHAR, target_name VARCHAR, severity VARCHAR "
-    "NOT NULL, outcome VARCHAR NOT NULL, execution_error VARCHAR, violation_count BIGINT, "
-    "measured_value VARCHAR, sample_count BIGINT, sample_unit VARCHAR, minimum_samples BIGINT, "
-    "thresholds_json VARCHAR, evidence_json VARCHAR, evidence_count BIGINT, evidence_truncated "
-    "VARCHAR, evidence_error VARCHAR, measurement_sql VARCHAR, evidence_sql VARCHAR, executed_sql "
-    "VARCHAR, sql_digest VARCHAR, metadata_json VARCHAR, reused VARCHAR NOT NULL)"
-)
-INSERT_SQL_GOLDEN: str = (
-    "INSERT INTO analytics._sqlbuild_audit_results (result_id, schema_version, occurred_at, "
-    "invocation_id, run_id, audit_name, binding_key, definition_fingerprint, execution_fingerprint, "
-    "evaluation_mode, run_scope_phase, attachment_kind, attached_target_kind, attached_target_name, "
-    "attached_column_name, target_database, target_schema, target_name, severity, outcome, "
-    "execution_error, violation_count, measured_value, sample_count, sample_unit, minimum_samples, "
-    "thresholds_json, evidence_json, evidence_count, evidence_truncated, evidence_error, "
-    "measurement_sql, evidence_sql, executed_sql, sql_digest, metadata_json, reused) VALUES "
-    "('result-1', CAST(1 AS BIGINT), '2026-01-02T03:04:05+00:00', 'invocation-1', 'run-1', "
-    "'valid_orders', 'orders.valid_orders', 'definition-fingerprint', 'execution-fingerprint', "
-    "'measurement', 'final', 'direct', 'model', 'orders', NULL, NULL, 'analytics', 'orders', 'warn', "
-    "'warn', NULL, CAST(NULL AS BIGINT), '99.25', CAST(12 AS BIGINT), 'rows', CAST(10 AS BIGINT), "
-    '\'{"warn":{"below":99.9}}\', \'[{"note":"it\'\'s invalid"}]\', CAST(1 AS BIGINT), '
-    "'false', NULL, 'SELECT AVG(is_valid) AS value FROM orders WHERE note = ''quoted''', NULL, "
-    "'SELECT AVG(is_valid) AS value FROM orders WHERE note = ''quoted''', 'sql-digest', NULL, "
-    "'false'), ('result-2', CAST(1 AS BIGINT), '2026-01-02T03:04:05+00:00', 'invocation-1', "
-    "'run-1', 'valid_orders', 'orders.valid_orders', 'definition-fingerprint', "
-    "'execution-fingerprint', 'measurement', 'final', 'direct', 'model', 'orders', NULL, NULL, "
-    "'analytics', 'orders', 'warn', 'warn', NULL, CAST(NULL AS BIGINT), NULL, CAST(12 AS BIGINT), "
-    "'rows', CAST(10 AS BIGINT), '{\"warn\":{\"below\":99.9}}', "
-    "'[{\"note\":\"it''s invalid\"}]', CAST(1 AS BIGINT), 'false', NULL, "
-    "'SELECT AVG(is_valid) AS value FROM orders WHERE note = ''quoted''', NULL, "
-    "'SELECT AVG(is_valid) AS value FROM orders WHERE note = ''quoted''', 'sql-digest', NULL, 'false')"
-)
+CREATE_TABLE_SQL_GOLDEN: str = "CREATE TABLE IF NOT EXISTS analytics._sqlbuild_audit_results (result_id VARCHAR NOT NULL, schema_version BIGINT NOT NULL, occurred_at TIMESTAMP NOT NULL, invocation_id VARCHAR NOT NULL, run_id VARCHAR NOT NULL, audit_name VARCHAR NOT NULL, audit_definition_name VARCHAR NOT NULL, audit_description VARCHAR, binding_key VARCHAR NOT NULL, definition_fingerprint VARCHAR NOT NULL, execution_fingerprint VARCHAR NOT NULL, evaluation_mode VARCHAR NOT NULL, run_scope_phase VARCHAR NOT NULL, attachment_kind VARCHAR NOT NULL, attached_target_kind VARCHAR, attached_target_name VARCHAR, attached_column_name VARCHAR, target_database VARCHAR, target_schema VARCHAR, target_name VARCHAR, severity VARCHAR NOT NULL, outcome VARCHAR NOT NULL, execution_error VARCHAR, violation_count BIGINT, measured_value VARCHAR, sample_count BIGINT, sample_unit VARCHAR, minimum_samples BIGINT, thresholds_json VARCHAR, evidence_json VARCHAR, evidence_count BIGINT, evidence_truncated VARCHAR, evidence_error VARCHAR, measurement_sql VARCHAR, evidence_sql VARCHAR, executed_sql VARCHAR, sql_digest VARCHAR, metadata_json VARCHAR, reused VARCHAR NOT NULL)"
+INSERT_SQL_GOLDEN: str = "INSERT INTO analytics._sqlbuild_audit_results (result_id, schema_version, occurred_at, invocation_id, run_id, audit_name, audit_definition_name, audit_description, binding_key, definition_fingerprint, execution_fingerprint, evaluation_mode, run_scope_phase, attachment_kind, attached_target_kind, attached_target_name, attached_column_name, target_database, target_schema, target_name, severity, outcome, execution_error, violation_count, measured_value, sample_count, sample_unit, minimum_samples, thresholds_json, evidence_json, evidence_count, evidence_truncated, evidence_error, measurement_sql, evidence_sql, executed_sql, sql_digest, metadata_json, reused) VALUES ('result-1', CAST(1 AS BIGINT), '2026-01-02T03:04:05+00:00', 'invocation-1', 'run-1', 'valid_orders', 'dq_column_rate', 'Valid order percentage', 'orders.valid_orders', 'definition-fingerprint', 'execution-fingerprint', 'measurement', 'final', 'direct', 'model', 'orders', NULL, NULL, 'analytics', 'orders', 'warn', 'warn', NULL, CAST(NULL AS BIGINT), '99.25', CAST(12 AS BIGINT), 'rows', CAST(10 AS BIGINT), '{\"warn\":{\"below\":99.9}}', '[{\"note\":\"it''s invalid\"}]', CAST(1 AS BIGINT), 'false', NULL, 'SELECT AVG(is_valid) AS value FROM orders WHERE note = ''quoted''', NULL, 'SELECT AVG(is_valid) AS value FROM orders WHERE note = ''quoted''', 'sql-digest', NULL, 'false'), ('result-2', CAST(1 AS BIGINT), '2026-01-02T03:04:05+00:00', 'invocation-1', 'run-1', 'valid_orders', 'dq_column_rate', 'Valid order percentage', 'orders.valid_orders', 'definition-fingerprint', 'execution-fingerprint', 'measurement', 'final', 'direct', 'model', 'orders', NULL, NULL, 'analytics', 'orders', 'warn', 'warn', NULL, CAST(NULL AS BIGINT), NULL, CAST(12 AS BIGINT), 'rows', CAST(10 AS BIGINT), '{\"warn\":{\"below\":99.9}}', '[{\"note\":\"it''s invalid\"}]', CAST(1 AS BIGINT), 'false', NULL, 'SELECT AVG(is_valid) AS value FROM orders WHERE note = ''quoted''', NULL, 'SELECT AVG(is_valid) AS value FROM orders WHERE note = ''quoted''', 'sql-digest', NULL, 'false')"

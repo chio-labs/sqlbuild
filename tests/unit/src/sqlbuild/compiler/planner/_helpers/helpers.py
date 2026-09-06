@@ -590,6 +590,7 @@ def build_test_project(
                     *(source_key(source_name) for source_name in audit_source_names),
                 ),
                 name=f"{model_name}_audit",
+                definition_name="test_audit",
                 audit_file=DiscoveredAuditFile(
                     file_path=Path("audits/generic/test.sql"),
                     relative_path=Path("audits/generic/test.sql"),
@@ -1205,6 +1206,7 @@ def build_audit_from_test_case(
 
     return CompiledAudit(
         key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name="test_audit"),
+        definition_name="test_audit",
         scope_deps=(),
         name="test_audit",
         audit_file=DiscoveredAuditFile(
@@ -1470,6 +1472,7 @@ def build_scheduling_audit(
     name: str = "test_audit"
     return CompiledAudit(
         key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=name),
+        definition_name="test_audit",
         scope_deps=audit_scope_deps(
             references=references,
             attached_target_kind=attached_target_kind,

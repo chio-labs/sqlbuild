@@ -219,6 +219,8 @@ def _base_result(
 ) -> AuditExecutionResult:
     return AuditExecutionResult(
         audit_name=audit.name,
+        audit_definition_name=audit.definition_name,
+        audit_description=audit.description,
         attachment_kind=audit.attachment_kind,
         severity=audit.severity,
         outcome=outcome,

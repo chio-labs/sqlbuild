@@ -50,6 +50,7 @@ def test_given_complete_audit_payload_when_creating_lifecycle_event_then_complet
 ) -> None:
     payload: dict[str, JSONValue] = {
         "audit_name": "valid_order_rate",
+        "audit_definition_name": "dq_column_rate",
         "evaluation_mode": "measurement",
         "outcome": "warn",
         "severity": "warn",
@@ -113,6 +114,7 @@ def test_given_invalid_audit_payload_when_creating_lifecycle_event_then_typed_fi
                 event_type=test_case.event_type,
                 payload={
                     "audit_name": "valid_order_rate",
+                    "audit_definition_name": "dq_column_rate",
                     "evaluation_mode": "measurement",
                     "outcome": "pass",
                     "severity": "warn",

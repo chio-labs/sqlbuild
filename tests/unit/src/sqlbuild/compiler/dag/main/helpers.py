@@ -200,6 +200,7 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
                 key=audit_key,
                 scope_deps=(model_key,),
                 name="orders_audit",
+                definition_name="test_audit",
                 audit_file=DiscoveredAuditFile(
                     file_path=Path("audits/orders.sql"),
                     relative_path=Path("audits/orders.sql"),

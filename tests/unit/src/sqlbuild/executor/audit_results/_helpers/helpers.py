@@ -27,6 +27,8 @@ def build_record(*, result_id: str, measured_value: float | None) -> AuditResult
         invocation_id="invocation-1",
         run_id="run-1",
         audit_name="valid_orders",
+        audit_definition_name="dq_column_rate",
+        audit_description="Valid order percentage",
         binding_key="orders.valid_orders",
         definition_fingerprint="definition-fingerprint",
         execution_fingerprint="execution-fingerprint",

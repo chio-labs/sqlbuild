@@ -177,6 +177,8 @@ def _build_records(
                 invocation_id=identity.invocation_id,
                 run_id=identity.run_id or "",
                 audit_name=result.audit_name,
+                audit_definition_name=result.audit_definition_name,
+                audit_description=result.audit_description,
                 binding_key=audit_id.binding_key,
                 definition_fingerprint=audit_id.definition_fingerprint,
                 execution_fingerprint=audit_id.execution_fingerprint,
@@ -228,6 +230,7 @@ def _build_records(
 def _publish_audit_completed(record: AuditResultRecord) -> None:
     payload: dict[str, JSONValue] = {
         "audit_name": record.audit_name,
+        "audit_definition_name": record.audit_definition_name,
         "evaluation_mode": record.evaluation_mode,
         "outcome": record.outcome,
         "severity": record.severity,
@@ -261,6 +264,7 @@ def _publish_audit_completed(record: AuditResultRecord) -> None:
         "measurement_sql": record.measurement_sql,
         "evidence_sql": record.evidence_sql,
         "execution_error": record.execution_error,
+        "audit_description": record.audit_description,
     }
     payload.update({key: value for key, value in optional.items() if value is not None})
     OperationLifecycle.publish_audit_completed(payload=payload)

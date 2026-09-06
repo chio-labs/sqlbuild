@@ -594,6 +594,7 @@ class CompileAuditInput:
     always_run: bool = False
     declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
     name: str | None = None
+    description: str | None = None
 
     def __post_init__(self) -> None:
         if self.attached_target_kind is not None:
@@ -724,6 +725,7 @@ class CompiledAudit:
     key: CompiledObjectKey
     scope_deps: tuple[CompiledObjectKey, ...]
     name: str
+    definition_name: str
     audit_file: DiscoveredAuditFile
     audit_block: DiscoveredAuditBlock
     sql_body: str
@@ -741,6 +743,7 @@ class CompiledAudit:
     severity: AuditSeverity | None = None
     run_scope: str | None = None
     always_run: bool = False
+    description: str | None = None
 
 
 @dataclass(frozen=True)
