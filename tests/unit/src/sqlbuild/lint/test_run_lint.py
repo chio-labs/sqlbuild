@@ -86,6 +86,20 @@ def test_given_synthetic_project_when_linting_then_results_match_expected(
             expected_fault_codes=("description-present",),
             expected_formatted_count=1,
         ),
+        FormatProjectTestCase(
+            description="SQLBuild reference calls survive canonical formatting",
+            files={
+                "models/reference.sql": (
+                    'MODEL (description "Reference formatting.");\n'
+                    'select order_id from __ref("orders")\n'
+                )
+            },
+            expected_written_fragments={
+                "models/reference.sql": 'FROM __ref("orders")',
+            },
+            expected_fault_codes=(),
+            expected_formatted_count=1,
+        ),
     ],
     ids=lambda case: case.description,
 )

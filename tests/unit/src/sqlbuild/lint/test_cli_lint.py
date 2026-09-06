@@ -11,6 +11,7 @@ from _pytest.capture import CaptureResult
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.cli.commands.main.project import _lint
 from tests.unit.src.sqlbuild.lint._test_types import (
+    FixCliTestCase,
     FormatCliTestCase,
     LintBehaviorTestCase,
     LintCliTestCase,
@@ -62,6 +63,18 @@ PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n'
                 "sqlbuild_local.toml": 'adapter = "duckdb"\n',
             },
             expected_exit_code=0,
+        ),
+        LintCliTestCase(
+            description="lint rule prefixes and ignores select optional catalogue entries",
+            files={
+                "models/limited.sql": ('MODEL (description "ok");\nSELECT id FROM items LIMIT 1\n'),
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n'
+                    '[lint]\nselect = ["SQBL"]\nignore = ["SQBL004"]\n'
+                ),
+            },
+            expected_exit_code=0,
+            expected_output_fragments=("WARN=0",),
         ),
     ],
     ids=lambda case: case.description,
@@ -372,3 +385,165 @@ def test_given_color_terminal_when_linting_then_severity_and_caret_are_styled(
     assert "\033[33m\033[1mwarning[SQBL001]\033[0m" in output
     assert "\033[33m\033[1m^\033[0m" in output
     assert "\033[2m= help:\033[0m" in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FixCliTestCase(
+            description="write mode applies proven semantic repairs",
+            original_sql=(
+                'MODEL (description "fix");\n'
+                "WITH unused AS (SELECT 9 AS id)\n"
+                "SELECT DISTINCT value FROM items JOIN other WHERE value = NULL GROUP BY value\n"
+            ),
+            arguments=(),
+            expected_exit_code=0,
+            expected_sql=(
+                'MODEL (description "fix");\n'
+                "SELECT value FROM items CROSS JOIN other WHERE value IS NULL GROUP BY value\n"
+            ),
+            expected_output_fragments=(
+                "fixed[SQBL001]",
+                "fixed[SQBL003]",
+                "fixed[SQBL005]",
+                "fixed[SQBL006]",
+                "FIXED=4",
+                "REMAINING=0",
+            ),
+        ),
+        FixCliTestCase(
+            description="check mode previews without writing",
+            original_sql=(
+                'MODEL (description "fix");\nSELECT value FROM items WHERE value = NULL\n'
+            ),
+            arguments=("--check",),
+            expected_exit_code=1,
+            expected_sql=(
+                'MODEL (description "fix");\nSELECT value FROM items WHERE value = NULL\n'
+            ),
+            expected_output_fragments=("fixed[SQBL001]", "WOULD_FIX=1"),
+        ),
+        FixCliTestCase(
+            description="diff mode shows edits without writing",
+            original_sql=(
+                'MODEL (description "fix");\nSELECT value FROM items WHERE value <> NULL\n'
+            ),
+            arguments=("--diff",),
+            expected_exit_code=1,
+            expected_sql=(
+                'MODEL (description "fix");\nSELECT value FROM items WHERE value <> NULL\n'
+            ),
+            expected_output_fragments=(
+                "-SELECT value FROM items WHERE value <> NULL",
+                "+SELECT value FROM items WHERE value IS NOT NULL",
+                "WOULD_FIX=1",
+            ),
+        ),
+        FixCliTestCase(
+            description="unfixable finding remains actionable",
+            original_sql=('MODEL (description "fix");\nSELECT id FROM items LIMIT 1\n'),
+            arguments=(),
+            expected_exit_code=1,
+            expected_sql=('MODEL (description "fix");\nSELECT id FROM items LIMIT 1\n'),
+            expected_output_fragments=(
+                "skipped[SQBL004]",
+                "deterministic ordering columns",
+                "REMAINING=1",
+            ),
+        ),
+        FixCliTestCase(
+            description="optional selected rule participates in fix",
+            original_sql=(
+                'MODEL (description "fix");\n'
+                "SELECT 'é' AS label, CASE WHEN active THEN TRUE ELSE FALSE END AS active FROM items\n"
+            ),
+            arguments=(),
+            expected_exit_code=0,
+            expected_sql=(
+                'MODEL (description "fix");\n'
+                "SELECT 'é' AS label, COALESCE(active, FALSE) AS active FROM items\n"
+            ),
+            expected_output_fragments=("fixed[SQBL030]", "FIXED=1"),
+            project_toml=('name = "demo"\nadapter = "duckdb"\n[lint]\nselect = ["SQBL030"]\n'),
+        ),
+        FixCliTestCase(
+            description="stale suppression directive is removed",
+            original_sql=(
+                'MODEL (description "fix");\n'
+                "-- sqb: ignore SQBL004 because this used to be limited\n"
+                "SELECT id FROM items ORDER BY id\n"
+            ),
+            arguments=(),
+            expected_exit_code=0,
+            expected_sql=('MODEL (description "fix");\nSELECT id FROM items ORDER BY id\n'),
+            expected_output_fragments=("fixed[SQBL000]", "FIXED=1"),
+        ),
+        FixCliTestCase(
+            description="unicode before a native edit preserves authored offsets",
+            original_sql=(
+                "MODEL (description \"fix\");\nSELECT 'é' AS label FROM items WHERE value = NULL\n"
+            ),
+            arguments=(),
+            expected_exit_code=0,
+            expected_sql=(
+                "MODEL (description \"fix\");\nSELECT 'é' AS label FROM items WHERE value IS NULL\n"
+            ),
+            expected_output_fragments=("fixed[SQBL001]", "FIXED=1"),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_lint_findings_when_fixing_then_mode_contract_is_respected(
+    test_case: FixCliTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _ = (tmp_path / "sqlbuild_project.toml").write_text(
+        test_case.project_toml or PROJECT_TOML,
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "fix.sql"
+    model.parent.mkdir()
+    _ = model.write_text(test_case.original_sql, encoding="utf-8")
+
+    exit_code: int = main(
+        ["--no-color", "--project-dir", str(tmp_path), "fix", *test_case.arguments]
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert model.read_text(encoding="utf-8") == test_case.expected_sql
+    output: str = capsys.readouterr().out
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [LintBehaviorTestCase(description="fix JSON output", expected_value=1)],
+    ids=lambda case: case.description,
+)
+def test_given_fixable_finding_when_checking_as_json_then_output_is_structured(
+    test_case: LintBehaviorTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _ = (tmp_path / "sqlbuild_project.toml").write_text(PROJECT_TOML, encoding="utf-8")
+    model: Path = tmp_path / "models" / "fix.sql"
+    model.parent.mkdir()
+    original: str = 'MODEL (description "fix");\nSELECT value FROM items WHERE value = NULL\n'
+    _ = model.write_text(original, encoding="utf-8")
+
+    exit_code: int = main(
+        ["--no-color", "--project-dir", str(tmp_path), "fix", "--check", "--json"]
+    )
+
+    assert exit_code == test_case.expected_value
+    assert model.read_text(encoding="utf-8") == original
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    assert payload["mode"] == "check"
+    fixes: object = payload["fixes"]
+    assert isinstance(fixes, list)
+    assert fixes[0]["code"] == "SQBL001"
+    assert fixes[0]["status"] == "fixed"
+    assert payload["remaining"] == []

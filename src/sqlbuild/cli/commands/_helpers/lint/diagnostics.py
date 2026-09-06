@@ -8,7 +8,7 @@ from pathlib import Path
 from rich.cells import cell_len
 
 from sqlbuild.lint.constants import TAB_CHARACTER, VIOLATION_SEVERITY_FAULT
-from sqlbuild.lint.models import LintRunResult, LintViolation
+from sqlbuild.lint.models import FixRunResult, LintRunResult, LintViolation
 from sqlbuild.presentation.classes.cli_style import CliStyle
 
 _REPORT_LINE_WIDTH: int = 100
@@ -17,7 +17,7 @@ _HELP_CONTINUATION: str = "          "
 
 
 def format_lint_diagnostics(
-    *, result: LintRunResult, root: Path, use_color: bool
+    *, result: LintRunResult | FixRunResult, root: Path, use_color: bool
 ) -> tuple[str, ...]:
     """Format every lint violation as a source-pointing diagnostic block."""
 
@@ -29,7 +29,11 @@ def format_lint_diagnostics(
 
 
 def _format_violation(
-    *, violation: LintViolation, result: LintRunResult, root: Path, style: CliStyle
+    *,
+    violation: LintViolation,
+    result: LintRunResult | FixRunResult,
+    root: Path,
+    style: CliStyle,
 ) -> str:
     severity: str = "error" if violation.severity == VIOLATION_SEVERITY_FAULT else "warning"
     label: str = f"{severity}[{violation.code}]"
