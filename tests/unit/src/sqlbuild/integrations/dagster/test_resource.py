@@ -281,6 +281,7 @@ def test_given_two_audit_envelopes_when_projecting_then_each_check_keeps_own_can
         DagsterMeasurementMetadataTestCase(
             "insufficient measurement metadata",
             "insufficient",
+            True,
             {
                 "evaluation_mode": "measurement",
                 "measured_value": 99.5,
@@ -290,6 +291,19 @@ def test_given_two_audit_envelopes_when_projecting_then_each_check_keeps_own_can
                 "thresholds": {"warn": {"operator": "below", "limit": 100.0}},
                 "evidence_count": 2,
                 "evidence_truncated": True,
+            },
+        ),
+        DagsterMeasurementMetadataTestCase(
+            "warning measurement metadata",
+            "warn",
+            False,
+            {
+                "evaluation_mode": "measurement",
+                "measured_value": 99.5,
+                "sample_count": 100,
+                "sample_unit": "rows",
+                "minimum_samples": 100,
+                "thresholds": {"warn": {"operator": "below", "limit": 100.0}},
             },
         ),
     ),
@@ -308,6 +322,7 @@ def test_given_measurement_check_when_projecting_then_dagster_metadata_and_warni
     check: IntegrationCheckResult = replace(
         envelope.checks[0],
         status=test_case.expected_status,
+        passed=test_case.expected_passed,
         **test_case.expected_metadata,
     )
     envelope = replace(envelope, checks=(check,))
@@ -323,7 +338,7 @@ def test_given_measurement_check_when_projecting_then_dagster_metadata_and_warni
 
     assert len(results) == 1
     result: Any = results[0]
-    assert result.passed is True
+    assert result.passed is test_case.expected_passed
     assert result.severity == dg.AssetCheckSeverity.WARN
     assert result.metadata["status"].value == test_case.expected_status
     for key, expected_value in test_case.expected_metadata.items():

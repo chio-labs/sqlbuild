@@ -12,6 +12,7 @@ from tests.unit.src.sqlbuild.executor.auditing.main._test_types import (
     InvalidMeasurementCase,
     MeasurementOutcomeCase,
     MeasurementRowCountCase,
+    NullMeasurementOutcomeCase,
 )
 from tests.unit.src.sqlbuild.executor.auditing.main.helpers import (
     Adapter,
@@ -108,6 +109,27 @@ def test_given_valid_measurement_when_executed_then_maps_outcome(
     assert result.measured_value == float(test_case.value)
     assert result.sample_count == test_case.sample_count
     assert result.row_count == 0
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [NullMeasurementOutcomeCase("zero samples", 0, AuditOutcome.INSUFFICIENT)],
+    ids=lambda case: case.description,
+)
+def test_given_null_measurement_with_too_few_samples_when_executed_then_is_insufficient(
+    test_case: NullMeasurementOutcomeCase,
+) -> None:
+    result: AuditExecutionResult = execute_entry(
+        entry=build_entry(),
+        adapter=Adapter(
+            [Cursor(columns=("VALID_RATE", "TOTAL_ROWS"), rows=[(None, test_case.sample_count)])]
+        ),
+    )
+
+    assert result.outcome == test_case.expected_outcome
+    assert result.measured_value is None
+    assert result.sample_count == test_case.sample_count
+    assert result.execution_error is None
 
 
 @pytest.mark.parametrize(

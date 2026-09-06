@@ -55,11 +55,16 @@ def test_given_measurement_outcomes_when_building_then_gates_and_persists_canoni
               minimum_samples 5,
               thresholds (warn (below 99), error (below 90))
             ),
-            configured_rate (
-              name insufficient_rate, measured_value 80, sample_count 1,
-              minimum_samples 5,
-              thresholds (warn (below 99), error (below 90))
-            )
+             configured_rate (
+               name insufficient_rate, measured_value 80, sample_count 1,
+               minimum_samples 5,
+               thresholds (warn (below 99), error (below 90))
+             ),
+             empty_rate (
+               name empty_rate,
+               minimum_samples 5,
+               thresholds (warn (below 99), error (below 90))
+             )
           ]
         );
         SELECT * FROM (VALUES (1), (2), (3)) AS orders(order_id)
@@ -88,6 +93,19 @@ def test_given_measurement_outcomes_when_building_then_gates_and_persists_canoni
             "sqlbuild_project.toml": 'name = "measurement_build"\nadapter = "duckdb"\n',
             "models/orders.sql": model_sql,
             "audits/generic/configured_rate.sql": audit_sql,
+            "audits/generic/empty_rate.sql": """
+            AUDIT (
+              evaluation measurement,
+              value measured_value,
+              sample_count samples,
+              sample_unit rows
+            );
+            MEASURE (
+              SELECT CAST(NULL AS DOUBLE) AS measured_value, 0 AS samples
+              FROM @relation
+              LIMIT 1
+            );
+        """,
         },
     )
     with identity_scope(ExecutionIdentity(invocation_id="integration", run_id="test_run")):
@@ -107,6 +125,7 @@ def test_given_measurement_outcomes_when_building_then_gates_and_persists_canoni
         "warn_rate": AuditOutcome.WARN,
         "error_rate": AuditOutcome.ERROR,
         "insufficient_rate": AuditOutcome.INSUFFICIENT,
+        "empty_rate": AuditOutcome.INSUFFICIENT,
     }
     assert connection.execute(
         "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'orders'"
@@ -119,11 +138,12 @@ def test_given_measurement_outcomes_when_building_then_gates_and_persists_canoni
         ORDER BY audit_name
         """
     ).fetchall()
-    assert len(history) == 4
+    assert len(history) == 5
     by_name: dict[str, tuple[Any, ...]] = {row[0]: row for row in history}
     assert by_name["pass_rate"][1:5] == ("pass", "100.0", 10, None)
     assert by_name["warn_rate"][1] == "warn"
     assert by_name["warn_rate"][6] == 3
     assert by_name["error_rate"][1] == "error"
     assert by_name["insufficient_rate"][1] == "insufficient"
+    assert by_name["empty_rate"][1:5] == ("insufficient", None, 0, None)
     assert '"operator":"below"' in by_name["error_rate"][5]

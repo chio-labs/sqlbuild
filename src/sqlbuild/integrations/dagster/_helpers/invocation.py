@@ -862,7 +862,7 @@ def _metadata_from_mapping(value: Mapping[str, Any]) -> Mapping[str, Any]:
 
 def _dagster_check_severity(*, dg: Any, check: Mapping[str, Any]) -> Any:
     if (
-        str(check.get("status")) == INSUFFICIENT_CHECK_STATUS
+        str(check.get("status")) in {INSUFFICIENT_CHECK_STATUS, WARNING_CHECK_SEVERITY}
         or str(check.get("severity")) == WARNING_CHECK_SEVERITY
     ):
         return dg.AssetCheckSeverity.WARN
