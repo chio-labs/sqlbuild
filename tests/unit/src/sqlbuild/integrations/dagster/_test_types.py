@@ -20,6 +20,7 @@ class DagsterInsufficientStatusTestCase:
 class DagsterMeasurementMetadataTestCase:
     description: str
     expected_status: str
+    expected_passed: bool
     expected_metadata: dict[str, object]
 
 
