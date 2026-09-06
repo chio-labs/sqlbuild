@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.83.2](https://github.com/chio-labs/sqlbuild/compare/v0.83.1...v0.83.2) (2026-09-06)
+
+
+### Bug Fixes
+
+* include required audit definition metadata in results and events ([#540](https://github.com/chio-labs/sqlbuild/issues/540)) ([b2c0819](https://github.com/chio-labs/sqlbuild/commit/b2c0819ac6e4df0bc6b30bf43eda1d560ac35ed5))
+
 ## [0.83.1](https://github.com/chio-labs/sqlbuild/compare/v0.83.0...v0.83.1) (2026-09-06)
 
 
