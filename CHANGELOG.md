@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.86.0](https://github.com/chio-labs/sqlbuild/compare/v0.85.0...v0.86.0) (2026-09-06)
+
+
+### Features
+
+* add actionable native lint diagnostics ([#550](https://github.com/chio-labs/sqlbuild/issues/550)) ([2c215d9](https://github.com/chio-labs/sqlbuild/commit/2c215d9ce541e113e39ed12d5293adfaa866ddb1))
+
 ## [0.85.0](https://github.com/chio-labs/sqlbuild/compare/v0.84.0...v0.85.0) (2026-09-06)
 
 
