@@ -1030,10 +1030,13 @@ def test_given_custom_translator_when_selecting_and_streaming_then_runtime_uses_
         project_dir=project_dir,
         sqb_command=write_fake_sqb_command(root=tmp_path, stdout=test_case.payload),
         dag_path=write_dagster_test_dag(root=tmp_path),
-        translator=_NamespacedDagsterTranslator(),
     )
 
-    invocation: SqlBuildCliInvocation = resource.cli(args=["build"], context=context)
+    invocation: SqlBuildCliInvocation = resource.cli(
+        args=["build"],
+        context=context,
+        translator=_NamespacedDagsterTranslator(),
+    )
     results: list[Any] = list(invocation.stream())
 
     results_by_materialization_status: defaultdict[bool, list[Any]] = defaultdict(list)

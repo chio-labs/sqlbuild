@@ -6,8 +6,6 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from pydantic import PrivateAttr
-
 from sqlbuild.integrations.dagster._helpers.dag import load_sqlbuild_dag
 from sqlbuild.integrations.dagster._helpers.imports import load_dagster
 from sqlbuild.integrations.dagster._helpers.invocation_factory import start_sqlbuild_cli_invocation
@@ -25,14 +23,12 @@ class SqlBuildCliResource(load_dagster().ConfigurableResource):  # type: ignore[
     project_dir: str = "."
     sqb_command: list[str] = ["sqb"]
     dag_path: str | None = None
-    _translator: SqlBuildDagsterTranslator = PrivateAttr()
 
     def __init__(
         self,
         project_dir: str | Path | SqlBuildProject = ".",
         sqb_command: list[str] | None = None,
         dag_path: str | Path | None = None,
-        translator: SqlBuildDagsterTranslator | None = None,
         **kwargs: Any,
     ) -> None:
         if isinstance(project_dir, SqlBuildProject):
@@ -48,7 +44,6 @@ class SqlBuildCliResource(load_dagster().ConfigurableResource):  # type: ignore[
             dag_path=None if dag_path is None else str(dag_path),
             **kwargs,
         )
-        self._translator = translator or SqlBuildDagsterTranslator()
 
     def cli(
         self,
@@ -56,13 +51,15 @@ class SqlBuildCliResource(load_dagster().ConfigurableResource):  # type: ignore[
         *,
         context: Any = None,
         raise_on_error: bool = True,
+        translator: SqlBuildDagsterTranslator | None = None,
     ) -> SqlBuildCliInvocation:
         """Create a SQLBuild CLI invocation for the provided command arguments."""
 
         loaded_dag: Mapping[str, Any] | None = None
         if self.dag_path is not None:
             loaded_dag = translate_sqlbuild_dag(
-                dag=load_sqlbuild_dag(self.dag_path), translator=self._translator
+                dag=load_sqlbuild_dag(self.dag_path),
+                translator=translator or SqlBuildDagsterTranslator(),
             )
         return start_sqlbuild_cli_invocation(
             sqb_command=self.sqb_command,

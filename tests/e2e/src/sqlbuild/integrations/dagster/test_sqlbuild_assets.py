@@ -335,7 +335,9 @@ def test_given_custom_translator_when_materializing_real_project_then_selection_
         required_resource_keys={"sqb"},
     )
     def sqlbuild_waffle_shop(context: AssetExecutionContext) -> Iterator[object]:
-        yield from context.resources.sqb.cli(["build"], context=context).stream()
+        yield from context.resources.sqb.cli(
+            ["build"], context=context, translator=translator
+        ).stream()
 
     selection: Any = build_sqlbuild_asset_selection(
         sqlbuild_assets=[sqlbuild_waffle_shop],
@@ -345,13 +347,8 @@ def test_given_custom_translator_when_materializing_real_project_then_selection_
     )
     result: ExecuteInProcessResult = materialize(
         [sqlbuild_waffle_shop],
-        resources={
-            "sqb": SqlBuildCliResource(
-                project_dir=sqlbuild_project,
-                translator=translator,
-            )
-        },
-        selection=selection.resolve([sqlbuild_waffle_shop]),
+        resources={"sqb": SqlBuildCliResource(project_dir=sqlbuild_project)},
+        selection=selection,
     )
 
     assert result.success
