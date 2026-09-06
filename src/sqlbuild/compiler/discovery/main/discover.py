@@ -7,6 +7,9 @@ from pathlib import Path
 from sqlbuild.compiler.discovery._helpers.filesystem.aggregation import (
     build_discovered_project_inputs,
 )
+from sqlbuild.compiler.discovery._helpers.filesystem.python_paths import (
+    validate_project_python_paths,
+)
 from sqlbuild.compiler.discovery._helpers.validation.discovery import validate_discovered_inputs
 from sqlbuild.compiler.discovery._helpers.yml.project import (
     load_local_config,
@@ -56,6 +59,7 @@ def _assemble_discovered_project_inputs(
 ) -> DiscoveredProjectInputs:
     project_config: ProjectConfig = load_project_config(project_dir=project_dir)
     local_config: LocalConfig = load_local_config(project_dir=project_dir)
+    validate_project_python_paths(project_dir=project_dir)
     sql_analysis_enabled: bool = (
         sql_analysis_enabled_override
         if sql_analysis_enabled_override is not None

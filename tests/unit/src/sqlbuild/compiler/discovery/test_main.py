@@ -18,6 +18,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._test_types import (
     DiscoverProjectInputsTestCase,
     DiscoveryLifecycleTestCase,
     DiscoveryRelevantCountTestCase,
+    ProjectPythonPathAcceptanceTestCase,
 )
 
 
@@ -464,6 +465,28 @@ def generated_tasks():
             },
             expected_task_names=("prepare_orders",),
         ),
+        DiscoverFactoryValidationTestCase(
+            description="factory can import ordinary private helper module",
+            repo_files=base_repo_files()
+            | {
+                "factories/orders/_helpers.py": "TASK_NAME = 'prepare_orders'\n",
+                "factories/orders/generated.py": """
+from factories.orders._helpers import TASK_NAME
+from sqlbuild.factories import factory
+from sqlbuild.tasks import task
+
+
+@factory
+def generated_tasks():
+    @task(name=TASK_NAME)
+    def prepare(ctx):
+        return None
+
+    return prepare
+""",
+            },
+            expected_task_names=("prepare_orders",),
+        ),
     ),
     ids=lambda case: case.description,
 )
@@ -482,6 +505,55 @@ def test_given_generated_factory_nodes_when_discovering_inputs_then_validates_ex
     assert tuple(task.name for task in result.task_functions) == test_case.expected_task_names
     assert tuple(asset.name for asset in result.asset_functions) == test_case.expected_asset_names
     assert tuple(check.name for check in result.check_functions) == test_case.expected_check_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ProjectPythonPathAcceptanceTestCase(
+            description="documented integration Python paths",
+            repo_files={
+                "definitions.py": "ROOT_DEFINITIONS = True\n",
+                "dagster/definitions.py": "DAGSTER_DEFINITIONS = True\n",
+                "rivers_pipeline/definitions.py": "RIVERS_DEFINITIONS = True\n",
+            },
+            expected_project_name="demo",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_documented_integration_python_when_discovering_inputs_then_paths_are_accepted(
+    test_case: ProjectPythonPathAcceptanceTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, base_repo_files() | test_case.repo_files)
+
+    result: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+
+    assert result.project_config.name == test_case.expected_project_name
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DiscoverProjectInputsErrorTestCase(
+            description="non-project directory containing Python",
+            repo_files={"application/main.py": "print('hello')\n"},
+            expected_error_fragment="Project config not found",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_non_project_with_python_when_discovering_then_missing_config_error_takes_precedence(
+    test_case: DiscoverProjectInputsErrorTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.repo_files)
+
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+        discover_project_inputs(project_dir=tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -660,6 +732,14 @@ def test_given_invalid_generated_factory_nodes_when_discovering_inputs_then_rais
 @pytest.mark.parametrize(
     "test_case",
     [
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when Python lives outside a supported project root",
+            repo_files=base_repo_files()
+            | {"audit_helpers/measurements.py": "def build_cases(): return []\n"},
+            expected_error_fragment=(
+                "Unsupported project Python path\\(s\\): audit_helpers/measurements.py"
+            ),
+        ),
         DiscoverProjectInputsErrorTestCase(
             description="raises on duplicate source names across files",
             repo_files=base_repo_files()

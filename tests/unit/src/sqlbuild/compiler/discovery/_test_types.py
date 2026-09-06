@@ -72,6 +72,13 @@ class DiscoverFactoryValidationTestCase:
 
 
 @dataclass(frozen=True)
+class ProjectPythonPathAcceptanceTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_project_name: str
+
+
+@dataclass(frozen=True)
 class DiscoveryLifecycleTestCase:
     description: str
     expected_event_types: tuple[str, ...]
